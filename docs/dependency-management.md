@@ -53,7 +53,7 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
 
 - Routine updates run weekly, on Monday morning (Europe/Amsterdam), and are grouped where related.
 - Both bots wait 7 days after a release before proposing it, 14 days for majors, to reduce supply-chain risk:
-  Renovate through `minimumReleaseAge` and Dependabot through `cooldown`. Security updates are not delayed.
+  Renovate through `minimumReleaseAge` and Dependabot through `cooldown`.
   Dependabot security updates for Python and GitHub Actions are not delayed by that wait or by the schedule.
 - Major updates wait 14 days, are labelled `breaking-change` and get their own pull request. Like every other update,
   they are reviewed by the `freesecdev-review` App and must pass the required checks. Nobody is asked to approve them

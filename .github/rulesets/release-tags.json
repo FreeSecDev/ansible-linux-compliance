@@ -5,13 +5,21 @@
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
-      "include": ["refs/tags/v*"],
-      "exclude": []
+      "exclude": [],
+      "include": [
+        "refs/tags/v*"
+      ]
     }
   },
   "rules": [
-    {"type": "deletion"},
-    {"type": "update"},
-    {"type": "non_fast_forward"}
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "update"
+    },
+    {
+      "type": "non_fast_forward"
+    }
   ]
 }
