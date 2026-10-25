@@ -1,0 +1,773 @@
+from __future__ import annotations
+
+import dataclasses
+import errno
+import math
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    process,
+)
+
+SHELL = process.ExecutablePolicy("sh", frozenset({"-c"}))
+POLICIES = {
+    "sh": SHELL,
+    "true": process.ExecutablePolicy("true"),
+    "false": process.ExecutablePolicy("false"),
+    "yes": process.ExecutablePolicy("yes"),
+    "sleep": process.ExecutablePolicy("sleep"),
+}
+FAST = 10.0
+PLANTED = "canary-value"
+
+
+def shell(script: str, *args: str, timeout: float = FAST, **fields: Any) -> process.CommandSpec:
+    return process.CommandSpec("sh", ("-c", script, "sh", *args), timeout, **fields)
+
+
+def execute(spec: process.CommandSpec, **keywords: Any) -> process.CommandResult:
+    return process.run(spec, policies=POLICIES, **keywords)
+
+
+def process_alive(pid: int) -> bool:
+    try:
+        stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return stat_text.rsplit(")", 1)[1].split()[0] != "Z"
+
+
+def wait_until_dead(pid: int, limit: float = 5.0) -> bool:
+    deadline = time.monotonic() + limit
+    while time.monotonic() < deadline:
+        if not process_alive(pid):
+            return True
+        time.sleep(0.05)
+    return not process_alive(pid)
+
+
+def make_tool(directory: Path, name: str = "tool", mode: int = 0o755) -> Path:
+    directory.mkdir(exist_ok=True)
+    tool = directory / name
+    tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    tool.chmod(mode)
+    return tool
+
+
+def run_in(trusted: Path, executable: str = "true") -> process.CommandResult:
+    return process.run(
+        process.CommandSpec(executable, (), FAST), policies=POLICIES, trusted_dirs=[str(trusted)]
+    )
+
+
+@pytest.fixture
+def trusted(tmp_path: Path) -> Path:
+    directory = tmp_path / "trusted"
+    directory.mkdir()
+    directory.chmod(0o755)
+    return directory
+
+
+class TestCommandSpec:
+    """Validation of command specifications."""
+
+    def test_defaults_and_normalisation(self) -> None:
+        arguments: Any = ["--version"]
+        spec = process.CommandSpec("oscap", arguments, 5)
+        assert spec.args == ("--version",)
+        assert spec.timeout_seconds == 5.0
+        assert spec.max_output_bytes == process.DEFAULT_MAX_OUTPUT_BYTES
+        assert spec.env_allow == ()
+        assert spec.cwd is None
+
+    def test_is_frozen(self) -> None:
+        spec: Any = process.CommandSpec("oscap", (), 1)
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            spec.timeout_seconds = 2.0
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            "../oscap",
+            "..",
+            "/usr/bin/oscap",
+            "a/b",
+            "OSCAP",
+            "oscap;ls",
+            "oscap\n",
+            " oscap",
+            7,
+        ],
+    )
+    def test_rejects_executable_names(self, name: Any) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="invalid executable name"):
+            process.CommandSpec(name, (), 1)
+
+    @pytest.mark.parametrize(
+        ("args", "message"),
+        [
+            (("a\x00b",), "control character or NUL"),
+            (("a\nb",), "control character or NUL"),
+            (("a\rb",), "control character or NUL"),
+            (("a\x7fb",), "control character or NUL"),
+            (("",), "must not be empty"),
+            ((7,), "must be a string"),
+            ((None,), "must be a string"),
+            (("a" * (process.MAX_ARGUMENT_LENGTH + 1),), "exceeds"),
+            (("x",) * (process.MAX_ARGUMENTS + 1), "too many arguments"),
+            ("--version", "args must be a tuple"),
+            (None, "args must be a tuple"),
+        ],
+    )
+    def test_rejects_arguments(self, args: Any, message: str) -> None:
+        with pytest.raises(process.ProcessPolicyError, match=message):
+            process.CommandSpec("oscap", args, 1)
+
+    @pytest.mark.parametrize(
+        "argument",
+        [";", "; touch /tmp/x", "`id`", "$(id)", "${HOME}", "a && b", "a | b", "*", "~", "a b"],
+    )
+    def test_shell_metacharacters_are_data_and_stay_unchanged(self, argument: str) -> None:
+        assert process.CommandSpec("oscap", (argument,), 1).args == (argument,)
+
+    @pytest.mark.parametrize(
+        "timeout",
+        [0, -1, 0.0, math.nan, math.inf, process.MAX_TIMEOUT_SECONDS + 1, True, "5", None],
+    )
+    def test_rejects_timeouts(self, timeout: Any) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="timeout_seconds"):
+            process.CommandSpec("oscap", (), timeout)
+
+    def test_accepts_the_maximum_timeout(self) -> None:
+        spec = process.CommandSpec("oscap", (), process.MAX_TIMEOUT_SECONDS)
+        assert spec.timeout_seconds == process.MAX_TIMEOUT_SECONDS
+
+    @pytest.mark.parametrize("cap", [0, -1, process.MAX_OUTPUT_BYTES + 1, True, 1.5, "10", None])
+    def test_rejects_output_caps(self, cap: Any) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="max_output_bytes"):
+            process.CommandSpec("oscap", (), 1, max_output_bytes=cap)
+
+    def test_accepts_the_maximum_output_cap(self) -> None:
+        spec = process.CommandSpec("oscap", (), 1, max_output_bytes=process.MAX_OUTPUT_BYTES)
+        assert spec.max_output_bytes == process.MAX_OUTPUT_BYTES
+
+    @pytest.mark.parametrize(
+        ("names", "message"),
+        [
+            (("SECRET_TOKEN",), "may not be copied"),
+            (("PATH",), "may not be copied"),
+            (("LC_ALL",), "may not be copied"),
+            (("LD_PRELOAD",), "may not be copied"),
+            (("tz",), "invalid environment variable name"),
+            (("TZ=UTC",), "invalid environment variable name"),
+            ((7,), "invalid environment variable name"),
+            ("TZ", "env_allow must be a tuple"),
+        ],
+    )
+    def test_rejects_environment_names(self, names: Any, message: str) -> None:
+        with pytest.raises(process.ProcessPolicyError, match=message):
+            process.CommandSpec("oscap", (), 1, env_allow=names)
+
+    def test_accepts_listed_environment_names(self) -> None:
+        names: Any = ["TZ", "TMPDIR"]
+        spec = process.CommandSpec("oscap", (), 1, env_allow=names)
+        assert spec.env_allow == ("TZ", "TMPDIR")
+
+    def test_accepts_an_existing_absolute_cwd(self, tmp_path: Path) -> None:
+        assert process.CommandSpec("oscap", (), 1, cwd=str(tmp_path)).cwd == str(tmp_path)
+
+    @pytest.mark.parametrize(
+        "cwd", ["relative", "", "/nonexistent-dir-for-test", "/etc/passwd", 7, "/usr\x00"]
+    )
+    def test_rejects_cwd(self, cwd: Any) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="cwd must be"):
+            process.CommandSpec("oscap", (), 1, cwd=cwd)
+
+    def test_messages_are_escaped_and_truncated(self) -> None:
+        with pytest.raises(process.ProcessPolicyError) as raised:
+            process.CommandSpec("oscap", ("bad\n" + "x" * 500,), 1)
+        message = str(raised.value)
+        assert "\\n" in message
+        assert "\n" not in message
+        assert len(message) < 200
+
+
+class TestPolicy:
+    """Executable and option allow-list policy."""
+
+    def test_default_allow_list_is_only_oscap(self) -> None:
+        assert set(process.ALLOWED_EXECUTABLES) == {"oscap"}
+        options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
+        assert {"--profile", "--results-arf", "--results", "--report"} <= options
+        assert not options & process.FORBIDDEN_OPTIONS
+
+    def test_default_trusted_directories_are_fixed(self) -> None:
+        assert process.TRUSTED_DIRECTORIES == ("/usr/bin", "/usr/sbin", "/bin", "/sbin")
+
+    @pytest.mark.parametrize("name", ["sh", "true", "bash", "python3", "rm"])
+    def test_rejects_executables_that_are_not_allow_listed(self, name: str) -> None:
+        spec = process.CommandSpec(name, (), 1)
+        with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
+            process.run(spec)
+
+    def test_accepts_allowed_options_and_positionals(self) -> None:
+        spec = process.CommandSpec(
+            "oscap",
+            (
+                "xccdf",
+                "eval",
+                "--profile",
+                "xccdf_x_profile_y",
+                "--results-arf=/tmp/a.xml",
+                "in.xml",
+            ),
+            1,
+        )
+        policy = process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+        assert policy.name == "oscap"
+
+    @pytest.mark.parametrize(
+        "argument",
+        [
+            "--fetch-remote-resources",
+            "--fetch-remote-resources=1",
+            "--oval-results",
+            "--",
+            "-",
+            "-h",
+            "--profile-x",
+            "--PROFILE",
+            "-oscap",
+            "--rule",
+        ],
+    )
+    def test_rejects_options_that_are_not_allow_listed(self, argument: str) -> None:
+        spec = process.CommandSpec("oscap", ("xccdf", "eval", argument), 1)
+        with pytest.raises(process.ProcessPolicyError, match="option is"):
+            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+
+    def test_remote_fetching_is_forbidden_even_if_a_policy_lists_it(self) -> None:
+        policies = {
+            "oscap": process.ExecutablePolicy("oscap", frozenset({"--fetch-remote-resources"}))
+        }
+        spec = process.CommandSpec("oscap", ("--fetch-remote-resources",), 1)
+        with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
+            process.check_policy(spec, policies)
+
+    def test_option_value_that_looks_like_an_option_is_rejected(self) -> None:
+        spec = process.CommandSpec("oscap", ("--profile", "--fetch-remote-resources"), 1)
+        with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
+            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+
+    def test_policy_rejection_happens_before_any_resolution(self, trusted: Path) -> None:
+        spec = process.CommandSpec("oscap", ("--fetch-remote-resources",), 1)
+        with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
+            process.run(spec, trusted_dirs=[str(trusted)])
+
+
+class TestResolveExecutable:
+    """Trusted-directory executable resolution."""
+
+    def test_resolves_to_an_absolute_path_in_a_trusted_directory(self) -> None:
+        resolved = process.resolve_executable("sh")
+        assert Path(resolved).is_absolute()
+        assert str(Path(resolved).parent) in process.TRUSTED_DIRECTORIES
+
+    def test_ignores_the_caller_path(self, trusted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        planted = make_tool(trusted, "sh")
+        monkeypatch.setenv("PATH", str(trusted))
+        assert process.resolve_executable("sh") != str(planted)
+
+    @pytest.mark.parametrize(
+        "name", ["", "../sh", "/bin/sh", "sh/", "./sh", "..", ".", "a\x00b", "sh\n", 3, None]
+    )
+    def test_rejects_traversal_and_malformed_names(self, name: Any, trusted: Path) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="invalid executable name"):
+            process.resolve_executable(name, [str(trusted)])
+
+    def test_missing_binary(self, trusted: Path) -> None:
+        with pytest.raises(process.ProcessExecutionError, match="not found"):
+            process.resolve_executable("missing", [str(trusted)])
+
+    def test_missing_directories_are_skipped(self, trusted: Path, tmp_path: Path) -> None:
+        tool = make_tool(trusted)
+        resolved = process.resolve_executable("tool", [str(tmp_path / "absent"), str(trusted)])
+        assert resolved == str(tool)
+
+    def test_a_file_is_not_a_trusted_directory(self, trusted: Path, tmp_path: Path) -> None:
+        make_tool(trusted)
+        blocker = tmp_path / "blocker"
+        blocker.write_text("x", encoding="utf-8")
+        resolved = process.resolve_executable("tool", [str(blocker), str(trusted)])
+        assert resolved == str(trusted / "tool")
+
+    def test_first_trusted_directory_wins(self, tmp_path: Path) -> None:
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        make_tool(first)
+        make_tool(second)
+        assert process.resolve_executable("tool", [str(first), str(second)]) == str(first / "tool")
+
+    @pytest.mark.parametrize("directory", ["relative/dir", "", "bin", 5, "/usr\x00"])
+    def test_rejects_untrusted_directory_declarations(self, directory: Any) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="absolute path"):
+            process.resolve_executable("tool", [directory])
+
+    def test_rejects_a_world_writable_directory(self, trusted: Path) -> None:
+        make_tool(trusted)
+        trusted.chmod(0o777)
+        with pytest.raises(process.ProcessPolicyError, match="directory is world-writable"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_rejects_a_symlink_that_points_outside(self, trusted: Path, tmp_path: Path) -> None:
+        outside = make_tool(tmp_path / "outside", "real")
+        (trusted / "tool").symlink_to(outside)
+        with pytest.raises(process.ProcessPolicyError, match="outside the trusted directories"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_rejects_a_symlink_to_a_system_file_outside(self, trusted: Path) -> None:
+        (trusted / "tool").symlink_to("/etc/hostname")
+        with pytest.raises(process.ProcessPolicyError, match="outside the trusted directories"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_accepts_a_symlink_chain_that_resolves_inside(
+        self, trusted: Path, tmp_path: Path
+    ) -> None:
+        real = make_tool(trusted, "real")
+        hop_dir = tmp_path / "hop"
+        hop_dir.mkdir()
+        hop = hop_dir / "hop"
+        hop.symlink_to(real)
+        (trusted / "tool").symlink_to(hop)
+        assert process.resolve_executable("tool", [str(trusted)]) == str(trusted / "tool")
+
+    def test_accepts_a_symlink_inside_the_trusted_directories(self, trusted: Path) -> None:
+        make_tool(trusted, "real")
+        (trusted / "alias").symlink_to("real")
+        assert process.resolve_executable("alias", [str(trusted)]) == str(trusted / "alias")
+
+    def test_rejects_a_symlink_loop(self, trusted: Path) -> None:
+        (trusted / "tool").symlink_to("tool")
+        with pytest.raises(process.ProcessError):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_rejects_an_unresolvable_candidate(
+        self, trusted: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        real = Path.resolve
+
+        def explode(path: Path, *, strict: bool = False) -> Path:
+            if path.name == "tool":
+                raise RuntimeError(strict)
+            return real(path, strict=strict)
+
+        make_tool(trusted)
+        monkeypatch.setattr(Path, "resolve", explode)
+        with pytest.raises(process.ProcessPolicyError, match="cannot be resolved"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_a_broken_symlink_inside_is_not_found(self, trusted: Path) -> None:
+        (trusted / "tool").symlink_to("gone")
+        with pytest.raises(process.ProcessExecutionError, match="not found"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_rejects_a_world_writable_binary(self, trusted: Path) -> None:
+        make_tool(trusted, mode=0o777)
+        with pytest.raises(process.ProcessPolicyError, match="world-writable"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_rejects_a_directory(self, trusted: Path) -> None:
+        (trusted / "tool").mkdir()
+        with pytest.raises(process.ProcessPolicyError, match="not a regular file"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_rejects_a_non_executable_file(self, trusted: Path) -> None:
+        make_tool(trusted, mode=0o644)
+        with pytest.raises(process.ProcessPolicyError, match="not executable"):
+            process.resolve_executable("tool", [str(trusted)])
+
+    def test_unsafe_file_in_an_earlier_directory_is_not_skipped(self, tmp_path: Path) -> None:
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        make_tool(first, mode=0o777)
+        make_tool(second)
+        with pytest.raises(process.ProcessPolicyError, match="world-writable"):
+            process.resolve_executable("tool", [str(first), str(second)])
+
+
+class TestConfinedPath:
+    """Path confinement."""
+
+    def test_relative_candidate(self, tmp_path: Path) -> None:
+        expected = tmp_path.resolve() / "a" / "b.xml"
+        assert process.confined_path(str(tmp_path), "a/b.xml") == str(expected)
+
+    def test_absolute_candidate_inside(self, tmp_path: Path) -> None:
+        inside = tmp_path.resolve() / "x"
+        assert process.confined_path(str(tmp_path), str(inside)) == str(inside)
+
+    def test_candidate_may_be_the_base(self, tmp_path: Path) -> None:
+        assert process.confined_path(str(tmp_path), ".") == str(tmp_path.resolve())
+
+    def test_dot_dot_that_stays_inside(self, tmp_path: Path) -> None:
+        assert process.confined_path(str(tmp_path), "a/../b") == str(tmp_path.resolve() / "b")
+
+    @pytest.mark.parametrize(
+        "candidate", ["..", "../x", "a/../../x", "/etc/passwd", "/", "a/../..", "//etc"]
+    )
+    def test_rejects_escapes(self, tmp_path: Path, candidate: str) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="escapes the base"):
+            process.confined_path(str(tmp_path), candidate)
+
+    def test_rejects_a_sibling_with_the_same_prefix(self, tmp_path: Path) -> None:
+        base = tmp_path / "base"
+        base.mkdir()
+        with pytest.raises(process.ProcessPolicyError, match="escapes the base"):
+            process.confined_path(str(base), str(tmp_path / "base-evil" / "x"))
+
+    def test_rejects_a_symlink_component(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        base = tmp_path / "base"
+        base.mkdir()
+        (base / "link").symlink_to(outside)
+        with pytest.raises(process.ProcessPolicyError, match="contains a symlink"):
+            process.confined_path(str(base), "link/file")
+
+    def test_rejects_a_symlink_leaf(self, tmp_path: Path) -> None:
+        (tmp_path / "leaf").symlink_to("/etc/passwd")
+        with pytest.raises(process.ProcessPolicyError, match="contains a symlink"):
+            process.confined_path(str(tmp_path), "leaf")
+
+    def test_a_symlinked_base_is_resolved(self, tmp_path: Path) -> None:
+        real = tmp_path / "real"
+        real.mkdir()
+        alias = tmp_path / "alias"
+        alias.symlink_to(real)
+        assert process.confined_path(str(alias), "f") == str(real.resolve() / "f")
+
+    def test_root_base(self) -> None:
+        assert process.confined_path("/", "etc/hostname") == "/etc/hostname"
+
+    @pytest.mark.parametrize(
+        ("base", "candidate"),
+        [("", "x"), ("/usr", ""), ("/usr\x00", "x"), ("/usr", "a\x00"), (None, "x"), ("/usr", 3)],
+    )
+    def test_rejects_malformed_inputs(self, base: Any, candidate: Any) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="non-empty string without NUL"):
+            process.confined_path(base, candidate)
+
+    @pytest.mark.parametrize("base", ["relative", "/nonexistent-dir-for-test", "/etc/passwd"])
+    def test_rejects_a_bad_base(self, base: str) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="base must be"):
+            process.confined_path(base, "x")
+
+
+class TestEnvironment:
+    """Child environment construction."""
+
+    def test_fixed_values_only_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SECRET_TOKEN", PLANTED)
+        spec = process.CommandSpec("oscap", (), 1)
+        assert process.build_environment(spec) == {
+            "PATH": process.SAFE_PATH,
+            "LC_ALL": "C",
+            "LANG": "C",
+        }
+
+    def test_copies_only_allowed_names_that_are_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TZ", "Europe/Amsterdam")
+        monkeypatch.delenv("TMPDIR", raising=False)
+        spec = process.CommandSpec("oscap", (), 1, env_allow=("TZ", "TMPDIR"))
+        environment = process.build_environment(spec)
+        assert environment["TZ"] == "Europe/Amsterdam"
+        assert "TMPDIR" not in environment
+
+    def test_child_does_not_see_the_parent_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SECRET_TOKEN", PLANTED)
+        monkeypatch.setenv("TZ", "Europe/Amsterdam")
+        monkeypatch.setenv("PATH", "/nonexistent-attacker-path")
+        result = execute(shell("env"))
+        lines = result.stdout.decode().splitlines()
+        assert b"SECRET_TOKEN" not in result.stdout
+        assert b"canary" not in result.stdout
+        assert "PATH=" + process.SAFE_PATH in lines
+        assert "LC_ALL=C" in lines
+        assert "LANG=C" in lines
+        assert not any(line.startswith("TZ=") for line in lines)
+
+    def test_child_sees_an_explicitly_copied_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TZ", "Europe/Amsterdam")
+        result = execute(shell("env", env_allow=("TZ",)))
+        assert "TZ=Europe/Amsterdam" in result.stdout.decode().splitlines()
+
+    def test_result_never_carries_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SECRET_TOKEN", PLANTED)
+        result = execute(shell("true"))
+        assert "canary" not in repr(result)
+        assert {field.name for field in dataclasses.fields(result)} == {
+            "argv",
+            "returncode",
+            "stdout",
+            "stderr",
+            "stdout_truncated",
+            "stderr_truncated",
+            "duration_seconds",
+            "timed_out",
+        }
+
+
+class TestRun:
+    """Execution, output capture and result contents."""
+
+    def test_success(self) -> None:
+        result = execute(process.CommandSpec("true", (), FAST))
+        assert result.returncode == 0
+        assert result.stdout == b""
+        assert result.stderr == b""
+        assert not result.timed_out
+        assert not result.stdout_truncated
+        assert not result.stderr_truncated
+        assert 0 <= result.duration_seconds < FAST
+        assert Path(result.argv[0]).is_absolute()
+        assert result.argv[1:] == ()
+
+    def test_failure_exit_status(self) -> None:
+        result = execute(process.CommandSpec("false", (), FAST))
+        assert result.returncode == 1
+        assert not result.timed_out
+
+    def test_captures_both_streams_and_the_exit_status(self) -> None:
+        result = execute(shell("printf out; printf err >&2; exit 3"))
+        assert (result.returncode, result.stdout, result.stderr) == (3, b"out", b"err")
+        assert result.argv[1:] == ("-c", "printf out; printf err >&2; exit 3", "sh")
+
+    def test_result_is_frozen(self) -> None:
+        result: Any = execute(process.CommandSpec("true", (), FAST))
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.returncode = 5
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            ";touch pwned",
+            "`touch pwned`",
+            "$(touch pwned)",
+            "&& touch pwned",
+            "| touch pwned",
+            "'; touch pwned; '",
+        ],
+    )
+    def test_injection_payloads_are_passed_as_data(self, tmp_path: Path, payload: str) -> None:
+        result = execute(shell('printf %s "$1"', payload, cwd=str(tmp_path)))
+        assert result.stdout == payload.encode()
+        assert not (tmp_path / "pwned").exists()
+
+    @pytest.mark.parametrize("payload", ["a\nb", "a\x00b", "a\rb"])
+    def test_injection_payloads_with_control_characters_never_run(self, payload: str) -> None:
+        with pytest.raises(process.ProcessPolicyError):
+            shell('printf %s "$1"', payload)
+
+    def test_disallowed_option_never_runs(self) -> None:
+        spec = process.CommandSpec("true", ("--evil",), 1)
+        with pytest.raises(process.ProcessPolicyError, match="option is not allow-listed"):
+            execute(spec)
+
+    def test_uses_the_hardened_process_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+        real: Any = process.SpawnProcess
+
+        def spy(argv: Any, **keywords: Any) -> Any:
+            captured["argv"] = argv
+            captured.update(keywords)
+            return real(argv, **keywords)
+
+        monkeypatch.setattr(process, "SpawnProcess", spy)
+        execute(process.CommandSpec("true", (), FAST))
+        assert isinstance(captured["argv"], tuple)
+        assert captured["shell"] is False
+        assert captured["stdin"] == subprocess.DEVNULL
+        assert captured["close_fds"] is True
+        assert captured["start_new_session"] is True
+        assert captured["env"] == dict(process.FIXED_ENVIRONMENT)
+        assert captured["cwd"] is None
+
+    def test_standard_input_is_closed(self) -> None:
+        result = execute(shell("cat; echo done"))
+        assert result.stdout == b"done\n"
+        assert not result.timed_out
+
+    def test_runs_in_the_requested_directory(self, tmp_path: Path) -> None:
+        result = execute(shell("pwd -P", cwd=str(tmp_path)))
+        assert result.stdout.strip() == str(tmp_path.resolve()).encode()
+
+
+class TestRunLimits:
+    """Output caps and timeouts."""
+
+    def test_caps_unbounded_output_and_times_out(self) -> None:
+        spec = process.CommandSpec("yes", (), 0.5, max_output_bytes=1000)
+        result = execute(spec)
+        assert result.timed_out
+        assert result.returncode == -9
+        assert len(result.stdout) == 1000
+        assert result.stdout_truncated
+        assert not result.stderr_truncated
+
+    def test_caps_finite_output_without_a_timeout(self) -> None:
+        result = execute(shell("yes | head -c 3000000", max_output_bytes=4096))
+        assert not result.timed_out
+        assert result.returncode == 0
+        assert len(result.stdout) == 4096
+        assert result.stdout.startswith(b"y\ny\n")
+        assert result.stdout_truncated
+
+    def test_caps_stderr_independently(self) -> None:
+        result = execute(shell("printf ok; head -c 100000 /dev/zero >&2", max_output_bytes=512))
+        assert result.stdout == b"ok"
+        assert len(result.stderr) == 512
+        assert result.stderr_truncated
+        assert not result.stdout_truncated
+
+    def test_output_exactly_at_the_cap_is_not_truncated(self) -> None:
+        result = execute(shell("head -c 100 /dev/zero", max_output_bytes=100))
+        assert len(result.stdout) == 100
+        assert not result.stdout_truncated
+
+    def test_timeout_kills_the_process(self) -> None:
+        started = time.monotonic()
+        result = execute(process.CommandSpec("sleep", ("30",), 0.5))
+        assert result.timed_out
+        assert result.returncode == -9
+        assert time.monotonic() - started < FAST
+
+    def test_timeout_kills_the_whole_process_group(self) -> None:
+        script = "sleep 60 & echo $!; sleep 60 & echo $!; wait"
+        result = execute(shell(script, timeout=1.0))
+        assert result.timed_out
+        pids = [int(value) for value in result.stdout.split()]
+        assert len(pids) == 2
+        assert all(wait_until_dead(pid) for pid in pids)
+
+    def test_timeout_when_output_pipes_are_closed(self) -> None:
+        started = time.monotonic()
+        result = execute(shell("exec >&- 2>&-; sleep 30", timeout=0.5))
+        assert result.timed_out
+        assert result.returncode == -9
+        assert time.monotonic() - started < FAST
+
+    def test_a_group_member_holding_the_pipes_cannot_outlive_the_timeout(self) -> None:
+        result = execute(shell("sleep 60 & echo $!; exit 0", timeout=1.0))
+        pid = int(result.stdout.split()[0])
+        assert result.timed_out
+        assert wait_until_dead(pid)
+
+    def test_timeout_is_a_result_not_an_exception(self) -> None:
+        result = execute(process.CommandSpec("sleep", ("30",), 0.2))
+        assert isinstance(result, process.CommandResult)
+        assert result.timed_out
+
+
+class TestRunFailures:
+    """Failures before or while starting a process."""
+
+    def test_missing_binary(self, trusted: Path) -> None:
+        with pytest.raises(process.ProcessExecutionError, match="not found"):
+            run_in(trusted)
+
+    def test_default_policy_missing_oscap(self, trusted: Path) -> None:
+        spec = process.CommandSpec("oscap", ("--version",), 1)
+        with pytest.raises(process.ProcessExecutionError, match="not found"):
+            process.run(spec, trusted_dirs=[str(trusted)])
+
+    def test_unsafe_binary_is_refused_before_running(self, trusted: Path, tmp_path: Path) -> None:
+        marker = tmp_path / "ran"
+        tool = trusted / "true"
+        tool.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+        tool.chmod(0o777)
+        with pytest.raises(process.ProcessPolicyError, match="world-writable"):
+            run_in(trusted)
+        assert not marker.exists()
+
+    def test_symlink_outside_is_refused_before_running(self, trusted: Path, tmp_path: Path) -> None:
+        marker = tmp_path / "ran"
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        evil = outside / "evil"
+        evil.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+        evil.chmod(0o755)
+        (trusted / "true").symlink_to(evil)
+        with pytest.raises(process.ProcessPolicyError, match="outside the trusted directories"):
+            run_in(trusted)
+        assert not marker.exists()
+
+    def test_runs_a_binary_from_an_injected_trusted_directory(self, trusted: Path) -> None:
+        tool = trusted / "sleep"
+        tool.write_text("#!/bin/sh\nprintf custom\n", encoding="utf-8")
+        tool.chmod(0o755)
+        result = run_in(trusted, "sleep")
+        assert result.stdout == b"custom"
+        assert result.argv == (str(tool),)
+
+    def test_start_failure_is_an_execution_error(self, trusted: Path) -> None:
+        tool = trusted / "true"
+        tool.write_text("not a program\n", encoding="utf-8")
+        tool.chmod(0o755)
+        with pytest.raises(process.ProcessExecutionError, match="cannot start"):
+            run_in(trusted)
+
+    def test_start_failure_without_a_strerror(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def explode(*_: Any, **__: Any) -> Any:
+            raise OSError
+
+        monkeypatch.setattr(process, "SpawnProcess", explode)
+        with pytest.raises(process.ProcessExecutionError, match="OSError"):
+            execute(process.CommandSpec("true", (), 1))
+
+    def test_read_error_kills_the_child_and_is_reported(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        children: list[Any] = []
+
+        class Recording(subprocess.Popen[bytes]):
+            """Popen that records every child it starts."""
+
+            def __init__(self, *args: Any, **keywords: Any) -> None:
+                super().__init__(*args, **keywords)
+                children.append(self)
+
+        def broken(descriptor: int) -> bytes:
+            raise OSError(errno.EIO, f"Input/output error on {descriptor}")
+
+        monkeypatch.setattr(process, "SpawnProcess", Recording)
+        monkeypatch.setattr(process, "_read_chunk", broken)
+        with pytest.raises(process.ProcessExecutionError, match="Input/output error"):
+            execute(shell("echo hi; sleep 30"))
+        assert wait_until_dead(children[0].pid)
+        assert children[0].returncode is not None
+
+
+class TestExceptions:
+    """Exception types and message escaping."""
+
+    def test_hierarchy(self) -> None:
+        assert issubclass(process.ProcessPolicyError, process.ProcessError)
+        assert issubclass(process.ProcessExecutionError, process.ProcessError)
+        assert issubclass(process.ProcessPolicyError, ValueError)
+        assert not issubclass(process.ProcessPolicyError, process.ProcessExecutionError)
+
+    def test_messages_never_contain_raw_untrusted_text(self) -> None:
+        with pytest.raises(process.ProcessPolicyError) as raised:
+            process.CommandSpec("true", ("-x\ty" + "z" * 200,), 1)
+        message = str(raised.value)
+        assert "\t" not in message
+        assert "\\t" in message
+        assert "z" * 100 not in message

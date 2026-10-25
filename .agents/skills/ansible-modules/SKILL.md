@@ -40,7 +40,7 @@ where external processes run, and only through one audited helper.
 - Set `supports_check_mode=True` wherever a check is meaningful; audit modules never change the host.
 - Failures use `module.fail_json` with structured fields (`msg`, `error_type`, `rule_id` or `path` where relevant), never bare tracebacks.
 - Resolve binaries with `module.get_bin_path(name, required=True)`.
-- All external process execution goes through `plugins/module_utils/compliance/process.py`, which calls `subprocess.run([...], shell=False, timeout=..., env=<explicit minimal env>, check=False)`. No other file imports `subprocess` or calls `os.system`, `os.popen` or `pty`. Commands are argument lists, never strings.
+- All external process execution goes through `plugins/module_utils/compliance/process.py`, which runs an argument list with `shell=False`, a timeout, an explicit minimal environment and bounded output (ADR 0004). No other file imports `subprocess` or calls `os.system`, `os.popen` or `pty`. Commands are argument lists, never strings.
 - Arguments are validated by allow-list or regex before use; reject values starting with `-` where a path or ID is expected. See [references/safe-io.md](references/safe-io.md).
 - Parse XML on hosts with the standard library only: reject DOCTYPE and entity declarations before parsing and bound the file size first.
 - Confine paths to a base directory, resolve and compare real paths, reject symlinks for writes, write atomically (temporary file, fsync, rename) with an explicit mode.

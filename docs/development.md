@@ -144,6 +144,8 @@ YAML and Python files (ADR 0005):
 - `#` inside quoted scalars, block scalars and URLs is content, not a comment.
 - Python files contain no comments, except a shebang on the first line. This includes `# noqa` and
   `# type: ignore`; suppressions are configured in `pyproject.toml` instead.
+- Python files under `plugins/` do not import `subprocess` or `pty`, call `os.system`, `os.popen`, `os.exec*` or
+  `os.spawn*`, or pass `shell=True`. Only `plugins/module_utils/compliance/process.py` is exempt (ADR 0004).
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
   including the `ansible.builtin.`, `ansible.legacy.`, `ansible.windows.` and `community.windows.` forms and the `action` / `local_action` spellings.
   The scan covers `extensions/` and `tests/` as well.

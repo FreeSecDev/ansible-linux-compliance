@@ -7,6 +7,10 @@ Rules:
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
 * YAML files contain no banned Ansible command-execution modules.
 * Python files contain no comments, except a shebang on the first line.
+* Python files under ``plugins/`` do not import ``subprocess`` or ``pty``, do not
+  call ``os.system``, ``os.popen``, ``os.exec*``, ``os.spawn*`` or ``os.posix_spawn*``,
+  and do not pass ``shell=True``. Only ``plugins/module_utils/compliance/process.py``
+  is exempt (ADR 0004).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
 """
@@ -14,6 +18,7 @@ Violations are printed as ``path:line: message`` and the exit status is 1.
 from __future__ import annotations
 
 import argparse
+import ast
 import bisect
 import io
 import re
@@ -47,6 +52,13 @@ PINNED_USES: Final[re.Pattern[str]] = re.compile(
     r"\s*(?:-\s+)?uses:\s+[\w.-]+/[\w.-]+(?:/[\w./-]+)?@[0-9a-f]{40}\s*"
 )
 PINNED_REV: Final[re.Pattern[str]] = re.compile(r"\s*(?:-\s+)?rev:\s+[0-9a-f]{40}\s*")
+REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+PLUGINS_DIRECTORY: Final[str] = "plugins"
+PROCESS_HELPER: Final[Path] = Path("plugins/module_utils/compliance/process.py")
+FORBIDDEN_MODULES: Final[frozenset[str]] = frozenset({"subprocess", "pty"})
+FORBIDDEN_OS_NAMES: Final[frozenset[str]] = frozenset({"system", "popen"})
+FORBIDDEN_OS_PREFIXES: Final[tuple[str, ...]] = ("exec", "spawn", "posix_spawn")
+IMPORT_FUNCTIONS: Final[frozenset[str]] = frozenset({"__import__", "import_module"})
 SHEBANG_PREFIX: Final[str] = "#!"
 BLOCK_STYLES: Final[frozenset[str]] = frozenset({"|", ">"})
 LINE_BREAK: Final[re.Pattern[str]] = re.compile(r"\r\n|[\n\r\x85\u2028\u2029]")
@@ -286,8 +298,104 @@ def check_python_comments(path: Path, data: bytes) -> list[Violation]:
     return violations
 
 
-def check_file(path: Path) -> list[Violation]:
-    """Apply every rule that matches the suffix of ``path``."""
+def is_process_scope(path: Path, root: Path) -> bool:
+    """Return whether ``path`` is plugin code that may not run processes itself."""
+    try:
+        relative = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return relative.parts[:1] == (PLUGINS_DIRECTORY,) and relative != PROCESS_HELPER
+
+
+def _is_forbidden_os_name(name: str) -> bool:
+    return name in FORBIDDEN_OS_NAMES or name.startswith(FORBIDDEN_OS_PREFIXES)
+
+
+def _is_forbidden_module(name: str) -> bool:
+    return name.split(".", 1)[0] in FORBIDDEN_MODULES
+
+
+def _os_aliases(tree: ast.AST) -> frozenset[str]:
+    """Return the names that are bound to the ``os`` module in ``tree``."""
+    aliases = {"os"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            aliases.update(alias.asname or alias.name for alias in node.names if alias.name == "os")
+    return frozenset(aliases)
+
+
+def _import_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
+    """Yield a description for each forbidden import on ``node``."""
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            if _is_forbidden_module(alias.name):
+                yield f"import of {alias.name!r} is only allowed in {PROCESS_HELPER}"
+        return
+    module = node.module or ""
+    if _is_forbidden_module(module):
+        yield f"import from {module!r} is only allowed in {PROCESS_HELPER}"
+    if module == "os":
+        for alias in node.names:
+            if _is_forbidden_os_name(alias.name):
+                yield f"import of os.{alias.name} is only allowed in {PROCESS_HELPER}"
+
+
+def _process_findings(node: ast.AST, aliases: frozenset[str]) -> Iterable[str]:
+    """Yield a description for each forbidden process construct on ``node`` itself."""
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        yield from _import_findings(node)
+    elif (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in aliases
+        and _is_forbidden_os_name(node.attr)
+    ):
+        yield f"use of os.{node.attr} is only allowed in {PROCESS_HELPER}"
+    elif isinstance(node, ast.Call):
+        yield from _call_findings(node)
+
+
+def _call_findings(node: ast.Call) -> Iterable[str]:
+    """Yield descriptions for ``shell=True`` and dynamic imports of forbidden modules."""
+    for keyword in node.keywords:
+        if (
+            keyword.arg == "shell"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+        ):
+            yield "shell=True is forbidden"
+    function = node.func
+    name = ""
+    if isinstance(function, ast.Name):
+        name = function.id
+    elif isinstance(function, ast.Attribute):
+        name = function.attr
+    if name in IMPORT_FUNCTIONS and node.args:
+        first = node.args[0]
+        if (
+            isinstance(first, ast.Constant)
+            and isinstance(first.value, str)
+            and _is_forbidden_module(first.value)
+        ):
+            yield f"dynamic import of {first.value!r} is only allowed in {PROCESS_HELPER}"
+
+
+def check_process_isolation(path: Path, data: bytes) -> list[Violation]:
+    """Reject process execution constructs in plugin code outside the helper."""
+    try:
+        tree = ast.parse(data, filename=str(path))
+    except (SyntaxError, ValueError) as error:
+        return [Violation(path, 1, f"cannot parse Python: {error}")]
+    aliases = _os_aliases(tree)
+    return sorted(
+        Violation(path, getattr(node, "lineno", 1), message)
+        for node in ast.walk(tree)
+        for message in _process_findings(node, aliases)
+    )
+
+
+def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
+    """Apply every rule that matches the suffix and location of ``path``."""
     suffix = path.suffix.lower()
     if suffix not in YAML_SUFFIXES | PYTHON_SUFFIXES:
         return []
@@ -296,7 +404,10 @@ def check_file(path: Path) -> list[Violation]:
     except OSError as error:
         return [Violation(path, 1, f"cannot read file: {error}")]
     if suffix in PYTHON_SUFFIXES:
-        return check_python_comments(path, data)
+        violations = check_python_comments(path, data)
+        if is_process_scope(path, root):
+            violations.extend(check_process_isolation(path, data))
+        return violations
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -308,9 +419,9 @@ def check_file(path: Path) -> list[Violation]:
     ]
 
 
-def check_paths(paths: Iterable[Path]) -> list[Violation]:
+def check_paths(paths: Iterable[Path], root: Path = REPO_ROOT) -> list[Violation]:
     """Check every path and return the violations in sorted order."""
-    return sorted(violation for path in paths for violation in check_file(path))
+    return sorted(violation for path in paths for violation in check_file(path, root))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -55,6 +55,7 @@ ignore = ["D203", "D213", "TRY003"]
 "tests/**" = ["S101", "PLR2004", "D", "ANN401", "SLF001", "FBT001", "INP001"]
 "tools/**" = ["T201"]
 "plugins/**" = ["INP001"]
+"plugins/module_utils/compliance/process.py" = ["S404", "S603"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -66,6 +67,8 @@ max-complexity = 10
 known-first-party = ["tools", "ansible_collections"]
 
 [tool.freesecdev.lint-justifications]
+"bandit B404 and B603" = "Bandit has no per-file skip and inline nosec comments are banned. Only plugins/module_utils/compliance/process.py (ADR 0004) may import subprocess or call it with an argument list; the repository rule in tools/lint/check_repo_rules.py fails on subprocess anywhere else in plugins, and Ruff S404 and S603 stay enabled for every other file."
+"ruff S404 and S603 (plugins/module_utils/compliance/process.py)" = "ADR 0004: this is the single audited process helper. It runs an argument list with shell=False, an absolute allow-listed executable, validated arguments and a timeout; a repository rule forbids subprocess everywhere else."
 "ruff D203" = "Mutually exclusive with D211; D211 is enforced instead."
 "ruff D213" = "Mutually exclusive with D212; D212 is enforced instead."
 "ruff TRY003" = "Overlaps with EM101 and EM102; messages are built from named variables in one place, and long messages in custom exception types add no value."
@@ -134,6 +137,7 @@ redefined-outer-name = "pytest fixtures are injected by parameter name and trigg
 
 [tool.bandit]
 exclude_dirs = [".venv", ".agents", ".claude", "tests", "build", "dist"]
+skips = ["B404", "B603"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"

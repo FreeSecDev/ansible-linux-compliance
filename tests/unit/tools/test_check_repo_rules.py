@@ -427,3 +427,159 @@ def test_comment_hidden_by_malformed_block_scalar_still_fails_the_file(tmp_path:
     target.write_text("---\nx: 'a' |\n  # c\n", encoding="utf-8")
     messages = [violation.message for violation in rules.check_file(target)]
     assert any(message.startswith("invalid YAML") for message in messages)
+
+
+def plugin_file(root: Path, source: str, name: str = "plugins/module_utils/other.py") -> Path:
+    target = root / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source, encoding="utf-8")
+    return target
+
+
+def process_messages(
+    root: Path, source: str, name: str = "plugins/module_utils/other.py"
+) -> list[str]:
+    target = plugin_file(root, source, name)
+    return [violation.message for violation in rules.check_file(target, root)]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import subprocess\n",
+        "import subprocess as sp\n",
+        "import os, subprocess\n",
+        "import subprocess.run\n",
+        "from subprocess import run\n",
+        "from subprocess import *\n",
+        "import pty\n",
+        "from pty import spawn\n",
+        "import os\nos.system('id')\n",
+        "import os\nos.popen('id')\n",
+        "import os\nos.execv('/bin/sh', [])\n",
+        "import os\nos.execvp('sh', [])\n",
+        "import os\nos.spawnl(0, 'sh')\n",
+        "import os\nos.posix_spawn('sh', [], {})\n",
+        "import os as o\no.system('id')\n",
+        "import os.path\nos.system('id')\n",
+        "from os import system\n",
+        "from os import popen, getcwd\n",
+        "from os import execv\n",
+        "def f(x):\n    return x(shell=True)\n",
+        "x = __import__('subprocess')\n",
+        "import importlib\nimportlib.import_module('subprocess.x')\n",
+        "importlib.import_module('pty')\n",
+        "from importlib import import_module\nimport_module('subprocess')\n",
+    ],
+)
+def test_process_isolation_rejects_forbidden_constructs(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import os\nos.getcwd()\n",
+        "import os.path\nos.path.join('a', 'b')\n",
+        "from os import getcwd\n",
+        "import os\nos.environ\n",
+        "def f(x):\n    return x(shell=False)\n",
+        "def f(x):\n    return x(shell=flag)\n",
+        "def f(x):\n    return x(other=True)\n",
+        "def f(x):\n    return x(*x)\n",
+        "import subprocessing\n",
+        "import json\njson.dumps(1)\n",
+        "from . import something\n",
+        "__import__('json')\n",
+        "__import__(name)\n",
+        "__import__()\n",
+        "import importlib\nimportlib.import_module(1)\n",
+        "importlib.invalidate_caches()\n",
+        "factory()()\n",
+        "obj.system('id')\n",
+        "other.system('id')\n",
+        "x = 'subprocess'\n",
+    ],
+)
+def test_process_isolation_allows_benign_constructs(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source) == []
+
+
+def test_process_isolation_messages_and_lines(tmp_path: Path) -> None:
+    target = plugin_file(tmp_path, "import os\n\nos.system('id')\nfrom subprocess import run\n")
+    helper = "plugins/module_utils/compliance/process.py"
+    violations = rules.check_file(target, tmp_path)
+    assert [(violation.line, violation.message) for violation in violations] == [
+        (3, f"use of os.system is only allowed in {helper}"),
+        (4, f"import from 'subprocess' is only allowed in {helper}"),
+    ]
+    shell_violation = process_messages(tmp_path, "run(x, shell=True)\n")
+    assert shell_violation == ["shell=True is forbidden"]
+
+
+def test_process_helper_is_exempt(tmp_path: Path) -> None:
+    messages = process_messages(
+        tmp_path, "import subprocess\n", "plugins/module_utils/compliance/process.py"
+    )
+    assert messages == []
+
+
+def test_same_file_name_elsewhere_is_not_exempt(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "import subprocess\n", "plugins/modules/process.py")
+    assert messages != []
+
+
+def test_nested_plugin_directories_are_in_scope(tmp_path: Path) -> None:
+    assert process_messages(tmp_path, "import subprocess\n", "plugins/a/b/c/mod.py") != []
+
+
+@pytest.mark.parametrize(
+    "name", ["tools/lint/helper.py", "tests/unit/plugins/test_x.py", "tests/plugins/x.py", "x.py"]
+)
+def test_code_outside_plugins_is_out_of_scope(tmp_path: Path, name: str) -> None:
+    assert process_messages(tmp_path, "import subprocess\nimport os\nos.system('x')\n", name) == []
+
+
+def test_path_outside_the_root_is_out_of_scope(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = plugin_file(tmp_path, "import subprocess\n", "plugins/x.py")
+    assert rules.check_file(outside, root) == []
+
+
+def test_unparsable_plugin_source_is_reported(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "def broken(:\n")
+    assert any(message.startswith("cannot parse Python") for message in messages)
+
+
+def test_null_bytes_in_plugin_source_are_reported(tmp_path: Path) -> None:
+    target = plugin_file(tmp_path, "x = 1\n")
+    target.write_bytes(b"x = 1\x00\n")
+    messages = [violation.message for violation in rules.check_file(target, tmp_path)]
+    assert any(message.startswith("cannot parse Python") for message in messages)
+
+
+def test_check_paths_uses_the_given_root(tmp_path: Path) -> None:
+    target = plugin_file(tmp_path, "import subprocess\n")
+    assert len(rules.check_paths([target], tmp_path)) == 1
+    assert rules.check_paths([target], tmp_path / "elsewhere") == []
+
+
+def test_comment_and_process_violations_are_both_reported(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "import subprocess  # why\n")
+    assert len(messages) == 2
+
+
+def test_repository_plugins_never_use_process_apis_outside_the_helper() -> None:
+    sources = sorted((rules.REPO_ROOT / "plugins").rglob("*.py"))
+    assert rules.REPO_ROOT / rules.PROCESS_HELPER in sources
+    assert rules.check_paths(sources) == []
+
+
+def test_repository_helper_is_the_only_plugin_file_importing_subprocess() -> None:
+    importers = [
+        path.relative_to(rules.REPO_ROOT)
+        for path in sorted((rules.REPO_ROOT / "plugins").rglob("*.py"))
+        if "subprocess" in path.read_text(encoding="utf-8")
+    ]
+    assert importers == [rules.PROCESS_HELPER]
