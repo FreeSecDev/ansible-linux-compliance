@@ -8,6 +8,9 @@ dependencies = []
 [dependency-groups]
 dev = [
     "actionlint-py==1.7.12.25",
+    "ansible-core==2.21.5",
+    "ansible-lint==26.10.1",
+    "antsibull-changelog==0.35.2",
     "bandit==1.9.4",
     "coverage==7.16.2",
     "mypy==2.4.0",
@@ -26,12 +29,13 @@ dev = [
 
 [tool.uv]
 package = false
+exclude-newer = "7 days"
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["tools", "tests"]
-extend-exclude = [".agents", ".claude"]
+src = ["tools", "tests", "plugins"]
+extend-exclude = [".agents", ".claude", "build", "dist"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -50,6 +54,8 @@ ignore = ["D203", "D213", "TRY003"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004", "D", "ANN401", "SLF001", "FBT001", "INP001"]
 "tools/**" = ["T201"]
+"plugins/**" = ["INP001", "UP017", "UP047"]
+"plugins/module_utils/compliance/model.py" = ["S105"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -58,7 +64,7 @@ convention = "google"
 max-complexity = 10
 
 [tool.ruff.lint.isort]
-known-first-party = ["tools"]
+known-first-party = ["tools", "ansible_collections"]
 
 [tool.freesecdev.lint-justifications]
 "ruff D203" = "Mutually exclusive with D211; D211 is enforced instead."
@@ -72,12 +78,16 @@ known-first-party = ["tools"]
 "ruff FBT001 (tests/**)" = "Parametrized expectations are booleans passed by pytest, not a public API."
 "ruff INP001 (tests/**)" = "Tests are collected in importlib mode and are not importable packages."
 "ruff T201 (tools/**)" = "Command-line tools report to the terminal with print by design."
+"ruff INP001 (plugins/**)" = "Collection plugin directories are implicit namespace packages; Ansible does not require __init__.py and a placeholder would only add files."
+"ruff UP017 (plugins/**)" = "datetime.UTC needs Python 3.11, but managed-node code must run on Python 3.9 (ADR 0013); timezone.utc is the compatible spelling."
+"ruff UP047 (plugins/**)" = "PEP 695 type parameter syntax needs Python 3.12; managed-node code must run on Python 3.9 (ADR 0013), so TypeVar is required."
+"ruff S105 (plugins/module_utils/compliance/model.py)" = "The Outcome.PASS enum member is named after the XCCDF result 'pass'; it is not a credential."
 
 [tool.mypy]
 strict = true
 python_version = "3.12"
 files = ["tools", "tests"]
-mypy_path = "."
+mypy_path = ".:build/collections"
 explicit_package_bases = true
 warn_unreachable = true
 disallow_any_unimported = true
@@ -87,7 +97,8 @@ show_error_codes = true
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
-include = ["tools", "tests"]
+include = ["tools", "tests", "plugins"]
+extraPaths = ["build/collections"]
 reportMissingModuleSource = "error"
 reportUnnecessaryTypeIgnoreComment = "error"
 
@@ -95,10 +106,12 @@ reportUnnecessaryTypeIgnoreComment = "error"
 py-version = "3.12"
 jobs = 0
 recursive = true
-ignore-paths = ["^\\.venv/", "^\\.agents/", "^\\.claude/"]
+ignore-paths = ["^\\.venv/", "^\\.agents/", "^\\.claude/", "^build/", "^dist/"]
+init-hook = "import sys; sys.path.insert(0, 'build/collections')"
 
 [tool.pylint.format]
 max-line-length = 100
+max-module-lines = 1500
 
 [tool.pylint."messages control"]
 enable = ["useless-suppression"]
@@ -109,30 +122,37 @@ disable = [
     "missing-function-docstring",
     "missing-module-docstring",
     "use-implicit-booleaness-not-comparison",
+    "too-many-instance-attributes",
 ]
 
 [tool.freesecdev.pylint-justifications]
+max-module-lines = "The findings model is one module by design (ADR 0013); Ruff formatting expands every call over several lines, and the entities share private validators."
 duplicate-code = "Two small standalone tools share the fence-marker constant; extracting a shared module would add coupling for a three-line constant."
 too-few-public-methods = "Frozen slotted dataclasses are deliberate value objects."
 missing-function-docstring = "Applies to test functions, whose names describe them; public tools code is enforced by Ruff D rules."
 missing-module-docstring = "Applies to test modules; public tools code is enforced by Ruff D rules."
 use-implicit-booleaness-not-comparison = "Tests assert an explicit empty list so that None or other falsy values fail."
+too-many-instance-attributes = "Findings model entities are frozen value objects whose fields mirror the serialized schema; splitting them would diverge from the schema."
 redefined-outer-name = "pytest fixtures are injected by parameter name and trigger it by design."
 
+[tool.freesecdev.bandit-justifications]
+B105 = "Bandit matches the enum member Outcome.PASS (the XCCDF result named pass) as a hardcoded password; the repository handles no credentials in code, and B105 stays off only for that false positive."
+
 [tool.bandit]
-exclude_dirs = [".venv", ".agents", ".claude", "tests"]
+exclude_dirs = [".venv", ".agents", ".claude", "tests", "build", "dist"]
+skips = ["B105"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "build/collections"]
 addopts = ["--strict-markers", "--strict-config", "-ra", "--import-mode=importlib"]
 xfail_strict = true
 filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
-source = ["tools"]
+source = ["tools", "plugins"]
 
 [tool.coverage.report]
 fail_under = 95

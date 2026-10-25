@@ -2,6 +2,8 @@
 ignores:
   - ".venv/**"
   - ".claude/**"
+  - "build/**"
+  - "dist/**"
   - "node_modules/**"
 config:
   default: true

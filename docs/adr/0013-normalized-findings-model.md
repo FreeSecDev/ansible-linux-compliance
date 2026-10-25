@@ -1,0 +1,197 @@
+# 0013. Normalized compliance findings model
+
+- **Status:** proposed
+- **Date:** 2026-10-25
+- **Deciders:** lead architect
+- **Jira:** FREES-26, FREES-39
+- **Pull requests:** pending
+- **Research:** [2026-10 upstream compatibility](../research/2026-10-upstream-compatibility.md)
+
+## Context
+
+Scanners, the audit module, remediation, exceptions and the report all exchange results. They need one typed,
+versioned representation that is independent of the scanner backend, the benchmark and the distribution
+([component map](../../.agents/skills/architecture/references/component-map.md)). The model has three constraints.
+
+- It is produced on managed hosts by modules, so it can only use the Python standard library and must run on every
+  managed-node Python version that the oldest supported ansible-core supports.
+- It is consumed on the controller by the reporting package, which must reuse it rather than redefine it.
+- It carries security decisions: an outcome that is wrongly `pass` is a false assurance
+  ([ADR 0010](0010-initial-os-and-benchmark-scope.md), [ADR 0011](0011-control-toggles-and-cleanup.md)).
+
+The collection requires ansible-core 2.20 or newer (`requires_ansible: ">=2.20.0"` in `meta/runtime.yml`). The
+official ansible-core support matrix, checked on 2026-10-25, lists 2.20 as supported (general availability
+03 November 2025, end of life May 2027) with control node Python 3.12 to 3.14 and **managed-node (target) Python 3.9 to
+3.14**. Source:
+<https://docs.ansible.com/projects/ansible/devel/reference_appendices/release_and_maintenance.html>. Python 3.9 is
+therefore the floor for all code in `plugins/modules` and `plugins/module_utils`. ansible-core 2.19 (target Python 3.8
+to 3.13) leaves support in November 2026 and is not supported by the collection.
+
+## Decision
+
+The findings model is a single standard-library module, `plugins/module_utils/compliance/model.py`, made of frozen
+dataclasses, enums and two functions for JSON. The reporting package imports the same module on the controller.
+
+### Entities
+
+| Entity | Fields |
+|---|---|
+| Framework | `framework_id` (`cis`, `stig`, `nist_800_53`, `nist_800_171`, `pci_dss`, `anssi`), `name` |
+| FrameworkVersion | `framework`, `version` |
+| Provenance | `source` (for example the ComplianceAsCode reference field), `content_version`, `content_sha256` |
+| Benchmark | full XCCDF benchmark ID, `title`, `version`, optional `framework_version`, `provenance`, `profiles`, `rules` |
+| Profile | full XCCDF profile ID, `title`, `rule_ids` |
+| Rule | see below |
+| Applicability | `distribution_id`, `versions` (at least one) |
+| Reference | `framework`, `control_id`, `provenance` |
+| HostIdentity | `hostname`, `distribution_id`, `distribution_version`, `architecture`, optional `machine_id` |
+| Evidence | `kind`, `source`, `content` (bounded text) |
+| ExceptionStatus | `state` (`none`, `active`, `expired`), `exception_id`, `reason`, `expires_at` |
+| RemediationResult | `rule_id`, `status`, `changed`, `message` |
+| Finding | `rule_id`, `outcome`, `severity`, `message`, `evidence`, `exception`, `remediation`, `disabled_by`, `flags` |
+| ScannerInfo | `name`, `version` |
+| ScanRun | `run_id`, `started_at`, `finished_at`, `host`, `scanner`, `content` (provenance including the datastream SHA-256), `benchmark_id`, `profile_id`, `status`, `error_message`, `findings` |
+
+A **Rule** has a stable full XCCDF ID (`xccdf_org.ssgproject.content_rule_<id>`, short IDs are display-only), `title`,
+`description`, `severity` (`unknown`, `info`, `low`, `medium`, `high`), `category` (the control family), `control_class`,
+`applicability` by distribution and version, `evaluation_method` (`oval`, `sce`, `ocil`, `evidence`, `manual`, `none`),
+`remediation_method` (`native_module`, `none`), `revert_strategy` per [ADR 0011](0011-control-toggles-and-cleanup.md)
+(`owned_dropin`, `recorded_value`, `recorded_state`, `irreversible`, or none) and `references` to CIS, STIG, NIST
+800-53, NIST 800-171, PCI DSS and ANSSI controls. Every reference carries its own provenance: source, content version
+and datastream SHA-256.
+
+`ScanRun` records when the scan ran (`started_at`, `finished_at`, UTC, second precision, `YYYY-MM-DDTHH:MM:SSZ`),
+which scanner and version produced it, and which content it evaluated, identified by source, version and digest. The
+digest is the SHA-256 that the content manifest verified before use.
+
+### Outcome enum and XCCDF mapping
+
+Outcomes are `pass`, `fail`, `notapplicable`, `notchecked`, `error`, `waived` and `disabled`. `disabled` means an
+operator toggle excluded the rule ([ADR 0011](0011-control-toggles-and-cleanup.md)); it is never counted as passing
+and a disabled finding names the controlling variable in `disabled_by`.
+
+`map_xccdf_result` maps scanner output with this explicit table. The match is exact and case-sensitive.
+
+| XCCDF result | Platform outcome | Retained flag |
+|---|---|---|
+| `pass` | `pass` | none |
+| `fail` | `fail` | none |
+| `notapplicable` | `notapplicable` | none |
+| `notchecked` | `notchecked` | none |
+| `error` | `error` | none |
+| `fixed` | `pass` | `fixed` |
+| `informational` | `notchecked` | `informational` |
+| `notselected` | `notchecked` | `notselected` |
+| `unknown` | `error` | none |
+
+**Any value that is not listed maps to `error`**, including other case spellings, empty strings, `waived`,
+`disabled` and every non-string. `waived` and `disabled` are never produced from scanner output: `waived` comes from an
+active exception record and `disabled` from tailoring data. A finding validates that its flags match its outcome
+(`fixed` only with `pass`, `informational` and `notselected` only with `notchecked`).
+
+### Control classification
+
+Every rule has exactly one `control_class`:
+
+| Class | Allowed evaluation methods | Remediation |
+|---|---|---|
+| `directly_auditable` | `oval`, `sce`, `ocil` | `none`, no revert strategy |
+| `automatable_remediation` | `oval`, `sce`, `ocil` | `native_module` and a revert strategy |
+| `evidence_only` | `evidence` | `none`, no revert strategy |
+| `manual_organizational` | `manual` | `none`, no revert strategy |
+| `unsupported` | `none` | `none`, no revert strategy |
+
+A rule that contradicts its class is rejected at construction. A revert strategy is required exactly for rules whose
+class is `automatable_remediation`.
+
+### Invariants
+
+- **A scanner execution failure is never `fail` or `pass`.** A `ScanRun` whose `status` is `failed` or `timed_out`
+  requires an `error_message` and may only contain findings with outcome `error`. A `completed` run must not have an
+  `error_message`. Unlisted XCCDF values map to `error` for the same reason.
+- **Cross-framework deduplication is by rule ID.** A `ScanRun`, a `Benchmark` and a `Profile` reject duplicate rule IDs,
+  so a rule is scanned, remediated and counted once however many frameworks reference it. Frameworks are reached
+  through `Rule.references`, never by repeating the rule.
+- `waived` holds exactly when the exception state is `active`; `disabled` holds exactly when `disabled_by` is set;
+  a remediation result must belong to the rule of its finding.
+- Profiles may only select rules that their benchmark contains.
+- Collections of keyed items are stored sorted (findings, rules and profiles by ID, references by framework and
+  control), so equal models serialize identically whatever the input order.
+
+### Serialization
+
+The model serializes to JSON with `schema_version` (currently `"1.0"`) at the top level of a `ScanRun`. `dumps` writes
+sorted keys, compact separators, ASCII escapes and no non-finite numbers. `loads` rejects oversized documents,
+invalid JSON, duplicate keys, `NaN` and `Infinity`, unknown or missing keys at every level, unknown enum values and
+unsupported schema versions. Readers accept only versions listed in `SUPPORTED_SCHEMA_VERSIONS`. A change that adds a
+field bumps the minor version and readers are updated before writers emit it; a breaking change bumps the major
+version.
+
+All text fields are bounded (identifiers 256 characters, titles 512, descriptions and messages 8192 or 4096, evidence
+content 65536, 64 evidence items per finding, 256 references per rule, 100000 findings per run, 128 MiB per document)
+and reject control characters. Identifiers, digests, timestamps and variable names are checked against anchored
+patterns. Validation failures raise `ModelError`, a `ValueError` subclass.
+
+### Placement and compatibility
+
+The model runs on managed hosts, so it lives in `plugins/module_utils/compliance/model.py`.
+
+- It imports only the standard library and no Ansible internals, so the reporting package can import it on the
+  controller without installing anything.
+- It supports Python 3.9, the oldest managed-node interpreter of ansible-core 2.20 (see Context). It uses
+  `from __future__ import annotations`, `TypeVar` instead of PEP 695 syntax, plain `Enum` instead of `StrEnum`
+  (Python 3.11) and `datetime.timezone.utc` instead of `datetime.UTC` (Python 3.11).
+- **Dataclass slots are not used.** `@dataclass(slots=True)` needs Python 3.10, so the dataclasses are frozen but not
+  slotted. The memory cost is irrelevant at the bounded sizes above and `__post_init__` validation is unaffected.
+- `ansible-test sanity` runs the `compile` and `import` tests on Python 3.9 to 3.14 and `ansible-test units` runs the
+  tests on 3.9, 3.12 and 3.14, so the claim is checked against real interpreters rather than asserted.
+
+## Alternatives evaluated
+
+| Alternative | Reason rejected |
+|---|---|
+| pydantic | A third-party package with a compiled core; target-side code may only use the standard library, and installing it on every managed host is not acceptable |
+| Plain dictionaries | No validation, no type checking, and key typos silently produce wrong outcomes; every consumer would re-implement the checks |
+| `TypedDict` | Static typing only, with no runtime validation of untrusted scanner output or host-supplied documents and no enforcement of invariants |
+| Dataclasses (chosen) | Standard library on Python 3.9, immutable with `frozen=True`, typed for mypy and Pyright strict, and validation fits in `__post_init__` |
+| Hand-written classes with `__slots__` | More code for the same behaviour; dataclasses give equality, hashing and `repr` for free |
+
+## Benefits
+
+One schema for scan, remediation, exceptions and reporting. Unsafe states (a failed scan reported as `pass`, a
+disabled rule counted as passing, a rule counted once per framework) cannot be constructed. Documents from hosts are
+validated before the controller uses them. The mapping table and classification are executable and tested at 100% line
+and branch coverage.
+
+## Trade-offs
+
+- Python 3.9 compatibility rules out newer syntax (slots, `StrEnum`, PEP 695, `X | Y` at runtime) until the oldest
+  supported ansible-core drops 3.9 as a target version.
+- Strict unknown-key rejection means a producer that adds a field must bump `schema_version` and readers must be
+  upgraded first.
+- Validation duplicates a small amount of logic that pydantic would provide; the helpers are internal and tested.
+- The module is large because Ruff formatting spreads every call over several lines.
+
+## Security implications
+
+Documents from managed hosts are untrusted input to the controller. `loads` bounds size, text length and item counts,
+rejects duplicate keys and non-finite numbers, and validates every field before an object exists, so a hostile host
+cannot smuggle an outcome the model forbids. A scanner crash, timeout or malformed output cannot become `pass` or
+`fail`. Evidence is bounded and may contain host data: producers must not put credentials in evidence, and consumers
+must escape it when rendering. The model never asserts compliance with a framework; references are evidence mappings
+with provenance (AGENTS.md rule 9).
+
+## Operational consequences
+
+- Modules and the reporting package import the model and never define their own outcome or finding types.
+- Changing an entity or an enum value requires an update to this ADR and a `schema_version` decision.
+- `make test-coverage` requires 100% line and branch coverage for `plugins/`, `make test-sanity` and
+  `make test-ansible-units` run the collection through `ansible-test`, and `make package` builds the tarball.
+- When ansible-core 2.20 leaves support, raising `requires_ansible` is a deliberate change with its own review.
+
+## References
+
+- ansible-core release and maintenance matrix:
+  <https://docs.ansible.com/projects/ansible/devel/reference_appendices/release_and_maintenance.html>
+- [ADR 0010](0010-initial-os-and-benchmark-scope.md), [ADR 0011](0011-control-toggles-and-cleanup.md)
+- [Collection design](../collection-design.md)

@@ -1,0 +1,9 @@
+---
+minor_changes:
+  - >-
+    Add the collection skeleton with Galaxy metadata and the minimum supported
+    ansible-core version 2.20.0.
+  - >-
+    Add the typed normalized findings model in
+    ``plugins/module_utils/compliance/model.py`` with strict validation,
+    deterministic JSON serialization and the explicit XCCDF result mapping.
