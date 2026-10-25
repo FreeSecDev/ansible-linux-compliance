@@ -43,7 +43,7 @@ The comment-lint check allows exactly this pattern and nothing else.
 
 ## Amendment 2026-10-25
 
-**Status:** proposed, pending lead approval.
+**Status:** accepted by the lead architect on 2026-10-25.
 
 The single permitted comment is extended to a trailing `# vX.Y.Z` on `rev: <40-hex>` lines in
 `.pre-commit-config.yaml`, in addition to `uses: owner/repo@<40-hex>` lines in workflow files.
