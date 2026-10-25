@@ -42,7 +42,6 @@ output-*/
 *.iso
 manifest.local.json
 
-reports/
-!tools/reporting/**
+/reports/
 .molecule/
 .cache/

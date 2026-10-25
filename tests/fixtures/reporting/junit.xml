@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="synthetic" tests="5">
+    <testcase classname="tests.alpha" name="test_pass"/>
+    <testcase classname="tests.alpha" name="test_fail"><failure message="assert 1 == 2">trace</failure></testcase>
+    <testcase classname="tests.beta" name="test_error"><error message="boom">trace</error></testcase>
+    <testcase classname="tests.beta" name="test_skip"><skipped message="not now"/></testcase>
+    <testcase classname="tests.beta" name="test_pass_two"/>
+  </testsuite>
+</testsuites>

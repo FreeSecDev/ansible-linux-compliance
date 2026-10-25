@@ -1,0 +1,10 @@
+---
+minor_changes:
+  - >-
+    Add the controller-side reporting package ``tools/reporting`` with the versioned
+    report schema ``report-v1.json`` and hardened parsers for OpenSCAP XCCDF and ARF,
+    ScanRun JSON, JUnit, Cobertura, pytest JSON, ansible-lint, Grype, SPDX, CycloneDX,
+    Packer, CodeBuild and Molecule summaries. Missing input is ``unavailable``, damaged
+    input is ``error`` and neither is ever a pass; a scan run that did not complete is
+    never summarised as compliant. ``make report`` now writes the normalized JSON
+    (``REPORT_SCOPE`` and ``REPORT_ARGS``); the HTML dashboard is pending FREES-77.

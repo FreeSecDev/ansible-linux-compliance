@@ -1,0 +1,7 @@
+{
+  "builds": [
+    {"name": "golden", "builder_type": "amazon-ebs", "build_time": 1792000000, "files": [{"name": "image-a", "size": 1024}, {"name": "image-b"}], "artifact_id": "eu-west-1:ami-0123456789abcdef0", "packer_run_uuid": "11111111-2222-3333-4444-555555555555", "custom_data": {"distro": "rhel-9"}},
+    {"name": "base", "builder_type": "qemu", "build_time": 1792000100, "files": null, "artifact_id": "local", "packer_run_uuid": "11111111-2222-3333-4444-555555555555", "custom_data": null}
+  ],
+  "last_run_uuid": "11111111-2222-3333-4444-555555555555"
+}

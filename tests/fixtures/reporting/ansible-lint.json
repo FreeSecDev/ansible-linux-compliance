@@ -1,0 +1,5 @@
+[
+  {"check_name": "fqcn[action]", "description": "Use FQCN for module actions", "severity": "major", "fingerprint": "f1", "location": {"path": "roles/demo/tasks/main.yml", "lines": {"begin": 7}}},
+  {"check_name": "risky-file-permissions", "description": "File permissions unset", "severity": "blocker", "fingerprint": "f2", "location": {"path": "roles/demo/tasks/files.yml", "lines": {"begin": 2}}},
+  {"check_name": "odd", "description": "Odd severity", "severity": "strange", "fingerprint": "f3", "location": {"path": "x.yml"}}
+]

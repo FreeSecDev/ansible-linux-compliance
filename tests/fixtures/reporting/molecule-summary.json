@@ -1,0 +1,10 @@
+{
+  "format": "freesecdev-molecule-summary",
+  "version": 1,
+  "scenarios": [
+    {"name": "default", "platform": "debian-12", "result": "passed"},
+    {"name": "default", "platform": "rocky-9", "result": "failed"},
+    {"name": "audit", "platform": "debian-12", "result": "skipped"},
+    {"name": "audit", "platform": "rocky-9", "result": "error"}
+  ]
+}
