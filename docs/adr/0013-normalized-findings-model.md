@@ -1,6 +1,6 @@
 # 0013. Normalized compliance findings model
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
 - **Jira:** FREES-26, FREES-39

@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansible-lint hook).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons).
 
 ## Layout
 
@@ -17,11 +17,40 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansibl
 | `plugins/{modules,action,filter,lookup}/` | Created together with the first plugin of each kind; Git cannot track empty directories and Galaxy does not need placeholders |
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
-| `roles/` | Not created yet; the roles belong to FREES-40 |
+| `roles/` | The `discover`, `audit`, `remediate`, `verify` and `evidence` role skeletons (FREES-40) |
+| `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
+| `ansible.cfg` | Sets `collections_path` to `build/collections` so that ansible-lint resolves `freesecdev.linux_compliance.*` role references; it is not part of the tarball |
 
 Everything else (`tools/`, `.agents/`, `.github/`, the Python tooling files, `docs/planning`, `docs/research`) supports
 development and is listed in `build_ignore`, so it is not part of the tarball.
+
+## Roles and playbooks
+
+The roles are skeletons. Each one validates its inputs and then fails with a message that names the issue that
+tracks its implementation, so a playbook can never report success for work that does not exist yet. They use only
+`ansible.builtin.assert` and `ansible.builtin.fail`. The platforms in each `meta/main.yml` are intended targets
+([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)); none is tested.
+
+| Role | Changes the host | Tracked in | Variables (default) |
+|---|---|---|---|
+| `discover` | Never | FREES-43 | `linux_compliance_discover_profile` (`cis_level1_server`) |
+| `audit` | Never | FREES-49 | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`) |
+| `remediate` | Only with explicit opt-in | FREES-52 | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
+| `verify` | Never | FREES-54 | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`) |
+| `evidence` | Never; writes on the controller only | FREES-51 | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_host_facts` (`false`) |
+
+Per-rule and per-family toggles do not exist yet; they are generated from the rule catalogue by FREES-55
+([ADR 0011](adr/0011-control-toggles-and-cleanup.md)). The variables of each role are documented in its
+`README.md` and in `meta/argument_specs.yml`.
+`tools/roles/check_role_specs.py` (part of `make lint-ansible`) fails when a role's `defaults/main.yml` and
+`meta/argument_specs.yml` disagree in names, types or values, when an option lacks a description or default, or when
+a variable lacks the `linux_compliance_<role>_` prefix.
+
+The playbooks `playbooks/audit.yml`, `playbooks/remediate.yml` and `playbooks/verify.yml` only reference roles by
+FQCN, for example `freesecdev.linux_compliance.audit`. The target comes from the variable
+`linux_compliance_target_hosts`, which defaults to the group `linux_compliance` so that no play ever targets `all` by accident. `become` is scoped to the role entry and is never set for the whole play; the
+`discover` role runs without it.
 
 ## Supported versions
 
@@ -46,7 +75,8 @@ gap:
   import `ansible_collections.freesecdev.linux_compliance.plugins...`, the same name `ansible-test` uses. Coverage
   resolves the symlink, so measured files are the real ones.
 
-`make install` creates the link; the targets that need it depend on it.
+The link directory also links `roles/`, so ansible-lint can resolve the role references in the playbooks through `ansible.cfg`.
+`make install` creates the links; the targets that need them depend on it.
 
 ## Targets
 

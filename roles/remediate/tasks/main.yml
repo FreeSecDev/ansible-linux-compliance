@@ -1,0 +1,18 @@
+---
+- name: Remediate | Validate inputs
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_allow_disruptive is sequence
+      - linux_compliance_remediate_allow_disruptive is not string
+      - >-
+        linux_compliance_remediate_allow_disruptive | difference(["bootloader", "crypto_policy",
+        "firewall", "mounts", "network", "pam", "ssh", "sudo"]) | length == 0
+      - linux_compliance_remediate_profile is string
+      - linux_compliance_remediate_profile | length > 0
+    fail_msg: The remediate role received an invalid input; see meta/argument_specs.yml.
+    quiet: true
+
+- name: Remediate | Stop because the role is not implemented yet
+  ansible.builtin.fail:
+    msg: The remediate role is not implemented yet (tracked in FREES-52). No change was made to the host.

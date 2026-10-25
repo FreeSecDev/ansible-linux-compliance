@@ -78,6 +78,7 @@ known-first-party = ["tools", "ansible_collections"]
 "ruff INP001 (tests/**)" = "Tests are collected in importlib mode and are not importable packages."
 "ruff T201 (tools/**)" = "Command-line tools report to the terminal with print by design."
 "ruff INP001 (plugins/**)" = "Collection plugin directories are implicit namespace packages; Ansible does not require __init__.py and a placeholder would only add files."
+"ansible-lint var-naming[no-role-prefix]" = "Role variables use the collection-wide prefix linux_compliance_<role>_ required by ADR 0011 and the ansible-collection skill, for example linux_compliance_remediate_enabled; the rule would force the shorter <role>_ prefix. Only this sub-rule is skipped; every other var-naming check stays on (FREES-40)."
 
 [tool.mypy]
 strict = true

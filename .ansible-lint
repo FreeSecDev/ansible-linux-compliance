@@ -13,3 +13,5 @@ exclude_paths:
   - dist/
   - docs/
   - tools/
+skip_list:
+  - var-naming[no-role-prefix]

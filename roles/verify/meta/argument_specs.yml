@@ -1,0 +1,22 @@
+---
+argument_specs:
+  main:
+    short_description: "Verify a host after remediation (read-only)"
+    description:
+      - "Compares a post-remediation audit with the baseline audit."
+      - "Skeleton only: the role validates its inputs and then fails until FREES-54 is implemented."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_verify_profile:
+        type: str
+        default: "cis_level1_server"
+        description:
+          - "ComplianceAsCode profile short identifier, without the XCCDF prefix."
+          - "The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010)."
+          - "A profile is never substituted silently for another benchmark."
+      linux_compliance_verify_fail_on_regression:
+        type: bool
+        default: true
+        description:
+          - "Fail the play when a rule that passed in the baseline no longer passes."
+          - "Verification never changes the host."

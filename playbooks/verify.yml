@@ -1,0 +1,7 @@
+---
+- name: Verify hosts after remediation
+  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
+  gather_facts: true
+  roles:
+    - role: freesecdev.linux_compliance.verify
+      become: true

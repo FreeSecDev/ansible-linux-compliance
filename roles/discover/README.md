@@ -1,0 +1,23 @@
+# discover
+
+Scope: role `freesecdev.linux_compliance.discover`. Audience: playbook authors and contributors.
+
+Collects the facts and benchmark content metadata that later roles need.
+
+## Status
+
+Skeleton only. The role validates its inputs and then fails with "not implemented yet". Implementation is
+tracked in FREES-43. The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL 9 compatible, per
+[ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested support.
+
+## Safety
+
+The `discover` role never changes the managed host.
+
+## Variables
+
+Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `linux_compliance_discover_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010). A profile is never substituted silently for another benchmark. |

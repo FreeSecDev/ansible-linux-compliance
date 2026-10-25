@@ -1,0 +1,38 @@
+---
+argument_specs:
+  main:
+    short_description: "Remediate a host with native modules (opt-in)"
+    description:
+      - "Applies the selected profile with native Ansible modules, only after explicit opt-in."
+      - "Skeleton only: the role validates its inputs and then fails until FREES-52 is implemented."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_remediate_enabled:
+        type: bool
+        default: false
+        description:
+          - "Global opt-in for remediation."
+          - "When false the role must not change the host (ADR 0011)."
+      linux_compliance_remediate_allow_disruptive:
+        type: list
+        default: []
+        description:
+          - "Disruptive control families that may be applied or cleaned up."
+          - "A disruptive family runs only when it is named here, because it can lock operators out."
+        elements: str
+        choices:
+          - bootloader
+          - crypto_policy
+          - firewall
+          - mounts
+          - network
+          - pam
+          - ssh
+          - sudo
+      linux_compliance_remediate_profile:
+        type: str
+        default: "cis_level1_server"
+        description:
+          - "ComplianceAsCode profile short identifier, without the XCCDF prefix."
+          - "The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010)."
+          - "A profile is never substituted silently for another benchmark."

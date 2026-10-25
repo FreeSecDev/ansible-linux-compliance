@@ -5,11 +5,12 @@ credential-free stage locally and is what the pull request workflow runs, split 
 
 Jira: FREES-68 (Makefile), FREES-69 (pre-commit), FREES-70 (Python tooling),
 FREES-71 (pull request workflow), FREES-91 (skill validator tests), FREES-39 (collection skeleton and
-ansible tooling), FREES-26 (findings model), FREES-69 (ansible-lint hook).
+ansible tooling), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons).
 
 ## Bootstrap
 
-Requirements: `git`, GNU `make` and [`uv`](https://docs.astral.sh/uv/). Python 3.12 is selected by
+Requirements: `git`, GNU `make`, [`jq`](https://jqlang.org/) (used by `make package`) and
+[`uv`](https://docs.astral.sh/uv/). Python 3.12 is selected by
 `.python-version` and installed by `uv` when missing.
 
 ```text
@@ -18,7 +19,8 @@ make help
 ```
 
 `make bootstrap` runs `uv sync --frozen` (exact versions from `uv.lock`), installs the `pre-commit` and
-`pre-push` git hooks and prints tool versions. A missing `uv` produces an error with install instructions.
+`pre-push` git hooks and prints tool versions. A missing `uv` produces an error with install instructions. `make bootstrap` also checks that
+`jq` is on `PATH` and fails with an install hint when it is missing, because `make package` cannot run without it.
 OpenTofu and Packer checks join `make bootstrap` with FREES-30 and FREES-64.
 
 ## Makefile targets
@@ -30,7 +32,7 @@ OpenTofu and Packer checks join `make bootstrap` with FREES-30 and FREES-64.
 | `install` | implemented | `uv sync --frozen`, installs both git hook types |
 | `format` | implemented | `ruff check --fix` and `ruff format` |
 | `lint` | implemented | `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible` |
-| `lint-ansible` | implemented | `ansible-lint` with the `production` profile, then `antsibull-changelog lint` |
+| `lint-ansible` | implemented | `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |

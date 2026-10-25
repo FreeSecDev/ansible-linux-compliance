@@ -1,0 +1,12 @@
+---
+- name: Discover | Validate inputs
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_discover_profile is string
+      - linux_compliance_discover_profile | length > 0
+    fail_msg: The discover role received an invalid input; see meta/argument_specs.yml.
+    quiet: true
+
+- name: Discover | Stop because the role is not implemented yet
+  ansible.builtin.fail:
+    msg: The discover role is not implemented yet (tracked in FREES-43). No change was made to the host.

@@ -1,0 +1,3 @@
+---
+linux_compliance_audit_profile: "cis_level1_server"
+linux_compliance_audit_fail_on_noncompliant: false

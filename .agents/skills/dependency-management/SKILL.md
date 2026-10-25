@@ -36,7 +36,7 @@ duplicate pull requests. Pinning rules from `AGENTS.md` are kept current, not re
 
 ## Conventions
 
-- Renovate owns: container image digests, GitHub Actions SHAs, Packer plugins, OpenTofu providers, pinned tool versions through regex or custom managers (Makefile and version files), Ansible Galaxy collection requirements and pre-commit hooks.
+- Renovate owns: container image digests, GitHub Actions SHAs, Packer plugins, OpenTofu providers, pinned tool versions through regex or custom managers (Makefile and version files), Ansible Galaxy collection requirements and pre-commit hooks. Ownership varies per repository; see references/ownership-and-sla.md.
 - Dependabot owns: Python ecosystem (pip and uv) version updates and security updates.
 - Renovate's Python managers are explicitly disabled to avoid duplicate pull requests.
 - Group related updates; weekly schedule for routine updates; security updates are raised immediately only for ecosystems in GitHub's dependency graph (Python and GitHub Actions) through Dependabot; other ecosystems receive fixes on the Renovate schedule (documented residual risk).

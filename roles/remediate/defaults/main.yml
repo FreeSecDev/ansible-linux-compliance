@@ -1,0 +1,4 @@
+---
+linux_compliance_remediate_enabled: false
+linux_compliance_remediate_allow_disruptive: []
+linux_compliance_remediate_profile: "cis_level1_server"

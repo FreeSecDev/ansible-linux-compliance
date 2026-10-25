@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  role_name: verify
+  namespace: freesecdev
+  author: FreeSecDev contributors
+  description: >-
+    Verify a host after remediation (read-only).
+    Skeleton only: not implemented yet, tracked in FREES-54.
+    The platforms below are intended targets and none is tested yet.
+  license: Apache-2.0
+  min_ansible_version: "2.20"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - compliance
+    - security
+    - verify
+dependencies: []

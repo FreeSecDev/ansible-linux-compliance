@@ -1,0 +1,7 @@
+---
+- name: Remediate hosts against a compliance profile
+  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
+  gather_facts: true
+  roles:
+    - role: freesecdev.linux_compliance.remediate
+      become: true
