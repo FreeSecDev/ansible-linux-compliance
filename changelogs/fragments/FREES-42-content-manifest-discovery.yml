@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    Add the pinned content manifest ``content/manifest.yml`` (ComplianceAsCode v0.1.82, SHA-512 of the release
+    archive, SHA-256 and profiles of the Ubuntu 24.04 and RHEL 9 datastreams) and the controller-side tool
+    ``tools/content/fetch_content.py``, which downloads over HTTPS or reads an archive offline, verifies the
+    digests and extracts only the listed datastreams.
+  - >-
+    Add the read-only modules ``freesecdev.linux_compliance.benchmark_info`` and
+    ``freesecdev.linux_compliance.profile_info``, backed by ``plugins/module_utils/compliance/catalog.py`` and the
+    shared hardened XML parser ``plugins/module_utils/compliance/xmlsafe.py``. A datastream is parsed only after its
+    SHA-256 matches the pinned value.
+  - >-
+    The ``discover`` role now verifies the datastream, describes its benchmark and profiles, and publishes the rules of
+    the requested profile as the fact ``linux_compliance_discovered``. It gains the variables
+    ``linux_compliance_discover_content_path`` and ``linux_compliance_discover_content_sha256``.

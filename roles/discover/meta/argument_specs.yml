@@ -3,8 +3,10 @@ argument_specs:
   main:
     short_description: "Discover host facts and available benchmark content (read-only)"
     description:
-      - "Collects the facts and benchmark content metadata that later roles need."
-      - "Skeleton only: the role validates its inputs and then fails until FREES-43 is implemented."
+      - "Verifies the pinned SCAP datastream on the managed host against its SHA-256."
+      - "Describes its benchmark and profiles and lists the rules that the requested profile selects."
+      - "The role never changes the managed host."
+      - "It fails clearly when the digest differs or the profile is not in the datastream."
     author: "FreeSecDev contributors"
     options:
       linux_compliance_discover_profile:
@@ -14,3 +16,16 @@ argument_specs:
           - "ComplianceAsCode profile short identifier, without the XCCDF prefix."
           - "The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010)."
           - "A profile is never substituted silently for another benchmark."
+      linux_compliance_discover_content_path:
+        type: str
+        default: ""
+        description:
+          - "Absolute path on the managed host of the datastream file."
+          - "A directory that holds exactly one -ds.xml file is also accepted."
+          - "Required. Fetch the pinned content with tools/content/fetch_content.py and copy it to the host (ADR 0015)."
+      linux_compliance_discover_content_sha256:
+        type: str
+        default: ""
+        description:
+          - "Pinned SHA-256 of the datastream file, 64 hexadecimal characters, from content/manifest.yml."
+          - "Required. The datastream is not parsed unless its digest equals this value."

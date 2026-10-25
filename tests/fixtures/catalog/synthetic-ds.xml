@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ds:data-stream-collection xmlns:ds="http://scap.nist.gov/schema/scap/source/1.2" xmlns:x="http://checklists.nist.gov/xccdf/1.2" xmlns:other="urn:example:synthetic:other" id="synthetic_collection_demo">
+  <ds:data-stream id="synthetic_datastream_demo">
+    <ds:checklists>
+      <ds:component-ref id="synthetic_cref_demo"/>
+    </ds:checklists>
+  </ds:data-stream>
+  <ds:component id="synthetic_component_other">
+    <other:Benchmark id="not-an-xccdf-benchmark">
+      <other:Profile id="not-a-profile"/>
+    </other:Benchmark>
+  </ds:component>
+  <ds:component id="synthetic_component_demo">
+    <x:Benchmark id="xccdf_org.example.synthetic_benchmark_demo">
+      <x:title xml:lang="de">Synthetischer Benchmark</x:title>
+      <x:title xml:lang="en-US">Synthetic demo benchmark</x:title>
+      <x:title>Ignored second title</x:title>
+      <x:version update="urn:example:synthetic:update">1.2.3</x:version>
+      <x:Profile id="xccdf_org.example.synthetic_profile_baseline">
+        <x:version>9.9.9</x:version>
+        <x:title>Synthetic baseline</x:title>
+        <x:description>Synthetic text.</x:description>
+        <x:select idref="xccdf_org.example.synthetic_rule_alpha" selected="true"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_beta" selected="true"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_gamma" selected="false"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_delta" selected="false"/>
+        <x:select idref="xccdf_org.example.synthetic_group_one" selected="true"/>
+        <x:select idref="xccdf_org.example.synthetic_value_size" selected="true"/>
+        <x:select idref="not an identifier" selected="true"/>
+      </x:Profile>
+      <x:Profile id="xccdf_org.example.synthetic_profile_strict">
+        <x:select idref="xccdf_org.example.synthetic_rule_alpha" selected="true"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_alpha" selected="false"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_alpha" selected="true"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_beta" selected="1"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_gamma" selected="true"/>
+        <x:select idref="xccdf_org.example.synthetic_rule_epsilon" selected="true"/>
+      </x:Profile>
+      <x:Profile id="xccdf_org.example.synthetic_profile_minimal"/>
+      <x:Group id="xccdf_org.example.synthetic_group_one">
+        <x:title>Ignored group title</x:title>
+        <x:Rule id="xccdf_org.example.synthetic_rule_alpha" severity="high" selected="false">
+          <x:title>Synthetic alpha rule</x:title>
+          <x:description>Ignored.</x:description>
+        </x:Rule>
+        <x:Rule id="xccdf_org.example.synthetic_rule_beta" severity="medium" selected="false">
+          <x:title>Synthetic beta rule</x:title>
+        </x:Rule>
+        <x:Group id="xccdf_org.example.synthetic_group_two">
+          <x:Rule id="xccdf_org.example.synthetic_rule_gamma" severity="critical" selected="false">
+            <x:title>Synthetic gamma rule</x:title>
+          </x:Rule>
+          <x:Rule id="xccdf_org.example.synthetic_rule_delta">
+            <x:title>Synthetic <x:sub idref="synthetic_value_size"/>delta   rule</x:title>
+          </x:Rule>
+          <x:Rule id="xccdf_org.example.synthetic_rule_epsilon" severity="low" selected="false"/>
+        </x:Group>
+      </x:Group>
+    </x:Benchmark>
+  </ds:component>
+</ds:data-stream-collection>

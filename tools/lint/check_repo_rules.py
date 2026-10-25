@@ -38,7 +38,8 @@ Rules:
   ``self`` and ``cls`` are exempt only as the never rebound first parameter of a method. This is
   static analysis, not a sandbox (ADR 0004).
   ``xml.parsers.expat`` may be imported (as ``from xml.parsers import expat``)
-  only by ``plugins/module_utils/compliance/openscap.py``. Only
+  only by ``plugins/module_utils/compliance/openscap.py`` and
+  ``plugins/module_utils/compliance/xmlsafe.py``. Only
   ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
   ``plugins/module_utils/compliance/fileio.py`` may additionally ``import`` ``os``, ``fcntl``,
   ``errno`` and ``time`` and use only the attributes listed in ``FILE_IO_ATTRIBUTES``, always as
@@ -155,7 +156,10 @@ RESTRICTED_FROM_IMPORTS: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
     {"types": frozenset({"MappingProxyType"})}
 )
 EXTRA_IMPORTS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
-    {Path("plugins/module_utils/compliance/openscap.py"): frozenset({"xml.parsers.expat"})}
+    {
+        Path("plugins/module_utils/compliance/openscap.py"): frozenset({"xml.parsers.expat"}),
+        Path("plugins/module_utils/compliance/xmlsafe.py"): frozenset({"xml.parsers.expat"}),
+    }
 )
 COLLECTION_PREFIX: Final[str] = "ansible_collections.freesecdev.linux_compliance"
 ALLOWED_IMPORT_PREFIXES: Final[tuple[str, ...]] = ("ansible.module_utils", COLLECTION_PREFIX)

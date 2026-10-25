@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery).
 
 ## Layout
 
@@ -13,8 +13,12 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 |---|---|
 | `galaxy.yml` | Namespace `freesecdev`, name `linux_compliance`, Apache-2.0, repository links, tags and `build_ignore` |
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
-| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF parser), `backends.py` (composition root) |
-| `plugins/{modules,action,filter,lookup}/` | Created together with the first plugin of each kind; Git cannot track empty directories and Galaxy does not need placeholders |
+| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF parser), `xmlsafe.py` (hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root) |
+| `plugins/modules/` | `control_state.py` (ledger) and the read-only discovery modules `benchmark_info.py` and `profile_info.py` |
+| `content/manifest.yml` | Pinned ComplianceAsCode release, archive SHA-512, datastream SHA-256 and profiles ([ADR 0015](adr/0015-content-acquisition-and-pinning.md)); the only file in `content/` |
+| `tools/content/fetch_content.py` | Controller-side tool that downloads or reads the pinned archive and extracts only the listed datastreams |
+| `typings/` | Minimal type stubs for the two `ansible.module_utils` modules that the plugins and tests import, because ansible-core ships no stubs |
+| `plugins/{action,filter,lookup}/` | Created together with the first plugin of each kind; Git cannot track empty directories and Galaxy does not need placeholders |
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
 | `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; inert data, shipped with the tests in the tarball |
@@ -27,14 +31,15 @@ development and is listed in `build_ignore`, so it is not part of the tarball.
 
 ## Roles and playbooks
 
-The roles are skeletons. Each one validates its inputs and then fails with a message that names the issue that
-tracks its implementation, so a playbook can never report success for work that does not exist yet. They use only
-`ansible.builtin.assert` and `ansible.builtin.fail`. The platforms in each `meta/main.yml` are intended targets
+The `discover` role is implemented (FREES-43). The other roles are skeletons: each validates its inputs and then fails
+with a message that names the issue that tracks its implementation, so a playbook can never report success for work
+that does not exist yet. The skeletons use only `ansible.builtin.assert` and `ansible.builtin.fail`; `discover` uses
+`assert`, `benchmark_info`, `profile_info` and `set_fact`, none of which changes the host. The platforms in each `meta/main.yml` are intended targets
 ([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)); none is tested.
 
 | Role | Changes the host | Tracked in | Variables (default) |
 |---|---|---|---|
-| `discover` | Never | FREES-43 | `linux_compliance_discover_profile` (`cis_level1_server`) |
+| `discover` | Never | FREES-43 (implemented) | `linux_compliance_discover_profile` (`cis_level1_server`), `linux_compliance_discover_content_path` (empty, required), `linux_compliance_discover_content_sha256` (empty, required) |
 | `audit` | Never | FREES-49 | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`) |
 | `remediate` | Only with explicit opt-in | FREES-52 | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
 | `verify` | Never | FREES-54 | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`) |
@@ -217,6 +222,44 @@ owner, while `Ledger()` is the only form that module code uses, and the guard ba
 keywords in plugins. The tests include symlinked ledgers and directories, swaps during the operation, oversized,
 malformed, duplicate-key and `NaN` documents, wrong owner and mode, concurrent writers, interrupted writes and check
 mode.
+
+## Content manifest and discovery
+
+Jira: FREES-42 and FREES-43. Decision: [ADR 0015](adr/0015-content-acquisition-and-pinning.md).
+
+### Fetching content
+
+`uv run python tools/content/fetch_content.py` reads `content/manifest.yml`, downloads the pinned release zip over
+HTTPS (or reads `--from-file <zip>` without any network access), verifies the archive SHA-512, extracts only the
+datastreams the manifest lists (`--datastream <name>` narrows the choice) into `build/content` (or `--output-dir`) and
+verifies each SHA-256. It refuses members that are symlinks, directories, special files, encrypted, duplicated or of a
+different size, never builds a path from an archive member name, and leaves no partial file on failure. The pinned
+content is `v0.1.82`, with `ssg-ubuntu2404-ds.xml` (5 profiles) and `ssg-rhel9-ds.xml` (20 profiles); the manifest lists
+each profile by identifier and title as read from the datastream.
+
+### Catalog and modules
+
+`xmlsafe.py` offers `parse_chunks(chunks, events, bounds)` and `iter_file_chunks(path, max_bytes)` with the same layers
+as the results parser, and `catalog.py` builds on it. Its public functions are `read_benchmarks(path,
+expected_sha256)` (hash first, parse second, hash again during the parse), `locate_datastreams(directory)`,
+`resolve_content_path(path)`, `single_benchmark`, `find_profile`, `profile_rules` and the module reports
+`benchmark_report` and `profile_report`. A digest mismatch raises `DigestMismatchError` before any parsing. Errors map
+to the stable `error_type` values `digest_mismatch`, `profile_not_found`, `unsupported_content` (a profile with `extends`, or a selected rule below a deselected group) and `invalid_content`.
+
+| Module | Options | Returns |
+|---|---|---|
+| `benchmark_info` | `content_path` (file, or a directory with exactly one `*-ds.xml`), `expected_sha256` | `benchmark_id`, `benchmark_version`, `benchmark_title`, `profiles` (`profile_id`, `title`, `rule_count`), `content_path`, `content_sha256` |
+| `profile_info` | the same, plus `profile_id` (the full XCCDF identifier) | the benchmark fields, `profile_id`, `profile_title`, `rule_count`, `rule_ids` (sorted) and `rules` (`rule_id`, `severity`, `title`) |
+
+Both modules are read-only, support check mode and always return `changed: false`. The `discover` role calls them
+with the variables `linux_compliance_discover_content_path`, `linux_compliance_discover_content_sha256` and
+`linux_compliance_discover_profile`, and publishes the result as the fact `linux_compliance_discovered`.
+
+Unit tests use the synthetic datastream `tests/fixtures/catalog/synthetic-ds.xml` and the hostile samples in
+`tests/fixtures/catalog/adversarial/` (DOCTYPE, entity expansion, wrong namespace, duplicate profiles, a profile that
+selects an undefined rule); oversized, missing-profile and tampered-digest cases are built in the tests. The tests for
+the fetch tool build tiny synthetic zips and mock the network. The real pinned datastreams were parsed once during
+development to produce the manifest; no test needs them.
 
 ## Adding plugins
 

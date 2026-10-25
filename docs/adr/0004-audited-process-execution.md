@@ -238,3 +238,14 @@ it does not track data flow, and independent security review stays required.
 Unused allow-list entries, on `main` before this change and left in place: the dunder reads `__qualname__`, `__doc__` and
 `__module__`, and the imports `collections` (bare), `functools`, `itertools` and `os.path`. No guarded plugin uses them
 today; remove them if they stay unused.
+
+## Amendment 2026-10-25: shared XML helper (FREES-42)
+
+- Import allow-list for `plugins/`: `xml.parsers.expat` is now allowed in exactly two files,
+  `plugins/module_utils/compliance/openscap.py` and `plugins/module_utils/compliance/xmlsafe.py` (`EXTRA_IMPORTS` in
+  `tools/lint/check_repo_rules.py`). `xmlsafe.py` holds the same layered defences as the XCCDF results parser (byte
+  scan for DOCTYPE and ENTITY, UTF-8 forced, parameter entities off, element and depth bounds, no stored elements) as a
+  public API, so that `catalog.py` and later parsers use it without importing private names of `openscap.py`. Every
+  other plugin file that imports expat still fails the guard, and a test shows it for several paths. `openscap.py`
+  keeps its own copy of the parser for now; moving it onto `xmlsafe.py` is a follow-up.
+- The public bounds parameter of `xmlsafe` is named `bounds`, because `limits` stays banned as a call keyword.
