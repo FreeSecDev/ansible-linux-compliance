@@ -1,0 +1,1 @@
+plugins/module_utils/compliance/process.py pylint:ansible-bad-function

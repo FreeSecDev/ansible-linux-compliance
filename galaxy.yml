@@ -37,6 +37,7 @@ build_ignore:
   - .renovaterc.json
   - .ansible-lint
   - ansible.cfg
+  - .ansible-lint-ignore
   - .coverage
   - .mypy_cache
   - .pytest_cache

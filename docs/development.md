@@ -114,7 +114,7 @@ YAML comment form (ADR 0005, amendment 2026-10-25).
 | Pylint | `uv run pylint tools tests plugins` |
 | mypy | `uv run mypy` |
 | Pyright | `uv run pyright` |
-| Bandit | `uv run bandit -c pyproject.toml -r tools plugins` |
+| Bandit | `make security` runs Bandit on everything except the process helper, then on the helper with only B404 and B603 skipped |
 | Tests with coverage | `uv run pytest tests/unit --cov --cov-report=term-missing` |
 | yamllint | `uv run yamllint --strict .` |
 | ansible-lint | `uv run ansible-lint` |
@@ -144,6 +144,14 @@ YAML and Python files (ADR 0005):
 - `#` inside quoted scalars, block scalars and URLs is content, not a comment.
 - Python files contain no comments, except a shebang on the first line. This includes `# noqa` and
   `# type: ignore`; suppressions are configured in `pyproject.toml` instead.
+- Python files under `plugins/` are checked deny-by-default (ADR 0004): only allow-listed standard library modules,
+  `ansible.module_utils` and this collection may be imported, `os` is usable only as `os.path`, `exec`, `eval`,
+  `compile` and `__import__` are banned, process, fork and `run_command` attributes are banned, `shell=True` and
+  `use_unsafe_shell` and the test-only `owner_uid`, `policies` and `trusted_dirs` keywords are banned, `subprocess`,
+  `pty`, `posix`, `os` and `sys` are banned as imported names or attributes, `vars`, `globals`, `locals`, `__dict__`
+  and `get_type_hints` are banned, and `getattr` needs a literal permitted name. Only
+  `plugins/module_utils/compliance/process.py` is exempt. Extend the allow-list in `tools/lint/check_repo_rules.py`
+  with a justification when a new module is genuinely needed.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
   including the `ansible.builtin.`, `ansible.legacy.`, `ansible.windows.` and `community.windows.` forms and the `action` / `local_action` spellings.
   The scan covers `extensions/` and `tests/` as well.

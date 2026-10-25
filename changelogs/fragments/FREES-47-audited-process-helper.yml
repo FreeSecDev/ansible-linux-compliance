@@ -1,0 +1,8 @@
+---
+minor_changes:
+  - >-
+    Add the audited external process helper in
+    ``plugins/module_utils/compliance/process.py`` with an executable
+    allow-list, trusted-directory resolution, a minimal environment, bounded
+    output and process-group kill on timeout, and a repository rule that
+    forbids process execution elsewhere in ``plugins/``.

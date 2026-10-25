@@ -40,7 +40,7 @@ where external processes run, and only through one audited helper.
 - Set `supports_check_mode=True` wherever a check is meaningful; audit modules never change the host.
 - Failures use `module.fail_json` with structured fields (`msg`, `error_type`, `rule_id` or `path` where relevant), never bare tracebacks.
 - Resolve binaries with `module.get_bin_path(name, required=True)`.
-- All external process execution goes through `plugins/module_utils/compliance/process.py`, which calls `subprocess.run([...], shell=False, timeout=..., env=<explicit minimal env>, check=False)`. No other file imports `subprocess` or calls `os.system`, `os.popen` or `pty`. Commands are argument lists, never strings.
+- All external process execution goes through `plugins/module_utils/compliance/process.py`, which runs an argument list with `shell=False`, a timeout, an explicit minimal environment and bounded output (ADR 0004). No other file imports `subprocess` or calls `os.system`, `os.popen` or `pty`. Commands are argument lists, never strings.
 - Arguments are validated by allow-list or regex before use; reject values starting with `-` where a path or ID is expected. See [references/safe-io.md](references/safe-io.md).
 - Parse XML on hosts with the standard library only: reject DOCTYPE and entity declarations before parsing and bound the file size first.
 - Confine paths to a base directory, resolve and compare real paths, reject symlinks for writes, write atomically (temporary file, fsync, rename) with an explicit mode.
@@ -53,7 +53,7 @@ where external processes run, and only through one audited helper.
 
 - `make test-unit` and `ansible-test units` pass; `make test-sanity` validates the documentation blocks.
 - `make typecheck`, `make lint-python` and `make security` pass without new suppressions.
-- A guard test fails if `subprocess`, `os.system` or `shell=True` appears outside `process.py`.
+- The repository rule is deny-by-default for `plugins/` outside `process.py`: allow-listed imports only, `os` only as `os.path`, no `exec`, `eval`, `compile`, `__import__`, `getattr` with a computed name, `run_command`, `use_unsafe_shell` or `shell=True`. Ask for an allow-list extension instead of working around it.
 - Security decision logic (path confinement, argument validation, XML rejection, outcome mapping) has 100% branch coverage.
 - Every module has a negative test for bad arguments and a check-mode test.
 

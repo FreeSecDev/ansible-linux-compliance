@@ -53,7 +53,7 @@ repos:
         name: ansible-lint
         entry: env ANSIBLE_COLLECTIONS_PATH=build/collections uv run --frozen ansible-lint
         language: system
-        files: ^(galaxy\.yml|\.ansible-lint|meta/|plugins/|roles/|playbooks/|extensions/|changelogs/)
+        files: ^(galaxy\.yml|\.ansible-lint|tests/sanity/|meta/|plugins/|roles/|playbooks/|extensions/|changelogs/)
         pass_filenames: false
       - id: shellcheck
         name: shellcheck
@@ -99,7 +99,18 @@ repos:
         stages: [pre-push]
       - id: bandit
         name: bandit
-        entry: uv run --frozen bandit -c pyproject.toml -r tools plugins -q
+        entry: >-
+          uv run --frozen bandit -c pyproject.toml -r tools plugins -q
+          -x plugins/module_utils/compliance/process.py
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: bandit-process-helper
+        name: bandit (process helper)
+        entry: >-
+          uv run --frozen bandit -c pyproject.toml -q -s B404,B603
+          plugins/module_utils/compliance/process.py
         language: system
         types: [python]
         pass_filenames: false

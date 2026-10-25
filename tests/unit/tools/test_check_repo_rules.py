@@ -427,3 +427,331 @@ def test_comment_hidden_by_malformed_block_scalar_still_fails_the_file(tmp_path:
     target.write_text("---\nx: 'a' |\n  # c\n", encoding="utf-8")
     messages = [violation.message for violation in rules.check_file(target)]
     assert any(message.startswith("invalid YAML") for message in messages)
+
+
+def plugin_file(root: Path, source: str, name: str = "plugins/modules/other.py") -> Path:
+    target = root / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source, encoding="utf-8")
+    return target
+
+
+def process_messages(root: Path, source: str, name: str = "plugins/modules/other.py") -> list[str]:
+    target = plugin_file(root, source, name)
+    return [violation.message for violation in rules.check_file(target, root)]
+
+
+CRAFTED_BYPASSES = {
+    "getattr-os-system": "import os\ngetattr(os, 'system')('id')\n",
+    "getattr-concatenated-name": "import os\ngetattr(os, 'sys' + 'tem')('id')\n",
+    "importlib-concatenated-module": (
+        "import importlib\nimportlib.import_module('sub' + 'process')\n"
+    ),
+    "import-module-alias": "from importlib import import_module as im\nim('subprocess')\n",
+    "star-import-os": "from os import *\nsystem('id')\n",
+    "os-alias-variable": "import os\nx = os\nx.system('id')\n",
+    "sys-modules-os": "import sys\nsys.modules['os'].system('id')\n",
+    "posix-system": "import posix\nposix.system('id')\n",
+    "posixsubprocess": "import _posixsubprocess\n",
+    "asyncio-exec": ("import asyncio\nasyncio.create_subprocess_exec('id')\n"),
+    "asyncio-subprocess-module": "import asyncio.subprocess\n",
+    "ctypes-system": "import ctypes\nctypes.CDLL(None).system(b'id')\n",
+    "exec-builtin": "exec('import os')\n",
+    "eval-builtin": "eval('1')\n",
+    "os-fork": "import os\nos.fork()\n",
+    "multiprocessing-popen-fork": "import multiprocessing.popen_fork\n",
+    "run-command-unsafe-shell": (
+        "def f(module):\n    return module.run_command('id', use_unsafe_shell=True)\n"
+    ),
+    "subprocess-import": "import subprocess\n",
+    "subprocess-from-import": "from subprocess import run\n",
+    "pty-import": "import pty\n",
+    "os-system": "import os\nos.system('id')\n",
+    "shell-true": "def f(x):\n    return x(shell=True)\n",
+}
+
+OTHER_BYPASSES = {
+    "compile-builtin": "compile('1', 'f', 'eval')\n",
+    "dunder-import-call": "__import__('os')\n",
+    "dunder-import-reference": "loader = __import__\n",
+    "exec-reference": "run = exec\n",
+    "builtins-module": "__builtins__\n",
+    "getattr-reference": "g = getattr\ng(object, 'x')\n",
+    "setattr-reference": "s = setattr\n",
+    "getattr-without-name": "getattr(object)\n",
+    "getattr-variable-name": "def f(name):\n    return getattr(object, name)\n",
+    "getattr-keyword": "getattr(object, name='system')\n",
+    "setattr-banned-name": "setattr(object, 'run_command', 1)\n",
+    "delattr-dynamic": "def f(n):\n    delattr(object, n)\n",
+    "getattr-literal-banned": "getattr(object, 'run_command')\n",
+    "getattr-literal-prefix": "getattr(object, 'spawnv')\n",
+    "run-command": "module.run_command(['id'])\n",
+    "use-unsafe-shell-only": "f(use_unsafe_shell=False)\n",
+    "popen-attribute": "thing.Popen(['id'])\n",
+    "popen-os": "import os.path\nos.popen('id')\n",
+    "os-bare-import": "import os\n",
+    "os-bare-import-alias": "import os as o\n",
+    "os-attribute": "import os.path\nos.getcwd()\n",
+    "os-reference": "import os.path\nx = os\n",
+    "os-environ": "import os.path\nos.environ\n",
+    "from-os-system": "from os import system\n",
+    "from-os-popen": "from os import path, popen\n",
+    "from-os-execv": "from os import execv\n",
+    "from-os-spawn": "from os import spawnv\n",
+    "from-os-fork": "from os import fork\n",
+    "star-allowed-module": "from json import *\n",
+    "star-relative": "from .helper import *\n",
+    "from-ansible-run-command": "from ansible.module_utils.basic import run_command\n",
+    "import-sys": "import sys\n",
+    "import-ctypes-from": "from ctypes import CDLL\n",
+    "import-importlib": "import importlib\n",
+    "import-importlib-util": "import importlib.util\n",
+    "import-socket": "import socket\n",
+    "import-asyncio": "import asyncio\n",
+    "import-multiprocessing": "import multiprocessing\n",
+    "import-shlex": "import shlex\n",
+    "import-prefix-lookalike": "import ansible.module_utils_evil\n",
+    "import-collection-lookalike": "import ansible_collections.freesecdev.linux_compliance_evil\n",
+    "import-other-collection": "import ansible_collections.other.collection.plugins\n",
+    "import-nested-forbidden": "import subprocess.x\n",
+    "execvpe-attribute": "libc.execvpe('id', [], {})\n",
+    "spawn-attribute": "libc.spawnlp(0, 'id')\n",
+    "posix-spawn-attribute": "libc.posix_spawnp('id')\n",
+    "prefix-over-approximation-spawner": "x.spawner\n",
+    "prefix-over-approximation-fork": "x.fork_choice\n",
+    "forkpty-attribute": "libc.forkpty()\n",
+    "create-subprocess-shell": "loop.create_subprocess_shell('id')\n",
+    "class-walk-subclasses": "().__class__.__base__.__subclasses__()\n",
+    "mro-walk": "type(x).__mro__\n",
+    "globals-attribute": "f.__globals__\n",
+    "code-attribute": "f.__code__\n",
+}
+
+RE_REVIEW_BYPASSES = {
+    "reexported-subprocess-relative": (
+        "from ..module_utils.compliance.process import subprocess\n"
+        "subprocess.check_output(['id'])\n"
+    ),
+    "reexported-subprocess-ansible-alias": (
+        "from ansible.module_utils.basic import subprocess as s\ns.run(['id'])\n"
+    ),
+    "process-subprocess-attribute": (
+        "from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance "
+        "import process\nprocess.subprocess.run(['id'])\n"
+    ),
+    "reexported-os": "from ansible.module_utils.basic import os\n",
+    "reexported-sys": "from ansible.module_utils.basic import sys\n",
+    "reexported-pty": "from json import pty\n",
+    "reexported-posix": "from typing import posix\n",
+    "reexported-posixsubprocess": "from typing import _posixsubprocess\n",
+    "os-path-os-attribute": "import os.path\nos.path.os.system('id')\n",
+    "os-path-os-fexecve": "import os.path\nos.path.os.fexecve(0, ['sh', '-c', 'id'], {})\n",
+    "sys-attribute": "from . import helper\nhelper.sys.modules\n",
+    "module-name-alias-reference": ("from . import helper as subprocess\nsubprocess.run(['id'])\n"),
+    "pty-name-reference": "from . import helper as pty\n",
+    "plain-import-alias-subprocess": "import json as subprocess\n",
+    "alias-exec": "from . import helper as exec\n",
+    "fexecve-attribute": "libc.fexecve(0, [], {})\n",
+    "fexecve-from-import": "from libc import fexecve\n",
+    "exec-attribute": "libc.exec('id')\n",
+    "exec-family-execl": "libc.execl('id')\n",
+    "exec-family-execlpe": "libc.execlpe('id')\n",
+    "exec-family-execvp": "libc.execvp('id', [])\n",
+    "owner-uid-keyword": "run(spec, owner_uid=module.params['uid'])\n",
+    "owner-uid-resolve": "resolve_executable('oscap', owner_uid=1)\n",
+    "policies-keyword": "run(spec, policies=custom)\n",
+    "trusted-dirs-keyword": "run(spec, trusted_dirs=['/tmp'])\n",
+    "vars-nested": "import os.path\nvars(vars(os.path)['os'])['sys' + 'tem']('id')\n",
+    "vars-reference": "f = vars\n",
+    "dunder-dict": "import os.path\nos.path.__dict__['os']\n",
+    "dunder-dict-chain": "import os.path\nos.path.__dict__['os'].__dict__['sys' + 'tem']\n",
+    "getattr-os-path-os": "import os.path\ngetattr(os.path, 'os')\n",
+    "globals-builtins": "globals()['__built' + 'ins__']['__imp' + 'ort__']('os')\n",
+    "globals-partial": "import functools\nfunctools.partial(globals)\n",
+    "locals-call": "locals()\n",
+    "get-type-hints-call": "import typing\ntyping.get_type_hints(f)\n",
+    "get-type-hints-import": "from typing import get_type_hints\n",
+    "get-type-hints-name": "get_type_hints(f)\n",
+    "dataclasses-create-fn": "import dataclasses\ndataclasses._create_fn('f', [], 'x')\n",
+    "create-prefix-from-import": "from dataclasses import _create_fn\n",
+    "builtins-attribute": "x.__builtins__\n",
+}
+
+BENIGN_PLUGIN_SOURCES = {
+    "future": "from __future__ import annotations\n",
+    "typing": "from typing import TYPE_CHECKING, Final, cast\n",
+    "stdlib": (
+        "import json\nimport re\nimport unicodedata\nfrom dataclasses import dataclass\n"
+        "from datetime import datetime\nfrom enum import Enum\nfrom types import MappingProxyType\n"
+        "import hashlib\nimport functools\nimport itertools\nimport stat\n"
+        "from pathlib import Path\nimport collections\nfrom collections import abc\n"
+        "from collections.abc import Mapping\nimport xml.etree.ElementTree\n"
+    ),
+    "os-path-import": "import os.path\nos.path.join('a', 'b')\n",
+    "os-path-from-import": "from os import path\npath.join('a', 'b')\n",
+    "os-path-module": "from os.path import join\n",
+    "ansible-module-utils": (
+        "from ansible.module_utils.basic import AnsibleModule\nimport ansible.module_utils\n"
+    ),
+    "collection": (
+        "from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance "
+        "import model\n"
+    ),
+    "relative": "from . import helper\nfrom .helper import thing\nfrom .. import other\n",
+    "object-setattr": "object.__setattr__(x, 'field', 1)\n",
+    "getattr-literal": "getattr(x, 'field')\nsetattr(x, 'field', 1)\ngetattr(x, 'field', None)\n",
+    "shell-false": "f(shell=False)\nf(shell=flag)\nf(other=True)\nf(*args, **kwargs)\n",
+    "plain-calls": "factory()()\nobj.system_name\nobj.executable\nobj.execute\n",
+    "unrelated-name": "x = 'subprocess'\nosmosis = 1\n",
+    "relative-lookalike": "from .subprocess import thing\n",
+    "empty": "",
+}
+
+
+@pytest.mark.parametrize("source", CRAFTED_BYPASSES.values(), ids=CRAFTED_BYPASSES.keys())
+def test_guard_flags_every_crafted_bypass(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source)
+
+
+@pytest.mark.parametrize("source", OTHER_BYPASSES.values(), ids=OTHER_BYPASSES.keys())
+def test_guard_denies_other_constructs_by_default(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source)
+
+
+@pytest.mark.parametrize("source", BENIGN_PLUGIN_SOURCES.values(), ids=BENIGN_PLUGIN_SOURCES.keys())
+def test_guard_allows_permitted_constructs(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source) == []
+
+
+@pytest.mark.parametrize("source", RE_REVIEW_BYPASSES.values(), ids=RE_REVIEW_BYPASSES.keys())
+def test_guard_flags_every_re_review_bypass(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source)
+
+
+def test_guard_still_allows_os_path_and_dataclass_models(tmp_path: Path) -> None:
+    source = (
+        "from dataclasses import dataclass\nfrom os import path\nimport os.path\n"
+        "@dataclass(frozen=True)\nclass A:\n    x: int\n"
+        "path.join('a')\nos.path.join('a')\nobject.__setattr__(A(1), 'x', 2)\n"
+    )
+    assert process_messages(tmp_path, source) == []
+
+
+def test_guard_covers_all_twenty_two_crafted_bypass_cases() -> None:
+    assert len(CRAFTED_BYPASSES) == 22
+
+
+def test_guard_messages_and_lines(tmp_path: Path) -> None:
+    target = plugin_file(tmp_path, "import os\n\nos.system('id')\nfrom subprocess import run\n")
+    violations = rules.check_file(target, tmp_path)
+    assert [(violation.line, violation.message) for violation in violations] == [
+        (1, "import of 'os' is not allowed in plugins outside " + str(rules.PROCESS_HELPER)),
+        (3, "attribute 'system' is not allowed in plugins"),
+        (3, "os may only be used as os.path in plugins"),
+        (
+            4,
+            "import of 'subprocess' is not allowed in plugins outside " + str(rules.PROCESS_HELPER),
+        ),
+    ]
+
+
+def test_guard_reports_shell_true_and_unsafe_shell_keywords(tmp_path: Path) -> None:
+    assert process_messages(tmp_path, "run(x, shell=True)\n") == ["shell=True is forbidden"]
+    assert process_messages(tmp_path, "run(x, use_unsafe_shell=True)\n") == [
+        "keyword 'use_unsafe_shell' is not allowed in plugins"
+    ]
+
+
+def test_process_helper_is_exempt(tmp_path: Path) -> None:
+    source = "import subprocess\nimport os\nos.system('x')\nexec('1')\n"
+    assert process_messages(tmp_path, source, "plugins/module_utils/compliance/process.py") == []
+
+
+def test_same_file_name_elsewhere_is_not_exempt(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "import subprocess\n", "plugins/modules/process.py")
+    assert messages != []
+
+
+def test_nested_plugin_directories_are_in_scope(tmp_path: Path) -> None:
+    assert process_messages(tmp_path, "import subprocess\n", "plugins/a/b/c/mod.py") != []
+
+
+@pytest.mark.parametrize(
+    "name", ["tools/lint/helper.py", "tests/unit/plugins/test_x.py", "tests/plugins/x.py", "x.py"]
+)
+def test_code_outside_plugins_is_out_of_scope(tmp_path: Path, name: str) -> None:
+    assert process_messages(tmp_path, "import subprocess\nimport os\nos.system('x')\n", name) == []
+
+
+def test_path_outside_the_root_is_out_of_scope(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = plugin_file(tmp_path, "import subprocess\n", "plugins/x.py")
+    assert rules.check_file(outside, root) == []
+
+
+def test_unparsable_plugin_source_is_reported(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "def broken(:\n")
+    assert any(message.startswith("cannot parse Python") for message in messages)
+
+
+def test_null_bytes_in_plugin_source_are_reported(tmp_path: Path) -> None:
+    target = plugin_file(tmp_path, "x = 1\n")
+    target.write_bytes(b"x = 1\x00\n")
+    messages = [violation.message for violation in rules.check_file(target, tmp_path)]
+    assert any(message.startswith("cannot parse Python") for message in messages)
+
+
+def test_check_paths_uses_the_given_root(tmp_path: Path) -> None:
+    target = plugin_file(tmp_path, "import subprocess\n")
+    assert len(rules.check_paths([target], tmp_path)) == 1
+    assert rules.check_paths([target], tmp_path / "elsewhere") == []
+
+
+def test_comment_and_process_violations_are_both_reported(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "import subprocess  # why\n")
+    assert len(messages) == 2
+
+
+def test_repository_plugins_pass_the_deny_by_default_rule() -> None:
+    sources = sorted((rules.REPO_ROOT / "plugins").rglob("*.py"))
+    assert rules.REPO_ROOT / rules.PROCESS_HELPER in sources
+    assert rules.check_paths(sources) == []
+
+
+def test_repository_helper_is_the_only_plugin_file_importing_subprocess() -> None:
+    importers = [
+        path.relative_to(rules.REPO_ROOT)
+        for path in sorted((rules.REPO_ROOT / "plugins").rglob("*.py"))
+        if "subprocess" in path.read_text(encoding="utf-8")
+    ]
+    assert importers == [rules.PROCESS_HELPER]
+
+
+SANCTIONED_SANITY_IGNORE = (
+    "plugins/module_utils/compliance/process.py pylint:ansible-bad-function\n"
+)
+
+
+@pytest.mark.parametrize("version", ["2.20", "2.21"])
+def test_sanity_ignore_files_contain_exactly_the_one_sanctioned_entry(version: str) -> None:
+    ignore = rules.REPO_ROOT / "tests" / "sanity" / f"ignore-{version}.txt"
+    assert ignore.read_text(encoding="utf-8") == SANCTIONED_SANITY_IGNORE
+
+
+def test_only_the_two_sanity_ignore_files_exist() -> None:
+    names = sorted(path.name for path in (rules.REPO_ROOT / "tests" / "sanity").iterdir())
+    assert names == ["ignore-2.20.txt", "ignore-2.21.txt"]
+
+
+def test_ansible_lint_ignore_skips_only_the_two_sanity_ignore_files() -> None:
+    lines = (rules.REPO_ROOT / ".ansible-lint-ignore").read_text(encoding="utf-8").splitlines()
+    assert lines == [
+        "tests/sanity/ignore-2.20.txt sanity[cannot-ignore] skip",
+        "tests/sanity/ignore-2.21.txt sanity[cannot-ignore] skip",
+    ]
+
+
+def test_ansible_lint_ignore_is_not_published() -> None:
+    galaxy = yaml.safe_load((rules.REPO_ROOT / "galaxy.yml").read_text(encoding="utf-8"))
+    assert ".ansible-lint-ignore" in galaxy["build_ignore"]

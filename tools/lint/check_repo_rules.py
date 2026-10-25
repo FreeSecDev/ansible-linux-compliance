@@ -7,6 +7,16 @@ Rules:
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
 * YAML files contain no banned Ansible command-execution modules.
 * Python files contain no comments, except a shebang on the first line.
+* Python files under ``plugins/`` are checked deny-by-default: they import only
+  allow-listed standard library modules, ``ansible.module_utils`` and this
+  collection, never use ``os`` except as ``os.path``, never use ``exec``, ``eval``,
+  ``compile`` or ``__import__``, never reference process, fork or ``run_command``
+  attributes, never import or name ``subprocess``, ``pty``, ``posix``, ``sys`` or
+  ``os`` as an imported name or attribute, never use ``vars``, ``globals``,
+  ``locals``, ``__dict__`` or ``get_type_hints``, never pass ``shell=True``,
+  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``policies`` and
+  ``trusted_dirs`` keywords, and only call ``getattr`` with a literal permitted name. Only
+  ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
 """
@@ -14,6 +24,7 @@ Violations are printed as ``path:line: message`` and the exit status is 1.
 from __future__ import annotations
 
 import argparse
+import ast
 import bisect
 import io
 import re
@@ -47,6 +58,78 @@ PINNED_USES: Final[re.Pattern[str]] = re.compile(
     r"\s*(?:-\s+)?uses:\s+[\w.-]+/[\w.-]+(?:/[\w./-]+)?@[0-9a-f]{40}\s*"
 )
 PINNED_REV: Final[re.Pattern[str]] = re.compile(r"\s*(?:-\s+)?rev:\s+[0-9a-f]{40}\s*")
+REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+PLUGINS_DIRECTORY: Final[str] = "plugins"
+PROCESS_HELPER: Final[Path] = Path("plugins/module_utils/compliance/process.py")
+ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
+    {
+        "__future__",
+        "collections",
+        "collections.abc",
+        "dataclasses",
+        "datetime",
+        "enum",
+        "functools",
+        "hashlib",
+        "itertools",
+        "json",
+        "os.path",
+        "pathlib",
+        "re",
+        "stat",
+        "types",
+        "typing",
+        "unicodedata",
+        "xml.etree.ElementTree",
+    }
+)
+ALLOWED_IMPORT_PREFIXES: Final[tuple[str, ...]] = (
+    "ansible.module_utils",
+    "ansible_collections.freesecdev.linux_compliance",
+)
+MODULE_NAMES: Final[frozenset[str]] = frozenset(
+    {"subprocess", "pty", "posix", "_posixsubprocess", "os", "sys"}
+)
+REFLECTION_NAMES: Final[frozenset[str]] = frozenset({"vars", "globals", "locals", "get_type_hints"})
+BANNED_NAMES: Final[frozenset[str]] = (
+    frozenset({"exec", "eval", "compile", "__import__", "__builtins__"})
+    | REFLECTION_NAMES
+    | (MODULE_NAMES - {"os"})
+)
+DYNAMIC_ATTRIBUTE_BUILTINS: Final[frozenset[str]] = frozenset({"getattr", "setattr", "delattr"})
+BANNED_ATTRIBUTES: Final[frozenset[str]] = (
+    frozenset(
+        {
+            "system",
+            "popen",
+            "run_command",
+            "create_subprocess_exec",
+            "create_subprocess_shell",
+            "Popen",
+            "import_module",
+            "exec",
+            "__import__",
+            "__builtins__",
+            "__subclasses__",
+            "__globals__",
+            "__bases__",
+            "__base__",
+            "__mro__",
+            "__code__",
+            "__loader__",
+            "__dict__",
+        }
+    )
+    | REFLECTION_NAMES
+    | MODULE_NAMES
+)
+BANNED_ATTRIBUTE_PREFIXES: Final[tuple[str, ...]] = ("spawn", "fork", "posix_spawn", "_create_")
+EXEC_FAMILY: Final[re.Pattern[str]] = re.compile(r"f?exec[lv][a-z]*")
+BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
+    {"use_unsafe_shell", "owner_uid", "policies", "trusted_dirs"}
+)
+OS_MODULE: Final[str] = "os"
+OS_PATH: Final[str] = "path"
 SHEBANG_PREFIX: Final[str] = "#!"
 BLOCK_STYLES: Final[frozenset[str]] = frozenset({"|", ">"})
 LINE_BREAK: Final[re.Pattern[str]] = re.compile(r"\r\n|[\n\r\x85\u2028\u2029]")
@@ -286,8 +369,144 @@ def check_python_comments(path: Path, data: bytes) -> list[Violation]:
     return violations
 
 
-def check_file(path: Path) -> list[Violation]:
-    """Apply every rule that matches the suffix of ``path``."""
+def is_process_scope(path: Path, root: Path) -> bool:
+    """Return whether ``path`` is plugin code that may not run processes itself."""
+    try:
+        relative = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return relative.parts[:1] == (PLUGINS_DIRECTORY,) and relative != PROCESS_HELPER
+
+
+def _is_banned_attribute(name: str) -> bool:
+    return (
+        name in BANNED_ATTRIBUTES
+        or name.startswith(BANNED_ATTRIBUTE_PREFIXES)
+        or EXEC_FAMILY.fullmatch(name) is not None
+    )
+
+
+def _is_allowed_import(name: str) -> bool:
+    return name in ALLOWED_IMPORTS or any(
+        name == prefix or name.startswith(prefix + ".") for prefix in ALLOWED_IMPORT_PREFIXES
+    )
+
+
+def _not_allowed(name: str) -> str:
+    return f"import of {name!r} is not allowed in plugins outside {PROCESS_HELPER}"
+
+
+def _alias_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
+    """Yield a description for each import bound to a banned name with ``as``."""
+    for alias in node.names:
+        if alias.asname and (_is_banned_attribute(alias.asname) or alias.asname in BANNED_NAMES):
+            yield f"import under the name {alias.asname!r} is not allowed in plugins"
+
+
+def _import_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
+    """Yield a description for each import on ``node`` that is not allow-listed."""
+    yield from _alias_findings(node)
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            if not _is_allowed_import(alias.name):
+                yield _not_allowed(alias.name)
+        return
+    module = node.module or ""
+    if not node.level and module != OS_MODULE and not _is_allowed_import(module):
+        yield _not_allowed(module)
+    for alias in node.names:
+        if alias.name == "*":
+            yield f"star import from {module!r} is not allowed in plugins"
+        elif module == OS_MODULE and not node.level and alias.name != OS_PATH:
+            yield _not_allowed(f"os.{alias.name}")
+        elif _is_banned_attribute(alias.name):
+            yield f"import of {alias.name!r} is not allowed in plugins"
+
+
+def _dynamic_attribute_findings(node: ast.Call) -> Iterable[str]:
+    """Yield descriptions for ``getattr`` style calls with an unsafe attribute name."""
+    attribute = node.args[1] if len(node.args) > 1 else None
+    if not (isinstance(attribute, ast.Constant) and isinstance(attribute.value, str)):
+        yield "getattr, setattr and delattr need a literal attribute name"
+    elif _is_banned_attribute(attribute.value):
+        yield f"attribute {attribute.value!r} is not allowed in plugins"
+
+
+def _call_findings(node: ast.Call) -> Iterable[str]:
+    """Yield descriptions for forbidden keywords and dynamic attribute access."""
+    for keyword in node.keywords:
+        if keyword.arg in BANNED_KEYWORDS:
+            yield f"keyword {keyword.arg!r} is not allowed in plugins"
+        if (
+            keyword.arg == "shell"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+        ):
+            yield "shell=True is forbidden"
+    if isinstance(node.func, ast.Name) and node.func.id in DYNAMIC_ATTRIBUTE_BUILTINS:
+        yield from _dynamic_attribute_findings(node)
+
+
+def _name_findings(
+    node: ast.Name, call_targets: set[int], os_path_bases: set[int]
+) -> Iterable[str]:
+    """Yield descriptions for banned builtins and for uses of ``os`` other than ``os.path``."""
+    if node.id in BANNED_NAMES:
+        yield f"use of {node.id} is not allowed in plugins"
+    if node.id in DYNAMIC_ATTRIBUTE_BUILTINS and id(node) not in call_targets:
+        yield f"{node.id} may only be called directly"
+    if node.id == OS_MODULE and id(node) not in os_path_bases:
+        yield "os may only be used as os.path in plugins"
+
+
+def _process_findings(
+    node: ast.AST, call_targets: set[int], os_path_bases: set[int]
+) -> Iterable[str]:
+    """Yield a description for each forbidden construct on ``node`` itself."""
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        yield from _import_findings(node)
+    elif isinstance(node, ast.Name):
+        yield from _name_findings(node, call_targets, os_path_bases)
+    elif isinstance(node, ast.Attribute):
+        if _is_banned_attribute(node.attr):
+            yield f"attribute {node.attr!r} is not allowed in plugins"
+    elif isinstance(node, ast.Call):
+        yield from _call_findings(node)
+
+
+def check_process_isolation(path: Path, data: bytes) -> list[Violation]:
+    """Reject, by default, anything in plugin code that could run a process.
+
+    Only allow-listed imports are accepted, ``exec``, ``eval``, ``compile`` and
+    ``__import__`` are banned, ``os`` is usable only as ``os.path``, attribute
+    names that run or spawn processes are banned wherever they appear, and
+    ``getattr`` style calls need a literal, permitted attribute name.
+    """
+    try:
+        tree = ast.parse(data, filename=str(path))
+    except (SyntaxError, ValueError) as error:
+        return [Violation(path, 1, f"cannot parse Python: {error}")]
+    nodes = list(ast.walk(tree))
+    call_targets = {id(node.func) for node in nodes if isinstance(node, ast.Call)}
+    os_path_bases = {
+        id(node.value)
+        for node in nodes
+        if isinstance(node, ast.Attribute)
+        and node.attr == OS_PATH
+        and isinstance(node.value, ast.Name)
+        and node.value.id == OS_MODULE
+    }
+    return sorted(
+        {
+            Violation(path, getattr(node, "lineno", 1), message)
+            for node in nodes
+            for message in _process_findings(node, call_targets, os_path_bases)
+        }
+    )
+
+
+def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
+    """Apply every rule that matches the suffix and location of ``path``."""
     suffix = path.suffix.lower()
     if suffix not in YAML_SUFFIXES | PYTHON_SUFFIXES:
         return []
@@ -296,7 +515,10 @@ def check_file(path: Path) -> list[Violation]:
     except OSError as error:
         return [Violation(path, 1, f"cannot read file: {error}")]
     if suffix in PYTHON_SUFFIXES:
-        return check_python_comments(path, data)
+        violations = check_python_comments(path, data)
+        if is_process_scope(path, root):
+            violations.extend(check_process_isolation(path, data))
+        return violations
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -308,9 +530,9 @@ def check_file(path: Path) -> list[Violation]:
     ]
 
 
-def check_paths(paths: Iterable[Path]) -> list[Violation]:
+def check_paths(paths: Iterable[Path], root: Path = REPO_ROOT) -> list[Violation]:
     """Check every path and return the violations in sorted order."""
-    return sorted(violation for path in paths for violation in check_file(path))
+    return sorted(violation for path in paths for violation in check_file(path, root))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
