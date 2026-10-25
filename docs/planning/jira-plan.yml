@@ -582,7 +582,7 @@ epics:
           - Docker matrix runs on pull requests; libvirt runs where KVM is available and is opt-in when expensive.
       - id: s1403-aws-workflows
         type: Story
-        summary: AWS image build workflows with environment approval
+        summary: AWS image build workflows from trusted refs
         skill: github-actions
         complexity: M
         depends_on: [s0402-oidc]

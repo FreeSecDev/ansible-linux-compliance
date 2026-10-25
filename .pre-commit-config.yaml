@@ -1,0 +1,119 @@
+---
+minimum_pre_commit_version: 4.0.0
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+fail_fast: false
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(LICENSE|NOTICE)$
+      - id: end-of-file-fixer
+        exclude: ^(LICENSE|NOTICE)$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: detect-private-key
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # v8.30.1
+    hooks:
+      - id: gitleaks
+      - id: gitleaks
+        alias: gitleaks-history
+        name: Detect hardcoded secrets in repository history
+        entry: gitleaks git --redact --no-banner --verbose
+        stages: [manual]
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: 916ad0aaa108c64d294101002066f530ea170b10  # v0.23.3
+    hooks:
+      - id: markdownlint-cli2
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: yamllint
+        name: yamllint
+        entry: uv run --frozen yamllint --strict
+        language: system
+        types: [yaml]
+      - id: shellcheck
+        name: shellcheck
+        entry: uv run --frozen shellcheck
+        language: system
+        types: [shell]
+      - id: repo-rules
+        name: repository source rules
+        entry: uv run --frozen python tools/lint/check_repo_rules.py
+        language: system
+        types_or: [yaml, python]
+      - id: skill-validator
+        name: agent skill validator
+        entry: uv run --frozen python tools/skills/validate_skills.py
+        language: system
+        files: ^\.agents/skills/
+        pass_filenames: false
+      - id: markdown-links
+        name: markdown relative links
+        entry: uv run --frozen python tools/docs/check_links.py
+        language: system
+        types: [markdown]
+      - id: mypy
+        name: mypy strict
+        entry: uv run --frozen mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pyright
+        name: pyright strict
+        entry: uv run --frozen pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pylint
+        name: pylint
+        entry: uv run --frozen pylint tools tests
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: bandit
+        name: bandit
+        entry: uv run --frozen bandit -c pyproject.toml -r tools -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pytest
+        name: pytest
+        entry: uv run --frozen pytest
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: actionlint
+        name: actionlint
+        entry: uv run --frozen actionlint
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+        stages: [manual]
+      - id: zizmor
+        name: zizmor
+        entry: uv run --frozen zizmor --persona pedantic
+        language: system
+        files: ^\.github/(workflows|actions)/.*\.ya?ml$
+        stages: [manual]

@@ -50,7 +50,7 @@ Releases are rare, verified and reproducible. A release is never a side effect o
 - `make release-check` passes locally and in CI.
 - Two independent builds of the tarball produce identical SHA-256 sums.
 - Tag version, `galaxy.yml` version and changelog heading agree.
-- Security scans, `ansible-test sanity` and the full test matrix passed for the tagged commit.
+- Security scans, `ansible-test sanity` and the full test matrix passed for the merge commit.
 - Checksums and attestation verify against the published files.
 
 ## Common failures
