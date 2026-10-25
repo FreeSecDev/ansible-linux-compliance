@@ -1,0 +1,26 @@
+---
+extends: default
+ignore:
+  - .venv/
+  - .git/
+rules:
+  document-start:
+    present: true
+  line-length:
+    max: 120
+    level: error
+    ignore: |
+      docs/planning/
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+  comments:
+    require-starting-space: true
+    min-spaces-from-content: 1
+  comments-indentation: enable
+  empty-lines:
+    max: 1
+  new-line-at-end-of-file: enable
