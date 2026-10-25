@@ -10,7 +10,14 @@ minor_changes:
     Add the strict YAML subset loader ``plugins/module_utils/compliance/yamlsubset.py``, which rejects duplicate keys,
     anchors, aliases, tags and ambiguous unquoted values.
   - >-
-    Add the controller filters ``freesecdev.linux_compliance.apply_exceptions`` and
-    ``freesecdev.linux_compliance.stale_exceptions``.
+    Exception scopes can name ``profiles``, which a ``benchmark`` scope requires, so a waiver granted for one
+    framework's profile does not cover another profile of the same benchmark. Owner and approver must be email
+    addresses or handles and are compared after NFKC normalisation and case folding.
   - >-
-    The findings model gains the public helpers ``validate_xccdf_id`` and ``validate_text``.
+    Add the controller filters ``freesecdev.linux_compliance.apply_exceptions`` and
+    ``freesecdev.linux_compliance.stale_exceptions``. ``apply_exceptions`` judges expiry at the later of the scan start
+    and the controller time, refuses a scan start more than five minutes in the future and flags scans older than
+    ``max_scan_lag_hours`` (default 24).
+  - >-
+    The findings model gains the public helpers ``validate_xccdf_id`` and ``validate_text`` and the constant
+    ``XCCDF_ID_PATTERNS``.

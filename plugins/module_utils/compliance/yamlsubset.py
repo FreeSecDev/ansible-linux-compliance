@@ -80,7 +80,7 @@ _BOOLEAN_WORDS: Final[frozenset[str]] = frozenset(
         "OFF",
     }
 )
-_RESERVED_PLAIN: Final[frozenset[str]] = _BOOLEAN_WORDS | frozenset({"="})
+_RESERVED_PLAIN: Final[frozenset[str]] = _BOOLEAN_WORDS | frozenset({"=", "<<"})
 _INDICATORS: Final[str] = "-?:,[]{}#&*!|>'\"%@`"
 _FLOW_PLAIN_FORBIDDEN: Final[str] = ",[]{}#:&*!|>'\"%@`?"
 _FLOW_START_FORBIDDEN: Final[str] = _FLOW_PLAIN_FORBIDDEN + "-"
@@ -207,6 +207,8 @@ def _flow_sequence(text: str, line: int) -> list[object]:
     while True:
         if index >= len(text):
             _raise("a flow sequence must end on the same line", line)
+        if len(items) >= MAX_SEQUENCE_ITEMS:
+            _raise(f"a sequence has more than {MAX_SEQUENCE_ITEMS} items", line)
         value, index = _flow_item(text, index, line)
         items.append(value)
         index = _skip_spaces(text, index)
@@ -237,12 +239,12 @@ def _fold(lines: list[str]) -> str:
     return "".join(parts)
 
 
-def _chomp(body: str, chomping: str, *, has_content: bool, trailing: int) -> str:
+def _chomp(body: str, chomping: str, *, has_content: bool, breaks: int) -> str:
     if chomping == "-":
         return body
     if chomping == "+":
-        return body + "\n" * (trailing + int(has_content))
-    return body + "\n" * int(has_content)
+        return body + "\n" * breaks
+    return body + "\n" * min(int(has_content), breaks)
 
 
 def _check_characters(text: str) -> None:
@@ -258,9 +260,10 @@ def _check_characters(text: str) -> None:
 
 
 class _Parser:
-    def __init__(self, lines: list[str]) -> None:
+    def __init__(self, lines: list[str], *, final_newline: bool) -> None:
         self._lines = lines
         self._index = 1
+        self._final_newline = final_newline
 
     def _fail(self, message: str) -> NoReturn:
         _raise(message, self._index + 1)
@@ -393,10 +396,15 @@ class _Parser:
                 self._fail("a folded block scalar must not have more-indented lines; use '|'")
             lines.append(raw[content_indent:])
             self._index += 1
+        return self._scalar(lines, match.group(1), match.group(2))
+
+    def _scalar(self, lines: list[str], style: str, chomping: str) -> str:
         last = max((number for number, text in enumerate(lines) if text), default=-1)
         body_lines = lines[: last + 1]
-        body = "\n".join(body_lines) if match.group(1) == "|" else _fold(body_lines)
-        return _chomp(body, match.group(2), has_content=last >= 0, trailing=len(lines) - last - 1)
+        body = "\n".join(body_lines) if style == "|" else _fold(body_lines)
+        unterminated = int(self._index >= len(self._lines) and not self._final_newline)
+        breaks = len(lines) - max(last, 0) - unterminated
+        return _chomp(body, chomping, has_content=last >= 0, breaks=breaks)
 
 
 def load(text: str) -> object:
@@ -425,4 +433,4 @@ def load(text: str) -> object:
     for number, line in enumerate(lines[1:], start=2):
         if line in {DOCUMENT_START, "..."} or line.startswith(("--- ", "... ", "%")):
             _raise("only one document is allowed and directives are not supported", number)
-    return _Parser(lines).document()
+    return _Parser(lines, final_newline=text.endswith("\n")).document()

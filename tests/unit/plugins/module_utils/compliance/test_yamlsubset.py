@@ -250,3 +250,29 @@ def test_rejects_too_many_sequence_items(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(yamlsubset, "MAX_SEQUENCE_ITEMS", 2)
     assert load("- a\n- b\n") == ["a", "b"]
     rejects("---\n- a\n- b\n- c\n", "more than 2 items", 4)
+    assert load("a: [p, q]\n") == {"a": ["p", "q"]}
+    rejects("---\na: [p, q, r]\n", "more than 2 items", 2)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("---\nk: |\n   x", "x"),
+        ("---\nk: |\n   x\n", "x\n"),
+        ("---\nk: |+\n  x\n  ", "x\n"),
+        ("---\nk: |+\n  x\n  \n", "x\n\n"),
+        ("---\nk: |+\n  x\n\n  ", "x\n\n"),
+        ("---\nk: >\n  a\n  b", "a b"),
+        ("---\nk: |-\n  x", "x"),
+        ("---\nk: |+\n", ""),
+        ("---\nk: |+\n  ", ""),
+    ],
+)
+def test_block_scalars_at_the_end_of_a_file_without_a_final_newline(
+    text: str, expected: str
+) -> None:
+    assert yamlsubset.load(text) == {"k": expected}
+
+
+def test_a_plain_merge_marker_value_is_rejected() -> None:
+    rejects("---\na: <<\n", "'<<' is not read as a string", 2)

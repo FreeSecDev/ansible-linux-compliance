@@ -26,11 +26,11 @@
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
     },
     "person": {
-      "description": "A person, team or role, without surrounding whitespace or control characters.",
+      "description": "An email address or a handle such as platform-team, in lowercase ASCII. The collection also accepts other case and NFKC-equivalent forms and folds them to this canonical form before comparing owner and approver.",
       "type": "string",
       "minLength": 1,
-      "maxLength": 256,
-      "pattern": "^\\S(?:.*\\S)?$"
+      "maxLength": 254,
+      "pattern": "^(?:[a-z0-9][a-z0-9._-]{0,63}|[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)$"
     },
     "exception": {
       "type": "object",
@@ -103,11 +103,26 @@
       }
     },
     "scope": {
-      "description": "Where the exception applies. Every dimension that is present must match; within a list, one entry is enough.",
+      "description": "Where the exception applies. Every dimension that is present must match; within a list, one entry is enough. A benchmark scope also needs profiles, because the profiles of one benchmark share its identifier.",
       "type": "object",
       "additionalProperties": false,
       "minProperties": 1,
+      "dependentRequired": {
+        "benchmark": ["profiles"]
+      },
       "properties": {
+        "profiles": {
+          "description": "Full XCCDF profile identifiers, matched exactly against the profile of the scan run.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^xccdf_[A-Za-z0-9_.-]+?_profile_[A-Za-z0-9_.+-]+$"
+          }
+        },
         "hosts": {
           "description": "Inventory host names (inventory_hostname), matched exactly.",
           "type": "array",

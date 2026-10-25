@@ -17,6 +17,7 @@ RULE = PREFIX + "sshd_disable_root_login"
 OTHER_RULE = PREFIX + "audit_rules_login_events"
 BENCHMARK = "xccdf_org.ssgproject.content_benchmark_UBUNTU2404"
 PROFILE = "xccdf_org.ssgproject.content_profile_cis_level1_server"
+STIG = "xccdf_org.ssgproject.content_profile_stig"
 VERSION = "0.1.82"
 NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone.utc)
 STARTED = "2026-10-25T10:00:00Z"
@@ -111,8 +112,8 @@ def scan_run(
     *,
     started: str = STARTED,
     status: model.ScanStatus = model.ScanStatus.COMPLETED,
-    benchmark: str = BENCHMARK,
     version: str = VERSION,
+    profile: str = PROFILE,
 ) -> model.ScanRun:
     if outcomes is None:
         outcomes = {RULE: model.Outcome.FAIL, OTHER_RULE: model.Outcome.PASS}
@@ -123,8 +124,8 @@ def scan_run(
         host=model.HostIdentity("reported-name", "ubuntu", "24.04", "x86_64", None),
         scanner=model.ScannerInfo("openscap", "1.3.10"),
         content=model.Provenance("ssg-ubuntu2404-ds.xml", version, "a" * 64),
-        benchmark_id=benchmark,
-        profile_id=PROFILE,
+        benchmark_id=BENCHMARK,
+        profile_id=profile,
         status=status,
         error_message=None if status is model.ScanStatus.COMPLETED else "scanner failed",
         findings=tuple(finding(rule_id, outcome) for rule_id, outcome in outcomes.items()),
@@ -137,16 +138,25 @@ def target(
     return exceptions.Target(host, groups)
 
 
+def instant(text: str) -> datetime:
+    return datetime.strptime(text, model.TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+
+
 def evaluate(
     *entries: dict[str, object],
     run: model.ScanRun | None = None,
     where: exceptions.Target | None = None,
     now: datetime = NOW,
+    controller: datetime | None = None,
+    max_scan_lag: timedelta = exceptions.DEFAULT_MAX_SCAN_LAG,
 ) -> exceptions.Evaluation:
+    selected = scan_run() if run is None else run
     return exceptions.evaluate_run(
-        scan_run() if run is None else run,
+        selected,
         parse(*entries, now=now),
         target() if where is None else where,
+        instant(selected.started_at) if controller is None else controller,
+        max_scan_lag=max_scan_lag,
     )
 
 
@@ -190,10 +200,11 @@ def test_parses_plain_yaml_with_comments_and_block_justification() -> None:
         "      benchmark:\n"
         f"        id: {BENCHMARK}\n"
         f"        version: {VERSION}\n"
+        f"      profiles: [{STIG}]\n"
         "    justification: >-\n"
         "      The vendor appliance needs it.\n"
         "      Migration is tracked in OPS-12.\n"
-        "    owner: Web Team <web@example.com>\n"
+        "    owner: Web@Example.com\n"
         "    approval:\n"
         "      approver: CISO\n"
         "      date: 2026-10-01\n"
@@ -205,6 +216,8 @@ def test_parses_plain_yaml_with_comments_and_block_justification() -> None:
     assert record.justification == "The vendor appliance needs it. Migration is tracked in OPS-12."
     assert record.scope.groups == ("dmz", "legacy_web")
     assert record.scope.benchmark == exceptions.BenchmarkScope(BENCHMARK, VERSION)
+    assert record.scope.profiles == (STIG,)
+    assert (record.owner, record.approver) == ("web@example.com", "ciso")
     assert record.framework is model.FrameworkId.STIG
     assert record.risk is exceptions.Risk.HIGH
 
@@ -222,6 +235,12 @@ def test_justification_whitespace_is_trimmed() -> None:
     )
     record = exceptions.parse_exceptions(text, NOW).records[0]
     assert record.justification == "Line one.\n  Indented line two."
+
+
+def test_justification_length_counts_surrounding_whitespace_like_the_schema() -> None:
+    exact = "x" * exceptions.MAX_JUSTIFICATION_LENGTH
+    assert parse(entry(justification=exact)).records[0].justification == exact
+    invalid_entry("justification exceeds 4096 characters", justification=" " + exact)
 
 
 @pytest.mark.parametrize("key", exceptions.ENTRY_KEYS)
@@ -271,7 +290,12 @@ def test_empty_and_wrongly_typed_structures_are_rejected() -> None:
         (entry(scope={"hosts": ["web01"], "regions": ["eu"]}), "scope has unknown keys"),
         (entry(approval={"approver": "a", "date": "2026-10-02", "role": "x"}), "approval has"),
         (
-            entry(scope={"benchmark": {"id": BENCHMARK, "version": VERSION, "profile": "x"}}),
+            entry(
+                scope={
+                    "benchmark": {"id": BENCHMARK, "version": VERSION, "profile": "x"},
+                    "profiles": [PROFILE],
+                }
+            ),
             "benchmark has unknown keys: 'profile'",
         ),
     ],
@@ -284,7 +308,7 @@ def test_documents_loaded_elsewhere_get_the_same_validation() -> None:
     loaded: dict[str, object] = {"schema_version": "1.0", "exceptions": [entry()]}
     assert exceptions.parse_document(loaded, NOW)[0].exception_id == "EXC-001"
     for scope, message in (
-        ({}, "scope must name hosts, groups or a benchmark"),
+        ({}, "scope must name hosts, groups, profiles or a benchmark"),
         ({"hosts": ["web01"], 1: "x"}, "scope has unknown keys: '1'"),
     ):
         broken: dict[str, object] = {"schema_version": "1.0", "exceptions": [entry(scope=scope)]}
@@ -319,7 +343,7 @@ def test_document_structure_is_checked(monkeypatch: pytest.MonkeyPatch) -> None:
         ({"risk": "none"}, r"\.risk must be one of: low, medium, high, critical"),
         ({"risk": "MEDIUM"}, r"\.risk must be one of"),
         ({"owner": "team\u200b"}, r"\.owner contains control or formatting characters"),
-        ({"owner": "x" * 257}, r"\.owner exceeds 256 characters"),
+        ({"owner": "x" * 255}, r"\.owner exceeds 254 characters"),
         ({"justification": "x" * 4097}, r"\.justification exceeds 4096 characters"),
         ({"justification": "bad \u202e text"}, r"line [0-9]+: .*bidi characters"),
         ({"justification": "bad \x1b text"}, r"line [0-9]+: control"),
@@ -331,10 +355,34 @@ def test_document_structure_is_checked(monkeypatch: pytest.MonkeyPatch) -> None:
         ({"scope": {"groups": ["bad group"]}}, r"scope\.groups\[0\] has an invalid format"),
         ({"scope": {"groups": ["all"]}}, "must not name the implicit group 'all'"),
         ({"scope": {"groups": ["web", "ungrouped"]}}, "implicit group 'ungrouped'"),
-        ({"scope": {"benchmark": {"id": BENCHMARK}}}, "benchmark is missing keys: version"),
-        ({"scope": {"benchmark": {"id": RULE, "version": "1"}}}, r"benchmark\.id has an invalid"),
-        ({"scope": {"benchmark": {"id": BENCHMARK, "version": ""}}}, r"version must not be empty"),
-        ({"scope": {"benchmark": "x"}}, r"scope\.benchmark must be a mapping"),
+        (
+            {"scope": {"benchmark": {"id": BENCHMARK}, "profiles": [PROFILE]}},
+            "benchmark is missing keys: version",
+        ),
+        (
+            {"scope": {"benchmark": {"id": RULE, "version": "1"}, "profiles": [PROFILE]}},
+            r"benchmark\.id has an invalid",
+        ),
+        (
+            {"scope": {"benchmark": {"id": BENCHMARK, "version": ""}, "profiles": [PROFILE]}},
+            r"version must not be empty",
+        ),
+        (
+            {"scope": {"benchmark": "x", "profiles": [PROFILE]}},
+            r"scope\.benchmark must be a mapping",
+        ),
+        (
+            {"scope": {"benchmark": {"id": BENCHMARK, "version": VERSION}}},
+            r"scope\.profiles is required when exceptions\[0\]\.scope\.benchmark is set",
+        ),
+        (
+            {"scope": {"hosts": ["web01"], "benchmark": {"id": BENCHMARK, "version": VERSION}}},
+            r"scope\.profiles is required",
+        ),
+        ({"scope": {"profiles": [RULE]}}, r"scope\.profiles\[0\] has an invalid format"),
+        ({"scope": {"profiles": [PROFILE, PROFILE]}}, r"scope\.profiles contains duplicates"),
+        ({"scope": {"profiles": []}}, r"scope\.profiles must not be empty"),
+        ({"scope": {"profiles": PROFILE}}, r"scope\.profiles must be a sequence"),
     ],
 )
 def test_field_values_are_validated(overrides: dict[str, object], message: str) -> None:
@@ -399,15 +447,88 @@ def test_approval_must_precede_expiry() -> None:
     )
 
 
-@pytest.mark.parametrize("approver", ["platform-team", "Platform-Team"])
-def test_owner_cannot_approve_their_own_exception(approver: str) -> None:
+@pytest.mark.parametrize(
+    ("owner", "approver"),
+    [
+        ("platform-team", "platform-team"),
+        ("platform-team", "Platform-Team"),
+        ("alice@example.com", "Alice@Example.COM"),
+        ("alice@example.com", "\uff41lice@example.com"),
+        ("alice@example.com", "alice"),
+        ("alice", "ALICE@corp.example"),
+        ("alice@example.com", "\uff21\uff2c\uff29\uff23\uff25@\uff45xample.com"),
+    ],
+)
+def test_owner_cannot_approve_their_own_exception(owner: str, approver: str) -> None:
     invalid_entry(
-        "approver must not be the owner", approval={"approver": approver, "date": "2026-10-02"}
+        "approver must not be the owner",
+        owner=owner,
+        approval={"approver": approver, "date": "2026-10-02"},
     )
 
 
+@pytest.mark.parametrize(
+    ("owner", "approver"),
+    [
+        ("alice@a.example", "alice@b.example"),
+        ("alice", "bob"),
+        ("alice@example.com", "bob"),
+        ("alice", "alicia@example.com"),
+    ],
+)
+def test_different_people_may_own_and_approve(owner: str, approver: str) -> None:
+    record = parse(entry(owner=owner, approval={"approver": approver, "date": "2026-10-02"}))
+    assert (record.records[0].owner, record.records[0].approver) == (owner, approver)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "\u0430lice@example.com",
+        "alice@example.com.",
+        "Web Team",
+        "web team@example.com",
+        "alice@localhost",
+        "-alice",
+        "a" * 65,
+        "x" * 65 + "@example.com",
+        "alice@-example.com",
+        "\u00e9lodie",
+    ],
+)
+def test_owner_and_approver_must_be_an_email_or_a_handle(value: str) -> None:
+    message = "must be an email address or a handle"
+    invalid_entry(rf"\.owner {message}", owner=value)
+    invalid_entry(
+        rf"approval\.approver {message}", approval={"approver": value, "date": "2026-10-02"}
+    )
+
+
+def test_person_names_are_canonicalised() -> None:
+    record = parse(
+        entry(owner="\uff30latform-Team", approval={"approver": "Sec.Lead", "date": "2026-10-02"})
+    ).records[0]
+    assert (record.owner, record.approver) == ("platform-team", "sec.lead")
+    assert exceptions.normalize_person("Alice@Example.Com", "x") == "alice@example.com"
+
+
+def test_a_name_that_grows_beyond_the_limit_when_normalised_is_rejected() -> None:
+    value = "\ufb00" * 127 + "@example.com"
+    with pytest.raises(exceptions.ExceptionsError, match="email address or a handle"):
+        exceptions.normalize_person(value, "owner")
+
+
+def test_same_person() -> None:
+    assert exceptions.same_person("alice", "alice")
+    assert exceptions.same_person("alice", "alice@x.example")
+    assert exceptions.same_person("alice@x.example", "alice")
+    assert not exceptions.same_person("alice@x.example", "alice@y.example")
+    assert not exceptions.same_person("alice", "bob")
+    assert not exceptions.same_person("bob@x.example", "alice")
+
+
 def test_today_is_the_utc_date_of_now() -> None:
-    values = entry(created="2026-10-26", approval={"approver": "a", "date": "2026-10-26"})
+    values = entry(created="2026-10-26", approval={"approver": "ciso", "date": "2026-10-26"})
     behind = datetime(2026, 10, 25, 23, 30, tzinfo=timezone(timedelta(hours=-2)))
     assert parse(values, now=behind).records[0].created == date(2026, 10, 26)
     ahead = datetime(2026, 10, 26, 5, 0, tzinfo=timezone(timedelta(hours=14)))
@@ -488,18 +609,46 @@ def test_host_scope_waives_a_failure_with_metadata() -> None:
         ({"groups": ["legacy"]}, target("db01", ("legacy", "dmz")), "waived"),
         ({"groups": ["legacy"]}, target("db01", ("dmz",)), "unmatched"),
         ({"groups": ["legacy"]}, target("db01", ()), "unmatched"),
-        ({"benchmark": {"id": BENCHMARK, "version": VERSION}}, target("any"), "waived"),
-        ({"benchmark": {"id": BENCHMARK, "version": "0.1.81"}}, target("any"), "unmatched"),
         (
-            {"benchmark": {"id": BENCHMARK.replace("2404", "2204"), "version": VERSION}},
+            {"benchmark": {"id": BENCHMARK, "version": VERSION}, "profiles": [PROFILE]},
+            target("any"),
+            "waived",
+        ),
+        (
+            {"benchmark": {"id": BENCHMARK, "version": "0.1.81"}, "profiles": [PROFILE]},
             target("any"),
             "unmatched",
         ),
+        (
+            {
+                "benchmark": {"id": BENCHMARK.replace("2404", "2204"), "version": VERSION},
+                "profiles": [PROFILE],
+            },
+            target("any"),
+            "unmatched",
+        ),
+        (
+            {"benchmark": {"id": BENCHMARK, "version": VERSION}, "profiles": [STIG]},
+            target("any"),
+            "unmatched",
+        ),
+        (
+            {"benchmark": {"id": BENCHMARK, "version": VERSION}, "profiles": [STIG, PROFILE]},
+            target("any"),
+            "waived",
+        ),
+        ({"profiles": [PROFILE]}, target("any"), "waived"),
+        ({"profiles": [STIG]}, target("any"), "unmatched"),
+        ({"hosts": ["web01"], "profiles": [STIG]}, target("web01"), "unmatched"),
         ({"hosts": ["web01"], "groups": ["legacy"]}, target("web01", ("legacy",)), "waived"),
         ({"hosts": ["web01"], "groups": ["legacy"]}, target("web01", ("dmz",)), "unmatched"),
         ({"hosts": ["web01"], "groups": ["legacy"]}, target("web02", ("legacy",)), "unmatched"),
         (
-            {"hosts": ["web01"], "benchmark": {"id": BENCHMARK, "version": "9"}},
+            {
+                "hosts": ["web01"],
+                "benchmark": {"id": BENCHMARK, "version": "9"},
+                "profiles": [PROFILE],
+            },
             target("web01"),
             "unmatched",
         ),
@@ -513,6 +662,19 @@ def test_scope_matching(scope: dict[str, object], where: exceptions.Target, stat
     if status == "unmatched":
         assert by_rule(evaluation)[RULE].exception == model.ExceptionStatus.none()
         assert evaluation.results[0].outcome is None
+
+
+def test_a_cis_waiver_does_not_cover_a_stig_scan_of_the_same_benchmark() -> None:
+    cis_only = entry(
+        framework="cis",
+        scope={"benchmark": {"id": BENCHMARK, "version": VERSION}, "profiles": [PROFILE]},
+    )
+    stig_run = scan_run(profile=STIG)
+    stig = evaluate(cis_only, run=stig_run, where=target("any"))
+    assert statuses(stig) == {"EXC-001": "unmatched"}
+    assert by_rule(stig)[RULE].outcome is model.Outcome.FAIL
+    cis = evaluate(cis_only, run=scan_run(), where=target("any"))
+    assert by_rule(cis)[RULE].outcome is model.Outcome.WAIVED
 
 
 def test_an_exception_for_a_rule_that_was_not_scanned_is_unmatched() -> None:
@@ -659,7 +821,77 @@ def test_an_expired_exception_wins_over_one_not_yet_in_effect() -> None:
 def test_a_run_that_already_carries_exception_data_is_rejected() -> None:
     evaluation = evaluate(entry())
     with pytest.raises(exceptions.ExceptionsError, match="already carries exception data"):
-        exceptions.evaluate_run(evaluation.run, parse(entry()), target())
+        exceptions.evaluate_run(evaluation.run, parse(entry()), target(), instant(STARTED))
+
+
+def test_a_host_clock_ahead_of_the_controller_is_refused() -> None:
+    run = scan_run(started="2026-10-25T10:05:01Z")
+    with pytest.raises(exceptions.ExceptionsError, match="later than the controller time"):
+        evaluate(entry(), run=run, controller=instant("2026-10-25T10:00:00Z"))
+    within = scan_run(started="2026-10-25T10:05:00Z")
+    evaluation = evaluate(entry(), run=within, controller=instant("2026-10-25T10:00:00Z"))
+    assert evaluation.timing.evaluated_at == instant("2026-10-25T10:05:00Z")
+    assert evaluation.to_dict()["scan_lag_seconds"] == -300
+
+
+def test_a_host_clock_behind_the_controller_cannot_keep_a_lapsed_waiver() -> None:
+    values = entry(expires="2026-10-01", approval={"approver": "ciso", "date": "2026-09-02"})
+    values["created"] = "2026-09-01"
+    run = scan_run(started="2026-09-30T23:59:59Z")
+    evaluation = evaluate(values, run=run, controller=NOW)
+    assert statuses(evaluation) == {"EXC-001": "expired"}
+    item = by_rule(evaluation)[RULE]
+    assert item.outcome is model.Outcome.FAIL
+    assert item.exception == model.ExceptionStatus.none()
+    assert evaluation.results[0].expired
+    assert evaluation.timing.evaluated_at == NOW.replace(microsecond=0)
+    assert evaluation.timing.scan_lag_exceeded
+
+
+def test_a_scan_exactly_on_the_expiry_boundary() -> None:
+    boundary = scan_run(started="2027-03-31T00:00:00Z")
+    on_time = evaluate(entry(), run=boundary)
+    assert statuses(on_time) == {"EXC-001": "expired"}
+    assert by_rule(on_time)[RULE].exception.state is model.ExceptionState.EXPIRED
+    just_before = scan_run(started="2027-03-30T23:59:59Z")
+    late = evaluate(entry(), run=just_before, controller=instant("2027-03-31T00:00:00Z"))
+    assert statuses(late) == {"EXC-001": "expired"}
+    assert by_rule(late)[RULE].outcome is model.Outcome.FAIL
+    assert by_rule(late)[RULE].exception == model.ExceptionStatus.none()
+    in_time = evaluate(entry(), run=just_before, controller=instant("2027-03-30T23:59:59Z"))
+    assert by_rule(in_time)[RULE].outcome is model.Outcome.WAIVED
+
+
+@pytest.mark.parametrize(
+    ("lag", "limit", "exceeded"),
+    [
+        (timedelta(hours=24), timedelta(hours=24), False),
+        (timedelta(hours=24, seconds=1), timedelta(hours=24), True),
+        (timedelta(hours=2), timedelta(hours=1), True),
+        (timedelta(0), timedelta(hours=1), False),
+    ],
+)
+def test_old_scans_are_flagged(lag: timedelta, limit: timedelta, exceeded: bool) -> None:
+    controller = instant(STARTED) + lag
+    evaluation = evaluate(entry(), controller=controller, max_scan_lag=limit)
+    timing = evaluation.to_dict()
+    assert timing["scan_lag_exceeded"] is exceeded
+    assert timing["scan_lag_seconds"] == int(lag.total_seconds())
+    assert timing["max_scan_lag_seconds"] == int(limit.total_seconds())
+    assert by_rule(evaluation)[RULE].outcome is model.Outcome.WAIVED
+
+
+@pytest.mark.parametrize(
+    "limit", [timedelta(0), timedelta(seconds=-1), timedelta(days=366), cast("timedelta", 24)]
+)
+def test_the_scan_lag_limit_is_validated(limit: timedelta) -> None:
+    with pytest.raises(exceptions.ExceptionsError, match="maximum scan lag"):
+        evaluate(entry(), max_scan_lag=limit)
+
+
+def test_the_controller_time_must_be_timezone_aware() -> None:
+    with pytest.raises(exceptions.ExceptionsError, match="timezone-aware"):
+        evaluate(entry(), controller=datetime.fromisoformat("2026-10-25T10:00:00"))
 
 
 def test_the_evaluation_document() -> None:
@@ -669,6 +901,7 @@ def test_the_evaluation_document() -> None:
                 "hosts": ["web01"],
                 "groups": ["legacy"],
                 "benchmark": {"id": BENCHMARK, "version": VERSION},
+                "profiles": [PROFILE],
             }
         ),
         entry(id="EXC-002", rule=OTHER_RULE, scope={"groups": ["nowhere"]}),
@@ -677,6 +910,11 @@ def test_the_evaluation_document() -> None:
     data = evaluation.to_dict()
     assert data["schema_version"] == exceptions.EVALUATION_SCHEMA_VERSION
     assert data["evaluated_at"] == STARTED
+    assert data["scan_started_at"] == STARTED
+    assert data["controller_time"] == STARTED
+    assert data["scan_lag_seconds"] == 0
+    assert data["max_scan_lag_seconds"] == 86400
+    assert data["scan_lag_exceeded"] is False
     assert data["max_validity_days"] == exceptions.MAX_VALIDITY_DAYS
     assert data["target"] == {"groups": ["dmz", "legacy"], "host": "web01"}
     assert data["summary"] == {
@@ -706,6 +944,7 @@ def test_the_evaluation_document() -> None:
             "benchmark": {"id": BENCHMARK, "version": VERSION},
             "groups": ["legacy"],
             "hosts": ["web01"],
+            "profiles": [PROFILE],
         },
         "status": "waived",
         "superseded_by": None,

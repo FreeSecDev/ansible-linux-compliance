@@ -22,9 +22,12 @@ Code: `plugins/module_utils/compliance/exceptions.py` (validation and matching),
 2. **Exceptions expire.** The maximum validity is **365 days** from `created` to `expires`. There are no permanent
    exceptions. To renew, add a new entry with a new `id`, a new approval and new dates, and remove or keep the old
    one; Git keeps the history either way.
-3. **Separation of duties.** The approver must not be the owner (compared ignoring case). The file records the
-   names; the authority to approve comes from the review of the pull request that changes the file, so protect the
-   file with the same branch rules as the inventory.
+3. **Separation of duties.** Owner and approver are each an email address or a handle (see
+   [Owner and approver](#owner-and-approver)), and the approver must not be the owner. The names are compared after
+   NFKC normalisation, trimming and case folding, and a handle counts as the same person as an email address with
+   that local part (`alice` and `alice@example.com`). The file records the names; the authority to approve comes from
+   the review of the pull request that changes the file, so protect the file with the same branch rules as the
+   inventory.
 4. **No back-dating into the future.** `created` must not be after today, `approval.date` lies between `created` and
    today, and `approval.date` is before `expires`. "Today" is the current UTC date on the controller.
 5. **Fail closed on bad input.** One invalid entry, a duplicate identifier or a malformed file rejects the whole file
@@ -34,8 +37,12 @@ Code: `plugins/module_utils/compliance/exceptions.py` (validation and matching),
 7. **Waivers are never silent.** Every waived finding carries the exception identifier, its expiry and a reason that
    contains the justification, risk, framework, owner, approver and dates. Every exception gets a status for every
    scan run it is applied to, including expired, superseded and unused ones.
-8. **Expired exceptions stop suppressing failures.** From the expiry date on, the finding is `fail` again. It still
-   names the expired exception (state `expired`) so the lapse is visible.
+8. **Expired exceptions stop suppressing failures.** From the expiry date on, the finding is `fail` again. The
+   evaluation lists the exception as `expired`. If the exception had already expired when the scan started, the
+   finding also names it (state `expired`).
+9. **The scanned host's clock cannot extend a waiver.** Expiry is judged at the later of the scan start and the
+   controller's clock, and a scan that claims to start in the future is refused; see
+   [Time and clocks](#time-and-clocks).
 
 ## File format
 
@@ -72,10 +79,10 @@ exceptions:
 | `id` | `[A-Za-z0-9][A-Za-z0-9._-]*`, at most 64 characters, unique in the file ignoring case |
 | `rule` | Full XCCDF rule identifier, checked with the findings model's rule-ID rule; short IDs are rejected |
 | `framework` | `cis`, `stig`, `nist_800_53`, `nist_800_171`, `pci_dss` or `anssi` (the model's framework IDs) |
-| `scope` | At least one of `hosts`, `groups` and `benchmark`; see [Scope](#scope) |
-| `justification` | Free text, at most 4096 characters; surrounding whitespace is trimmed |
-| `owner` | The accountable person or team, at most 256 characters |
-| `approval.approver` | Who approved, at most 256 characters, not the owner |
+| `scope` | At least one of `hosts`, `groups`, `profiles` and `benchmark`; `benchmark` requires `profiles`; see [Scope](#scope) |
+| `justification` | Free text, at most 4096 characters including surrounding whitespace (as in the schema); the stored value is trimmed |
+| `owner` | The accountable person or team: an email address or a handle, see [Owner and approver](#owner-and-approver) |
+| `approval.approver` | Who approved: an email address or a handle, not the owner |
 | `approval.date` | `YYYY-MM-DD`; the exception takes effect at 00:00:00 UTC on this date |
 | `created` | `YYYY-MM-DD`, not in the future |
 | `expires` | `YYYY-MM-DD`, after `created` by at most 365 days; the exception stops at 00:00:00 UTC on this date |
@@ -84,6 +91,18 @@ exceptions:
 All dates are UTC calendar dates. The exception is in effect from `approval.date` 00:00:00 UTC up to, but not
 including, `expires` 00:00:00 UTC, so the last day it applies is the day before `expires`. An exception whose
 `expires` is today is already expired.
+
+### Owner and approver
+
+Each must be, after NFKC normalisation, trimming and case folding, one of:
+
+- a handle matching `^[a-z0-9][a-z0-9._-]{0,63}$`, for example `platform-team` or `sec.lead`;
+- an email address: a local part of up to 64 characters from `[a-z0-9._%+-]`, starting with a letter or digit, then
+  `@` and a domain of at least two dot-separated labels (`alice@example.com`). A trailing dot is rejected.
+
+Only ASCII is accepted after normalisation, so a Cyrillic `а` in `аlice@example.com` is rejected. Fullwidth forms such
+as `ａlice@example.com` normalise to `alice@example.com`. The collection stores and reports the canonical form. The
+JSON Schema accepts only the canonical lowercase form; write the names that way.
 
 ### YAML subset
 
@@ -94,8 +113,10 @@ The loader:
 - requires the first line to be exactly `---` and allows one document, with block mappings, block sequences,
   one-line plain and quoted scalars, one-line flow sequences such as `[web01, web02]` and `|` or `>` block scalars;
 - allows comment lines and comments after a value;
-- rejects duplicate keys, anchors and aliases, tags, flow mappings, merge keys, multi-line plain or quoted scalars,
-  tabs, carriage returns, control, separator and bidi characters, files over 1 MiB and nesting deeper than 8 levels;
+- rejects duplicate keys, anchors and aliases, tags, flow mappings, merge keys (and a plain `<<` value),
+  multi-line plain or quoted scalars, tabs, carriage returns, control, separator and bidi characters, files over
+  1 MiB, nesting deeper than 8 levels and sequences, block or flow, of more than 10000 items;
+- treats a block scalar at the end of a file without a final newline as PyYAML does (no line break is added);
 - reads every scalar as a string, so unquoted dates such as `2026-10-01` stay text, and rejects unquoted values that
   other YAML loaders would read as something else (`yes`, `on`, `true` and similar, numbers such as `1.0` or `1234`)
   so the file means the same to every tool. Quote such values.
@@ -106,32 +127,39 @@ unquoted dates into date objects; quote the dates if you validate the file with 
 keys itself). The schema cannot express the rules that compare fields (dates, the validity cap, owner and approver,
 unique identifiers); the module enforces them.
 
+`tests/unit/tools/test_yamlsubset_differential.py` generates a seeded corpus of 3000 documents on every CI run and
+requires that every document the loader accepts loads to the same value with PyYAML (dates compared as text).
+
 ## Scope
 
 | Key | Matches |
 |---|---|
 | `hosts` | The inventory host name (`inventory_hostname`), exactly |
 | `groups` | Any of the inventory groups of the host (`group_names`), exactly; `all` and `ungrouped` are rejected because `group_names` never contains them |
-| `benchmark.id`, `benchmark.version` | The `benchmark_id` and the content version (`content.content_version`) of the scan run; both must be equal |
+| `profiles` | The full XCCDF profile identifier of the scan run (`profile_id`), exactly |
+| `benchmark.id`, `benchmark.version` | The `benchmark_id` and the content version (`content.content_version`) of the scan run; both must be equal. Requires `profiles` |
 
 Every key that is present must match (AND); within a list one entry is enough (OR). There are no wildcards or
-patterns. A scope with only `benchmark` applies to every host scanned with that benchmark version, so use it
-sparingly. Host scopes are matched against the controller's inventory name, never against the host name the scanned
+patterns. Host scopes are matched against the controller's inventory name, never against the host name the scanned
 host reports about itself, because a compromised host could claim another host's name.
 
-`framework` records which framework's control the exception is granted against and appears in reports. It does not
-restrict matching: rules are deduplicated by rule ID across frameworks (ADR 0013), so a rule is waived or not,
-whichever framework references it. Use `benchmark` to restrict an exception to one benchmark.
+`framework` records which framework's control the exception is granted against and appears in reports, but it does
+not restrict matching by itself. Rules are deduplicated by rule ID across frameworks (ADR 0013), and in
+ComplianceAsCode the CIS and STIG profiles of a distribution share one benchmark identifier, so neither `framework`
+nor `benchmark` can tell a CIS scan from a STIG scan. **To limit an exception to one framework, list its profiles in
+`profiles`.** Because a benchmark scope alone would silently cover every profile of the benchmark, a scope with
+`benchmark` must also name `profiles` (fail closed). A scope without `profiles` (only `hosts` or `groups`) applies to
+every profile scanned on those hosts; that is deliberate and visible in the scope, but name the profiles whenever the
+approval was for one framework.
 
 ## How exceptions are applied
 
-Exceptions are evaluated at the scan start time (`started_at` of the scan run), not when a report is built, so
-re-reporting an old scan gives the same result. Each exception gets exactly one status per scan run:
+Each exception gets exactly one status per scan run:
 
 | Status | When | Effect on the finding |
 |---|---|---|
-| `waived` | The rule failed in a completed run, the scope matches and the exception is in effect | `fail` becomes `waived`; `evaluated_outcome` stays `fail`; the exception is `active` with identifier, reason and expiry |
-| `expired` | As above, but the scan started on or after `expires` | Stays `fail`; carries the exception with state `expired` |
+| `waived` | The rule failed in a completed run, the scope matches, the exception was approved before the scan started and has not expired at the evaluation time | `fail` becomes `waived`; `evaluated_outcome` stays `fail`; the exception is `active` with identifier, reason and expiry |
+| `expired` | As above, but the evaluation time is on or after `expires` | Stays `fail`; carries the exception with state `expired` when it had expired by the scan start, otherwise no exception is attached (the findings model only allows `expired` at or before the scan start) |
 | `not_yet_effective` | As above, but the scan started before `approval.date` | Stays `fail`; no exception attached |
 | `not_failing` | The scope matches but the finding is not `fail`, or the run did not complete | Unchanged (`error` stays `error`) |
 | `superseded` | Another exception for the same failing finding was chosen | None; `superseded_by` names the chosen one |
@@ -139,8 +167,26 @@ re-reporting an old scan gives the same result. Each exception gets exactly one 
 
 When several exceptions match one failing finding, an exception in effect wins over an expired one, which wins over
 one not yet in effect; among equals the earliest `expires` wins (the waiver that lapses first), then the lowest `id`.
-The result also carries `expired: true` for every exception whose expiry is at or before the scan start, whatever its
-status.
+The result also carries `expired: true` for every exception whose expiry is at or before the evaluation time, whatever
+its status.
+
+### Time and clocks
+
+`started_at` comes from the scanned host, so it is untrusted: a host whose clock runs behind would otherwise keep a
+lapsed waiver alive. The filter therefore takes the controller's current UTC time and:
+
+- refuses (fails the task) a scan whose `started_at` is more than **5 minutes** after the controller time;
+- judges expiry at the **later** of `started_at` and the controller time (`evaluated_at`), so a host can only make a
+  waiver lapse sooner, never later;
+- judges whether an exception was already approved at `started_at`, so a scan from before the approval is never
+  waived;
+- flags the evaluation with `scan_lag_exceeded: true` when the scan started more than `max_scan_lag_hours` (default
+  **24**) before the controller time, and still evaluates it. A large lag means either an old scan run that is being
+  re-applied or a host clock that is behind; both deserve a look.
+
+Applying the current exceptions file to an old scan run therefore uses today's validity: a waiver that has expired
+since the scan no longer applies. Reports built from scan runs that were already marked are unaffected, because they
+read the marked findings.
 
 **Stale exceptions** are exceptions that matched no finding at all. One host cannot tell, so
 `freesecdev.linux_compliance.stale_exceptions` takes the evaluations of all hosts and returns the identifiers that are
@@ -159,7 +205,9 @@ because the rule now passes.
 | `exceptions` | One entry per exception, sorted by `id`: the record as in the file plus `expires_at`, `status`, `outcome` (the evaluated outcome of the matched finding or `null`), `expired` and `superseded_by` |
 | `summary` | The number of exceptions per status |
 | `source_sha256` | SHA-256 of the exceptions text; `stale_exceptions` refuses evaluations of different files |
-| `evaluated_at` | The scan start time used for expiry |
+| `scan_started_at`, `controller_time` | The scan start reported by the host and the controller's time, UTC |
+| `evaluated_at` | The later of the two: the instant at which expiry was judged |
+| `scan_lag_seconds`, `max_scan_lag_seconds`, `scan_lag_exceeded` | How long before the controller time the scan started (negative within the 5-minute tolerance), the limit, and whether it was exceeded |
 | `max_validity_days` | `365` |
 | `target` | The inventory host and sorted groups used for matching |
 
@@ -233,8 +281,11 @@ its own `schema_version` decision under [ADR 0016](adr/0016-report-schema-and-su
 | File size | 1 MiB |
 | Nesting depth | 8 |
 | Entries | 1000 |
-| Hosts or groups per scope | 256 |
+| Items in any one YAML sequence, block or flow | 10000 |
+| Hosts, groups or profiles per scope | 256 |
 | Validity | 365 days |
 | `id` | 64 characters |
 | `justification` | 4096 characters |
-| `owner`, `approver` | 256 characters |
+| `owner`, `approver` | 254 characters (a handle at most 64) |
+| Scan start after the controller time | 5 minutes |
+| Scan lag before the evaluation is flagged | 24 hours by default, 1 to 8760 |

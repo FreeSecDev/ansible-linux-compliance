@@ -46,8 +46,8 @@ def exceptions_text() -> str:
     return "\n".join(lines) + "\n"
 
 
-def scan_run() -> model.ScanRun:
-    started = f"{TODAY.isoformat()}T00:00:01Z"
+def scan_run(age: timedelta = timedelta(hours=1)) -> model.ScanRun:
+    started = (datetime.now(timezone.utc) - age).strftime(model.TIMESTAMP_FORMAT)
     findings = tuple(
         model.Finding(
             rule_id=rule_id,
@@ -145,3 +145,31 @@ def test_apply_exceptions_rejects_invalid_arguments(
 def test_stale_exceptions_rejects_invalid_input() -> None:
     with pytest.raises(exceptions.ExceptionsError, match="at least one evaluation"):
         stale_exceptions.stale_exceptions([])
+
+
+def test_the_filter_uses_the_controller_clock() -> None:
+    result = apply_exceptions.apply_exceptions(
+        scan_run(timedelta(hours=2)).to_dict(), exceptions_text(), "web01", [], 1
+    )
+    assert result["scan_lag_exceeded"] is True
+    assert result["max_scan_lag_seconds"] == 3600
+    assert result["evaluated_at"] == result["controller_time"]
+    default = apply_exceptions.apply_exceptions(
+        scan_run().to_dict(), exceptions_text(), "web01", []
+    )
+    assert default["scan_lag_exceeded"] is False
+    assert default["max_scan_lag_seconds"] == 86400
+
+
+def test_the_filter_refuses_a_scan_from_the_future() -> None:
+    future = scan_run(-timedelta(minutes=10)).to_dict()
+    with pytest.raises(exceptions.ExceptionsError, match="later than the controller time"):
+        apply_exceptions.apply_exceptions(future, exceptions_text(), "web01", [])
+
+
+@pytest.mark.parametrize("hours", [0, -1, 8761, True, "24", 1.5])
+def test_the_filter_validates_the_scan_lag_limit(hours: object) -> None:
+    with pytest.raises(exceptions.ExceptionsError, match="max_scan_lag_hours must be an integer"):
+        apply_exceptions.apply_exceptions(
+            scan_run().to_dict(), exceptions_text(), "web01", [], hours
+        )

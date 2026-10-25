@@ -113,9 +113,29 @@ def test_the_schema_matches_the_validator() -> None:
     assert entry["properties"]["justification"]["maxLength"] == exceptions.MAX_JUSTIFICATION_LENGTH
     assert entry["properties"]["approval"]["required"] == list(exceptions.APPROVAL_KEYS)
     assert definitions["person"]["maxLength"] == exceptions.MAX_PERSON_LENGTH
+    assert definitions["person"]["minLength"] == 1
+    assert definitions["person"]["pattern"] == f"^{exceptions.PERSON_PATTERN}$"
     assert definitions["date"]["pattern"] == f"^{exceptions.DATE_PATTERN}$"
-    assert list(scope) == list(exceptions.SCOPE_KEYS)
-    assert scope["hosts"]["maxItems"] == scope["groups"]["maxItems"] == exceptions.MAX_SCOPE_ITEMS
+    assert definitions["date"]["format"] == "date"
+    assert set(scope) == set(exceptions.SCOPE_KEYS)
+    assert definitions["scope"]["dependentRequired"] == {"benchmark": ["profiles"]}
+    assert (
+        scope["hosts"]["maxItems"]
+        == scope["groups"]["maxItems"]
+        == scope["profiles"]["maxItems"]
+        == exceptions.MAX_SCOPE_ITEMS
+    )
+    xccdf = (
+        ("rule", entry["properties"]["rule"]),
+        ("benchmark", scope["benchmark"]["properties"]["id"]),
+        ("profile", scope["profiles"]["items"]),
+    )
+    for kind, node in xccdf:
+        assert node["pattern"] == f"^{model.XCCDF_ID_PATTERNS[kind]}$"
+        assert node["maxLength"] == model.MAX_ID_LENGTH
+    version = scope["benchmark"]["properties"]["version"]
+    assert version["pattern"] == f"^{exceptions.TRIMMED_PATTERN}$"
+    assert version["minLength"] == 1
     assert scope["hosts"]["items"]["pattern"] == f"^{exceptions.HOST_PATTERN}$"
     assert scope["hosts"]["items"]["maxLength"] == exceptions.MAX_HOST_LENGTH
     assert scope["groups"]["items"]["pattern"] == f"^{exceptions.GROUP_PATTERN}$"
@@ -184,6 +204,15 @@ def test_the_example_validates_against_the_schema() -> None:
         (("id",), "-bad"),
         (("created",), "2026/10/01"),
         (("owner",), " padded"),
+        (("owner",), "Web Team"),
+        (("owner",), "alice@example.com."),
+        (("owner",), "\u0430lice@example.com"),
+        (
+            ("scope",),
+            {"benchmark": {"id": "xccdf_org.ssgproject.content_benchmark_RHEL-9", "version": "1"}},
+        ),
+        (("scope",), {"profiles": ["xccdf_org.ssgproject.content_rule_x"]}),
+        (("scope",), {"profiles": []}),
         (("justification",), "   "),
         (("approval",), {"approver": "a"}),
         (("comment",), "x"),

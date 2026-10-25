@@ -58,6 +58,7 @@ _XCCDF_PATTERNS: Final[Mapping[str, str]] = MappingProxyType(
         for kind in ("rule", "profile", "benchmark")
     }
 )
+XCCDF_ID_PATTERNS: Final[Mapping[str, str]] = _XCCDF_PATTERNS
 
 T = TypeVar("T")
 E = TypeVar("E", bound=Enum)

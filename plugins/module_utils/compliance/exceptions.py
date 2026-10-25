@@ -14,14 +14,18 @@ Rules applied here:
   ``created``, ``expires`` and ``risk``; none may be null or empty.
 * ``created`` must not be in the future, ``approval.date`` lies between
   ``created`` and today and before ``expires``, and ``expires`` is after
-  ``created`` by at most :data:`MAX_VALIDITY_DAYS` days. The approver must not
-  be the owner. Identifiers are unique, ignoring case.
+  ``created`` by at most :data:`MAX_VALIDITY_DAYS` days. Owner and approver are
+  email addresses or handles and must be different people. Identifiers are
+  unique, ignoring case.
+* A scope that names a benchmark must also name the profiles it covers, because
+  the profiles of one benchmark (for example CIS and STIG) share its identifier.
 * An exception is in effect from ``approval.date`` 00:00:00 UTC up to, but not
-  including, ``expires`` 00:00:00 UTC. It is evaluated at the scan start time.
+  including, ``expires`` 00:00:00 UTC. Expiry is judged at the later of the
+  scan start and the controller time, so a host clock that runs behind cannot
+  keep a lapsed waiver alive; a scan start in the future is refused.
 * Only a ``fail`` finding of a completed run is waived. Every other outcome,
   and every finding of a run that did not complete, stays as it is.
-* An expired exception never suppresses a failure: the finding stays ``fail``
-  and carries the exception with state ``expired``.
+* An expired exception never suppresses a failure: the finding stays ``fail``.
 * Every exception gets a result per scan run, so unused (stale), expired and
   superseded exceptions are reported rather than dropped.
 """
@@ -30,6 +34,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import unicodedata
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
@@ -49,17 +55,27 @@ MAX_VALIDITY_DAYS: Final[int] = 365
 MAX_EXCEPTIONS: Final[int] = 1000
 MAX_SCOPE_ITEMS: Final[int] = 256
 MAX_ID_LENGTH: Final[int] = 64
-MAX_PERSON_LENGTH: Final[int] = 256
+MAX_PERSON_LENGTH: Final[int] = 254
 MAX_HOST_LENGTH: Final[int] = 253
 MAX_GROUP_LENGTH: Final[int] = 128
 MAX_VERSION_LENGTH: Final[int] = 64
 MAX_JUSTIFICATION_LENGTH: Final[int] = 4096
 MAX_EVALUATIONS: Final[int] = 100000
+FUTURE_TOLERANCE: Final[timedelta] = timedelta(minutes=5)
+DEFAULT_MAX_SCAN_LAG: Final[timedelta] = timedelta(hours=24)
+LONGEST_MAX_SCAN_LAG: Final[timedelta] = timedelta(days=MAX_VALIDITY_DAYS)
 
 ID_PATTERN: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]*"
 HOST_PATTERN: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._:-]*"
 GROUP_PATTERN: Final[str] = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 DATE_PATTERN: Final[str] = r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
+TRIMMED_PATTERN: Final[str] = r"\S(?:.*\S)?"
+HANDLE_PATTERN: Final[str] = r"[a-z0-9][a-z0-9._-]{0,63}"
+EMAIL_PATTERN: Final[str] = (
+    r"[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+"
+)
+PERSON_PATTERN: Final[str] = f"(?:{HANDLE_PATTERN}|{EMAIL_PATTERN})"
 RESERVED_GROUPS: Final[frozenset[str]] = frozenset({"all", "ungrouped"})
 
 DOCUMENT_KEYS: Final[tuple[str, ...]] = ("schema_version", "exceptions")
@@ -75,7 +91,7 @@ ENTRY_KEYS: Final[tuple[str, ...]] = (
     "expires",
     "risk",
 )
-SCOPE_KEYS: Final[tuple[str, ...]] = ("hosts", "groups", "benchmark")
+SCOPE_KEYS: Final[tuple[str, ...]] = ("hosts", "groups", "benchmark", "profiles")
 APPROVAL_KEYS: Final[tuple[str, ...]] = ("approver", "date")
 BENCHMARK_KEYS: Final[tuple[str, ...]] = ("id", "version")
 
@@ -176,6 +192,43 @@ def _names(value: object, where: str, *, max_length: int, pattern: str) -> tuple
     return tuple(sorted(names))
 
 
+def normalize_person(value: object, where: str) -> str:
+    """Return the canonical form of an owner or approver.
+
+    The value is NFKC-normalised, trimmed and case-folded, and must then be an
+    email address or a handle (``[a-z0-9][a-z0-9._-]{0,63}``), ASCII only.
+
+    Args:
+        value: The owner or approver as written in the file.
+        where: The field name used in error messages.
+
+    Returns:
+        The canonical form.
+
+    Raises:
+        ExceptionsError: If the value is not an email address or a handle.
+        model.ModelError: If the value is not valid text.
+    """
+    raw = _text(value, where, max_length=MAX_PERSON_LENGTH)
+    canonical = unicodedata.normalize("NFKC", raw).strip().casefold()
+    if len(canonical) > MAX_PERSON_LENGTH or re.fullmatch(PERSON_PATTERN, canonical) is None:
+        _fail(f"{where} must be an email address or a handle such as platform-team")
+    return canonical
+
+
+def same_person(first: str, second: str) -> bool:
+    """Return whether two canonical owner or approver names may denote one person.
+
+    They match when they are equal, or when one is a handle and the other an
+    email address whose local part is that handle (``alice`` and
+    ``alice@example.com``).
+    """
+    if first == second:
+        return True
+    handle, email = (first, second) if "@" in second else (second, first)
+    return "@" not in handle and "@" in email and email.split("@", 1)[0] == handle
+
+
 @dataclass(frozen=True)
 class BenchmarkScope:
     """A benchmark and content version to which an exception is limited."""
@@ -195,6 +248,7 @@ class Scope:
     hosts: tuple[str, ...]
     groups: tuple[str, ...]
     benchmark: BenchmarkScope | None
+    profiles: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping that lists only the dimensions that are set."""
@@ -205,6 +259,8 @@ class Scope:
             result["groups"] = list(self.groups)
         if self.benchmark is not None:
             result["benchmark"] = self.benchmark.to_dict()
+        if self.profiles:
+            result["profiles"] = list(self.profiles)
         return result
 
 
@@ -279,6 +335,8 @@ class ExceptionRecord:
             return False
         if scope.groups and not set(scope.groups) & set(target.groups):
             return False
+        if scope.profiles and run.profile_id not in scope.profiles:
+            return False
         benchmark = scope.benchmark
         return benchmark is None or (
             run.benchmark_id == benchmark.benchmark_id
@@ -331,6 +389,46 @@ class ExceptionResult:
 
 
 @dataclass(frozen=True)
+class Timing:
+    """The instants an evaluation used.
+
+    ``evaluated_at`` is the later of the scan start and the controller time and
+    is the instant at which expiry is judged. ``scan_lag_exceeded`` is set when
+    the scan started more than ``max_scan_lag`` before the controller time.
+    """
+
+    scan_started_at: datetime
+    controller_time: datetime
+    max_scan_lag: timedelta
+
+    @property
+    def evaluated_at(self) -> datetime:
+        """Return the instant at which expiry is judged."""
+        return max(self.scan_started_at, self.controller_time)
+
+    @property
+    def scan_lag(self) -> timedelta:
+        """Return how long before the controller time the scan started."""
+        return self.controller_time - self.scan_started_at
+
+    @property
+    def scan_lag_exceeded(self) -> bool:
+        """Return whether the scan started longer ago than the allowed lag."""
+        return self.scan_lag > self.max_scan_lag
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible mapping."""
+        return {
+            "controller_time": _format(self.controller_time),
+            "evaluated_at": _format(self.evaluated_at),
+            "max_scan_lag_seconds": int(self.max_scan_lag.total_seconds()),
+            "scan_lag_exceeded": self.scan_lag_exceeded,
+            "scan_lag_seconds": int(self.scan_lag.total_seconds()),
+            "scan_started_at": _format(self.scan_started_at),
+        }
+
+
+@dataclass(frozen=True)
 class Evaluation:
     """A scan run with exceptions applied, and the result of every exception."""
 
@@ -338,14 +436,14 @@ class Evaluation:
     target: Target
     source_sha256: str
     results: tuple[ExceptionResult, ...]
+    timing: Timing
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping (the evaluation document)."""
         counts = {status.value: 0 for status in Status}
         for result in self.results:
             counts[result.status.value] += 1
-        return {
-            "evaluated_at": self.run.started_at,
+        document: dict[str, object] = {
             "exceptions": [result.to_dict() for result in self.results],
             "max_validity_days": MAX_VALIDITY_DAYS,
             "scan_run": self.run.to_dict(),
@@ -354,24 +452,35 @@ class Evaluation:
             "summary": counts,
             "target": self.target.to_dict(),
         }
+        document.update(self.timing.to_dict())
+        return document
 
 
 def _midnight(day: date) -> datetime:
     return datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
 
 
-def _utc_today(now: object) -> date:
+def _format(instant: datetime) -> str:
+    return instant.strftime(model.TIMESTAMP_FORMAT)
+
+
+def _utc(now: object) -> datetime:
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         _fail("the current time must be a timezone-aware datetime")
-    return now.astimezone(timezone.utc).date()
+    return now.astimezone(timezone.utc).replace(microsecond=0)
+
+
+def _utc_today(now: object) -> date:
+    return _utc(now).date()
 
 
 def _parse_scope(value: object, where: str) -> Scope:
     data = _mapping(value, where, SCOPE_KEYS, required=False)
     if not data:
-        _fail(f"{where} must name hosts, groups or a benchmark")
+        _fail(f"{where} must name hosts, groups, profiles or a benchmark")
     hosts: tuple[str, ...] = ()
     groups: tuple[str, ...] = ()
+    profiles: tuple[str, ...] = ()
     benchmark = None
     if "hosts" in data:
         hosts = _names(
@@ -384,13 +493,27 @@ def _parse_scope(value: object, where: str) -> Scope:
         reserved = sorted(RESERVED_GROUPS.intersection(groups))
         if reserved:
             _fail(f"{where}.groups must not name the implicit group {reserved[0]!r}")
+    if "profiles" in data:
+        profiles = _names(
+            data["profiles"],
+            f"{where}.profiles",
+            max_length=model.MAX_ID_LENGTH,
+            pattern=model.XCCDF_ID_PATTERNS["profile"],
+        )
     if "benchmark" in data:
+        if not profiles:
+            _fail(f"{where}.profiles is required when {where}.benchmark is set")
         bench = _mapping(data["benchmark"], f"{where}.benchmark", BENCHMARK_KEYS, required=True)
         benchmark = BenchmarkScope(
             model.validate_xccdf_id(bench["id"], f"{where}.benchmark.id", "benchmark"),
-            _text(bench["version"], f"{where}.benchmark.version", max_length=MAX_VERSION_LENGTH),
+            _text(
+                bench["version"],
+                f"{where}.benchmark.version",
+                max_length=MAX_VERSION_LENGTH,
+                pattern=TRIMMED_PATTERN,
+            ),
         )
-    return Scope(hosts, groups, benchmark)
+    return Scope(hosts, groups, benchmark, profiles)
 
 
 def _parse_enum(value: object, where: str, kind: type[E]) -> E:
@@ -415,29 +538,27 @@ def _check_dates(record: ExceptionRecord, where: str, today: date) -> None:
         _fail(f"{where}.approval.date is in the future")
     if record.approved_on >= record.expires:
         _fail(f"{where}.approval.date must be before {where}.expires")
-    if record.approver.casefold() == record.owner.casefold():
+    if same_person(record.approver, record.owner):
         _fail(f"{where}.approval.approver must not be the owner")
 
 
 def _parse_entry(value: object, where: str, today: date) -> ExceptionRecord:
     data = _mapping(value, where, ENTRY_KEYS, required=True)
     approval = _mapping(data["approval"], f"{where}.approval", APPROVAL_KEYS, required=True)
-    justification = data["justification"]
+    justification = model.validate_text(
+        data["justification"],
+        f"{where}.justification",
+        max_length=MAX_JUSTIFICATION_LENGTH,
+        multiline=True,
+    )
     record = ExceptionRecord(
         exception_id=_text(data["id"], f"{where}.id", max_length=MAX_ID_LENGTH, pattern=ID_PATTERN),
         rule_id=model.validate_xccdf_id(data["rule"], f"{where}.rule", "rule"),
         framework=_parse_enum(data["framework"], f"{where}.framework", model.FrameworkId),
         scope=_parse_scope(data["scope"], f"{where}.scope"),
-        justification=model.validate_text(
-            justification.strip() if isinstance(justification, str) else justification,
-            f"{where}.justification",
-            max_length=MAX_JUSTIFICATION_LENGTH,
-            multiline=True,
-        ),
-        owner=_text(data["owner"], f"{where}.owner", max_length=MAX_PERSON_LENGTH),
-        approver=_text(
-            approval["approver"], f"{where}.approval.approver", max_length=MAX_PERSON_LENGTH
-        ),
+        justification=justification.strip(),
+        owner=normalize_person(data["owner"], f"{where}.owner"),
+        approver=normalize_person(approval["approver"], f"{where}.approval.approver"),
         approved_on=_date(approval["date"], f"{where}.approval.date"),
         created=_date(data["created"], f"{where}.created"),
         expires=_date(data["expires"], f"{where}.expires"),
@@ -521,13 +642,15 @@ def parse_exceptions(text: str, now: datetime) -> ExceptionSet:
     return ExceptionSet(records, digest)
 
 
-def _mark(finding: model.Finding, status: Status, record: ExceptionRecord) -> model.Finding:
+def _mark(
+    finding: model.Finding, status: Status, record: ExceptionRecord, started: datetime
+) -> model.Finding:
     if status is Status.WAIVED:
         exception = model.ExceptionStatus(
             model.ExceptionState.ACTIVE, record.exception_id, record.reason(), record.expires_at
         )
         return replace(finding, outcome=model.Outcome.WAIVED, exception=exception)
-    if status is Status.EXPIRED:
+    if status is Status.EXPIRED and record.is_expired_at(started):
         exception = model.ExceptionStatus(
             model.ExceptionState.EXPIRED, record.exception_id, record.reason(), record.expires_at
         )
@@ -535,34 +658,67 @@ def _mark(finding: model.Finding, status: Status, record: ExceptionRecord) -> mo
     return finding
 
 
-def _candidate_status(record: ExceptionRecord, started: datetime) -> Status:
-    if record.is_expired_at(started):
+def _candidate_status(record: ExceptionRecord, timing: Timing) -> Status:
+    if record.is_expired_at(timing.evaluated_at):
         return Status.EXPIRED
-    if not record.is_effective_at(started):
+    if not record.is_effective_at(timing.scan_started_at):
         return Status.NOT_YET_EFFECTIVE
     return Status.WAIVED
 
 
-def evaluate_run(run: model.ScanRun, exceptions: ExceptionSet, target: Target) -> Evaluation:
+def _timing(run: model.ScanRun, now: datetime, max_scan_lag: object) -> Timing:
+    controller = _utc(now)
+    if not isinstance(max_scan_lag, timedelta) or not (
+        timedelta(0) < max_scan_lag <= LONGEST_MAX_SCAN_LAG
+    ):
+        _fail(f"the maximum scan lag must be positive and at most {MAX_VALIDITY_DAYS} days")
+    started = datetime.strptime(run.started_at, model.TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+    if started > controller + FUTURE_TOLERANCE:
+        _fail(
+            f"scan_run.started_at {run.started_at} is later than the controller time "
+            f"{_format(controller)} by more than {int(FUTURE_TOLERANCE.total_seconds())} "
+            "seconds; check the clock of the scanned host"
+        )
+    return Timing(started, controller, max_scan_lag)
+
+
+def evaluate_run(
+    run: model.ScanRun,
+    exceptions: ExceptionSet,
+    target: Target,
+    now: datetime,
+    *,
+    max_scan_lag: timedelta = DEFAULT_MAX_SCAN_LAG,
+) -> Evaluation:
     """Apply exceptions to the findings of one scan run.
+
+    The scan start comes from the scanned host and is not trusted to extend a
+    waiver: expiry is judged at the later of the scan start and ``now`` (the
+    controller time), and a scan start more than :data:`FUTURE_TOLERANCE`
+    after ``now`` is refused. Whether an exception was already approved is
+    judged at the scan start. A scan that started more than ``max_scan_lag``
+    before ``now`` is still evaluated and is flagged in the evaluation.
 
     Args:
         run: A scan run whose findings carry no exception data yet.
         exceptions: The validated exceptions file.
         target: The inventory host and groups the run belongs to.
+        now: The controller's current time, timezone-aware.
+        max_scan_lag: The scan age above which the evaluation is flagged.
 
     Returns:
         The evaluation: the run with waived and expired findings marked, and one
         result per exception.
 
     Raises:
-        ExceptionsError: If the run already carries exception data.
+        ExceptionsError: If the run already carries exception data, starts in
+            the future, or ``now`` or ``max_scan_lag`` is invalid.
     """
     for finding in run.findings:
         if finding.exception.state is not model.ExceptionState.NONE:
             _fail(f"finding {finding.rule_id} already carries exception data")
-    started = datetime.strptime(run.started_at, model.TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
-    results, candidates = _classify(run, exceptions, target, started)
+    timing = _timing(run, now, max_scan_lag)
+    results, candidates = _classify(run, exceptions, target, timing)
     marked: list[model.Finding] = []
     for finding in run.findings:
         options = candidates.get(finding.rule_id)
@@ -570,22 +726,22 @@ def evaluate_run(run: model.ScanRun, exceptions: ExceptionSet, target: Target) -
             marked.append(finding)
             continue
         status, chosen = _choose(options, results)
-        marked.append(_mark(finding, status, chosen))
+        marked.append(_mark(finding, status, chosen, timing.scan_started_at))
     ordered = tuple(results[record.exception_id] for record in exceptions.records)
     return Evaluation(
-        replace(run, findings=tuple(marked)), target, exceptions.source_sha256, ordered
+        replace(run, findings=tuple(marked)), target, exceptions.source_sha256, ordered, timing
     )
 
 
 def _classify(
-    run: model.ScanRun, exceptions: ExceptionSet, target: Target, started: datetime
+    run: model.ScanRun, exceptions: ExceptionSet, target: Target, timing: Timing
 ) -> tuple[dict[str, ExceptionResult], dict[str, list[tuple[Status, ExceptionRecord]]]]:
     completed = run.status is model.ScanStatus.COMPLETED
     findings = {finding.rule_id: finding for finding in run.findings}
     results: dict[str, ExceptionResult] = {}
     candidates: dict[str, list[tuple[Status, ExceptionRecord]]] = {}
     for record in exceptions.records:
-        expired = record.is_expired_at(started)
+        expired = record.is_expired_at(timing.evaluated_at)
         finding = findings.get(record.rule_id)
         if finding is None or not record.matches(run, target):
             results[record.exception_id] = ExceptionResult(
@@ -597,7 +753,7 @@ def _classify(
             )
         else:
             candidates.setdefault(record.rule_id, []).append(
-                (_candidate_status(record, started), record)
+                (_candidate_status(record, timing), record)
             )
     return results, candidates
 

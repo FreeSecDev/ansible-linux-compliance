@@ -61,7 +61,7 @@ def test_applied_exceptions_appear_in_the_report(kit: Any, write_run: Callable[.
     )
     parsed = exceptions.parse_exceptions(exceptions_file(kit), NOW)
     target = exceptions.Target(kit.HOST.hostname, ())
-    evaluation = exceptions.evaluate_run(run, parsed, target)
+    evaluation = exceptions.evaluate_run(run, parsed, target, NOW)
     path = write_run("evaluated.json", evaluation.run)
     inputs = ReportInputs(scope=Scope.SINGLE_HOST, metadata=RunMetadata(), scan_run=(path,))
     document = json.loads(dumps(report.build_report(inputs)))

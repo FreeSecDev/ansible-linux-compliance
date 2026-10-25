@@ -25,6 +25,8 @@ exceptions:
       benchmark:
         id: xccdf_org.ssgproject.content_benchmark_RHEL-9
         version: 0.1.82
+      profiles:
+        - xccdf_org.ssgproject.content_profile_stig
     justification: |
       Lab hosts run a vendor test harness that needs the telnet client.
       They have no route to production networks.

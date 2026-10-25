@@ -291,12 +291,15 @@ fetched content the comparison is skipped locally.
 Jira: FREES-50. Policy, file format and filter usage: [Exceptions and waivers](exceptions.md); decision: the FREES-50
 amendment of [ADR 0013](adr/0013-normalized-findings-model.md). `exceptions.py` validates an exceptions file read by
 `yamlsubset.py` and applies it to a `ScanRun`; only `fail` findings of completed runs become `waived`, expired
-exceptions leave the finding `fail` with state `expired`, and every exception gets a status per run. The filters
+exceptions leave the finding `fail`, and every exception gets a status per run. A benchmark scope must name its
+profiles, and expiry is judged at the later of the scan start and the controller time, so neither a shared benchmark
+identifier nor a host clock that runs behind widens a waiver. The filters
 `freesecdev.linux_compliance.apply_exceptions` and `freesecdev.linux_compliance.stale_exceptions` wrap it for roles;
 the `audit` and `verify` roles do not call them yet (FREES-49, FREES-54). Both filter files pass the deny-by-default
 plugin guard without an exemption. Unit tests cover the loader, every required field, the expiry boundaries, scope
-matching and the filters; `tests/unit/tools/test_exceptions_schema.py` compares the loader with PyYAML and the JSON
-Schema with the validator's constants and validates the example with `jsonschema`, so the two cannot drift.
+matching and the filters; `tests/unit/tools/test_exceptions_schema.py` compares the JSON Schema with the
+validator's constants and validates the example with `jsonschema`, so the two cannot drift, and
+`tests/unit/tools/test_yamlsubset_differential.py` compares the loader with PyYAML on a seeded generated corpus.
 `tests/unit/tools/reporting/test_exceptions_report.py` feeds an evaluated scan run through `tools/reporting`; stale
 exceptions are not yet part of the report (see [exceptions](exceptions.md#reporting)).
 
