@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -316,24 +317,29 @@ def other_inputs(directory: Path) -> dict[str, tuple[Path, ...]]:
 
 
 def maximum_report(directory: Path, rules_per_input: int) -> dict[str, Any]:
-    """1000 inputs in every section, detail lists past their cap, and many compliance rules."""
-    xccdf, runs = compliance_inputs(directory, rules_per_input)
-    others = other_inputs(directory)
-    inputs = ReportInputs(
-        scope=Scope.FLEET,
-        metadata=RunMetadata(commit=COMMIT, generated_at="2026-10-25T10:11:00Z"),
-        xccdf=xccdf,
-        scan_run=runs,
-        junit=others["junit"],
-        cobertura=others["cobertura"],
-        lint=others["lint"],
-        grype=others["grype"],
-        sbom=others["sbom"],
-        packer=others["packer"],
-        codebuild=others["codebuild"],
-        molecule=others["molecule"],
-    )
-    return as_json(build_report(inputs))
+    """1000 inputs in every section, detail lists past their cap, and many compliance rules.
+
+    Inputs are named relative to ``directory``, so the size of the report does not depend on
+    where the temporary directory is.
+    """
+    with contextlib.chdir(directory):
+        xccdf, runs = compliance_inputs(Path(), rules_per_input)
+        others = other_inputs(Path())
+        inputs = ReportInputs(
+            scope=Scope.FLEET,
+            metadata=RunMetadata(commit=COMMIT, generated_at="2026-10-25T10:11:00Z"),
+            xccdf=xccdf,
+            scan_run=runs,
+            junit=others["junit"],
+            cobertura=others["cobertura"],
+            lint=others["lint"],
+            grype=others["grype"],
+            sbom=others["sbom"],
+            packer=others["packer"],
+            codebuild=others["codebuild"],
+            molecule=others["molecule"],
+        )
+        return as_json(build_report(inputs))
 
 
 @dataclass

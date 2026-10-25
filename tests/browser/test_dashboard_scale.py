@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import Locator
     from tests.browser.conftest import Dashboard
 
-RULES_PER_INPUT = 152
+RULES_PER_INPUT = 168
 LOAD_SECONDS = 60.0
 ACTION_SECONDS = 10.0
 SCHEMA = json.loads(
@@ -68,7 +68,7 @@ def test_the_maximum_fixture_fills_the_list_limits_and_the_size_cap(
     )
     assert len(document["raw_artifacts"]) == 9000
     compliance = sections["compliance"]
-    assert len(compliance["rules"]) > 140_000
+    assert len(compliance["rules"]) > 160_000
     assert compliance["notes"]
     truncated = [
         name
