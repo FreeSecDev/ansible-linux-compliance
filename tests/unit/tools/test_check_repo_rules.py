@@ -527,6 +527,56 @@ OTHER_BYPASSES = {
     "code-attribute": "f.__code__\n",
 }
 
+RE_REVIEW_BYPASSES = {
+    "reexported-subprocess-relative": (
+        "from ..module_utils.compliance.process import subprocess\n"
+        "subprocess.check_output(['id'])\n"
+    ),
+    "reexported-subprocess-ansible-alias": (
+        "from ansible.module_utils.basic import subprocess as s\ns.run(['id'])\n"
+    ),
+    "process-subprocess-attribute": (
+        "from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance "
+        "import process\nprocess.subprocess.run(['id'])\n"
+    ),
+    "reexported-os": "from ansible.module_utils.basic import os\n",
+    "reexported-sys": "from ansible.module_utils.basic import sys\n",
+    "reexported-pty": "from json import pty\n",
+    "reexported-posix": "from typing import posix\n",
+    "reexported-posixsubprocess": "from typing import _posixsubprocess\n",
+    "os-path-os-attribute": "import os.path\nos.path.os.system('id')\n",
+    "os-path-os-fexecve": "import os.path\nos.path.os.fexecve(0, ['sh', '-c', 'id'], {})\n",
+    "sys-attribute": "from . import helper\nhelper.sys.modules\n",
+    "module-name-alias-reference": ("from . import helper as subprocess\nsubprocess.run(['id'])\n"),
+    "pty-name-reference": "from . import helper as pty\n",
+    "plain-import-alias-subprocess": "import json as subprocess\n",
+    "alias-exec": "from . import helper as exec\n",
+    "fexecve-attribute": "libc.fexecve(0, [], {})\n",
+    "fexecve-from-import": "from libc import fexecve\n",
+    "exec-attribute": "libc.exec('id')\n",
+    "exec-family-execl": "libc.execl('id')\n",
+    "exec-family-execlpe": "libc.execlpe('id')\n",
+    "exec-family-execvp": "libc.execvp('id', [])\n",
+    "owner-uid-keyword": "run(spec, owner_uid=module.params['uid'])\n",
+    "owner-uid-resolve": "resolve_executable('oscap', owner_uid=1)\n",
+    "policies-keyword": "run(spec, policies=custom)\n",
+    "trusted-dirs-keyword": "run(spec, trusted_dirs=['/tmp'])\n",
+    "vars-nested": "import os.path\nvars(vars(os.path)['os'])['sys' + 'tem']('id')\n",
+    "vars-reference": "f = vars\n",
+    "dunder-dict": "import os.path\nos.path.__dict__['os']\n",
+    "dunder-dict-chain": "import os.path\nos.path.__dict__['os'].__dict__['sys' + 'tem']\n",
+    "getattr-os-path-os": "import os.path\ngetattr(os.path, 'os')\n",
+    "globals-builtins": "globals()['__built' + 'ins__']['__imp' + 'ort__']('os')\n",
+    "globals-partial": "import functools\nfunctools.partial(globals)\n",
+    "locals-call": "locals()\n",
+    "get-type-hints-call": "import typing\ntyping.get_type_hints(f)\n",
+    "get-type-hints-import": "from typing import get_type_hints\n",
+    "get-type-hints-name": "get_type_hints(f)\n",
+    "dataclasses-create-fn": "import dataclasses\ndataclasses._create_fn('f', [], 'x')\n",
+    "create-prefix-from-import": "from dataclasses import _create_fn\n",
+    "builtins-attribute": "x.__builtins__\n",
+}
+
 BENIGN_PLUGIN_SOURCES = {
     "future": "from __future__ import annotations\n",
     "typing": "from typing import TYPE_CHECKING, Final, cast\n",
@@ -570,6 +620,20 @@ def test_guard_denies_other_constructs_by_default(tmp_path: Path, source: str) -
 
 @pytest.mark.parametrize("source", BENIGN_PLUGIN_SOURCES.values(), ids=BENIGN_PLUGIN_SOURCES.keys())
 def test_guard_allows_permitted_constructs(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source) == []
+
+
+@pytest.mark.parametrize("source", RE_REVIEW_BYPASSES.values(), ids=RE_REVIEW_BYPASSES.keys())
+def test_guard_flags_every_re_review_bypass(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source)
+
+
+def test_guard_still_allows_os_path_and_dataclass_models(tmp_path: Path) -> None:
+    source = (
+        "from dataclasses import dataclass\nfrom os import path\nimport os.path\n"
+        "@dataclass(frozen=True)\nclass A:\n    x: int\n"
+        "path.join('a')\nos.path.join('a')\nobject.__setattr__(A(1), 'x', 2)\n"
+    )
     assert process_messages(tmp_path, source) == []
 
 

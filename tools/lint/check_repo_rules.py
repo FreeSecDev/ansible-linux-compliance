@@ -11,8 +11,11 @@ Rules:
   allow-listed standard library modules, ``ansible.module_utils`` and this
   collection, never use ``os`` except as ``os.path``, never use ``exec``, ``eval``,
   ``compile`` or ``__import__``, never reference process, fork or ``run_command``
-  attributes, never pass ``shell=True`` or ``use_unsafe_shell`` and only call
-  ``getattr`` with a literal permitted name. Only
+  attributes, never import or name ``subprocess``, ``pty``, ``posix``, ``sys`` or
+  ``os`` as an imported name or attribute, never use ``vars``, ``globals``,
+  ``locals``, ``__dict__`` or ``get_type_hints``, never pass ``shell=True``,
+  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``policies`` and
+  ``trusted_dirs`` keywords, and only call ``getattr`` with a literal permitted name. Only
   ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
@@ -84,40 +87,47 @@ ALLOWED_IMPORT_PREFIXES: Final[tuple[str, ...]] = (
     "ansible.module_utils",
     "ansible_collections.freesecdev.linux_compliance",
 )
-BANNED_NAMES: Final[frozenset[str]] = frozenset(
-    {"exec", "eval", "compile", "__import__", "__builtins__"}
+MODULE_NAMES: Final[frozenset[str]] = frozenset(
+    {"subprocess", "pty", "posix", "_posixsubprocess", "os", "sys"}
+)
+REFLECTION_NAMES: Final[frozenset[str]] = frozenset({"vars", "globals", "locals", "get_type_hints"})
+BANNED_NAMES: Final[frozenset[str]] = (
+    frozenset({"exec", "eval", "compile", "__import__", "__builtins__"})
+    | REFLECTION_NAMES
+    | (MODULE_NAMES - {"os"})
 )
 DYNAMIC_ATTRIBUTE_BUILTINS: Final[frozenset[str]] = frozenset({"getattr", "setattr", "delattr"})
-BANNED_ATTRIBUTES: Final[frozenset[str]] = frozenset(
-    {
-        "system",
-        "popen",
-        "run_command",
-        "create_subprocess_exec",
-        "create_subprocess_shell",
-        "Popen",
-        "import_module",
-        "__import__",
-        "__builtins__",
-        "__subclasses__",
-        "__globals__",
-        "__bases__",
-        "__base__",
-        "__mro__",
-        "__code__",
-        "__loader__",
-        "execl",
-        "execle",
-        "execlp",
-        "execlpe",
-        "execv",
-        "execve",
-        "execvp",
-        "execvpe",
-    }
+BANNED_ATTRIBUTES: Final[frozenset[str]] = (
+    frozenset(
+        {
+            "system",
+            "popen",
+            "run_command",
+            "create_subprocess_exec",
+            "create_subprocess_shell",
+            "Popen",
+            "import_module",
+            "exec",
+            "__import__",
+            "__builtins__",
+            "__subclasses__",
+            "__globals__",
+            "__bases__",
+            "__base__",
+            "__mro__",
+            "__code__",
+            "__loader__",
+            "__dict__",
+        }
+    )
+    | REFLECTION_NAMES
+    | MODULE_NAMES
 )
-BANNED_ATTRIBUTE_PREFIXES: Final[tuple[str, ...]] = ("spawn", "fork", "posix_spawn")
-BANNED_KEYWORDS: Final[frozenset[str]] = frozenset({"use_unsafe_shell"})
+BANNED_ATTRIBUTE_PREFIXES: Final[tuple[str, ...]] = ("spawn", "fork", "posix_spawn", "_create_")
+EXEC_FAMILY: Final[re.Pattern[str]] = re.compile(r"f?exec[lv][a-z]*")
+BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
+    {"use_unsafe_shell", "owner_uid", "policies", "trusted_dirs"}
+)
 OS_MODULE: Final[str] = "os"
 OS_PATH: Final[str] = "path"
 SHEBANG_PREFIX: Final[str] = "#!"
@@ -369,7 +379,11 @@ def is_process_scope(path: Path, root: Path) -> bool:
 
 
 def _is_banned_attribute(name: str) -> bool:
-    return name in BANNED_ATTRIBUTES or name.startswith(BANNED_ATTRIBUTE_PREFIXES)
+    return (
+        name in BANNED_ATTRIBUTES
+        or name.startswith(BANNED_ATTRIBUTE_PREFIXES)
+        or EXEC_FAMILY.fullmatch(name) is not None
+    )
 
 
 def _is_allowed_import(name: str) -> bool:
@@ -382,8 +396,16 @@ def _not_allowed(name: str) -> str:
     return f"import of {name!r} is not allowed in plugins outside {PROCESS_HELPER}"
 
 
+def _alias_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
+    """Yield a description for each import bound to a banned name with ``as``."""
+    for alias in node.names:
+        if alias.asname and (_is_banned_attribute(alias.asname) or alias.asname in BANNED_NAMES):
+            yield f"import under the name {alias.asname!r} is not allowed in plugins"
+
+
 def _import_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
     """Yield a description for each import on ``node`` that is not allow-listed."""
+    yield from _alias_findings(node)
     if isinstance(node, ast.Import):
         for alias in node.names:
             if not _is_allowed_import(alias.name):

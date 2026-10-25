@@ -87,8 +87,12 @@ Deviations and decisions:
   collection; star imports and `from os import` of anything but `path` fail. `os` is usable only as `os.path`. `exec`,
   `eval`, `compile` and `__import__` are banned. Attribute names `system`, `popen`, `run_command`, `Popen`,
   `import_module`, `create_subprocess_*`, `exec*`, `spawn*`, `fork*`, `posix_spawn*` and class-walking dunders are
-  banned wherever they appear. `getattr`, `setattr` and `delattr` need a literal permitted name. `shell=True` and
-  `use_unsafe_shell` are banned. This is static analysis, not a sandbox; it makes bypasses deliberate and visible
+  banned wherever they appear, as are the names `subprocess`, `pty`, `posix`, `_posixsubprocess`, `os` and `sys` as
+  imported names, aliases or attributes (so re-exports such as `process.subprocess` fail), the whole `exec*` family
+  including `fexecve`, the reflection helpers `vars`, `globals`, `locals`, `__dict__` and `get_type_hints`, and
+  private `_create_*` internals. `getattr`, `setattr` and `delattr` need a literal permitted name. `shell=True`,
+  `use_unsafe_shell` and the test-only keywords `owner_uid`, `policies` and `trusted_dirs` are banned in plugin code,
+  so no module can weaken the ownership or trusted-directory checks. This is static analysis, not a sandbox; it makes bypasses deliberate and visible
   in review. The prefix rules over-approximate on purpose.
 - Bandit runs twice (`make security`): on everything except `process.py` with no skips, so a `subprocess` use
   anywhere else is reported, and on `process.py` alone with only B404 and B603 skipped. Ruff S404 and S603 are

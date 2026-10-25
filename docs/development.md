@@ -147,7 +147,9 @@ YAML and Python files (ADR 0005):
 - Python files under `plugins/` are checked deny-by-default (ADR 0004): only allow-listed standard library modules,
   `ansible.module_utils` and this collection may be imported, `os` is usable only as `os.path`, `exec`, `eval`,
   `compile` and `__import__` are banned, process, fork and `run_command` attributes are banned, `shell=True` and
-  `use_unsafe_shell` are banned, and `getattr` needs a literal permitted name. Only
+  `use_unsafe_shell` and the test-only `owner_uid`, `policies` and `trusted_dirs` keywords are banned, `subprocess`,
+  `pty`, `posix`, `os` and `sys` are banned as imported names or attributes, `vars`, `globals`, `locals`, `__dict__`
+  and `get_type_hints` are banned, and `getattr` needs a literal permitted name. Only
   `plugins/module_utils/compliance/process.py` is exempt. Extend the allow-list in `tools/lint/check_repo_rules.py`
   with a justification when a new module is genuinely needed.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
