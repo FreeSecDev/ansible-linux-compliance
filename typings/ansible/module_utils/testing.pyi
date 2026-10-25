@@ -1,0 +1,3 @@
+from contextlib import AbstractContextManager
+
+def patch_module_args(args: dict[str, object] | None = None) -> AbstractContextManager[None]: ...

@@ -110,7 +110,7 @@ repos:
         stages: [pre-push]
       - id: pylint
         name: pylint
-        entry: uv run --frozen pylint tools tests plugins
+        entry: make lint-pylint
         language: system
         types: [python]
         pass_filenames: false

@@ -193,6 +193,31 @@ parameter entity, oversized, deeply nested, unknown result value, missing namesp
 depend on the filesystem, such as a symlinked results path, are created inside the tests. A real `oscap`
 run against real content belongs to a later Molecule story and is not covered here.
 
+## State ledger
+
+The `control_state` module (`plugins/modules/control_state.py`) maintains the on-host ledger of applied remediations
+that ADR 0011 requires, in `/var/lib/freesecdev/linux_compliance/state.json`. The typed model and the strict JSON
+reader and writer are in `plugins/module_utils/compliance/ledger.py`. All file access is in
+`plugins/module_utils/compliance/fileio.py`, the second audited helper after `process.py`; see the amendment to
+[ADR 0011](adr/0011-control-toggles-and-cleanup.md) for the format, the guard exemption and the threat model.
+
+| Action | Behaviour |
+|---|---|
+| `record` | Adds an entry (rule ID, family, revert strategy, prior values, collection version, time). Identical entries are left alone, differing ones are a `conflict` unless `replace: true` |
+| `get` | Returns the entry or `found: false` |
+| `remove` | Deletes the entry; a missing entry is `changed: false` |
+| `list` | Returns all entries sorted by rule ID, optionally for one `family` |
+
+The module needs `become`. It supports check mode (nothing is created or written) and diff mode. Sensitive prior values
+are passed through `sensitive_prior_values` (`no_log`) and are redacted from results unless `reveal_sensitive` is set.
+A corrupt, oversized or unsafe ledger fails the task with an `error_type`; it is never reset.
+
+Unit tests run against a directory the test owns: `Ledger(state_dir, owner_uid)` takes the location and the expected
+owner, while `Ledger()` is the only form that module code uses, and the guard bans the `state_dir` and `owner_uid`
+keywords in plugins. The tests include symlinked ledgers and directories, swaps during the operation, oversized,
+malformed, duplicate-key and `NaN` documents, wrong owner and mode, concurrent writers, interrupted writes and check
+mode.
+
 ## Adding plugins
 
 1. Put target-side logic in `plugins/module_utils/compliance/<area>.py`, standard library only and Python 3.9 compatible.
