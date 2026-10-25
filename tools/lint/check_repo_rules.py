@@ -14,15 +14,16 @@ Rules:
   attributes, never import or name ``subprocess``, ``pty``, ``posix``, ``sys`` or
   ``os`` as an imported name or attribute, never use ``vars``, ``globals``,
   ``locals``, ``__dict__`` or ``get_type_hints``, never pass ``shell=True``,
-  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``state_dir``, ``policies``,
-  ``trusted_dirs``, ``runner``, ``clock`` and ``limits`` keywords, never use a ``**`` dict splat in
-  a call, and
+  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``state_dir``, ``lock_timeout``,
+  ``policies``, ``trusted_dirs``, ``runner``, ``clock`` and ``limits`` keywords, never use a ``**``
+  dict splat in a call, never use the attribute ``__self__``, and
   only call ``getattr`` with a literal permitted name. ``xml.parsers.expat`` may be imported
   only by ``plugins/module_utils/compliance/openscap.py``. Only
   ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
   ``plugins/module_utils/compliance/fileio.py`` may additionally ``import`` ``os``, ``fcntl``,
   ``errno`` and ``time`` and use only the attributes listed in ``FILE_IO_ATTRIBUTES``, always as
-  ``module.attribute``; it keeps every other rule (ADR 0011).
+  ``module.attribute``; it keeps every other rule. Only
+  ``plugins/module_utils/compliance/ledger.py`` may import ``fileio`` (ADR 0011).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
 """
@@ -69,6 +70,10 @@ REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 PLUGINS_DIRECTORY: Final[str] = "plugins"
 PROCESS_HELPER: Final[Path] = Path("plugins/module_utils/compliance/process.py")
 FILE_IO_HELPER: Final[Path] = Path("plugins/module_utils/compliance/fileio.py")
+FILE_IO_IMPORTERS: Final[frozenset[Path]] = frozenset(
+    {Path("plugins/module_utils/compliance/ledger.py"), FILE_IO_HELPER}
+)
+FILE_IO_MODULE: Final[str] = "fileio"
 FILE_IO_ATTRIBUTES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
     {
         "errno": frozenset({"ELOOP", "EMLINK", "ENOTDIR"}),
@@ -86,6 +91,7 @@ FILE_IO_ATTRIBUTES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
                 "close",
                 "fchmod",
                 "fstat",
+                "scandir",
                 "fsync",
                 "mkdir",
                 "open",
@@ -161,6 +167,7 @@ BANNED_ATTRIBUTES: Final[frozenset[str]] = (
             "__code__",
             "__loader__",
             "__dict__",
+            "__self__",
         }
     )
     | REFLECTION_NAMES
@@ -173,6 +180,7 @@ BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
         "use_unsafe_shell",
         "owner_uid",
         "state_dir",
+        "lock_timeout",
         "policies",
         "trusted_dirs",
         "runner",
@@ -611,6 +619,30 @@ def check_process_isolation(
     )
 
 
+def _file_io_import_findings(path: Path, data: bytes) -> list[Violation]:
+    """Reject imports of the file-I/O helper by any file except its sanctioned importers."""
+    try:
+        tree = ast.parse(data, filename=str(path))
+    except (SyntaxError, ValueError):
+        return []
+    findings: list[Violation] = []
+    for node in ast.walk(tree):
+        names: list[str] = []
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            names = [node.module or "", *(alias.name for alias in node.names)]
+        if any(name.split(".")[-1] == FILE_IO_MODULE for name in names):
+            findings.append(
+                Violation(
+                    path,
+                    getattr(node, "lineno", 1),
+                    f"import of {FILE_IO_MODULE!r} is restricted to ledger.py",
+                )
+            )
+    return findings
+
+
 def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
     """Apply every rule that matches the suffix and location of ``path``."""
     suffix = path.suffix.lower()
@@ -629,6 +661,8 @@ def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
             if restricted:
                 extra = extra | frozenset(restricted)
             violations.extend(check_process_isolation(path, data, extra, restricted))
+            if relative not in FILE_IO_IMPORTERS:
+                violations.extend(_file_io_import_findings(path, data))
         return violations
     try:
         text = data.decode("utf-8")

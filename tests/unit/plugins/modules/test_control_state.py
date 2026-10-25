@@ -35,7 +35,7 @@ def state(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def store(state: Path) -> ledger.Ledger:
-    return ledger.Ledger(str(state), OWNER, 5.0)
+    return ledger.Ledger(state_dir=str(state), owner_uid=OWNER, lock_timeout=5.0)
 
 
 def run_module(store: ledger.Ledger) -> None:
@@ -436,3 +436,107 @@ def test_running_the_file_as_a_script_calls_main(
         runpy.run_module(control_state.__name__, run_name="__main__")
     assert excinfo.value.code == 0
     assert json.loads(capsys.readouterr().out)["count"] == 0
+
+
+class RecordingModule:
+    """Duck-typed module that records exit_json and fail_json calls."""
+
+    def __init__(self, params: dict[str, Any], *, check_mode: bool = False) -> None:
+        self.params: dict[str, Any] = {
+            "rule_id": None,
+            "family": None,
+            "revert_strategy": None,
+            "prior_values": [],
+            "sensitive_prior_values": [],
+            "collection_version": None,
+            "applied_at": None,
+            "replace": False,
+            "reveal_sensitive": False,
+            **params,
+        }
+        self.check_mode = check_mode
+        self.exited: list[dict[str, Any]] = []
+        self.failed: list[dict[str, Any]] = []
+
+    def exit_json(self, **kwargs: Any) -> None:
+        self.exited.append(kwargs)
+
+    def fail_json(self, msg: str, **kwargs: Any) -> None:
+        self.failed.append({"msg": msg, **kwargs})
+
+
+def raw_run(
+    store: ledger.Ledger, params: dict[str, Any], *, check: bool = False
+) -> RecordingModule:
+    fake = RecordingModule(params, check_mode=check)
+    control_state.run(cast("Any", fake), store)
+    return fake
+
+
+def test_the_raw_results_never_contain_a_sensitive_value_unless_revealed(
+    store: ledger.Ledger,
+) -> None:
+    sensitive = {
+        "rule_id": RULE,
+        "family": "ssh",
+        "revert_strategy": "recorded_value",
+        "collection_version": "0.1.0",
+        "applied_at": STAMP,
+        "prior_values": [{"name": "plain", "value": "visible"}],
+        "sensitive_prior_values": [{"name": "bind_password", "value": CANARY}],
+    }
+    changed = {**sensitive, "sensitive_prior_values": [{"name": "bind_password", "value": "x"}]}
+    steps = [
+        raw_run(store, {"action": "record", **sensitive}, check=True),
+        raw_run(store, {"action": "record", **sensitive}),
+        raw_run(store, {"action": "record", **sensitive}),
+        raw_run(store, {"action": "record", **changed}, check=True),
+        raw_run(store, {"action": "record", **changed}),
+        raw_run(store, {"action": "record", **changed, "replace": True}, check=True),
+        raw_run(store, {"action": "get", "rule_id": RULE}),
+        raw_run(store, {"action": "list"}),
+        raw_run(store, {"action": "remove", "rule_id": RULE}, check=True),
+        raw_run(store, {"action": "remove", "rule_id": RULE}),
+    ]
+    for fake in steps:
+        assert CANARY not in json.dumps(fake.exited + fake.failed)
+    assert steps[3].failed[0]["error_type"] == "conflict"
+    assert steps[4].failed[0]["error_type"] == "conflict"
+    assert steps[5].failed == []
+    assert steps[0].exited[0]["changed"] is True
+
+
+def test_the_raw_results_show_the_sensitive_value_only_when_revealed(
+    store: ledger.Ledger,
+) -> None:
+    raw_run(
+        store,
+        {
+            "action": "record",
+            "rule_id": RULE,
+            "family": "ssh",
+            "revert_strategy": "recorded_value",
+            "collection_version": "0.1.0",
+            "applied_at": STAMP,
+            "sensitive_prior_values": [{"name": "bind_password", "value": CANARY}],
+        },
+    )
+    shown = raw_run(store, {"action": "get", "rule_id": RULE, "reveal_sensitive": True})
+    assert CANARY in json.dumps(shown.exited)
+    hidden = raw_run(store, {"action": "get", "rule_id": RULE})
+    assert CANARY not in json.dumps(hidden.exited)
+
+
+def test_return_documents_every_key_the_module_can_return() -> None:
+    returned = yaml.safe_load(control_state.RETURN)
+    assert {
+        "error_type",
+        "path",
+        "ledger_path",
+        "action",
+        "found",
+        "entry",
+        "entries",
+        "count",
+    } <= set(returned)
+    assert returned["error_type"]["returned"] == "on failure"

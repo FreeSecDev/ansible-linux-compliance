@@ -3,7 +3,9 @@ from __future__ import annotations
 import errno
 import fcntl
 import os
+import runpy
 import stat
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -635,3 +637,113 @@ def test_a_vanishing_entry_while_classifying_a_failure_is_still_an_error(
 
     patch_os(monkeypatch, "stat", vanish)
     assert reason_of(fileio.open_directory, str(base / "state"), OWNER) == "not_directory"
+
+
+def temporary_name(digits: str = "0123456789abcdef") -> str:
+    return f".{NAME}.{digits}.tmp"
+
+
+def test_sweep_removes_only_stale_temporary_files_of_the_expected_shape(
+    directory: fileio.SafeDirectory, base: Path, tmp_path: Path
+) -> None:
+    state = base / "state"
+    stale = state / temporary_name()
+    stale.write_text("sensitive", encoding="utf-8")
+    keep = [
+        state / NAME,
+        state / ".state.json.XYZ.tmp",
+        state / ".state.json.0123456789abcdef.tmp.bak",
+        state / ".other.json.0123456789abcdef.tmp",
+        state / "x.state.json.0123456789abcdef.tmp",
+    ]
+    for path in keep:
+        path.write_text("keep", encoding="utf-8")
+    victim = tmp_path / "victim"
+    victim.write_text("precious", encoding="utf-8")
+    link = state / temporary_name("aaaaaaaaaaaaaaaa")
+    link.symlink_to(victim)
+    folder = state / temporary_name("bbbbbbbbbbbbbbbb")
+    folder.mkdir()
+    assert directory.sweep_temporaries(NAME) == 1
+    assert not stale.exists()
+    assert all(path.exists() for path in keep)
+    assert link.is_symlink()
+    assert victim.read_text(encoding="utf-8") == "precious"
+    assert folder.is_dir()
+
+
+def test_sweep_leaves_files_of_another_owner(base: Path) -> None:
+    opened = fileio.open_directory(str(base), OWNER, create=True)
+    assert opened is not None
+    (base / temporary_name()).write_text("x", encoding="utf-8")
+    other = foreign(base, OTHER)
+    try:
+        assert other.sweep_temporaries(NAME) == 0
+    finally:
+        other.close()
+        opened.close()
+    assert (base / temporary_name()).exists()
+
+
+def test_sweep_reports_unlink_and_stat_failures_as_not_removed(
+    directory: fileio.SafeDirectory, base: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (base / "state" / temporary_name()).write_text("x", encoding="utf-8")
+    real_stat = os.stat
+    real_unlink = os.unlink
+
+    def refuse(*_arguments: Any, **_keywords: Any) -> None:
+        raise PermissionError(errno.EACCES, "denied")
+
+    patch_os(monkeypatch, "unlink", refuse)
+    assert directory.sweep_temporaries(NAME) == 0
+    monkeypatch.setattr(os, "unlink", real_unlink)
+
+    def vanish(path: Any, *arguments: Any, **keywords: Any) -> os.stat_result:
+        if keywords.get("follow_symlinks") is False:
+            raise FileNotFoundError(errno.ENOENT, "gone")
+        return real_stat(path, *arguments, **keywords)
+
+    patch_os(monkeypatch, "stat", vanish)
+    assert directory.sweep_temporaries(NAME) == 0
+    assert (base / "state" / temporary_name()).exists()
+
+
+def test_sweep_reports_a_listing_failure(
+    directory: fileio.SafeDirectory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(_descriptor: int) -> None:
+        raise OSError(errno.EIO, "boom")
+
+    monkeypatch.setattr(os, "scandir", broken)
+    assert reason_of(directory.sweep_temporaries, NAME) == "io_error"
+
+
+def test_sweep_validates_the_name_and_the_open_state(directory: fileio.SafeDirectory) -> None:
+    assert reason_of(directory.sweep_temporaries, "a/b") == "unsafe_path"
+    directory.close()
+    assert reason_of(directory.sweep_temporaries, NAME) == "io_error"
+
+
+def test_missing_open_flags_fail_closed_with_a_structured_error(
+    base: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delattr(os, "O_NOFOLLOW")
+    assert reason_of(fileio.open_directory, str(base), OWNER, create=True) == "unsupported_platform"
+
+
+def test_a_missing_fcntl_module_fails_closed_with_a_structured_error(
+    base: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(sys.modules, "fcntl", None)
+    monkeypatch.delitem(sys.modules, fileio.__name__)
+    namespace = runpy.run_module(fileio.__name__, run_name="pr_frees56_without_fcntl")
+    assert namespace["_flock_supported"]() is False
+    error = namespace["SafeFileError"]
+    with pytest.raises(error) as excinfo:
+        namespace["open_directory"](str(base), OWNER, create=True)
+    assert excinfo.value.reason == "unsupported_platform"
+    assert not base.exists()
+    with pytest.raises(error) as excinfo:
+        namespace["_try_lock"](0)
+    assert excinfo.value.reason == "unsupported_platform"

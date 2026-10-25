@@ -31,8 +31,8 @@ silently repaired: an unsafe file or directory is an error, not something to fix
 from __future__ import annotations
 
 import errno
-import fcntl
 import os
+import re
 import stat
 import time
 from typing import Final, NoReturn
@@ -47,6 +47,7 @@ READ_CHUNK_BYTES: Final[int] = 65536
 DEFAULT_LOCK_TIMEOUT_SECONDS: Final[float] = 30.0
 LOCK_POLL_SECONDS: Final[float] = 0.02
 TEMPORARY_SUFFIX: Final[str] = ".tmp"
+TEMPORARY_HEX_PATTERN: Final[str] = "[0-9a-f]{16}"
 SYMLINK_ERRORS: Final[frozenset[int]] = frozenset({errno.ELOOP, errno.EMLINK})
 
 REASONS: Final[frozenset[str]] = frozenset(
@@ -87,6 +88,31 @@ def _io_failure(error: OSError, action: str) -> NoReturn:
     _fail("io_error", f"{action}: {error.strerror or 'operating system error'}")
 
 
+try:
+    import fcntl
+except ImportError:
+
+    def _flock_supported() -> bool:
+        return False
+
+    def _try_lock(descriptor: int) -> bool:
+        _fail("unsupported_platform", f"this platform lacks flock (descriptor {descriptor})")
+
+else:
+
+    def _flock_supported() -> bool:
+        return True
+
+    def _try_lock(descriptor: int) -> bool:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        except OSError as error:
+            _io_failure(error, "cannot lock the state directory")
+        return True
+
+
 def _directory_open_failure(error: OSError, parent: int, name: str) -> NoReturn:
     if error.errno == errno.ENOTDIR:
         try:
@@ -99,6 +125,21 @@ def _directory_open_failure(error: OSError, parent: int, name: str) -> NoReturn:
 
 
 def _require_dir_fd_support() -> None:
+    try:
+        _probe = (
+            os.O_RDONLY,
+            os.O_WRONLY,
+            os.O_CREAT,
+            os.O_EXCL,
+            os.O_DIRECTORY,
+            os.O_NOFOLLOW,
+            os.O_NONBLOCK,
+            os.O_CLOEXEC,
+        )
+    except AttributeError:
+        _fail("unsupported_platform", "this platform lacks the required open flags")
+    if not _flock_supported():
+        _fail("unsupported_platform", "this platform lacks flock")
     required = {os.open, os.mkdir, os.rename, os.stat, os.unlink}
     if not required <= os.supports_dir_fd:
         _fail("unsupported_platform", "this platform lacks directory-relative file operations")
@@ -161,16 +202,6 @@ def _check_directory(descriptor: int, owner_uid: int) -> None:
         _fail("wrong_owner", f"the state directory is not owned by uid {owner_uid}")
     if stat.S_IMODE(info.st_mode) & FORBIDDEN_MODE_BITS:
         _fail("unsafe_mode", "the state directory has group or world permission bits")
-
-
-def _try_lock(descriptor: int) -> bool:
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return False
-    except OSError as error:
-        _io_failure(error, "cannot lock the state directory")
-    return True
 
 
 def _walk(parts: tuple[str, ...], *, create: bool) -> int | None:
@@ -350,3 +381,41 @@ class SafeDirectory:
         except OSError:
             return False
         return True
+
+    def sweep_temporaries(self, name: str) -> int:
+        """Remove stale temporary files that an interrupted :meth:`write` of ``name`` left.
+
+        Only entries named exactly ``.<name>.<16 hex digits>.tmp`` that are regular
+        files owned by the expected user are removed; symlinks, directories and
+        everything else are left alone. Call it while holding the lock.
+
+        Returns:
+            The number of files removed.
+
+        Raises:
+            SafeFileError: If the directory cannot be listed.
+        """
+        plain = _check_name(name)
+        directory = self._open_descriptor()
+        pattern = re.compile(
+            re.escape(f".{plain}.") + TEMPORARY_HEX_PATTERN + re.escape(TEMPORARY_SUFFIX)
+        )
+        try:
+            with os.scandir(directory) as entries:
+                candidates = [entry.name for entry in entries]
+        except OSError as error:
+            _io_failure(error, "cannot list the state directory")
+        return sum(
+            self._sweep_one(directory, candidate)
+            for candidate in candidates
+            if pattern.fullmatch(candidate) is not None
+        )
+
+    def _sweep_one(self, directory: int, candidate: str) -> bool:
+        try:
+            info = os.stat(candidate, dir_fd=directory, follow_symlinks=False)
+        except OSError:
+            return False
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != self._owner_uid:
+            return False
+        return self._discard(directory, candidate)

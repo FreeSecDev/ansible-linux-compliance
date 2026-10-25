@@ -136,11 +136,10 @@ disable = [
     "missing-module-docstring",
     "use-implicit-booleaness-not-comparison",
     "too-many-instance-attributes",
-    "wrong-import-position",
 ]
 
 [tool.freesecdev.pylint-justifications]
-wrong-import-position = "ansible-test sanity validate-modules requires every import of a module to appear below the DOCUMENTATION, EXAMPLES and RETURN blocks (import-before-documentation), so module files in plugins/modules necessarily import after module-level assignments. Pylint cannot disable a message per file; Ruff E402 is relaxed for plugins/modules only and still applies everywhere else (FREES-56)."
+wrong-import-position = "Not disabled. ansible-test sanity validate-modules requires imports below the DOCUMENTATION, EXAMPLES and RETURN blocks, so make lint-pylint runs Pylint twice: over tools, tests and plugins with the rule enabled and plugins/modules ignored, and over plugins/modules alone with the rule disabled. A unit test fails if the rule enters the global disable list (FREES-56)."
 max-module-lines = "The findings model is one module by design (ADR 0013); Ruff formatting expands every call over several lines, and the entities share private validators."
 duplicate-code = "Two small standalone tools share the fence-marker constant; extracting a shared module would add coupling for a three-line constant."
 too-few-public-methods = "Frozen slotted dataclasses are deliberate value objects."

@@ -49,7 +49,7 @@ def state(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def store(state: Path) -> ledger.Ledger:
-    return ledger.Ledger(str(state), OWNER, 5.0)
+    return ledger.Ledger(state_dir=str(state), owner_uid=OWNER, lock_timeout=5.0)
 
 
 def error_type(call: Any, *arguments: Any, **keywords: Any) -> str:
@@ -245,11 +245,6 @@ def test_loads_rejects_very_deep_nesting() -> None:
     assert error_type(ledger.loads, deep) == "corrupt"
 
 
-@pytest.mark.parametrize("version", [0, 2, -1, "1", 1.0, True, False, None, [], {}])
-def test_loads_rejects_unsupported_schema_versions(version: Any) -> None:
-    assert error_type(ledger.loads, document(schema_version=version)) == "unsupported_schema"
-
-
 def test_loads_rejects_unknown_and_missing_document_keys() -> None:
     assert error_type(ledger.loads, document(extra=1)) == "corrupt"
     assert error_type(ledger.loads, b'{"schema_version": 1}') == "corrupt"
@@ -436,8 +431,8 @@ def test_a_symlinked_parent_directory_is_refused(
 
 
 def test_the_wrong_owner_is_refused(state: Path) -> None:
-    ledger.Ledger(str(state), OWNER).record(make_entry())
-    foreign = ledger.Ledger(str(state), OWNER + 1)
+    ledger.Ledger(state_dir=str(state), owner_uid=OWNER).record(make_entry())
+    foreign = ledger.Ledger(state_dir=str(state), owner_uid=OWNER + 1)
     assert error_type(foreign.entries) == "wrong_owner"
     assert error_type(foreign.record, make_entry(OTHER_RULE, RevertStrategy.OWNED_DROPIN)) == (
         "wrong_owner"
@@ -445,7 +440,7 @@ def test_the_wrong_owner_is_refused(state: Path) -> None:
 
 
 def test_the_default_owner_is_root(state: Path) -> None:
-    store = ledger.Ledger(str(state))
+    store = ledger.Ledger(state_dir=str(state))
     if OWNER == 0:
         assert store.entries() == ()
     else:
@@ -563,7 +558,7 @@ def test_an_interrupted_write_leaves_the_old_ledger_intact(
 
 
 def test_lock_contention_times_out_without_changing_anything(state: Path) -> None:
-    store = ledger.Ledger(str(state), OWNER, 0.1)
+    store = ledger.Ledger(state_dir=str(state), owner_uid=OWNER, lock_timeout=0.1)
     store.record(make_entry())
     holder = fileio.open_directory(str(state), OWNER)
     assert holder is not None
@@ -585,7 +580,7 @@ def test_concurrent_writers_serialise_and_lose_nothing(state: Path) -> None:
 
     def work(index: int) -> None:
         try:
-            writer = ledger.Ledger(str(state), OWNER, 30.0)
+            writer = ledger.Ledger(state_dir=str(state), owner_uid=OWNER, lock_timeout=30.0)
             writer.record(make_entry(f"{PREFIX}rule_{index:02d}", RevertStrategy.OWNED_DROPIN))
         except (ledger.LedgerError, AssertionError) as error:
             errors.append(error)
@@ -596,20 +591,20 @@ def test_concurrent_writers_serialise_and_lose_nothing(state: Path) -> None:
     for thread in threads:
         thread.join()
     assert errors == []
-    final = ledger.Ledger(str(state), OWNER).entries()
+    final = ledger.Ledger(state_dir=str(state), owner_uid=OWNER).entries()
     assert [entry.rule_id for entry in final] == [
         f"{PREFIX}rule_{index:02d}" for index in range(count)
     ]
 
 
 def test_concurrent_record_and_remove_keep_the_ledger_valid(state: Path) -> None:
-    seed = ledger.Ledger(str(state), OWNER, 30.0)
+    seed = ledger.Ledger(state_dir=str(state), owner_uid=OWNER, lock_timeout=30.0)
     seed.record(make_entry(PREFIX + "keep", RevertStrategy.OWNED_DROPIN))
     errors: list[BaseException] = []
 
     def churn(index: int) -> None:
         try:
-            writer = ledger.Ledger(str(state), OWNER, 30.0)
+            writer = ledger.Ledger(state_dir=str(state), owner_uid=OWNER, lock_timeout=30.0)
             rule = f"{PREFIX}churn_{index}"
             writer.record(make_entry(rule, RevertStrategy.OWNED_DROPIN))
             writer.remove(rule)
@@ -623,3 +618,55 @@ def test_concurrent_record_and_remove_keep_the_ledger_valid(state: Path) -> None
         thread.join()
     assert errors == []
     assert [entry.rule_id for entry in seed.entries()] == [PREFIX + "keep"]
+
+
+@pytest.mark.parametrize("version", [0, 2, -1])
+def test_loads_rejects_unsupported_schema_versions(version: Any) -> None:
+    assert error_type(ledger.loads, document(schema_version=version)) == "unsupported_schema"
+
+
+@pytest.mark.parametrize("version", ["1", 1.0, 1e400, True, False, None, [], {}])
+def test_loads_reports_a_non_integer_schema_version_as_corrupt(version: Any) -> None:
+    data = document(schema_version=version).replace(b"Infinity", b"1e400")
+    assert error_type(ledger.loads, data) == "corrupt"
+
+
+def test_values_reject_lone_surrogates() -> None:
+    for value in ["a" + chr(0xD800) + "b", chr(0xDFFF)]:
+        assert error_type(ledger.PriorValue, "a", value) == "invalid_entry"
+
+
+def test_the_seams_are_keyword_only() -> None:
+    for arguments in [("dir",), ("dir", 1000), ("dir", 1000, 1.0)]:
+        with pytest.raises(TypeError):
+            ledger.Ledger(*arguments)
+
+
+def test_a_write_sweeps_stale_temporary_files_holding_old_values(
+    store: ledger.Ledger, state: Path, tmp_path: Path
+) -> None:
+    store.record(make_entry())
+    stale = state / ".state.json.0123456789abcdef.tmp"
+    stale.write_text("old sensitive value", encoding="utf-8")
+    victim = tmp_path / "victim"
+    victim.write_text("precious", encoding="utf-8")
+    link = state / ".state.json.aaaaaaaaaaaaaaaa.tmp"
+    link.symlink_to(victim)
+    unrelated = state / "notes.tmp"
+    unrelated.write_text("keep", encoding="utf-8")
+    store.remove(RULE)
+    assert not stale.exists()
+    assert link.is_symlink()
+    assert victim.read_text(encoding="utf-8") == "precious"
+    assert unrelated.exists()
+
+
+def test_a_dry_run_and_an_unchanged_record_leave_stale_files_alone(
+    store: ledger.Ledger, state: Path
+) -> None:
+    store.record(make_entry())
+    stale = state / ".state.json.0123456789abcdef.tmp"
+    stale.write_text("x", encoding="utf-8")
+    store.record(make_entry())
+    store.remove(RULE, dry_run=True)
+    assert stale.exists()

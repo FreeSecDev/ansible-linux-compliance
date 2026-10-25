@@ -27,6 +27,11 @@ MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
 
+space := $(subst ,, )
+PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
+PYLINT_MODULE_DIRECTORIES := plugins/modules
+PYLINT_MODULE_IGNORES := $(subst $(space),|,$(patsubst %,^%/,$(PYLINT_MODULE_DIRECTORIES)))
+
 NOT_IMPLEMENTED = @printf 'not implemented yet: %s (tracked in %s)\n' '$(1)' '$(2)' >&2; exit 2
 
 define HELP_TEXT
@@ -41,6 +46,7 @@ Formatting and linting
   format                Apply Ruff fixes and formatting
   lint                  Run every implemented linter (lock, repo, skills, python, yaml, actions, ansible)
   lint-python           Ruff lint, Ruff format check and Pylint
+  lint-pylint           Pylint in two passes: wrong-import-position on, and off for plugins/modules only
   lint-yaml             yamllint in strict mode
   lint-actions          actionlint for GitHub workflows
   lint-repo             Repository source rules (document start, comments, banned modules)
@@ -127,10 +133,13 @@ lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-a
 lock-check: require-uv
 	uv lock --check
 
-lint-python: require-uv collection-link
+lint-python: require-uv collection-link lint-pylint
 	$(RUN) ruff check .
 	$(RUN) ruff format --check .
-	$(RUN) pylint tools tests plugins
+
+lint-pylint: require-uv collection-link
+	$(RUN) pylint --ignore-paths='$(PYLINT_BASE_IGNORES)|$(PYLINT_MODULE_IGNORES)' tools tests plugins
+	$(RUN) pylint --disable=wrong-import-position $(PYLINT_MODULE_DIRECTORIES)
 
 lint-yaml: require-uv
 	$(RUN) yamllint --strict .

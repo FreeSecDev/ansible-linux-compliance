@@ -114,8 +114,11 @@ def _value_text(value: object, name: str) -> str | None:
     if len(value) > MAX_VALUE_LENGTH:
         _invalid(f"{name} exceeds {MAX_VALUE_LENGTH} characters")
     for character in value:
-        if character in _BIDI_CONTROLS or (
-            unicodedata.category(character) == "Cc" and character not in _ALLOWED_CONTROLS
+        category = unicodedata.category(character)
+        if (
+            character in _BIDI_CONTROLS
+            or category == "Cs"
+            or (category == "Cc" and character not in _ALLOWED_CONTROLS)
         ):
             _invalid(f"{name} contains control characters")
     return value
@@ -362,7 +365,9 @@ def loads(data: bytes) -> tuple[LedgerEntry, ...]:
     try:
         fields = _mapping(document, "ledger", _DOCUMENT_KEYS)
         version = fields["schema_version"]
-        if isinstance(version, bool) or not isinstance(version, int) or version != SCHEMA_VERSION:
+        if isinstance(version, bool) or not isinstance(version, int):
+            _fail("corrupt", "the ledger schema version is not an integer")
+        if version != SCHEMA_VERSION:
             _fail("unsupported_schema", "the ledger schema version is not supported")
         entries = tuple(
             LedgerEntry.from_dict(item) for item in _list(fields["entries"], "entries", MAX_ENTRIES)
@@ -401,12 +406,14 @@ class Ledger:
     """The on-host ledger.
 
     Production code constructs ``Ledger()``. ``state_dir``, ``owner_uid`` and
-    ``lock_timeout`` exist so that unit tests can use a directory they own; module
-    arguments never reach them.
+    ``lock_timeout`` are keyword-only and exist so that unit tests can use a directory
+    they own; the guard bans these keywords in plugin code and module arguments never
+    reach them.
     """
 
     def __init__(
         self,
+        *,
         state_dir: str = LEDGER_DIRECTORY,
         owner_uid: int = fileio.ROOT_UID,
         lock_timeout: float = fileio.DEFAULT_LOCK_TIMEOUT_SECONDS,
@@ -445,6 +452,7 @@ class Ledger:
                 entries = self._read(directory)
                 updated, result = update(entries)
                 if write and updated != entries:
+                    directory.sweep_temporaries(LEDGER_FILENAME)
                     directory.write(LEDGER_FILENAME, dumps(updated))
                 return result
             finally:

@@ -9,18 +9,14 @@ module: control_state
 short_description: Read and maintain the on-host ledger of applied remediations
 version_added: "0.1.0"
 description:
-  - Maintains the state ledger C(/var/lib/freesecdev/linux_compliance/state.json), which records
-    for every
-    remediated rule what is needed to revert it when the rule is disabled.
+  - Maintains the state ledger C(/var/lib/freesecdev/linux_compliance/state.json), which records for
+    every remediated rule what is needed to revert it when the rule is disabled.
   - Each entry holds the rule identifier, control family, revert strategy, prior values, collection
-    version
-    and the time the rule was applied.
+    version and the time the rule was applied.
   - The ledger is owned by root with mode C(0600) in a C(0700) directory, is written atomically and
-    is
-    serialised between concurrent runs with a lock. The module needs C(become).
+    is serialised between concurrent runs with a lock. The module needs C(become).
   - A corrupt, oversized or unsafe ledger (symbolic link, wrong owner, group or world permission
-    bits) is an
-    error. The module never repairs or resets it.
+    bits) is an error. The module never repairs or resets it.
   - The location of the ledger cannot be changed through module arguments.
 author:
   - FreeSecDev (@FreeSecDev)
@@ -28,8 +24,7 @@ options:
   action:
     description:
       - C(get) returns the entry of a rule, C(record) adds or replaces it, C(remove) deletes it and
-        C(list)
-        returns all entries.
+        C(list) returns all entries.
     type: str
     required: true
     choices: [get, record, remove, list]
@@ -93,8 +88,7 @@ options:
   replace:
     description:
       - Replace an existing entry that differs. Without it, a differing entry is an error
-        (C(conflict)),
-        so the original prior values cannot be overwritten by accident.
+        (C(conflict)), so the original prior values cannot be overwritten by accident.
     type: bool
     default: false
   reveal_sensitive:
@@ -220,6 +214,19 @@ count:
   type: int
   returned: when O(action=list)
   sample: 0
+error_type:
+  description:
+    - Stable identifier of the failure, for example C(corrupt), C(symlink), C(wrong_owner),
+      C(unsafe_mode), C(too_large), C(lock_timeout), C(conflict), C(invalid_entry) or
+      C(unsupported_platform).
+  type: str
+  returned: on failure
+  sample: corrupt
+path:
+  description: Path of the ledger file that the failed action used.
+  type: str
+  returned: on failure
+  sample: /var/lib/freesecdev/linux_compliance/state.json
 """
 
 import json
