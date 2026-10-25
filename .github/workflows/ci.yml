@@ -56,7 +56,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -73,6 +73,8 @@ jobs:
         run: make test-coverage
       - name: Run test-content-golden
         run: make test-content-golden
+      - name: Run test-browser
+        run: make test-browser
 
   oscap-integration:
     name: oscap-integration

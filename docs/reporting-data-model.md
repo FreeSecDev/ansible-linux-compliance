@@ -9,11 +9,13 @@ record is [ADR 0016](adr/0016-report-schema-and-summary-semantics.md); the findi
 
 ```bash
 make report REPORT_SCOPE=single_host REPORT_ARGS='--scan-run run.json --junit junit.xml'
-python -m tools.reporting --scope fleet --output build/report/report.json --xccdf results.xml
+python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
+  --xccdf results.xml
 ```
 
-`make report` writes `build/report/report.json` (`REPORT_OUTPUT` overrides it) and states that the HTML dashboard is
-pending FREES-77. `--scope` and `--output` are required. Every input option can be repeated.
+`make report` writes `build/report/report.json` and the HTML dashboard `build/report/report.html` (`REPORT_OUTPUT`
+and `REPORT_HTML` override them). `--scope` and `--output` are required; `--html` is optional and writes the
+[dashboard](dashboard.md) of the same document. Every input option can be repeated.
 
 | Option | Format |
 |---|---|
@@ -37,8 +39,15 @@ Exit status:
 - 0: the report was written and every supplied input parsed. A section without any input is `unavailable`; that is
   not an error, and it is never shown as passed.
 - 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`).
-- 2: invalid arguments or metadata, a scope that the data contradicts (below), or an output that cannot be written.
-  No report is written for a contradicted scope.
+- 2: invalid arguments or metadata, `--html` naming the same file as `--output`, a scope that the data contradicts
+  (below), or an output that cannot be written. No report is written for a contradicted scope.
+- 3: the JSON report was written, but the dashboard was not, because the report is above the dashboard size cap
+  (128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)). A dashboard left at that path by an earlier
+  run is removed. Status 3 takes precedence over 1; the sections of the JSON still show any missing or invalid input.
+
+Both files are written atomically (a temporary file in the target directory, synced, then renamed over the target),
+so a crash or a full disk never leaves a truncated file. They are created with mode 0600, because a report can hold
+host evidence.
 
 At most 1000 input files per section are accepted.
 
@@ -107,10 +116,14 @@ unnamed input is never merged with anything, and a crafted name cannot take over
 name in the file for XCCDF (`target` or the fqdn fact) and ARF (asset fqdn and hostname, which must match the
 TestResult target, otherwise the file is an error). Names
 are lower-cased, and files are grouped only when the names are equal; differing identities are never merged. Input
-files with the same SHA-256 count once. When several input files claim the same self-asserted host, they are
-merged and `notes` records it as a structured entry (whenever a host group combines several inputs and at least one is a
-self-asserted XCCDF or ARF file), `{"kind": "shared_self_asserted_host", "host": ..., "sources": [sha256, ...]}`;
-consumers build the wording, so no input text becomes prose.
+files with the same SHA-256 count once. When several input files claim the same self-asserted host, they count as one
+host, and `notes` records it as a structured entry `{"kind": "shared_self_asserted_host", "host": ..., "sources":
+[sha256, ...]}`; consumers build the wording, so no input text becomes prose. A note is written **per host, not per host
+group**: it is written whenever several inputs share a host key and at least one of them is a self-asserted XCCDF or
+ARF file, and `sources` lists every such input, across all benchmarks and content versions. Figures stay separate per
+(benchmark, content version, host), so the inputs of one note can sit in different groups that combine nothing. The
+dashboard therefore shows a merge inside a group only when at least two of the note's sources are inputs of that group,
+and lists only those. Notes per host group in the report itself are tracked in FREES-130.
 
 | Field | Meaning |
 |---|---|
@@ -199,3 +212,5 @@ scenario is required. Any other `format` or `version` is an error.
 
 - 1.0: first version (FREES-75), including the `partial` section status, `groups`, `aggregates` and `gaps`. A change that adds a field bumps the minor version; a breaking change bumps the major
   version, and `report-v<major>.json` is a new file. The version, this page and ADR 0016 change together.
+- The HTML dashboard (FREES-77, ADR 0017) reads version 1.0 and adds no field to the document; it refuses any
+  other version.

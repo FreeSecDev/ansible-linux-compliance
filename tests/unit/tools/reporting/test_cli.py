@@ -18,7 +18,7 @@ def run(argv: list[str]) -> int:
     return cli.main(argv)
 
 
-def test_cli_writes_the_report_and_says_the_html_is_pending(
+def test_cli_writes_the_report(
     kit: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     output = tmp_path / "nested" / "report.json"
@@ -41,7 +41,7 @@ def test_cli_writes_the_report_and_says_the_html_is_pending(
         ]
     )
     assert status == 0
-    assert "pending FREES-77" in capsys.readouterr().out
+    assert f"report written to {output}" in capsys.readouterr().out
     document = json.loads(output.read_text(encoding="utf-8"))
     assert document["scope"] == "single_host"
     assert document["metadata"]["commit"] == COMMIT

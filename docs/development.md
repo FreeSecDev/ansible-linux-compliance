@@ -54,7 +54,8 @@ make help
 | `collection-link` | implemented | Links `plugins/` into `build/collections` for pytest and the type checkers |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches and coverage output |
-| `ci` | implemented | `lint lint-iac typecheck test-coverage security docs test-sanity test-ansible-units package-check` |
+| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser security docs test-sanity test-ansible-units package-check` |
+| `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
 | `lint-iac` | implemented | `tofu fmt -check -recursive infra/`, `tofu init -backend=false` and `tofu validate` per root module, shellcheck of the rendered bootstrap script; needs `tofu` on `PATH`, runs in the `iac` CI job and in `make ci`, not in `make lint` |
 | `aws-bootstrap-render` | implemented | Renders `infra/bootstrap/bootstrap.sh.tmpl` to the gitignored `infra/bootstrap/bootstrap.local.sh` |
 | `lint-packer` | pending FREES-64 | Packer validation |
@@ -67,8 +68,8 @@ make help
 | `packer-validate` | pending FREES-64 | Packer template validation |
 | `packer-build` | pending FREES-64 | Packer image build |
 | `image-build` | pending FREES-36 | Runner image build on AWS |
-| `report` | normalized JSON now, HTML pending FREES-77 | Report generation (`REPORT_SCOPE`, `REPORT_ARGS`), see [reporting data model](reporting-data-model.md) |
-| `report-serve` | pending FREES-77 | Local report server |
+| `report` | implemented | Normalized JSON and the HTML dashboard (`REPORT_SCOPE`, `REPORT_ARGS`, `REPORT_OUTPUT`, `REPORT_HTML`), see [reporting data model](reporting-data-model.md) and the [dashboard guide](dashboard.md) |
+| `report-serve` | implemented | Serves `build/report/` on 127.0.0.1 only (`REPORT_PORT`, default 8765); refuses a `REPORT_HTML` outside it |
 | `release-check` | pending FREES-84 | Release readiness |
 
 Pending targets print `not implemented yet: <target> (tracked in FREES-<key>)` to standard error and exit
@@ -206,7 +207,7 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage` |
+| `test` | `make test-coverage`, `make test-content-golden`, `make test-browser` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
 | `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |
