@@ -11,7 +11,9 @@ locals {
   budget_name = "freesecdev-monthly"
   budget_arn  = "arn:aws:budgets::${var.account_id}:budget/${local.budget_name}"
 
-  plan_subject = "repo:${var.github_repository}:ref:refs/heads/main"
+  github_owner_name      = split("/", var.github_repository)[0]
+  github_repository_name = split("/", var.github_repository)[1]
+  plan_subject           = "repo:${local.github_owner_name}@${var.github_owner_id}/${local.github_repository_name}@${var.github_repository_id}:ref:refs/heads/main"
   plan_workflow_refs = [
     for file in var.plan_workflow_files :
     "${var.github_repository}/.github/workflows/${file}@refs/heads/main"

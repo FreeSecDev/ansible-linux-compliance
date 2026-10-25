@@ -23,6 +23,18 @@ data "aws_iam_policy_document" "plan_trust" {
 
     condition {
       test     = "StringEquals"
+      variable = "${local.oidc_host}:repository_id"
+      values   = [var.github_repository_id]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_host}:repository_owner_id"
+      values   = [var.github_owner_id]
+    }
+
+    condition {
+      test     = "StringEquals"
       variable = "${local.oidc_host}:job_workflow_ref"
       values   = local.plan_workflow_refs
     }
@@ -71,13 +83,17 @@ data "aws_iam_policy_document" "plan_permissions" {
   }
 
   statement {
-    sid     = "ReadWriteStateAndLock"
-    effect  = "Allow"
-    actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = [
-      "arn:aws:s3:::${local.state_bucket_name}/${local.state_key}",
-      "arn:aws:s3:::${local.state_bucket_name}/${local.state_lock_key}",
-    ]
+    sid       = "ReadState"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::${local.state_bucket_name}/${local.state_key}"]
+  }
+
+  statement {
+    sid       = "ManageStateLock"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["arn:aws:s3:::${local.state_bucket_name}/${local.state_lock_key}"]
   }
 }
 

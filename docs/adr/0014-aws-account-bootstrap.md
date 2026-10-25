@@ -29,7 +29,8 @@ This is an accepted risk owned by the project owner. Mitigations:
 - no keys are written: the script uses the credentials already in the session and never creates or stores access keys;
 - CI is OIDC-only: workflows assume roles through the OIDC provider, and no root credential or access key exists in
   GitHub;
-- the owner enables MFA on the root user after the bootstrap (recommended, and listed in the bootstrap output).
+- the owner enables MFA on the root user before the bootstrap (recommended; the script warns and the typed
+  confirmation is the last chance to stop), and stops using root afterwards.
 
 The follow-up that removes the deviation is an IAM Identity Center or administrator role for the owner, after which the
 bootstrap should be run with that identity.
@@ -41,7 +42,8 @@ State is stored in the S3 bucket `freesecdev-tfstate-910736812072-eu-west-1` wit
 IAM surface for the same guarantee. The bucket is created by the bootstrap script, not by OpenTofu, because the
 backend must exist before `init`. It has `BucketOwnerEnforced`, versioning, all public access blocked, a TLS-only
 policy and a lifecycle rule for noncurrent versions. Encryption is SSE-KMS with the AWS-managed key `aws/s3`, chosen
-over SSE-S3 for the CloudTrail record of key use at no key cost. The backend block uses partial configuration; the
+over SSE-S3 for the CloudTrail record of key use at no key cost. The backend sets `kms_key_id = "alias/aws/s3"`, because `encrypt = true` alone makes it send SSE-S3
+on every write, overriding the bucket default. The backend block uses partial configuration; the
 bucket and key come from a generated, gitignored `backend.hcl` whose shape is the committed `backend.hcl.example`.
 
 ### OIDC trust
@@ -51,11 +53,14 @@ thumbprints for this provider, so none is configured. The role `freesecdev-gha-a
 only tokens with:
 
 - `aud` equal to `sts.amazonaws.com`,
-- `sub` equal to `repo:FreeSecDev/ansible-linux-compliance:ref:refs/heads/main`,
+- `sub` equal to `repo:FreeSecDev@347867179/ansible-linux-compliance@1433323044:ref:refs/heads/main`: the repository
+  uses GitHub immutable subjects, so the numeric owner and repository IDs are part of the subject and come from
+  variables,
+- `repository_id` equal to `1433323044` and `repository_owner_id` equal to `347867179`,
 - `job_workflow_ref` equal to `FreeSecDev/ansible-linux-compliance/.github/workflows/oidc-check.yml@refs/heads/main`.
 
 All comparisons are `StringEquals`; there are no wildcards. The maximum session duration is 3600 seconds. No role is
-issued to pull requests or forks. The role is read-only for `tofu plan` plus state and lock-file access on its prefix.
+issued to pull requests or forks. The role is read-only for `tofu plan`: it reads state and may write only the `.tflock` object for the native lock.
 Build and release roles are added by later issues with their own trust: the release role is pinned to the `release`
 environment of [ADR 0012](0012-github-native-releases-and-packages.md), which accepts `main` only and has no human
 reviewers, so the gate is automated and the trust must not depend on a reviewer.
@@ -65,7 +70,8 @@ reviewers, so the gate is automated and the trust must not depend on a reviewer.
 OpenTofu is pinned to `1.13.2`. It is four days old at the time of writing, but it is a security release that
 replaces compromised intermediate certificates, and security fixes are exempt from the seven-day release age rule.
 The AWS provider is pinned to `6.69.1` (released 2026-10-15) with a committed `.terraform.lock.hcl` holding hashes for
-`linux_amd64` and `linux_arm64`. Checkov `3.3.29` (released 2026-10-13) scans `infra/` in `make security` and the
+`linux_amd64` and `linux_arm64`. Checkov `3.3.29` (released 2026-10-13; its `packaging`, `asteval`, `virtualenv` and `certifi` resolution is overridden
+in `pyproject.toml` for security reasons) scans `infra/` in `make security` and the
 pre-commit hook, and no check is skipped. CI installs OpenTofu with `tools/iac/install-tofu.sh`, which verifies a pinned
 SHA-256 for the release archive.
 
@@ -88,8 +94,7 @@ close to nothing ([costs](../aws/costs.md)).
 ## Trade-offs
 
 Root credentials are used once. `job_workflow_ref` pins the workflow file name, so adding a plan workflow is a
-reviewed trust change. The plan role can write the state and lock objects of its own prefix, so a compromised
-workflow on `main` could corrupt that state, which versioning allows recovering.
+reviewed trust change. The plan role cannot write state, only the lock object, so it can at worst block a lock.
 
 ## Security implications
 

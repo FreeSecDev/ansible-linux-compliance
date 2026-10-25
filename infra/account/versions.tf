@@ -10,6 +10,7 @@ terraform {
 
   backend "s3" {
     encrypt      = true
+    kms_key_id   = "alias/aws/s3"
     use_lockfile = true
   }
 }

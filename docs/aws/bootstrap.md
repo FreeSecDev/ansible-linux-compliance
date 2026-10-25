@@ -14,6 +14,8 @@ workstation. CI never uses root or access keys; it assumes the OIDC role created
 - `gh auth status` succeeds with a token that may write repository variables on `FreeSecDev/ansible-linux-compliance`.
 - AWS credentials for the account in the environment (the project owner's authorized root session for this one
   time; any administrator role works too and is preferred). `AWS_REGION` is `eu-west-1`.
+- MFA enabled on the root user, done before the bootstrap if you use the root session. The script warns about this and
+  the typed confirmation is your last chance to stop.
 - An email address for budget alerts. The script asks for it and stores it only in the gitignored
   `infra/account/account.local.tfvars`.
 
@@ -49,6 +51,9 @@ The script never writes access keys or secrets to disk. The state bucket is crea
 because the OpenTofu backend needs it before the first `init`.
 
 ### Why SSE-KMS with the AWS-managed key
+
+The OpenTofu backend sets `kms_key_id = "alias/aws/s3"`, because with `encrypt = true` alone the backend sends SSE-S3
+(`AES256`) on every write, which overrides the bucket default.
 
 Both options encrypt at rest at no key cost. SSE-KMS with `aws/s3` additionally records each key use in CloudTrail,
 which gives an audit trail for state access, and the Bucket Key keeps KMS request charges negligible. A
@@ -86,8 +91,15 @@ The role trust policy allows `sts:AssumeRoleWithWebIdentity` only for tokens whe
 | Condition key | Operator | Value |
 |---|---|---|
 | `token.actions.githubusercontent.com:aud` | `StringEquals` | `sts.amazonaws.com` |
-| `token.actions.githubusercontent.com:sub` | `StringEquals` | `repo:FreeSecDev/ansible-linux-compliance:ref:refs/heads/main` |
+| `token.actions.githubusercontent.com:sub` | `StringEquals` | `repo:FreeSecDev@347867179/ansible-linux-compliance@1433323044:ref:refs/heads/main` |
+| `token.actions.githubusercontent.com:repository_id` | `StringEquals` | `1433323044` |
+| `token.actions.githubusercontent.com:repository_owner_id` | `StringEquals` | `347867179` |
 | `token.actions.githubusercontent.com:job_workflow_ref` | `StringEquals` | `FreeSecDev/ansible-linux-compliance/.github/workflows/oidc-check.yml@refs/heads/main` |
+
+This repository uses GitHub immutable subjects (`use_immutable_subject: true`, checked with
+`gh api repos/FreeSecDev/ansible-linux-compliance/actions/oidc/customization/sub`), so the `sub` embeds the numeric
+organization and repository IDs. They come from the variables `github_owner_id` and `github_repository_id` and also
+feed the `repository_owner_id` and `repository_id` conditions.
 
 The maximum session duration is 3600 seconds. There is no role for pull requests or forks: a token from any other
 ref, event or repository matches nothing. Adding another workflow to the trust is a reviewed change to the
@@ -101,17 +113,19 @@ The role is read-only for `tofu plan` of `infra/account`:
 | ReadPlanRole | `iam:GetRole`, `iam:GetRolePolicy`, `iam:ListRolePolicies`, `iam:ListAttachedRolePolicies`, `iam:ListRoleTags` | the plan role ARN |
 | ReadBudget | `budgets:ViewBudget`, `budgets:ListTagsForResource` | the budget ARN |
 | ListStateBucketPrefix | `s3:ListBucket` | the state bucket, only for prefixes `account/*` and `env:/*` |
-| ReadWriteStateAndLock | `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | `account/terraform.tfstate` and `account/terraform.tfstate.tflock` in the state bucket |
+| ReadState | `s3:GetObject` | `account/terraform.tfstate` in the state bucket |
+| ManageStateLock | `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | `account/terraform.tfstate.tflock` in the state bucket |
 
-No action uses a wildcard and no resource is `*`. Writing state and the lock file is needed for a plan to take the
-native S3 lock (`use_lockfile = true`); the role cannot change any AWS resource.
+No action uses a wildcard and no resource is `*`. The role can read state but not write it; only the lock object is writable, which a plan needs for the native S3 lock
+(`use_lockfile = true`). `aws iam simulate-custom-policy` confirms `PutObject` and `DeleteObject` on the state object are
+implicitly denied. The role cannot change any AWS resource.
 
 ## Workflow permissions
 
 `.github/workflows/oidc-check.yml` is `workflow_dispatch` only, runs only on `main` and requests
 `id-token: write` and `contents: read` in its single job. `id-token: write` lets the job request the OIDC token that
 `aws-actions/configure-aws-credentials` exchanges for the role. It grants no write access to the repository. The
-zizmor `undocumented-permissions` audit is disabled in `.github/zizmor.yml` because YAML comments are banned and this
+zizmor `undocumented-permissions` audit ignores only `oidc-check.yml:20` in `.github/zizmor.yml` because YAML comments are banned and this
 paragraph is the explanation.
 
 ## Verification
@@ -126,7 +140,7 @@ gh run watch --repo FreeSecDev/ansible-linux-compliance
 The job output must show an ARN of the form
 `arn:aws:sts::910736812072:assumed-role/freesecdev-gha-ansible-linux-compliance-plan/oidc-check`.
 
-After a successful check, enable MFA on the root user and stop using the root session.
+After a successful check, sign out of the root session and stop using root.
 
 ## Local files
 

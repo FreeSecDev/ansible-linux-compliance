@@ -21,6 +21,28 @@ variable "github_repository" {
   default     = "FreeSecDev/ansible-linux-compliance"
 }
 
+variable "github_owner_id" {
+  description = "Numeric ID of the GitHub organization; immutable subjects embed it."
+  type        = string
+  default     = "347867179"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_owner_id))
+    error_message = "github_owner_id must be numeric."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Numeric ID of the GitHub repository; immutable subjects embed it."
+  type        = string
+  default     = "1433323044"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must be numeric."
+  }
+}
+
 variable "plan_workflow_files" {
   description = "Workflow files on main that may assume the plan role; each is matched exactly through job_workflow_ref."
   type        = list(string)

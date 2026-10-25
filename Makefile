@@ -39,7 +39,7 @@ Setup
 
 Formatting and linting
   format                Apply Ruff fixes and formatting
-  lint                  Run every implemented linter (repo, skills, python, yaml, actions, ansible)
+  lint                  Run every implemented linter (lock, repo, skills, python, yaml, actions, ansible)
   lint-python           Ruff lint, Ruff format check and Pylint
   lint-yaml             yamllint in strict mode
   lint-actions          actionlint for GitHub workflows
@@ -90,7 +90,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
-	lint-iac tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons \
 	test-integration test-coverage test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -122,7 +122,10 @@ format: require-uv
 	$(RUN) ruff check --fix .
 	$(RUN) ruff format .
 
-lint: lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible
+lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible
+
+lock-check: require-uv
+	uv lock --check
 
 lint-python: require-uv collection-link
 	$(RUN) ruff check .
@@ -218,6 +221,10 @@ packer-build:
 	$(call NOT_IMPLEMENTED,packer-build,FREES-64)
 
 aws-bootstrap-render:
+	@printf '%s' '$(AWS_ACCOUNT_ID)' | grep -Eq '^[0-9]{12}$$' || { printf 'error: AWS_ACCOUNT_ID must be 12 digits\n' >&2; exit 1; }
+	@printf '%s' '$(AWS_REGION)' | grep -Eq '^(eu-west-[123]|eu-central-1|eu-north-1)$$' || { printf 'error: AWS_REGION is not allow-listed\n' >&2; exit 1; }
+	@printf '%s' '$(STATE_BUCKET)' | grep -Eq '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$$' || { printf 'error: STATE_BUCKET is not a valid S3 bucket name\n' >&2; exit 1; }
+	@printf '%s' '$(GITHUB_REPOSITORY)' | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$$' || { printf 'error: GITHUB_REPOSITORY must be owner/name\n' >&2; exit 1; }
 	@mkdir -p $(dir $(BOOTSTRAP_SCRIPT))
 	sed $(BOOTSTRAP_RENDER_SED) $(BOOTSTRAP_TEMPLATE) > $(BOOTSTRAP_SCRIPT)
 	chmod 0700 $(BOOTSTRAP_SCRIPT)

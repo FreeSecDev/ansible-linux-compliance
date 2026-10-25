@@ -1,4 +1,5 @@
 ---
 rules:
   undocumented-permissions:
-    disable: true
+    ignore:
+      - oidc-check.yml:20

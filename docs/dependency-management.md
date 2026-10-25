@@ -82,6 +82,20 @@ not cover pre-commit hooks, Galaxy collections, OpenTofu providers or Packer plu
 through the Renovate schedule unless a maintainer acts on an advisory. Revisit this if Renovate's OSV-based alerts can be scoped to these ecosystems without overlapping
 Dependabot. Tracked on FREES-81.
 
+## Accepted exceptions
+
+| Package | Advisory | Owner | Jira | Justification | Expires |
+|---|---|---|---|---|---|
+| `ecdsa` 0.19.2 (transitive of Checkov) | GHSA-wj6h-64fc-37mp (Minerva timing attack) | project owner | FREES-82 | No fixed release exists. Checkov imports `ecdsa` only for signature verification (`VerifyingKey`), and the attack targets signing, so it does not apply. | 2027-01-23 |
+
+Re-run the OSV query over `uv.lock` before the expiry. Remove the entry as soon as a fixed `ecdsa` release exists or
+Checkov drops the dependency.
+
+Checkov pins `packaging<24.0` and `asteval==1.0.6`, which resolve to vulnerable `virtualenv`, `certifi` and `asteval`
+releases. `pyproject.toml` overrides these with `[tool.uv] override-dependencies` and `constraint-dependencies`, each
+justified in its `lint-justifications` table. `make lint` runs `uv lock --check`, so the lock cannot drift from
+`pyproject.toml`, and `exclude-newer` cutoffs are never committed.
+
 ## Vulnerability response targets
 
 | Severity | Fix or documented exception within |

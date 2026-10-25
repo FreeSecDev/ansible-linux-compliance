@@ -15,10 +15,23 @@ readonly TFVARS_FILE='account.local.tfvars'
 readonly PLAN_FILE='account.tfplan'
 readonly IDENTITY_CONFIRMATION="yes-${EXPECTED_ACCOUNT_ID}"
 readonly APPLY_CONFIRMATION="apply-${EXPECTED_ACCOUNT_ID}"
+readonly ALLOWED_REGIONS=(eu-west-1 eu-west-2 eu-west-3 eu-central-1 eu-north-1)
 
 fail() {
   printf 'error: %s\n' "$1" >&2
   exit 1
+}
+
+validate_rendered_values() {
+  local region_allowed=false allowed_region
+  [[ "${EXPECTED_ACCOUNT_ID}" =~ ^[0-9]{12}$ ]] || fail 'rendered account ID is not 12 digits'
+  for allowed_region in "${ALLOWED_REGIONS[@]}"; do
+    [[ "${EXPECTED_REGION}" == "${allowed_region}" ]] && region_allowed=true
+  done
+  [[ "${region_allowed}" == true ]] || fail "rendered region ${EXPECTED_REGION} is not allow-listed"
+  [[ "${STATE_BUCKET}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ && "${STATE_BUCKET}" != *..* ]] ||
+    fail 'rendered state bucket name is not a valid S3 bucket name'
+  [[ "${TARGET_REPOSITORY}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'rendered repository is not owner/name'
 }
 
 require_command() {
@@ -61,7 +74,8 @@ verify_identity() {
   if [[ "${caller_arn}" == *:root ]]; then
     printf '\n!!! WARNING: these are ROOT credentials. !!!\n'
     printf '!!! Root is accepted for this one-time bootstrap only (ADR 0014). !!!\n'
-    printf '!!! CI never uses root or access keys. Enable root MFA and stop using root afterwards. !!!\n\n'
+    printf '!!! Enable MFA on the root user BEFORE continuing; stop and do that first if it is not on. !!!\n'
+    printf '!!! CI never uses root or access keys. Stop using root after this run. !!!\n\n'
   fi
   printf 'This script creates the state bucket %s and applies %s.\n' "${STATE_BUCKET}" "${ACCOUNT_STACK_DIR}"
   confirm "${IDENTITY_CONFIRMATION}"
@@ -193,7 +207,7 @@ ensure_tfvars_file() {
   fi
   printf 'Budget alert email address (stored only in the gitignored %s): ' "${TFVARS_FILE}"
   read -r email
-  [[ "${email}" =~ ^[^@[:space:]\"]+@[^@[:space:]\"]+\.[^@[:space:]\"]+$ ]] || fail 'that does not look like an email address'
+  [[ "${email}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || fail 'that does not look like an email address'
   printf 'budget_alert_email = "%s"\n' "${email}" > "${ACCOUNT_STACK_DIR}/${TFVARS_FILE}"
 }
 
@@ -221,10 +235,11 @@ print_verification_steps() {
   printf '  gh run watch --repo %s\n\n' "${TARGET_REPOSITORY}"
   printf 'Expect aws sts get-caller-identity to print an assumed-role ARN ending in\n'
   printf 'assumed-role/freesecdev-gha-ansible-linux-compliance-plan/<session>.\n\n'
-  printf 'Now stop using root: enable MFA on the root user and sign out of the root session.\n'
+  printf 'Now stop using root: sign out of the root session.\n'
 }
 
 main() {
+  validate_rendered_values
   require_command aws
   require_command tofu
   require_command gh

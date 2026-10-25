@@ -33,7 +33,7 @@ make help
 | `bootstrap` | implemented | `install` plus tool version check |
 | `install` | implemented | `uv sync --frozen`, installs both git hook types |
 | `format` | implemented | `ruff check --fix` and `ruff format` |
-| `lint` | implemented | `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible` |
+| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible` |
 | `lint-ansible` | implemented | `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
