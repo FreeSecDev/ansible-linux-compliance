@@ -14,8 +14,14 @@ description:
     findings (the C(scan_run) document of ADR 0013), the provenance of the scan and the paths of the
     evidence files.
   - The datastream must have the SHA-256 O(expected_sha256) from the pinned content manifest. It is
-    verified before it is parsed and again by the scanner backend before and after the scan. A
-    profile that the datastream does not contain is an error and is never replaced by another one.
+    verified before it is parsed. A profile that the datastream does not contain is an error and is
+    never replaced by another one.
+  - The scanner never reads O(content_path). The module copies the datastream into the private,
+    root-only run directory (file mode C(0600)), computes the SHA-256 over exactly the bytes it
+    writes and stops with C(digest_mismatch) unless they are the pinned content. The scanner reads
+    only that copy, so a file swapped at O(content_path) after verification cannot change what is
+    scanned. The copy is removed after the scan; its source path and SHA-256 are returned in
+    RV(content).
   - The only backend is C(openscap). It runs C(oscap xccdf eval) through the audited process helper
     of the collection, with an argument list, no shell, a minimal environment, a timeout and
     validated arguments. It never remediates and never fetches remote resources.
@@ -42,7 +48,9 @@ options:
     description:
       - Absolute path of the datastream file, or of a directory that holds exactly one C(*-ds.xml)
         file.
-      - Paths containing C(..) are rejected, and no component may be a symbolic link.
+      - It is read only to verify it and to make the private copy that is scanned.
+      - Paths containing C(..) are rejected and the file itself must not be a symbolic link.
+      - The file name must match C([A-Za-z0-9._+-]{1,64}), because it labels the provenance.
     type: str
     required: true
   expected_sha256:
@@ -299,6 +307,13 @@ evidence:
       description: The run directory, null in check mode.
       type: str
       sample: /var/lib/freesecdev/linux_compliance/evidence/20261025T100000.123456Z
+    skipped:
+      description:
+        - Entries that the scanner wrote that are not regular files, with their C(path) and
+          C(type) (C(symlink), C(directory), C(fifo), C(socket) or C(other)). They are not changed
+          and not recorded as evidence. Empty in check mode.
+      type: list
+      elements: dict
     files:
       description: The evidence files, sorted by path. Empty in check mode.
       type: list
@@ -316,6 +331,20 @@ evidence:
         size:
           description: Size in bytes.
           type: int
+content:
+  description:
+    - The datastream that was scanned. Null when no scan ran.
+    - C(source_path) and C(sha256) identify the verified file on the host; C(private_copy) is the
+      copy in the run directory that the scanner read, and C(copy_removed) is always true because
+      the copy is deleted after the scan so that evidence does not hold the datastream again.
+  returned: success
+  type: dict
+  sample:
+    source_path: /opt/freesecdev/content/ssg-ubuntu2404-ds.xml
+    sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+    size: 12645122
+    private_copy: /var/lib/freesecdev/evidence/run-1/content/ssg-ubuntu2404-ds.xml
+    copy_removed: true
 disabled_rules:
   description: The disabled rules with their controlling variables, sorted by rule identifier.
   returned: success
@@ -428,6 +457,7 @@ def main() -> None:
             changed=False,
             evidence_written=result["evidence_written"],
             evidence=result["evidence"],
+            content=result["content"],
             disabled_rules=result["disabled_rules"],
             planned=result["planned"],
             run_id=result["run_id"],
@@ -440,6 +470,7 @@ def main() -> None:
         changed=False,
         evidence_written=result["evidence_written"],
         evidence=result["evidence"],
+        content=result["content"],
         disabled_rules=result["disabled_rules"],
         planned=result["planned"],
         run_id=result["run_id"],

@@ -126,6 +126,7 @@ def run(audit_job: audit.AuditJob, *, check_mode: bool) -> dict[str, Any]:
             "run_status": result["run_status"],
             "scanner": None if result["scan_run"] is None else result["scan_run"]["scanner"],
             "summary": result["summary"],
+            "content": result["content"],
             "error_message": None
             if result["scan_run"] is None
             else result["scan_run"]["error_message"],
@@ -154,6 +155,14 @@ def test_a_check_mode_scan_without_tailoring_evaluates_the_whole_profile(
     assert result["scan_run"]["profile_id"] == PROFILE
     assert result["scan_run"]["content"]["content_sha256"] == datastream[1]
     assert result["scan_run"]["content"]["source"] == datastream[0].name
+    copy = output_root / ".check-untailored" / "content" / datastream[0].name
+    assert result["content"] == {
+        "copy_removed": True,
+        "private_copy": str(copy),
+        "sha256": datastream[1],
+        "size": datastream[0].stat().st_size,
+        "source_path": str(datastream[0]),
+    }
     assert sorted(output_root.rglob("*")) == []
 
 
@@ -180,6 +189,10 @@ def test_a_tailored_scan_excludes_the_disabled_rules(
     )
     assert result["run_status"] == "completed", result["scan_run"]["error_message"]
     run_dir = output_root / "tailored"
+    assert result["content"]["private_copy"] == str(run_dir / "content" / datastream[0].name)
+    assert result["content"]["source_path"] == str(datastream[0])
+    assert result["content"]["sha256"] == datastream[1]
+    assert not (run_dir / "content").exists()
     tailoring = run_dir / "tailoring.xml"
     report("tailoring", tailoring.read_text(encoding="utf-8").splitlines())
     tailoring_sha256 = hashlib.sha256(tailoring.read_bytes()).hexdigest()

@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import stat
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -82,6 +83,7 @@ class FakeRunner:
         self.error: Exception | None = None
         self.on_evaluate: Callable[[Path], None] | None = None
         self.specs: list[process.CommandSpec] = []
+        self.scanned: list[tuple[str, str]] = []
 
     def __call__(self, spec: process.CommandSpec) -> process.CommandResult:
         self.specs.append(spec)
@@ -93,6 +95,9 @@ class FakeRunner:
         results = Path(args[args.index("--results") + 1])
         arf = Path(args[args.index("--results-arf") + 1])
         profile = args[args.index("--profile") + 1]
+        if self.on_evaluate is not None:
+            self.on_evaluate(results)
+        self.scanned.append((args[-1], hashlib.sha256(Path(args[-1]).read_bytes()).hexdigest()))
         document = self.document
         if document is None:
             document = results_xml(profile, self.results)
@@ -101,8 +106,6 @@ class FakeRunner:
         else:
             results.write_text(document, encoding="utf-8")
         arf.write_text("<arf/>", encoding="utf-8")
-        if self.on_evaluate is not None:
-            self.on_evaluate(results)
         return command_result(self.returncode, timed_out=self.timed_out)
 
     @property
@@ -208,7 +211,7 @@ def test_the_scanner_is_called_with_validated_arguments_only(harness: Harness) -
     assert spec.args[:4] == ("xccdf", "eval", "--profile", PROFILE)
     assert "--tailoring-file" not in spec.args
     assert "--remediate" not in spec.args
-    assert spec.args[-1] == str(harness.datastream)
+    assert spec.args[-1] == str(harness.run_dir / "content" / "synthetic-ds.xml")
     assert spec.timeout_seconds == 60.0
 
 
@@ -252,7 +255,7 @@ def test_check_mode_never_creates_the_output_root_and_then_runs_nothing(harness:
     assert "does not exist and check mode does not create it" in result["msg"]
     assert result["scan_run"] is None
     assert result["summary"] is None
-    assert result["evidence"] == {"directory": None, "files": []}
+    assert result["evidence"] == {"directory": None, "files": [], "skipped": []}
     assert harness.runner.specs == []
     assert not harness.output_root.exists()
     planned = result["planned"]
@@ -281,7 +284,7 @@ def test_check_mode_scans_for_real_and_keeps_nothing(harness: Harness) -> None:
     result = harness.run(check_mode=True, expected_sha256=SHA256.upper())
     assert result["changed"] is False
     assert result["evidence_written"] is False
-    assert result["evidence"] == {"directory": None, "files": []}
+    assert result["evidence"] == {"directory": None, "files": [], "skipped": []}
     assert result["run_status"] == "completed"
     assert outcomes(result) == {ALPHA: "pass", BETA: "fail"}
     assert result["summary"]["fail"] == 1
@@ -339,13 +342,38 @@ def test_check_mode_keeps_nothing_when_the_scan_fails(harness: Harness, failure:
 
 def test_check_mode_keeps_nothing_when_the_backend_refuses(harness: Harness) -> None:
     harness.output_root.mkdir(mode=0o700)
-    real = harness.root / "real-content"
-    real.mkdir()
-    shutil.copyfile(SYNTHETIC, real / "synthetic-ds.xml")
-    (harness.root / "linked").symlink_to(real)
     with pytest.raises(audit.AuditError) as raised:
-        harness.run(check_mode=True, content_path=str(harness.root / "linked" / "synthetic-ds.xml"))
+        refusing_auditor().run(harness.job(), check_mode=True)
     assert raised.value.error_type == "invalid_request"
+    assert raised.value.evidence_dir is None
+    assert snapshot(harness.output_root) == []
+
+
+def test_check_mode_reports_no_evidence_for_an_unregistered_backend(harness: Harness) -> None:
+    harness.output_root.mkdir(mode=0o700)
+    planned = audit.plan(harness.job(), UID)
+    empty = audit.Auditor(owner_uid=UID, registry=scanner.BackendRegistry())
+    with pytest.raises(audit.AuditError) as raised:
+        empty.preview(planned)
+    assert raised.value.error_type == "unknown_backend"
+    assert raised.value.evidence_dir is None
+    assert snapshot(harness.output_root) == []
+
+
+def test_check_mode_scans_a_private_copy_and_removes_it(harness: Harness) -> None:
+    harness.output_root.mkdir(mode=0o700)
+
+    def swap(_results: Path) -> None:
+        harness.datastream.write_bytes(b"<swapped/>")
+
+    harness.runner.on_evaluate = swap
+    result = harness.run(check_mode=True)
+    ((scanned_path, scanned_sha256),) = harness.runner.scanned
+    expected = harness.output_root / ".check-run-1" / "content" / "synthetic-ds.xml"
+    assert scanned_path == str(expected)
+    assert scanned_sha256 == SHA256
+    assert result["content"]["private_copy"] == scanned_path
+    assert result["run_status"] == "completed"
     assert snapshot(harness.output_root) == []
 
 
@@ -570,15 +598,136 @@ def test_oversized_results_fail_the_run(harness: Harness) -> None:
     assert "larger than 1024 bytes" in result["scan_run"]["error_message"]
 
 
-def test_content_swapped_after_verification_fails_the_run(harness: Harness) -> None:
+def test_the_scanner_reads_only_the_verified_private_copy(harness: Harness) -> None:
+    hostile = b"<attacker-controlled datastream/>"
+
+    def swap(_results: Path) -> None:
+        harness.datastream.write_bytes(hostile)
+
+    harness.runner.on_evaluate = swap
+    result = harness.run()
+    ((scanned_path, scanned_sha256),) = harness.runner.scanned
+    assert scanned_path == str(harness.run_dir / "content" / "synthetic-ds.xml")
+    assert scanned_sha256 == SHA256
+    assert harness.datastream.read_bytes() == hostile
+    assert result["run_status"] == "completed"
+    assert outcomes(result) == {ALPHA: "pass", BETA: "fail"}
+    assert result["content"] == {
+        "copy_removed": True,
+        "private_copy": scanned_path,
+        "sha256": SHA256,
+        "size": SYNTHETIC.stat().st_size,
+        "source_path": str(harness.datastream),
+    }
+    assert not (harness.run_dir / "content").exists()
+    assert result["scan_run"]["content"]["content_sha256"] == SHA256
+
+
+def test_a_source_that_changed_after_verification_is_never_scanned(harness: Harness) -> None:
     auditor = harness.auditor()
     planned = audit.plan(harness.job(), UID)
     harness.datastream.write_bytes(SYNTHETIC.read_bytes() + b"\n")
-    outcome = auditor.execute(planned)
-    assert outcome.run.status is model.ScanStatus.FAILED
-    assert outcome.run.error_message is not None
-    assert "not the pinned" in outcome.run.error_message
-    assert {finding.outcome for finding in outcome.run.findings} == {model.Outcome.ERROR}
+    with pytest.raises(audit.AuditError, match="changed after verification") as raised:
+        auditor.execute(planned)
+    assert raised.value.error_type == "digest_mismatch"
+    assert raised.value.evidence_dir == str(harness.run_dir)
+    assert harness.runner.specs == []
+    assert not (harness.run_dir / "content").exists()
+
+
+def test_a_source_replaced_by_a_symlink_after_verification_is_never_scanned(
+    harness: Harness,
+) -> None:
+    auditor = harness.auditor()
+    planned = audit.plan(harness.job(), UID)
+    harness.datastream.unlink()
+    harness.datastream.symlink_to(SYNTHETIC)
+    with pytest.raises(audit.AuditError, match="cannot be copied") as raised:
+        auditor.execute(planned)
+    assert raised.value.error_type == "invalid_content"
+    assert harness.runner.specs == []
+    assert not (harness.run_dir / "content").exists()
+
+
+def test_a_copy_that_cannot_be_written_is_reported(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned = audit.plan(harness.job(), UID)
+    original = Path.open
+
+    def failing_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if args and args[0] == "xb" and self.parent.name == "content":
+            raise PermissionError(13, "Permission denied")
+        return cast("Any", original(self, *args, **kwargs))
+
+    monkeypatch.setattr(Path, "open", failing_open)
+    with pytest.raises(audit.AuditError, match="cannot be copied") as raised:
+        harness.auditor().execute(planned)
+    assert raised.value.error_type == "evidence_write_failed"
+    assert not (harness.run_dir / "content").exists()
+
+
+def test_a_copy_directory_that_cannot_be_created_is_reported(harness: Harness) -> None:
+    directory = harness.root / "copy-target"
+    directory.mkdir()
+    with pytest.raises(audit.AuditError, match="private copy cannot be created") as raised:
+        audit.copy_content(str(harness.datastream), directory, SHA256)
+    assert raised.value.error_type == "evidence_write_failed"
+    assert directory.exists()
+
+
+def test_a_copy_that_cannot_be_removed_is_reported(harness: Harness) -> None:
+    locked: list[Path] = []
+
+    def lock(results: Path) -> None:
+        directory = results.parent.parent / "content"
+        directory.chmod(0o500)
+        locked.append(directory)
+
+    harness.runner.on_evaluate = lock
+    try:
+        with pytest.raises(audit.AuditError, match="could not be removed") as raised:
+            harness.run()
+        assert raised.value.error_type == "cleanup_failed"
+        assert raised.value.evidence_dir == str(harness.run_dir)
+    finally:
+        for directory in locked:
+            directory.chmod(0o700)
+
+
+def test_a_completed_run_with_another_digest_becomes_failed(harness: Harness) -> None:
+    run = replace(
+        static_run(model.ScanStatus.COMPLETED, finding(ALPHA, model.Outcome.PASS)),
+        profile_id=PROFILE,
+        content=model.Provenance("synthetic-ds.xml", "1.2.3", "0" * 64),
+        findings=(finding(ALPHA, model.Outcome.PASS), finding(BETA, model.Outcome.PASS)),
+    )
+    auditor, _backend = static_auditor(run)
+    result = cast("dict[str, Any]", auditor.run(harness.job(), check_mode=False))
+    assert result["run_status"] == "failed"
+    assert "not the pinned" in result["scan_run"]["error_message"]
+    assert set(outcomes(result).values()) == {"error"}
+
+
+def test_a_datastream_name_that_cannot_label_the_provenance_is_refused_early(
+    harness: Harness,
+) -> None:
+    odd = harness.content_dir / "synthetic ds.xml"
+    harness.datastream.rename(odd)
+    with pytest.raises(audit.AuditError, match="file name must match") as raised:
+        harness.run(content_path=str(odd))
+    assert raised.value.error_type == "invalid_argument"
+    assert not harness.output_root.exists()
+
+
+def test_a_symlinked_content_directory_no_longer_matters(harness: Harness) -> None:
+    link = harness.root / "linked"
+    link.symlink_to(harness.content_dir)
+    result = harness.run(content_path=str(link / "synthetic-ds.xml"))
+    assert result["run_status"] == "completed"
+    assert result["content"]["source_path"] == str(link / "synthetic-ds.xml")
+    ((scanned_path, _digest),) = harness.runner.scanned
+    assert scanned_path.startswith(str(harness.run_dir))
 
 
 def test_a_digest_mismatch_stops_before_anything_runs(harness: Harness) -> None:
@@ -986,17 +1135,27 @@ def test_the_default_registry_holds_the_openscap_backend(harness: Harness) -> No
     assert result["planned"]["backend"] == "openscap"
 
 
+class RefusingBackend:
+    """A backend that refuses every request."""
+
+    def audit(self, request: scanner.ScanRequest) -> model.ScanRun:
+        message = f"refused {request.run_id}"
+        raise scanner.ScanRequestError(message)
+
+
+def refusing_auditor() -> audit.Auditor:
+    registry = scanner.BackendRegistry()
+    registry.register("openscap", lambda _settings: RefusingBackend())
+    return audit.Auditor(owner_uid=UID, registry=registry)
+
+
 def test_a_backend_request_error_is_reported_with_the_run_directory(harness: Harness) -> None:
-    real = harness.root / "real-content"
-    real.mkdir()
-    shutil.copyfile(SYNTHETIC, real / "synthetic-ds.xml")
-    link = harness.root / "linked"
-    link.symlink_to(real)
+    disabled = audit.parse_disabled_rules([{"rule_id": ALPHA}])
     with pytest.raises(audit.AuditError) as raised:
-        harness.run(content_path=str(link / "synthetic-ds.xml"))
+        refusing_auditor().run(harness.job(disabled_rules=disabled), check_mode=False)
     assert raised.value.error_type == "invalid_request"
     assert raised.value.evidence_dir == str(harness.run_dir)
-    assert harness.runner.specs == []
+    assert not (harness.run_dir / "content").exists()
 
 
 def test_an_evidence_write_failure_is_reported(harness: Harness) -> None:
@@ -1024,6 +1183,11 @@ def test_scanner_entries_that_are_not_regular_files_are_ignored(harness: Harness
     result = harness.run()
     names = {Path(item["path"]).name for item in result["evidence"]["files"]}
     assert names == {"results.xml", "results-arf.xml", "scan-run.json"}
+    scan = harness.run_dir / "scan"
+    assert result["evidence"]["skipped"] == [
+        {"path": str(scan / "link"), "type": "symlink"},
+        {"path": str(scan / "nested"), "type": "directory"},
+    ]
     assert mode(outside) == 0o644
 
 
@@ -1260,3 +1424,42 @@ def test_an_explicitly_toggled_rule_still_needs_a_valid_identifier(rule_id: obje
     if isinstance(rule_id, str):
         with pytest.raises(audit.AuditError):
             audit.parse_disabled_rules([{"rule_id": rule_id, "disabled_by": ALPHA_TOGGLE}])
+
+
+@pytest.mark.parametrize(
+    ("mode_bits", "expected"),
+    [
+        (stat.S_IFLNK, "symlink"),
+        (stat.S_IFDIR, "directory"),
+        (stat.S_IFIFO, "fifo"),
+        (stat.S_IFSOCK, "socket"),
+        (stat.S_IFCHR, "other"),
+    ],
+)
+def test_skipped_entry_types(mode_bits: int, expected: str) -> None:
+    assert audit.entry_type(mode_bits) == expected
+
+
+def test_xml_escape_covers_every_markup_character() -> None:
+    assert audit.xml_escape("a&b<c>d\"e'f") == "a&amp;b&lt;c&gt;d&quot;e&apos;f"
+    assert audit.xml_escape(ALPHA) == ALPHA
+
+
+def test_check_mode_reports_a_copy_that_cannot_be_removed(harness: Harness) -> None:
+    harness.output_root.mkdir(mode=0o700)
+    locked: list[Path] = []
+
+    def lock(results: Path) -> None:
+        directory = results.parent.parent / "content"
+        directory.chmod(0o500)
+        locked.append(directory)
+
+    harness.runner.on_evaluate = lock
+    try:
+        with pytest.raises(audit.AuditError, match="could not be removed") as raised:
+            harness.run(check_mode=True)
+        assert raised.value.error_type == "cleanup_failed"
+        assert raised.value.evidence_dir is not None
+    finally:
+        for directory in locked:
+            directory.chmod(0o700)

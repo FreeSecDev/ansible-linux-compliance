@@ -222,11 +222,13 @@ def test_check_mode_with_an_existing_output_dir_returns_real_findings(
     assert code == 0
     assert result["changed"] is False
     assert result["evidence_written"] is False
-    assert result["evidence"] == {"directory": None, "files": []}
+    assert result["evidence"] == {"directory": None, "files": [], "skipped": []}
     assert result["run_status"] == "completed"
     findings = {item["rule_id"]: item["outcome"] for item in result["scan_run"]["findings"]}
     assert findings == {ALPHA: "pass", BETA: "fail"}
     assert "no evidence was kept" in result["msg"]
+    assert result["content"]["sha256"] == SHA256
+    assert result["content"]["copy_removed"] is True
     assert runner.calls == 2
     assert list(root.iterdir()) == []
 
@@ -304,13 +306,22 @@ def test_a_symlinked_output_directory_is_refused(
 
 
 def test_an_error_after_the_run_directory_exists_names_it(
-    capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
+    capsys: pytest.CaptureFixture[str],
+    runner: FakeRunner,
+    content: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    linked = content.parent.parent / "linked"
-    linked.symlink_to(content.parent)
-    code, result = run(capsys, arguments(content, content_path=str(linked / content.name)))
+    original = audit.copy_content
+    pinned_bytes = content.read_bytes()
+
+    def change_after_plan(path: str, directory: Path, pinned: str) -> audit.ContentCopy:
+        content.write_bytes(pinned_bytes + b" ")
+        return original(path, directory, pinned)
+
+    monkeypatch.setattr(audit, "copy_content", change_after_plan)
+    code, result = run(capsys, arguments(content))
     assert code == 1
-    assert result["error_type"] == "invalid_request"
+    assert result["error_type"] == "digest_mismatch"
     assert result["evidence_written"] is True
     assert result["evidence_dir"] == str(content.parent.parent / "evidence" / "run-1")
     assert runner.calls == 0

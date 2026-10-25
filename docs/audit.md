@@ -44,17 +44,47 @@ The variables are listed in the [role README](../roles/audit/README.md).
 
 1. **Plan**. Validate every argument; resolve the content path; verify the datastream SHA-256 and
    parse it with the hardened catalog parser; find the profile (a missing profile is `profile_not_found`, never
-   replaced); check that every disabled rule is selected by the profile and that at least one rule stays enabled;
-   inspect the output directory without creating anything.
+   replaced); check that the datastream file name fits the provenance label (`[A-Za-z0-9._+-]{1,64}`); check that every
+   disabled rule is selected by the profile and that at least one rule stays enabled; inspect the output directory
+   without creating anything. Everything the backend would refuse is refused here, before anything is created.
 2. **Execute** (outside check mode). Create missing components of the output directory (mode `0700`), create the run
-   directory `<output_dir>/<run_id>` (mode `0700`, must not exist), write the tailoring file when rules are disabled,
-   run the backend, set every scanner output file to mode `0600`, and write the normalized scan run to
-   `scan-run.json`.
+   directory `<output_dir>/<run_id>` (mode `0700`, must not exist), make the private copy of the datastream (below),
+   write the tailoring file when rules are disabled, run the backend on the copy, remove the copy, set every scanner
+   output file to mode `0600`, and write the normalized scan run to `scan-run.json`.
 3. **Preview** (check mode). Run the same scan into a private temporary directory and keep nothing; see below.
+
+### The scanner reads only a private copy
+
+`oscap` runs as root and reads the datastream, so the bytes it reads must be the pinned ones. Hashing the operator's
+file before and after the scan does not prove that: a user who can write the file or its directory could swap it while
+the scan runs and restore it afterwards. The module therefore never lets the scanner read `content_path`:
+
+1. The run directory (or the check-mode directory) is root-only and `0700`. In it the module creates `content/`
+   (`0700`) and copies the datastream to `content/<file name>` (`0600`, same file name, so the provenance label is
+   unchanged).
+2. The source is opened once as a regular file that is not a symlink and is at most 256 MiB, and the SHA-256 is computed
+   over exactly the bytes written to the copy, in one pass. Unless it is the pinned digest the copy is deleted and the
+   audit stops with `digest_mismatch` before any scanner runs; a source that cannot be read safely is `invalid_content`.
+3. The backend is configured with the run directory as both its content root and its output root, and gets the copy as
+   its datastream. The tailoring file is in the same directory and references no file; the copy is the only datastream
+   on the `oscap` command line.
+4. After the scan (also when it fails) the copy and `content/` are removed, so a run does not keep another 12 to 30 MB.
+   The result reports `content`: `source_path`, `sha256` and `size` of what was copied, `private_copy` (the path the
+   scanner read) and `copy_removed: true`. The backend still hashes the copy before and after the scan, and a completed
+   run whose recorded digest is not the pinned one becomes `failed`.
+
+Only root can change the copy, so a swap of `content_path` after verification cannot change what is scanned; the
+regression tests swap the source during the scan and show that the scanner read the pinned bytes. Because the bytes
+are verified while they are copied, symlinks in the directories above `content_path` no longer matter for integrity
+and are accepted; the file itself must not be a symlink. The earlier rule that refused a symlink anywhere in the content
+path (because the backend's content root was the common path of the datastream and the run directory, often `/`) is
+gone, because the content root is now the run directory.
+
+### Scanner invocation
 
 The scan runs through the backend registry (`backends.default_registry()`). The only backend is OpenSCAP, which runs
 `oscap xccdf eval --profile <id> [--tailoring-file <run>/tailoring.xml] --results-arf <run>/scan/results-arf.xml
---results <run>/scan/results.xml <datastream>` through `process.run`: an argument list, `shell=False`, a binary from a
+--results <run>/scan/results.xml <run>/content/<datastream>` through `process.run`: an argument list, `shell=False`, a binary from a
 trusted root-owned directory, a minimal environment, a timeout and bounded output. `--remediate` and remote resources
 are refused by the process policy.
 
@@ -68,7 +98,8 @@ are refused by the process policy.
 | Any other exit status, a signal, a missing or unstartable `oscap` | `failed` | all `error` |
 | Timeout (`scan_timeout`, the process group is killed) | `timed_out` | all `error` |
 | Missing, oversized, malformed or hostile results, results for another profile or benchmark, unexpected or duplicate rules | `failed` | all `error` |
-| The datastream digest at scan time differs from the pinned one | `failed` | all `error` |
+| The datastream no longer has the pinned digest when it is copied | no run: `digest_mismatch`, nothing scanned | none |
+| The backend records another digest for the copy than the pinned one | `failed` | all `error` |
 | A rule of the profile has no result (exit `2`) | `completed` | that rule `error` |
 
 A run that is not `completed` has an `error_message`, every rule of the profile (including disabled ones) is `error`,
@@ -161,10 +192,10 @@ an error, and disabling every rule is `nothing_to_scan`.
 | `output_exists` | The run directory already exists |
 | `nothing_to_scan` | Every rule of the profile is disabled |
 | `unknown_backend` | The backend is not registered |
-| `digest_mismatch`, `profile_not_found`, `unsupported_content`, `invalid_content` | Content errors from the catalog |
-| `invalid_request` | The backend refused the request (for example a symlink in the content path); `evidence_dir` names the run directory |
+| `digest_mismatch`, `profile_not_found`, `unsupported_content`, `invalid_content` | Content errors from the catalog, or from making the private copy |
+| `invalid_request` | The backend refused the request; outside check mode `evidence_dir` names the run directory, in check mode it is null because the temporary directory is gone |
 | `evidence_write_failed` | An evidence file could not be written, or the check-mode scan could not write its files |
-| `cleanup_failed` | The temporary check-mode directory could not be removed; `evidence_dir` names it |
+| `cleanup_failed` | The private copy or the temporary check-mode directory could not be removed; `evidence_dir` names what is left |
 | `scan_incomplete` | The scan did not complete and `fail_on_incomplete` is true; the full result is included |
 
 ## Tests
@@ -172,10 +203,13 @@ an error, and disabling every rule is `nothing_to_scan`.
 Unit tests (`tests/unit/plugins/module_utils/compliance/test_audit.py`, `tests/unit/plugins/modules/test_compliance_scan.py`)
 use a fake process layer and never run `oscap`. They cover exit statuses 0, 1, 2, 137 and a signal, timeouts, a missing
 scanner, contradicting results, malformed, hostile (billion laughs, external entity, DOCTYPE), oversized and foreign
-results, content swapped after verification, malicious profile, rule, toggle and run identifiers, path traversal,
+results, a source swapped during the scan (the scanner still reads the pinned private copy), a source changed or
+replaced by a symlink after verification (refused at copy time), copy write and removal failures, malicious profile, rule, toggle and run identifiers, path traversal,
 symlinked output directories and ancestors, planted run directories, open permissions, foreign owners, races during
 directory creation, tailoring, check mode (real findings, and nothing left behind on success, scanner failure, timeout,
-a missing scanner, malformed results, planted symlinks and nested directories, a backend refusal and a write failure)
+a missing scanner, malformed results, planted symlinks and nested directories, a backend refusal and a write failure,
+and no `evidence_dir` for errors after the temporary directory is gone), skipped non-regular scanner entries, XML
+escaping of the tailoring file
 and repeated runs. `audit.py` and the module have 100% line and branch coverage.
 
 `make test-oscap-integration` (CI job `oscap-integration`) runs a real `oscap`. It fetches the pinned Ubuntu 24.04

@@ -259,8 +259,13 @@ verdict from findings alone. These invariants apply to every backend and every r
 - **Scanner failures are results, not exceptions.** A `failed` or `timed_out` run is returned with all findings `error`
   and, by default (`fail_on_incomplete: true`), the task fails with `error_type: scan_incomplete` and the full result.
   The audit role registers the result first and fails afterwards, so the evidence of a failed scan is kept.
-- **Pinned digest at scan time.** A completed run whose `content.content_sha256` differs from the pinned digest is turned
-  into a `failed` run, so content swapped between verification and scan never yields `pass` or `fail`.
+- **The scanner reads only a verified private copy.** Hashing the operator's file before and after the scan does not
+  bind what `oscap` read: the file could be swapped during the scan and restored. The module therefore copies the
+  datastream into the root-only `0700` run directory (`content/<name>`, `0600`), hashes exactly the bytes it writes and
+  stops with `digest_mismatch` unless they are the pinned content; `oscap` reads only that copy, which only root can
+  change. The copy is removed after the scan and reported as `content` (`source_path`, `sha256`, `size`,
+  `private_copy`, `copy_removed`). A completed run whose recorded `content.content_sha256` differs from the pinned
+  digest still becomes `failed`.
 - **Summary.** The module summary is the count per outcome, the total and `run_status`; it contains no percentage and no
   compliance statement ([ADR 0016](0016-report-schema-and-summary-semantics.md)). `scan-run.json` is the `model.dumps`
   document that the reporting package reads as ScanRun JSON.

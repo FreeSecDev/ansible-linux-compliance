@@ -52,6 +52,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     model,
     process,
     scanner,
+    xmlsafe,
 )
 
 if TYPE_CHECKING:
@@ -79,6 +80,7 @@ RUN_STATUS_NOT_RUN: Final[str] = "not_run"
 RULE_TOGGLE_PREFIX: Final[str] = "linux_compliance_rule_"
 RULE_TOGGLE_SUFFIX: Final[str] = "_enabled"
 
+_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 _BACKEND: Final[str] = r"[a-z][a-z0-9_-]{0,63}"
 _TOGGLE: Final[str] = r"linux_compliance_[a-z0-9_]{1,100}_enabled"
@@ -98,6 +100,9 @@ ERROR_UNKNOWN_BACKEND: Final[str] = "unknown_backend"
 ERROR_INVALID_REQUEST: Final[str] = "invalid_request"
 ERROR_EVIDENCE: Final[str] = "evidence_write_failed"
 ERROR_CLEANUP: Final[str] = "cleanup_failed"
+ERROR_DIGEST_MISMATCH: Final[str] = "digest_mismatch"
+ERROR_INVALID_CONTENT: Final[str] = "invalid_content"
+CONTENT_DIRECTORY_NAME: Final[str] = "content"
 PREVIEW_PREFIX: Final[str] = ".check-"
 MAX_DISCARD_DEPTH: Final[int] = 4
 
@@ -525,9 +530,11 @@ def _tailored_profile_id(profile_id: str) -> str:
 def plan(job: AuditJob, owner_uid: int) -> AuditPlan:
     """Validate an audit against the host without writing anything.
 
-    Verifies the datastream digest and the profile, checks that every disabled
-    rule is selected by the profile and that at least one rule stays enabled,
-    and inspects the output root and the run directory.
+    Verifies the datastream digest and the profile and the datastream file name,
+    checks that every disabled rule is selected by the profile and that at least
+    one rule stays enabled, and inspects the output root and the run directory.
+    Everything the backend would refuse about the request is refused here, before
+    anything is created.
 
     Args:
         job: The validated job.
@@ -537,6 +544,11 @@ def plan(job: AuditJob, owner_uid: int) -> AuditPlan:
         AuditError: For every problem, with a stable ``error_type``.
     """
     content, benchmark, rules = _verified_profile(job)
+    if re.fullmatch(_CONTENT_NAME, Path(content).name) is None:
+        _invalid(
+            f"the datastream file name must match {_CONTENT_NAME}, because it labels the "
+            f"provenance: {_safe(Path(content).name)}"
+        )
     selected = {rule.rule_id for rule in rules}
     outside = [rule.rule_id for rule in job.disabled_rules if rule.rule_id not in selected]
     if outside:
@@ -558,24 +570,38 @@ def plan(job: AuditJob, owner_uid: int) -> AuditPlan:
     return AuditPlan(job, content, benchmark, rules, expected, evaluated, run_dir, exists)
 
 
+def xml_escape(value: str) -> str:
+    """Escape ``&``, ``<``, ``>``, ``"`` and ``'`` for XML text and attribute values."""
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
 def tailoring_document(audit_plan: AuditPlan, moment: datetime) -> str:
     """Return the XCCDF 1.2 tailoring document that deselects the disabled rules.
 
     Every identifier in it has been validated against the XCCDF identifier
-    alphabet, which contains no XML markup characters, so no escaping is needed.
+    alphabet, which contains no XML markup characters; every value is escaped
+    with :func:`xml_escape` anyway, so a later change of the alphabet cannot
+    inject markup. The document references no file: the scanner gets the
+    datastream (the private copy) on its command line.
     """
     stamp = moment.astimezone(timezone.utc).strftime(model.TIMESTAMP_FORMAT)
-    profile = audit_plan.job.profile_id
-    tailored = audit_plan.evaluated_profile_id
+    profile = xml_escape(audit_plan.job.profile_id)
+    tailored = xml_escape(audit_plan.evaluated_profile_id)
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<xccdf:Tailoring xmlns:xccdf="{XCCDF_NAMESPACE}" id="{TAILORING_ID}">',
-        f'  <xccdf:version time="{stamp}">1</xccdf:version>',
+        f'<xccdf:Tailoring xmlns:xccdf="{XCCDF_NAMESPACE}" id="{xml_escape(TAILORING_ID)}">',
+        f'  <xccdf:version time="{xml_escape(stamp)}">1</xccdf:version>',
         f'  <xccdf:Profile id="{tailored}" extends="{profile}">',
-        f"    <xccdf:title>{TAILORING_TITLE}</xccdf:title>",
+        f"    <xccdf:title>{xml_escape(TAILORING_TITLE)}</xccdf:title>",
     ]
     lines.extend(
-        f'    <xccdf:select idref="{rule.rule_id}" selected="false"/>'
+        f'    <xccdf:select idref="{xml_escape(rule.rule_id)}" selected="false"/>'
         for rule in audit_plan.job.disabled_rules
     )
     lines.extend(["  </xccdf:Profile>", "</xccdf:Tailoring>", ""])
@@ -611,11 +637,60 @@ class AuditOutcome:
         plan: The plan that was executed.
         run: The normalized scan run.
         evidence: The evidence files, sorted by path.
+        skipped: Entries of the scanner output directory that are not regular
+            files and were therefore neither recorded nor changed.
+        content: The private copy of the datastream that the scanner read.
     """
 
     plan: AuditPlan
     run: model.ScanRun
     evidence: tuple[EvidenceFile, ...]
+    skipped: tuple[SkippedEntry, ...]
+    content: ContentCopy
+
+
+@dataclass(frozen=True)
+class SkippedEntry:
+    """An entry of the scanner output directory that is not a regular file.
+
+    Attributes:
+        path: Absolute path of the entry.
+        type: ``symlink``, ``directory``, ``fifo``, ``socket`` or ``other``.
+    """
+
+    path: str
+    type: str
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible mapping."""
+        return {"path": self.path, "type": self.type}
+
+
+@dataclass(frozen=True)
+class ContentCopy:
+    """The private copy of the datastream that the scanner reads.
+
+    Attributes:
+        source_path: The verified datastream on the host.
+        copy_path: The copy in the run directory, the only file the scanner reads.
+        sha256: SHA-256 of exactly the bytes written to the copy; equal to the pin.
+        size: Size of the copy in bytes.
+    """
+
+    source_path: str
+    copy_path: str
+    sha256: str
+    size: int
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible mapping; the copy is always removed after the scan."""
+        return {
+            "copy_removed": True,
+            "private_copy": self.copy_path,
+            "sha256": self.sha256,
+            "size": self.size,
+            "source_path": self.source_path,
+        }
 
 
 def _write_new_file(path: Path, text: str) -> None:
@@ -639,21 +714,98 @@ def _record(path: Path, kind: str) -> EvidenceFile:
     return EvidenceFile(str(path), kind, _digest(path), path.lstat().st_size)
 
 
-def _scanner_files(directory: Path) -> list[EvidenceFile]:
+def entry_type(mode: int) -> str:
+    """Return the evidence listing type of a non-regular directory entry."""
+    if stat.S_ISLNK(mode):
+        return "symlink"
+    if stat.S_ISDIR(mode):
+        return "directory"
+    if stat.S_ISFIFO(mode):
+        return "fifo"
+    if stat.S_ISSOCK(mode):
+        return "socket"
+    return "other"
+
+
+def _scanner_files(directory: Path) -> tuple[list[EvidenceFile], list[SkippedEntry]]:
     info = _lstat(directory)
     if info is None or not stat.S_ISDIR(info.mode):
-        return []
+        return [], []
     entries = sorted(directory.iterdir())
     if len(entries) > MAX_EVIDENCE_ENTRIES:
         message = f"the scanner wrote more than {MAX_EVIDENCE_ENTRIES} entries"
         raise AuditError(ERROR_EVIDENCE, message, str(directory.parent))
     recorded: list[EvidenceFile] = []
+    skipped: list[SkippedEntry] = []
     for entry in entries:
-        if not stat.S_ISREG(entry.lstat().st_mode):
+        mode = entry.lstat().st_mode
+        if not stat.S_ISREG(mode):
+            skipped.append(SkippedEntry(str(entry), entry_type(mode)))
             continue
         entry.chmod(FILE_MODE)
         recorded.append(_record(entry, "scanner_output"))
-    return recorded
+    return recorded, skipped
+
+
+def copy_content(source: str, directory: Path, pinned: str) -> ContentCopy:
+    """Copy the datastream into a new private directory and verify the copy.
+
+    The source is opened once as a regular file that is not a symlink and is at
+    most :data:`catalog.DEFAULT_MAX_BYTES` long. The SHA-256 is computed over
+    exactly the bytes written to the copy (mode 0600, same file name), in one pass,
+    so the copy has the pinned content or the audit stops. A copy that does not
+    match is deleted. ``directory`` is created with mode 0700 and must not exist.
+
+    Raises:
+        AuditError: ``digest_mismatch`` if the bytes are not the pinned content,
+            ``invalid_content`` if the source cannot be read safely, and
+            ``evidence_write_failed`` if the copy cannot be written.
+    """
+    target = directory / Path(source).name
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        directory.mkdir(mode=DIRECTORY_MODE)
+    except OSError as error:
+        message = f"the private copy cannot be created: {error.strerror or type(error).__name__}"
+        raise AuditError(ERROR_EVIDENCE, message) from error
+    try:
+        with (
+            xmlsafe.open_regular(source, catalog.DEFAULT_MAX_BYTES) as handle,
+            target.open("xb") as copy,
+        ):
+            target.chmod(FILE_MODE)
+            for chunk in xmlsafe.iter_handle_chunks(handle, catalog.DEFAULT_MAX_BYTES):
+                digest.update(chunk)
+                size += len(chunk)
+                copy.write(chunk)
+            copy.flush()
+    except xmlsafe.XmlSafetyError as error:
+        _discard_copy(directory)
+        raise AuditError(
+            ERROR_INVALID_CONTENT, f"the datastream cannot be copied: {error}"
+        ) from error
+    except OSError as error:
+        _discard_copy(directory)
+        message = f"the datastream cannot be copied: {error.strerror or type(error).__name__}"
+        raise AuditError(ERROR_EVIDENCE, message) from error
+    actual = digest.hexdigest()
+    if actual != pinned:
+        _discard_copy(directory)
+        message = f"the datastream changed after verification: expected {pinned}, copied {actual}"
+        raise AuditError(ERROR_DIGEST_MISMATCH, message)
+    return ContentCopy(source, str(target), actual, size)
+
+
+def _discard_copy(directory: Path) -> None:
+    try:
+        _discard_tree(directory)
+    except OSError as error:
+        message = (
+            "the private copy of the datastream could not be removed: "
+            f"{error.strerror or type(error).__name__}"
+        )
+        raise AuditError(ERROR_CLEANUP, message, str(directory)) from error
 
 
 def _truncate(text: str) -> str:
@@ -750,13 +902,12 @@ def _secure_directory(path: Path, owner_uid: int) -> None:
 
 
 def _run_backend(
-    audit_plan: AuditPlan, run_dir: Path, registry: scanner.BackendRegistry
+    audit_plan: AuditPlan, run_dir: Path, registry: scanner.BackendRegistry, content: ContentCopy
 ) -> model.ScanRun:
-    content_root = os.path.commonpath([str(Path(audit_plan.content_path).parent), str(run_dir)])
     tailoring = str(run_dir / TAILORING_FILE_NAME) if audit_plan.tailored else None
     try:
         settings = scanner.ScanSettings(
-            content_root,
+            str(run_dir),
             str(run_dir),
             audit_plan.job.timeout_seconds,
             audit_plan.job.max_result_bytes,
@@ -767,7 +918,7 @@ def _run_backend(
             host=audit_plan.job.host,
             benchmark_id=audit_plan.benchmark.benchmark_id,
             profile_id=audit_plan.evaluated_profile_id,
-            content_path=audit_plan.content_path,
+            content_path=content.copy_path,
             output_dir=SCAN_DIRECTORY_NAME,
             expected_rule_ids=audit_plan.expected_rule_ids,
             tailoring_path=tailoring,
@@ -800,7 +951,8 @@ def summarize(run: model.ScanRun | None) -> dict[str, object] | None:
 def report(
     audit_plan: AuditPlan,
     run: model.ScanRun | None,
-    evidence: tuple[EvidenceFile, ...] | None,
+    kept: AuditOutcome | None,
+    content: ContentCopy | None,
     message: str,
 ) -> dict[str, object]:
     """Return the module result for an audit.
@@ -808,8 +960,10 @@ def report(
     Args:
         audit_plan: The plan of the audit.
         run: The scan run, or ``None`` when no scanner ran.
-        evidence: The kept evidence files, or ``None`` when nothing was kept
-            (check mode).
+        kept: The executed audit whose evidence was kept, or ``None`` (check mode,
+            or no scan).
+        content: The private copy of the datastream that the scanner read, or
+            ``None`` when no scanner ran.
         message: Human-readable summary returned as ``msg``.
 
     ``changed`` is always false: an audit never changes the configuration of the
@@ -817,12 +971,14 @@ def report(
     """
     return {
         "changed": False,
+        "content": None if content is None else content.to_dict(),
         "disabled_rules": [rule.to_dict() for rule in audit_plan.job.disabled_rules],
         "evidence": {
-            "directory": None if evidence is None else audit_plan.run_dir,
-            "files": [] if evidence is None else [item.to_dict() for item in evidence],
+            "directory": None if kept is None else audit_plan.run_dir,
+            "files": [] if kept is None else [item.to_dict() for item in kept.evidence],
+            "skipped": [] if kept is None else [item.to_dict() for item in kept.skipped],
         },
-        "evidence_written": evidence is not None,
+        "evidence_written": kept is not None,
         "msg": message,
         "planned": audit_plan.to_dict(),
         "run_id": audit_plan.job.run_id,
@@ -834,11 +990,11 @@ def report(
 
 def _discard_tree(path: Path, depth: int = 0) -> None:
     if depth > MAX_DISCARD_DEPTH:
-        message = f"the temporary check-mode directory is nested too deeply: {_safe(path)}"
+        message = f"the temporary directory is nested too deeply: {_safe(path)}"
         raise AuditError(ERROR_CLEANUP, message, str(path))
     entries = sorted(path.iterdir())
     if len(entries) > MAX_EVIDENCE_ENTRIES:
-        message = f"the temporary check-mode directory has too many entries: {_safe(path)}"
+        message = f"the temporary directory has too many entries: {_safe(path)}"
         raise AuditError(ERROR_CLEANUP, message, str(path))
     for entry in entries:
         if stat.S_ISDIR(entry.lstat().st_mode):
@@ -889,14 +1045,27 @@ class Auditor:
         self._registry = backends.default_registry() if registry is None else registry
         self._clock = _utc_now if clock is None else clock
 
-    def _scan(self, audit_plan: AuditPlan, run_dir: Path) -> model.ScanRun:
-        if audit_plan.tailored:
-            tailoring = run_dir / TAILORING_FILE_NAME
-            _write_new_file(tailoring, tailoring_document(audit_plan, self._clock()))
-        return finalize_run(audit_plan, _run_backend(audit_plan, run_dir, self._registry))
+    def _scan(self, audit_plan: AuditPlan, run_dir: Path) -> tuple[model.ScanRun, ContentCopy]:
+        content = copy_content(
+            audit_plan.content_path,
+            run_dir / CONTENT_DIRECTORY_NAME,
+            audit_plan.job.expected_sha256.lower(),
+        )
+        try:
+            if audit_plan.tailored:
+                tailoring = run_dir / TAILORING_FILE_NAME
+                _write_new_file(tailoring, tailoring_document(audit_plan, self._clock()))
+            run = _run_backend(audit_plan, run_dir, self._registry, content)
+        finally:
+            _discard_copy(run_dir / CONTENT_DIRECTORY_NAME)
+        return finalize_run(audit_plan, run), content
 
     def execute(self, audit_plan: AuditPlan) -> AuditOutcome:
         """Create the run directory, run the backend and store the evidence.
+
+        The scanner reads only a private, verified copy of the datastream in the
+        run directory (:func:`copy_content`), which is removed after the scan; its
+        source path and SHA-256 are reported in ``content``.
 
         Raises:
             AuditError: For every problem that prevents a scan run from existing.
@@ -907,36 +1076,51 @@ class Auditor:
         run_dir = Path(audit_plan.run_dir)
         _secure_directory(run_dir, self._owner_uid)
         try:
-            run = self._scan(audit_plan, run_dir)
+            run, content = self._scan(audit_plan, run_dir)
             evidence: list[EvidenceFile] = []
             if audit_plan.tailored:
                 evidence.append(_record(run_dir / TAILORING_FILE_NAME, "tailoring"))
-            evidence.extend(_scanner_files(run_dir / SCAN_DIRECTORY_NAME))
+            recorded, skipped = _scanner_files(run_dir / SCAN_DIRECTORY_NAME)
+            evidence.extend(recorded)
             record = run_dir / SCAN_RUN_FILE_NAME
             _write_new_file(record, model.dumps(run) + "\n")
             evidence.append(_record(record, "scan_run"))
+        except AuditError as error:
+            raise AuditError(error.error_type, str(error), str(run_dir)) from error
         except OSError as error:
             message = f"evidence could not be written: {error.strerror or type(error).__name__}"
             raise AuditError(ERROR_EVIDENCE, message, str(run_dir)) from error
-        return AuditOutcome(audit_plan, run, tuple(sorted(evidence, key=lambda item: item.path)))
+        return AuditOutcome(
+            audit_plan,
+            run,
+            tuple(sorted(evidence, key=lambda item: item.path)),
+            tuple(skipped),
+            content,
+        )
 
-    def preview(self, audit_plan: AuditPlan) -> model.ScanRun:
+    def preview(self, audit_plan: AuditPlan) -> tuple[model.ScanRun, ContentCopy]:
         """Run the scan for check mode and keep nothing.
 
         The scan runs into a new private directory ``<output_dir>/.check-<run_id>``
         (mode 0700, vetted like a run directory) below the existing, vetted output
-        root. The directory and every file in it are removed before this returns,
-        also when the scan or anything else fails. The output root is never created.
+        root, on a private copy of the datastream in that directory. The directory
+        and every file in it are removed before this returns, also when the scan or
+        anything else fails. The output root is never created. Errors never name the
+        removed directory, so nothing claims that evidence exists.
 
         Raises:
-            AuditError: As :meth:`execute`, and ``cleanup_failed`` if the
-                temporary directory cannot be removed.
+            AuditError: As :meth:`execute`, and ``cleanup_failed`` (naming the
+                directory) if the temporary directory cannot be removed.
         """
         inspect_output_root(audit_plan.job.output_root, self._owner_uid, create=False)
         scratch = Path(audit_plan.job.output_root) / f"{PREVIEW_PREFIX}{audit_plan.job.run_id}"
         _secure_directory(scratch, self._owner_uid)
         try:
             return self._scan(audit_plan, scratch)
+        except AuditError as error:
+            if error.error_type == ERROR_CLEANUP:
+                raise
+            raise AuditError(error.error_type, str(error)) from error
         except OSError as error:
             message = f"the check-mode scan failed: {error.strerror or type(error).__name__}"
             raise AuditError(ERROR_EVIDENCE, message) from error
@@ -968,17 +1152,18 @@ class Auditor:
                 f"check mode: output_dir {job.output_root} does not exist and check mode does "
                 "not create it, so no scan ran"
             )
-            return report(planned, None, None, message)
+            return report(planned, None, None, None, message)
         if check_mode:
-            run = self.preview(planned)
+            run, content = self.preview(planned)
             message = (
-                f"check mode: scan finished with run_status {run.status.value}; it ran in a "
-                "temporary directory that was removed, and no evidence was kept"
+                f"check mode: scan finished with run_status {run.status.value}; it ran on a "
+                "private copy of the datastream in a temporary directory that was removed, and "
+                "no evidence was kept"
             )
-            return report(planned, run, None, message)
+            return report(planned, run, None, content, message)
         outcome = self.execute(planned)
         message = (
-            f"scan finished with run_status {outcome.run.status.value}; "
-            f"evidence in {planned.run_dir}"
+            f"scan finished with run_status {outcome.run.status.value} on a private copy of the "
+            f"datastream; evidence in {planned.run_dir}"
         )
-        return report(planned, outcome.run, outcome.evidence, message)
+        return report(planned, outcome.run, outcome, outcome.content, message)
