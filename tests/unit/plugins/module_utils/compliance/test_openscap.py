@@ -1177,7 +1177,7 @@ class TestStreaming:
         path.write_text(head + body + "  </TestResult>\n</Benchmark>\n", encoding="utf-8")
         tracemalloc.start()
         parsed = openscap.read_results(str(path), 10**8)
-        _, peak = tracemalloc.get_traced_memory()
+        peak = tracemalloc.get_traced_memory()[1]
         tracemalloc.stop()
         assert len(parsed.findings) == 3000
         assert peak < path.stat().st_size // 2
