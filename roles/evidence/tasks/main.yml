@@ -5,7 +5,11 @@
       - linux_compliance_evidence_output_dir is string
       - linux_compliance_evidence_output_dir | length > 0
       - linux_compliance_evidence_include_host_facts is boolean
-    fail_msg: The evidence role received an invalid input; see meta/argument_specs.yml.
+    fail_msg: >-
+      The evidence role received an invalid input; see meta/argument_specs.yml.
+      Boolean variables must be real booleans on the command line, for example
+      -e '{"linux_compliance_evidence_include_host_facts": true}';
+      -e linux_compliance_evidence_include_host_facts=true passes a string.
     quiet: true
 
 - name: Evidence | Stop because the role is not implemented yet

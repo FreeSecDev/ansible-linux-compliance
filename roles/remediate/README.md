@@ -27,3 +27,10 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 Per-rule and per-family toggles (`linux_compliance_<family>_enabled`,
 `linux_compliance_rule_<rule_short_id>_enabled`) are generated from the rule catalogue by FREES-55 and do not exist
 yet ([ADR 0011](../../docs/adr/0011-control-toggles-and-cleanup.md)).
+
+## Running
+
+Select hosts with `-e linux_compliance_target_hosts=<group or host>`. Only `-e` works: play `hosts:` is evaluated
+before inventory variables apply, so setting it in `group_vars` has no effect. Pass booleans as JSON, for example
+`-e '{"linux_compliance_remediate_enabled": true}'`; `-e linux_compliance_remediate_enabled=true` passes a string and
+the input validation fails closed.

@@ -131,7 +131,7 @@ lint-skills: require-uv
 	$(RUN) python tools/skills/validate_skills.py
 
 lint-ansible: require-uv collection-link
-	$(RUN) ansible-lint
+	ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' $(RUN) ansible-lint
 	$(RUN) python tools/roles/check_role_specs.py roles
 	$(RUN) antsibull-changelog lint
 

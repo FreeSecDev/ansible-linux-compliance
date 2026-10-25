@@ -5,7 +5,11 @@
       - linux_compliance_verify_profile is string
       - linux_compliance_verify_profile | length > 0
       - linux_compliance_verify_fail_on_regression is boolean
-    fail_msg: The verify role received an invalid input; see meta/argument_specs.yml.
+    fail_msg: >-
+      The verify role received an invalid input; see meta/argument_specs.yml.
+      Boolean variables must be real booleans on the command line, for example
+      -e '{"linux_compliance_verify_fail_on_regression": true}';
+      -e linux_compliance_verify_fail_on_regression=true passes a string.
     quiet: true
 
 - name: Verify | Stop because the role is not implemented yet

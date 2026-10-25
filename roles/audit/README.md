@@ -22,3 +22,10 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 |---|---|---|---|
 | `linux_compliance_audit_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010). A profile is never substituted silently for another benchmark. |
 | `linux_compliance_audit_fail_on_noncompliant` | `bool` | `false` | Fail the play when the audit reports at least one failed rule. The audit never changes the host either way. |
+
+## Running
+
+Select hosts with `-e linux_compliance_target_hosts=<group or host>`. Only `-e` works: play `hosts:` is evaluated
+before inventory variables apply, so setting it in `group_vars` has no effect. Pass booleans as JSON, for example
+`-e '{"linux_compliance_remediate_enabled": true}'`; `-e linux_compliance_remediate_enabled=true` passes a string and
+the input validation fails closed.

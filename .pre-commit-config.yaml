@@ -51,9 +51,9 @@ repos:
         types: [yaml]
       - id: ansible-lint
         name: ansible-lint
-        entry: uv run --frozen ansible-lint
+        entry: env ANSIBLE_COLLECTIONS_PATH=build/collections uv run --frozen ansible-lint
         language: system
-        files: ^(galaxy\.yml|ansible\.cfg|\.ansible-lint|meta/|plugins/|roles/|playbooks/|extensions/|changelogs/)
+        files: ^(galaxy\.yml|\.ansible-lint|meta/|plugins/|roles/|playbooks/|extensions/|changelogs/)
         pass_filenames: false
       - id: shellcheck
         name: shellcheck

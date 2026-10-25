@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks).
 
 ## Layout
 
@@ -20,7 +20,6 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansibl
 | `roles/` | The `discover`, `audit`, `remediate`, `verify` and `evidence` role skeletons (FREES-40) |
 | `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
-| `ansible.cfg` | Sets `collections_path` to `build/collections` so that ansible-lint resolves `freesecdev.linux_compliance.*` role references; it is not part of the tarball |
 
 Everything else (`tools/`, `.agents/`, `.github/`, the Python tooling files, `docs/planning`, `docs/research`) supports
 development and is listed in `build_ignore`, so it is not part of the tarball.
@@ -49,7 +48,8 @@ a variable lacks the `linux_compliance_<role>_` prefix.
 
 The playbooks `playbooks/audit.yml`, `playbooks/remediate.yml` and `playbooks/verify.yml` only reference roles by
 FQCN, for example `freesecdev.linux_compliance.audit`. The target comes from the variable
-`linux_compliance_target_hosts`, which defaults to the group `linux_compliance` so that no play ever targets `all` by accident. `become` is scoped to the role entry and is never set for the whole play; the
+`linux_compliance_target_hosts`, which defaults to the group `linux_compliance` so that no play ever targets `all` by accident (usage in
+[playbooks](playbooks.md)). `become` is scoped to the role entry and is never set for the whole play; the
 `discover` role runs without it.
 
 ## Supported versions
@@ -75,7 +75,9 @@ gap:
   import `ansible_collections.freesecdev.linux_compliance.plugins...`, the same name `ansible-test` uses. Coverage
   resolves the symlink, so measured files are the real ones.
 
-The link directory also links `roles/`, so ansible-lint can resolve the role references in the playbooks through `ansible.cfg`.
+The link directory also links `roles/`, so ansible-lint can resolve the role references in the playbooks. `make lint-ansible` and the ansible-lint hook set
+`ANSIBLE_COLLECTIONS_PATH` to `build/collections` for that one invocation only; the repository has no `ansible.cfg`,
+which would override users' own Ansible configuration, and `ansible.cfg` is listed in `build_ignore`.
 `make install` creates the links; the targets that need them depend on it.
 
 ## Targets

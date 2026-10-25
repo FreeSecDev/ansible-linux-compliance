@@ -22,3 +22,10 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 |---|---|---|---|
 | `linux_compliance_evidence_output_dir` | `path` | `"evidence"` | Controller directory that receives the evidence bundle. A relative path is resolved against the playbook directory. |
 | `linux_compliance_evidence_include_host_facts` | `bool` | `false` | Include gathered host facts in the bundle. Facts can identify the host, so they are excluded by default. |
+
+## Running
+
+Select hosts with `-e linux_compliance_target_hosts=<group or host>`. Only `-e` works: play `hosts:` is evaluated
+before inventory variables apply, so setting it in `group_vars` has no effect. Pass booleans as JSON, for example
+`-e '{"linux_compliance_remediate_enabled": true}'`; `-e linux_compliance_remediate_enabled=true` passes a string and
+the input validation fails closed.

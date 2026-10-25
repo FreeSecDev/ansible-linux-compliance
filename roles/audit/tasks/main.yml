@@ -5,7 +5,11 @@
       - linux_compliance_audit_profile is string
       - linux_compliance_audit_profile | length > 0
       - linux_compliance_audit_fail_on_noncompliant is boolean
-    fail_msg: The audit role received an invalid input; see meta/argument_specs.yml.
+    fail_msg: >-
+      The audit role received an invalid input; see meta/argument_specs.yml.
+      Boolean variables must be real booleans on the command line, for example
+      -e '{"linux_compliance_audit_fail_on_noncompliant": true}';
+      -e linux_compliance_audit_fail_on_noncompliant=true passes a string.
     quiet: true
 
 - name: Audit | Stop because the role is not implemented yet
