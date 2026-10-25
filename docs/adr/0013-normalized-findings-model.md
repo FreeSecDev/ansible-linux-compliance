@@ -4,7 +4,7 @@
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
 - **Jira:** FREES-26, FREES-39
-- **Pull requests:** pending
+- **Pull requests:** [#6](https://github.com/FreeSecDev/ansible-linux-compliance/pull/6)
 - **Research:** [2026-10 upstream compatibility](../research/2026-10-upstream-compatibility.md)
 
 ## Context
