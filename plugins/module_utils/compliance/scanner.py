@@ -34,10 +34,10 @@ MAX_ECHO_LENGTH: Final[int] = 64
 _FIRST_PRINTABLE: Final[int] = 32
 _DELETE: Final[int] = 127
 
-_BACKEND_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_-]{0,63}")
-_RUN_ID: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}")
-_XCCDF_ID: Final[dict[str, re.Pattern[str]]] = {
-    kind: re.compile(rf"xccdf_[A-Za-z0-9_.-]+?_{kind}_[A-Za-z0-9_.+-]+")
+_BACKEND_NAME: Final[str] = r"[a-z][a-z0-9_-]{0,63}"
+_RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}"
+_XCCDF_ID: Final[dict[str, str]] = {
+    kind: rf"xccdf_[A-Za-z0-9_.-]+?_{kind}_[A-Za-z0-9_.+-]+"
     for kind in ("rule", "profile", "benchmark")
 }
 
@@ -76,7 +76,7 @@ def check_xccdf_id(value: object, kind: str, name: str) -> str:
     if (
         not isinstance(value, str)
         or len(value) > model.MAX_ID_LENGTH
-        or _XCCDF_ID[kind].fullmatch(value) is None
+        or re.fullmatch(_XCCDF_ID[kind], value) is None
     ):
         _reject(f"{name} is not a valid XCCDF {kind} identifier: {_safe(value)}")
     return value
@@ -118,7 +118,7 @@ def _check_size(value: object) -> None:
 
 
 def _check_backend_name(value: object) -> None:
-    if not isinstance(value, str) or _BACKEND_NAME.fullmatch(value) is None:
+    if not isinstance(value, str) or re.fullmatch(_BACKEND_NAME, value) is None:
         _reject(f"backend name is invalid: {_safe(value)}")
 
 
@@ -128,7 +128,7 @@ def _check_host(value: object) -> None:
 
 
 def _check_run_id(value: object) -> None:
-    if not isinstance(value, str) or _RUN_ID.fullmatch(value) is None:
+    if not isinstance(value, str) or re.fullmatch(_RUN_ID, value) is None:
         _reject(f"run_id is invalid: {_safe(value)}")
 
 

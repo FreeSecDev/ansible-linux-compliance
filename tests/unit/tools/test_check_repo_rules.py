@@ -622,7 +622,6 @@ BENIGN_PLUGIN_SOURCES = {
         "import model\n"
     ),
     "relative": "from . import helper\nfrom .helper import thing\nfrom .. import other\n",
-    "object-setattr": "object.__setattr__(x, 'field', 1)\n",
     "getattr-literal": "getattr(x, 'field')\nsetattr(x, 'field', 1)\ngetattr(x, 'field', None)\n",
     "shell-false": "f(shell=False)\nf(shell=flag)\nf(other=True)\nf(*args)\n",
     "plain-calls": "factory()()\nobj.system_name\nobj.executable\nobj.execute\n",
@@ -700,7 +699,7 @@ def test_guard_still_allows_os_path_and_dataclass_models(tmp_path: Path) -> None
     source = (
         "from dataclasses import dataclass\nfrom os import path\nimport os.path\n"
         "@dataclass(frozen=True)\nclass A:\n    x: int\n"
-        "path.join('a')\nos.path.join('a')\nobject.__setattr__(A(1), 'x', 2)\n"
+        "path.join('a')\nos.path.join('a')\n"
     )
     assert process_messages(tmp_path, source) == []
 

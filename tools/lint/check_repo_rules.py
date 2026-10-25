@@ -17,13 +17,34 @@ Rules:
   ``use_unsafe_shell`` or the test-only ``owner_uid``, ``state_dir``, ``lock_timeout``,
   ``policies``, ``trusted_dirs``, ``runner``, ``clock`` and ``limits`` keywords, never use a ``**``
   dict splat in a call, never use the attribute ``__self__``, and
-  only call ``getattr`` with a literal permitted name. ``xml.parsers.expat`` may be imported
+  only call ``getattr`` with a literal permitted name. The string-based reflection names
+  ``builtins``, ``operator``, ``eval``, ``exec``, ``compile``, ``attrgetter``,
+  ``methodcaller``, ``_evaluate`` and ``evaluate_forward_ref`` are banned as attributes, a
+  module-level ``__getattr__`` is banned, so are the function internals ``__kwdefaults__``,
+  ``__defaults__``, ``__code__``, ``__closure__`` and ``__globals__``, assigning to an
+  attribute of an imported name (including ``setattr``) is banned, and underscore-prefixed
+  attributes may only be read, called or assigned through ``self`` or ``cls`` inside a class
+  (dunder reads such as ``__name__`` stay allowed; dunder assignment does not). Underscore-prefixed
+  names may not be imported. Dunder attributes are denied by default: only reading ``__name__``,
+  ``__qualname__``, ``__doc__`` and ``__module__`` is allowed, plus the single form
+  ``object.__setattr__(self, "<literal>", value)`` in ``__post_init__``. Frame and code
+  attributes and the ``types`` module (except ``MappingProxyType``) are banned on every
+  object, and attributes named like standard library or collection modules are banned when the
+  chain starts at a module name (``dataclasses.inspect``). Only ``super().__init__()`` and
+  ``super().__post_init__()`` may call a dunder on ``super()``, and ``super`` and ``object``
+  may never be rebound. A name bound to a module, and a submodule reached by attribute
+  (``os.path``, ``json.decoder``, or ``from json import decoder``), may only appear as the base
+  of an attribute access, and
+  ``self`` and ``cls`` are exempt only as the never rebound first parameter of a method. This is
+  static analysis, not a sandbox (ADR 0004).
+  ``xml.parsers.expat`` may be imported (as ``from xml.parsers import expat``)
   only by ``plugins/module_utils/compliance/openscap.py``. Only
   ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
   ``plugins/module_utils/compliance/fileio.py`` may additionally ``import`` ``os``, ``fcntl``,
   ``errno`` and ``time`` and use only the attributes listed in ``FILE_IO_ATTRIBUTES``, always as
   ``module.attribute``; it keeps every other rule. Only
-  ``plugins/module_utils/compliance/ledger.py`` may import ``fileio`` (ADR 0011).
+  ``plugins/module_utils/compliance/ledger.py`` may import ``fileio`` or name it as an attribute
+  or ``getattr`` literal (ADR 0011).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
 """
@@ -74,6 +95,7 @@ FILE_IO_IMPORTERS: Final[frozenset[Path]] = frozenset(
     {Path("plugins/module_utils/compliance/ledger.py"), FILE_IO_HELPER}
 )
 FILE_IO_MODULE: Final[str] = "fileio"
+LEDGER_MODULE: Final[Path] = Path("plugins/module_utils/compliance/ledger.py")
 FILE_IO_ATTRIBUTES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
     {
         "errno": frozenset({"ELOOP", "EMLINK", "ENOTDIR"}),
@@ -129,19 +151,33 @@ ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
         "unicodedata",
     }
 )
+RESTRICTED_FROM_IMPORTS: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {"types": frozenset({"MappingProxyType"})}
+)
 EXTRA_IMPORTS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
     {Path("plugins/module_utils/compliance/openscap.py"): frozenset({"xml.parsers.expat"})}
 )
-ALLOWED_IMPORT_PREFIXES: Final[tuple[str, ...]] = (
-    "ansible.module_utils",
-    "ansible_collections.freesecdev.linux_compliance",
-)
+COLLECTION_PREFIX: Final[str] = "ansible_collections.freesecdev.linux_compliance"
+ALLOWED_IMPORT_PREFIXES: Final[tuple[str, ...]] = ("ansible.module_utils", COLLECTION_PREFIX)
+ANSIBLE_PACKAGES: Final[frozenset[str]] = frozenset({"ansible", "ansible.module_utils"})
 MODULE_NAMES: Final[frozenset[str]] = frozenset(
     {"subprocess", "pty", "posix", "_posixsubprocess", "os", "sys"}
 )
 REFLECTION_NAMES: Final[frozenset[str]] = frozenset({"vars", "globals", "locals", "get_type_hints"})
 BANNED_NAMES: Final[frozenset[str]] = (
-    frozenset({"exec", "eval", "compile", "__import__", "__builtins__"})
+    frozenset(
+        {
+            "exec",
+            "eval",
+            "compile",
+            "__import__",
+            "__builtins__",
+            "__getattr__",
+            "__class__",
+            "__loader__",
+            "__spec__",
+        }
+    )
     | REFLECTION_NAMES
     | (MODULE_NAMES - {"os"})
 )
@@ -161,6 +197,46 @@ BANNED_ATTRIBUTES: Final[frozenset[str]] = (
             "__builtins__",
             "__subclasses__",
             "__globals__",
+            "__kwdefaults__",
+            "__defaults__",
+            "__closure__",
+            "builtins",
+            "operator",
+            "eval",
+            "compile",
+            "attrgetter",
+            "methodcaller",
+            "_evaluate",
+            "evaluate_forward_ref",
+            "evaluate",
+            "call_evaluate_function",
+            "annotationlib",
+            "bltns",
+            "_bltin",
+            "stdlib_re",
+            "_os",
+            "_sys",
+            "currentframe",
+            "f_builtins",
+            "f_globals",
+            "f_locals",
+            "f_back",
+            "f_code",
+            "gi_frame",
+            "gi_code",
+            "cr_frame",
+            "cr_code",
+            "ag_frame",
+            "ag_code",
+            "tb_frame",
+            "tb_next",
+            "co_code",
+            "co_consts",
+            "co_names",
+            "CodeType",
+            "FunctionType",
+            "LambdaType",
+            "MethodType",
             "__bases__",
             "__base__",
             "__mro__",
@@ -187,6 +263,86 @@ BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
         "clock",
         "limits",
     }
+)
+DUNDER: Final[re.Pattern[str]] = re.compile(r"__\w+__")
+OWN_NAMES: Final[frozenset[str]] = frozenset({"self", "cls"})
+DUNDER_READS: Final[frozenset[str]] = frozenset(
+    {"__name__", "__qualname__", "__doc__", "__module__"}
+)
+SUPER_DUNDERS: Final[frozenset[str]] = frozenset({"__init__", "__post_init__"})
+POST_INIT: Final[str] = "__post_init__"
+
+
+def _words(text: str) -> frozenset[str]:
+    """Return the whitespace-separated words of ``text`` as a set."""
+    return frozenset(text.split())
+
+
+STDLIB_MODULE_NAMES: Final[frozenset[str]] = _words(
+    "__future__ _abc _aix_support _android_support _apple_support _ast _ast_unparse _asyncio "
+    "_bisect _blake2 _bootlocale _bootsubprocess _bz2 _codecs _codecs_cn _codecs_hk "
+    "_codecs_iso2022 _codecs_jp _codecs_kr _codecs_tw _collections _collections_abc _colorize "
+    "_compat_pickle _compression _contextvars _crypt _csv _ctypes _curses _curses_panel "
+    "_datetime _dbm _decimal _elementtree _frozen_importlib _frozen_importlib_external "
+    "_functools _gdbm _hashlib _heapq _hmac _imp _interpchannels _interpqueues _interpreters "
+    "_io _ios_support _json _locale _lsprof _lzma _markupbase _math_integer _md5 _msi "
+    "_multibytecodec _multiprocessing _opcode _opcode_metadata _operator _osx_support "
+    "_overlapped _peg_parser _pickle _posixshmem _posixsubprocess _py_abc _py_warnings "
+    "_pydatetime _pydecimal _pyio _pylong _pyrepl _queue _random _remote_debugging _scproxy "
+    "_sha1 _sha2 _sha256 _sha3 _sha512 _signal _sitebuiltins _socket _sqlite3 _sre _ssl _stat "
+    "_statistics _string _strptime _struct _suggestions _symtable _sysconfig "
+    "_sysconfigdata__linux_x86_64-linux-gnu _testbuffer _testimportmultiple _testinternalcapi "
+    "_testmultiphase _thread _threading_local _tkinter _tokenize _tracemalloc _types _typing "
+    "_uuid _warnings _weakref _weakrefset _winapi _wmi _xxsubinterpreters _xxtestfuzz _zoneinfo "
+    "_zstd abc aifc annotationlib antigravity argparse array ast asynchat asyncio asyncore "
+    "atexit audioop base64 bdb binascii binhex bisect builtins bz2 cProfile calendar cgi cgitb "
+    "chunk cmath cmd code codecs codeop collections colorsys compileall compression concurrent "
+    "configparser contextlib contextvars copy copyreg crypt csv ctypes curses dataclasses "
+    "datetime dbm decimal difflib dis distutils doctest email encodings ensurepip enum errno "
+    "faulthandler fcntl filecmp fileinput fnmatch formatter fractions ftplib functools gc "
+    "genericpath getopt getpass gettext glob graphlib grp gzip hashlib heapq hmac html http "
+    "idlelib imaplib imghdr imp importlib inspect io ipaddress itertools json keyword lib2to3 "
+    "linecache locale logging lzma mailbox mailcap marshal math mimetypes mmap modulefinder "
+    "msilib msvcrt multiprocessing netrc nis nntplib nt ntpath nturl2path numbers opcode "
+    "operator optparse os ossaudiodev parser pathlib pdb pickle pickletools pipes pkgutil "
+    "platform plistlib poplib posix posixpath pprint profile profiling pstats pty pwd "
+    "py_compile pyclbr pydoc pydoc_data pyexpat queue quopri random re readline reprlib "
+    "resource rlcompleter runpy sched secrets select selectors shelve shlex shutil signal site "
+    "smtpd smtplib sndhdr socket socketserver spwd sqlite3 sre_compile sre_constants sre_parse "
+    "ssl stat statistics string stringprep struct subprocess sunau symbol symtable sys "
+    "sysconfig syslog tabnanny tarfile telnetlib tempfile termios textwrap this threading time "
+    "timeit tkinter token tokenize tomllib trace traceback tracemalloc tty turtle turtledemo "
+    "types typing unicodedata unittest urllib uu uuid venv warnings wave weakref webbrowser "
+    "winreg winsound wsgiref xdrlib xml xmlrpc xxsubtype zipapp zipfile zipimport zlib zoneinfo"
+)
+
+KNOWN_SUBMODULE_ATTRIBUTES: Final[frozenset[str]] = _words(
+    "_abc _casefix _collections_abc _compiler _constants _hashlib _heapq _local _locale _os "
+    "_parser _sre _sys _thread abc annotationlib bltns builtins codecs collections contextlib "
+    "copy copyreg decoder encoder enum errno errors fnmatch functools genericpath grp inspect "
+    "io itertools keyword model ntpath operator os posixpath pwd re scanner shutil sre_compile "
+    "sre_parse stat stdlib_re sys types warnings"
+)
+SETATTR_ARGUMENTS: Final[int] = 3
+SUPER_ARGUMENTS: Final[int] = 2
+FUNCTIONS: Final[tuple[type, ...]] = (ast.FunctionDef, ast.AsyncFunctionDef)
+ALLOWED_COMPONENTS: Final[frozenset[str]] = frozenset(
+    part for name in ALLOWED_IMPORTS for part in name.split(".")
+) - frozenset({"types"})
+STDLIB_MODULE_ATTRIBUTES: Final[frozenset[str]] = (
+    STDLIB_MODULE_NAMES - ALLOWED_COMPONENTS - frozenset({"__future__"})
+)
+COLLECTION_MODULE_ATTRIBUTES: Final[frozenset[str]] = frozenset(
+    path.stem for path in (REPO_ROOT / PLUGINS_DIRECTORY).rglob("*.py") if path.stem != "__init__"
+)
+BANNED_MODULE_ATTRIBUTES: Final[frozenset[str]] = (
+    STDLIB_MODULE_ATTRIBUTES | COLLECTION_MODULE_ATTRIBUTES
+)
+PROTECTED_NAMES: Final[frozenset[str]] = frozenset({"super", "object"})
+
+
+SUBMODULE_ATTRIBUTES: Final[frozenset[str]] = KNOWN_SUBMODULE_ATTRIBUTES.union(
+    *(frozenset(name.split(".")[1:]) for name in ALLOWED_IMPORTS.union(*EXTRA_IMPORTS.values()))
 )
 OS_MODULE: Final[str] = "os"
 OS_PATH: Final[str] = "path"
@@ -446,6 +602,155 @@ def _is_banned_attribute(name: str) -> bool:
     )
 
 
+def _is_private(name: str, *, include_dunder: bool = False) -> bool:
+    """Return whether ``name`` starts with an underscore; dunders only on request."""
+    if not name.startswith("_"):
+        return False
+    return include_dunder or DUNDER.fullmatch(name) is None
+
+
+def _binding_names(node: ast.AST) -> Iterable[str]:
+    """Yield every name that ``node`` binds, rebinds or deletes."""
+    if isinstance(node, ast.Name):
+        if not isinstance(node.ctx, ast.Load):
+            yield node.id
+    elif isinstance(node, ast.arg):
+        yield node.arg
+    elif isinstance(node, (ast.Import, ast.ImportFrom)):
+        yield from (alias.asname or alias.name.split(".")[0] for alias in node.names)
+    elif isinstance(node, (ast.Global, ast.Nonlocal)):
+        yield from node.names
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        yield node.name
+    elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)):
+        yield from (node.name,) if node.name else ()
+    elif isinstance(node, ast.MatchMapping):
+        yield from (node.rest,) if node.rest else ()
+
+
+def _rebinds(method: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
+    """Return whether ``method`` rebinds, deletes or shadows its first parameter ``name``."""
+    first = [*method.args.posonlyargs, *method.args.args][0]
+    return any(
+        name in _binding_names(node)
+        for node in ast.walk(method)
+        if node is not first and node is not method
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _Scope:
+    """Facts about one parsed module that the per-node checks need."""
+
+    call_targets: set[int]
+    os_path_bases: set[int]
+    imported: frozenset[str]
+    modules: frozenset[str]
+    parents: dict[int, ast.AST]
+    restricted: Mapping[str, frozenset[str]]
+    restricted_bases: set[int]
+    fileio_attribute_allowed: bool
+
+    def ancestors(self, node: ast.AST) -> Iterable[ast.AST]:
+        """Yield the parents of ``node``, nearest first."""
+        current = self.parents.get(id(node))
+        while current is not None:
+            yield current
+            current = self.parents.get(id(current))
+
+    def own_method(self, node: ast.expr) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+        """Return the method whose never rebound first parameter ``node`` names, if any."""
+        if not (isinstance(node, ast.Name) and node.id in OWN_NAMES):
+            return None
+        for ancestor in self.ancestors(node):
+            if not isinstance(ancestor, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            params = [*ancestor.args.posonlyargs, *ancestor.args.args]
+            if (
+                isinstance(self.parents.get(id(ancestor)), ast.ClassDef)
+                and params
+                and params[0].arg == node.id
+                and not any(
+                    isinstance(d, ast.Name) and d.id == "staticmethod"
+                    for d in ancestor.decorator_list
+                )
+                and not _rebinds(ancestor, node.id)
+            ):
+                return ancestor
+        return None
+
+    def is_own(self, node: ast.expr) -> bool:
+        """Return whether ``node`` is the intact ``self`` or ``cls`` parameter of a method."""
+        return self.own_method(node) is not None
+
+    def at_module_level(self, node: ast.AST) -> bool:
+        """Return whether no function or class encloses ``node``."""
+        return not any(
+            isinstance(ancestor, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            for ancestor in self.ancestors(node)
+        )
+
+    def is_module_rooted(self, node: ast.expr) -> bool:
+        """Return whether ``node`` is an attribute chain rooted in a module-bound name."""
+        current = node
+        while isinstance(current, ast.Attribute):
+            current = current.value
+        return isinstance(current, ast.Name) and current.id in self.modules
+
+    def is_imported(self, node: ast.expr) -> bool:
+        """Return whether ``node`` is rooted in a name that an import statement binds."""
+        current = node
+        while isinstance(current, (ast.Attribute, ast.Subscript)):
+            current = current.value
+        return isinstance(current, ast.Name) and current.id in self.imported
+
+
+def _bound_names(nodes: Iterable[ast.AST]) -> frozenset[str]:
+    """Return every name that an import statement binds."""
+    names: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            names.update(a.asname or a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(a.asname or a.name for a in node.names)
+    return frozenset(names)
+
+
+def _module_exists(base: Path) -> bool:
+    return base.with_suffix(".py").is_file() or (base / "__init__.py").is_file()
+
+
+def _imports_module(node: ast.ImportFrom, name: str, path: Path) -> bool:
+    """Return whether ``from module import name`` binds a module."""
+    module = node.module or ""
+    if node.level:
+        base = path.resolve().parent
+        for _ in range(node.level - 1):
+            base = base.parent
+        return _module_exists(base.joinpath(*filter(None, module.split(".")), name))
+    if name in SUBMODULE_ATTRIBUTES:
+        return True
+    full = f"{module}.{name}"
+    if module == COLLECTION_PREFIX or module.startswith(COLLECTION_PREFIX + "."):
+        return _module_exists(
+            REPO_ROOT.joinpath(*full.split(".")[len(COLLECTION_PREFIX.split(".")) :])
+        )
+    return module in ANSIBLE_PACKAGES and name.islower()
+
+
+def _module_names(nodes: Iterable[ast.AST], path: Path) -> frozenset[str]:
+    """Return every name that an import statement binds to a module."""
+    names: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            names.update(a.asname or a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(
+                a.asname or a.name for a in node.names if _imports_module(node, a.name, path)
+            )
+    return frozenset(names)
+
+
 def _is_allowed_import(name: str, extra: frozenset[str]) -> bool:
     return (
         name in ALLOWED_IMPORTS
@@ -467,12 +772,29 @@ def _alias_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
             yield f"import under the name {alias.asname!r} is not allowed in plugins"
 
 
+def _private_import_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
+    """Yield a description for each underscore-prefixed module or name that ``node`` imports."""
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            if any(_is_private(part) for part in alias.name.split(".")):
+                yield f"import of private module {alias.name!r} is not allowed in plugins"
+        return
+    module = node.module or ""
+    if any(_is_private(part) for part in module.split(".")):
+        yield f"import from private module {module!r} is not allowed in plugins"
+    for alias in node.names:
+        if _is_private(alias.name, include_dunder=True):
+            yield f"import of private name {alias.name!r} is not allowed in plugins"
+        elif alias.name in STDLIB_MODULE_ATTRIBUTES:
+            yield f"import of module name {alias.name!r} through another module is not allowed"
+
+
 def _plain_import_findings(
     node: ast.Import, extra: frozenset[str], restricted: frozenset[str]
 ) -> Iterable[str]:
     """Yield a description for each ``import x`` name that is not allow-listed."""
     for alias in node.names:
-        if not _is_allowed_import(alias.name, extra):
+        if alias.name in RESTRICTED_FROM_IMPORTS or not _is_allowed_import(alias.name, extra):
             yield _not_allowed(alias.name)
         elif alias.name in restricted and alias.asname:
             yield f"import of {alias.name!r} under another name is not allowed in plugins"
@@ -483,33 +805,52 @@ def _import_findings(
 ) -> Iterable[str]:
     """Yield a description for each import on ``node`` that is not allow-listed."""
     yield from _alias_findings(node)
+    yield from _private_import_findings(node)
     if isinstance(node, ast.Import):
         yield from _plain_import_findings(node, extra, restricted)
         return
     module = node.module or ""
     if module in restricted and not node.level and module != OS_MODULE:
         yield f"from-import of {module!r} is not allowed in plugins"
-    if not node.level and module != OS_MODULE and not _is_allowed_import(module, extra):
+    if (
+        not node.level
+        and module != OS_MODULE
+        and not _is_allowed_import(module, extra)
+        and not all(f"{module}.{alias.name}" in extra for alias in node.names)
+    ):
         yield _not_allowed(module)
     for alias in node.names:
-        if alias.name == "*":
+        if module in RESTRICTED_FROM_IMPORTS and alias.name not in RESTRICTED_FROM_IMPORTS[module]:
+            yield _not_allowed(f"{module}.{alias.name}")
+        elif alias.name == "*":
             yield f"star import from {module!r} is not allowed in plugins"
         elif module == OS_MODULE and not node.level and alias.name != OS_PATH:
             yield _not_allowed(f"os.{alias.name}")
-        elif _is_banned_attribute(alias.name):
+        elif _is_banned_attribute(alias.name) or alias.name in BANNED_NAMES:
             yield f"import of {alias.name!r} is not allowed in plugins"
 
 
-def _dynamic_attribute_findings(node: ast.Call) -> Iterable[str]:
-    """Yield descriptions for ``getattr`` style calls with an unsafe attribute name."""
+def _dynamic_attribute_findings(node: ast.Call, name: str, scope: _Scope) -> Iterable[str]:
+    """Yield descriptions for ``getattr`` style calls with an unsafe target or name."""
     attribute = node.args[1] if len(node.args) > 1 else None
     if not (isinstance(attribute, ast.Constant) and isinstance(attribute.value, str)):
         yield "getattr, setattr and delattr need a literal attribute name"
-    elif _is_banned_attribute(attribute.value):
+    elif attribute.value == FILE_IO_MODULE and not scope.fileio_attribute_allowed:
+        yield f"attribute {FILE_IO_MODULE!r} is restricted to ledger.py"
+    elif _is_banned_attribute(attribute.value) or (
+        attribute.value in BANNED_MODULE_ATTRIBUTES and scope.is_module_rooted(node.args[0])
+    ):
         yield f"attribute {attribute.value!r} is not allowed in plugins"
+    elif DUNDER.fullmatch(attribute.value):
+        if name != "getattr" or attribute.value not in DUNDER_READS:
+            yield f"dunder attribute {attribute.value!r} is not allowed in plugins"
+    elif _is_private(attribute.value) and not scope.is_own(node.args[0]):
+        yield f"underscore-prefixed attribute {attribute.value!r} of another object is not allowed"
+    if name != "getattr" and node.args and scope.is_imported(node.args[0]):
+        yield f"{name} on an imported module is not allowed in plugins"
 
 
-def _call_findings(node: ast.Call) -> Iterable[str]:
+def _call_findings(node: ast.Call, scope: _Scope) -> Iterable[str]:
     """Yield descriptions for forbidden keywords and dynamic attribute access."""
     for keyword in node.keywords:
         if keyword.arg is None:
@@ -523,44 +864,158 @@ def _call_findings(node: ast.Call) -> Iterable[str]:
         ):
             yield "shell=True is forbidden"
     if isinstance(node.func, ast.Name) and node.func.id in DYNAMIC_ATTRIBUTE_BUILTINS:
-        yield from _dynamic_attribute_findings(node)
+        yield from _dynamic_attribute_findings(node, node.func.id, scope)
 
 
-@dataclass(frozen=True)
-class _Scan:
-    """Facts about one parsed file that the per-node checks share."""
-
-    call_targets: set[int]
-    os_path_bases: set[int]
-    extra: frozenset[str]
-    restricted: Mapping[str, frozenset[str]]
-    restricted_bases: set[int]
-
-
-def _name_findings(node: ast.Name, scan: _Scan) -> Iterable[str]:
+def _name_findings(node: ast.Name, scope: _Scope) -> Iterable[str]:
     """Yield descriptions for banned builtins and for uses of ``os`` other than ``os.path``."""
     if node.id in BANNED_NAMES:
         yield f"use of {node.id} is not allowed in plugins"
-    if node.id in DYNAMIC_ATTRIBUTE_BUILTINS and id(node) not in scan.call_targets:
+    if node.id in DYNAMIC_ATTRIBUTE_BUILTINS and id(node) not in scope.call_targets:
         yield f"{node.id} may only be called directly"
-    permitted = scan.os_path_bases | scan.restricted_bases
+    permitted = scope.os_path_bases | scope.restricted_bases
     if node.id == OS_MODULE and id(node) not in permitted:
         yield "os may only be used as os.path in plugins"
-    if node.id in scan.restricted and node.id != OS_MODULE and id(node) not in permitted:
+    if node.id in scope.restricted and node.id != OS_MODULE and id(node) not in permitted:
         yield f"{node.id} may only be used through its permitted attributes in plugins"
+    parent = scope.parents.get(id(node))
+    if node.id in scope.modules and not (
+        isinstance(parent, ast.Attribute)
+        and parent.value is node
+        and isinstance(node.ctx, ast.Load)
+    ):
+        yield f"module name {node.id!r} may only be used as {node.id}.attribute in plugins"
 
 
-def _process_findings(node: ast.AST, scan: _Scan) -> Iterable[str]:
+def _is_guarded_store(node: ast.Attribute, scope: _Scope) -> bool:
+    """Return whether ``node`` is the allowed ``object.__setattr__`` form."""
+    call = scope.parents.get(id(node))
+    if not (
+        isinstance(call, ast.Call)
+        and call.func is node
+        and node.attr == "__setattr__"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "object"
+        and len(call.args) == SETATTR_ARGUMENTS
+        and not call.keywords
+    ):
+        return False
+    target, field = call.args[0], call.args[1]
+    method = scope.own_method(target)
+    return (
+        method is not None
+        and isinstance(target, ast.Name)
+        and target.id == "self"
+        and method.name == POST_INIT
+        and next((a for a in scope.ancestors(call) if isinstance(a, FUNCTIONS)), None) is method
+        and isinstance(field, ast.Constant)
+        and isinstance(field.value, str)
+        and not _is_banned_attribute(field.value)
+        and DUNDER.fullmatch(field.value) is None
+    )
+
+
+def _is_restricted_attribute(node: ast.Attribute, scope: _Scope) -> bool:
+    """Return whether ``node`` is one of the permitted attributes of a restricted module."""
+    return isinstance(node.value, ast.Name) and node.attr in scope.restricted.get(
+        node.value.id, frozenset()
+    )
+
+
+def _is_attribute_base(node: ast.Attribute, scope: _Scope) -> bool:
+    """Return whether ``node`` is the value of an enclosing attribute access."""
+    parent = scope.parents.get(id(node))
+    return isinstance(parent, ast.Attribute) and parent.value is node
+
+
+def _is_super_call(node: ast.Attribute, scope: _Scope) -> bool:
+    """Return whether ``node`` calls __init__ or __post_init__ on ``super()``."""
+    call = scope.parents.get(id(node))
+    receiver = node.value
+    if not (
+        isinstance(call, ast.Call)
+        and call.func is node
+        and node.attr in SUPER_DUNDERS
+        and isinstance(receiver, ast.Call)
+        and isinstance(receiver.func, ast.Name)
+        and receiver.func.id == "super"
+        and not receiver.keywords
+    ):
+        return False
+    args = receiver.args
+    return not args or (
+        len(args) == SUPER_ARGUMENTS and isinstance(args[0], ast.Name) and scope.is_own(args[1])
+    )
+
+
+def _attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
+    """Yield descriptions for banned, dunder, private and imported-module attribute use."""
+    if _is_guarded_store(node, scope):
+        return
+    if _is_banned_attribute(node.attr) or (
+        node.attr in BANNED_MODULE_ATTRIBUTES and scope.is_module_rooted(node.value)
+    ):
+        yield f"attribute {node.attr!r} is not allowed in plugins"
+    stored = not isinstance(node.ctx, ast.Load)
+    if DUNDER.fullmatch(node.attr):
+        if not _is_banned_attribute(node.attr) and (
+            stored or not (node.attr in DUNDER_READS or _is_super_call(node, scope))
+        ):
+            yield f"dunder attribute {node.attr!r} is not allowed in plugins"
+    elif _is_private(node.attr) and not scope.is_own(node.value):
+        yield f"underscore-prefixed attribute {node.attr!r} of another object is not allowed"
+    if stored and scope.is_imported(node.value):
+        yield f"assigning attribute {node.attr!r} of an imported module is not allowed in plugins"
+    if node.attr == FILE_IO_MODULE and not scope.fileio_attribute_allowed:
+        yield f"attribute {FILE_IO_MODULE!r} is restricted to ledger.py"
+    if (
+        node.attr in SUBMODULE_ATTRIBUTES
+        and scope.is_module_rooted(node.value)
+        and not _is_attribute_base(node, scope)
+        and not _is_restricted_attribute(node, scope)
+    ):
+        yield f"module {node.attr!r} may only be used as {node.attr}.attribute in plugins"
+
+
+def _definition_findings(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, scope: _Scope
+) -> Iterable[str]:
+    """Yield a description for a module-level ``__getattr__`` definition."""
+    if node.name == "__getattr__" and scope.at_module_level(node):
+        yield "module-level __getattr__ is not allowed in plugins"
+
+
+def _declaration_findings(node: ast.Global | ast.Nonlocal, scope: _Scope) -> Iterable[str]:
+    """Yield a description for each module name that ``node`` declares global or nonlocal."""
+    for name in node.names:
+        if name in scope.modules:
+            yield f"module name {name!r} may not be declared global or nonlocal in plugins"
+
+
+def _binding_findings(node: ast.AST) -> Iterable[str]:
+    """Yield a description for each protected builtin name that ``node`` binds."""
+    for name in PROTECTED_NAMES.intersection(_binding_names(node)):
+        yield f"the name {name!r} may not be rebound in plugins"
+
+
+def _process_findings(node: ast.AST, scope: _Scope, extra: frozenset[str]) -> Iterable[str]:
     """Yield a description for each forbidden construct on ``node`` itself."""
+    yield from _binding_findings(node)
     if isinstance(node, (ast.Import, ast.ImportFrom)):
-        yield from _import_findings(node, scan.extra, frozenset(scan.restricted))
+        yield from _import_findings(node, extra, frozenset(scope.restricted))
     elif isinstance(node, ast.Name):
-        yield from _name_findings(node, scan)
+        yield from _name_findings(node, scope)
+    elif isinstance(node, (ast.Global, ast.Nonlocal)):
+        yield from _declaration_findings(node, scope)
     elif isinstance(node, ast.Attribute):
-        if _is_banned_attribute(node.attr):
-            yield f"attribute {node.attr!r} is not allowed in plugins"
+        yield from _attribute_findings(node, scope)
+    elif isinstance(node, ast.Subscript):
+        if not isinstance(node.ctx, ast.Load) and scope.is_imported(node.value):
+            yield "assigning an item of an imported module attribute is not allowed in plugins"
     elif isinstance(node, ast.Call):
-        yield from _call_findings(node)
+        yield from _call_findings(node, scope)
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        yield from _definition_findings(node, scope)
 
 
 def _restricted_bases(
@@ -581,6 +1036,8 @@ def check_process_isolation(
     data: bytes,
     extra_imports: frozenset[str] = frozenset(),
     restricted: Mapping[str, frozenset[str]] = NO_RESTRICTION,
+    *,
+    fileio_attribute_allowed: bool = False,
 ) -> list[Violation]:
     """Reject, by default, anything in plugin code that could run a process.
 
@@ -603,18 +1060,21 @@ def check_process_isolation(
         and isinstance(node.value, ast.Name)
         and node.value.id == OS_MODULE
     }
-    scan = _Scan(
+    scope = _Scope(
         call_targets,
         os_path_bases,
-        extra_imports,
+        _bound_names(nodes),
+        _module_names(nodes, path),
+        {id(child): parent for parent in nodes for child in ast.iter_child_nodes(parent)},
         restricted,
         _restricted_bases(nodes, restricted),
+        fileio_attribute_allowed,
     )
     return sorted(
         {
             Violation(path, getattr(node, "lineno", 1), message)
             for node in nodes
-            for message in _process_findings(node, scan)
+            for message in _process_findings(node, scope, extra_imports)
         }
     )
 
@@ -660,7 +1120,15 @@ def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
             restricted = FILE_IO_ATTRIBUTES if relative == FILE_IO_HELPER else NO_RESTRICTION
             if restricted:
                 extra = extra | frozenset(restricted)
-            violations.extend(check_process_isolation(path, data, extra, restricted))
+            violations.extend(
+                check_process_isolation(
+                    path,
+                    data,
+                    extra,
+                    restricted,
+                    fileio_attribute_allowed=relative == LEDGER_MODULE,
+                )
+            )
             if relative not in FILE_IO_IMPORTERS:
                 violations.extend(_file_io_import_findings(path, data))
         return violations
