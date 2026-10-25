@@ -68,7 +68,9 @@ def _timestamp(value: object) -> str | None:
 def _custom_data(entry: dict[str, object]) -> dict[str, str]:
     mapping = optional_object(entry, "custom_data", "build")
     items = bounded(sorted(mapping.items()), MAX_SUBENTRIES, "custom_data")
-    return {key: as_text(item, f"custom_data.{key}") for key, item in items}
+    return {
+        as_text(key, "custom_data key"): as_text(item, "custom_data value") for key, item in items
+    }
 
 
 def _build_entry(raw: object, last_run: str | None) -> PackerBuild:

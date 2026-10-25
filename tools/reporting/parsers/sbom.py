@@ -1,5 +1,6 @@
 """SPDX 2.x JSON and CycloneDX 1.x JSON software bills of materials."""
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -7,11 +8,13 @@ from typing import Final
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
     MAX_DETAIL_ITEMS,
+    MAX_ENTRIES,
     InvalidInputError,
     ParseResult,
     as_list,
     as_object,
     as_text,
+    bounded,
     dig,
     load_json,
     maybe_text,
@@ -126,11 +129,13 @@ def _build(data: bytes) -> SbomData:
         components, key=lambda item: (item.name, item.version or "", item.license or "")
     )
     licenses = [item.license for item in ordered if item.license is not None]
+    counted = Counter(licenses)
+    bounded(list(counted), MAX_ENTRIES, "distinct licences")
     return SbomData(
         format=name,
         spec_version=version,
         component_count=len(ordered),
-        license_counts={key: licenses.count(key) for key in sorted(set(licenses))},
+        license_counts=dict(sorted(counted.items())),
         unlicensed=len(ordered) - len(licenses),
         components=tuple(ordered[:MAX_DETAIL_ITEMS]),
         truncated=len(ordered) > MAX_DETAIL_ITEMS,

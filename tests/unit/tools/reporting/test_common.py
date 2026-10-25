@@ -76,7 +76,7 @@ def test_run_parser_uninspectable_path_is_error(write: Callable[..., Path]) -> N
     file_path = write("plain", b"abc")
     result = common.run_parser(file_path / "child", "demo", 100, build_upper)
     assert result.status is SectionStatus.ERROR
-    assert result.reason == "input file cannot be opened without following symbolic links"
+    assert result.reason == common.OPEN_FAILED
 
 
 def test_run_parser_rejects_a_symlinked_parent_directory(tmp_path: Path) -> None:
@@ -110,6 +110,12 @@ def test_run_parser_reads_relative_paths(
         common.run_parser(Path("../" + path.parent.name + "/a.txt"), "demo", 100, build_upper).data
         == "ABC"
     )
+
+
+def test_run_parser_rejects_a_nul_byte_in_the_path() -> None:
+    result = common.run_parser(Path("a\x00b"), "demo", 100, build_upper)
+    assert result.status is SectionStatus.ERROR
+    assert result.reason == common.OPEN_FAILED
 
 
 @pytest.mark.parametrize("name", [".", "/"])

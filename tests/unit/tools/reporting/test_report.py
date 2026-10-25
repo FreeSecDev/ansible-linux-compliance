@@ -3,14 +3,15 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from jsonschema import Draft202012Validator
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
-from tools.reporting import report
+from tools.reporting import common, report
 from tools.reporting.common import dumps
 from tools.reporting.report import ReportError, ReportInputs, RunMetadata, Scope
 
@@ -662,3 +663,104 @@ def test_inconsistent_documents_fail_validation(kit: Any, tmp_path: Path) -> Non
     assert mutate_many(ok, first_item, {"status": "error"})
     assert mutate_many(ok, first_item, {"status": "unavailable"})
     assert mutate_many(ok, ("overview",), {"available": [], "unavailable": sorted(SECTIONS)})
+
+
+def test_files_claiming_the_same_host_are_merged_with_a_note(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    paths = (
+        write("one.xml", kit.xccdf_text("Web01")),
+        write("two.xml", kit.xccdf_text("web01", "fail")),
+        write("three.xml", kit.xccdf_text("other")),
+    )
+    document = build(ReportInputs(scope=Scope.FLEET, xccdf=paths))
+    assert errors(document) == []
+    section = document["sections"]["compliance"]
+    assert section["notes"] == ["2 input files claim the self-asserted host web01 and are merged"]
+    single = build(ReportInputs(scope=Scope.FLEET, xccdf=paths[2:]))
+    assert single["sections"]["compliance"]["notes"] == []
+    assert mutate_many(document, ("sections", "compliance"), {"status": "partial"})
+
+
+def test_schema_and_code_limits_agree(kit: Any) -> None:
+    del kit
+    properties: dict[str, dict[str, Any]] = {}
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            mapping = cast("dict[str, Any]", node)
+            for name, value in mapping.get("properties", {}).items():
+                properties.setdefault(name, value)
+            for value in mapping.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in cast("list[object]", node):
+                walk(value)
+
+    walk(SCHEMA)
+    expected_items = {
+        "findings": model.MAX_FINDINGS,
+        "evidence": model.MAX_EVIDENCE_ITEMS,
+        "flags": len(model.ResultFlag),
+        "rules": report.MAX_RULES,
+        "groups": report.MAX_GROUPS,
+        "aggregates": report.MAX_GROUPS,
+        "builds": common.MAX_ENTRIES,
+        "scenarios": common.MAX_ENTRIES,
+        "items": report.MAX_INPUTS,
+        "gaps": report.MAX_INPUTS,
+        "issues": common.MAX_DETAIL_ITEMS,
+        "vulnerabilities": common.MAX_DETAIL_ITEMS,
+        "components": common.MAX_DETAIL_ITEMS,
+        "packages": common.MAX_DETAIL_ITEMS,
+        "failed_cases": common.MAX_DETAIL_ITEMS,
+        "files": common.MAX_SUBENTRIES,
+        "fixed_versions": common.MAX_SUBENTRIES,
+        "sources": report.MAX_INPUTS,
+        "raw_artifacts": 9 * report.MAX_INPUTS,
+    }
+    for name, limit in expected_items.items():
+        assert properties[name]["maxItems"] == limit, name
+    maxima = {name: value["maxItems"] for name, value in properties.items() if "maxItems" in value}
+    structural = {"available", "partial", "unavailable", "error", "aggregates", "notes"}
+    assert set(maxima) - set(expected_items) <= structural | {"notes"}
+    assert properties["custom_data"]["maxProperties"] == common.MAX_SUBENTRIES
+    assert SCHEMA["$defs"]["counts"]["maxProperties"] == common.MAX_ENTRIES
+    assert properties["custom_data"]["additionalProperties"]["maxLength"] == common.MAX_TEXT_LENGTH
+    path_limit = properties["path"]["maxLength"]
+    assert path_limit == common.MAX_PATH_LENGTH
+    assert properties["content"]["maxLength"] == model.MAX_EVIDENCE_LENGTH
+    assert SCHEMA["$defs"]["rawArtifact"]["properties"]["path"]["maxLength"] == path_limit
+
+
+def test_the_schema_timestamp_pattern_agrees_with_the_metadata_validator() -> None:
+    pattern = re.compile(SCHEMA["$defs"]["timestamp"]["pattern"])
+    candidates = [
+        "2026-10-25T10:00:00Z",
+        "2026-12-31T23:59:59Z",
+        "2026-02-28T00:00:00Z",
+        "2024-02-29T12:00:00Z",
+        "2026-13-45T99:99:99Z",
+        "2026-02-30T10:00:00Z",
+        "2026-04-31T10:00:00Z",
+        "2026-00-10T10:00:00Z",
+        "2026-10-00T10:00:00Z",
+        "2026-10-32T10:00:00Z",
+        "2026-10-25T24:00:00Z",
+        "2026-10-25T10:60:00Z",
+        "2026-10-25T10:00:60Z",
+        "2026-10-25 10:00:00Z",
+        "2026-10-25T10:00:00",
+    ]
+    for value in candidates:
+        try:
+            RunMetadata(generated_at=value)
+            accepted = True
+        except ReportError:
+            accepted = False
+        if accepted:
+            assert pattern.fullmatch(value), value
+        if not pattern.fullmatch(value):
+            assert not accepted, value
+    assert not pattern.fullmatch("2026-13-45T99:99:99Z")
+    assert not pattern.fullmatch("2026-02-30T10:00:00Z")

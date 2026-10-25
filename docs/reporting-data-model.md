@@ -54,7 +54,7 @@ At most 1000 input files per section are accepted.
 | `raw_artifacts` | One reference per input: `format`, `path` as supplied, `sha256`, `size`, `status` |
 
 Each section has `status`, `reason`, `items`, `gaps` and `summary`; `compliance` also has `rules`, `groups` and
-`aggregates`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
+`aggregates` and `notes`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
 lists every item that is not `available` with its path, status and reason.
 
 | Section | Item formats | Summary |
@@ -76,6 +76,10 @@ lists every item that is not `available` with its path, status and reason.
   It is `partial` when some items are available and the rest are missing. It is `available` only when every item is.
 - When a section is not `available` its `summary` is `null` and `rules`, `groups` and `aggregates` are empty. Its
   `reason` is a string and `gaps` lists the missing or invalid inputs. Available items keep their `data`.
+- Limits of the schema: JSON Schema 2020-12 cannot compare counts or sum values, so a forged document with
+  `all_evaluated_passed` next to non-zero `fail` counts, or a section `summary` next to groups of two versions, still
+  validates; the producer never writes them. A test keeps every `maxItems`, `maxProperties` and `maxLength` equal to the
+  Python constants, and the timestamp pattern accepts only valid months, days (29 February in any year) and times.
 - The schema enforces these couplings (status against items, gaps, reason, summary, overview, and an available item
   having a checksum and size), so a consumer can rely on them. Every array has a `maxItems`.
 
@@ -97,7 +101,8 @@ A host is identified by `host.hostname` (plus `machine_id` when present) for Sca
 name in the file for XCCDF (`target` or the fqdn fact) and ARF (asset fqdn and hostname, which must match the
 TestResult target, otherwise the file is an error). A file that names no host is its own host, keyed by its path. Names
 are lower-cased, and files are grouped only when the names are equal; differing identities are never merged. Input
-files with the same SHA-256 count once.
+files with the same SHA-256 count once. When several input files claim the same self-asserted host, they are
+merged and `notes` says so.
 
 | Field | Meaning |
 |---|---|
@@ -156,7 +161,7 @@ Common behaviour of every parser:
 
 | Format | Module | Notes and limitations |
 |---|---|---|
-| XCCDF 1.2 results | `parsers/xccdf.py` | Reuses `openscap.parse_results` of the findings model: result mapping through `map_xccdf_result`, unknown values become `error`, exactly one TestResult. `notselected` results are counted in `not_selected`, not in the findings. `host` is `null`; `reported_host` is the self-asserted `target` or fqdn fact. |
+| XCCDF 1.2 results | `parsers/xccdf.py` | Reuses `openscap.parse_results` of the findings model (more than 100000 selected rule results is an error): result mapping through `map_xccdf_result`, unknown values become `error`, exactly one TestResult. `notselected` results are counted in `not_selected`, not in the findings. `host` is `null`; `reported_host` is the self-asserted `target` or fqdn fact. |
 | ARF 1.1 | `parsers/xccdf.py` | Bounds and parses with defusedxml, then requires exactly one embedded XCCDF 1.2 TestResult and hands it to the same parser. The asset fqdn and hostname must agree with the target and fact names. Other report contents are ignored. |
 | ScanRun JSON | `parsers/scanrun.py` | `model.loads`; the validated run is embedded unchanged and `findings` is empty in the item to avoid duplication. |
 | JUnit XML | `parsers/junit.py` | Roots `testsuite` or `testsuites`. Totals come from `testcase` elements. The `tests`, `failures` and `errors` attributes of a `testsuite`, if present, must match its own test cases, otherwise the file is an error. `error` outranks `failure`; no test cases is an error. Durations are not read. |
@@ -164,8 +169,8 @@ Common behaviour of every parser:
 | pytest JSON | `parsers/pytest_json.py` | pytest-json-report layout. `exitcode` is required: 2, 3, 4 and 5 (interrupted, internal error, usage error, no tests) are errors, 0 must agree with zero failures and 1 with at least one. `summary.total` must equal the sum of the outcome counts. `xpassed` counts as failed, `xfailed` as skipped. |
 | ansible-lint | `parsers/lint.py` | SARIF 2.1.0 (levels map to severities: error high, warning medium, note low, none info) or JSON/code-climate (blocker and critical map to critical, major high, minor medium, info info; others unknown). The SARIF driver must be `ansible-lint`; `executionSuccessful: false` or a `toolExecutionNotifications` entry at level `error` makes the file an error. The JSON format carries no tool name. A clean run with zero issues is `available`. |
 | Grype | `parsers/grype.py` | `descriptor.name` must be `grype`. Severities: Negligible is `info`, unlisted values are `unknown`. The severity is the highest of the match and its `relatedVulnerabilities`. Matches are deduplicated by vulnerability, package and version, keeping the highest severity. The database date is read from `descriptor.db.status.built` or `descriptor.db.built`, else `null`. Ignored matches are not read. |
-| SPDX and CycloneDX | `parsers/sbom.py` | SPDX-2.2 and SPDX-2.3 JSON (not SPDX 3, not tag-value; the document must be `SPDXRef-DOCUMENT` with a namespace and every package an `SPDXID`) and CycloneDX 1.4 to 1.6 JSON (every component a `type`). Other versions are errors. Only top-level packages or components are read. A licence is the first asserted of `licenseConcluded` and `licenseDeclared`, or the first CycloneDX licence id, name or expression. An SBOM with no components is an error. |
-| Packer manifest | `parsers/packer.py` | Requires at least one build with `name`, `builder_type` and `artifact_id`. `build_time` (epoch seconds from the file) is written in UTC and must be valid if present. `in_last_run` marks the builds of `last_run_uuid`. `custom_data` values must be strings. At most 10000 builds and 1000 files. |
+| SPDX and CycloneDX | `parsers/sbom.py` | SPDX-2.2 and SPDX-2.3 JSON (not SPDX 3, not tag-value; the document must be `SPDXRef-DOCUMENT` with a namespace and every package an `SPDXID`) and CycloneDX 1.4 to 1.6 JSON (every component a `type`). Other versions are errors. Only top-level packages or components are read. A licence is the first asserted of `licenseConcluded` and `licenseDeclared`, or the first CycloneDX licence id, name or expression. An SBOM with no components, or more than 10000 distinct licences, is an error. |
+| Packer manifest | `parsers/packer.py` | Requires at least one build with `name`, `builder_type` and `artifact_id`. `build_time` (epoch seconds from the file) is written in UTC and must be valid if present. `in_last_run` marks the builds of `last_run_uuid`. `custom_data` keys and values must be non-empty strings of at most 512 characters, at most 1000 keys. At most 10000 builds and 1000 files. |
 | CodeBuild | `parsers/codebuild.py` | `batch-get-builds` output. `buildStatus` must be a known CodeBuild status. Any entry in `buildsNotFound` makes the file an error, because a requested build is missing. The section summary counts succeeded, failed and in-progress builds, so a failed build is never shown as clean. Times are numbers (epoch seconds, written in UTC) or strings as supplied. |
 | Molecule summary | `parsers/molecule.py` | The project-defined format below. |
 

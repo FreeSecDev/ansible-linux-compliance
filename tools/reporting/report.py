@@ -265,13 +265,25 @@ def _unique_entries(results: Sequence[ParseResult[ComplianceData]]) -> list[Entr
     return entries
 
 
+def _host_notes(entries: list[Entry]) -> list[str]:
+    claims: dict[str, int] = {}
+    for _, data in entries:
+        if data.host is None and data.reported_host is not None:
+            claims[data.reported_host] = claims.get(data.reported_host, 0) + 1
+    return [
+        f"{count} input files claim the self-asserted host {name} and are merged"
+        for name, count in sorted(claims.items())
+        if count > 1
+    ]
+
+
 def _compliance_section(
     results: Sequence[ParseResult[ComplianceData]], scope: Scope
 ) -> dict[str, Json]:
     section = _section(results)
     entries = _unique_entries(results)
     check_scope(scope, entries)
-    section.update({"aggregates": [], "groups": [], "rules": []})
+    section.update({"aggregates": [], "groups": [], "notes": [], "rules": []})
     if section["status"] != SectionStatus.AVAILABLE.value:
         return section
     rules = rollup(entries)
@@ -280,6 +292,7 @@ def _compliance_section(
         message = "the compliance data exceeds the report size limits"
         raise ReportError(message)
     versions = pairs(entries)
+    section["notes"] = [to_json(note) for note in _host_notes(entries)]
     section["rules"] = [to_json(rule) for rule in rules]
     section["groups"] = [to_json(group) for group in groups]
     if scope is not Scope.SINGLE_HOST:

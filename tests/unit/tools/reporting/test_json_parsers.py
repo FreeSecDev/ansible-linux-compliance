@@ -667,3 +667,29 @@ def test_entry_counts_are_bounded(
 def test_json_parsers_reject_non_finite_numbers(write: Callable[..., Path]) -> None:
     text = '{"summary": {"passed": 1, "total": 1}, "exitcode": 0, "duration": 1e999}'
     assert rejected(pytest_json.parse_pytest_json, write, text)
+
+
+def test_sbom_distinct_licences_are_bounded(
+    write: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sbom, "MAX_ENTRIES", 2)
+    components = [
+        {"type": "library", "name": f"c{i}", "licenses": [{"license": {"id": f"L{i}"}}]}
+        for i in range(3)
+    ]
+    assert rejected(sbom.parse_sbom, write, cyclonedx_document(components=components))
+    assert sbom.parse_sbom(
+        write("s.json", json.dumps(cyclonedx_document(components=components[:2])))
+    ).data
+
+
+def test_packer_custom_data_keys_are_cleaned_and_must_not_be_empty(
+    write: Callable[..., Path],
+) -> None:
+    base = {"name": "n", "builder_type": "b", "artifact_id": "a"}
+    document = {"builds": [{**base, "custom_data": {"k\x00ey": "v"}}]}
+    data = packer.parse_packer(write("p.json", json.dumps(document))).data
+    assert data is not None
+    assert data.builds[0].custom_data == {"key": "v"}
+    empty = {"builds": [{**base, "custom_data": {"\x00": "v"}}]}
+    assert rejected(packer.parse_packer, write, empty)

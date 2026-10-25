@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
 from tools.reporting import xmlsafe
 from tools.reporting.common import InvalidInputError, SectionStatus
 from tools.reporting.parsers import cobertura, junit, xccdf
@@ -340,3 +341,22 @@ def test_cobertura_covered_counts_cannot_exceed_valid_counts(write: Callable[...
     for kind in ("lines", "branches"):
         document = f'<coverage line-rate="1" branch-rate="1" {kind}-valid="1" {kind}-covered="2"/>'
         assert cobertura.parse_cobertura(write("c.xml", document)).status is SectionStatus.ERROR
+
+
+def test_xccdf_rule_results_are_bounded_by_the_model_limit(
+    kit: Any, write: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(model, "MAX_FINDINGS", 2)
+    results = [(f"r{i}", "pass") for i in range(3)]
+    result = xccdf.parse_xccdf(write("x.xml", kit.xccdf_text("h", results=results)))
+    assert result.status is SectionStatus.ERROR
+    assert result.reason is not None
+    assert "more than 2" in result.reason
+    arf = (kit.REPORTING / "arf.xml").read_text(encoding="utf-8")
+    extra = "".join(
+        f'<rule-result idref="xccdf_org.example.synthetic_rule_x{i}">'
+        "<result>pass</result></rule-result>"
+        for i in range(2)
+    )
+    over = xccdf.parse_arf(write("a.xml", arf.replace("</TestResult>", f"{extra}</TestResult>")))
+    assert over.status is SectionStatus.ERROR

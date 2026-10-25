@@ -18,6 +18,9 @@ MAX_DETAIL_ITEMS: Final[int] = 1000
 MAX_COUNT: Final[int] = 10**9
 MAX_EPOCH_SECONDS: Final[int] = 10**11
 MAX_PATH_LENGTH: Final[int] = 4096
+OPEN_FAILED: Final[str] = (
+    "input file cannot be opened (not a directory, or a symbolic link in the path)"
+)
 MAX_ENTRIES: Final[int] = 10000
 MAX_SUBENTRIES: Final[int] = 1000
 _READ_CHUNK: Final[int] = 1024 * 1024
@@ -98,8 +101,10 @@ def _read_bytes(path: Path, max_bytes: int) -> bytes:
     except FileNotFoundError:
         message = "input file does not exist"
         raise MissingInputError(message) from None
-    except OSError:
-        message = "input file cannot be opened without following symbolic links"
+    except InvalidInputError:
+        raise
+    except (OSError, ValueError):
+        message = OPEN_FAILED
         raise InvalidInputError(message) from None
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):

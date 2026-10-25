@@ -24,6 +24,7 @@ from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
     InvalidInputError,
     ParseResult,
+    bounded,
     clean_text,
     decode_text,
     run_parser,
@@ -74,6 +75,7 @@ def _convert(document: str, kind: str, reported_host: str | None) -> ComplianceD
     selected = tuple(
         finding for finding in parsed.findings if model.ResultFlag.NOTSELECTED not in finding.flags
     )
+    bounded(list(selected), model.MAX_FINDINGS, "rule results")
     not_selected = len(parsed.findings) - len(selected)
     summary = summarize(tally_findings(selected), COMPLETED, 1, 0, not_selected)
     return ComplianceData(
