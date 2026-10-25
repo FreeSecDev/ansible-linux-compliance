@@ -1638,6 +1638,108 @@
         "message": "document has more than 5 elements"
       }
     },
+    "reporting/arf.xml": {
+      "file": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-chunks-64": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-chunks-7": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-max-elements-5": {
+        "error": "XccdfParseError",
+        "message": "document has more than 5 elements"
+      },
+      "file-one-byte-short": {
+        "error": "XccdfParseError",
+        "message": "the results file is larger than 1604 bytes"
+      },
+      "text": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "text-max-depth-3": {
+        "error": "XccdfParseError",
+        "message": "document is nested deeper than 3 levels"
+      },
+      "text-max-elements-5": {
+        "error": "XccdfParseError",
+        "message": "document has more than 5 elements"
+      }
+    },
+    "reporting/cobertura.xml": {
+      "file": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-chunks-64": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-chunks-7": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-max-elements-5": {
+        "error": "XccdfParseError",
+        "message": "document has more than 5 elements"
+      },
+      "file-one-byte-short": {
+        "error": "XccdfParseError",
+        "message": "the results file is larger than 368 bytes"
+      },
+      "text": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "text-max-depth-3": {
+        "error": "XccdfParseError",
+        "message": "document is nested deeper than 3 levels"
+      },
+      "text-max-elements-5": {
+        "error": "XccdfParseError",
+        "message": "document has more than 5 elements"
+      }
+    },
+    "reporting/junit.xml": {
+      "file": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-chunks-64": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-chunks-7": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "file-max-elements-5": {
+        "error": "XccdfParseError",
+        "message": "document has more than 5 elements"
+      },
+      "file-one-byte-short": {
+        "error": "XccdfParseError",
+        "message": "the results file is larger than 549 bytes"
+      },
+      "text": {
+        "error": "XccdfParseError",
+        "message": "the root element is not an XCCDF 1.2 Benchmark or TestResult"
+      },
+      "text-max-depth-3": {
+        "error": "XccdfParseError",
+        "message": "document is nested deeper than 3 levels"
+      },
+      "text-max-elements-5": {
+        "error": "XccdfParseError",
+        "message": "document has more than 5 elements"
+      }
+    },
     "xccdf/all-pass.xml": {
       "file": {
         "result": {
