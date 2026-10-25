@@ -158,7 +158,7 @@ def test_errors_from_the_receiver_propagate() -> None:
 
 def test_default_bounds_are_documented_values() -> None:
     bounds = xmlsafe.XmlBounds()
-    assert (bounds.max_elements, bounds.max_depth) == (5_000_000, 64)
+    assert (bounds.max_elements, bounds.max_depth) == (2_000_000, 64)
 
 
 def test_a_regular_file_is_streamed_in_chunks(tmp_path: Path) -> None:
@@ -240,3 +240,65 @@ def test_a_read_error_on_an_open_handle_is_a_clean_error() -> None:
 
     with pytest.raises(xmlsafe.XmlSafetyError, match="OSError"):
         list(xmlsafe.iter_handle_chunks(cast("Any", Broken()), 10))
+
+
+def test_text_is_parsed_like_its_utf8_bytes() -> None:
+    document = '<a xmlns="urn:x">café</a>'
+    recorder = Recorder()
+    xmlsafe.parse_text(document, recorder)
+    assert recorder.events == parse(document.encode("utf-8")).events
+    assert ("text", "café") in recorder.events
+
+
+@pytest.mark.parametrize(
+    ("document", "message"),
+    [
+        ("<a>\ud800</a>", "not valid Unicode text"),
+        ("", "empty"),
+        ("<!DOCTYPE a><a/>", "DOCTYPE and ENTITY"),
+        ("<a>\x00</a>", "NUL"),
+        ("<a><a><a/></a></a>", "deeper than 2"),
+    ],
+)
+def test_text_gets_every_check_of_the_byte_parser(document: str, message: str) -> None:
+    with pytest.raises(xmlsafe.XmlSafetyError, match=message):
+        xmlsafe.parse_text(document, Recorder(), xmlsafe.XmlBounds(max_depth=2))
+
+
+def test_errors_from_the_receiver_propagate_for_text() -> None:
+    with pytest.raises(RuntimeError, match="stop"):
+        xmlsafe.parse_text("<a/>", Explosive())
+
+
+def test_the_subject_names_the_file_in_messages(tmp_path: Path) -> None:
+    path = tmp_path / "data.xml"
+    path.write_bytes(b"x" * 11)
+    with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the results file is larger than 10 bytes$"):
+        next(xmlsafe.iter_file_chunks(str(path), 10, subject="results"))
+    with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the results path is not a regular file$"):
+        next(xmlsafe.iter_file_chunks(str(tmp_path), 10, subject="results"))
+    with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the results file cannot be read: "):
+        next(xmlsafe.iter_file_chunks(str(tmp_path / "missing.xml"), 10, subject="results"))
+    grown = r"^the results file is larger than 5 bytes$"
+    with xmlsafe.open_regular(str(path), 11) as handle, pytest.raises(ValueError, match=grown):
+        list(xmlsafe.iter_handle_chunks(handle, 5, subject="results"))
+
+
+def test_without_a_subject_the_messages_are_generic(tmp_path: Path) -> None:
+    path = tmp_path / "data.xml"
+    path.write_bytes(b"x" * 11)
+    with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the file is larger than 10 bytes$"):
+        next(xmlsafe.iter_file_chunks(str(path), 10))
+    with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the path is not a regular file$"):
+        next(xmlsafe.iter_file_chunks(str(tmp_path), 10))
+
+
+def test_a_read_error_names_the_subject() -> None:
+    class Broken:
+        """Handle whose seek fails."""
+
+        def seek(self, _offset: int) -> Any:
+            raise OSError
+
+    with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the results file cannot be read: OSError$"):
+        list(xmlsafe.iter_handle_chunks(cast("Any", Broken()), 10, subject="results"))

@@ -115,7 +115,7 @@ identifier that is neither, or both, fails closed. A golden file (`tests/fixture
 every profile of both pinned datastreams (all 25), the rule count and the SHA-256 of the sorted rule list, and
 `make test-content-golden` fetches the pinned content through the digest-verified downloader and compares the catalog
 with it. The CI `test` job runs that target and fails, rather than skips, when the content cannot be fetched. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
-`openscap.py` still carries its own copy of the hardened parser; moving it onto `xmlsafe.py` is tracked as FREES-126.
+Since FREES-126 `openscap.py` parses through `xmlsafe.py` too and no longer carries its own copy of the parser.
 
 One residual risk remains: `open_regular` checks the type with `lstat` and then opens the path. If an attacker who
 controls the directory swaps a regular file for a FIFO in that window, the open could block until the module times out.
@@ -125,7 +125,8 @@ The result can never be wrong content, because the bytes read are hashed, and an
 ## Security implications
 
 The datastream is untrusted until its digest matches the pin, and is still parsed defensively afterwards. The parser
-rejects DOCTYPE and entities, UTF-16, NUL bytes, files over 256 MiB, more than 5,000,000 elements and nesting deeper
+rejects DOCTYPE and entities, UTF-16, NUL bytes, files over 256 MiB, more than 2,000,000 elements (5,000,000 before FREES-126, which took the stricter bound of
+the results parser; the pinned datastreams have about 155,000 and 70,000 elements) and nesting deeper
 than 64. The fetch tool cannot be made to write outside its output directory or to extract a link. A compromised
 upstream release is detected only if the pin is reviewed against an independent source; the manifest records the
 publication time so a reviewer can enforce the seven-day rule.
@@ -134,4 +135,5 @@ publication time so a reviewer can enforce the seven-day rule.
 
 Updating content means a pull request that changes `content/manifest.yml` and the profile list together, with the
 verification evidence in the description. Changing the repository rule list: `tools/lint/check_repo_rules.py` now
-allows `xml.parsers.expat` in `plugins/module_utils/compliance/xmlsafe.py` as well as in `openscap.py`.
+allows `xml.parsers.expat` in `plugins/module_utils/compliance/xmlsafe.py` as well as in `openscap.py`. FREES-126
+later removed `openscap.py` from that allowance, so only `xmlsafe.py` may import expat (ADR 0004).

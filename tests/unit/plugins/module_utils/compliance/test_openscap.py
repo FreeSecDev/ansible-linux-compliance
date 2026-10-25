@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import io
 import os
 import re
 import stat
@@ -18,6 +19,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     openscap,
     process,
     scanner,
+    xmlsafe,
 )
 
 if TYPE_CHECKING:
@@ -46,6 +48,32 @@ def non_utf8_file(directory: Path) -> Path:
 
 def skip_declaration_scan(_previous: bytes, _chunk: bytes) -> bytes:
     return b""
+
+
+class CloseFails(io.BytesIO):
+    """In-memory handle whose close fails like an I/O error on a network file system."""
+
+    def __init__(self, data: bytes, error: OSError) -> None:
+        super().__init__(data)
+        self.error = error
+
+    def close(self) -> None:
+        first = not self.closed
+        super().close()
+        if first:
+            raise self.error
+
+
+def fail_on_close(monkeypatch: pytest.MonkeyPatch, target: Path, error: OSError) -> None:
+    real: Any = Path.open
+    data = target.read_bytes()
+
+    def opener(self: Path, *arguments: Any, **keywords: Any) -> Any:
+        if self == target:
+            return CloseFails(data, error)
+        return real(self, *arguments, **keywords)
+
+    monkeypatch.setattr(Path, "open", opener)
 
 
 def text(name: str, folder: Path = XCCDF) -> str:
@@ -364,8 +392,10 @@ class TestHardening:
     def test_parser_rejects_declarations_even_if_the_text_check_is_bypassed(
         self, name: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(openscap, "_scan_for_declarations", skip_declaration_scan)
-        with pytest.raises(openscap.XccdfParseError, match="not allowed"):
+        monkeypatch.setattr(xmlsafe, "_scan_for_declarations", skip_declaration_scan)
+        with pytest.raises(
+            openscap.XccdfParseError, match="external entity declarations are not allowed"
+        ):
             parse(name, ADVERSARIAL)
 
     def test_external_entity_is_never_read(
@@ -380,7 +410,7 @@ class TestHardening:
         with pytest.raises(openscap.XccdfParseError) as caught:
             openscap.parse_results(document)
         assert "TOP-SECRET-VALUE" not in str(caught.value)
-        monkeypatch.setattr(openscap, "_scan_for_declarations", skip_declaration_scan)
+        monkeypatch.setattr(xmlsafe, "_scan_for_declarations", skip_declaration_scan)
         with pytest.raises(openscap.XccdfParseError) as bypassed:
             openscap.parse_results(document)
         assert "TOP-SECRET-VALUE" not in str(bypassed.value)
@@ -530,7 +560,7 @@ class TestReadResults:
     ) -> None:
         path = tmp_path / "nul.xml"
         path.write_bytes((XCCDF / "all-pass.xml").read_bytes().replace(b"draft", b"dr\x00ft"))
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 64)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", 64)
         with pytest.raises(openscap.XccdfParseError, match="NUL byte"):
             self.read(path)
 
@@ -551,6 +581,30 @@ class TestReadResults:
             openscap.read_results(
                 str(XCCDF / "all-pass.xml"), 1_000_000, openscap.XmlLimits(max_elements=3)
             )
+
+
+class TestCloseErrors:
+    """An error while the results file is closed is a rejection, never a traceback."""
+
+    @pytest.mark.parametrize(
+        ("error", "message"),
+        [
+            (OSError(5, "Input/output error"), "Input/output error"),
+            (OSError(), "OSError"),
+        ],
+    )
+    def test_an_error_on_close_is_a_structured_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: OSError, message: str
+    ) -> None:
+        path = tmp_path / "results.xml"
+        path.write_bytes((XCCDF / "all-pass.xml").read_bytes())
+        fail_on_close(monkeypatch, path, error)
+        with pytest.raises(
+            openscap.XccdfParseError, match="the results file cannot be read"
+        ) as caught:
+            openscap.read_results(str(path), 1_000_000)
+        assert str(caught.value) == f"the results file cannot be read: {message}"
+        assert caught.value.__cause__ is error
 
 
 class TestCompletedScans:
@@ -804,6 +858,22 @@ class TestResultFailures:
 
         setup.runner.on_evaluate = write
         assert_failure(setup.audit(), model.ScanStatus.FAILED, "not well-formed")
+
+    def test_an_error_on_close_is_a_failure_not_a_traceback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        setup = harness(tmp_path)
+        results = setup.output_root / "scan-1" / "results.xml"
+
+        def install(path: Path) -> None:
+            fail_on_close(monkeypatch, path, OSError(5, "Input/output error"))
+
+        setup.runner.on_evaluate = install
+        run = setup.audit()
+        assert_failure(run, model.ScanStatus.FAILED, "results rejected")
+        assert run.error_message is not None
+        assert "the results file cannot be read: Input/output error" in run.error_message
+        assert results.is_file()
 
     def test_symlinked_results_path_is_a_failure(self, tmp_path: Path) -> None:
         setup = Harness(tmp_path, FakeRunner(None))
@@ -1172,7 +1242,7 @@ class TestStreaming:
 
     def test_small_chunks_give_the_same_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
         expected = openscap.read_results(str(XCCDF / "all-pass.xml"), 10**6)
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 7)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", 7)
         assert openscap.read_results(str(XCCDF / "all-pass.xml"), 10**6) == expected
 
     @pytest.mark.parametrize("size", [1, 2, 3, 5, 8, 9, 13])
@@ -1180,12 +1250,12 @@ class TestStreaming:
     def test_declarations_split_across_chunks_are_rejected_by_the_scan(
         self, monkeypatch: pytest.MonkeyPatch, name: str, size: int
     ) -> None:
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", size)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", size)
         with pytest.raises(openscap.XccdfParseError, match="DOCTYPE and ENTITY"):
             openscap.read_results(str(ADVERSARIAL / name), 10**6)
 
     def test_size_is_enforced_across_chunks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 16)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", 16)
         path = str(XCCDF / "all-pass.xml")
         size = (XCCDF / "all-pass.xml").stat().st_size
         assert openscap.read_results(path, size)

@@ -26,61 +26,47 @@ namespace fails the run, and a failed run reports every selected rule as ``error
 XML hardening
 -------------
 
-Results come from a process on a managed host, so they are untrusted. The
-standard library expat parser is used because this code must run on managed hosts
-with nothing but the Python standard library. It is made safe by layering:
+Results come from a process on a managed host, so they are untrusted. This module
+contains no XML parsing code: every byte goes through :mod:`xmlsafe`, which bounds
+the file size before and while reading, refuses symlinks and other non-regular
+files, rejects DOCTYPE and ENTITY declarations before parsing, forces UTF-8,
+rejects UTF-16, UTF-32 and NUL bytes, turns parameter entities off and bounds the
+element count and nesting depth (:class:`XmlLimits`, whose defaults are those of
+:mod:`xmlsafe`). This module keeps only the XCCDF semantics:
 
-1. The file must be a regular file, not a symlink, and is read in chunks that are
-   bounded before and while reading, so memory does not grow with its size.
-2. A DOCTYPE or ENTITY declaration is rejected in the raw bytes before the chunk
-   that holds it is parsed, across chunk boundaries, so the entity expansion and
-   external entity paths of the parser are unreachable for accepted input. The
-   expat handlers reject the same declarations again if that check were bypassed.
-3. The expat parser is created directly with the encoding forced to UTF-8,
-   parameter entity parsing turned off
-   (``SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)``) and no external
-   entity handler, so an external subset or entity is never loaded.
-4. Element count and nesting depth are bounded while parsing.
-5. Only the XCCDF 1.2 namespace is accepted.
-6. Elements are never stored. Each rule-result is reduced to its identifier,
+1. Only the XCCDF 1.2 namespace is accepted for the root, the test result, the
+   rule results and their result elements.
+2. Elements are never stored. Each rule-result is reduced to its identifier,
    severity and result text when it ends. Text is read only before the first child
    element, and a result or ident element with children is malformed.
-
-Python and expat versions differ in their entity-expansion defences: the
-billion-laughs limits arrived with expat 2.4.0 (2.4.1 for the final fixes) and
-Python bundles or links different expat versions across 3.9 to 3.14. This module
-does not depend on them, because a document with any entity declaration is
-rejected before parsing.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
-import stat
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, NoReturn
-from xml.parsers import expat
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     model,
     process,
     scanner,
+    xmlsafe,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator
-    from typing import BinaryIO
+    from collections.abc import Callable
 
 BACKEND_NAME: Final[str] = "openscap"
 XCCDF_NAMESPACE: Final[str] = "http://checklists.nist.gov/xccdf/1.2"
 RESULTS_FILE_NAME: Final[str] = "results.xml"
 ARF_FILE_NAME: Final[str] = "results-arf.xml"
 UNKNOWN_VERSION: Final[str] = "unknown"
-DEFAULT_MAX_ELEMENTS: Final[int] = 2_000_000
-DEFAULT_MAX_DEPTH: Final[int] = 64
+DEFAULT_MAX_ELEMENTS: Final[int] = xmlsafe.DEFAULT_MAX_ELEMENTS
+DEFAULT_MAX_DEPTH: Final[int] = xmlsafe.DEFAULT_MAX_DEPTH
 EXIT_ALL_PASSED: Final[int] = 0
 EXIT_RULES_FAILED: Final[int] = 2
 VERSION_TIMEOUT_SECONDS: Final[float] = 30.0
@@ -90,7 +76,7 @@ MAX_MESSAGE_LENGTH: Final[int] = 1024
 EXCERPT_BYTES: Final[int] = 512
 HASH_CHUNK_BYTES: Final[int] = 1024 * 1024
 SOURCE_NAME_LENGTH: Final[int] = 64
-READ_CHUNK_BYTES: Final[int] = 1024 * 1024
+RESULTS_SUBJECT: Final[str] = "results"
 
 _LABEL_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
 _VERSION_LINE: Final[str] = r"\(oscap\)\s+([0-9][A-Za-z0-9._+-]{0,63})"
@@ -99,13 +85,6 @@ _ERROR_OUTCOMES: Final[frozenset[model.Outcome]] = frozenset(
     {model.Outcome.FAIL, model.Outcome.ERROR}
 )
 
-
-_MORE: Final[bool] = False
-_FINAL: Final[bool] = True
-_DECLARATION_MARKERS: Final[tuple[bytes, ...]] = (b"<!DOCTYPE", b"<!ENTITY")
-_MARKER_OVERLAP: Final[int] = max(len(marker) for marker in _DECLARATION_MARKERS) - 1
-_NUL: Final[bytes] = b"\x00"
-_NON_UTF8_MARKS: Final[tuple[bytes, ...]] = (b"\xff\xfe", b"\xfe\xff")
 _TEST_ATTRIBUTES: Final[frozenset[str]] = frozenset({"start-time", "end-time", "version"})
 
 
@@ -199,18 +178,18 @@ def _reject_foreign(tag: str, local: str) -> None:
 
 
 class _Builder:
-    """Expat handlers that bound the document and stream compact rule data.
+    """Receiver of :mod:`xmlsafe` events that streams compact rule data.
 
     Nothing but the few values the extraction needs is kept: rule results are
     reduced to ``(idref, severity, result text)`` as each one ends and the
     elements themselves are never stored, so memory does not grow with the size
     of the document. Text is collected only before the first child element of
     an element, so text that follows a child is never merged into its parent.
+    Element names arrive in Clark notation, and the element count and depth are
+    bounded by :mod:`xmlsafe` before an element reaches this receiver.
     """
 
-    def __init__(self, limits: XmlLimits) -> None:
-        self.limits = limits
-        self.count = 0
+    def __init__(self) -> None:
         self.frames: list[_Frame] = []
         self.root_tag = ""
         self.root_id: str | None = None
@@ -222,17 +201,7 @@ class _Builder:
         self.rule = _RawRule(None, None)
         self.rules: list[tuple[str | None, str | None, str | None]] = []
 
-    def reject_declaration(self, *_arguments: object) -> NoReturn:
-        _fail("DOCTYPE, ENTITY and external entity declarations are not allowed")
-
-    def start(self, name: str, attributes: dict[str, str]) -> None:
-        self.count += 1
-        if self.count > self.limits.max_elements:
-            _fail(f"document has more than {self.limits.max_elements} elements")
-        if len(self.frames) >= self.limits.max_depth:
-            _fail(f"document is nested deeper than {self.limits.max_depth} levels")
-        namespace, separator, local = name.partition("}")
-        tag = f"{{{namespace}}}{local}" if separator else name
+    def start(self, tag: str, attributes: dict[str, str]) -> None:
         if self.frames:
             parent = self.frames[-1]
             parent.had_child = True
@@ -309,41 +278,9 @@ class _Builder:
             frame.text.append(data)
 
 
-def _scan_for_declarations(previous: bytes, chunk: bytes) -> bytes:
-    window = previous + chunk
-    if any(marker in window for marker in _DECLARATION_MARKERS):
-        _fail("DOCTYPE and ENTITY declarations are not allowed")
-    return window[-_MARKER_OVERLAP:]
-
-
-def _parse_stream(chunks: Iterable[bytes], limits: XmlLimits) -> _Builder:
-    builder = _Builder(limits)
-    parser = expat.ParserCreate(encoding="utf-8", namespace_separator="}")
-    parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
-    parser.buffer_text = True
-    parser.StartElementHandler = builder.start
-    parser.EndElementHandler = builder.end
-    parser.CharacterDataHandler = builder.text
-    parser.StartDoctypeDeclHandler = builder.reject_declaration
-    parser.EntityDeclHandler = builder.reject_declaration
-    parser.ExternalEntityRefHandler = builder.reject_declaration
-    previous = b""
-    received = 0
-    try:
-        for chunk in chunks:
-            if received == 0 and chunk.startswith(_NON_UTF8_MARKS):
-                _fail("the document is UTF-16 or UTF-32, only UTF-8 is accepted")
-            if _NUL in chunk:
-                _fail("the document contains a NUL byte, only UTF-8 text is accepted")
-            received += len(chunk)
-            previous = _scan_for_declarations(previous, chunk)
-            parser.Parse(chunk, _MORE)
-        if received == 0:
-            _fail("the document is empty")
-        parser.Parse(b"", _FINAL)
-    except expat.ExpatError as error:
-        _fail(f"not well-formed XML: {expat.ErrorString(error.code)} at line {error.lineno}")
-    return builder
+def _bounds(limits: XmlLimits | None) -> xmlsafe.XmlBounds:
+    chosen = XmlLimits() if limits is None else limits
+    return xmlsafe.XmlBounds(max_elements=chosen.max_elements, max_depth=chosen.max_depth)
 
 
 def _utc_timestamp(value: str | None, name: str) -> str:
@@ -437,21 +374,12 @@ def parse_results(document: str, limits: XmlLimits | None = None) -> ParsedResul
         XccdfParseError: If the document is unsafe, malformed, not XCCDF 1.2
             or lacks required data. A document is never treated as a pass.
     """
-    limits = XmlLimits() if limits is None else limits
+    builder = _Builder()
     try:
-        encoded = document.encode("utf-8")
-    except UnicodeEncodeError:
-        _fail("the document is not valid Unicode text")
-    return _extract(_parse_stream([encoded], limits))
-
-
-def _bounded_chunks(handle: BinaryIO, max_bytes: int) -> Iterator[bytes]:
-    total = 0
-    while chunk := handle.read(READ_CHUNK_BYTES):
-        total += len(chunk)
-        if total > max_bytes:
-            _fail(f"the results file is larger than {max_bytes} bytes")
-        yield chunk
+        xmlsafe.parse_text(document, builder, _bounds(limits))
+    except xmlsafe.XmlSafetyError as error:
+        raise XccdfParseError(str(error)) from error
+    return _extract(builder)
 
 
 def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> ParsedResults:
@@ -463,21 +391,25 @@ def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> 
     that the text is UTF-8, so other encodings are malformed, and DOCTYPE and
     ENTITY declarations are rejected before the chunk that holds them is parsed.
 
+    An error while the file is closed, the only file operation outside
+    :mod:`xmlsafe`, is a rejection too.
+
     Raises:
         XccdfParseError: For every rejection, including unreadable files.
     """
-    target = Path(path)
-    limits = XmlLimits() if limits is None else limits
+    builder = _Builder()
+    bounds = _bounds(limits)
     try:
-        info = target.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            _fail("the results path is not a regular file")
-        if info.st_size > max_bytes:
-            _fail(f"the results file is larger than {max_bytes} bytes")
-        with target.open("rb") as handle:
-            return _extract(_parse_stream(_bounded_chunks(handle, max_bytes), limits))
+        with xmlsafe.open_regular(path, max_bytes, subject=RESULTS_SUBJECT) as handle:
+            chunks = xmlsafe.iter_handle_chunks(handle, max_bytes, subject=RESULTS_SUBJECT)
+            xmlsafe.parse_chunks(chunks, builder, bounds)
+    except xmlsafe.XmlSafetyError as error:
+        raise XccdfParseError(str(error)) from error
     except OSError as error:
-        _fail(f"the results file cannot be read: {error.strerror or type(error).__name__}")
+        reason = error.strerror or type(error).__name__
+        message = f"the {RESULTS_SUBJECT} file cannot be read: {reason}"
+        raise XccdfParseError(message) from error
+    return _extract(builder)
 
 
 @dataclass(frozen=True)
