@@ -1,0 +1,11 @@
+---
+minor_changes:
+  - >-
+    Add the ``control_state`` module and the on-host state ledger
+    (``plugins/module_utils/compliance/ledger.py``) that records applied
+    remediations, their revert strategy and prior values in a root-only
+    ``state.json``. Reads are strict and bounded, a corrupt or unsafe ledger is an
+    error and is never reset, and writes are atomic and serialised with a lock.
+    All file access goes through the new audited helper
+    ``plugins/module_utils/compliance/fileio.py``, the only plugin file that may
+    use ``os``, ``fcntl``, ``errno`` and ``time`` beyond ``os.path`` (ADR 0011).

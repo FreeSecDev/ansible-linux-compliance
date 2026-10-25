@@ -58,6 +58,7 @@ ignore = ["D203", "D213", "TRY003"]
 "tests/**" = ["S101", "PLR2004", "D", "ANN401", "SLF001", "FBT001", "INP001"]
 "tools/**" = ["T201"]
 "plugins/**" = ["INP001"]
+"plugins/modules/**" = ["E402"]
 "plugins/module_utils/compliance/process.py" = ["S404", "S603"]
 
 [tool.ruff.lint.pydocstyle]
@@ -72,12 +73,14 @@ known-first-party = ["tools", "ansible_collections"]
 [tool.freesecdev.lint-justifications]
 "bandit B404 and B603 (plugins/module_utils/compliance/process.py)" = "Bandit has no per-file skip and inline nosec comments are banned, so make security runs Bandit twice: once on everything except the process helper with no skips, and once on the helper alone with only B404 and B603 skipped. A subprocess use anywhere else is still reported (ADR 0004)."
 "sanity ignore pylint:ansible-bad-function (plugins/module_utils/compliance/process.py)" = "ansible-test sanity pylint forbids subprocess.Popen in favour of AnsibleModule.run_command, which has no timeout, no output bound and no process-group handling (ADR 0004). The exception is declared in tests/sanity/ignore-2.20.txt and ignore-2.21.txt and lists exactly this one entry; a unit test fails if either file changes. ansible-lint does not permit this ignore (sanity[cannot-ignore]), and its allowed list is not configurable, so .ansible-lint-ignore skips that rule for those two files only. This departs from the Ansible Automation Platform certification ignore policy, which this collection does not target."
+"sanity ignore validate-modules:missing-gplv3-license (plugins/modules/control_state.py)" = "ansible-test validate-modules requires a GPLv3 header in the first 20 lines of every module. The collection is licensed Apache-2.0 (LICENSE, galaxy.yml), and adding a GPL header would misstate the licence of the file. The exception is declared per module in tests/sanity/ignore-2.20.txt and ignore-2.21.txt, which a unit test pins exactly; each new module needs its own reviewed line (FREES-56)."
 "ruff S404 and S603 (plugins/module_utils/compliance/process.py)" = "ADR 0004: this is the single audited process helper. It runs an argument list with shell=False, an absolute allow-listed executable, validated arguments and a timeout; a repository rule forbids subprocess everywhere else."
 "uv override packaging>=26.3" = "Checkov 3.3.29 declares packaging<24.0, which forces virtualenv 21.14.5 (12 advisories, five HIGH). packaging is a pure version and specifier parser; Checkov only uses it for version comparison and works unchanged on 26.3, with identical results on infra/ and on a deliberately insecure sample. virtualenv 21.14.13 itself requires packaging>=26.3."
 "uv override asteval>=1.0.10" = "Checkov pins asteval==1.0.6, which has two sandbox escape advisories (GHSA-89v8-rhwq-hf77, GHSA-9w56-46f6-3qhx) fixed in 1.0.9. Checkov results are identical on 1.0.10. A security fix is exempt from the seven-day release age rule."
 "uv constraint virtualenv>=21.14.13" = "Versions 21.14.5 to 21.14.12 are affected by advisories (the lowest clean release is 21.14.13). A security fix is exempt from the seven-day release age rule."
 "uv constraint certifi>=2026.10.19" = "certifi before 2026.10.19 trusts compromised emSign intermediates (GHSA-6q48-6c7w-9gw2, CRITICAL). A security fix is exempt from the seven-day release age rule."
 "zizmor undocumented-permissions (.github/zizmor.yml)" = "The pedantic persona demands a comment next to every write permission, but YAML comments are banned repository-wide (ADR 0005). Only oidc-check.yml:20 (id-token: write) is ignored, by file and line; the audit stays on for every other workflow line. The permission is explained in docs/aws/bootstrap.md and ADR 0014."
+"typings/ansible (local type stubs)" = "ansible-core ships no py.typed marker, so mypy and Pyright strict cannot type AnsibleModule and patch_module_args. typings/ansible holds minimal stubs for exactly the members that plugins/modules/control_state.py and its tests use; Pyright reads them as its default stubPath and mypy through mypy_path. The directory is not part of the collection (FREES-56)."
 "ruff D203" = "Mutually exclusive with D211; D211 is enforced instead."
 "ruff D213" = "Mutually exclusive with D212; D212 is enforced instead."
 "ruff TRY003" = "Overlaps with EM101 and EM102; messages are built from named variables in one place, and long messages in custom exception types add no value."
@@ -89,6 +92,7 @@ known-first-party = ["tools", "ansible_collections"]
 "ruff FBT001 (tests/**)" = "Parametrized expectations are booleans passed by pytest, not a public API."
 "ruff INP001 (tests/**)" = "Tests are collected in importlib mode and are not importable packages."
 "ruff T201 (tools/**)" = "Command-line tools report to the terminal with print by design."
+"ruff E402 (plugins/modules/**)" = "ansible-test sanity validate-modules requires imports below the DOCUMENTATION, EXAMPLES and RETURN blocks (import-before-documentation), which makes every module import follow module-level assignments. Only plugins/modules is relaxed (FREES-56)."
 "ruff INP001 (plugins/**)" = "Collection plugin directories are implicit namespace packages; Ansible does not require __init__.py and a placeholder would only add files."
 "ansible-lint var-naming[no-role-prefix]" = "Role variables use the collection-wide prefix linux_compliance_<role>_ required by ADR 0011 and the ansible-collection skill, for example linux_compliance_remediate_enabled; the rule would force the shorter <role>_ prefix. Only this sub-rule is skipped; every other var-naming check stays on (FREES-40)."
 
@@ -96,7 +100,7 @@ known-first-party = ["tools", "ansible_collections"]
 strict = true
 python_version = "3.12"
 files = ["tools", "tests"]
-mypy_path = ".:build/collections"
+mypy_path = ".:build/collections:typings"
 explicit_package_bases = true
 warn_unreachable = true
 disallow_any_unimported = true
@@ -132,9 +136,11 @@ disable = [
     "missing-module-docstring",
     "use-implicit-booleaness-not-comparison",
     "too-many-instance-attributes",
+    "wrong-import-position",
 ]
 
 [tool.freesecdev.pylint-justifications]
+wrong-import-position = "ansible-test sanity validate-modules requires every import of a module to appear below the DOCUMENTATION, EXAMPLES and RETURN blocks (import-before-documentation), so module files in plugins/modules necessarily import after module-level assignments. Pylint cannot disable a message per file; Ruff E402 is relaxed for plugins/modules only and still applies everywhere else (FREES-56)."
 max-module-lines = "The findings model is one module by design (ADR 0013); Ruff formatting expands every call over several lines, and the entities share private validators."
 duplicate-code = "Two small standalone tools share the fence-marker constant; extracting a shared module would add coupling for a three-line constant."
 too-few-public-methods = "Frozen slotted dataclasses are deliberate value objects."

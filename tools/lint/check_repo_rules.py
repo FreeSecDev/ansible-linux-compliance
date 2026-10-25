@@ -14,11 +14,15 @@ Rules:
   attributes, never import or name ``subprocess``, ``pty``, ``posix``, ``sys`` or
   ``os`` as an imported name or attribute, never use ``vars``, ``globals``,
   ``locals``, ``__dict__`` or ``get_type_hints``, never pass ``shell=True``,
-  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``policies``, ``trusted_dirs``,
-  ``runner``, ``clock`` and ``limits`` keywords, never use a ``**`` dict splat in a call, and
+  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``state_dir``, ``policies``,
+  ``trusted_dirs``, ``runner``, ``clock`` and ``limits`` keywords, never use a ``**`` dict splat in
+  a call, and
   only call ``getattr`` with a literal permitted name. ``xml.parsers.expat`` may be imported
   only by ``plugins/module_utils/compliance/openscap.py``. Only
   ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
+  ``plugins/module_utils/compliance/fileio.py`` may additionally ``import`` ``os``, ``fcntl``,
+  ``errno`` and ``time`` and use only the attributes listed in ``FILE_IO_ATTRIBUTES``, always as
+  ``module.attribute``; it keeps every other rule (ADR 0011).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
 """
@@ -64,6 +68,40 @@ PINNED_REV: Final[re.Pattern[str]] = re.compile(r"\s*(?:-\s+)?rev:\s+[0-9a-f]{40
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 PLUGINS_DIRECTORY: Final[str] = "plugins"
 PROCESS_HELPER: Final[Path] = Path("plugins/module_utils/compliance/process.py")
+FILE_IO_HELPER: Final[Path] = Path("plugins/module_utils/compliance/fileio.py")
+FILE_IO_ATTRIBUTES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "errno": frozenset({"ELOOP", "EMLINK", "ENOTDIR"}),
+        "fcntl": frozenset({"flock", "LOCK_EX", "LOCK_NB"}),
+        "os": frozenset(
+            {
+                "O_CLOEXEC",
+                "O_CREAT",
+                "O_DIRECTORY",
+                "O_EXCL",
+                "O_NOFOLLOW",
+                "O_NONBLOCK",
+                "O_RDONLY",
+                "O_WRONLY",
+                "close",
+                "fchmod",
+                "fstat",
+                "fsync",
+                "mkdir",
+                "open",
+                "read",
+                "rename",
+                "stat",
+                "supports_dir_fd",
+                "unlink",
+                "urandom",
+                "write",
+            }
+        ),
+        "time": frozenset({"monotonic", "sleep"}),
+    }
+)
+NO_RESTRICTION: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
 ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
     {
         "__future__",
@@ -131,7 +169,16 @@ BANNED_ATTRIBUTES: Final[frozenset[str]] = (
 BANNED_ATTRIBUTE_PREFIXES: Final[tuple[str, ...]] = ("spawn", "fork", "posix_spawn", "_create_")
 EXEC_FAMILY: Final[re.Pattern[str]] = re.compile(r"f?exec[lv][a-z]*")
 BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
-    {"use_unsafe_shell", "owner_uid", "policies", "trusted_dirs", "runner", "clock", "limits"}
+    {
+        "use_unsafe_shell",
+        "owner_uid",
+        "state_dir",
+        "policies",
+        "trusted_dirs",
+        "runner",
+        "clock",
+        "limits",
+    }
 )
 OS_MODULE: Final[str] = "os"
 OS_PATH: Final[str] = "path"
@@ -412,15 +459,28 @@ def _alias_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
             yield f"import under the name {alias.asname!r} is not allowed in plugins"
 
 
-def _import_findings(node: ast.Import | ast.ImportFrom, extra: frozenset[str]) -> Iterable[str]:
+def _plain_import_findings(
+    node: ast.Import, extra: frozenset[str], restricted: frozenset[str]
+) -> Iterable[str]:
+    """Yield a description for each ``import x`` name that is not allow-listed."""
+    for alias in node.names:
+        if not _is_allowed_import(alias.name, extra):
+            yield _not_allowed(alias.name)
+        elif alias.name in restricted and alias.asname:
+            yield f"import of {alias.name!r} under another name is not allowed in plugins"
+
+
+def _import_findings(
+    node: ast.Import | ast.ImportFrom, extra: frozenset[str], restricted: frozenset[str]
+) -> Iterable[str]:
     """Yield a description for each import on ``node`` that is not allow-listed."""
     yield from _alias_findings(node)
     if isinstance(node, ast.Import):
-        for alias in node.names:
-            if not _is_allowed_import(alias.name, extra):
-                yield _not_allowed(alias.name)
+        yield from _plain_import_findings(node, extra, restricted)
         return
     module = node.module or ""
+    if module in restricted and not node.level and module != OS_MODULE:
+        yield f"from-import of {module!r} is not allowed in plugins"
     if not node.level and module != OS_MODULE and not _is_allowed_import(module, extra):
         yield _not_allowed(module)
     for alias in node.names:
@@ -458,26 +518,36 @@ def _call_findings(node: ast.Call) -> Iterable[str]:
         yield from _dynamic_attribute_findings(node)
 
 
-def _name_findings(
-    node: ast.Name, call_targets: set[int], os_path_bases: set[int]
-) -> Iterable[str]:
+@dataclass(frozen=True)
+class _Scan:
+    """Facts about one parsed file that the per-node checks share."""
+
+    call_targets: set[int]
+    os_path_bases: set[int]
+    extra: frozenset[str]
+    restricted: Mapping[str, frozenset[str]]
+    restricted_bases: set[int]
+
+
+def _name_findings(node: ast.Name, scan: _Scan) -> Iterable[str]:
     """Yield descriptions for banned builtins and for uses of ``os`` other than ``os.path``."""
     if node.id in BANNED_NAMES:
         yield f"use of {node.id} is not allowed in plugins"
-    if node.id in DYNAMIC_ATTRIBUTE_BUILTINS and id(node) not in call_targets:
+    if node.id in DYNAMIC_ATTRIBUTE_BUILTINS and id(node) not in scan.call_targets:
         yield f"{node.id} may only be called directly"
-    if node.id == OS_MODULE and id(node) not in os_path_bases:
+    permitted = scan.os_path_bases | scan.restricted_bases
+    if node.id == OS_MODULE and id(node) not in permitted:
         yield "os may only be used as os.path in plugins"
+    if node.id in scan.restricted and node.id != OS_MODULE and id(node) not in permitted:
+        yield f"{node.id} may only be used through its permitted attributes in plugins"
 
 
-def _process_findings(
-    node: ast.AST, call_targets: set[int], os_path_bases: set[int], extra: frozenset[str]
-) -> Iterable[str]:
+def _process_findings(node: ast.AST, scan: _Scan) -> Iterable[str]:
     """Yield a description for each forbidden construct on ``node`` itself."""
     if isinstance(node, (ast.Import, ast.ImportFrom)):
-        yield from _import_findings(node, extra)
+        yield from _import_findings(node, scan.extra, frozenset(scan.restricted))
     elif isinstance(node, ast.Name):
-        yield from _name_findings(node, call_targets, os_path_bases)
+        yield from _name_findings(node, scan)
     elif isinstance(node, ast.Attribute):
         if _is_banned_attribute(node.attr):
             yield f"attribute {node.attr!r} is not allowed in plugins"
@@ -485,8 +555,24 @@ def _process_findings(
         yield from _call_findings(node)
 
 
+def _restricted_bases(
+    nodes: Iterable[ast.AST], restricted: Mapping[str, frozenset[str]]
+) -> set[int]:
+    """Return the ids of module names used as the base of a permitted attribute."""
+    return {
+        id(node.value)
+        for node in nodes
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.attr in restricted.get(node.value.id, frozenset())
+    }
+
+
 def check_process_isolation(
-    path: Path, data: bytes, extra_imports: frozenset[str] = frozenset()
+    path: Path,
+    data: bytes,
+    extra_imports: frozenset[str] = frozenset(),
+    restricted: Mapping[str, frozenset[str]] = NO_RESTRICTION,
 ) -> list[Violation]:
     """Reject, by default, anything in plugin code that could run a process.
 
@@ -509,11 +595,18 @@ def check_process_isolation(
         and isinstance(node.value, ast.Name)
         and node.value.id == OS_MODULE
     }
+    scan = _Scan(
+        call_targets,
+        os_path_bases,
+        extra_imports,
+        restricted,
+        _restricted_bases(nodes, restricted),
+    )
     return sorted(
         {
             Violation(path, getattr(node, "lineno", 1), message)
             for node in nodes
-            for message in _process_findings(node, call_targets, os_path_bases, extra_imports)
+            for message in _process_findings(node, scan)
         }
     )
 
@@ -530,8 +623,12 @@ def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
     if suffix in PYTHON_SUFFIXES:
         violations = check_python_comments(path, data)
         if is_process_scope(path, root):
-            extra = EXTRA_IMPORTS.get(path.resolve().relative_to(root.resolve()), frozenset())
-            violations.extend(check_process_isolation(path, data, extra))
+            relative = path.resolve().relative_to(root.resolve())
+            extra = EXTRA_IMPORTS.get(relative, frozenset())
+            restricted = FILE_IO_ATTRIBUTES if relative == FILE_IO_HELPER else NO_RESTRICTION
+            if restricted:
+                extra = extra | frozenset(restricted)
+            violations.extend(check_process_isolation(path, data, extra, restricted))
         return violations
     try:
         text = data.decode("utf-8")

@@ -797,11 +797,12 @@ def test_repository_helper_is_the_only_plugin_file_importing_subprocess() -> Non
 
 SANCTIONED_SANITY_IGNORE = (
     "plugins/module_utils/compliance/process.py pylint:ansible-bad-function\n"
+    "plugins/modules/control_state.py validate-modules:missing-gplv3-license\n"
 )
 
 
 @pytest.mark.parametrize("version", ["2.20", "2.21"])
-def test_sanity_ignore_files_contain_exactly_the_one_sanctioned_entry(version: str) -> None:
+def test_sanity_ignore_files_contain_exactly_the_sanctioned_entries(version: str) -> None:
     ignore = rules.REPO_ROOT / "tests" / "sanity" / f"ignore-{version}.txt"
     assert ignore.read_text(encoding="utf-8") == SANCTIONED_SANITY_IGNORE
 
@@ -822,3 +823,128 @@ def test_ansible_lint_ignore_skips_only_the_two_sanity_ignore_files() -> None:
 def test_ansible_lint_ignore_is_not_published() -> None:
     galaxy = yaml.safe_load((rules.REPO_ROOT / "galaxy.yml").read_text(encoding="utf-8"))
     assert ".ansible-lint-ignore" in galaxy["build_ignore"]
+
+
+FILE_IO_FILE = "plugins/module_utils/compliance/fileio.py"
+FILE_IO_SOURCE = (
+    "import errno\nimport fcntl\nimport os\nimport time\n"
+    "os.open('x', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=1)\n"
+    "os.fsync(1)\nos.rename('a', 'b', src_dir_fd=1, dst_dir_fd=1)\n"
+    "fcntl.flock(1, fcntl.LOCK_EX | fcntl.LOCK_NB)\nerrno.ELOOP\ntime.sleep(1)\n"
+    "os.path.join('a')\n"
+)
+
+
+def test_file_io_helper_may_use_its_listed_attributes(tmp_path: Path) -> None:
+    assert process_messages(tmp_path, FILE_IO_SOURCE, FILE_IO_FILE) == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "plugins/modules/fileio.py",
+        "plugins/module_utils/compliance/model.py",
+        "plugins/module_utils/compliance/ledger.py",
+        "plugins/module_utils/compliance/fileio_other.py",
+        "plugins/module_utils/other/fileio.py",
+        "plugins/module_utils/compliance/process_fileio.py",
+    ],
+)
+def test_file_io_privileges_are_denied_in_every_other_plugin_file(
+    tmp_path: Path, name: str
+) -> None:
+    messages = process_messages(tmp_path, FILE_IO_SOURCE, name)
+    assert any("import of 'os'" in message for message in messages)
+    assert any("import of 'fcntl'" in message for message in messages)
+    assert any("import of 'time'" in message for message in messages)
+    assert any("import of 'errno'" in message for message in messages)
+    assert any("os may only be used as os.path" in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import os\nos.system('id')\n",
+        "import os\nos.popen('id')\n",
+        "import os\nos.execv('/bin/sh', [])\n",
+        "import os\nos.fork()\n",
+        "import os\nos.posix_spawn('a', [], {})\n",
+        "import os\nos.getcwd()\n",
+        "import os\nos.chmod('a', 0)\n",
+        "import os\nos.environ\n",
+        "import os\nx = os\n",
+        "import os\ngetattr(os, 'open')\n",
+        "import os as o\no.open('a', 0)\n",
+        "import os as system\n",
+        "from os import open\n",
+        "from os import fsync as sync\n",
+        "import fcntl\nfcntl.fcntl(1, 2)\n",
+        "import fcntl\nfcntl.ioctl(1, 2)\n",
+        "import fcntl\nx = fcntl\n",
+        "import fcntl as f\nf.flock(1, 2)\n",
+        "from fcntl import flock\n",
+        "import time\ntime.time()\n",
+        "import errno\nerrno.errorcode\n",
+        "import subprocess\n",
+        "import sys\n",
+        "import ctypes\n",
+        "exec('1')\n",
+        "run(x, owner_uid=1)\n",
+        "run(x, state_dir='/tmp')\n",
+        "run(x, **options)\n",
+    ],
+)
+def test_file_io_helper_keeps_every_other_restriction(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source, FILE_IO_FILE)
+
+
+def test_file_io_helper_is_not_exempt_from_the_comment_rule(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "import os  # why\n", FILE_IO_FILE)
+    assert any(message.startswith("comment is not allowed") for message in messages)
+
+
+def test_state_dir_keyword_is_banned_in_plugins(tmp_path: Path) -> None:
+    assert process_messages(tmp_path, "Ledger(state_dir='/tmp')\n") == [
+        "keyword 'state_dir' is not allowed in plugins"
+    ]
+
+
+def test_file_io_attribute_table_is_pinned() -> None:
+    assert {name: sorted(attributes) for name, attributes in rules.FILE_IO_ATTRIBUTES.items()} == {
+        "errno": ["ELOOP", "EMLINK", "ENOTDIR"],
+        "fcntl": ["LOCK_EX", "LOCK_NB", "flock"],
+        "os": [
+            "O_CLOEXEC",
+            "O_CREAT",
+            "O_DIRECTORY",
+            "O_EXCL",
+            "O_NOFOLLOW",
+            "O_NONBLOCK",
+            "O_RDONLY",
+            "O_WRONLY",
+            "close",
+            "fchmod",
+            "fstat",
+            "fsync",
+            "mkdir",
+            "open",
+            "read",
+            "rename",
+            "stat",
+            "supports_dir_fd",
+            "unlink",
+            "urandom",
+            "write",
+        ],
+        "time": ["monotonic", "sleep"],
+    }
+    assert str(rules.FILE_IO_HELPER) == FILE_IO_FILE
+
+
+def test_repository_file_io_helper_is_the_only_plugin_file_importing_fcntl() -> None:
+    importers = [
+        path.relative_to(rules.REPO_ROOT)
+        for path in sorted((rules.REPO_ROOT / "plugins").rglob("*.py"))
+        if "import fcntl" in path.read_text(encoding="utf-8")
+    ]
+    assert importers == [rules.FILE_IO_HELPER]
