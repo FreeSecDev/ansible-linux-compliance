@@ -13,15 +13,18 @@ changelog:
     - title: Features
       labels:
         - feature
+        - enhancement
     - title: Fixes
       labels:
         - fix
+        - bug
     - title: Compliance content
       labels:
         - compliance-content
     - title: Documentation
       labels:
         - docs
+        - documentation
     - title: Dependencies
       labels:
         - dependencies

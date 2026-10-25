@@ -26,18 +26,33 @@ The configuration files are committed, but the bots are not confirmed active:
 | Terraform and OpenTofu providers | Renovate | Provider lock handling and version constraints |
 | Packer plugins (future `extensions/packer/**/*.pkr.hcl`) | Renovate | Custom regex manager over `required_plugins` blocks |
 | Ansible Galaxy collection requirements | Renovate | Galaxy is not supported by Dependabot |
+| `astral-sh/setup-uv` `version:` input (the uv tool version) | Renovate | Read by the `github-actions` manager; Dependabot does not manage it |
+| Python runtime version (`.python-version`, `setup-python` inputs) | Manual pull request | A runtime change needs full testing; Renovate's `python-version` datasource is disabled |
+| Security updates for every ecosystem, including GitHub Actions | Dependabot | GitHub security updates are enabled for the repository; Renovate's `vulnerabilityAlerts` is disabled |
 
-Renovate's Python managers (`pep621`, `pip_requirements`, `pip_setup`, `pipenv`, `poetry`, `setup-cfg`) are disabled, and
-Renovate runs only an explicit allow-list of managers. Dependabot is configured for the `uv` ecosystem only and never
-manages GitHub Actions, containers, Terraform or anything else. A new ecosystem must be assigned to exactly one bot in
-this table in the same pull request that adds it.
+Renovate runs only an explicit allow-list of managers, none of which is a Python manager. Two enabled managers could
+still see Python data, so Renovate also disables the `pypi` datasource (Python packages in pre-commit
+`additional_dependencies`) and the `python-version` datasource (`setup-python` inputs). Python tools used by pre-commit
+run as local hooks through `uv`, so their versions live only in `pyproject.toml` and `uv.lock`, which Dependabot owns.
+
+Dependabot version updates cover the `uv` ecosystem only. GitHub's Dependabot security updates are enabled for the whole
+repository, so security pull requests for any ecosystem, including GitHub Actions, come from Dependabot.
+Renovate's `vulnerabilityAlerts` is disabled so the two bots never open competing security pull requests.
+
+One overlap is accepted on purpose: a Dependabot security update to a GitHub Action can land between Renovate's
+scheduled digest updates. Renovate then rebases or closes its own pull request. This keeps security fixes fast without
+waiting for the Renovate schedule.
+
+A new ecosystem must be assigned to exactly one bot in this table in the same pull request that adds it.
 
 ## Update policy
 
 - Routine updates run weekly, on Monday morning (Europe/Amsterdam), and are grouped where related.
 - Renovate waits 7 days after a release before proposing it (`minimumReleaseAge`) to reduce supply-chain risk.
-  Vulnerability fixes skip that wait and the schedule.
-- Major updates need approval on the Renovate dependency dashboard before a pull request is created.
+  Security fixes come from Dependabot security updates and are not delayed.
+- Major updates wait 14 days, are labelled `breaking-change` and get their own pull request. Like every other update,
+  they are reviewed by the `freesecdev-review` App and must pass the required checks. Nobody is asked to approve them
+  on the dependency dashboard, which is informational only.
 - Concurrency is limited (Dependabot 5 open pull requests, Renovate 5 concurrent and 2 per hour).
 - Commits use the Conventional Commit type `build`, for example `build(deps): bump ...`.
 - Labels: `dependencies` plus an ecosystem label such as `python` or `ci`.

@@ -37,6 +37,9 @@ described in [SECURITY.md](SECURITY.md), never in a public issue or pull request
 5. Open a pull request into `main`. Never push to `main` directly. The title is a Conventional Commit and includes the
    Jira key, for example `feat: add OpenSCAP audit module (FREES-42)`. Fill in the pull request template.
 6. A reviewer other than the author must approve. All review threads must be resolved and required checks must pass.
+   Approvals come from an independent review agent through the `freesecdev-review` GitHub App. The repository has no
+   `CODEOWNERS` file on purpose: code-owner rules would automatically request the maintainer's review, and the project
+   owner decided not to be asked for reviews.
 7. Pull requests are merged by squash merge only.
 
 User-visible changes need a changelog fragment in `changelogs/fragments/`, and behaviour changes need documentation
