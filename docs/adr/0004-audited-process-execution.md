@@ -356,7 +356,9 @@ Non-blocking follow-ups from the final review of PR #11 (FREES-125) and the revi
 - Test seams: `registry` (the backend registry seam of `audit.Auditor` in PR #17) joins `BANNED_KEYWORDS`. A review of
   every keyword-only parameter in `plugins/` found no other unbanned seam; the remaining keyword-only parameters
   (`accept`, `create`, `default`, `dry_run`, `max_length`, `multiline`, `pattern`, `replace`, `reveal`, `sensitive`,
-  `subject`, `write`) are production arguments. `tests/unit/tools/test_check_repo_rules_followups.py` now fails for any
+  `subject`, `write`) are production arguments, and so are the keyword-only parameters that the open PRs #17 (`final`,
+  `check_mode`) and #18 (`required`, `max_scan_lag`, `has_content`, `breaks`, `final_newline`, `nested_sequence`) add,
+  which were reviewed here so that those PRs need no classification change. `tests/unit/tools/test_check_repo_rules_followups.py` now fails for any
   keyword-only plugin parameter that is neither a banned seam nor on that reviewed list, so a new seam cannot be added
   without a decision.
 - `xmlsafe.open_regular` is private (`_open_regular`). Only `RegularFile` (and through it `iter_file_chunks`) calls

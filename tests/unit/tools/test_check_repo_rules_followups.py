@@ -19,7 +19,7 @@ CALLER_FILES = (
     "plugins/modules/benchmark_info.py",
     "plugins/action/other.py",
 )
-PRODUCTION_KEYWORDS = frozenset(
+MERGED_PRODUCTION_KEYWORDS = frozenset(
     {
         "accept",
         "create",
@@ -35,6 +35,19 @@ PRODUCTION_KEYWORDS = frozenset(
         "write",
     }
 )
+OPEN_PULL_REQUEST_KEYWORDS = frozenset(
+    {
+        "final",
+        "check_mode",
+        "required",
+        "max_scan_lag",
+        "has_content",
+        "breaks",
+        "final_newline",
+        "nested_sequence",
+    }
+)
+PRODUCTION_KEYWORDS = MERGED_PRODUCTION_KEYWORDS | OPEN_PULL_REQUEST_KEYWORDS
 
 
 def process_messages(root: Path, source: str, name: str = "plugins/modules/other.py") -> list[str]:
