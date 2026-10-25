@@ -110,7 +110,7 @@ jobs:
           version: 0.13.1
           enable-cache: false
       - name: Run collection sanity, unit and package targets
-        run: make test-sanity test-ansible-units package
+        run: make test-sanity test-ansible-units package-check
 
   ci-gate:
     name: ci-gate

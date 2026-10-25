@@ -29,13 +29,13 @@ dev = [
 
 [tool.uv]
 package = false
-exclude-newer = "7 days"
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
 src = ["tools", "tests", "plugins"]
 extend-exclude = [".agents", ".claude", "build", "dist"]
+per-file-target-version = { "plugins/**" = "py39" }
 
 [tool.ruff.format]
 quote-style = "double"
@@ -54,8 +54,7 @@ ignore = ["D203", "D213", "TRY003"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004", "D", "ANN401", "SLF001", "FBT001", "INP001"]
 "tools/**" = ["T201"]
-"plugins/**" = ["INP001", "UP017", "UP047"]
-"plugins/module_utils/compliance/model.py" = ["S105"]
+"plugins/**" = ["INP001"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -79,9 +78,6 @@ known-first-party = ["tools", "ansible_collections"]
 "ruff INP001 (tests/**)" = "Tests are collected in importlib mode and are not importable packages."
 "ruff T201 (tools/**)" = "Command-line tools report to the terminal with print by design."
 "ruff INP001 (plugins/**)" = "Collection plugin directories are implicit namespace packages; Ansible does not require __init__.py and a placeholder would only add files."
-"ruff UP017 (plugins/**)" = "datetime.UTC needs Python 3.11, but managed-node code must run on Python 3.9 (ADR 0013); timezone.utc is the compatible spelling."
-"ruff UP047 (plugins/**)" = "PEP 695 type parameter syntax needs Python 3.12; managed-node code must run on Python 3.9 (ADR 0013), so TypeVar is required."
-"ruff S105 (plugins/module_utils/compliance/model.py)" = "The Outcome.PASS enum member is named after the XCCDF result 'pass'; it is not a credential."
 
 [tool.mypy]
 strict = true
@@ -135,12 +131,8 @@ use-implicit-booleaness-not-comparison = "Tests assert an explicit empty list so
 too-many-instance-attributes = "Findings model entities are frozen value objects whose fields mirror the serialized schema; splitting them would diverge from the schema."
 redefined-outer-name = "pytest fixtures are injected by parameter name and trigger it by design."
 
-[tool.freesecdev.bandit-justifications]
-B105 = "Bandit matches the enum member Outcome.PASS (the XCCDF result named pass) as a hardcoded password; the repository handles no credentials in code, and B105 stays off only for that false positive."
-
 [tool.bandit]
 exclude_dirs = [".venv", ".agents", ".claude", "tests", "build", "dist"]
-skips = ["B105"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"

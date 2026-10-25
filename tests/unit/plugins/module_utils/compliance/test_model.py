@@ -33,6 +33,7 @@ STANDARD_LIBRARY_IMPORTS = frozenset(
         "re",
         "types",
         "typing",
+        "unicodedata",
     }
 )
 UNCHANGED_STATUSES: frozenset[model.RemediationStatus] = frozenset(
@@ -159,6 +160,8 @@ def finding(**overrides: Any) -> model.Finding:
         "disabled_by": None,
         "flags": (),
     }
+    outcome = overrides.get("outcome", model.Outcome.FAIL)
+    values["evaluated_outcome"] = model.Outcome.FAIL if outcome is model.Outcome.WAIVED else outcome
     return model.Finding(**{**values, **overrides})
 
 
@@ -215,7 +218,7 @@ def test_entity_round_trips_through_dict(name: str) -> None:
 def test_entity_rejects_unknown_missing_and_non_mapping(name: str) -> None:
     factory, cls = ENTITY_FACTORIES[name]
     data = factory().to_dict()
-    with pytest.raises(model.ModelError, match="unknown keys: extra"):
+    with pytest.raises(model.ModelError, match="unknown keys: 'extra'"):
         cls.from_dict({**data, "extra": 1})
     removed = copy.deepcopy(data)
     del removed[min(removed)]
@@ -239,7 +242,7 @@ def test_entity_is_frozen_and_hashable(name: str) -> None:
 def test_from_dict_rejects_nested_unknown_key() -> None:
     data: dict[str, Any] = scan_run().to_dict()
     data["host"]["extra"] = "x"
-    with pytest.raises(model.ModelError, match="host has unknown keys: extra"):
+    with pytest.raises(model.ModelError, match="host has unknown keys: 'extra'"):
         model.ScanRun.from_dict(data)
 
 
@@ -348,15 +351,15 @@ def test_text_must_not_be_blank(value: str) -> None:
 def test_single_line_text_rejects_surrounding_whitespace_and_newlines() -> None:
     with pytest.raises(model.ModelError, match="surrounding whitespace"):
         provenance(source=" source")
-    with pytest.raises(model.ModelError, match="control characters"):
+    with pytest.raises(model.ModelError, match="control or formatting characters"):
         provenance(source="a\nb")
-    with pytest.raises(model.ModelError, match="control characters"):
+    with pytest.raises(model.ModelError, match="control or formatting characters"):
         provenance(source="a\x7fb")
 
 
 def test_multiline_text_allows_newlines_but_not_other_controls() -> None:
     assert evidence(content="line one\r\n\tline two\n").content.endswith("\n")
-    with pytest.raises(model.ModelError, match="control characters"):
+    with pytest.raises(model.ModelError, match="control or formatting characters"):
         evidence(content="a\x00b")
     with pytest.raises(model.ModelError, match="must not be empty"):
         evidence(content="\n \n")
@@ -657,7 +660,9 @@ def test_exception_status_rules() -> None:
     assert (
         exception_status(state=model.ExceptionState.EXPIRED).state is model.ExceptionState.EXPIRED
     )
-    assert exception_status(expires_at=None).expires_at is None
+    for state in (model.ExceptionState.ACTIVE, model.ExceptionState.EXPIRED):
+        with pytest.raises(model.ModelError, match="must be a string"):
+            exception_status(state=state, expires_at=None)
     for bad in ({"exception_id": "EXC-1"}, {"reason": "r"}, {"expires_at": START}):
         with pytest.raises(model.ModelError, match="require an active or expired"):
             exception_status(
@@ -708,22 +713,57 @@ def test_remediation_rule_id_and_message_validation() -> None:
         remediation(message="a" * 4097)
 
 
-def test_waived_requires_exactly_an_active_exception() -> None:
+def test_waived_requires_an_active_exception_and_an_evaluated_fail() -> None:
     waived = finding(outcome=model.Outcome.WAIVED, exception=exception_status())
     assert waived.outcome is model.Outcome.WAIVED
-    with pytest.raises(model.ModelError, match="waived requires"):
+    assert waived.evaluated_outcome is model.Outcome.FAIL
+    with pytest.raises(model.ModelError, match="waived requires an active exception"):
         finding(outcome=model.Outcome.WAIVED)
-    with pytest.raises(model.ModelError, match="waived requires"):
+    with pytest.raises(model.ModelError, match="waived requires an active exception"):
         finding(
             outcome=model.Outcome.WAIVED,
             exception=exception_status(state=model.ExceptionState.EXPIRED),
         )
-    with pytest.raises(model.ModelError, match="waived requires"):
+    with pytest.raises(model.ModelError, match="evaluated outcome of fail"):
+        finding(
+            outcome=model.Outcome.WAIVED,
+            evaluated_outcome=model.Outcome.ERROR,
+            exception=exception_status(),
+        )
+
+
+def test_a_failed_rule_under_an_active_exception_must_be_waived() -> None:
+    with pytest.raises(model.ModelError, match="must be reported as waived"):
         finding(outcome=model.Outcome.FAIL, exception=exception_status())
     assert (
         finding(exception=exception_status(state=model.ExceptionState.EXPIRED)).outcome
         is model.Outcome.FAIL
     )
+
+
+@pytest.mark.parametrize("outcome", [model.Outcome.ERROR, model.Outcome.PASS])
+def test_error_and_pass_stay_visible_under_an_active_exception(outcome: model.Outcome) -> None:
+    kept = finding(outcome=outcome, exception=exception_status())
+    assert kept.outcome is outcome
+    assert kept.evaluated_outcome is outcome
+    assert model.Finding.from_dict(kept.to_dict()) == kept
+
+
+@pytest.mark.parametrize(
+    "outcome", [model.Outcome.ERROR, model.Outcome.PASS, model.Outcome.NOTCHECKED]
+)
+def test_evaluated_outcome_must_equal_the_outcome_unless_waived(outcome: model.Outcome) -> None:
+    with pytest.raises(model.ModelError, match="only when waived"):
+        finding(outcome=outcome, evaluated_outcome=model.Outcome.FAIL)
+    with pytest.raises(model.ModelError, match="must be of type Outcome"):
+        finding(evaluated_outcome="fail")
+
+
+def test_waiver_keeps_the_evaluated_result_in_the_document() -> None:
+    waived = finding(outcome=model.Outcome.WAIVED, exception=exception_status())
+    data = waived.to_dict()
+    assert data["outcome"] == "waived"
+    assert data["evaluated_outcome"] == "fail"
 
 
 def test_disabled_requires_exactly_the_controlling_variable() -> None:
@@ -984,7 +1024,7 @@ def test_loads_rejects_unknown_keys_deep_in_the_document() -> None:
         model.dumps(scan_run(findings=(finding(remediation=remediation()),)))
     )
     data["findings"][0]["remediation"]["surprise"] = True
-    with pytest.raises(model.ModelError, match="remediation has unknown keys: surprise"):
+    with pytest.raises(model.ModelError, match="remediation has unknown keys: 'surprise'"):
         model.loads(json.dumps(data))
 
 
@@ -1022,3 +1062,133 @@ def test_host_identity_allows_a_missing_machine_id() -> None:
     anonymous = host(machine_id=None)
     assert anonymous.to_dict()["machine_id"] is None
     assert model.HostIdentity.from_dict(anonymous.to_dict()) == anonymous
+
+
+def expiring(state: model.ExceptionState, expires_at: str) -> model.Finding:
+    return finding(
+        outcome=model.Outcome.WAIVED
+        if state is model.ExceptionState.ACTIVE
+        else model.Outcome.FAIL,
+        exception=exception_status(state=state, expires_at=expires_at),
+    )
+
+
+@pytest.mark.parametrize(
+    ("expires_at", "valid"),
+    [
+        ("2026-10-25T10:00:01Z", True),
+        ("2026-10-25T10:00:00Z", False),
+        ("2026-10-25T09:59:59Z", False),
+        ("2027-01-01T00:00:00Z", True),
+        ("2026-01-01T00:00:00Z", False),
+    ],
+)
+def test_active_exception_must_outlive_the_scan_start(expires_at: str, valid: bool) -> None:
+    findings = (expiring(model.ExceptionState.ACTIVE, expires_at),)
+    if valid:
+        assert scan_run(findings=findings).findings == findings
+    else:
+        with pytest.raises(model.ModelError, match="active but expired at scan start"):
+            scan_run(findings=findings)
+
+
+@pytest.mark.parametrize(
+    ("expires_at", "valid"),
+    [
+        ("2026-10-25T10:00:01Z", False),
+        ("2026-10-25T10:00:00Z", True),
+        ("2026-10-25T09:59:59Z", True),
+        ("2027-01-01T00:00:00Z", False),
+        ("2026-01-01T00:00:00Z", True),
+    ],
+)
+def test_expired_exception_must_not_be_valid_at_scan_start(expires_at: str, valid: bool) -> None:
+    findings = (expiring(model.ExceptionState.EXPIRED, expires_at),)
+    if valid:
+        assert scan_run(findings=findings).findings == findings
+    else:
+        with pytest.raises(model.ModelError, match="marked expired but is valid"):
+            scan_run(findings=findings)
+
+
+def test_expiry_is_judged_against_started_at_not_finished_at() -> None:
+    findings = (expiring(model.ExceptionState.ACTIVE, "2026-10-25T10:03:00Z"),)
+    with pytest.raises(model.ModelError):
+        scan_run(started_at="2026-10-25T10:03:00Z", finished_at=END, findings=findings)
+    assert scan_run(findings=findings).findings == findings
+
+
+def test_unknown_keys_are_escaped_and_bounded_in_error_messages() -> None:
+    data = provenance().to_dict()
+    hostile = {**data, "\x1b[2J\u202e": 1, "k" * 500: 2, "a": 3, "b": 4, "c": 5, "d": 6}
+    with pytest.raises(model.ModelError) as caught:
+        model.Provenance.from_dict(hostile)
+    message = str(caught.value)
+    assert message.isprintable()
+    assert "\x1b" not in message
+    assert "\\x1b" in message
+    assert "\\u202e" in message
+    assert "k" * 65 not in message
+    assert message.count("', '") <= 4
+
+
+def test_unknown_enum_values_and_duplicate_keys_are_escaped() -> None:
+    with pytest.raises(model.ModelError) as unknown:
+        model.Finding.from_dict({**finding().to_dict(), "outcome": "\x1b[31m" + "x" * 200})
+    assert unknown.value.args[0].isprintable()
+    assert "x" * 65 not in unknown.value.args[0]
+    with pytest.raises(model.ModelError) as duplicate:
+        model.loads('{"\\u001b[0m": 1, "\\u001b[0m": 2}')
+    assert duplicate.value.args[0].isprintable()
+    with pytest.raises(model.ModelError) as version:
+        model.ScanRun.from_dict({**scan_run().to_dict(), "schema_version": "\x1b[1m"})
+    assert version.value.args[0].isprintable()
+
+
+@pytest.mark.parametrize(
+    "character",
+    ["\u202e", "\u202a", "\u2066", "\u200b", "\u200d", "\ufeff", "\u2028", "\u2029", "\x85"],
+)
+def test_identifier_fields_reject_control_and_format_characters(character: str) -> None:
+    with pytest.raises(model.ModelError):
+        provenance(source=f"cis{character}x")
+    with pytest.raises(model.ModelError):
+        provenance(content_version=f"1{character}")
+    with pytest.raises(model.ModelError):
+        reference(control_id=f"5{character}1")
+    with pytest.raises(model.ModelError):
+        model.Framework(model.FrameworkId.CIS, f"CIS{character}")
+    with pytest.raises(model.ModelError):
+        rule(title=f"title{character}")
+    with pytest.raises(model.ModelError):
+        host(hostname=f"web{character}01")
+    with pytest.raises(model.ModelError):
+        rule(rule_id=f"{RULE}{character}")
+    with pytest.raises(model.ModelError):
+        profile(profile_id=f"{PROFILE}{character}")
+    with pytest.raises(model.ModelError):
+        host(distribution_id=f"ubuntu{character}")
+
+
+@pytest.mark.parametrize(
+    "character", ["\u202e", "\u202a", "\u202c", "\u2066", "\u2069", "\x1b", "\x85"]
+)
+def test_free_text_fields_reject_bidi_and_control_characters(character: str) -> None:
+    with pytest.raises(model.ModelError):
+        evidence(content=f"line{character}")
+    with pytest.raises(model.ModelError):
+        rule(description=f"text{character}")
+    with pytest.raises(model.ModelError):
+        finding(message=f"msg{character}")
+    with pytest.raises(model.ModelError):
+        scan_run(
+            status=model.ScanStatus.FAILED,
+            error_message=f"boom{character}",
+            findings=(),
+        )
+
+
+def test_free_text_fields_allow_tabs_newlines_and_ordinary_unicode() -> None:
+    text = "tab\tnewline\nreturn\r caf\u00e9 \u2603 \U0001f468\u200d\U0001f469"
+    assert evidence(content=text).content == text
+    assert rule(description=text).description == text

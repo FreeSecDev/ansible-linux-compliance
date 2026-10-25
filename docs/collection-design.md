@@ -56,7 +56,8 @@ gap:
 | `test-unit`, `test-coverage` | pytest including the plugin tests; coverage requires 100% for `tools/` and `plugins/` |
 | `test-sanity` | `ansible-test sanity --local` on the temporary tree, no Docker |
 | `test-ansible-units` | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
-| `package` | Deterministic `ansible-galaxy collection build` into `dist/`, with `dist/SHA256SUMS` |
+| `package` | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, with `dist/SHA256SUMS` |
+| `package-check` | Builds twice from differently ordered trees and compares the SHA-256 values |
 
 `ansible-test sanity` runs with `--local` rather than `--venv`. Sanity tests install their own pinned requirements in
 isolated virtual environments either way, and `--local` avoids a second delegation virtual environment inside the
@@ -66,9 +67,14 @@ on every managed-node Python version instead of being skipped. Units use `--venv
 own pytest.
 
 `package` builds from the temporary tree, so `build_ignore` is applied to a tree that already holds only collection
-content. `ansible-galaxy` stamps the current time into the archive, so the target unpacks the result and repacks it
-with sorted members, zero owner, a zero modification time and a gzip header without a name or time. Two builds of the
-same sources produce the same SHA-256, given the same `tar` and `gzip` implementations.
+content. Two things in the `ansible-galaxy` output depend on the machine: it stamps the build time into the archive,
+and it writes the `FILES.json` entries in `os.listdir` order, which differs between filesystems. The target therefore
+unpacks the result, sorts the `FILES.json` entries by name, recomputes the `FILES.json` checksum in `MANIFEST.json`,
+asserts that the order is sorted, and repacks with sorted members, owner 0, a zero modification time and a gzip header
+without name or time. `make package-check`, which CI runs, builds twice from trees created in opposite file order and
+fails unless the two SHA-256 values are identical. The remaining assumption is the same `tar`, `gzip` and `jq`
+behaviour; byte-identical output across different machines was checked by comparing a local build with the CI build of
+the same commit (see the pull request that introduced it).
 
 ## Adding plugins
 

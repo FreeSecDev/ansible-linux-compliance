@@ -46,9 +46,9 @@ dataclasses, enums and two functions for JSON. The reporting package imports the
 | Reference | `framework`, `control_id`, `provenance` |
 | HostIdentity | `hostname`, `distribution_id`, `distribution_version`, `architecture`, optional `machine_id` |
 | Evidence | `kind`, `source`, `content` (bounded text) |
-| ExceptionStatus | `state` (`none`, `active`, `expired`), `exception_id`, `reason`, `expires_at` |
+| ExceptionStatus | `state` (`none`, `active`, `expired`), `exception_id`, `reason`, `expires_at` (required for `active` and `expired`) |
 | RemediationResult | `rule_id`, `status`, `changed`, `message` |
-| Finding | `rule_id`, `outcome`, `severity`, `message`, `evidence`, `exception`, `remediation`, `disabled_by`, `flags` |
+| Finding | `rule_id`, `outcome`, `evaluated_outcome`, `severity`, `message`, `evidence`, `exception`, `remediation`, `disabled_by`, `flags` |
 | ScannerInfo | `name`, `version` |
 | ScanRun | `run_id`, `started_at`, `finished_at`, `host`, `scanner`, `content` (provenance including the datastream SHA-256), `benchmark_id`, `profile_id`, `status`, `error_message`, `findings` |
 
@@ -112,8 +112,16 @@ class is `automatable_remediation`.
 - **Cross-framework deduplication is by rule ID.** A `ScanRun`, a `Benchmark` and a `Profile` reject duplicate rule IDs,
   so a rule is scanned, remediated and counted once however many frameworks reference it. Frameworks are reached
   through `Rule.references`, never by repeating the rule.
-- `waived` holds exactly when the exception state is `active`; `disabled` holds exactly when `disabled_by` is set;
-  a remediation result must belong to the rule of its finding.
+- **A waiver only turns an evaluated `fail` into `waived`.** `outcome` is what is reported and `evaluated_outcome` is
+  what the scanner decided. They are equal except for a waived finding, whose `evaluated_outcome` is always `fail`, so a
+  report can show what was waived. A rule that the scanner evaluated as `error` stays `error` (or any other
+  non-`fail` outcome stays as it is) even when an active exception exists; a broken check is never hidden behind a
+  waiver. A failed rule under an active exception must be reported as `waived`, never as `fail`.
+- **Waivers apply only while valid.** An exception has an expiry: `expires_at` is required for `active` and
+  `expired`, so the model has no permanent waivers. `ScanRun` compares it with `started_at` as UTC instants: an
+  `active` exception must expire strictly after `started_at` and an `expired` exception must expire at or before
+  `started_at`. An expiry exactly at `started_at` is therefore expired, one second later is active.
+- `disabled` holds exactly when `disabled_by` is set; a remediation result must belong to the rule of its finding.
 - Profiles may only select rules that their benchmark contains.
 - Collections of keyed items are stored sorted (findings, rules and profiles by ID, references by framework and
   control), so equal models serialize identically whatever the input order.
@@ -129,8 +137,14 @@ version.
 
 All text fields are bounded (identifiers 256 characters, titles 512, descriptions and messages 8192 or 4096, evidence
 content 65536, 64 evidence items per finding, 256 references per rule, 100000 findings per run, 128 MiB per document)
-and reject control characters. Identifiers, digests, timestamps and variable names are checked against anchored
-patterns. Validation failures raise `ModelError`, a `ValueError` subclass.
+and reject control and formatting characters. Identifier-like fields (IDs, names, titles, versions, sources,
+control IDs, host fields, error and exception identifiers) reject every character of Unicode category Cc, Cf, Zl or
+Zp, which includes bidi overrides, zero-width characters and line separators. Free-text fields (descriptions,
+messages, reasons, evidence content) allow tab, newline and carriage return but reject all other Cc characters and the
+bidi embedding, override and isolate controls; they allow ordinary Unicode such as accents and emoji joiners. Reports
+must still escape everything they render. Identifiers, digests, timestamps and variable names are checked against
+anchored patterns. Error messages never echo untrusted text raw: keys and values are escaped with `repr` and cut to
+64 characters, and at most five unknown keys are listed. Validation failures raise `ModelError`, a `ValueError` subclass.
 
 ### Placement and compatibility
 

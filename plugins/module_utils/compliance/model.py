@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -45,8 +46,12 @@ _MACHINE_ID: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{32}")
 _TOKEN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:+-]*")
 _SLUG: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9._-]*")
 _VARIABLE: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]*")
-_SINGLE_LINE_CONTROLS: Final[re.Pattern[str]] = re.compile(r"[\x00-\x1f\x7f]")
-_MULTI_LINE_CONTROLS: Final[re.Pattern[str]] = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_IDENTIFIER_FORBIDDEN_CATEGORIES: Final[frozenset[str]] = frozenset({"Cc", "Cf", "Zl", "Zp"})
+_TEXT_ALLOWED_CONTROLS: Final[frozenset[str]] = frozenset({"\t", "\n", "\r"})
+_BIDI_CONTROLS: Final[frozenset[str]] = frozenset(
+    {"\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u2066", "\u2067", "\u2068", "\u2069"}
+)
+MAX_ECHO_LENGTH: Final[int] = 64
 _XCCDF_PATTERNS: Final[Mapping[str, re.Pattern[str]]] = MappingProxyType(
     {
         kind: re.compile(rf"xccdf_[A-Za-z0-9_.-]+?_{kind}_[A-Za-z0-9_.+-]+")
@@ -62,10 +67,13 @@ class ModelError(ValueError):
     """Raised when a value or document violates the findings model."""
 
 
+_XCCDF_RESULT_OK: Final[str] = "pass"
+
+
 class Outcome(Enum):
     """Platform outcome of evaluating one rule on one host."""
 
-    PASS = "pass"
+    PASS = _XCCDF_RESULT_OK
     FAIL = "fail"
     NOTAPPLICABLE = "notapplicable"
     NOTCHECKED = "notchecked"
@@ -243,6 +251,22 @@ def _fail(message: str) -> NoReturn:
     raise ModelError(message)
 
 
+def _safe(value: object) -> str:
+    return repr(str(value)[:MAX_ECHO_LENGTH])
+
+
+def _has_forbidden_characters(value: str, *, multiline: bool) -> bool:
+    for character in value:
+        if multiline:
+            if character in _TEXT_ALLOWED_CONTROLS:
+                continue
+            if unicodedata.category(character) == "Cc" or character in _BIDI_CONTROLS:
+                return True
+        elif unicodedata.category(character) in _IDENTIFIER_FORBIDDEN_CATEGORIES:
+            return True
+    return False
+
+
 def _text(
     value: object,
     name: str,
@@ -259,9 +283,8 @@ def _text(
         _fail(f"{name} must not have surrounding whitespace")
     if len(value) > max_length:
         _fail(f"{name} exceeds {max_length} characters")
-    controls = _MULTI_LINE_CONTROLS if multiline else _SINGLE_LINE_CONTROLS
-    if controls.search(value):
-        _fail(f"{name} contains control characters")
+    if _has_forbidden_characters(value, multiline=multiline):
+        _fail(f"{name} contains control or formatting characters")
     if pattern is not None and pattern.fullmatch(value) is None:
         _fail(f"{name} has an invalid format")
     return value
@@ -332,10 +355,14 @@ def _store(instance: object, field: str, value: object) -> None:
 def _timestamp(value: object, name: str) -> str:
     text = _text(value, name, max_length=20, pattern=_TIMESTAMP)
     try:
-        datetime.strptime(text, TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+        _instant(text)
     except ValueError:
         _fail(f"{name} is not a valid UTC timestamp")
     return text
+
+
+def _instant(text: str) -> datetime:
+    return datetime.strptime(text, TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
 
 
 def _xccdf_id(value: object, name: str, kind: str) -> str:
@@ -347,9 +374,9 @@ class _Reader:
         if not isinstance(data, dict):
             _fail(f"{where} must be an object")
         mapping = cast("dict[str, object]", data)
-        unknown = sorted(str(key) for key in mapping if key not in keys)
+        unknown = sorted(_safe(key) for key in mapping if key not in keys)
         if unknown:
-            _fail(f"{where} has unknown keys: {', '.join(unknown)}")
+            _fail(f"{where} has unknown keys: {', '.join(unknown[:5])}")
         missing = sorted(key for key in keys if key not in mapping)
         if missing:
             _fail(f"{where} is missing keys: {', '.join(missing)}")
@@ -394,7 +421,7 @@ class _Reader:
         try:
             return kind(value)
         except ValueError:
-            _fail(f"{self._where}.{key} has unknown value {value!r}")
+            _fail(f"{self._where}.{key} has unknown value {_safe(value)}")
 
     def objects(self, key: str, parse: Callable[[object], T]) -> tuple[T, ...]:
         return tuple(parse(item) for item in self.array(key))
@@ -869,8 +896,7 @@ class ExceptionStatus:
             return
         _text(self.exception_id, "exception.exception_id", max_length=128, pattern=_TOKEN)
         _text(self.reason, "exception.reason", max_length=MAX_TEXT_LENGTH, multiline=True)
-        if self.expires_at is not None:
-            _timestamp(self.expires_at, "exception.expires_at")
+        _timestamp(self.expires_at, "exception.expires_at")
 
     @classmethod
     def none(cls) -> ExceptionStatus:
@@ -943,6 +969,7 @@ class Finding:
 
     rule_id: str
     outcome: Outcome
+    evaluated_outcome: Outcome
     severity: Severity
     message: str | None
     evidence: tuple[Evidence, ...]
@@ -955,6 +982,7 @@ class Finding:
         """Validate and canonically order the finding."""
         _xccdf_id(self.rule_id, "finding.rule_id", "rule")
         _enum(self.outcome, "finding.outcome", Outcome)
+        _enum(self.evaluated_outcome, "finding.evaluated_outcome", Outcome)
         _enum(self.severity, "finding.severity", Severity)
         _optional_text(self.message, "finding.message", max_length=4096)
         _items(self.evidence, "finding.evidence", Evidence, MAX_EVIDENCE_ITEMS)
@@ -968,8 +996,16 @@ class Finding:
         _store(self, "flags", tuple(sorted(flags, key=lambda flag: flag.value)))
 
     def _check_links(self) -> None:
-        if (self.outcome is Outcome.WAIVED) != (self.exception.state is ExceptionState.ACTIVE):
-            _fail("finding.outcome waived requires exactly an active exception")
+        waived = self.outcome is Outcome.WAIVED
+        active = self.exception.state is ExceptionState.ACTIVE
+        if waived and not active:
+            _fail("finding.outcome waived requires an active exception")
+        if waived and self.evaluated_outcome is not Outcome.FAIL:
+            _fail("finding.outcome waived requires an evaluated outcome of fail")
+        if not waived and self.evaluated_outcome is not self.outcome:
+            _fail("finding.evaluated_outcome may differ from finding.outcome only when waived")
+        if active and self.outcome is Outcome.FAIL:
+            _fail("a failed rule under an active exception must be reported as waived")
         if (self.outcome is Outcome.DISABLED) != (self.disabled_by is not None):
             _fail("finding.outcome disabled requires exactly finding.disabled_by")
         if self.remediation is not None and self.remediation.rule_id != self.rule_id:
@@ -982,6 +1018,7 @@ class Finding:
         """Return a JSON-compatible mapping."""
         return {
             "disabled_by": self.disabled_by,
+            "evaluated_outcome": self.evaluated_outcome.value,
             "evidence": [item.to_dict() for item in self.evidence],
             "exception": self.exception.to_dict(),
             "flags": [flag.value for flag in self.flags],
@@ -1001,6 +1038,7 @@ class Finding:
             (
                 "rule_id",
                 "outcome",
+                "evaluated_outcome",
                 "severity",
                 "message",
                 "evidence",
@@ -1013,6 +1051,7 @@ class Finding:
         return cls(
             rule_id=reader.text("rule_id"),
             outcome=reader.enum("outcome", Outcome),
+            evaluated_outcome=reader.enum("evaluated_outcome", Outcome),
             severity=reader.enum("severity", Severity),
             message=reader.optional_text("message"),
             evidence=reader.objects("evidence", Evidence.from_dict),
@@ -1056,7 +1095,22 @@ class ScanRun:
         findings = _items(self.findings, "scan_run.findings", Finding, MAX_FINDINGS)
         _unique(tuple(finding.rule_id for finding in findings), "scan_run.findings")
         self._check_status(findings)
+        self._check_exceptions(findings)
         _store(self, "findings", tuple(sorted(findings, key=lambda finding: finding.rule_id)))
+
+    def _check_exceptions(self, findings: tuple[Finding, ...]) -> None:
+        started = _instant(self.started_at)
+        for finding in findings:
+            state = finding.exception.state
+            if state is ExceptionState.NONE:
+                continue
+            expiry = _instant(_timestamp(finding.exception.expires_at, "exception.expires_at"))
+            if state is ExceptionState.ACTIVE and expiry <= started:
+                _fail(f"exception for {finding.rule_id} is active but expired at scan start")
+            if state is ExceptionState.EXPIRED and expiry > started:
+                _fail(
+                    f"exception for {finding.rule_id} is marked expired but is valid at scan start"
+                )
 
     def _check_status(self, findings: tuple[Finding, ...]) -> None:
         if (self.status is ScanStatus.COMPLETED) != (self.error_message is None):
@@ -1105,7 +1159,7 @@ class ScanRun:
         )
         version = reader.text("schema_version")
         if version not in SUPPORTED_SCHEMA_VERSIONS:
-            _fail(f"unsupported schema_version {version!r}")
+            _fail(f"unsupported schema_version {_safe(version)}")
         return cls(
             run_id=reader.text("run_id"),
             started_at=reader.text("started_at"),
@@ -1125,7 +1179,7 @@ def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            _fail(f"duplicate key {key!r}")
+            _fail(f"duplicate key {_safe(key)}")
         result[key] = value
     return result
 

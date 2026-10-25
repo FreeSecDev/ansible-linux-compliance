@@ -13,6 +13,7 @@ COLLECTION_TREE := build/collection/$(COLLECTION_PATH)
 COLLECTION_LINK := build/collections/$(COLLECTION_PATH)
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
 	tests/unit/plugins tests/sanity tests/integration extensions
+TREE_SORT := sort -z
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
@@ -66,7 +67,8 @@ Reporting, docs and release
   report                [pending FREES-77] Generate the HTML report
   report-serve          [pending FREES-77] Serve the HTML report locally
   docs                  markdownlint and relative link check
-  package               Build the collection tarball into dist/
+  package               Build the collection tarball into dist/ with a canonical FILES.json
+  package-check         Build the tarball twice from differently ordered trees and compare SHA-256
   release-check         [pending FREES-84] Verify release readiness
 
 Housekeeping
@@ -79,7 +81,7 @@ export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
 	lint-iac lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
-	test-ansible-units collection-tree collection-link sanity-pythons \
+	test-ansible-units package-check collection-tree collection-link sanity-pythons \
 	test-integration test-coverage test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
@@ -211,9 +213,20 @@ package: require-uv collection-tree
 	cd $(COLLECTION_TREE) && uv run --frozen --project '$(CURDIR)' ansible-galaxy collection build --force --output-path '$(CURDIR)/build/package/raw'
 	archive="$$(basename build/package/raw/*.tar.gz)" && \
 		tar -xzpf "build/package/raw/$$archive" -C build/package/content && \
+		(cd build/package/content && jq --indent 1 '.files |= sort_by(.name)' FILES.json > FILES.json.new && mv FILES.json.new FILES.json && \
+			sum="$$(sha256sum FILES.json | cut -d' ' -f1)" && \
+			jq --indent 1 --arg sum "$$sum" '.file_manifest_file.chksum_sha256 = $$sum' MANIFEST.json > MANIFEST.json.new && mv MANIFEST.json.new MANIFEST.json && \
+			chmod 0644 FILES.json MANIFEST.json && \
+			jq -e '(.files | map(.name)) as $$names | $$names == ($$names | sort)' FILES.json > /dev/null) && \
 		(cd build/package/content && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort > ../members.txt) && \
 		(cd build/package/content && tar --no-recursion --owner=0 --group=0 --numeric-owner --mtime='@0' -cf - -T ../members.txt | gzip -n -9 > "$(CURDIR)/dist/$$archive")
 	cd dist && sha256sum -- *.tar.gz | tee SHA256SUMS
+
+package-check: require-uv
+	$(MAKE) package
+	cp dist/SHA256SUMS build/package-first.sums
+	$(MAKE) package TREE_SORT='sort -z -r'
+	diff build/package-first.sums dist/SHA256SUMS
 
 collection-link:
 	mkdir -p $(COLLECTION_LINK)
@@ -222,7 +235,7 @@ collection-link:
 collection-tree:
 	rm -rf build/collection
 	mkdir -p $(COLLECTION_TREE)
-	git ls-files -z --cached --others --exclude-standard -- $(COLLECTION_SOURCES) | tar --null -T - -cf - | tar -xf - -C $(COLLECTION_TREE)
+	git ls-files -z --cached --others --exclude-standard -- $(COLLECTION_SOURCES) | $(TREE_SORT) | tar --null -T - -cf - | tar -xf - -C $(COLLECTION_TREE)
 	git -C $(COLLECTION_TREE) init --quiet
 	printf 'tests/output/\n' > $(COLLECTION_TREE)/.git/info/exclude
 	git -C $(COLLECTION_TREE) add --all
@@ -234,4 +247,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint typecheck test-coverage security docs test-sanity test-ansible-units package
+ci: lint typecheck test-coverage security docs test-sanity test-ansible-units package-check

@@ -43,12 +43,13 @@ OpenTofu and Packer checks join `make bootstrap` with FREES-30 and FREES-64.
 | `test-coverage` | implemented | Unit tests with branch coverage, 95% overall, 100% on `tools/` and on `plugins/` |
 | `test-sanity` | implemented | `ansible-test sanity --local` on the temporary collection tree, no Docker; installs Python 3.9 to 3.14 with `uv python install` |
 | `test-ansible-units` | implemented | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
-| `package` | implemented | Deterministic `ansible-galaxy collection build` into `dist/`, plus `dist/SHA256SUMS` |
+| `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
+| `package-check` | implemented | Builds twice from differently ordered trees and fails unless the SHA-256 values match |
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
 | `collection-link` | implemented | Links `plugins/` into `build/collections` for pytest and the type checkers |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches and coverage output |
-| `ci` | implemented | `lint typecheck test-coverage security docs test-sanity test-ansible-units package` |
+| `ci` | implemented | `lint typecheck test-coverage security docs test-sanity test-ansible-units package-check` |
 | `lint-iac` | pending FREES-30 | OpenTofu validation and Checkov |
 | `lint-packer` | pending FREES-64 | Packer validation |
 | `test-integration` | pending FREES-60 | Integration tests |
@@ -92,7 +93,8 @@ The ansible-lint hook (FREES-69) runs the whole project with the `production` pr
 file changes. Hooks for OpenTofu and Checkov (FREES-30, FREES-31) and Packer (FREES-64) are pending the issues
 that introduce their sources. They are intentionally absent rather than faked.
 
-The mypy, pyright, pylint and pytest hooks need the `build/collections` link that `make install` creates.
+The mypy, pyright, pylint and pytest hooks need the `build/collections` link that `make install` creates; pytest
+stops with the hint "run 'make install'" when it is missing.
 
 Pin ownership rule: every Python tool hook (ruff, yamllint, ansible-lint, mypy, pyright, pylint, bandit, pytest,
 shellcheck, actionlint, zizmor) is a `repo: local` hook that runs `uv run --frozen <tool>`, so its version lives only in
@@ -171,7 +173,7 @@ Configuration relaxations, each with its reason:
 | `typecheck` | `make typecheck` |
 | `test` | `make test-coverage` |
 | `security` | `make security` |
-| `collection` | `make test-sanity test-ansible-units package` |
+| `collection` | `make test-sanity test-ansible-units package-check` |
 | `ci-gate` | none; fails unless every needed job succeeded |
 
 `ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. Job names
@@ -187,7 +189,8 @@ follow-up work tracked with the runner image issue (FREES-35); it is not simulat
 
 - Python tools, including `ansible-core`, `ansible-lint` and `antsibull-changelog`, are pinned to exact versions in
   `pyproject.toml` and locked in `uv.lock`. Update with `uv lock --upgrade-package <name>` and commit both files.
-- `[tool.uv] exclude-newer = "7 days"` makes the resolver ignore releases younger than the release-age policy, so
-  transitive dependencies obey it too.
+- The release-age policy (at least seven days) applies to direct and transitive version updates through the
+  Dependabot cooldown and review; the lock is not filtered by age, because a security fix is exempt from the policy
+  ([dependency management](dependency-management.md)).
 - GitHub Actions are pinned to full commit SHAs with a `# vX.Y.Z` annotation.
 - The `uv` version used in CI is pinned in `.github/workflows/ci.yml`.
