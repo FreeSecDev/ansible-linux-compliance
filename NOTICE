@@ -1,0 +1,16 @@
+freesecdev.linux_compliance
+Copyright 2026 The FreeSecDev contributors
+
+This product is licensed under the Apache License, Version 2.0.
+
+Third-party content used or referenced by this project keeps its own licence:
+
+- ComplianceAsCode/content (SCAP Security Guide), BSD-3-Clause.
+  https://github.com/ComplianceAsCode/content
+  Datastreams are downloaded at a pinned version and verified by digest. Profiles named after CIS, DISA STIG
+  or ANSSI are ComplianceAsCode implementations, not content certified or endorsed by those organisations.
+
+- OpenSCAP, LGPL-2.1-or-later. Used as an external scanner on managed hosts; not redistributed.
+
+CIS Benchmark documents and CIS-CAT content are not included and must be obtained from the Center for Internet Security
+under its own terms where needed.

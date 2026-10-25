@@ -1,0 +1,708 @@
+---
+schema_version: 1
+project: FREES
+site: https://vidlunnia.atlassian.net
+label_prefix: plan-
+complexity_scale: [S, M, L, XL]
+epics:
+  - id: e01-governance
+    summary: Agent skills and engineering governance
+    milestone: 1
+    skill: architecture
+    purpose: Establish repository-scoped agent skills, AGENTS.md and contribution rules so every agent and human works to the same enforced conventions.
+    items:
+      - id: s0101-skills
+        type: Story
+        summary: Author the seventeen repository-scoped agent skills
+        skill: architecture
+        complexity: L
+        acceptance:
+          - Every required skill exists under .agents/skills with valid Agent Skills frontmatter.
+          - Every skill defines invocation, inputs, outputs, conventions, quality gates, failures, security, documentation, completion and interactions.
+          - The skill validator passes with zero errors.
+        testing: tools/skills/validate_skills.py runs in make lint and CI.
+        docs: AGENTS.md skill index.
+        security: security-review skill encodes the adversarial checklist.
+        subtasks:
+          - {id: t010101-validator, summary: "Implement and unit-test the skill validator"}
+          - {id: t010102-exemplars, summary: "Author architecture and security-review exemplar skills"}
+          - {id: t010103-delegated, summary: "Author and review the remaining fifteen skills"}
+          - {id: t010104-runner-subset, summary: "Provide the relevant skill subset in linux-compliance-runner"}
+      - id: s0102-agents-md
+        type: Task
+        summary: Write AGENTS.md with mandatory repository rules
+        skill: documentation
+        complexity: S
+        acceptance:
+          - AGENTS.md states traceability rules, hard rules and the skill index without duplicating skill detail.
+      - id: s0103-contribution-files
+        type: Task
+        summary: Add CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, CODEOWNERS and templates to both repositories
+        skill: documentation
+        complexity: M
+        depends_on: [s0302-create-repos]
+        acceptance:
+          - Both repositories contain the community health files and issue and pull request templates.
+          - SECURITY.md defines private vulnerability reporting.
+
+  - id: e02-architecture
+    summary: Architecture and security design
+    milestone: 1
+    skill: architecture
+    purpose: Decide and record the platform architecture, interfaces and threat model before implementation.
+    items:
+      - id: s0201-research
+        type: Story
+        summary: Verify upstream tooling versions, licensing and OS compatibility
+        skill: compliance-frameworks
+        complexity: M
+        acceptance:
+          - docs/research contains verified versions with source URLs and explicit UNVERIFIED markers.
+      - id: s0202-adr-foundation
+        type: Story
+        summary: Record foundational ADRs
+        skill: architecture
+        complexity: L
+        depends_on: [s0201-research]
+        acceptance:
+          - ADRs exist for collection layout, docs in Git, scanner protocol, remediation strategy, process execution, IaC tool, registry, image build path, report format and dependency ownership.
+        subtasks:
+          - {id: t020201-adr-remediation, summary: "ADR native-module remediation instead of ComplianceAsCode playbooks"}
+          - {id: t020202-adr-process, summary: "ADR audited external process execution helper"}
+          - {id: t020203-adr-docs, summary: "ADR documentation in Git instead of Confluence"}
+          - {id: t020204-adr-registry, summary: "ADR container registry and signing approach"}
+          - {id: t020205-adr-qcow2, summary: "ADR portable qcow2 build path in AWS"}
+      - id: s0203-threat-model
+        type: Story
+        summary: Write the platform threat model
+        skill: security-review
+        complexity: M
+        depends_on: [s0202-adr-foundation]
+        acceptance:
+          - docs/security/threat-model.md lists assets, trust boundaries, entry points, threats and mitigations.
+      - id: s0204-findings-model
+        type: Story
+        summary: Define the normalized compliance findings model
+        skill: architecture
+        complexity: M
+        depends_on: [s0202-adr-foundation]
+        acceptance:
+          - Typed model covers framework, version, benchmark, profile, rule, severity, applicability, evaluation, remediation, evidence, host, timestamp, result, exception and remediation result.
+          - Outcomes distinguish pass, fail, not applicable, not checked, error, waived and disabled.
+
+  - id: e03-github
+    summary: GitHub organization and repository configuration
+    milestone: 2
+    skill: github-actions
+    purpose: Create and secure the two public repositories with enforced review, check and merge policies.
+    items:
+      - id: s0301-org-audit
+        type: Task
+        summary: Audit FreeSecDev organization settings and plan features
+        skill: github-actions
+        complexity: S
+        acceptance:
+          - Available features (rulesets, merge queue, secret scanning, Pages) are documented with any restrictions.
+      - id: s0302-create-repos
+        type: Story
+        summary: Create ansible-linux-compliance and linux-compliance-runner repositories
+        skill: github-actions
+        complexity: S
+        depends_on: [s0301-org-audit]
+        acceptance:
+          - Both repositories are public with descriptions, topics, Apache-2.0 licence and an initial commit on main.
+      - id: s0303-repo-security
+        type: Story
+        summary: Enforce rulesets, squash-only merging and security features
+        skill: github-actions
+        complexity: M
+        depends_on: [s0302-create-repos, s1401-pr-workflow]
+        acceptance:
+          - Merge commits and rebase merges are disabled; squash merge only; branches deleted on merge.
+          - main requires pull requests, approvals, linear history, up-to-date required checks and blocks force pushes and deletion.
+          - Secret scanning and push protection are enabled; no permanent bypass actors exist.
+        subtasks:
+          - {id: t030301-merge-settings, summary: "Configure merge options and auto-delete"}
+          - {id: t030302-rulesets, summary: "Create main branch rulesets with required checks"}
+          - {id: t030303-security-features, summary: "Enable secret scanning, push protection, private vulnerability reporting"}
+          - {id: t030304-verify-policy, summary: "Verify direct pushes to main are rejected"}
+
+  - id: e04-aws
+    summary: AWS infrastructure and OIDC
+    milestone: 3
+    skill: aws-infrastructure
+    purpose: Provide least-privilege, OIDC-authenticated AWS infrastructure in eu-west-1 for image builds and artifact storage.
+    items:
+      - id: s0401-state-backend
+        type: Task
+        summary: Create OpenTofu remote state backend
+        skill: aws-infrastructure
+        complexity: S
+        acceptance:
+          - State bucket is encrypted, versioned, public-access blocked and locked.
+      - id: s0402-oidc
+        type: Story
+        summary: Configure GitHub OIDC provider and repository-scoped roles
+        skill: aws-infrastructure
+        complexity: M
+        depends_on: [s0401-state-backend]
+        acceptance:
+          - Trust policies pin issuer, audience, organization, repository and ref or environment.
+          - Validation, image-build and release roles are separate; untrusted pull requests receive no role.
+        subtasks:
+          - {id: t040201-provider, summary: "Create OIDC identity provider"}
+          - {id: t040202-roles, summary: "Create least-privilege roles per repository and stage"}
+          - {id: t040203-oidc-test, summary: "Verify OIDC with a harmless sts call from a workflow"}
+      - id: s0403-build-services
+        type: Story
+        summary: Provision CodeBuild, ECR, S3 artifact storage and logging
+        skill: aws-infrastructure
+        complexity: L
+        depends_on: [s0402-oidc]
+        acceptance:
+          - CodeBuild projects, ECR repositories and S3 buckets exist with encryption, lifecycle and log retention.
+      - id: s0404-bootstrap
+        type: Story
+        summary: Implement the AWS bootstrap template and generated local script
+        skill: aws-infrastructure
+        complexity: M
+        acceptance:
+          - Tracked template reproduces the gitignored script; script confirms account and region before changes and never writes access keys.
+      - id: s0405-cost-guardrails
+        type: Task
+        summary: Configure budgets, tagging, timeouts and builder cleanup
+        skill: aws-infrastructure
+        complexity: M
+        depends_on: [s0403-build-services]
+        acceptance:
+          - Budget alerts, mandatory tags, build timeouts and a reaper for orphaned EC2 builders exist and are documented with cost estimates.
+
+  - id: e05-runner
+    summary: Secure CI runner container
+    milestone: 3
+    skill: container-security
+    purpose: Build, scan, sign and publish a minimal Alpine-based CI toolbox image in AWS.
+    items:
+      - id: s0501-containerfile
+        type: Story
+        summary: Write the multi-stage Alpine Containerfile with pinned inputs
+        skill: container-security
+        complexity: M
+        acceptance:
+          - Base image pinned by digest, packages and Python dependencies pinned and hash-locked, non-root by default.
+      - id: s0502-aws-build
+        type: Story
+        summary: Build the image with rootless Buildah in CodeBuild orchestrated by GitHub Actions
+        skill: container-security
+        complexity: L
+        depends_on: [s0501-containerfile, s0403-build-services]
+        acceptance:
+          - A workflow run obtains OIDC credentials, triggers CodeBuild and records the resulting digest.
+      - id: s0503-supply-chain
+        type: Story
+        summary: Scan, SBOM, sign and attest the runner image
+        skill: container-security
+        complexity: M
+        depends_on: [s0502-aws-build]
+        acceptance:
+          - SBOM, vulnerability report, signature and provenance are published; publication is blocked on failing checks.
+      - id: s0504-smoke-tests
+        type: Task
+        summary: Runtime smoke tests under read-only, non-root, no-capability constraints
+        skill: container-security
+        complexity: S
+        depends_on: [s0501-containerfile]
+        acceptance:
+          - Every bundled tool reports its version inside the constrained container.
+
+  - id: e06-collection
+    summary: Ansible collection architecture
+    milestone: 4
+    skill: ansible-collection
+    purpose: Deliver an installable, Galaxy-compatible collection skeleton with strict tooling.
+    items:
+      - id: s0601-skeleton
+        type: Story
+        summary: Create collection skeleton, galaxy.yml and runtime metadata
+        skill: ansible-collection
+        complexity: M
+        acceptance:
+          - ansible-galaxy collection build succeeds and the tarball installs.
+          - ansible-lint production profile and ansible-test sanity pass.
+      - id: s0602-roles-skeleton
+        type: Story
+        summary: Create discover, audit, remediate, verify and evidence roles with argument specs
+        skill: ansible-collection
+        complexity: M
+        depends_on: [s0601-skeleton]
+        acceptance:
+          - Each role validates inputs through meta/argument_specs.yml and has safe defaults.
+      - id: s0603-playbooks
+        type: Task
+        summary: Provide orchestration playbooks for audit, remediate and verify flows
+        skill: ansible-collection
+        complexity: S
+        depends_on: [s0602-roles-skeleton]
+        acceptance:
+          - Playbooks use only FQCN role references and contain no component logic.
+
+  - id: e07-benchmarks
+    summary: Compliance policy and benchmark integration
+    milestone: 5
+    skill: compliance-frameworks
+    purpose: Integrate properly licensed SCAP content with provenance, pinning and an honest support matrix.
+    items:
+      - id: s0701-content-manifest
+        type: Story
+        summary: Content manifest with pinned ComplianceAsCode versions and digests
+        skill: compliance-frameworks
+        complexity: M
+        acceptance:
+          - Each datastream has version, source URL, licence and SHA-256 verified before use.
+      - id: s0702-catalog
+        type: Story
+        summary: Benchmark and profile discovery modules
+        skill: ansible-modules
+        complexity: M
+        depends_on: [s0701-content-manifest, s0204-findings-model]
+        acceptance:
+          - benchmark_info and profile_info list content, profiles and rules without changing the host.
+      - id: s0703-mappings
+        type: Story
+        summary: Cross-framework mappings from ComplianceAsCode references
+        skill: compliance-frameworks
+        complexity: L
+        depends_on: [s0702-catalog]
+        acceptance:
+          - CIS, STIG, ANSSI, NIST 800-53, NIST 800-171 and PCI DSS references are mapped with provenance and deduplicated by rule.
+      - id: s0704-support-matrix
+        type: Task
+        summary: Machine-readable OS and benchmark support matrix
+        skill: compliance-frameworks
+        complexity: S
+        acceptance:
+          - docs/support-matrix.yml records testing status only for tests that were executed.
+      - id: s0705-user-content
+        type: Task
+        summary: Support user-supplied and offline benchmark content
+        skill: compliance-frameworks
+        complexity: M
+        depends_on: [s0701-content-manifest]
+        acceptance:
+          - Users can supply content with a digest; restricted content is never bundled.
+
+  - id: e08-audit
+    summary: Audit engine and normalized findings
+    milestone: 5
+    skill: ansible-modules
+    purpose: Run scanners safely and return normalized, correctly classified findings.
+    items:
+      - id: s0801-process-helper
+        type: Story
+        summary: Audited external process execution helper
+        skill: ansible-modules
+        complexity: M
+        depends_on: [t020202-adr-process]
+        acceptance:
+          - Only this helper executes binaries, with argument lists, shell disabled, explicit environment and timeouts.
+          - Adversarial tests cover injection, timeout and missing binary cases with 100% branch coverage.
+      - id: s0802-openscap-backend
+        type: Story
+        summary: OpenSCAP scanner backend and XCCDF result parser
+        skill: ansible-modules
+        complexity: L
+        depends_on: [s0801-process-helper, s0204-findings-model]
+        acceptance:
+          - Scanner failures are classified as error; malformed or hostile XML is rejected safely.
+      - id: s0803-scan-module
+        type: Story
+        summary: compliance_scan module and audit role
+        skill: ansible-modules
+        complexity: L
+        depends_on: [s0802-openscap-backend]
+        acceptance:
+          - Audit-only runs make no changes; results are normalized findings with evidence paths.
+      - id: s0804-exceptions
+        type: Story
+        summary: Version-controlled exceptions and waivers
+        skill: compliance-frameworks
+        complexity: M
+        depends_on: [s0204-findings-model]
+        acceptance:
+          - Exceptions require id, rule, framework, scope, justification, owner, approval, dates and risk; expired exceptions stop suppressing failures.
+      - id: s0805-evidence
+        type: Task
+        summary: Evidence bundle export
+        skill: ansible-collection
+        complexity: M
+        depends_on: [s0803-scan-module]
+        acceptance:
+          - Evidence bundles include raw results, checksums and provenance and exclude secrets.
+
+  - id: e09-remediation
+    summary: Remediation engine
+    milestone: 5
+    skill: ansible-collection
+    purpose: Apply opt-in, native-module remediation keyed by stable rule identifiers, with verification.
+    items:
+      - id: s0901-dispatch
+        type: Story
+        summary: Remediation dispatcher and opt-in safety model
+        skill: ansible-collection
+        complexity: M
+        depends_on: [t020201-adr-remediation, s0803-scan-module]
+        acceptance:
+          - Remediation runs only when enabled; disruptive controls require explicit allow-listing.
+      - id: s0902-first-families
+        type: Story
+        summary: First control families for Ubuntu 24.04 CIS Level 1
+        skill: ansible-collection
+        complexity: XL
+        depends_on: [s0901-dispatch]
+        acceptance:
+          - Families for sysctl, file permissions, SSH, auditd, PAM and services remediate idempotently with native modules.
+        subtasks:
+          - {id: t090201-sysctl, summary: "Kernel parameter family"}
+          - {id: t090202-permissions, summary: "File permission and ownership family"}
+          - {id: t090203-ssh, summary: "SSH server configuration family"}
+          - {id: t090204-auditd, summary: "auditd rules family"}
+          - {id: t090205-pam, summary: "PAM and password policy family"}
+          - {id: t090206-services, summary: "Service and package removal family"}
+      - id: s0903-verify
+        type: Story
+        summary: Verify role comparing baseline and post-remediation results
+        skill: ansible-collection
+        complexity: M
+        depends_on: [s0902-first-families]
+        acceptance:
+          - Verification reports improved, regressed and unchanged rules from two scans.
+      - id: s0905-toggles
+        type: Story
+        summary: Per-rule and per-topic toggles generated from the rule catalogue
+        skill: ansible-collection
+        complexity: L
+        depends_on: [s0901-dispatch]
+        acceptance:
+          - Every implemented rule has a flat rule toggle defaulting to its family toggle, as decided in ADR 0011.
+          - Defaults and argument specs are generated from roles/remediate/vars/rules.yml and CI fails on drift.
+          - Disabled rules are excluded through generated XCCDF tailoring and reported as disabled with the controlling variable.
+        testing: Unit tests for effective-state resolution; Molecule asserts single-rule and whole-topic disable.
+        docs: Variable reference generated from the catalogue.
+        security: Disabled rules are always visible in reports and the exceptions report.
+      - id: s0906-state-ledger
+        type: Story
+        summary: control_state module and on-host state ledger
+        skill: ansible-modules
+        complexity: M
+        depends_on: [s0801-process-helper]
+        acceptance:
+          - Ledger is root-only, written atomically and records rule, family, strategy, prior values, version and time.
+          - Check mode never writes the ledger; a corrupt ledger is reported as an error rather than reset.
+        security: Adversarial tests for symlinked, oversized and malformed ledger files.
+      - id: s0907-cleanup
+        type: Story
+        summary: Cleanup on disable for every control family
+        skill: ansible-collection
+        complexity: XL
+        depends_on: [s0905-toggles, s0906-state-ledger, s0902-first-families]
+        acceptance:
+          - Disabling a previously applied rule or topic restores the recorded prior state, for example disabling auditd removes collection-owned audit rules and restores the prior package and service state.
+          - Cleanup honours check mode, diff mode and the disruptive allow-list and is idempotent.
+          - Irreversible rules report a manual action with a runbook link instead of guessing.
+        testing: A Molecule toggle-and-cleanup scenario per family applies, disables, asserts restoration and asserts zero changes on rerun.
+      - id: s0904-recovery
+        type: Task
+        summary: Rollback and recovery guidance for disruptive controls
+        skill: documentation
+        complexity: S
+        depends_on: [s0902-first-families]
+        acceptance:
+          - Runbooks exist for every disruptive control family.
+
+  - id: e10-molecule-docker
+    summary: Docker Molecule infrastructure
+    milestone: 7
+    skill: molecule-testing
+    purpose: Fast container-based scenarios for module and role behaviour.
+    items:
+      - id: s1001-docker-base
+        type: Story
+        summary: Docker scenario framework with pinned images and no shell modules
+        skill: molecule-testing
+        complexity: M
+        depends_on: [s0601-skeleton]
+        acceptance:
+          - docker-ubuntu and docker-rhel-compatible scenarios create, converge, verify and destroy unprivileged containers.
+      - id: s1002-docker-coverage
+        type: Story
+        summary: Docker coverage for check mode, diff mode, idempotency and negative cases
+        skill: molecule-testing
+        complexity: L
+        depends_on: [s1001-docker-base, s0803-scan-module]
+        acceptance:
+          - Scenarios assert audit-only makes no changes and invalid profiles fail clearly.
+
+  - id: e11-molecule-libvirt
+    summary: libvirt Molecule infrastructure
+    milestone: 7
+    skill: molecule-testing
+    purpose: Full VM scenarios for OS features that containers cannot validate.
+    items:
+      - id: s1101-libvirt-base
+        type: Story
+        summary: libvirt scenario framework with isolated networks and guaranteed cleanup
+        skill: molecule-testing
+        complexity: L
+        depends_on: [s0601-skeleton]
+        acceptance:
+          - VMs boot from checksum-verified cloud images on an isolated network and are always destroyed.
+          - A guard prevents any scenario from targeting the local host.
+      - id: s1102-bare-scenarios
+        type: Story
+        summary: Bare-image audit and remediation scenarios
+        skill: molecule-testing
+        complexity: L
+        depends_on: [s1101-libvirt-base, s0902-first-families]
+        acceptance:
+          - libvirt-ubuntu-bare, libvirt-rhel-bare, libvirt-negative and libvirt-idempotency pass including reboot and full OpenSCAP scans.
+      - id: s1103-golden-scenarios
+        type: Story
+        summary: Golden-image regression scenarios
+        skill: molecule-testing
+        complexity: L
+        depends_on: [s1101-libvirt-base, s1203-qcow2]
+        acceptance:
+          - Golden scenarios boot verified images, detect unexpected changes and compare scores to the recorded baseline.
+
+  - id: e12-packer
+    summary: Packer image building
+    milestone: 8
+    skill: packer-images
+    purpose: Data-driven, AWS-built golden images hardened by the collection itself.
+    items:
+      - id: s1201-templates
+        type: Story
+        summary: Data-driven HCL2 templates and variant definitions
+        skill: packer-images
+        complexity: M
+        depends_on: [s0603-playbooks]
+        acceptance:
+          - One template set builds every variant from data; plugins pinned with checksums; packer validate passes.
+      - id: s1202-ami
+        type: Story
+        summary: AMI builds via CodeBuild
+        skill: packer-images
+        complexity: L
+        depends_on: [s1201-templates, s0403-build-services]
+        acceptance:
+          - Builds produce AMIs with manifests, scan results and provenance; builders are terminated on failure.
+      - id: s1203-qcow2
+        type: Story
+        summary: Portable qcow2 builds on ephemeral KVM-capable EC2
+        skill: packer-images
+        complexity: XL
+        depends_on: [t020205-adr-qcow2, s1201-templates, s0403-build-services]
+        acceptance:
+          - qcow2 artifacts with SHA-256 and provenance land in encrypted S3 and are downloadable and verifiable.
+      - id: s1204-image-lock
+        type: Task
+        summary: Shared image lock manifest
+        skill: packer-images
+        complexity: S
+        depends_on: [s1203-qcow2]
+        acceptance:
+          - extensions/packer/images.lock.json pins image digests consumed by Molecule.
+
+  - id: e13-quality
+    summary: Security and quality automation
+    milestone: 2
+    skill: python-quality
+    purpose: Makefile, pre-commit and static analysis that developers and CI share.
+    items:
+      - id: s1301-makefile
+        type: Story
+        summary: Makefile developer interface in both repositories
+        skill: python-quality
+        complexity: M
+        acceptance:
+          - All required targets exist, are documented by make help and fail loudly on missing dependencies.
+          - make ci runs without AWS credentials.
+      - id: s1302-precommit
+        type: Story
+        summary: Pre-commit, pre-push and CI-only hook stages
+        skill: python-quality
+        complexity: M
+        acceptance:
+          - Hooks are pinned and cover whitespace, syntax, secrets, Python, YAML, Ansible, Markdown, shell, Actions, IaC and Packer.
+      - id: s1303-python-tooling
+        type: Story
+        summary: Strict Python tooling configuration
+        skill: python-quality
+        complexity: M
+        acceptance:
+          - Ruff, Pylint, mypy strict, Pyright strict, Bandit and pytest with branch coverage gates are configured in pyproject.toml.
+
+  - id: e14-cicd
+    summary: GitHub Actions CI/CD
+    milestone: 2
+    skill: github-actions
+    purpose: Secure workflows orchestrating Makefile targets and AWS builds.
+    items:
+      - id: s1401-pr-workflow
+        type: Story
+        summary: Pull request validation workflow with an aggregate required check
+        skill: github-actions
+        complexity: M
+        depends_on: [s1301-makefile]
+        acceptance:
+          - Actions are SHA-pinned, permissions minimal, zizmor and actionlint clean; ci-gate always reports.
+      - id: s1402-molecule-workflows
+        type: Story
+        summary: Docker and libvirt Molecule matrix workflows
+        skill: github-actions
+        complexity: L
+        depends_on: [s1401-pr-workflow, s1001-docker-base, s1101-libvirt-base]
+        acceptance:
+          - Docker matrix runs on pull requests; libvirt runs where KVM is available and is opt-in when expensive.
+      - id: s1403-aws-workflows
+        type: Story
+        summary: AWS image build workflows with environment approval
+        skill: github-actions
+        complexity: M
+        depends_on: [s0402-oidc]
+        acceptance:
+          - Build workflows run only from trusted refs through protected environments.
+      - id: s1404-maintenance
+        type: Task
+        summary: Scheduled security and dependency maintenance workflow
+        skill: github-actions
+        complexity: S
+        depends_on: [s1401-pr-workflow]
+        acceptance:
+          - Scheduled scans report findings without write access to protected branches.
+
+  - id: e15-reporting
+    summary: Unified compliance reporting dashboard
+    milestone: 9
+    skill: reporting-dashboard
+    purpose: A standalone, offline, single-file HTML dashboard aggregating CI and compliance results.
+    items:
+      - id: s1501-schema
+        type: Story
+        summary: Versioned normalized report JSON schema
+        skill: reporting-dashboard
+        complexity: M
+        depends_on: [s0204-findings-model]
+        acceptance:
+          - Schema covers every input type and marks unavailable data explicitly.
+      - id: s1502-parsers
+        type: Story
+        summary: Hardened parsers for every supported input format
+        skill: reporting-dashboard
+        complexity: XL
+        depends_on: [s1501-schema]
+        acceptance:
+          - ARF, XCCDF, JUnit, Cobertura, pytest JSON, Molecule, ansible-lint, Trivy or Grype, SBOM, Packer and CodeBuild inputs parse with tests for malformed input.
+        subtasks:
+          - {id: t150201-scap, summary: "ARF and XCCDF parsers"}
+          - {id: t150202-tests, summary: "JUnit, pytest and Molecule parsers"}
+          - {id: t150203-quality, summary: "Coverage and ansible-lint parsers"}
+          - {id: t150204-security, summary: "Vulnerability and SBOM parsers"}
+          - {id: t150205-builds, summary: "Packer and CodeBuild parsers"}
+      - id: s1503-html
+        type: Story
+        summary: Single-file accessible HTML dashboard
+        skill: reporting-dashboard
+        complexity: XL
+        depends_on: [s1501-schema]
+        acceptance:
+          - Offline, CSP-restricted, escaped, keyboard-accessible tabs, filters, search, sorting, dark and light modes.
+      - id: s1504-ci-publish
+        type: Task
+        summary: Publish report artifacts and job summaries from CI
+        skill: github-actions
+        complexity: S
+        depends_on: [s1503-html, s1401-pr-workflow]
+        acceptance:
+          - Every relevant run uploads the dashboard, including failed runs with enough data.
+
+  - id: e16-docs
+    summary: Documentation in Git
+    milestone: 1
+    skill: documentation
+    purpose: Long-form engineering documentation and ADRs maintained in the repository.
+    items:
+      - id: s1601-docs-tree
+        type: Story
+        summary: Create the documentation tree and navigation
+        skill: documentation
+        complexity: M
+        acceptance:
+          - Every documentation area from the plan exists with scope and audience stated.
+      - id: s1602-docs-quality
+        type: Task
+        summary: Markdown lint and link checking
+        skill: documentation
+        complexity: S
+        depends_on: [s1301-makefile]
+        acceptance:
+          - make docs runs markdownlint and link checks in CI.
+
+  - id: e17-supply-chain
+    summary: Supply-chain security
+    milestone: 3
+    skill: dependency-management
+    purpose: Pinned, scanned, attested dependencies with non-overlapping update automation.
+    items:
+      - id: s1701-renovate-dependabot
+        type: Story
+        summary: Renovate and Dependabot with divided ownership
+        skill: dependency-management
+        complexity: M
+        depends_on: [s0302-create-repos]
+        acceptance:
+          - No ecosystem is managed by both tools; configs validate in CI.
+      - id: s1702-scanning
+        type: Story
+        summary: Dependency, secret and IaC scanning gates
+        skill: security-review
+        complexity: M
+        depends_on: [s1401-pr-workflow]
+        acceptance:
+          - Vulnerability, secret and IaC scans block merges on unjustified findings.
+
+  - id: e18-release
+    summary: Release and distribution
+    milestone: 10
+    skill: release-engineering
+    purpose: Verified, reproducible releases of the collection and runner image.
+    items:
+      - id: s1801-changelog
+        type: Task
+        summary: antsibull-changelog fragments and release notes
+        skill: release-engineering
+        complexity: S
+        depends_on: [s0601-skeleton]
+        acceptance:
+          - Pull requests carry changelog fragments; release notes are generated.
+      - id: s1802-release-workflow
+        type: Story
+        summary: Tag-driven verified release workflow
+        skill: release-engineering
+        complexity: L
+        depends_on: [s1401-pr-workflow, s1801-changelog]
+        acceptance:
+          - Releases verify tag, approved commit, checks and reproducibility, then publish to GitHub and Galaxy.
+
+  - id: e19-acceptance
+    summary: End-to-end acceptance testing
+    milestone: 10
+    skill: code-review
+    purpose: Execute and record workflows A to F from the master requirements.
+    items:
+      - {id: s1901-workflow-a, type: Story, summary: "Acceptance workflow A new developer", skill: code-review, complexity: M, depends_on: [s1302-precommit, s1001-docker-base, s1503-html], acceptance: ["Clean clone to offline report succeeds and is recorded."]}
+      - {id: s1902-workflow-b, type: Story, summary: "Acceptance workflow B bare Linux system", skill: molecule-testing, complexity: L, depends_on: [s1102-bare-scenarios], acceptance: ["Audit, remediate, re-audit, idempotency and report are recorded with results."]}
+      - {id: s1903-workflow-c, type: Story, summary: "Acceptance workflow C golden image", skill: packer-images, complexity: L, depends_on: [s1103-golden-scenarios], acceptance: ["AWS build to libvirt Molecule run is recorded with artifacts and checksums."]}
+      - {id: s1904-workflow-d, type: Story, summary: "Acceptance workflow D CI runner", skill: container-security, complexity: M, depends_on: [s0503-supply-chain], acceptance: ["Image built in AWS is consumed by digest and runs real tests in the main repository."]}
+      - {id: s1905-workflow-e, type: Story, summary: "Acceptance workflow E pull request", skill: code-review, complexity: M, depends_on: [s0303-repo-security, s1504-ci-publish], acceptance: ["Jira-linked change passes checks, review, rebase and squash merge under enforced policy."]}
+      - {id: s1906-workflow-f, type: Story, summary: "Acceptance workflow F reproducible troubleshooting", skill: documentation, complexity: S, depends_on: [s1905-workflow-e], acceptance: ["An issue is traced to PR, commits, ADR, controls, CI results and image metadata and reproduced locally."]}
