@@ -391,8 +391,9 @@ def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> 
     that the text is UTF-8, so other encodings are malformed, and DOCTYPE and
     ENTITY declarations are rejected before the chunk that holds them is parsed.
 
-    An error while the file is closed, the only file operation outside
-    :mod:`xmlsafe`, is a rejection too.
+    Every file operation, including the close, happens in :mod:`xmlsafe`. An
+    error while the file is closed is a rejection too; its cause is the
+    ``OSError`` of the close.
 
     Raises:
         XccdfParseError: For every rejection, including unreadable files.
@@ -400,15 +401,13 @@ def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> 
     builder = _Builder()
     bounds = _bounds(limits)
     try:
-        with xmlsafe.open_regular(path, max_bytes, subject=RESULTS_SUBJECT) as handle:
+        with xmlsafe.RegularFile(path, max_bytes, subject=RESULTS_SUBJECT) as handle:
             chunks = xmlsafe.iter_handle_chunks(handle, max_bytes, subject=RESULTS_SUBJECT)
             xmlsafe.parse_chunks(chunks, builder, bounds)
+    except xmlsafe.CloseError as error:
+        raise XccdfParseError(str(error)) from error.os_error
     except xmlsafe.XmlSafetyError as error:
         raise XccdfParseError(str(error)) from error
-    except OSError as error:
-        reason = error.strerror or type(error).__name__
-        message = f"the {RESULTS_SUBJECT} file cannot be read: {reason}"
-        raise XccdfParseError(message) from error
     return _extract(builder)
 
 

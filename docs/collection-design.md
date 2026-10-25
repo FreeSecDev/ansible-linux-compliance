@@ -166,10 +166,11 @@ is never summarised as compliant (ADR 0013, amendment of FREES-48).
 
 Results come from a host and are untrusted. The parser uses only the standard library and layers its defences.
 Layers 1 to 4 are implemented once, in `plugins/module_utils/compliance/xmlsafe.py`, which `catalog.py` uses too;
-`openscap.py` contains no XML parsing code of its own (FREES-126). It calls `xmlsafe.open_regular`,
+`openscap.py` contains no XML parsing code of its own (FREES-126). It calls `xmlsafe.RegularFile`,
 `xmlsafe.iter_handle_chunks` and `xmlsafe.parse_chunks` for files and `xmlsafe.parse_text` for text, passes its
 `XmlLimits` bounds, turns every `xmlsafe.XmlSafetyError` into an `XccdfParseError` with the same message, and implements
-layers 5 and 6 in its event receiver:
+layers 5 and 6 in its event receiver. A failing close of the results file is an `xmlsafe.CloseError` and so an
+`XccdfParseError` too (FREES-131):
 
 1. The file must be a regular file and not a symlink. It is streamed in 1 MiB chunks into the parser and bounded by
    `max_result_bytes` before and while it is read, so memory does not grow with its size (about 25 MB peak for a 115 MB
@@ -252,9 +253,12 @@ each profile by identifier and title as read from the datastream.
 ### Catalog and modules
 
 `xmlsafe.py` offers `parse_chunks(chunks, events, bounds)`, `parse_text(document, events, bounds)`,
-`open_regular(path, max_bytes)`, `iter_handle_chunks(handle, max_bytes)` and `iter_file_chunks(path, max_bytes)`; the
-three file functions take an optional keyword `subject` that names the file in error messages (`"results"` gives
-"the results file"). It is the parser behind the results parser, and `catalog.py` builds on it too. Its public functions are `read_benchmarks(path,
+`open_regular(path, max_bytes)`, the context manager `RegularFile(path, max_bytes)`, `iter_handle_chunks(handle,
+max_bytes)` and `iter_file_chunks(path, max_bytes)`; the file functions take an optional keyword `subject` that names
+the file in error messages (`"results"` gives "the results file"). `RegularFile` opens through `open_regular` and turns
+an `OSError` raised by the close into `CloseError`, an `XmlSafetyError` worded like a read error whose cause is the
+`OSError`; an error raised inside the block is never replaced by a close error. `catalog.py` and `openscap.py` open files
+only through it, so a failing close is a `CatalogError` or an `XccdfParseError`, never a bare `OSError` (FREES-131). It is the parser behind the results parser, and `catalog.py` builds on it too. Its public functions are `read_benchmarks(path,
 expected_sha256)` (hash first, parse second, hash again during the parse), `locate_datastreams(directory)`,
 `resolve_content_path(path)`, `single_benchmark`, `find_profile`, `profile_rules` and the module reports
 `benchmark_report` and `profile_report`. A digest mismatch raises `DigestMismatchError` before any parsing. Errors map

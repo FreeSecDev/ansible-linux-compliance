@@ -43,6 +43,7 @@ where external processes run, and only through one audited helper.
 - All external process execution goes through `plugins/module_utils/compliance/process.py`, which runs an argument list with `shell=False`, a timeout, an explicit minimal environment and bounded output (ADR 0004). No other file imports `subprocess` or calls `os.system`, `os.popen` or `pty`. Commands are argument lists, never strings.
 - Arguments are validated by allow-list or regex before use; reject values starting with `-` where a path or ID is expected. See [references/safe-io.md](references/safe-io.md).
 - Parse XML on hosts with the standard library only: reject DOCTYPE and entity declarations before parsing and bound the file size first.
+- Parse XML only through `plugins/module_utils/compliance/xmlsafe.py` and open the files it reads with `xmlsafe.RegularFile`, which also turns a failing close into `XmlSafetyError`. The names `expat` and `parsers` are reserved for `xmlsafe.py`; naming them anywhere else (`xmlsafe.expat`, `getattr(x, "expat")`, `from .xmlsafe import expat`) fails the guard.
 - Confine paths to a base directory, resolve and compare real paths, reject symlinks for writes, write atomically (temporary file, fsync, rename) with an explicit mode.
 - Scanner failure, timeout, malformed output or missing content yields outcome `error`, never `pass` or `fail`.
 - Action plugins hold only controller-side logic (inventory-wide aggregation, exception handling); they never run host work.

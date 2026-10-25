@@ -549,7 +549,7 @@ def verify_digest(path: str, expected_sha256: str, max_bytes: int = DEFAULT_MAX_
     """
     expected = _expected_digest(expected_sha256)
     try:
-        with xmlsafe.open_regular(_checked_path(path), max_bytes) as handle:
+        with xmlsafe.RegularFile(_checked_path(path), max_bytes) as handle:
             actual = _handle_digest(handle, max_bytes)
     except xmlsafe.XmlSafetyError as error:
         raise CatalogError(str(error)) from error
@@ -601,7 +601,7 @@ def read_benchmarks(
     expected = _expected_digest(expected_sha256)
     checked = _checked_path(path)
     try:
-        with xmlsafe.open_regular(checked, max_bytes) as handle:
+        with xmlsafe.RegularFile(checked, max_bytes) as handle:
             actual = _handle_digest(handle, max_bytes)
             if actual != expected:
                 message = f"content digest mismatch: expected {expected}, found {actual}"

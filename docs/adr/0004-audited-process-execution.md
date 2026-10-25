@@ -281,3 +281,39 @@ today; remove them if they stay unused.
   with expected data generated from the old parser on `main` at `fdc788c` for every XML fixture, both entry points,
   element, depth and size bounds, small read chunks and the symlink, directory, missing and empty cases. The test file
   passes unchanged against both implementations.
+
+## Amendment 2026-10-25: no raw expat through `xmlsafe` (FREES-131)
+
+The independent review of PR #16 (FREES-126) found that raw expat was still reachable from every plugin file. The guard
+derived the names `parsers` and `expat` from the dotted `EXTRA_IMPORTS` entry `xml.parsers.expat` and treated them like
+the submodules of the global allow-list, so they only had to be the base of an attribute access. As a result,
+`xmlsafe.expat.ParserCreate()` and `from .xmlsafe import expat` passed the guard in any plugin file and gave a raw expat
+parser with no declaration scan, no bounds and no reject handlers.
+
+- Reserved names: the components of an `EXTRA_IMPORTS` name that no allow-listed import provides (today `parsers` and
+  `expat`, `RESERVED_ATTRIBUTES` in `tools/lint/check_repo_rules.py`) may be used only in the file that owns the entry,
+  `plugins/module_utils/compliance/xmlsafe.py`. In every other plugin file, they are banned:
+  - as an attribute name on any object, whether read, called, stored or deleted (`xmlsafe.expat.ParserCreate()`,
+    `x = xmlsafe.expat`, `xmlsafe.parsers.expat`, `obj.expat`);
+  - as a literal `getattr`, `setattr` or `delattr` name (`getattr(xmlsafe, "expat")`);
+  - as a keyword of a `match` class pattern (`case object(expat=e)`);
+  - as an imported name or a component of an import path (`from .xmlsafe import expat`,
+    `from <collection>.xmlsafe.expat import ParserCreate`, `import <collection>.xmlsafe.expat as e`).
+
+  The message names the owning file. `SUBMODULE_ATTRIBUTES` still contains both names, so in `xmlsafe.py` itself the
+  submodule-value rule still applies and `x = xml.parsers.expat` and `x = expat` stay denied. The global names
+  (`SHARED_SUBMODULE_ATTRIBUTES`: `path`, `abc`, `decoder` and the others) are unchanged. No rule was weakened and no
+  exemption was added. Regression tests in `tests/unit/tools/test_check_repo_rules_hardening.py` cover 20 forms in
+  `openscap.py`, `catalog.py`, the three modules under `plugins/modules/`, other `module_utils` files and an action
+  plugin, and show that `xmlsafe.py` keeps the forms it uses. The `match` and `getattr` forms on a module name were
+  already denied by R-A; the new rule also covers them on other objects.
+- Close errors in one place: `xmlsafe.RegularFile(path, max_bytes, *, subject="")` is a context manager that opens
+  through `open_regular` and closes the handle on exit. An `OSError` from the close becomes `xmlsafe.CloseError`, an
+  `XmlSafetyError` with the read-error wording ("the file cannot be read: ...", "the results file ..." with
+  `subject="results"`), the `OSError` as its cause and as `os_error`. An error raised in the block wins over a
+  failing close, so a digest mismatch or a parse error is reported as such. `iter_file_chunks`, `catalog.verify_digest`,
+  `catalog.read_benchmarks` and `openscap.read_results` use it. Before this change, a failing close in the two catalog
+  functions surfaced as a bare `OSError`, so `benchmark_info` and `profile_info` failed with a traceback instead of
+  `CatalogError` (`invalid_content`). It is now a `CatalogError` with the read-error message. `openscap.read_results`
+  no longer handles `OSError` itself. It maps `CloseError` to `XccdfParseError` with the same message and keeps the
+  `OSError` as the cause, as PR #16 established.

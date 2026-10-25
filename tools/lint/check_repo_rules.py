@@ -39,7 +39,12 @@ Rules:
   static analysis, not a sandbox (ADR 0004).
   ``xml.parsers.expat`` may be imported (as ``from xml.parsers import expat``)
   only by ``plugins/module_utils/compliance/xmlsafe.py``, the shared hardened
-  XML parser that every other plugin file parses through. Only
+  XML parser that every other plugin file parses through. The components of that
+  dotted name that no allow-listed import provides (``parsers`` and ``expat``) are
+  reserved for the same file: everywhere else they are banned as attribute names on
+  any object, as literal ``getattr`` names, as ``match`` class pattern keywords and as
+  imported names or import path components, so ``xmlsafe.expat.ParserCreate()`` and
+  ``from .xmlsafe import expat`` fail. Only
   ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
   ``plugins/module_utils/compliance/fileio.py`` may additionally ``import`` ``os``, ``fcntl``,
   ``errno`` and ``time`` and use only the attributes listed in ``FILE_IO_ATTRIBUTES``, always as
@@ -344,8 +349,26 @@ BANNED_MODULE_ATTRIBUTES: Final[frozenset[str]] = (
 PROTECTED_NAMES: Final[frozenset[str]] = frozenset({"super", "object"})
 
 
-SUBMODULE_ATTRIBUTES: Final[frozenset[str]] = KNOWN_SUBMODULE_ATTRIBUTES.union(
-    *(frozenset(name.split(".")[1:]) for name in ALLOWED_IMPORTS.union(*EXTRA_IMPORTS.values()))
+def _dotted_parts(names: Iterable[str]) -> frozenset[str]:
+    """Return every component after the first of the dotted module ``names``."""
+    return frozenset(part for name in names for part in name.split(".")[1:])
+
+
+SHARED_SUBMODULE_ATTRIBUTES: Final[frozenset[str]] = KNOWN_SUBMODULE_ATTRIBUTES | _dotted_parts(
+    ALLOWED_IMPORTS
+)
+SUBMODULE_ATTRIBUTES: Final[frozenset[str]] = SHARED_SUBMODULE_ATTRIBUTES | _dotted_parts(
+    name for names in EXTRA_IMPORTS.values() for name in names
+)
+RESERVED_ATTRIBUTES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        part: ", ".join(
+            sorted(
+                str(path) for path, names in EXTRA_IMPORTS.items() if part in _dotted_parts(names)
+            )
+        )
+        for part in sorted(SUBMODULE_ATTRIBUTES - SHARED_SUBMODULE_ATTRIBUTES)
+    }
 )
 OS_MODULE: Final[str] = "os"
 OS_PATH: Final[str] = "path"
@@ -653,6 +676,7 @@ class _Scope:
     restricted: Mapping[str, frozenset[str]]
     restricted_bases: set[int]
     fileio_attribute_allowed: bool
+    reserved: Mapping[str, str]
 
     def ancestors(self, node: ast.AST) -> Iterable[ast.AST]:
         """Yield the parents of ``node``, nearest first."""
@@ -792,8 +816,18 @@ def _private_import_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]
             yield f"import of module name {alias.name!r} through another module is not allowed"
 
 
+def _reserved_findings(names: Iterable[str], reserved: Mapping[str, str]) -> Iterable[str]:
+    """Yield a description for each name that only another plugin file may import."""
+    for name in names:
+        if name in reserved:
+            yield f"import of {name!r} is restricted to {reserved[name]}"
+
+
 def _plain_import_findings(
-    node: ast.Import, extra: frozenset[str], restricted: frozenset[str]
+    node: ast.Import,
+    extra: frozenset[str],
+    restricted: frozenset[str],
+    reserved: Mapping[str, str],
 ) -> Iterable[str]:
     """Yield a description for each ``import x`` name that is not allow-listed."""
     for alias in node.names:
@@ -801,16 +835,21 @@ def _plain_import_findings(
             yield _not_allowed(alias.name)
         elif alias.name in restricted and alias.asname:
             yield f"import of {alias.name!r} under another name is not allowed in plugins"
+        else:
+            yield from _reserved_findings(alias.name.split("."), reserved)
 
 
 def _import_findings(
-    node: ast.Import | ast.ImportFrom, extra: frozenset[str], restricted: frozenset[str]
+    node: ast.Import | ast.ImportFrom,
+    extra: frozenset[str],
+    restricted: frozenset[str],
+    reserved: Mapping[str, str],
 ) -> Iterable[str]:
     """Yield a description for each import on ``node`` that is not allow-listed."""
     yield from _alias_findings(node)
     yield from _private_import_findings(node)
     if isinstance(node, ast.Import):
-        yield from _plain_import_findings(node, extra, restricted)
+        yield from _plain_import_findings(node, extra, restricted, reserved)
         return
     module = node.module or ""
     if module in restricted and not node.level and module != OS_MODULE:
@@ -822,6 +861,9 @@ def _import_findings(
         and not all(f"{module}.{alias.name}" in extra for alias in node.names)
     ):
         yield _not_allowed(module)
+    else:
+        names = [*module.split("."), *(alias.name for alias in node.names)]
+        yield from _reserved_findings(names, reserved)
     for alias in node.names:
         if module in RESTRICTED_FROM_IMPORTS and alias.name not in RESTRICTED_FROM_IMPORTS[module]:
             yield _not_allowed(f"{module}.{alias.name}")
@@ -840,6 +882,8 @@ def _dynamic_attribute_findings(node: ast.Call, name: str, scope: _Scope) -> Ite
         yield "getattr, setattr and delattr need a literal attribute name"
     elif attribute.value == FILE_IO_MODULE and not scope.fileio_attribute_allowed:
         yield f"attribute {FILE_IO_MODULE!r} is restricted to ledger.py"
+    elif attribute.value in scope.reserved:
+        yield f"attribute {attribute.value!r} is restricted to {scope.reserved[attribute.value]}"
     elif _is_banned_attribute(attribute.value) or (
         attribute.value in BANNED_MODULE_ATTRIBUTES and scope.is_module_rooted(node.args[0])
     ):
@@ -971,6 +1015,8 @@ def _attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
         yield f"assigning attribute {node.attr!r} of an imported module is not allowed in plugins"
     if node.attr == FILE_IO_MODULE and not scope.fileio_attribute_allowed:
         yield f"attribute {FILE_IO_MODULE!r} is restricted to ledger.py"
+    if node.attr in scope.reserved:
+        yield f"attribute {node.attr!r} is restricted to {scope.reserved[node.attr]}"
     if (
         node.attr in SUBMODULE_ATTRIBUTES
         and scope.is_module_rooted(node.value)
@@ -1001,11 +1047,18 @@ def _binding_findings(node: ast.AST) -> Iterable[str]:
         yield f"the name {name!r} may not be rebound in plugins"
 
 
+def _pattern_findings(node: ast.MatchClass, scope: _Scope) -> Iterable[str]:
+    """Yield a description for each reserved name that a class pattern reads as a keyword."""
+    for name in node.kwd_attrs:
+        if name in scope.reserved:
+            yield f"attribute {name!r} is restricted to {scope.reserved[name]}"
+
+
 def _process_findings(node: ast.AST, scope: _Scope, extra: frozenset[str]) -> Iterable[str]:
     """Yield a description for each forbidden construct on ``node`` itself."""
     yield from _binding_findings(node)
     if isinstance(node, (ast.Import, ast.ImportFrom)):
-        yield from _import_findings(node, extra, frozenset(scope.restricted))
+        yield from _import_findings(node, extra, frozenset(scope.restricted), scope.reserved)
     elif isinstance(node, ast.Name):
         yield from _name_findings(node, scope)
     elif isinstance(node, (ast.Global, ast.Nonlocal)):
@@ -1017,6 +1070,8 @@ def _process_findings(node: ast.AST, scope: _Scope, extra: frozenset[str]) -> It
             yield "assigning an item of an imported module attribute is not allowed in plugins"
     elif isinstance(node, ast.Call):
         yield from _call_findings(node, scope)
+    elif isinstance(node, ast.MatchClass):
+        yield from _pattern_findings(node, scope)
     elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         yield from _definition_findings(node, scope)
 
@@ -1032,6 +1087,14 @@ def _restricted_bases(
         and isinstance(node.value, ast.Name)
         and node.attr in restricted.get(node.value.id, frozenset())
     }
+
+
+def _reserved_for(extra_imports: frozenset[str]) -> Mapping[str, str]:
+    """Return the reserved attribute names that a file with ``extra_imports`` may not use."""
+    owned = _dotted_parts(extra_imports)
+    return MappingProxyType(
+        {name: owner for name, owner in RESERVED_ATTRIBUTES.items() if name not in owned}
+    )
 
 
 def check_process_isolation(
@@ -1072,6 +1135,7 @@ def check_process_isolation(
         restricted,
         _restricted_bases(nodes, restricted),
         fileio_attribute_allowed,
+        _reserved_for(extra_imports),
     )
     return sorted(
         {

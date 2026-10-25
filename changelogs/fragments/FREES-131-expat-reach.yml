@@ -1,0 +1,11 @@
+---
+security_fixes:
+  - >-
+    Repository guard: the names ``parsers`` and ``expat`` are reserved for
+    ``plugins/module_utils/compliance/xmlsafe.py``. Every other plugin file fails the guard if it names them as an
+    attribute, a literal ``getattr`` name, a ``match`` class keyword or an imported name, so
+    ``xmlsafe.expat.ParserCreate()`` can no longer reach a raw expat parser.
+bugfixes:
+  - >-
+    benchmark_info, profile_info - an error while the datastream file is closed is now reported as an
+    ``invalid_content`` failure instead of an unhandled ``OSError``.
