@@ -749,6 +749,15 @@ epics:
           - "The ComplianceAsCode content mirror carries licence, upstream version and digest provenance."
           - "Offline installation from the OCI artifacts is documented and tested."
 
+      - id: s1805-release-app
+        type: Task
+        summary: Dedicated release GitHub App to restrict v* tag creation
+        skill: release-engineering
+        complexity: S
+        depends_on: [s1802-release-workflow]
+        acceptance:
+          - "Manual v* tag pushes are rejected; the release workflow creates tags through the org-owned release App, the only bypass actor."
+
   - id: e19-acceptance
     summary: End-to-end acceptance testing
     milestone: 10

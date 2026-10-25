@@ -91,6 +91,7 @@ keys:
   s1802-release-workflow: FREES-84
   s1803-github-release-features: FREES-118
   s1804-ghcr-artifacts: FREES-119
+  s1805-release-app: FREES-124
   s1901-workflow-a: FREES-85
   s1902-workflow-b: FREES-86
   s1903-workflow-c: FREES-87

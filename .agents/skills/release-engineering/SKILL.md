@@ -36,11 +36,11 @@ Releases are rare, verified and reproducible. A release is never a side effect o
 
 - Semantic Versioning: breaking changes to module arguments, role variables, report schema or exception format are major; additive changes are minor; fixes are patch.
 - Every user-visible change adds a changelog fragment reviewed in its pull request.
-- Releases come only from annotated tags `vX.Y.Z` whose version equals the `galaxy.yml` version. Never release from an arbitrary commit on `main`.
+- Releases start only when a reviewed pull request that bumps the `galaxy.yml` version (or the runner version file) is merged to `main`. The release workflow runs from `main`, validates the release, then creates the annotated `vX.Y.Z` tag and the release. Never trigger a release by pushing a tag, and never release an arbitrary commit without a version bump.
 - Use every GitHub-native release feature in [ADR 0012](../../../docs/adr/0012-github-native-releases-and-packages.md). Releases are immutable, so complete every publishing step before making a release public. Attest every asset and image so `gh attestation verify` succeeds. Generate notes from `.github/release.yml` categories, announce in Discussions, and publish the collection and content mirror as signed OCI artifacts on GHCR alongside Galaxy.
 - The release workflow verifies: the tag commit is on `main`; it came from an approved pull request; all required checks passed; the artifacts rebuild reproducibly (`SOURCE_DATE_EPOCH` set from the tag commit, deterministic tarball); security scans passed.
 - It publishes the tarball, checksums, SBOM and provenance attestation to GitHub Releases and the collection to Ansible Galaxy.
-- The Galaxy API key is stored only as a secret of the `release` environment, which is restricted to `v*` tags. Galaxy offers no OIDC publishing, so this key is the one long-lived credential and is rotated on schedule.
+- The Galaxy API key is stored only as a secret of the `release` environment, which accepts deployments from `main` only. Galaxy offers no OIDC publishing, so this key is the one long-lived credential and is rotated on schedule.
 - Runner images are released from the runner repository with immutable version tags and consumed here by digest only.
 - `make package` builds the tarball locally; `make release-check` runs every verification except publishing.
 - Never release when a mandatory check fails; fix forward with a new version rather than moving a tag.
@@ -65,7 +65,7 @@ Releases are rare, verified and reproducible. A release is never a side effect o
 
 ## Security requirements
 
-- The Galaxy key never appears in logs, artifacts or the repository; the release environment is limited to `v*` tags, and the workflow passes its automated gates before the key is used.
+- The Galaxy key never appears in logs, artifacts or the repository; the release environment accepts `main` only, and the workflow passes its automated gates before the key is used.
 - Release workflow permissions are least privilege; attestation uses OIDC to GitHub, not stored keys.
 - No release artifact is built from untrusted pull request code.
 - Changes to the release workflow or signing require the `security-review` skill.

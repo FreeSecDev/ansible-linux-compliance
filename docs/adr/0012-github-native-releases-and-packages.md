@@ -20,8 +20,14 @@ GitHub Packages has no native registry for Ansible collections or Python package
 
 ### Releases
 
-- Releases are created only by the release workflow, from annotated `vX.Y.Z` tags. Pre-releases use
-  `vX.Y.Z-alpha.N` and `vX.Y.Z-rc.N` and are marked as pre-releases.
+- Releases are cut from protected `main`, never by pushing a tag. A release starts when a reviewed pull request that
+  changes the `galaxy.yml` version (or the runner's version file) is squash-merged.
+  - The release workflow runs on `push` to `main`, so its definition always comes from protected, reviewed `main`.
+    A tag-triggered workflow would run the workflow file from the tagged commit, and an edited file there could skip
+    every check.
+  - The workflow validates the release, then creates the annotated `vX.Y.Z` tag and the release itself. Tags are
+    therefore validated version tags created by the trusted workflow, not inputs to it.
+  - Pre-releases use `vX.Y.Z-alpha.N` and `vX.Y.Z-rc.N` and are marked as pre-releases.
 - **Immutable releases** are enabled on both repositories, so published release assets and their tags cannot be changed.
 - Release notes combine GitHub generated notes, categorised by `.github/release.yml` labels, with the
   antsibull-changelog fragment output.
@@ -36,15 +42,17 @@ GitHub Packages has no native registry for Ansible collections or Python package
     scanned, copied and signed the image. It records the CodeBuild build ID and the staged ECR digest as build
     parameters, but it does not cryptographically prove which steps CodeBuild executed. Trust in the CodeBuild step
     rests on its IAM role scoping and on the build specification being version-controlled in the runner repository.
-- A **tag ruleset** on `refs/tags/v*` blocks tag deletion and updates.
-- A **`release` deployment environment** restricted to `v*` tags scopes publishing credentials and permissions. It has
-  no human required reviewers: the project owner decided on 2026-10-25 not to be asked for approvals. The gate is
-  automated instead. Before anything is published, the release workflow verifies all of the following and fails
-  otherwise:
-  - the tag commit is on `main`;
-  - it was merged from a pull request approved by the `freesecdev-review` App;
+- A **tag ruleset** on `refs/tags/v*` blocks tag deletion and updates. It does not yet restrict tag creation:
+  GitHub rejects the built-in GitHub Actions app as a bypass actor on repository rulesets, so restricting creation
+  needs a dedicated org-owned release App. That App is tracked in FREES-124.
+- A **`release` deployment environment** accepts deployments from `main` only. Administrator bypass is disabled. It
+  holds the publishing secrets, and the AWS release role's OIDC trust is pinned to this environment.
+- The environment has no human required reviewers: the project owner decided on 2026-10-25 not to be asked for
+  approvals. The gate is automated instead. Before anything is published, the release workflow, running from `main`,
+  verifies all of the following and fails otherwise:
+  - the commit was merged from a pull request approved by the `freesecdev-review` App;
   - every required check passed on that commit;
-  - the tag matches the `galaxy.yml` version;
+  - the version is new, follows SemVer and has a changelog entry;
   - the artifacts rebuild reproducibly.
 
   See residual risks below.
@@ -123,8 +131,8 @@ More publishing paths to maintain. Immutable releases mean a bad release must be
 
 | Risk | Mitigation now | Owner | Follow-up |
 |---|---|---|---|
-| No human approves a release before publication, by owner decision | Automated release workflow gates (approved pull request, required checks, version match, reproducibility); immutable releases; tag ruleset; attestations | Project owner | FREES-84 |
-| Anyone with write access can create a `v*` tag; the ruleset blocks only deletion and update | The release workflow refuses tags whose commit is not on `main` with passing required checks, and publishing still needs environment approval | Project owner | FREES-84 |
+| No human approves a release before publication, by owner decision | Automated gates in the release workflow, which always runs from protected `main` (approved pull request, required checks, new SemVer version with changelog, reproducibility); main-only release environment; immutable releases; attestations | Project owner | FREES-84 |
+| Anyone with write access can create a `v*` tag and run workflows from their own commits with the repository token. They cannot use the `release` environment, so they get no publishing secrets and no AWS release role | Write access is the real containment: today the owner is the only collaborator and the organisation default permission is read. Releases are never triggered by tags. The tag ruleset blocks deletion and update | Project owner | FREES-124 |
 | CodeBuild steps are not covered by cryptographic provenance | Version-controlled build specification, least-privilege CodeBuild role, digest comparison before promotion | Lead architect | FREES-36 |
 
 ## Operational consequences
