@@ -88,9 +88,10 @@ the issues that introduce their sources. They are intentionally absent rather th
 
 Pin ownership rule: every Python tool hook (ruff, yamllint, mypy, pyright, pylint, bandit, pytest, shellcheck,
 actionlint, zizmor) is a `repo: local` hook that runs `uv run --frozen <tool>`, so its version lives only in
-`pyproject.toml` and `uv.lock` and is updated by Dependabot. Only non-Python hook repositories (pre-commit-hooks,
-gitleaks, markdownlint-cli2) are remote hooks, pinned by full commit SHA with a `# vX.Y.Z` annotation and
-updated by Renovate. `additional_dependencies` is never used. The annotation on `rev:` is the second permitted
+`pyproject.toml` and `uv.lock` and is updated by Dependabot. Only hook repositories that are not tools declared in
+`pyproject.toml` (pre-commit-hooks, gitleaks, markdownlint-cli2) are remote hooks. pre-commit-hooks is a Python
+package, but its version is the hook revision, owned by Renovate rather than by the project environment. They are
+pinned by full commit SHA with a `# vX.Y.Z` annotation and updated by Renovate. `additional_dependencies` is never used. The annotation on `rev:` is the second permitted
 YAML comment form (ADR 0005, amendment 2026-10-25).
 
 ## Running each check manually

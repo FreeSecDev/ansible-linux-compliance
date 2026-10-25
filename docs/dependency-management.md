@@ -52,7 +52,8 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
 ## Update policy
 
 - Routine updates run weekly, on Monday morning (Europe/Amsterdam), and are grouped where related.
-- Renovate waits 7 days after a release before proposing it (`minimumReleaseAge`) to reduce supply-chain risk.
+- Both bots wait 7 days after a release before proposing it, 14 days for majors, to reduce supply-chain risk:
+  Renovate through `minimumReleaseAge` and Dependabot through `cooldown`.
   Dependabot security updates for Python and GitHub Actions are not delayed by that wait or by the schedule.
 - Major updates wait 14 days, are labelled `breaking-change` and get their own pull request. Like every other update,
   they are reviewed by the `freesecdev-review` App and must pass the required checks. Nobody is asked to approve them
@@ -70,9 +71,11 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
 GitHub's dependency graph does not cover container images, pre-commit hooks, Ansible Galaxy collections, OpenTofu
 providers or Packer plugins, and Renovate's own vulnerability alerts are disabled to avoid competing security pull
 requests. A security fix in one of these ecosystems therefore arrives with the next weekly Renovate run, after the
-7-day (or 14-day for majors) release age. Image and dependency scanning in CI (Grype, ADR 0006) fails a build on a
-fixable critical or high finding, and the response targets below then require a manual update pull request within
-the target time. Revisit this if Renovate's OSV-based alerts can be scoped to these ecosystems without overlapping
+7-day (or 14-day for majors) release age. Image and dependency scanning in CI with Grype (ADR 0006) is planned in
+FREES-82 and is not active yet. Once active it will fail a build on a fixable critical or high finding in container
+images and Python dependencies, and the response targets below then require a manual update pull request. It will
+not cover pre-commit hooks, Galaxy collections, OpenTofu providers or Packer plugins; for those, fixes arrive only
+through the Renovate schedule unless a maintainer acts on an advisory. Revisit this if Renovate's OSV-based alerts can be scoped to these ecosystems without overlapping
 Dependabot. Tracked on FREES-81.
 
 ## Vulnerability response targets

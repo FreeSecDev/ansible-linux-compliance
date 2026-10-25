@@ -3,6 +3,7 @@ extends: default
 ignore:
   - .venv/
   - .git/
+  - .claude/worktrees/
 rules:
   document-start:
     present: true
