@@ -223,7 +223,7 @@ class TestAdversarialDatastreams:
     def test_a_profile_that_selects_an_undefined_rule_is_rejected(self, tmp_path: Path) -> None:
         data = (ADVERSARIAL / "profile-selects-unknown-rule.xml").read_bytes()
         path, expected = write(tmp_path, data)
-        with pytest.raises(catalog.CatalogError, match="does not define"):
+        with pytest.raises(catalog.UnsupportedContentError, match="neither a rule nor a group"):
             catalog.read_benchmarks(path, expected)
 
     def test_a_missing_profile_in_a_plain_benchmark_is_an_error(self, tmp_path: Path) -> None:
@@ -343,10 +343,6 @@ class TestSelection:
             profile("p") + rule("a", 'selected="true"') + rule("b", 'selected="false"') + rule("c")
         )
         assert parse(collection(body))[0].profiles[0].rule_ids == (RULE + "a", RULE + "c")
-
-    def test_a_false_select_of_an_undefined_rule_is_harmless(self) -> None:
-        body = benchmark(profile("p", select("ghost", "false")) + rule("a", 'selected="false"'))
-        assert parse(collection(body))[0].profiles[0].rule_ids == ()
 
     def test_profile_and_rule_limits(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(catalog, "MAX_PROFILES", 1)
@@ -585,9 +581,50 @@ class TestFailClosed:
         )
         assert parse(collection(body))[0].profiles[0].rule_ids == (RULE + "b",)
 
-    def test_a_select_of_an_undefined_group_is_harmless(self) -> None:
-        body = benchmark(profile("p", group_select("ghost", "false")) + rule("a"))
-        assert parse(collection(body))[0].profiles[0].rule_ids == (RULE + "a",)
+    @pytest.mark.parametrize("flag", ["true", "false"])
+    def test_a_select_of_an_unknown_identifier_is_unsupported(self, flag: str) -> None:
+        body = benchmark(
+            profile("p", select("ghost", flag) + group_select("ghost", flag)) + rule("a")
+        )
+        with pytest.raises(catalog.UnsupportedContentError, match="neither a rule nor a group"):
+            parse(collection(body))
+
+    def test_a_select_of_a_non_identifier_is_unsupported(self) -> None:
+        odd = '<x:select idref="not an identifier" selected="true"/>'
+        with pytest.raises(catalog.UnsupportedContentError, match="neither a rule nor a group"):
+            parse(collection(benchmark(profile("p", odd) + rule("a"))))
+        long = f'<x:select idref="{"x" * 300}" selected="true"/>'
+        with pytest.raises(catalog.UnsupportedContentError, match="too long"):
+            parse(collection(benchmark(profile("p", long))))
+
+    def test_an_identifier_used_for_a_rule_and_a_group_is_unsupported(self) -> None:
+        clash = f'<x:Group id="{RULE}a">' + rule("a") + "</x:Group>"
+        with pytest.raises(catalog.UnsupportedContentError, match="rule and a group"):
+            parse(collection(benchmark(clash)))
+
+    def test_rule_identifiers_that_look_like_groups_are_still_rules(self) -> None:
+        names = ("wheel_group_empty", "group_unique_id", "group_rule", "x_group_")
+        rules = "".join(rule(name, 'selected="false"') for name in names)
+        selects = "".join(select(name) for name in names)
+        selected = parse(collection(benchmark(profile("p", selects) + rules)))[0].profiles[0]
+        assert selected.rule_ids == tuple(sorted(RULE + name for name in names))
+
+    def test_group_identifiers_that_look_like_rules_are_still_groups(self) -> None:
+        inner = '<x:Group id="xccdf_org.example.synthetic_group_rule_x">'
+        body = benchmark(
+            profile(
+                "p",
+                select("a")
+                + '<x:select idref="xccdf_org.example.synthetic_group_rule_x" selected="false"/>',
+            )
+            + inner
+            + rule("a", 'selected="false"')
+            + "</x:Group>"
+        )
+        with pytest.raises(catalog.UnsupportedContentError, match="synthetic_group_rule_x"):
+            parse(collection(body))
+        reselected = body.replace('_rule_x" selected="false"/>', '_rule_x" selected="true"/>')
+        assert parse(collection(reselected))[0].profiles[0].rule_ids == (RULE + "a",)
 
     @pytest.mark.parametrize("extends", ["xccdf_org.example.synthetic_profile_base", "x", ""])
     def test_extends_is_unsupported(self, extends: str) -> None:

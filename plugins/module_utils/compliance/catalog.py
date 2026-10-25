@@ -11,16 +11,18 @@ rejects DOCTYPE and ENTITY declarations. Elements are never stored; only the
 benchmark, its profiles and the identifier, severity and title of its rules are
 kept.
 
-Rule selection follows XCCDF: a ``select`` of a rule inside a profile decides,
-the last one wins, and a rule the profile does not mention keeps the ``selected``
-default of the rule itself (true when absent). ``select`` entries that name values
-are ignored. Group selection is checked: a group is selected when the last
-``select`` of the profile says so, or else by its own default (true when absent).
-The catalog fails closed and never returns a partial or guessed rule list: a
-profile that has ``extends``, that selects a rule inside a deselected group, or
-that selects a rule the benchmark does not define raises an error
-(:class:`UnsupportedContentError` for the first two). The pinned ComplianceAsCode
-profiles contain group deselections, and no selected rule sits below one.
+Rule selection follows XCCDF. Each ``select`` of a profile is classified by what
+the benchmark defines, never by the shape of the identifier: the identifier of a
+rule decides that rule, the identifier of a group decides that group. The last
+``select`` wins. A rule the profile does not mention keeps the ``selected`` default
+of the rule itself (true when absent), and a group is selected when the last
+``select`` says so or else by its own default (true when absent).
+
+The catalog fails closed and never returns a partial or guessed rule list. These
+raise :class:`UnsupportedContentError`: a profile with ``extends``, a ``select``
+of an identifier that is neither a rule nor a group, an identifier that is both,
+and a selected rule inside a deselected group. The pinned ComplianceAsCode
+profiles contain group deselections only, and no selected rule sits below one.
 
 Nothing here runs a process, writes a file or changes the host.
 """
@@ -56,7 +58,7 @@ _TEXT_BUDGET: Final[int] = MAX_TEXT_LENGTH * 4
 HASH_CHUNK_BYTES: Final[int] = xmlsafe.READ_CHUNK_BYTES
 SEVERITIES: Final[frozenset[str]] = frozenset({"unknown", "info", "low", "medium", "high"})
 
-_GROUP_ID: Final[re.Pattern[str]] = re.compile(r"xccdf_[A-Za-z0-9_.-]+?_group_[A-Za-z0-9_.+-]+")
+_GROUP_ID: Final[re.Pattern[str]] = re.compile(r"xccdf_[A-Za-z0-9_.+-]+")
 _MAX_ID_LENGTH: Final[int] = 256
 _SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
 _VERSION: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+:~-]{0,63}")
@@ -211,13 +213,12 @@ class _RuleDraft:
 
 
 class _ProfileDraft:
-    __slots__ = ("group_selects", "profile_id", "selects", "title")
+    __slots__ = ("profile_id", "selects", "title")
 
     def __init__(self, profile_id: str) -> None:
         self.profile_id = profile_id
         self.title: str | None = None
         self.selects: dict[str, bool] = {}
-        self.group_selects: dict[str, bool] = {}
 
 
 class _BenchmarkDraft:
@@ -232,29 +233,43 @@ class _BenchmarkDraft:
         self.groups: dict[str, bool] = {}
 
 
+def _unsupported(message: str) -> NoReturn:
+    raise UnsupportedContentError(message)
+
+
 def _finish_profile(draft: _ProfileDraft, benchmark: _BenchmarkDraft) -> Profile:
     definitions = {rule.rule_id: rule for rule in benchmark.rules}
-    for rule_id, flag in draft.selects.items():
-        if flag and rule_id not in definitions:
-            _fail(f"profile {draft.profile_id!r} selects a rule that the benchmark does not define")
+    rule_selects: dict[str, bool] = {}
+    group_selects: dict[str, bool] = {}
+    for idref, flag in draft.selects.items():
+        if idref in definitions:
+            rule_selects[idref] = flag
+        elif idref in benchmark.groups:
+            group_selects[idref] = flag
+        else:
+            _unsupported(
+                f"profile {draft.profile_id!r} selects {idref!r}, which the benchmark defines "
+                "as neither a rule nor a group; no rule list is returned"
+            )
     selected = sorted(
-        rule_id for rule_id, rule in definitions.items() if draft.selects.get(rule_id, rule.default)
+        rule_id for rule_id, rule in definitions.items() if rule_selects.get(rule_id, rule.default)
     )
     for rule_id in selected:
         for group_id in definitions[rule_id].groups:
-            if not draft.group_selects.get(group_id, benchmark.groups[group_id]):
-                message = (
+            if not group_selects.get(group_id, benchmark.groups[group_id]):
+                _unsupported(
                     f"profile {draft.profile_id!r} selects rule {rule_id!r} inside the "
                     f"deselected group {group_id!r}; this is not resolved, so no rule list "
                     "is returned"
                 )
-                raise UnsupportedContentError(message)
     return Profile(draft.profile_id, draft.title or "", tuple(selected))
 
 
 def _finish_benchmark(draft: _BenchmarkDraft) -> Benchmark:
     if draft.version is None:
         _fail(f"benchmark {draft.benchmark_id!r} has no version")
+    if draft.groups.keys() & {rule.rule_id for rule in draft.rules}:
+        _unsupported(f"benchmark {draft.benchmark_id!r} uses one identifier for a rule and a group")
     return Benchmark(
         benchmark_id=draft.benchmark_id,
         version=draft.version,
@@ -380,17 +395,11 @@ class _Collector:
         profile = self.profile
         flag = _boolean(attributes.get("selected"), "select selected", default=None)
         idref = attributes.get("idref", "")
-        table = profile.selects
-        if len(idref) <= _MAX_ID_LENGTH and _GROUP_ID.fullmatch(idref) is not None:
-            table = profile.group_selects
-        else:
-            try:
-                scanner.check_xccdf_id(idref, "rule", "select idref")
-            except scanner.ScanRequestError:
-                return _Frame(_SELECT_KIND)
-        if len(table) >= MAX_RULES and idref not in table:
+        if len(idref) > _MAX_ID_LENGTH:
+            _unsupported(f"profile {profile.profile_id!r} has a select identifier that is too long")
+        if len(profile.selects) >= MAX_RULES and idref not in profile.selects:
             _fail(f"profile {profile.profile_id!r} selects more than {MAX_RULES} items")
-        table[idref] = flag
+        profile.selects[idref] = flag
         return _Frame(_SELECT_KIND)
 
     def end(self, _name: str) -> None:

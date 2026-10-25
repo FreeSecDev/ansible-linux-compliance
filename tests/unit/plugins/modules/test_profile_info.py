@@ -101,7 +101,7 @@ def test_a_profile_that_selects_an_undefined_rule_is_invalid(
     sha = hashlib.sha256(path.read_bytes()).hexdigest()
     code, result = run(capsys, arguments(content_path=str(path), expected_sha256=sha))
     assert code == 1
-    assert result["error_type"] == "invalid_content"
+    assert result["error_type"] == "unsupported_content"
 
 
 @pytest.mark.parametrize("missing", ["content_path", "expected_sha256", "profile_id"])

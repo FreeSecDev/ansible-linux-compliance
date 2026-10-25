@@ -109,8 +109,18 @@ datastream fail with `unsupported_content`, naming the profile, and no partial o
 `select` entries and group `selected` defaults are otherwise evaluated (the last `select` wins, then the group default).
 All 25 pinned profiles contain group deselections (`selected="false"`), none selects a group `true`, no group is
 deselected by default and no selected rule sits below a deselected group, so they resolve to the same lists as plain
-rule selection. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
+rule selection. `select` entries are classified by what the benchmark defines (a Rule or a Group), never by the shape of
+the identifier, because rule identifiers such as `..._rule_ensure_pam_wheel_group_empty` contain `_group_`; an
+identifier that is neither, or both, fails closed. A golden file (`tests/fixtures/catalog/golden-rules.yml`) records, for
+every profile of both pinned datastreams (all 25), the rule count and the SHA-256 of the sorted rule list, and
+`make test-content-golden` fetches the pinned content through the digest-verified downloader and compares the catalog
+with it. The CI `test` job runs that target and fails, rather than skips, when the content cannot be fetched. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
 `openscap.py` still carries its own copy of the hardened parser; moving it onto `xmlsafe.py` is tracked as FREES-126.
+
+One residual risk remains: `open_regular` checks the type with `lstat` and then opens the path. If an attacker who
+controls the directory swaps a regular file for a FIFO in that window, the open could block until the module times out.
+The result can never be wrong content, because the bytes read are hashed, and an `fstat` check on the descriptor needs
+`os`, which the repository guard forbids in plugins. This is accepted and documented.
 
 ## Security implications
 

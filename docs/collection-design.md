@@ -258,8 +258,10 @@ with the variables `linux_compliance_discover_content_path`, `linux_compliance_d
 Unit tests use the synthetic datastream `tests/fixtures/catalog/synthetic-ds.xml` and the hostile samples in
 `tests/fixtures/catalog/adversarial/` (DOCTYPE, entity expansion, wrong namespace, duplicate profiles, a profile that
 selects an undefined rule); oversized, missing-profile and tampered-digest cases are built in the tests. The tests for
-the fetch tool build tiny synthetic zips and mock the network. The real pinned datastreams were parsed once during
-development to produce the manifest; no test needs them.
+the fetch tool build tiny synthetic zips and mock the network. A golden file, `tests/fixtures/catalog/golden-rules.yml`, records the rule count and the SHA-256 of the sorted rule list of
+every profile of the two pinned datastreams (25 profiles). `make test-content-golden` fetches the pinned content with
+`fetch_content.py` and compares the catalog with it; the CI `test` job runs it and fails when the fetch fails. Without
+fetched content the comparison is skipped locally.
 
 ## Adding plugins
 
