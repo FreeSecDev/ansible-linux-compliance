@@ -67,7 +67,7 @@ make help
 | `packer-validate` | pending FREES-64 | Packer template validation |
 | `packer-build` | pending FREES-64 | Packer image build |
 | `image-build` | pending FREES-36 | Runner image build on AWS |
-| `report` | pending FREES-77 | HTML report generation |
+| `report` | normalized JSON now, HTML pending FREES-77 | Report generation (`REPORT_SCOPE`, `REPORT_ARGS`), see [reporting data model](reporting-data-model.md) |
 | `report-serve` | pending FREES-77 | Local report server |
 | `release-check` | pending FREES-84 | Release readiness |
 

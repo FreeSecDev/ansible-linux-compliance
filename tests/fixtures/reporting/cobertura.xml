@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<coverage version="7.0" line-rate="0.9" branch-rate="0.8" lines-valid="100" lines-covered="90" branches-valid="10" branches-covered="8">
+  <packages>
+    <package name="tools.beta" line-rate="1" branch-rate="1"><classes/></package>
+    <package name="tools.alpha" line-rate="0.5" branch-rate="0.25"><classes/></package>
+  </packages>
+</coverage>

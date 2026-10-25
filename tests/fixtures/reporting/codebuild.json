@@ -1,0 +1,7 @@
+{
+  "builds": [
+    {"id": "demo:aaaaaaaa", "projectName": "demo", "buildStatus": "SUCCEEDED", "currentPhase": "COMPLETED", "sourceVersion": "refs/pull/1/head", "resolvedSourceVersion": "0123456789abcdef0123456789abcdef01234567", "startTime": 1792000000.5, "endTime": "2026-10-25T10:05:00Z"},
+    {"id": "demo:bbbbbbbb", "projectName": "demo", "buildStatus": "FAILED", "currentPhase": "COMPLETED"}
+  ],
+  "buildsNotFound": []
+}

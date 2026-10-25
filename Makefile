@@ -81,7 +81,7 @@ Images and AWS
   image-build           [pending FREES-36] Build the runner image on AWS
 
 Reporting, docs and release
-  report                [pending FREES-77] Generate the HTML report
+  report                Write the normalized report JSON from REPORT_ARGS (HTML dashboard pending FREES-77)
   report-serve          [pending FREES-77] Serve the HTML report locally
   docs                  markdownlint and relative link check
   package               Build the collection tarball into dist/ with a canonical FILES.json
@@ -249,8 +249,13 @@ aws-bootstrap: aws-bootstrap-render
 image-build:
 	$(call NOT_IMPLEMENTED,image-build,FREES-36)
 
-report:
-	$(call NOT_IMPLEMENTED,report,FREES-77)
+REPORT_SCOPE ?=
+REPORT_ARGS ?=
+REPORT_OUTPUT ?= build/report/report.json
+
+report: require-uv collection-link
+	@test -n '$(REPORT_SCOPE)' || { printf 'error: set REPORT_SCOPE to single_host, multi_host, benchmark or fleet\n' >&2; exit 2; }
+	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.reporting --scope '$(REPORT_SCOPE)' --output '$(REPORT_OUTPUT)' $(REPORT_ARGS)
 
 report-serve:
 	$(call NOT_IMPLEMENTED,report-serve,FREES-77)

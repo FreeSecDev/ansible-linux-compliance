@@ -1,0 +1,3359 @@
+{
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "size": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "codebuildData": {
+      "additionalProperties": false,
+      "properties": {
+        "builds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "build_id": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "ended_at": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "phase": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "project": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "resolved_source_version": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "source_version": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "started_at": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "status": {
+                "enum": [
+                  "SUCCEEDED",
+                  "FAILED",
+                  "FAULT",
+                  "TIMED_OUT",
+                  "IN_PROGRESS",
+                  "STOPPED"
+                ]
+              }
+            },
+            "required": [
+              "build_id",
+              "ended_at",
+              "phase",
+              "project",
+              "resolved_source_version",
+              "source_version",
+              "started_at",
+              "status"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "builds"
+      ],
+      "type": "object"
+    },
+    "codebuildItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/codebuildData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/codebuildData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "codebuild"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "codebuildSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/codebuildItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "complianceData": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "host": {
+                "type": "null"
+              },
+              "scan_run": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "scan_run"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "findings": {
+                "maxItems": 0
+              },
+              "host": {
+                "$ref": "#/$defs/hostIdentity"
+              },
+              "scan_run": {
+                "$ref": "#/$defs/scanRun"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "benchmark_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "benchmark_version": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "content_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "error_message": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/finding"
+          },
+          "type": "array"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "host": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/hostIdentity"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "scan_run",
+            "xccdf",
+            "arf"
+          ]
+        },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "scan_run": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/scanRun"
+            }
+          ]
+        },
+        "scan_status": {
+          "enum": [
+            "completed",
+            "failed",
+            "timed_out"
+          ]
+        },
+        "started_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "summary": {
+          "$ref": "#/$defs/complianceSummary"
+        }
+      },
+      "required": [
+        "benchmark_id",
+        "benchmark_version",
+        "content_version",
+        "error_message",
+        "findings",
+        "finished_at",
+        "host",
+        "kind",
+        "profile_id",
+        "scan_run",
+        "scan_status",
+        "started_at",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "complianceItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/complianceData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/complianceData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "scan_run",
+            "xccdf",
+            "arf"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "complianceSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "$ref": "#/$defs/complianceSummary"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/complianceItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/rule"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/complianceSummary"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "rules",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "complianceSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "assessment": {
+          "enum": [
+            "run_not_completed",
+            "nothing_evaluated",
+            "all_evaluated_passed",
+            "findings_open"
+          ]
+        },
+        "compliance_percent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "counts": {
+          "$ref": "#/$defs/outcomeCounts"
+        },
+        "evaluated": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expired_waivers": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open_by_severity": {
+          "$ref": "#/$defs/platformSeverityCounts"
+        },
+        "run_status": {
+          "enum": [
+            "completed",
+            "failed",
+            "timed_out",
+            "not_completed"
+          ]
+        },
+        "runs_not_completed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "runs_total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "assessment",
+        "compliance_percent",
+        "counts",
+        "evaluated",
+        "expired_waivers",
+        "open_by_severity",
+        "run_status",
+        "runs_not_completed",
+        "runs_total"
+      ],
+      "type": "object"
+    },
+    "counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "coverageData": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "branches_covered": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ]
+        },
+        "branches_valid": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ]
+        },
+        "line_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "lines_covered": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ]
+        },
+        "lines_valid": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ]
+        },
+        "packages": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "branch_rate": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "line_rate": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "name": {
+                "maxLength": 8192,
+                "type": "string"
+              }
+            },
+            "required": [
+              "branch_rate",
+              "line_rate",
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "branch_rate",
+        "branches_covered",
+        "branches_valid",
+        "line_rate",
+        "lines_covered",
+        "lines_valid",
+        "packages",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "coverageItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/coverageData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/coverageData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "cobertura"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "coverageSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/coverageItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 8192,
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "kind",
+        "source"
+      ],
+      "type": "object"
+    },
+    "exception": {
+      "additionalProperties": false,
+      "properties": {
+        "exception_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "expires_at": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/timestamp"
+            }
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "none",
+            "active",
+            "expired"
+          ]
+        }
+      },
+      "required": [
+        "exception_id",
+        "expires_at",
+        "reason",
+        "state"
+      ],
+      "type": "object"
+    },
+    "failedCase": {
+      "additionalProperties": false,
+      "properties": {
+        "classname": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "kind": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "name": {
+          "maxLength": 8192,
+          "type": "string"
+        }
+      },
+      "required": [
+        "classname",
+        "kind",
+        "message",
+        "name"
+      ],
+      "type": "object"
+    },
+    "finding": {
+      "additionalProperties": false,
+      "properties": {
+        "disabled_by": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "evaluated_outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "notapplicable",
+            "notchecked",
+            "error",
+            "waived",
+            "disabled"
+          ]
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "type": "array"
+        },
+        "exception": {
+          "$ref": "#/$defs/exception"
+        },
+        "flags": {
+          "items": {
+            "enum": [
+              "fixed",
+              "informational",
+              "notselected"
+            ]
+          },
+          "type": "array"
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "notapplicable",
+            "notchecked",
+            "error",
+            "waived",
+            "disabled"
+          ]
+        },
+        "remediation": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/remediation"
+            }
+          ]
+        },
+        "rule_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "unknown",
+            "info",
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      },
+      "required": [
+        "disabled_by",
+        "evaluated_outcome",
+        "evidence",
+        "exception",
+        "flags",
+        "message",
+        "outcome",
+        "remediation",
+        "rule_id",
+        "severity"
+      ],
+      "type": "object"
+    },
+    "hostIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "architecture": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "distribution_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "distribution_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "hostname": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "machine_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "architecture",
+        "distribution_id",
+        "distribution_version",
+        "hostname",
+        "machine_id"
+      ],
+      "type": "object"
+    },
+    "lintData": {
+      "additionalProperties": false,
+      "properties": {
+        "by_severity": {
+          "$ref": "#/$defs/severityCounts"
+        },
+        "format": {
+          "enum": [
+            "sarif",
+            "json"
+          ]
+        },
+        "issues": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "line": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "message": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "path": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "rule_id": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "severity": {
+                "enum": [
+                  "critical",
+                  "high",
+                  "medium",
+                  "low",
+                  "info",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "line",
+              "message",
+              "path",
+              "rule_id",
+              "severity"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "by_severity",
+        "format",
+        "issues",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "lintItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/lintData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/lintData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "ansible_lint"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "lintSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "$ref": "#/$defs/severitySummary"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/lintItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/severitySummary"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "moleculeData": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scenarios": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "platform": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "result": {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "skipped",
+                  "error"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "platform",
+              "result"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "skipped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "error",
+        "failed",
+        "passed",
+        "scenarios",
+        "skipped",
+        "total"
+      ],
+      "type": "object"
+    },
+    "moleculeItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/moleculeData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/moleculeData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "molecule_summary"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "moleculeSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "$ref": "#/$defs/moleculeSummary"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/moleculeItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/moleculeSummary"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "moleculeSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "error",
+        "failed",
+        "passed",
+        "skipped",
+        "total"
+      ],
+      "type": "object"
+    },
+    "nullableTimestamp": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/timestamp"
+        }
+      ]
+    },
+    "outcomeCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fail": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "notapplicable": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "notchecked": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pass": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "waived": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "disabled",
+        "error",
+        "fail",
+        "notapplicable",
+        "notchecked",
+        "pass",
+        "waived"
+      ],
+      "type": "object"
+    },
+    "packerData": {
+      "additionalProperties": false,
+      "properties": {
+        "builds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact_id": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "build_time": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/timestamp"
+                  }
+                ]
+              },
+              "builder_type": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "custom_data": {
+                "additionalProperties": {
+                  "maxLength": 8192,
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "files": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "maxLength": 8192,
+                      "type": "string"
+                    },
+                    "size": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "size"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "name": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "run_uuid": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "artifact_id",
+              "build_time",
+              "builder_type",
+              "custom_data",
+              "files",
+              "name",
+              "run_uuid"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "last_run_uuid": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "builds",
+        "last_run_uuid"
+      ],
+      "type": "object"
+    },
+    "packerItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/packerData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/packerData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "packer_manifest"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "packerSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/packerItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "platformSeverityCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "high": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "info": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "low": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "medium": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unknown": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "high",
+        "info",
+        "low",
+        "medium",
+        "unknown"
+      ],
+      "type": "object"
+    },
+    "rawArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "size": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "format",
+        "path",
+        "sha256",
+        "size",
+        "status"
+      ],
+      "type": "object"
+    },
+    "remediation": {
+      "additionalProperties": false,
+      "properties": {
+        "changed": {
+          "type": "boolean"
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "rule_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "already_compliant",
+            "skipped",
+            "failed",
+            "reverted",
+            "cleanup_incomplete",
+            "not_remediated"
+          ]
+        }
+      },
+      "required": [
+        "changed",
+        "message",
+        "rule_id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "rule": {
+      "additionalProperties": false,
+      "properties": {
+        "content_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "expired_waiver": {
+          "type": "boolean"
+        },
+        "host": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "notapplicable",
+            "notchecked",
+            "error",
+            "waived",
+            "disabled"
+          ]
+        },
+        "rule_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "unknown",
+            "info",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "sources": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "benchmark_id": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "profile_id": {
+                "maxLength": 8192,
+                "type": "string"
+              }
+            },
+            "required": [
+              "artifact",
+              "benchmark_id",
+              "profile_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "content_version",
+        "expired_waiver",
+        "host",
+        "outcome",
+        "rule_id",
+        "severity",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "sbomData": {
+      "additionalProperties": false,
+      "properties": {
+        "component_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "components": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "license": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "name": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "version": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "license",
+              "name",
+              "version"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "format": {
+          "enum": [
+            "spdx",
+            "cyclonedx"
+          ]
+        },
+        "license_counts": {
+          "$ref": "#/$defs/counts"
+        },
+        "spec_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "unlicensed": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "component_count",
+        "components",
+        "format",
+        "license_counts",
+        "spec_version",
+        "truncated",
+        "unlicensed"
+      ],
+      "type": "object"
+    },
+    "sbomItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/sbomData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sbomData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "sbom"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "sbomSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/sbomItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "scanRun": {
+      "additionalProperties": false,
+      "properties": {
+        "benchmark_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "content": {
+          "additionalProperties": false,
+          "properties": {
+            "content_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "content_version": {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            "source": {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          },
+          "required": [
+            "content_sha256",
+            "content_version",
+            "source"
+          ],
+          "type": "object"
+        },
+        "error_message": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/finding"
+          },
+          "type": "array"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "host": {
+          "$ref": "#/$defs/hostIdentity"
+        },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "scanner": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            "version": {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "type": "object"
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "started_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed",
+            "timed_out"
+          ]
+        }
+      },
+      "required": [
+        "benchmark_id",
+        "content",
+        "error_message",
+        "findings",
+        "finished_at",
+        "host",
+        "profile_id",
+        "run_id",
+        "scanner",
+        "schema_version",
+        "started_at",
+        "status"
+      ],
+      "type": "object"
+    },
+    "severityCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "critical": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "high": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "info": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "low": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "medium": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unknown": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "critical",
+        "high",
+        "info",
+        "low",
+        "medium",
+        "unknown"
+      ],
+      "type": "object"
+    },
+    "severitySummary": {
+      "additionalProperties": false,
+      "properties": {
+        "by_severity": {
+          "$ref": "#/$defs/severityCounts"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "by_severity",
+        "total"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "available",
+        "unavailable",
+        "error"
+      ]
+    },
+    "testsData": {
+      "additionalProperties": false,
+      "properties": {
+        "errors": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed_cases": {
+          "items": {
+            "$ref": "#/$defs/failedCase"
+          },
+          "type": "array"
+        },
+        "passed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "errors",
+        "failed",
+        "failed_cases",
+        "passed",
+        "skipped",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "testsItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/testsData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/testsData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "junit",
+            "pytest_json"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "testsSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "$ref": "#/$defs/testsSummary"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/testsItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/testsSummary"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "testsSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "errors": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "errors",
+        "failed",
+        "passed",
+        "skipped",
+        "total"
+      ],
+      "type": "object"
+    },
+    "timestamp": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "type": "string"
+    },
+    "vulnerabilitiesSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "$ref": "#/$defs/severitySummary"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/vulnerabilityItem"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/severitySummary"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "vulnerabilityData": {
+      "additionalProperties": false,
+      "properties": {
+        "by_severity": {
+          "$ref": "#/$defs/severityCounts"
+        },
+        "database_built": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "scanner": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "scanner_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "vulnerabilities": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "fix_state": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maxLength": 8192,
+                    "type": "string"
+                  }
+                ]
+              },
+              "fixed_versions": {
+                "items": {
+                  "maxLength": 8192,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "package": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "severity": {
+                "enum": [
+                  "critical",
+                  "high",
+                  "medium",
+                  "low",
+                  "info",
+                  "unknown"
+                ]
+              },
+              "version": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "vulnerability_id": {
+                "maxLength": 8192,
+                "type": "string"
+              }
+            },
+            "required": [
+              "fix_state",
+              "fixed_versions",
+              "package",
+              "severity",
+              "version",
+              "vulnerability_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "by_severity",
+        "database_built",
+        "scanner",
+        "scanner_version",
+        "total",
+        "truncated",
+        "vulnerabilities"
+      ],
+      "type": "object"
+    },
+    "vulnerabilityItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/vulnerabilityData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/vulnerabilityData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "grype"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/FreeSecDev/ansible-linux-compliance/tools/reporting/schema/report-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Normalized report built from heterogeneous inputs. Every section has an explicit status; missing or invalid input is never a pass. Timestamps are supplied by the caller and never generated.",
+  "properties": {
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "pattern": "^[0-9a-f]{7,64}$",
+              "type": "string"
+            }
+          ]
+        },
+        "finished_at": {
+          "$ref": "#/$defs/nullableTimestamp"
+        },
+        "generated_at": {
+          "$ref": "#/$defs/nullableTimestamp"
+        },
+        "pull_request": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "pattern": "^[1-9][0-9]{0,8}$",
+              "type": "string"
+            }
+          ]
+        },
+        "started_at": {
+          "$ref": "#/$defs/nullableTimestamp"
+        },
+        "workflow_run": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "pattern": "^[A-Za-z0-9._:/@#-]{1,256}$",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "commit",
+        "finished_at",
+        "generated_at",
+        "pull_request",
+        "started_at",
+        "workflow_run"
+      ],
+      "type": "object"
+    },
+    "overview": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "items": {
+            "enum": [
+              "codebuild",
+              "compliance",
+              "coverage",
+              "lint",
+              "molecule",
+              "packer",
+              "sbom",
+              "tests",
+              "vulnerabilities"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "error": {
+          "items": {
+            "enum": [
+              "codebuild",
+              "compliance",
+              "coverage",
+              "lint",
+              "molecule",
+              "packer",
+              "sbom",
+              "tests",
+              "vulnerabilities"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "unavailable": {
+          "items": {
+            "enum": [
+              "codebuild",
+              "compliance",
+              "coverage",
+              "lint",
+              "molecule",
+              "packer",
+              "sbom",
+              "tests",
+              "vulnerabilities"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "available",
+        "error",
+        "unavailable"
+      ],
+      "type": "object"
+    },
+    "raw_artifacts": {
+      "items": {
+        "$ref": "#/$defs/rawArtifact"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "scope": {
+      "enum": [
+        "single_host",
+        "multi_host",
+        "benchmark",
+        "fleet"
+      ]
+    },
+    "sections": {
+      "additionalProperties": false,
+      "properties": {
+        "codebuild": {
+          "$ref": "#/$defs/codebuildSection"
+        },
+        "compliance": {
+          "$ref": "#/$defs/complianceSection"
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverageSection"
+        },
+        "lint": {
+          "$ref": "#/$defs/lintSection"
+        },
+        "molecule": {
+          "$ref": "#/$defs/moleculeSection"
+        },
+        "packer": {
+          "$ref": "#/$defs/packerSection"
+        },
+        "sbom": {
+          "$ref": "#/$defs/sbomSection"
+        },
+        "tests": {
+          "$ref": "#/$defs/testsSection"
+        },
+        "vulnerabilities": {
+          "$ref": "#/$defs/vulnerabilitiesSection"
+        }
+      },
+      "required": [
+        "codebuild",
+        "compliance",
+        "coverage",
+        "lint",
+        "molecule",
+        "packer",
+        "sbom",
+        "tests",
+        "vulnerabilities"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "metadata",
+    "overview",
+    "raw_artifacts",
+    "schema_version",
+    "scope",
+    "sections"
+  ],
+  "title": "FreeSecDev normalized report, version 1",
+  "type": "object"
+}

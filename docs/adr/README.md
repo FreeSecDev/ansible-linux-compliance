@@ -17,5 +17,6 @@
 | [0013](0013-normalized-findings-model.md) | Normalized compliance findings model | accepted |
 | [0015](0015-content-acquisition-and-pinning.md) | Content acquisition and pinning | proposed |
 | [0014](0014-aws-account-bootstrap.md) | AWS account bootstrap | proposed |
+| [0016](0016-report-schema-and-summary-semantics.md) | Report schema and summary semantics | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

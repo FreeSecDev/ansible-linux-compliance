@@ -1,0 +1,12 @@
+{
+  "created": 1,
+  "exitcode": 1,
+  "summary": {"passed": 3, "failed": 1, "error": 1, "skipped": 1, "xfailed": 1, "xpassed": 1, "total": 8},
+  "tests": [
+    {"nodeid": "tests/test_a.py::test_ok", "outcome": "passed"},
+    {"nodeid": "tests/test_a.py::test_bad", "outcome": "failed"},
+    {"nodeid": "tests/test_a.py::test_err", "outcome": "error"},
+    {"nodeid": "tests/test_a.py::test_xp", "outcome": "xpassed"},
+    {"nodeid": "tests/test_a.py::test_xf", "outcome": "xfailed"}
+  ]
+}
