@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    Add version-controlled exceptions (waivers). ``plugins/module_utils/compliance/exceptions.py`` validates an
+    exceptions file (id, rule, framework, scope, justification, owner, approval, created, expires and risk, all
+    required, valid for at most 365 days) and applies it to a scan run. Only ``fail`` findings of completed runs become
+    ``waived``; expired exceptions leave the finding ``fail`` and are flagged. The file format is documented in
+    ``docs/exceptions.md`` with a JSON Schema in ``docs/schemas/exceptions-v1.schema.json``.
+  - >-
+    Add the strict YAML subset loader ``plugins/module_utils/compliance/yamlsubset.py``, which rejects duplicate keys,
+    anchors, aliases, tags and ambiguous unquoted values.
+  - >-
+    Add the controller filters ``freesecdev.linux_compliance.apply_exceptions`` and
+    ``freesecdev.linux_compliance.stale_exceptions``.
+  - >-
+    The findings model gains the public helpers ``validate_xccdf_id`` and ``validate_text``.

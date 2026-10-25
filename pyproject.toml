@@ -43,7 +43,7 @@ target-version = "py312"
 line-length = 100
 src = ["tools", "tests", "plugins"]
 extend-exclude = [".agents", ".claude", "build", "dist"]
-per-file-target-version = { "plugins/**" = "py39" }
+per-file-target-version = { "plugins/**" = "py39", "tests/unit/plugins/**" = "py39" }
 
 [tool.ruff.format]
 quote-style = "double"

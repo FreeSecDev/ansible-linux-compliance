@@ -234,6 +234,42 @@ verdict from findings alone. These invariants apply to every backend and every r
   hex64    = 64( DIGIT / %x61-66 )
   ```
 
+## Amendment 2026-10-25: exceptions file and waivers (FREES-50)
+
+The source of `waived` findings is a version-controlled exceptions file, documented in
+[Exceptions and waivers](../exceptions.md). The model entities are unchanged and `schema_version` stays `"1.0"`.
+
+- `plugins/module_utils/compliance/exceptions.py` validates the file and applies it to a `ScanRun`; it is standard
+  library only, like the model. The model gains two public helpers, `validate_xccdf_id` and `validate_text`, so the
+  exceptions code checks rule IDs and text with exactly the model's rules instead of copying them.
+- The standard library has no YAML parser, so `plugins/module_utils/compliance/yamlsubset.py` reads a strict subset
+  of YAML. It rejects duplicate keys, anchors, aliases, tags and unquoted values that other loaders would not read as
+  strings. Writing a parser was preferred to accepting data pre-parsed by Ansible, because Ansible's loader only warns
+  on duplicate keys by default, and to adding PyYAML to target-side code, which the repository guard forbids.
+- Every exception needs `id`, `rule`, `framework`, `scope`, `justification`, `owner`, `approval` (`approver`,
+  `date`), `created`, `expires` and `risk` (`low`, `medium`, `high`, `critical`). The validity is capped at **365 days**
+  from `created` to `expires`, `created` must not be in the future, `approval.date` lies between `created` and today
+  and before `expires`, and the approver must not be the owner. An invalid entry rejects the whole file.
+- Dates are UTC calendar dates. An exception is in effect from `approval.date` 00:00:00 UTC until `expires`
+  00:00:00 UTC (exclusive), evaluated at `ScanRun.started_at`. `ExceptionStatus.expires_at` is `expires` at
+  00:00:00 UTC, which keeps the existing invariant: `active` expires strictly after the scan start, `expired` at or
+  before it.
+- A scope has `hosts` (inventory host names), `groups` (inventory groups) and `benchmark` (`benchmark_id` and content
+  version); all present dimensions must match. Hosts are matched against the controller's inventory name, never
+  against the host name in `ScanRun.host`, which the scanned host reports itself. `framework` is recorded, not matched,
+  because rules are deduplicated by rule ID across frameworks.
+- Only a `fail` finding of a `completed` run becomes `waived`; the invariant "a waiver only turns an evaluated `fail`
+  into `waived`" above is enforced again by the model when the finding is rebuilt. An expired exception leaves the
+  finding `fail` with exception state `expired`. A scan run whose findings already carry exception data is refused.
+- The reason of a waived or expired finding contains the justification, risk, framework, owner, approver and dates, so
+  the finding is self-describing. The controller filter returns an evaluation document with one status per exception
+  (`waived`, `expired`, `not_yet_effective`, `not_failing`, `superseded`, `unmatched`); exceptions that are `unmatched`
+  on every evaluated host are stale.
+
+Rejected alternatives: matching on `ScanRun.host.hostname` (self-asserted by the host), an end-of-day expiry
+(it would keep a waiver alive on its expiry date), exceptions without a cap (permanent waivers), and silently skipping
+invalid entries (a typo would turn a waiver into an unexplained failure or hide that the file is broken).
+
 ## References
 
 - ansible-core release and maintenance matrix:
