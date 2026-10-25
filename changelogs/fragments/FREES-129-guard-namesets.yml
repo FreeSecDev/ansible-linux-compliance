@@ -5,3 +5,7 @@ trivial:
     from 3.9 to 3.15 and checked in CI on 3.9 to 3.14. The unused allow-list entries collections, functools, itertools,
     __qualname__, __doc__ and __module__ are removed, registry is a banned test-seam keyword, and the open helper of
     xmlsafe is private, so plugins open files only through xmlsafe.RegularFile.
+bugfixes:
+  - >-
+    compliance_scan - an error while the datastream source is closed after copying is reported as
+    ``invalid_content``, like every other read failure of the source, instead of ``evidence_write_failed``.

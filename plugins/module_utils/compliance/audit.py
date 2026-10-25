@@ -771,7 +771,7 @@ def copy_content(source: str, directory: Path, pinned: str) -> ContentCopy:
         raise AuditError(ERROR_EVIDENCE, message) from error
     try:
         with (
-            xmlsafe.open_regular(source, catalog.DEFAULT_MAX_BYTES) as handle,
+            xmlsafe.RegularFile(source, catalog.DEFAULT_MAX_BYTES) as handle,
             target.open("xb") as copy,
         ):
             target.chmod(FILE_MODE)
@@ -1030,7 +1030,7 @@ class Auditor:
     keyword-only. Production code constructs ``Auditor()``: the output root must
     then be owned by root, the backends come from :func:`backends.default_registry`
     and the time from the system clock. The repository guard bans the
-    ``owner_uid`` and ``clock`` keywords in plugin code.
+    ``owner_uid``, ``registry`` and ``clock`` keywords in plugin code.
     """
 
     def __init__(

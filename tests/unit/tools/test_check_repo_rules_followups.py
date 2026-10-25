@@ -22,9 +22,11 @@ CALLER_FILES = (
 MERGED_PRODUCTION_KEYWORDS = frozenset(
     {
         "accept",
+        "check_mode",
         "create",
         "default",
         "dry_run",
+        "final",
         "max_length",
         "multiline",
         "pattern",
@@ -35,10 +37,8 @@ MERGED_PRODUCTION_KEYWORDS = frozenset(
         "write",
     }
 )
-OPEN_PULL_REQUEST_KEYWORDS = frozenset(
+PR_18_KEYWORDS = frozenset(
     {
-        "final",
-        "check_mode",
         "required",
         "max_scan_lag",
         "has_content",
@@ -47,7 +47,7 @@ OPEN_PULL_REQUEST_KEYWORDS = frozenset(
         "nested_sequence",
     }
 )
-PRODUCTION_KEYWORDS = MERGED_PRODUCTION_KEYWORDS | OPEN_PULL_REQUEST_KEYWORDS
+PRODUCTION_KEYWORDS = MERGED_PRODUCTION_KEYWORDS | PR_18_KEYWORDS
 
 
 def process_messages(root: Path, source: str, name: str = "plugins/modules/other.py") -> list[str]:
@@ -211,6 +211,7 @@ def test_the_test_seams_of_the_plugins_are_banned_keywords() -> None:
         "plugins/module_utils/compliance/process.py": {"policies", "trusted_dirs", "owner_uid"},
         "plugins/module_utils/compliance/ledger.py": {"state_dir", "owner_uid", "lock_timeout"},
         "plugins/module_utils/compliance/openscap.py": {"runner", "clock", "limits"},
+        "plugins/module_utils/compliance/audit.py": {"owner_uid", "registry", "clock"},
     }
     for name, expected in seams.items():
         parameters = _keyword_only_parameters(rules.REPO_ROOT / name)

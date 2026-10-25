@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -18,6 +19,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     openscap,
     process,
     scanner,
+    xmlsafe,
 )
 
 if TYPE_CHECKING:
@@ -665,6 +667,34 @@ def test_a_copy_that_cannot_be_written_is_reported(
         harness.auditor().execute(planned)
     assert raised.value.error_type == "evidence_write_failed"
     assert not (harness.run_dir / "content").exists()
+
+
+class _FailingClose(io.BytesIO):
+    def close(self) -> None:
+        super().close()
+        raise OSError(5, "Input/output error")
+
+
+def test_a_source_that_fails_to_close_is_invalid_content(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = Path.open
+    data = harness.datastream.read_bytes()
+
+    def opening(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if args and args[0] == "rb" and self == harness.datastream:
+            return _FailingClose(data)
+        return cast("Any", original(self, *args, **kwargs))
+
+    monkeypatch.setattr(Path, "open", opening)
+    directory = harness.root / "copy-target"
+    with pytest.raises(
+        audit.AuditError, match="cannot be copied: the file cannot be read: Input/output error"
+    ) as raised:
+        audit.copy_content(str(harness.datastream), directory, SHA256)
+    assert raised.value.error_type == "invalid_content"
+    assert isinstance(raised.value.__cause__, xmlsafe.CloseError)
+    assert not directory.exists()
 
 
 def test_a_copy_directory_that_cannot_be_created_is_reported(harness: Harness) -> None:

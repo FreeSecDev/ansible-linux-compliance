@@ -349,19 +349,23 @@ Non-blocking follow-ups from the final review of PR #11 (FREES-125) and the revi
   it on the project interpreter. A test pins the matrix to the recorded releases.
 - Allow-list cleanup: the import allow-list no longer contains `collections` (bare), `functools` and `itertools`, and
   the only dunder read left is `__name__` (`__qualname__`, `__doc__` and `__module__` were removed). No plugin file on
-  `main` used them, and no open pull request (#17, #18) adds a use. They are now denied, and `functools` and
-  `itertools` are also banned as module-rooted attributes (`typing.functools`). `os.path` was kept although no merged
-  plugin uses it: PR #17 (FREES-49, `audit.py`) imports it, the `os`-only-as-`os.path` rule and the file-I/O helper
-  rules are built on it, and removing it now would mean a second guard change in that pull request to restore it.
-- Test seams: `registry` (the backend registry seam of `audit.Auditor` in PR #17) joins `BANNED_KEYWORDS`. A review of
+  `main` used them, including `audit.py` and `compliance_scan.py` from PR #17 (FREES-49), and the open PR #18 adds no
+  use. They are now denied, and `functools` and `itertools` are also banned as module-rooted attributes
+  (`typing.functools`). `os.path` is kept: `audit.py` (PR #17) uses `os.path.normpath` and `os.path.commonpath`, and
+  the `os`-only-as-`os.path` rule and the file-I/O helper rules are built on it.
+- Test seams: `registry` (the backend registry seam of `audit.Auditor`, PR #17) joins `BANNED_KEYWORDS`, and the
+  `Auditor` docstring names it with `owner_uid` and `clock`. A review of
   every keyword-only parameter in `plugins/` found no other unbanned seam; the remaining keyword-only parameters
   (`accept`, `create`, `default`, `dry_run`, `max_length`, `multiline`, `pattern`, `replace`, `reveal`, `sensitive`,
-  `subject`, `write`) are production arguments, and so are the keyword-only parameters that the open PRs #17 (`final`,
-  `check_mode`) and #18 (`required`, `max_scan_lag`, `has_content`, `breaks`, `final_newline`, `nested_sequence`) add,
-  which were reviewed here so that those PRs need no classification change. `tests/unit/tools/test_check_repo_rules_followups.py` now fails for any
+  `subject`, `write`, and `final` and `check_mode` from `audit.py`) are production arguments, and so are the
+  keyword-only parameters that the open PR #18 adds (`required`, `max_scan_lag`, `has_content`, `breaks`,
+  `final_newline`, `nested_sequence`), which were reviewed here so that it needs no classification change. `tests/unit/tools/test_check_repo_rules_followups.py` now fails for any
   keyword-only plugin parameter that is neither a banned seam nor on that reviewed list, so a new seam cannot be added
   without a decision.
 - `xmlsafe.open_regular` is private (`_open_regular`). Only `RegularFile` (and through it `iter_file_chunks`) calls
-  it, so a future plugin cannot open a file in a way that lets a close-time `OSError` escape as a bare `OSError`. The
+  it, so a future plugin cannot open a file in a way that lets a close-time `OSError` escape as a bare `OSError`.
+  `audit.copy_content` (PR #17) was the one caller outside `xmlsafe.py` and now opens the datastream through
+  `RegularFile`: a failing close of the source is a `CloseError`, reported as `invalid_content` like every other read
+  failure of the source, instead of `evidence_write_failed`, and a unit test covers it. The
   existing rules enforce this: an underscore-prefixed attribute of another module and an import of an
   underscore-prefixed name fail the guard, which tests show for five plugin paths.
