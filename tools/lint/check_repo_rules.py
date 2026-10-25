@@ -14,13 +14,14 @@ Violations are printed as ``path:line: message`` and the exit status is 1.
 from __future__ import annotations
 
 import argparse
+import bisect
 import io
 import re
 import sys
 import tokenize
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 import yaml
 
@@ -33,7 +34,12 @@ DOCUMENT_START: Final[str] = "---\n"
 BANNED_MODULES: Final[frozenset[str]] = frozenset(
     {"shell", "command", "raw", "script", "win_shell", "win_command"}
 )
-COLLECTION_PREFIXES: Final[tuple[str, ...]] = ("ansible.builtin.", "ansible.legacy.")
+COLLECTION_PREFIXES: Final[tuple[str, ...]] = (
+    "ansible.builtin.",
+    "ansible.legacy.",
+    "ansible.windows.",
+    "community.windows.",
+)
 ACTION_KEYS: Final[frozenset[str]] = frozenset({"action", "local_action"})
 MODULE_KEY: Final[str] = "module"
 VERSION_ANNOTATION: Final[re.Pattern[str]] = re.compile(r"# v\d+\.\d+\.\d+")
@@ -41,18 +47,10 @@ PINNED_USES: Final[re.Pattern[str]] = re.compile(
     r"\s*(?:-\s+)?uses:\s+[\w.-]+/[\w.-]+(?:/[\w./-]+)?@[0-9a-f]{40}\s*"
 )
 PINNED_REV: Final[re.Pattern[str]] = re.compile(r"\s*(?:-\s+)?rev:\s+[0-9a-f]{40}\s*")
-SEQUENCE_ENTRY: Final[re.Pattern[str]] = re.compile(r"-\s+")
-BLOCK_SCALAR_VALUE: Final[re.Pattern[str]] = re.compile(r"(?:[!&]\S*\s+)*[|>][1-9+-]{0,2}")
-BLOCK_SCALAR_LINE: Final[re.Pattern[str]] = re.compile(
-    r"(?:^|[-:?]\s)(?:[!&]\S*\s+)*[|>][1-9+-]{0,2}$"
-)
 SHEBANG_PREFIX: Final[str] = "#!"
-QUOTES: Final[str] = "\"'"
-FLOW_OPENERS: Final[str] = "[{"
-FLOW_CLOSERS: Final[str] = "]}"
-INDICATORS: Final[str] = "-?:"
-PROPERTY_MARKERS: Final[str] = "!&"
-WHITESPACE: Final[str] = " \t"
+BLOCK_STYLES: Final[frozenset[str]] = frozenset({"|", ">"})
+LINE_BREAK: Final[re.Pattern[str]] = re.compile(r"\r\n|[\n\r\x85\u2028\u2029]")
+COMMENT_START: Final[re.Pattern[str]] = re.compile(r"(?:^|(?<=[ \t\r\n\x85\u2028\u2029]))#")
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -77,121 +75,79 @@ class Comment:
     text: str
 
 
-@dataclass(slots=True)
-class _ScanState:
-    """Scanner state that carries over from one line to the next."""
+class _TokenSource(Protocol):
+    """Typed view of the untyped PyYAML scanner interface."""
 
-    quote: str | None = None
-    flow_depth: int = 0
+    def check_token(self) -> bool:
+        """Return whether another token is available."""
+        ...
 
-
-@dataclass(slots=True)
-class _LineScan:
-    """Scanner cursor for a single line."""
-
-    raw: str
-    state: _ScanState
-    index: int = 0
-    value_start: bool = True
-
-    def advance_in_quote(self) -> None:
-        """Consume one character while inside a quoted scalar."""
-        character = self.raw[self.index]
-        if self.state.quote == '"' and character == "\\":
-            self.index += 2
-            return
-        if (
-            self.state.quote == "'"
-            and character == "'"
-            and self.raw[self.index + 1 : self.index + 2] == "'"
-        ):
-            self.index += 2
-            return
-        if character == self.state.quote:
-            self.state.quote = None
-        self.index += 1
-
-    def skip_property(self) -> None:
-        """Skip a tag or anchor token, keeping the scalar-start position."""
-        while self.index < len(self.raw) and self.raw[self.index] not in WHITESPACE:
-            self.index += 1
-
-    def advance_outside_quote(self) -> None:
-        """Consume one token outside quoted scalars."""
-        character = self.raw[self.index]
-        if character in WHITESPACE:
-            self.index += 1
-        elif self.value_start and character in PROPERTY_MARKERS:
-            self.skip_property()
-        elif self.value_start and character in QUOTES:
-            self.state.quote = character
-            self.value_start = False
-            self.index += 1
-        elif self.value_start and character in FLOW_OPENERS:
-            self.state.flow_depth += 1
-            self.index += 1
-        elif self.state.flow_depth and character in FLOW_CLOSERS:
-            self.state.flow_depth -= 1
-            self.value_start = False
-            self.index += 1
-        elif self.state.flow_depth and character == ",":
-            self.value_start = True
-            self.index += 1
-        else:
-            following = self.raw[self.index + 1 : self.index + 2]
-            self.value_start = character in INDICATORS and (
-                not following or following in WHITESPACE
-            )
-            self.index += 1
-
-    def comment_column(self) -> int | None:
-        """Return the column where a comment starts on this line, if any."""
-        self.value_start = self.state.quote is None
-        while self.index < len(self.raw):
-            if self.state.quote is not None:
-                self.advance_in_quote()
-            elif self.raw[self.index] == "#" and (
-                self.index == 0 or self.raw[self.index - 1] in WHITESPACE
-            ):
-                return self.index
-            else:
-                self.advance_outside_quote()
-        return None
+    def get_token(self) -> yaml.Token:
+        """Consume and return the next token."""
+        ...
 
 
-def _indent(line: str) -> int:
-    """Return the number of leading spaces of ``line``."""
-    return len(line) - len(line.lstrip(" "))
+def _line_breaks(text: str) -> list[tuple[int, int]]:
+    """Return the ``(start, end)`` span of every line break in ``text``."""
+    return [(match.start(), match.end()) for match in LINE_BREAK.finditer(text)]
 
 
-def _block_parent_indent(code: str) -> int:
-    """Return the indentation of the node that owns a block scalar on ``code``."""
-    position = _indent(code)
-    last_dash: int | None = None
-    while (entry := SEQUENCE_ENTRY.match(code, position)) is not None:
-        last_dash = position
-        position = entry.end()
-    if BLOCK_SCALAR_VALUE.fullmatch(code[position:].strip()) is None:
-        return position
-    return -1 if last_dash is None else last_dash
+def _block_content_start(text: str, indicator: int) -> int:
+    """Return the offset of the line that follows the block scalar indicator."""
+    match = LINE_BREAK.search(text, indicator)
+    return len(text) if match is None else match.end()
+
+
+def _scalar_spans(text: str) -> list[tuple[int, int]]:
+    """Return the character spans that YAML scalars occupy in ``text``.
+
+    The spans come from the PyYAML scanner, so quoted, plain and block scalars
+    follow YAML semantics. Block scalar spans start on the line after the
+    indicator, which leaves a header comment outside the span. A scanner
+    error ends the scan; the spans found so far are returned.
+    """
+    spans: list[tuple[int, int]] = []
+    try:
+        loader = yaml.SafeLoader(text)
+    except yaml.YAMLError:
+        return spans
+    source = cast("_TokenSource", loader)
+    try:
+        while source.check_token():
+            token = source.get_token()
+            if not isinstance(token, yaml.ScalarToken):
+                continue
+            start = token.start_mark.index
+            if token.style in BLOCK_STYLES:
+                start = _block_content_start(text, start)
+            spans.append((start, token.end_mark.index))
+    except yaml.YAMLError:
+        return spans
+    finally:
+        loader.dispose()
+    return spans
 
 
 def scan_yaml_comments(text: str) -> list[Comment]:
-    """Return every comment in ``text``, ignoring ``#`` in quotes and block scalars."""
+    """Return every YAML comment in ``text``.
+
+    A ``#`` starts a comment when it is at the start of a line or follows
+    whitespace and lies outside every scalar span reported by the scanner.
+    """
+    spans = _scalar_spans(text)
+    breaks = _line_breaks(text)
+    line_ends = [start for start, _ in breaks]
+    line_starts = [0, *(end for _, end in breaks)]
     comments: list[Comment] = []
-    state = _ScanState()
-    block_parent: int | None = None
-    for number, raw in enumerate(text.splitlines(), start=1):
-        if block_parent is not None:
-            if not raw.strip() or _indent(raw) > block_parent:
-                continue
-            block_parent = None
-        column = _LineScan(raw, state).comment_column()
-        code = raw if column is None else raw[:column]
-        if column is not None:
-            comments.append(Comment(number, code, raw[column:].rstrip()))
-        if state.quote is None and BLOCK_SCALAR_LINE.search(code.rstrip()) is not None:
-            block_parent = _block_parent_indent(code.rstrip())
+    for match in COMMENT_START.finditer(text):
+        offset = match.start()
+        if any(start <= offset < end for start, end in spans):
+            continue
+        index = bisect.bisect_right(line_starts, offset) - 1
+        line_end = line_ends[index] if index < len(line_ends) else len(text)
+        comments.append(
+            Comment(index + 1, text[line_starts[index] : offset], text[offset:line_end].rstrip())
+        )
     return comments
 
 
@@ -285,10 +241,20 @@ def _banned_nodes(root: yaml.Node) -> Iterable[yaml.Node]:
                     yield offender
 
 
+def _invalid_yaml(path: Path, error: yaml.YAMLError) -> Violation:
+    """Describe a YAML error as a violation at the line the parser reports."""
+    mark = getattr(error, "problem_mark", None)
+    line = 1 if mark is None else int(mark.line) + 1
+    return Violation(path, line, f"invalid YAML: {error}")
+
+
 def check_banned_modules(path: Path, text: str) -> list[Violation]:
     """Reject banned command-execution modules and report unparsable YAML."""
     violations: list[Violation] = []
-    loader = yaml.SafeLoader(text)
+    try:
+        loader = yaml.SafeLoader(text)
+    except yaml.YAMLError as error:
+        return [_invalid_yaml(path, error)]
     try:
         loader.check_node()
         for document in iter(loader.get_node, None):
@@ -298,9 +264,7 @@ def check_banned_modules(path: Path, text: str) -> list[Violation]:
                 if isinstance(node, yaml.ScalarNode)
             )
     except yaml.YAMLError as error:
-        mark = getattr(error, "problem_mark", None)
-        line = 1 if mark is None else int(mark.line) + 1
-        violations.append(Violation(path, line, f"invalid YAML: {error}"))
+        violations.append(_invalid_yaml(path, error))
     finally:
         loader.dispose()
     return violations

@@ -86,8 +86,12 @@ uv run pre-commit run --all-files --hook-stage manual
 Hooks for ansible-lint (FREES-39), OpenTofu and Checkov (FREES-30, FREES-31) and Packer (FREES-64) are pending
 the issues that introduce their sources. They are intentionally absent rather than faked.
 
-Third-party hook repositories are pinned by full commit SHA with a `# vX.Y.Z` annotation. Hooks without a
-suitable annotated tag (shellcheck-py publishes four-part versions) run from the locked `uv` environment.
+Pin ownership rule: every Python tool hook (ruff, yamllint, mypy, pyright, pylint, bandit, pytest, shellcheck,
+actionlint, zizmor) is a `repo: local` hook that runs `uv run --frozen <tool>`, so its version lives only in
+`pyproject.toml` and `uv.lock` and is updated by Dependabot. Only non-Python hook repositories (pre-commit-hooks,
+gitleaks, markdownlint-cli2) are remote hooks, pinned by full commit SHA with a `# vX.Y.Z` annotation and
+updated by Renovate. `additional_dependencies` is never used. The annotation on `rev:` is the second permitted
+YAML comment form (ADR 0005, amendment 2026-10-25).
 
 ## Running each check manually
 
@@ -125,18 +129,19 @@ YAML and Python files (ADR 0005):
 - Python files contain no comments, except a shebang on the first line. This includes `# noqa` and
   `# type: ignore`; suppressions are configured in `pyproject.toml` instead.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
-  including `ansible.builtin.` and `ansible.legacy.` forms and the `action` / `local_action` spellings.
+  including the `ansible.builtin.`, `ansible.legacy.`, `ansible.windows.` and `community.windows.` forms and the `action` / `local_action` spellings.
   The scan covers `extensions/` and `tests/` as well.
 
 Every lint ignore lives in `pyproject.toml` with its reason in `[tool.freesecdev.lint-justifications]` or
 `[tool.freesecdev.pylint-justifications]`.
 
-Configuration relaxations adopted to accept existing content without rewriting it in this change:
+Configuration relaxations, each with its reason:
 
-- `.markdownlint-cli2.yaml` disables MD013 (line length), MD032, MD033, MD034 (bare URLs in research notes),
-  MD037, MD040, MD041 and MD060 (table style). Re-enable them as documents are cleaned up.
-- `.yamllint.yaml` exempts `docs/planning/` from the line length rule because the plan stores long
-  acceptance criteria on single lines.
+- `.markdownlint-cli2.yaml` disables MD013 (line length) because prose and tables in the research notes and
+  skills are written one paragraph per line, and MD060 (table column style) because it demands padded
+  pipes that the existing tables, which are maintained by hand, do not use. All other default rules are on.
+- `.yamllint.yaml` exempts `docs/planning/` from the line length rule only, because the Jira plan stores each
+  acceptance criterion on one line (up to about 300 characters) and the file is consumed by tooling.
 
 ## Pull request workflow
 

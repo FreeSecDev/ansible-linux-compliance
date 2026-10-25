@@ -50,7 +50,7 @@ def comment_texts(text: str) -> list[tuple[int, str]]:
         ("- key: |\n    # content\n  other: v # c\n", [(3, "# c")]),
         ("- - |\n    # content\n", []),
         ("key: !!str |\n  # content\n", []),
-        ("|\n# content-at-root\n", []),
+        ("|\n# content-at-root\n", [(2, "# content-at-root")]),
         ("key: |\n  # content\n# after block\n", [(3, "# after block")]),
         ("key: a >\n  # continuation\n", [(2, "# continuation")]),
         ("key: ]\n", []),
@@ -62,6 +62,47 @@ def comment_texts(text: str) -> list[tuple[int, str]]:
 )
 def test_scan_yaml_comments(text: str, expected: list[tuple[int, str]]) -> None:
     assert comment_texts(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("x: a - |\n  # c\n", [(2, "# c")]),
+        ("x: a >\n  # c\n", [(2, "# c")]),
+        ("key: - |\n  # c\n", [(2, "# c")]),
+        ("a:\n  b: |\n      text\n    # less indented\n  d: 1\n", [(4, "# less indented")]),
+        ("k: |\n\n   first\n  # less indented\n", [(4, "# less indented")]),
+        ("k: |\n     deep\n  # not content\n", [(3, "# not content")]),
+        ("k: |2\n    # x\n  # y\n# z\n", [(4, "# z")]),
+        ("k: |\n# empty scalar\n", [(2, "# empty scalar")]),
+        ("k: | # header\n  body # text\n", [(1, "# header")]),
+        ("k: >-  # header\n  body\n", [(1, "# header")]),
+        ("k: |+\n  a\n\n# after\n", [(4, "# after")]),
+        ("{a: 1, # c\n b: 2}\n", [(1, "# c")]),
+        ("{a: \"x # y\", b: 'p # q'} # t\n", [(1, "# t")]),
+        ("[a, b] # t\n", [(1, "# t")]),
+        ("a: b#c\n", []),
+        ('a: "x"#c\n', []),
+        ("a: 'x#y' # z\n", [(1, "# z")]),
+        ("key: v\t# c\n", [(1, "# c")]),
+        ("key:\t# c\n", [(1, "# c")]),
+        ("\t# c\n", [(1, "# c")]),
+        ("k: |\r\n  # in\r\n# out\r\n", [(3, "# out")]),
+        ("a: 1 # x\rb: 2 # y\r", [(1, "# x"), (2, "# y")]),
+        ("a: 1\x85# x\n", [(2, "# x")]),
+        ("a: 1\u2028# x\n", [(2, "# x")]),
+        ("---\x07\n# c\n", [(2, "# c")]),
+        ("- a\n- |\n  # in\n- 'x # y'\n# out\n", [(5, "# out")]),
+    ],
+)
+def test_scan_regressions_and_adversarial(text: str, expected: list[tuple[int, str]]) -> None:
+    assert comment_texts(text) == expected
+
+
+def test_invalid_yaml_with_unprintable_character_is_reported() -> None:
+    violations = rules.check_banned_modules(Path("f.yml"), "---\n\x07\n")
+    assert len(violations) == 1
+    assert violations[0].message.startswith("invalid YAML")
 
 
 def test_scan_reports_code_before_comment() -> None:
@@ -137,6 +178,10 @@ def test_document_start(text: str, ok: bool) -> None:
         "ansible.builtin.script",
         "ansible.legacy.shell",
         "ansible.legacy.command",
+        "ansible.windows.win_shell",
+        "ansible.windows.win_command",
+        "community.windows.win_shell",
+        "community.windows.win_command",
     ],
 )
 def test_banned_task_keys(module: str) -> None:
@@ -375,3 +420,10 @@ def test_script_entry_point(
         runpy.run_path(rules.__file__, run_name="__main__")
     assert raised.value.code == 0
     assert "satisfied" in capsys.readouterr().out
+
+
+def test_comment_hidden_by_malformed_block_scalar_still_fails_the_file(tmp_path: Path) -> None:
+    target = tmp_path / "bad.yml"
+    target.write_text("---\nx: 'a' |\n  # c\n", encoding="utf-8")
+    messages = [violation.message for violation in rules.check_file(target)]
+    assert any(message.startswith("invalid YAML") for message in messages)

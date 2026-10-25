@@ -1,18 +1,11 @@
 ---
-globs:
-  - "**/*.md"
 ignores:
   - ".venv/**"
+  - ".claude/**"
   - "node_modules/**"
 config:
   default: true
   MD013: false
   MD024:
     siblings_only: true
-  MD032: false
-  MD033: false
-  MD034: false
-  MD037: false
-  MD040: false
-  MD041: false
   MD060: false

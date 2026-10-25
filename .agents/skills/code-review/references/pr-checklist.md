@@ -5,7 +5,7 @@ Record each item as satisfied, not applicable (with reason) or violated.
 ## Traceability
 
 - [ ] Branch name matches `<type>/FREES-<n>-<slug>`.
-- [ ] Title is a Conventional Commit and references FREES-<n>.
+- [ ] Title is a Conventional Commit and references `FREES-<n>`.
 - [ ] Commits end with `Refs: FREES-<n>`.
 - [ ] Jira issue updated with PR and CI links.
 - [ ] Interface change links an accepted ADR.
