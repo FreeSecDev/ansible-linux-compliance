@@ -1,10 +1,13 @@
-"""Command line: parse report inputs and write the normalized JSON report.
+"""Command line: parse report inputs, write the normalized JSON report and the dashboard.
+
+``--html`` also writes the single-file HTML dashboard of the same document. Nothing
+is written when the dashboard cannot be rendered.
 
 Exit status: 0 when the report was written and every supplied input parsed, 1 when it
 was written but a supplied input is missing or invalid (a section is ``partial`` or
 ``error``), 2 for invalid arguments or metadata, a scope that the data contradicts,
-or an output that cannot be written. A section without any input is ``unavailable``
-and is not an error.
+a report that the dashboard cannot render, or an output that cannot be written. A
+section without any input is ``unavailable`` and is not an error.
 """
 
 import argparse
@@ -14,6 +17,7 @@ from pathlib import Path
 from typing import Final
 
 from tools.reporting.common import DEFAULT_MAX_BYTES, dumps
+from tools.reporting.dashboard import DashboardError, render_dashboard
 from tools.reporting.report import (
     ReportError,
     ReportInputs,
@@ -55,11 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
     """Return the argument parser."""
     parser = argparse.ArgumentParser(
         prog="python -m tools.reporting",
-        description="Write the normalized JSON report (schema report-v1). The HTML "
-        "dashboard is pending FREES-77.",
+        description="Write the normalized JSON report (schema report-v1) and, with "
+        "--html, the single-file HTML dashboard.",
     )
     parser.add_argument("--scope", required=True, choices=[scope.value for scope in Scope])
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--html", type=Path, default=None)
     parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
     for name in INPUT_OPTIONS:
         parser.add_argument(
@@ -89,12 +94,20 @@ def main(argv: Sequence[str]) -> int:
     except ReportError as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_USAGE
-    output: Path = arguments["output"]
-    try:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(dumps(report), encoding="utf-8")
-    except OSError as error:
-        print(f"error: cannot write the report: {error.strerror}", file=sys.stderr)
-        return EXIT_USAGE
-    print(f"report written to {output}; the HTML dashboard is pending FREES-77")
+    outputs: list[tuple[Path, str, str]] = [(arguments["output"], dumps(report), "report")]
+    html_output: Path | None = arguments["html"]
+    if html_output is not None:
+        try:
+            outputs.append((html_output, render_dashboard(report), "dashboard"))
+        except DashboardError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return EXIT_USAGE
+    for path, content, name in outputs:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        except OSError as error:
+            print(f"error: cannot write the {name}: {error.strerror}", file=sys.stderr)
+            return EXIT_USAGE
+        print(f"{name} written to {path}")
     return EXIT_SECTION_ERROR if has_error(report) or has_gap(report) else EXIT_OK

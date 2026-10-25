@@ -9,11 +9,13 @@ record is [ADR 0016](adr/0016-report-schema-and-summary-semantics.md); the findi
 
 ```bash
 make report REPORT_SCOPE=single_host REPORT_ARGS='--scan-run run.json --junit junit.xml'
-python -m tools.reporting --scope fleet --output build/report/report.json --xccdf results.xml
+python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
+  --xccdf results.xml
 ```
 
-`make report` writes `build/report/report.json` (`REPORT_OUTPUT` overrides it) and states that the HTML dashboard is
-pending FREES-77. `--scope` and `--output` are required. Every input option can be repeated.
+`make report` writes `build/report/report.json` and the HTML dashboard `build/report/report.html` (`REPORT_OUTPUT`
+and `REPORT_HTML` override them). `--scope` and `--output` are required; `--html` is optional and writes the
+[dashboard](dashboard.md) of the same document. Every input option can be repeated.
 
 | Option | Format |
 |---|---|
@@ -37,8 +39,9 @@ Exit status:
 - 0: the report was written and every supplied input parsed. A section without any input is `unavailable`; that is
   not an error, and it is never shown as passed.
 - 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`).
-- 2: invalid arguments or metadata, a scope that the data contradicts (below), or an output that cannot be written.
-  No report is written for a contradicted scope.
+- 2: invalid arguments or metadata, a scope that the data contradicts (below), a report that the dashboard cannot
+  render (more than 128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)), or an output that cannot be
+  written. No report is written for a contradicted scope or a report that the dashboard refuses.
 
 At most 1000 input files per section are accepted.
 
@@ -199,3 +202,5 @@ scenario is required. Any other `format` or `version` is an error.
 
 - 1.0: first version (FREES-75), including the `partial` section status, `groups`, `aggregates` and `gaps`. A change that adds a field bumps the minor version; a breaking change bumps the major
   version, and `report-v<major>.json` is a new file. The version, this page and ADR 0016 change together.
+- The HTML dashboard (FREES-77, ADR 0017) reads version 1.0 and adds no field to the document; it refuses any
+  other version.

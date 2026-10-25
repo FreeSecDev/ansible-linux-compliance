@@ -1,0 +1,9 @@
+---
+minor_changes:
+  - >-
+    Add the offline single-file HTML report dashboard. ``make report`` and
+    ``python -m tools.reporting --html`` render the normalized report into one HTML file
+    with inline, hash-allowed script and style, a strict Content-Security-Policy and no
+    network access. Report data is embedded as escaped JSON and rendered as text only;
+    figures are shown exactly as the report gives them. ``make report-serve`` serves the
+    report on 127.0.0.1, and ``make test-browser`` runs the browser and accessibility tests.

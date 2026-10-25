@@ -27,6 +27,7 @@ The configuration files are committed, but the bots are not confirmed active:
 | Packer plugins (future `extensions/packer/**/*.pkr.hcl`) | Renovate | Custom regex manager over `required_plugins` blocks |
 | Ansible Galaxy collection requirements | Renovate | Galaxy is not supported by Dependabot |
 | Pinned tool versions in the `Makefile` and version files | Planned (FREES-81) | No Renovate custom manager is configured yet, so these pins are updated by hand |
+| Browser test downloads (Chrome for Testing headless shell, axe-core) in `tools/browser/fetch-test-deps.sh` | Planned (FREES-81) | Pinned by version and SHA-256 in the script and updated by hand with new checksums; used by tests only and never shipped. Playwright itself is a `uv` package owned by Dependabot |
 | `astral-sh/setup-uv` `version:` input (the uv tool version) | Renovate | Read by the `github-actions` manager; Dependabot does not manage it |
 | Python runtime version (`.python-version`, `setup-python` inputs) | Manual pull request | A runtime change needs full testing; Renovate disables the `python-version` datasource and the `actions/python-versions` package that `setup-python` resolves through |
 | Security updates for ecosystems in GitHub's dependency graph (Python `uv`, GitHub Actions) | Dependabot | GitHub security updates are enabled for the repository; Renovate's `vulnerabilityAlerts` is disabled |

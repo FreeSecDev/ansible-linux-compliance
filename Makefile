@@ -25,6 +25,7 @@ BOOTSTRAP_RENDER_SED := -e 's|@@AWS_ACCOUNT_ID@@|$(AWS_ACCOUNT_ID)|g' -e 's|@@AW
 	-e 's|@@STATE_BUCKET@@|$(STATE_BUCKET)|g' -e 's|@@GITHUB_REPOSITORY@@|$(GITHUB_REPOSITORY)|g'
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
+BROWSER_TEST_DIR := build/browser-test
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
 
 space := $(subst ,, )
@@ -67,6 +68,8 @@ Tests
   test-coverage         Unit tests with branch coverage thresholds
   test-content-golden   Fetch the pinned content and compare the catalog with the recorded rule lists
   test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap
+  test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
+  browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
@@ -82,8 +85,8 @@ Images and AWS
   image-build           [pending FREES-36] Build the runner image on AWS
 
 Reporting, docs and release
-  report                Write the normalized report JSON from REPORT_ARGS (HTML dashboard pending FREES-77)
-  report-serve          [pending FREES-77] Serve the HTML report locally
+  report                Write the normalized report JSON and the HTML dashboard from REPORT_ARGS
+  report-serve          Serve the report directory on 127.0.0.1 only (REPORT_PORT, default 8765)
   docs                  markdownlint and relative link check
   package               Build the collection tarball into dist/ with a canonical FILES.json
   package-check         Build the tarball twice from differently ordered trees and compare SHA-256
@@ -100,7 +103,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
 	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons \
-	test-integration test-coverage test-content-golden test-oscap-integration test-molecule-docker test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
 	require-uv
@@ -167,7 +170,7 @@ lint-iac: require-uv
 	$(MAKE) --no-print-directory tofu-validate
 	mkdir -p build
 	sed $(BOOTSTRAP_RENDER_SED) $(BOOTSTRAP_TEMPLATE) > build/bootstrap.rendered.sh
-	$(RUN) shellcheck build/bootstrap.rendered.sh tools/iac/install-tofu.sh
+	$(RUN) shellcheck build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/browser/fetch-test-deps.sh
 
 tofu-validate:
 	@for module in $(IAC_ROOT_MODULES); do \
@@ -206,6 +209,12 @@ test-content-golden: require-uv collection-link
 test-oscap-integration: require-uv collection-link
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
 	$(RUN) pytest tests/system --no-cov -v -s -p no:cacheprovider
+
+browser-test-deps:
+	tools/browser/fetch-test-deps.sh '$(BROWSER_TEST_DIR)'
+
+test-browser: require-uv collection-link browser-test-deps
+	FREESECDEV_BROWSER_TEST_DIR='$(CURDIR)/$(BROWSER_TEST_DIR)' $(RUN) pytest tests/browser --no-cov
 
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)
@@ -258,13 +267,18 @@ image-build:
 REPORT_SCOPE ?=
 REPORT_ARGS ?=
 REPORT_OUTPUT ?= build/report/report.json
+REPORT_HTML ?= build/report/report.html
+REPORT_PORT ?= 8765
 
 report: require-uv collection-link
 	@test -n '$(REPORT_SCOPE)' || { printf 'error: set REPORT_SCOPE to single_host, multi_host, benchmark or fleet\n' >&2; exit 2; }
-	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.reporting --scope '$(REPORT_SCOPE)' --output '$(REPORT_OUTPUT)' $(REPORT_ARGS)
+	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.reporting --scope '$(REPORT_SCOPE)' --output '$(REPORT_OUTPUT)' --html '$(REPORT_HTML)' $(REPORT_ARGS)
 
-report-serve:
-	$(call NOT_IMPLEMENTED,report-serve,FREES-77)
+report-serve: require-uv
+	@printf '%s' '$(REPORT_PORT)' | grep -Eq '^[1-9][0-9]{3,4}$$' || { printf 'error: REPORT_PORT must be a port from 1000 to 65535\n' >&2; exit 2; }
+	@test -f '$(REPORT_HTML)' || { printf 'error: %s does not exist; run make report first\n' '$(REPORT_HTML)' >&2; exit 2; }
+	@printf 'serving %s on http://127.0.0.1:%s/ (loopback only, stop with Ctrl+C)\n' '$(REPORT_HTML)' '$(REPORT_PORT)'
+	$(RUN) python -m http.server --bind 127.0.0.1 --directory '$(dir $(REPORT_HTML))' '$(REPORT_PORT)'
 
 docs: require-uv
 	$(RUN) pre-commit run markdownlint-cli2 --all-files
@@ -311,4 +325,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser security docs test-sanity test-ansible-units package-check
