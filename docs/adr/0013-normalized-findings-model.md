@@ -240,3 +240,24 @@ verdict from findings alone. These invariants apply to every backend and every r
   <https://docs.ansible.com/projects/ansible/devel/reference_appendices/release_and_maintenance.html>
 - [ADR 0010](0010-initial-os-and-benchmark-scope.md), [ADR 0011](0011-control-toggles-and-cleanup.md)
 - [Collection design](../collection-design.md)
+
+## Amendment 2026-10-25: audit module semantics (FREES-49)
+
+`freesecdev.linux_compliance.compliance_scan` is the first producer of `ScanRun` documents on managed hosts
+([audit guide](../audit.md)). The model is unchanged; these are the producer rules.
+
+- **`changed` is always false.** An audit never changes the configuration of a host (AGENTS.md rule 7). The evidence that
+  a run writes (scanner output, the tailoring file and `scan-run.json`, in a new root-owned `0700` run directory with
+  `0600` files) is reported separately as `evidence_written` and `evidence.files` (path, kind, SHA-256, size), so a
+  report can always tell a host change from an audit record. Evidence is never overwritten; a repeated run reports
+  `changed: false` again and writes a new run directory.
+- **Check mode runs no scanner and writes nothing.** It validates the arguments, verifies the digest and the profile,
+  inspects the output directory and returns `run_status: not_run` with the planned scan. This deliberately differs from
+  the read-only discovery modules, because a scan writes evidence.
+- **Scanner failures are results, not exceptions.** A `failed` or `timed_out` run is returned with all findings `error`
+  and, by default (`fail_on_incomplete: true`), the task fails with `error_type: scan_incomplete` and the full result.
+  The audit role registers the result first and fails afterwards, so the evidence of a failed scan is kept.
+- **Pinned digest at scan time.** A completed run whose `content.content_sha256` differs from the pinned digest is turned
+  into a `failed` run, so content swapped between verification and scan never yields `pass` or `fail`.
+- **Summary.** The module summary is the count per outcome, the total and `run_status`; it contains no percentage and no
+  compliance statement (ADR 0016, proposed in pull request #12).

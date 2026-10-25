@@ -1,9 +1,10 @@
 # Playbooks
 
 Scope: the orchestration playbooks shipped in `playbooks/`. Audience: operators and playbook authors.
-Jira: FREES-41. The playbooks contain no component logic; they only reference roles by FQCN. The roles are
-skeletons (FREES-40) and currently fail with a "not implemented yet" message that names their tracking issue, so every
-playbook below stops at its first role until that role is implemented.
+Jira: FREES-41. The playbooks contain no component logic; they only reference roles by FQCN. The `discover` and
+`audit` roles are implemented ([audit guide](audit.md)). The other roles are skeletons (FREES-40) that fail with a "not
+implemented yet" message naming their tracking issue, so `remediate.yml` and `verify.yml` stop at their first role
+until that role is implemented.
 
 | Playbook | Roles in order | `become` |
 |---|---|---|
@@ -11,8 +12,10 @@ playbook below stops at its first role until that role is implemented.
 | `playbooks/remediate.yml` | `remediate` | `remediate` |
 | `playbooks/verify.yml` | `verify` | `verify` |
 
-`discover`, `audit` and `verify` never change the host. `remediate` changes a host only after the opt-in below.
-`become` is set on the role entry, never on the whole play. The `evidence` role is not part of a playbook yet.
+`discover`, `audit` and `verify` never change the host; `audit` writes evidence files below
+`linux_compliance_audit_output_dir` and reports them separately from `changed`. `remediate` changes a host only after
+the opt-in below. `become` is set on the role entry, never on the whole play, and the audit role also sets it on its
+scan task only. The `evidence` role is not part of a playbook yet.
 
 ## Selecting hosts
 
@@ -37,6 +40,9 @@ Role variables are documented in each role `README.md` and in `meta/argument_spe
 | `linux_compliance_<role>_profile` | `cis_level1_server` | `discover`, `audit`, `remediate`, `verify` |
 | `linux_compliance_discover_content_path`, `linux_compliance_discover_content_sha256` | empty, required | `discover` |
 | `linux_compliance_audit_fail_on_noncompliant` | `false` | `audit` |
+| `linux_compliance_audit_output_dir` | `/var/lib/freesecdev/linux_compliance/evidence` | `audit` |
+| `linux_compliance_audit_scan_timeout` | `1800` | `audit` |
+| `linux_compliance_audit_disabled_rules` | `[]` | `audit` |
 | `linux_compliance_verify_fail_on_regression` | `true` | `verify` |
 
 ## Remediation opt-in
@@ -59,7 +65,7 @@ Per-rule and per-family toggles do not exist yet (FREES-55).
 
 ## Tags
 
-Every validation and stop task in the roles is tagged `always`, so `--tags` cannot bypass them: for example,
+Every validation and stop task in the roles is tagged `always` (in the `audit` role every task is), so `--tags` cannot bypass them: for example,
 `--tags nothing` still validates inputs and stops with the role's tracking key.
 
 `--skip-tags always` is unsupported. It skips input validation, the not-implemented stop and fact gathering, so the
