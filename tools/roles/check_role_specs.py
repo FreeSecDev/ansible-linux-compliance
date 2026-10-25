@@ -93,6 +93,22 @@ def check_role(role_dir: Path) -> list[str]:
             findings.append(f"{role}: {name}: missing from defaults/main.yml")
         else:
             findings.extend(check_option(role, name, spec_options[name], defaults[name]))
+    return findings + check_tasks(role_dir)
+
+
+def check_tasks(role_dir: Path) -> list[str]:
+    """Return findings for tasks in ``tasks/main.yml`` that are not tagged ``always``."""
+    path = role_dir / "tasks" / "main.yml"
+    if not path.is_file():
+        return [f"{role_dir.name}: tasks/main.yml is missing"]
+    loaded = cast("object", yaml.safe_load(path.read_text(encoding="utf-8")))
+    if not isinstance(loaded, list):
+        return [f"{role_dir.name}: tasks/main.yml must be a list of tasks"]
+    findings: list[str] = []
+    for task in cast("list[object]", loaded):
+        tags = cast("dict[str, object]", task).get("tags") if isinstance(task, dict) else None
+        if not isinstance(tags, list) or "always" not in tags:
+            findings.append(f"{role_dir.name}: every task in tasks/main.yml must be tagged always")
     return findings
 
 

@@ -13,7 +13,11 @@
       -e '{"linux_compliance_remediate_enabled": true}';
       -e linux_compliance_remediate_enabled=true passes a string.
     quiet: true
+  tags:
+    - always
 
 - name: Remediate | Stop because the role is not implemented yet
   ansible.builtin.fail:
     msg: The remediate role is not implemented yet (tracked in FREES-52). No change was made to the host.
+  tags:
+    - always

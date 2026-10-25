@@ -11,7 +11,11 @@
       -e '{"linux_compliance_audit_fail_on_noncompliant": true}';
       -e linux_compliance_audit_fail_on_noncompliant=true passes a string.
     quiet: true
+  tags:
+    - always
 
 - name: Audit | Stop because the role is not implemented yet
   ansible.builtin.fail:
     msg: The audit role is not implemented yet (tracked in FREES-49). No change was made to the host.
+  tags:
+    - always

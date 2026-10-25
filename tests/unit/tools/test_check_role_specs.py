@@ -13,6 +13,7 @@ from tools.roles import check_role_specs as specs
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ROLES = ("discover", "audit", "remediate", "verify", "evidence")
 FLAG = "linux_compliance_demo_flag"
+TASKS = [{"name": "Demo", "ansible.builtin.fail": {"msg": "x"}, "tags": ["always"]}]
 
 
 def write_role(
@@ -32,6 +33,8 @@ def write_role(
         argument_specs = {"argument_specs": {"main": {"options": options}}}
     (role / "meta" / "argument_specs.yml").write_text(yaml.safe_dump(argument_specs))
     (role / "defaults" / "main.yml").write_text(yaml.safe_dump(defaults))
+    (role / "tasks").mkdir()
+    (role / "tasks" / "main.yml").write_text(yaml.safe_dump(TASKS))
     return role
 
 
@@ -213,3 +216,30 @@ def test_module_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as raised:
         runpy.run_path(specs.__file__, run_name="__main__")
     assert raised.value.code == 0
+
+
+def test_tasks_file_is_required(tmp_path: Path) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "main.yml").unlink()
+    assert "tasks/main.yml is missing" in specs.check_role(role)[0]
+
+
+def test_tasks_must_be_a_list(tmp_path: Path) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "main.yml").write_text("a: 1\n")
+    assert "must be a list of tasks" in specs.check_role(role)[0]
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        {"name": "x"},
+        {"name": "x", "tags": ["other"]},
+        {"name": "x", "tags": "always"},
+        "x",
+    ],
+)
+def test_every_task_must_be_tagged_always(tmp_path: Path, task: object) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "main.yml").write_text(yaml.safe_dump([task]))
+    assert "tagged always" in specs.check_role(role)[0]
