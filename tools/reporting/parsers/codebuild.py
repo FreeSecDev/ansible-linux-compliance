@@ -7,11 +7,13 @@ from typing import Final
 
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
+    MAX_ENTRIES,
     InvalidInputError,
     ParseResult,
     as_list,
     as_object,
     as_text,
+    bounded,
     load_json,
     maybe_text,
     optional_list,
@@ -81,7 +83,10 @@ def _build(data: bytes) -> CodeBuildData:
     if missing:
         message = f"CodeBuild reported {len(missing)} requested build(s) as not found"
         raise InvalidInputError(message)
-    builds = [_record(raw) for raw in as_list(require(document, "builds", "document"), "builds")]
+    listed = bounded(
+        as_list(require(document, "builds", "document"), "builds"), MAX_ENTRIES, "builds"
+    )
+    builds = [_record(raw) for raw in listed]
     if not builds:
         message = "the document lists no builds"
         raise InvalidInputError(message)

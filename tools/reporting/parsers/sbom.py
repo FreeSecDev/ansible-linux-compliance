@@ -20,6 +20,8 @@ from tools.reporting.common import (
 )
 
 UNASSERTED: Final[frozenset[str]] = frozenset({"NOASSERTION", "NONE"})
+SPDX_VERSIONS: Final[frozenset[str]] = frozenset({"SPDX-2.2", "SPDX-2.3"})
+CYCLONEDX_VERSIONS: Final[frozenset[str]] = frozenset({"1.4", "1.5", "1.6"})
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,11 @@ class SbomData:
     truncated: bool
 
 
+def _identified(entry: dict[str, object], marker: str, name: str, label: str) -> str:
+    as_text(require(entry, marker, name), f"{name}.{marker}")
+    return as_text(require(entry, "name", name), label)
+
+
 def _spdx_license(package: dict[str, object]) -> str | None:
     for key in ("licenseConcluded", "licenseDeclared"):
         value = maybe_text(package.get(key))
@@ -54,16 +61,20 @@ def _spdx_license(package: dict[str, object]) -> str | None:
 
 def _spdx(document: dict[str, object]) -> tuple[str, list[Component]]:
     version = as_text(document["spdxVersion"], "spdxVersion")
-    if not version.startswith("SPDX-2."):
-        message = "unsupported SPDX version, expected SPDX 2.x JSON"
+    if version not in SPDX_VERSIONS:
+        message = "unsupported SPDX version, expected SPDX-2.2 or SPDX-2.3 JSON"
         raise InvalidInputError(message)
+    if document.get("SPDXID") != "SPDXRef-DOCUMENT":
+        message = "the SPDX document does not identify itself as SPDXRef-DOCUMENT"
+        raise InvalidInputError(message)
+    as_text(require(document, "documentNamespace", "SPDX document"), "documentNamespace")
     packages = [
         as_object(raw, "package")
         for raw in as_list(require(document, "packages", "SPDX document"), "packages")
     ]
     return version, [
         Component(
-            as_text(require(package, "name", "package"), "package.name"),
+            _identified(package, "SPDXID", "package", "package.name"),
             maybe_text(package.get("versionInfo")),
             _spdx_license(package),
         )
@@ -80,8 +91,8 @@ def _cyclonedx_license(component: dict[str, object]) -> str | None:
 
 def _cyclonedx(document: dict[str, object]) -> tuple[str, list[Component]]:
     version = as_text(require(document, "specVersion", "CycloneDX document"), "specVersion")
-    if not version.startswith("1."):
-        message = "unsupported CycloneDX version, expected 1.x JSON"
+    if version not in CYCLONEDX_VERSIONS:
+        message = "unsupported CycloneDX version, expected 1.4, 1.5 or 1.6 JSON"
         raise InvalidInputError(message)
     components = [
         as_object(raw, "component")
@@ -89,7 +100,7 @@ def _cyclonedx(document: dict[str, object]) -> tuple[str, list[Component]]:
     ]
     return version, [
         Component(
-            as_text(require(component, "name", "component"), "component.name"),
+            _identified(component, "type", "component", "component.name"),
             maybe_text(component.get("version")),
             _cyclonedx_license(component),
         )

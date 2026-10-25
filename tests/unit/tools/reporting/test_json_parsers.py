@@ -40,6 +40,14 @@ BAD_PYTEST_JSON_REJECTS_DOCUMENTS: list[Any] = [
     {},
     {"summary": []},
     {"summary": {"passed": 1}},
+    {"summary": {"passed": 1, "total": 1}},
+    {"exitcode": 2, "summary": {"passed": 5, "total": 5}},
+    {"exitcode": 3, "summary": {"passed": 5, "total": 5}},
+    {"exitcode": 4, "summary": {"total": 0}},
+    {"exitcode": 5, "summary": {"total": 0}},
+    {"exitcode": 0, "summary": {"passed": 1, "failed": 1, "total": 2}},
+    {"exitcode": 1, "summary": {"passed": 2, "total": 2}},
+    {"exitcode": "0", "summary": {"passed": 1, "total": 1}},
     {"summary": {"passed": 1, "total": 2}},
     {"summary": {"total": 0}},
     {"summary": {"passed": "1", "total": 1}},
@@ -58,7 +66,7 @@ def test_pytest_json_rejects_bad_documents(write: Callable[..., Path], document:
 
 def test_pytest_json_truncates_failures(write: Callable[..., Path]) -> None:
     tests = [{"nodeid": f"t{i}", "outcome": "failed"} for i in range(1001)]
-    document = {"summary": {"failed": 1001, "total": 1001}, "tests": tests}
+    document = {"exitcode": 1, "summary": {"failed": 1001, "total": 1001}, "tests": tests}
     data = pytest_json.parse_pytest_json(write("p.json", json.dumps(document))).data
     assert data is not None
     assert data.truncated
@@ -67,7 +75,7 @@ def test_pytest_json_truncates_failures(write: Callable[..., Path]) -> None:
 
 def test_pytest_json_without_a_test_list(write: Callable[..., Path]) -> None:
     data = pytest_json.parse_pytest_json(
-        write("p.json", json.dumps({"summary": {"passed": 2, "total": 2}}))
+        write("p.json", json.dumps({"exitcode": 0, "summary": {"passed": 2, "total": 2}}))
     ).data
     assert data is not None
     assert data.failed_cases == ()
@@ -103,7 +111,7 @@ def test_lint_json(kit: Any) -> None:
 def test_lint_clean_runs_are_available_with_zero_issues(write: Callable[..., Path]) -> None:
     sarif: dict[str, Any] = {
         "version": "2.1.0",
-        "runs": [{"tool": {"driver": {"name": "x"}}, "results": []}],
+        "runs": [{"tool": {"driver": {"name": "ansible-lint"}}, "results": []}],
     }
     documents: list[object] = [[], sarif]
     for document in documents:
@@ -129,15 +137,17 @@ BAD_LINT_REJECTS_DOCUMENTS: list[Any] = [
     {"version": "2.1.0"},
     {"version": "2.1.0", "runs": []},
     {"version": "2.1.0", "runs": [{"results": []}]},
-    {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "x"}}}]},
-    {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "x"}}, "results": [1]}]},
+    {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "ansible-lint"}}}]},
+    {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "ansible-lint"}}, "results": [1]}]},
     {
         "version": "2.1.0",
-        "runs": [{"tool": {"driver": {"name": "x"}}, "results": [{"message": {"text": "m"}}]}],
+        "runs": [
+            {"tool": {"driver": {"name": "ansible-lint"}}, "results": [{"message": {"text": "m"}}]}
+        ],
     },
     {
         "version": "2.1.0",
-        "runs": [{"tool": {"driver": {"name": "x"}}, "results": [{"ruleId": "r"}]}],
+        "runs": [{"tool": {"driver": {"name": "ansible-lint"}}, "results": [{"ruleId": "r"}]}],
     },
     [1],
     [{"description": "d"}],
@@ -159,7 +169,7 @@ def test_lint_unknown_level_and_defaults(write: Callable[..., Path]) -> None:
     ]
     document = {
         "version": "2.1.0",
-        "runs": [{"tool": {"driver": {"name": "x"}}, "results": results}],
+        "runs": [{"tool": {"driver": {"name": "ansible-lint"}}, "results": results}],
     }
     data = lint.parse_lint(write("l.json", json.dumps(document))).data
     assert data is not None
@@ -273,7 +283,7 @@ def test_cyclonedx(kit: Any) -> None:
 
 
 def test_sbom_truncates(write: Callable[..., Path]) -> None:
-    components = [{"name": f"c{i}"} for i in range(1001)]
+    components = [{"type": "library", "name": f"c{i}"} for i in range(1001)]
     document = {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": components}
     data = sbom.parse_sbom(write("s.json", json.dumps(document))).data
     assert data is not None
@@ -455,3 +465,205 @@ def test_scan_run_rejects_documents_the_model_rejects(
 
 def test_scan_run_rejects_non_utf8(write: Callable[..., Path]) -> None:
     assert scanrun.parse_scan_run(write("run.json", b"\xff")).status is SectionStatus.ERROR
+
+
+OK_TOOL = {"driver": {"name": "ansible-lint"}}
+
+
+def sarif(run: dict[str, Any]) -> dict[str, Any]:
+    return {"version": "2.1.0", "runs": [{"tool": OK_TOOL, "results": [], **run}]}
+
+
+BAD_SARIF_RUNS: list[Any] = [
+    sarif({"invocations": [{"executionSuccessful": False}]}),
+    sarif({"invocations": [{"executionSuccessful": True}, {"executionSuccessful": False}]}),
+    sarif({"invocations": [{"toolExecutionNotifications": [{"level": "error"}]}]}),
+    sarif({"tool": {"driver": {"name": "eslint"}}}),
+    sarif({"invocations": {}}),
+    sarif({"invocations": [1]}),
+]
+
+
+@pytest.mark.parametrize("document", BAD_SARIF_RUNS)
+def test_lint_crashed_or_foreign_sarif_is_an_error(
+    write: Callable[..., Path], document: Any
+) -> None:
+    assert rejected(lint.parse_lint, write, document)
+
+
+def test_lint_successful_invocations_with_warnings_are_fine(write: Callable[..., Path]) -> None:
+    document = sarif(
+        {
+            "invocations": [
+                {
+                    "executionSuccessful": True,
+                    "toolExecutionNotifications": [{"level": "warning"}, {"level": "note"}],
+                }
+            ]
+        }
+    )
+    assert lint.parse_lint(write("l.json", json.dumps(document))).data is not None
+
+
+def test_pytest_json_exit_code_one_with_failures_is_consistent(kit: Any) -> None:
+    result = pytest_json.parse_pytest_json(kit.REPORTING / "pytest.json")
+    assert result.status is SectionStatus.AVAILABLE
+
+
+def test_grype_uses_the_highest_severity_of_every_source(write: Callable[..., Path]) -> None:
+    low = {
+        "vulnerability": {"id": "CVE-1", "severity": "Low"},
+        "artifact": {"name": "n", "version": "1"},
+    }
+    related = {
+        "vulnerability": {"id": "CVE-1", "severity": "Low"},
+        "relatedVulnerabilities": [{"severity": "Critical"}, {"severity": "bogus"}, {}],
+        "artifact": {"name": "n", "version": "1"},
+    }
+    high = {
+        "vulnerability": {"id": "CVE-2", "severity": "High"},
+        "artifact": {"name": "m", "version": "1"},
+    }
+    lower_duplicate = {
+        "vulnerability": {"id": "CVE-2", "severity": "Low"},
+        "artifact": {"name": "m", "version": "1"},
+    }
+    document = {
+        "matches": [low, related, high, lower_duplicate],
+        "descriptor": {"name": "grype", "version": "1"},
+    }
+    data = grype.parse_grype(write("g.json", json.dumps(document))).data
+    assert data is not None
+    assert [(item.vulnerability_id, item.severity) for item in data.vulnerabilities] == [
+        ("CVE-1", "critical"),
+        ("CVE-2", "high"),
+    ]
+
+
+def test_grype_fixed_versions_are_bounded(
+    write: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(grype, "MAX_SUBENTRIES", 1)
+    match = {
+        "vulnerability": {"id": "x", "fix": {"versions": ["1", "2"]}},
+        "artifact": {"name": "n", "version": "1"},
+    }
+    document = {"matches": [match], "descriptor": {"name": "grype", "version": "1"}}
+    assert rejected(grype.parse_grype, write, document)
+
+
+def spdx_document(**changes: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "spdxVersion": "SPDX-2.3",
+        "SPDXID": "SPDXRef-DOCUMENT",
+        "documentNamespace": "https://example.invalid/x",
+        "packages": [{"SPDXID": "SPDXRef-1", "name": "a"}],
+    }
+    return {**base, **changes}
+
+
+def cyclonedx_document(**changes: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "components": [{"type": "library", "name": "a"}],
+    }
+    return {**base, **changes}
+
+
+BAD_SBOM_SHAPES: list[Any] = [
+    spdx_document(spdxVersion="SPDX-2.99-junk"),
+    spdx_document(spdxVersion="SPDX-2.1"),
+    spdx_document(SPDXID="SPDXRef-OTHER"),
+    spdx_document(documentNamespace=None),
+    spdx_document(packages=[{"name": "a"}]),
+    cyclonedx_document(specVersion="1.999"),
+    cyclonedx_document(specVersion="1.3"),
+    cyclonedx_document(components=[{"name": "a"}]),
+]
+
+
+@pytest.mark.parametrize("document", BAD_SBOM_SHAPES)
+def test_sbom_shape_checks_are_strict(write: Callable[..., Path], document: Any) -> None:
+    assert rejected(sbom.parse_sbom, write, document)
+
+
+@pytest.mark.parametrize("version", ["1.4", "1.5", "1.6"])
+def test_cyclonedx_allowed_versions(write: Callable[..., Path], version: str) -> None:
+    document = cyclonedx_document(specVersion=version)
+    assert sbom.parse_sbom(write("s.json", json.dumps(document))).data is not None
+
+
+def test_packer_marks_builds_of_the_last_run(write: Callable[..., Path]) -> None:
+    base = {"builder_type": "b", "artifact_id": "a"}
+    document = {
+        "builds": [
+            {**base, "name": "old", "packer_run_uuid": "u1"},
+            {**base, "name": "new", "packer_run_uuid": "u2"},
+            {**base, "name": "none"},
+        ],
+        "last_run_uuid": "u2",
+    }
+    data = packer.parse_packer(write("p.json", json.dumps(document))).data
+    assert data is not None
+    assert {build.name: build.in_last_run for build in data.builds} == {
+        "new": True,
+        "old": False,
+        "none": False,
+    }
+
+
+@pytest.mark.parametrize("value", ["yesterday", -1, 1.5, True, 10**12])
+def test_packer_rejects_an_invalid_build_time(write: Callable[..., Path], value: Any) -> None:
+    build = {"name": "n", "builder_type": "b", "artifact_id": "a", "build_time": value}
+    assert rejected(packer.parse_packer, write, {"builds": [build]})
+
+
+@pytest.mark.parametrize("field", ["files", "custom_data"])
+def test_packer_limits_nested_entries(
+    write: Callable[..., Path], monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    monkeypatch.setattr(packer, "MAX_SUBENTRIES", 1)
+    value: Any = [{"name": "a"}, {"name": "b"}] if field == "files" else {"a": "1", "b": "2"}
+    build = {"name": "n", "builder_type": "b", "artifact_id": "a", field: value}
+    assert rejected(packer.parse_packer, write, {"builds": [build]})
+
+
+@pytest.mark.parametrize(
+    ("module", "parse", "document"),
+    [
+        (
+            packer,
+            packer.parse_packer,
+            {"builds": [{"name": "n", "builder_type": "b", "artifact_id": "a"}] * 2},
+        ),
+        (
+            codebuild,
+            codebuild.parse_codebuild,
+            {"builds": [{"id": "a", "buildStatus": "FAILED"}] * 2},
+        ),
+        (
+            molecule,
+            molecule.parse_molecule,
+            {
+                "format": "freesecdev-molecule-summary",
+                "version": 1,
+                "scenarios": [{"name": "n", "platform": "p", "result": "passed"}] * 2,
+            },
+        ),
+    ],
+)
+def test_entry_counts_are_bounded(
+    write: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+    module: Any,
+    parse: Callable[..., Any],
+    document: Any,
+) -> None:
+    monkeypatch.setattr(module, "MAX_ENTRIES", 1)
+    assert rejected(parse, write, document)
+
+
+def test_json_parsers_reject_non_finite_numbers(write: Callable[..., Path]) -> None:
+    text = '{"summary": {"passed": 1, "total": 1}, "exitcode": 0, "duration": 1e999}'
+    assert rejected(pytest_json.parse_pytest_json, write, text)

@@ -18,11 +18,13 @@ from typing import Final
 
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
+    MAX_ENTRIES,
     InvalidInputError,
     ParseResult,
     as_list,
     as_object,
     as_text,
+    bounded,
     load_json,
     require,
     run_parser,
@@ -77,9 +79,10 @@ def _build(data: bytes) -> MoleculeData:
     ):
         message = f"not a {FORMAT_NAME} version {FORMAT_VERSION} document"
         raise InvalidInputError(message)
-    scenarios = [
-        _scenario(raw) for raw in as_list(require(document, "scenarios", "document"), "scenarios")
-    ]
+    listed = bounded(
+        as_list(require(document, "scenarios", "document"), "scenarios"), MAX_ENTRIES, "scenarios"
+    )
+    scenarios = [_scenario(raw) for raw in listed]
     if not scenarios:
         message = "the summary lists no scenarios"
         raise InvalidInputError(message)

@@ -4,6 +4,11 @@ The XCCDF mapping reuses the hardened controller-side parser of the findings mod
 (``openscap.parse_results``), so result values go through ``map_xccdf_result`` and
 any unknown value becomes ``error``. ARF is bounded and read with defusedxml first;
 its single embedded ``TestResult`` is then handed to the same parser.
+
+``oscap`` lists every rule of the benchmark and marks the ones the profile did not
+select as ``notselected``. Those results never enter the compliance maths (ADR 0013);
+they are only counted. The host name in the file (XCCDF ``target`` or fqdn fact, ARF
+asset) is self-asserted and is only used to group files of the same host.
 """
 
 from pathlib import Path
@@ -12,6 +17,7 @@ from typing import Final
 from defusedxml.ElementTree import fromstring, tostring
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    model,
     openscap,
 )
 from tools.reporting.common import (
@@ -23,21 +29,53 @@ from tools.reporting.common import (
     run_parser,
 )
 from tools.reporting.compliance import COMPLETED, ComplianceData, summarize, tally_findings
-from tools.reporting.xmlsafe import parse_xml
+from tools.reporting.xmlsafe import XmlNode, parse_xml
 
 ARF_ROOT_TAG: Final[str] = (
     "{http://scap.nist.gov/schema/asset-reporting-format/1.1}asset-report-collection"
 )
 TEST_RESULT_TAG: Final[str] = "{http://checklists.nist.gov/xccdf/1.2}TestResult"
+FQDN_FACT: Final[str] = "urn:xccdf:fact:asset:identifier:fqdn"
+MAX_HOST_LENGTH: Final[int] = 255
 
 
-def _convert(document: str, kind: str) -> ComplianceData:
+def _name(text: str) -> str | None:
+    return clean_text(text.strip(), MAX_HOST_LENGTH).strip().lower() or None
+
+
+def _host_names(tree: XmlNode) -> list[str]:
+    nodes = tree.descendants()
+    facts = [n.text for n in nodes if n.local == "fact" and n.attributes.get("name") == FQDN_FACT]
+    targets = [n.text for n in nodes if n.local == "target"]
+    names = (_name(text) for text in [*facts, *targets])
+    return [name for name in names if name is not None]
+
+
+def _first(names: list[str]) -> str | None:
+    return names[0] if names else None
+
+
+def _asset_names(tree: XmlNode) -> set[str]:
+    names: set[str] = set()
+    for device in (n for n in tree.descendants() if n.local == "computing-device"):
+        for child in device.children:
+            name = _name(child.text)
+            if child.local in {"fqdn", "hostname"} and name is not None:
+                names.add(name)
+    return names
+
+
+def _convert(document: str, kind: str, reported_host: str | None) -> ComplianceData:
     try:
         parsed = openscap.parse_results(document)
     except openscap.XccdfParseError as error:
         message = f"XCCDF results rejected: {clean_text(str(error), 200)}"
         raise InvalidInputError(message) from None
-    summary = summarize(tally_findings(parsed.findings), COMPLETED, 1, 0)
+    selected = tuple(
+        finding for finding in parsed.findings if model.ResultFlag.NOTSELECTED not in finding.flags
+    )
+    not_selected = len(parsed.findings) - len(selected)
+    summary = summarize(tally_findings(selected), COMPLETED, 1, 0, not_selected)
     return ComplianceData(
         kind=kind,
         scan_status=COMPLETED,
@@ -48,19 +86,21 @@ def _convert(document: str, kind: str) -> ComplianceData:
         started_at=parsed.started_at,
         finished_at=parsed.finished_at,
         host=None,
+        reported_host=reported_host,
         content_version=parsed.benchmark_version,
-        findings=parsed.findings,
+        findings=selected,
+        not_selected=not_selected,
         scan_run=None,
         summary=summary,
     )
 
 
 def _build_xccdf(data: bytes) -> ComplianceData:
-    return _convert(decode_text(data), "xccdf")
+    return _convert(decode_text(data), "xccdf", _first(_host_names(parse_xml(data))))
 
 
 def _build_arf(data: bytes) -> ComplianceData:
-    parse_xml(data)
+    tree = parse_xml(data)
     root = fromstring(data, forbid_dtd=True)
     if root.tag != ARF_ROOT_TAG:
         message = "the root element is not an ARF 1.1 asset-report-collection"
@@ -69,7 +109,12 @@ def _build_arf(data: bytes) -> ComplianceData:
     if len(results) != 1:
         message = f"expected exactly one XCCDF TestResult in the ARF, found {len(results)}"
         raise InvalidInputError(message)
-    return _convert(tostring(results[0], encoding="unicode"), "arf")
+    names = _host_names(tree)
+    assets = _asset_names(tree)
+    if assets and any(name not in assets for name in names):
+        message = "the ARF asset names a different host than the XCCDF TestResult target"
+        raise InvalidInputError(message)
+    return _convert(tostring(results[0], encoding="unicode"), "arf", _first(names))
 
 
 def parse_xccdf(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[ComplianceData]:

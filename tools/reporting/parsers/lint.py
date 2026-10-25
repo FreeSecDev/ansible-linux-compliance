@@ -18,12 +18,14 @@ from tools.reporting.common import (
     load_json,
     maybe_count,
     maybe_text,
+    optional_list,
     require,
     run_parser,
     severity_counts,
 )
 
 SARIF_VERSION: Final[str] = "2.1.0"
+EXPECTED_TOOL: Final[str] = "ansible-lint"
 SARIF_LEVELS: Final[dict[str, str]] = {
     "error": "high",
     "warning": "medium",
@@ -73,6 +75,18 @@ def _sarif_issue(raw: object) -> LintIssue:
     )
 
 
+def _check_invocations(run: dict[str, object]) -> None:
+    for invocation in optional_list(run, "invocations", "run"):
+        item = as_object(invocation, "invocation")
+        if item.get("executionSuccessful") is False:
+            message = "the SARIF invocation reports that the tool did not run successfully"
+            raise InvalidInputError(message)
+        for note in optional_list(item, "toolExecutionNotifications", "invocation"):
+            if dig(note, "level") == "error":
+                message = "the SARIF invocation reports a tool execution error"
+                raise InvalidInputError(message)
+
+
 def _sarif_issues(document: dict[str, object]) -> list[LintIssue]:
     if document.get("version") != SARIF_VERSION:
         message = f"unsupported SARIF version, expected {SARIF_VERSION}"
@@ -83,7 +97,11 @@ def _sarif_issues(document: dict[str, object]) -> list[LintIssue]:
         raise InvalidInputError(message)
     issues: list[LintIssue] = []
     for run in runs:
-        as_text(dig(run, "tool", "driver", "name"), "tool.driver.name")
+        driver = as_text(dig(run, "tool", "driver", "name"), "tool.driver.name")
+        if driver != EXPECTED_TOOL:
+            message = f"the SARIF run was produced by a different tool than {EXPECTED_TOOL}"
+            raise InvalidInputError(message)
+        _check_invocations(as_object(run, "run"))
         issues.extend(_sarif_issue(raw) for raw in as_list(dig(run, "results"), "results"))
     return issues
 

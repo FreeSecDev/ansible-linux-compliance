@@ -6,13 +6,18 @@ Counting rules:
   ``error``, ``notapplicable`` and ``disabled`` never count as pass.
 * The compliance percentage is ``pass`` divided by every evaluated outcome, which is
   all outcomes except ``notapplicable`` and ``disabled``. ``waived``, ``notchecked``
-  and ``error`` stay in the denominator, so they lower the percentage.
+  and ``error`` stay in the denominator, so they lower the percentage. It is rounded
+  down to one decimal, so 100.0 appears only when everything evaluated passed.
+* ``notselected`` rule results of XCCDF and ARF files never enter the maths; they are
+  reported as a separate ``not_selected`` count.
 * A run that did not complete is never summarised as compliant. The run status comes
   first and the percentage is withheld.
+* A figure covers one benchmark, one content version and, unless it is an aggregate,
+  one host. Figures of different benchmarks or versions are never pooled.
 """
 
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Final, NamedTuple
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
@@ -47,7 +52,7 @@ SEVERITY_RANK: Final[tuple[model.Severity, ...]] = (
     model.Severity.MEDIUM,
     model.Severity.HIGH,
 )
-_PERCENT_STEP: Final[Decimal] = Decimal("0.01")
+_PERCENT_STEP: Final[Decimal] = Decimal("0.1")
 _HUNDRED: Final[Decimal] = Decimal(100)
 
 
@@ -68,10 +73,11 @@ class Summary:
             ``not_completed``. It is shown before any count.
         assessment: ``run_not_completed``, ``nothing_evaluated``,
             ``all_evaluated_passed`` or ``findings_open``. Never a compliance claim.
-        compliance_percent: ``pass`` divided by ``evaluated``, rounded half up to two
-            decimals, or ``None`` when the run did not complete or nothing was evaluated.
+        compliance_percent: ``pass`` divided by ``evaluated``, rounded down to one
+            decimal, or ``None`` when the run did not complete or nothing was evaluated.
         evaluated: The denominator: all outcomes except ``notapplicable`` and ``disabled``.
         counts: Number of rules per outcome, every outcome present.
+        not_selected: Rule results the profile did not select. Informational only.
         expired_waivers: Rules whose waiver expired; they count as their evaluated outcome.
         open_by_severity: ``fail``, ``error`` and ``notchecked`` rules per severity.
         runs_total: Number of scan runs summarised.
@@ -83,6 +89,7 @@ class Summary:
     compliance_percent: float | None
     evaluated: int
     counts: dict[str, int]
+    not_selected: int
     expired_waivers: int
     open_by_severity: dict[str, int]
     runs_total: int
@@ -90,11 +97,11 @@ class Summary:
 
 
 def percent(passed: int, evaluated: int) -> float | None:
-    """Return ``passed`` as a percentage of ``evaluated`` rounded half up, or ``None``."""
+    """Return ``passed`` as a percentage of ``evaluated`` rounded down to one decimal."""
     if evaluated == 0:
         return None
     ratio = Decimal(passed) * _HUNDRED / Decimal(evaluated)
-    return float(ratio.quantize(_PERCENT_STEP, rounding=ROUND_HALF_UP))
+    return float(ratio.quantize(_PERCENT_STEP, rounding=ROUND_DOWN))
 
 
 def _assessment(run_status: str, evaluated: int, passed: int) -> str:
@@ -108,7 +115,11 @@ def _assessment(run_status: str, evaluated: int, passed: int) -> str:
 
 
 def summarize(
-    tallies: list[Tally], run_status: str, runs_total: int, runs_not_completed: int
+    tallies: list[Tally],
+    run_status: str,
+    runs_total: int,
+    runs_not_completed: int,
+    not_selected: int = 0,
 ) -> Summary:
     """Apply the counting rules to ``tallies``."""
     counts = {outcome.value: 0 for outcome in model.Outcome}
@@ -130,6 +141,7 @@ def summarize(
         compliance_percent=percent(passed, evaluated) if completed else None,
         evaluated=evaluated,
         counts=counts,
+        not_selected=not_selected,
         expired_waivers=sum(1 for tally in tallies if tally.expired_waiver),
         open_by_severity=open_by_severity,
         runs_total=runs_total,
@@ -154,7 +166,8 @@ class ComplianceData:
     """One compliance input: a scan run or XCCDF results, with its own summary.
 
     For ``scan_run`` inputs the validated :class:`model.ScanRun` is embedded as is and
-    ``findings`` is serialized empty so that no finding appears twice.
+    ``findings`` is serialized empty so that no finding appears twice. XCCDF and ARF
+    files may name a host (``reported_host``); that name is self-asserted by the file.
     """
 
     kind: str
@@ -166,8 +179,10 @@ class ComplianceData:
     started_at: str
     finished_at: str
     host: model.HostIdentity | None
+    reported_host: str | None
     content_version: str
     findings: tuple[model.Finding, ...]
+    not_selected: int
     scan_run: model.ScanRun | None
     summary: Summary
 
@@ -183,7 +198,9 @@ class ComplianceData:
             "findings": [] if embedded else [finding.to_dict() for finding in self.findings],
             "host": None if self.host is None else self.host.to_dict(),
             "kind": self.kind,
+            "not_selected": self.not_selected,
             "profile_id": self.profile_id,
+            "reported_host": self.reported_host,
             "scan_run": None if self.scan_run is None else self.scan_run.to_dict(),
             "scan_status": self.scan_status,
             "started_at": self.started_at,
@@ -193,11 +210,13 @@ class ComplianceData:
 
 @dataclass(frozen=True)
 class RuleSource:
-    """Which scan contributed an evaluation of a rule."""
+    """Which scan contributed an evaluation of a rule, and what it decided."""
 
     artifact: str
     benchmark_id: str
     profile_id: str
+    outcome: model.Outcome
+    expired_waiver: bool
 
 
 @dataclass(frozen=True)
@@ -205,7 +224,7 @@ class RuleRollup:
     """One rule on one host and content version, however many scans evaluated it.
 
     The outcome is the worst among the scans, so a pass in one scan never hides a
-    failure in another. All originating benchmarks and profiles are kept.
+    failure in another. Every originating scan is listed with its own outcome.
     """
 
     rule_id: str
@@ -222,8 +241,20 @@ class _Evaluation(NamedTuple):
     source: RuleSource
 
 
-def _host_key(artifact: str, data: ComplianceData) -> str:
-    return artifact if data.host is None else data.host.hostname
+type Entry = tuple[str, ComplianceData]
+
+
+def host_key(artifact: str, data: ComplianceData) -> str:
+    """Return the identity used to group inputs by host.
+
+    A ScanRun uses its host name, plus the machine ID when there is one. XCCDF and ARF
+    use the self-asserted name from the file. An input that names no host is its own
+    host, keyed by its path, so it is never merged with another.
+    """
+    if data.host is not None:
+        machine = data.host.machine_id
+        return data.host.hostname if machine is None else f"{data.host.hostname}|{machine}"
+    return artifact if data.reported_host is None else data.reported_host
 
 
 def worse(first: model.Outcome, second: model.Outcome) -> model.Outcome:
@@ -259,25 +290,31 @@ def _collapse(
         outcome=outcome,
         severity=severity,
         expired_waiver=any(
-            evaluation.finding.exception.state is model.ExceptionState.EXPIRED
+            evaluation.source.expired_waiver
             for evaluation in evaluations
+            if evaluation.finding.outcome is outcome
         ),
         sources=tuple(sources),
     )
 
 
-def rollup(entries: list[tuple[str, ComplianceData]]) -> list[RuleRollup]:
+def rollup(entries: list[Entry]) -> list[RuleRollup]:
     """Deduplicate rules by rule ID across scans of the same host and content version.
 
-    ``entries`` pairs each input's artifact path with its data. Inputs without a host
-    identity (XCCDF and ARF results) are keyed by their artifact path, so two such
-    files are never merged into one host. Different content versions stay separate.
+    ``entries`` pairs each input's artifact path with its data. Different hosts and
+    different content versions stay separate, and so does any input without a host name.
     """
     groups: dict[tuple[str, str, str], list[_Evaluation]] = {}
     for artifact, data in entries:
-        source = RuleSource(artifact, data.benchmark_id, data.profile_id)
-        host = _host_key(artifact, data)
+        host = host_key(artifact, data)
         for finding in data.findings:
+            source = RuleSource(
+                artifact,
+                data.benchmark_id,
+                data.profile_id,
+                finding.outcome,
+                finding.exception.state is model.ExceptionState.EXPIRED,
+            )
             key = (host, data.content_version, finding.rule_id)
             groups.setdefault(key, []).append(_Evaluation(finding, source))
     return [
@@ -286,13 +323,77 @@ def rollup(entries: list[tuple[str, ComplianceData]]) -> list[RuleRollup]:
     ]
 
 
-def summarize_rollup(rules: list[RuleRollup], run_statuses: list[str]) -> Summary:
-    """Summarise deduplicated rules for a set of runs.
+def _run_status(statuses: list[str]) -> str:
+    unfinished = [status for status in statuses if status != COMPLETED]
+    if not unfinished:
+        return COMPLETED
+    return unfinished[0] if len(statuses) == 1 else NOT_COMPLETED
 
-    The run status is ``completed`` only when every run completed; otherwise it is
-    ``not_completed`` and no percentage is produced.
+
+def figure(entries: list[Entry]) -> Summary:
+    """Summarise deduplicated rules of ``entries``, which must share benchmark and version.
+
+    The run status is ``completed`` only when every run completed; for several runs
+    the status is ``not_completed`` as soon as one did not, and no percentage appears.
     """
-    unfinished = sum(1 for status in run_statuses if status != COMPLETED)
+    rules = rollup(entries)
+    statuses = [data.scan_status for _, data in entries]
     tallies = [Tally(rule.outcome, rule.severity, rule.expired_waiver) for rule in rules]
-    status = COMPLETED if unfinished == 0 else NOT_COMPLETED
-    return summarize(tallies, status, len(run_statuses), unfinished)
+    unfinished = sum(1 for status in statuses if status != COMPLETED)
+    not_selected = sum(data.not_selected for _, data in entries)
+    return summarize(tallies, _run_status(statuses), len(statuses), unfinished, not_selected)
+
+
+@dataclass(frozen=True)
+class GroupFigure:
+    """The figure of one benchmark and content version on one host."""
+
+    benchmark_id: str
+    content_version: str
+    host: str
+    summary: Summary
+
+
+@dataclass(frozen=True)
+class AggregateFigure:
+    """The pooled figure of one benchmark and content version over several hosts."""
+
+    benchmark_id: str
+    content_version: str
+    host_count: int
+    scope: str
+    summary: Summary
+
+
+def group_figures(entries: list[Entry]) -> list[GroupFigure]:
+    """Return one figure per (benchmark, content version, host)."""
+    groups: dict[tuple[str, str, str], list[Entry]] = {}
+    for entry in entries:
+        key = (entry[1].benchmark_id, entry[1].content_version, host_key(*entry))
+        groups.setdefault(key, []).append(entry)
+    return [
+        GroupFigure(benchmark, version, host, figure(members))
+        for (benchmark, version, host), members in sorted(groups.items())
+    ]
+
+
+def pairs(entries: list[Entry]) -> dict[tuple[str, str], list[Entry]]:
+    """Group entries by (benchmark, content version)."""
+    result: dict[tuple[str, str], list[Entry]] = {}
+    for entry in entries:
+        result.setdefault((entry[1].benchmark_id, entry[1].content_version), []).append(entry)
+    return result
+
+
+def aggregate_figures(entries: list[Entry], scope: str) -> list[AggregateFigure]:
+    """Return one pooled figure per (benchmark, content version), labelled with ``scope``."""
+    return [
+        AggregateFigure(
+            benchmark,
+            version,
+            len({host_key(*entry) for entry in members}),
+            scope,
+            figure(members),
+        )
+        for (benchmark, version), members in sorted(pairs(entries).items())
+    ]

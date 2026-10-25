@@ -24,22 +24,29 @@ The reporting package (`tools/reporting/`, controller side, Python 3.12 or newer
 validates against `tools/reporting/schema/report-v1.json` (JSON Schema 2020-12). `schema_version` is `"1.0"`.
 The document has `metadata`, one `scope`, nine `sections`, an `overview` and `raw_artifacts`.
 
-Every section has a `status` of `available`, `unavailable` or `error`:
+Every item and section has a `status`:
 
 - `unavailable` means there was no input, or an input file does not exist.
 - `error` means an input exists but is empty, oversized, not a regular file, malformed, truncated, unsafe or
-  unexpected (unknown root, unknown format version, inconsistent counts).
-- `available` means every input of the section parsed.
+  unexpected (unknown root, unknown format version, inconsistent counts), or the tool that wrote it reports that it
+  failed (pytest exit codes 2 to 5, SARIF `executionSuccessful: false`).
+- `available` means the input parsed.
+- A section is `available` when every input is, `error` when any input is `error`, `partial` when some inputs are
+  available and the others are missing, and `unavailable` when it has no input or all inputs are missing.
 
-A section takes the worst state of its inputs (`error`, then `unavailable`, then `available`). A section that is not
-`available` has a `reason`, no `summary`, and its good items stay visible beside the bad ones. Nothing defaults to a
-pass; the schema enforces the coupling between status, reason, data and summary.
+A section that is not `available` has a `reason`, a list of `gaps` and no `summary`, and its good items stay visible
+beside the bad ones. The CLI exits non-zero when a supplied input is missing or invalid; a section without any input
+is `unavailable`, which is not an error and is never shown as passed. Nothing defaults to a pass; the schema enforces
+the coupling between status, items, gaps, reason, data, summary and overview, and bounds every array.
 
 ### The scope is part of the document
 
 `scope` is one of `single_host`, `multi_host`, `benchmark` or `fleet` and applies to every statistic in the
-document. A document has exactly one scope, so no figure combines scopes or benchmark versions, and no percentage
-appears without its denominator.
+document. It is validated against the data: `single_host` with more than one host, or `benchmark` with more than one
+benchmark or content version, is rejected. A figure is computed per (benchmark, content version, host) (`groups`). A
+pooled figure (`aggregates`, labelled with the scope and `host_count`) exists only per benchmark and content version,
+and the section-level `summary` exists only when there is exactly one benchmark and content version. No figure
+combines benchmarks or versions, and no percentage appears without its denominator.
 
 ### Summary semantics
 
@@ -48,9 +55,9 @@ These rules come from the FREES-75 acceptance comment and are implemented in `to
 1. Only `pass` counts as pass. `notchecked`, `error`, `notapplicable`, `disabled` and `waived` never do.
 2. The denominator (`evaluated`) is every outcome except `notapplicable` and `disabled`. Those two are counted and
    shown separately.
-3. `compliance_percent` is `pass` divided by `evaluated`, rounded half up to two decimals. `notchecked`, `error`
-   and `waived` stay in the denominator, so they lower the percentage, and every outcome count is present in the
-   summary.
+3. `compliance_percent` is `pass` divided by `evaluated`, rounded down to one decimal, so 100.0 appears only when
+   everything evaluated passed (99999 of 100000 is 99.9). `notchecked`, `error` and `waived` stay in the denominator,
+   so they lower the percentage, and every outcome count is present in the summary.
 4. A scan run that did not complete (`failed` or `timed_out`) is never summarised as compliant. The run status is
    reported first (`run_status`), `compliance_percent` is `null` and `assessment` is `run_not_completed`. For several
    runs the status is `not_completed` as soon as one run did not complete.
@@ -59,14 +66,21 @@ These rules come from the FREES-75 acceptance comment and are implemented in `to
 6. A waived finding is its own count. An expired exception does not change the outcome (ADR 0013 already reports it
    as `fail`); `expired_waivers` counts those findings so that the expiry stays visible.
 7. `open_by_severity` counts `fail`, `error` and `notchecked` rules per severity.
+8. `notselected` results in XCCDF and ARF files (which list every benchmark rule) never enter the maths; they are
+   reported as `not_selected`. For a ScanRun JSON, whose expected rules are known, the ADR 0013 backend semantics
+   apply and a `notselected` result for an expected rule is `notchecked`.
+9. The schema ties status, percentage and assessment together: a run that is not `completed` has no percentage.
 
 ### Deduplication across frameworks
 
 Rules are deduplicated by full rule ID within the same host and content version (ADR 0013: the rule is counted
 once however many frameworks reference it). The worst outcome wins (`error`, `fail`, `notchecked`, `waived`,
 `pass`, `notapplicable`, `disabled`), the highest severity is kept and every originating artifact, benchmark and
-profile is listed in `sources`. Different content versions and different hosts stay separate. XCCDF and ARF files
-carry no host identity, so each file is its own host key and two files are never merged.
+profile is listed in `sources` with the outcome each source reported. Different content versions and different hosts
+stay separate. A ScanRun host is its host name plus machine ID; XCCDF and ARF files name their host (`target`, fqdn
+fact, ARF asset), which is self-asserted. Files are grouped only when the names are equal, a file without a name is its
+own host, and an ARF asset that disagrees with its TestResult target is an error. Input files with the same SHA-256 count
+once.
 
 ### Determinism and input-supplied times
 
@@ -79,7 +93,9 @@ byte-identical output. Timestamps (`started_at`, `finished_at`, `generated_at`) 
 Report files are attacker-controlled. Every parser bounds the file size (64 MiB by default), reads regular files only
 (no symlinks), rejects DOCTYPE, entity and external-reference constructs in XML through defusedxml, bounds XML depth
 and element count while parsing, rejects duplicate JSON keys and non-finite numbers, bounds the depth of JSON,
-strips control and formatting characters from text and caps free text and detail lists. Unknown versions of a format
+rejects numbers that overflow to infinity, opens files component by component with `O_NOFOLLOW` and `O_NONBLOCK`
+(no symlinks in the path, no FIFO, no check-then-open gap), strips control and formatting characters from text and
+caps free text and detail lists. Unknown versions of a format
 are `error`. The original path is kept in the artifact reference together with the SHA-256 of the exact bytes that
 were parsed.
 
@@ -104,10 +120,11 @@ overstate compliance, and reproducible output that can be diffed and cached.
 
 ## Trade-offs
 
-- A section with one missing file among several is `unavailable` as a whole, so consumers see less aggregate data
-  than they could; the per-item data remains.
-- XCCDF and ARF do not identify a host, so multi-host reports from them list each file separately; ScanRun JSON
-  carries the host and deduplicates by it.
+- A section with one missing file among several is `partial` and has no summary, so consumers see less aggregate
+  data than they could; the per-item data and the gaps remain.
+- The host in an XCCDF or ARF file is self-asserted, so grouping by it trusts the file; two files that claim the
+  same name are one host.
+- A `single_host` or `benchmark` report over data from several hosts or versions is refused rather than labelled.
 - Detail lists are capped at 1000 items with a `truncated` flag; totals are always complete.
 
 ## Security implications

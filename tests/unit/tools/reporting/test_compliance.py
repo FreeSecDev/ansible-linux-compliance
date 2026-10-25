@@ -30,23 +30,32 @@ def summary_of(*outcomes: model.Outcome, status: str = "completed") -> complianc
     ("passed", "evaluated", "expected"),
     [
         (0, 0, None),
-        (1, 3, 33.33),
-        (2, 3, 66.67),
+        (1, 3, 33.3),
+        (2, 3, 66.6),
         (1, 8, 12.5),
         (1, 200, 0.5),
         (1, 1, 100.0),
         (0, 5, 0.0),
     ],
 )
-def test_percent_rounds_half_up_and_withholds_empty_denominators(
+def test_percent_rounds_down_and_withholds_empty_denominators(
     passed: int, evaluated: int, expected: float | None
 ) -> None:
     assert compliance.percent(passed, evaluated) == expected
 
 
-def test_half_up_rounding_is_exact() -> None:
-    assert compliance.percent(5, 8000) == 0.06
-    assert compliance.percent(1, 16) == 6.25
+def test_rounding_is_downwards_so_100_means_everything_passed() -> None:
+    assert compliance.percent(99999, 100000) == 99.9
+    assert compliance.percent(999, 1000) == 99.9
+    assert compliance.percent(5, 8000) == 0.0
+    assert compliance.percent(1, 16) == 6.2
+    assert compliance.percent(100000, 100000) == 100.0
+
+
+def test_a_single_open_finding_never_reaches_100_percent() -> None:
+    summary = summary_of(*([OC.PASS] * 99999 + [OC.FAIL]))
+    assert summary.compliance_percent == 99.9
+    assert summary.assessment == ASSESSMENT_FINDINGS_OPEN
 
 
 def test_mixed_outcomes() -> None:
@@ -54,7 +63,7 @@ def test_mixed_outcomes() -> None:
         OC.PASS, OC.PASS, OC.FAIL, OC.NOTCHECKED, OC.ERROR, OC.WAIVED, OC.NOTAPPLICABLE, OC.DISABLED
     )
     assert summary.evaluated == 6
-    assert summary.compliance_percent == 33.33
+    assert summary.compliance_percent == 33.3
     assert summary.assessment == ASSESSMENT_FINDINGS_OPEN
     assert summary.counts == {
         "pass": 2,
@@ -130,7 +139,7 @@ def test_waived_and_expired_waivers() -> None:
     assert summary.counts["fail"] == 1
     assert summary.counts["pass"] == 1
     assert summary.expired_waivers == 1
-    assert summary.compliance_percent == 33.33
+    assert summary.compliance_percent == 33.3
     assert summary.open_by_severity["high"] == 1
 
 
@@ -164,7 +173,9 @@ def test_worse_and_higher() -> None:
     assert compliance.higher(SV.UNKNOWN, SV.INFO) is SV.INFO
 
 
-def data_for(run: model.ScanRun, *, scan_run: bool = True) -> compliance.ComplianceData:
+def data_for(
+    run: model.ScanRun, *, scan_run: bool = True, reported_host: str | None = None
+) -> compliance.ComplianceData:
     return compliance.ComplianceData(
         kind="scan_run" if scan_run else "xccdf",
         scan_status=run.status.value,
@@ -175,8 +186,10 @@ def data_for(run: model.ScanRun, *, scan_run: bool = True) -> compliance.Complia
         started_at=run.started_at,
         finished_at=run.finished_at,
         host=run.host if scan_run else None,
+        reported_host=reported_host,
         content_version=run.content.content_version,
         findings=run.findings,
+        not_selected=0,
         scan_run=run if scan_run else None,
         summary=compliance.summarize(compliance.tally_findings(run.findings), "completed", 1, 0),
     )
@@ -240,18 +253,100 @@ def test_rollup_reports_any_expired_waiver_in_the_group(kit: Any) -> None:
     assert rules[0].outcome is OC.FAIL
 
 
-def test_summarize_rollup_status(kit: Any) -> None:
+def test_figure_status(kit: Any) -> None:
     run = kit.scan_run((kit.finding("a"), kit.finding("b", OC.FAIL)))
-    rules = compliance.rollup([("1.json", data_for(run))])
-    completed = compliance.summarize_rollup(rules, ["completed", "completed"])
+    entry = ("1.json", data_for(run))
+    completed = compliance.figure([entry, ("2.json", data_for(run))])
     assert (completed.run_status, completed.compliance_percent) == ("completed", 50.0)
-    mixed = compliance.summarize_rollup(rules, ["completed", "failed"])
+    failed = kit.scan_run((), status=model.ScanStatus.FAILED)
+    mixed = compliance.figure([entry, ("2.json", data_for(failed))])
     assert (mixed.run_status, mixed.compliance_percent, mixed.runs_not_completed) == (
         "not_completed",
         None,
         1,
     )
     assert mixed.assessment == ASSESSMENT_RUN_NOT_COMPLETED
+
+
+def test_a_single_failed_run_keeps_its_own_status(kit: Any) -> None:
+    timed_out = kit.scan_run((), status=model.ScanStatus.TIMED_OUT)
+    single = compliance.figure([("1.json", data_for(timed_out))])
+    assert single.run_status == "timed_out"
+    assert single.compliance_percent is None
+
+
+def test_host_key_uses_machine_id_reported_host_or_the_path(kit: Any) -> None:
+    run = kit.scan_run((kit.finding("a"),))
+    with_machine = model.HostIdentity("h.example", "rhel", "9", "x86_64", "a" * 32)
+    machine_run = kit.scan_run((kit.finding("a"),), host=with_machine)
+    assert compliance.host_key("p", data_for(run)) == "host.example"
+    assert compliance.host_key("p", data_for(machine_run)) == "h.example|" + "a" * 32
+    named = data_for(run, scan_run=False, reported_host="web01")
+    assert compliance.host_key("p", named) == "web01"
+    assert compliance.host_key("p", data_for(run, scan_run=False)) == "p"
+
+
+def test_same_hostname_with_different_machine_ids_is_not_merged(kit: Any) -> None:
+    first = kit.scan_run(
+        (kit.finding("a"),), host=model.HostIdentity("h", "rhel", "9", "x", "1" * 32)
+    )
+    second = kit.scan_run(
+        (kit.finding("a", OC.FAIL),), host=model.HostIdentity("h", "rhel", "9", "x", "2" * 32)
+    )
+    rules = compliance.rollup([("1", data_for(first)), ("2", data_for(second))])
+    assert len(rules) == 2
+
+
+def test_rollup_records_the_outcome_of_every_source(kit: Any) -> None:
+    first = kit.scan_run((kit.finding("a", OC.ERROR),), benchmark_id=kit.BENCHMARK + "_x")
+    second = kit.scan_run((kit.expired("a"),), benchmark_id=kit.BENCHMARK + "_y")
+    rule = compliance.rollup([("1.json", data_for(first)), ("2.json", data_for(second))])[0]
+    assert rule.outcome is OC.ERROR
+    assert not rule.expired_waiver
+    assert [
+        (source.artifact, source.outcome, source.expired_waiver) for source in rule.sources
+    ] == [
+        ("1.json", OC.ERROR, False),
+        ("2.json", OC.FAIL, True),
+    ]
+
+
+def test_group_figures_are_per_benchmark_version_and_host(kit: Any) -> None:
+    other = model.HostIdentity("other.example", "rhel", "9", "x86_64", None)
+    entries = [
+        ("1", data_for(kit.scan_run((kit.finding("a"),)))),
+        ("2", data_for(kit.scan_run((kit.finding("a", OC.FAIL),), host=other))),
+        ("3", data_for(kit.scan_run((kit.finding("a", OC.FAIL),), content_version="2.0"))),
+        ("4", data_for(kit.scan_run((kit.finding("a"),), benchmark_id=kit.BENCHMARK + "_z"))),
+    ]
+    groups = compliance.group_figures(entries)
+    assert len(groups) == 4
+    assert {
+        (g.content_version, g.host, g.summary.compliance_percent)
+        for g in groups
+        if g.benchmark_id == kit.BENCHMARK
+    } == {
+        ("1.0", "host.example", 100.0),
+        ("1.0", "other.example", 0.0),
+        ("2.0", "host.example", 0.0),
+    }
+
+
+def test_aggregates_never_pool_benchmarks_or_versions(kit: Any) -> None:
+    other = model.HostIdentity("other.example", "rhel", "9", "x86_64", None)
+    entries = [
+        ("1", data_for(kit.scan_run((kit.finding("a"), kit.finding("b"))))),
+        ("2", data_for(kit.scan_run((kit.finding("a", OC.FAIL), kit.finding("b")), host=other))),
+        ("3", data_for(kit.scan_run((kit.finding("a", OC.FAIL),), content_version="2.0"))),
+    ]
+    aggregates = compliance.aggregate_figures(entries, "fleet")
+    assert [
+        (a.content_version, a.host_count, a.scope, a.summary.compliance_percent) for a in aggregates
+    ] == [
+        ("1.0", 2, "fleet", 75.0),
+        ("2.0", 1, "fleet", 0.0),
+    ]
+    assert set(compliance.pairs(entries)) == {(kit.BENCHMARK, "1.0"), (kit.BENCHMARK, "2.0")}
 
 
 def test_compliance_data_serializes_scan_runs_without_duplicating_findings(kit: Any) -> None:
@@ -263,3 +358,5 @@ def test_compliance_data_serializes_scan_runs_without_duplicating_findings(kit: 
     assert flat["findings"] == [finding.to_dict() for finding in run.findings]
     assert flat["scan_run"] is None
     assert flat["host"] is None
+    assert flat["reported_host"] is None
+    assert flat["not_selected"] == 0

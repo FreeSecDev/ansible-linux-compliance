@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -75,7 +76,47 @@ def test_run_parser_uninspectable_path_is_error(write: Callable[..., Path]) -> N
     file_path = write("plain", b"abc")
     result = common.run_parser(file_path / "child", "demo", 100, build_upper)
     assert result.status is SectionStatus.ERROR
-    assert result.reason == "input file cannot be inspected"
+    assert result.reason == "input file cannot be opened without following symbolic links"
+
+
+def test_run_parser_rejects_a_symlinked_parent_directory(tmp_path: Path) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "a.txt").write_bytes(b"abc")
+    (tmp_path / "alias").symlink_to(real, target_is_directory=True)
+    assert common.run_parser(real / "a.txt", "demo", 100, build_upper).status is (
+        SectionStatus.AVAILABLE
+    )
+    assert common.run_parser(tmp_path / "alias" / "a.txt", "demo", 100, build_upper).status is (
+        SectionStatus.ERROR
+    )
+
+
+def test_run_parser_rejects_a_fifo_without_blocking(tmp_path: Path) -> None:
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    result = common.run_parser(fifo, "demo", 100, build_upper)
+    assert result.status is SectionStatus.ERROR
+    assert result.reason == "input path is not a regular file"
+
+
+def test_run_parser_reads_relative_paths(
+    write: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = write("a.txt", b"abc")
+    monkeypatch.chdir(path.parent)
+    assert common.run_parser(Path("a.txt"), "demo", 100, build_upper).data == "ABC"
+    assert (
+        common.run_parser(Path("../" + path.parent.name + "/a.txt"), "demo", 100, build_upper).data
+        == "ABC"
+    )
+
+
+@pytest.mark.parametrize("name", [".", "/"])
+def test_run_parser_rejects_paths_without_a_file_name(name: str) -> None:
+    result = common.run_parser(Path(name), "demo", 100, build_upper)
+    assert result.status is SectionStatus.ERROR
+    assert result.reason == "input path is not a regular file"
 
 
 def test_run_parser_unreadable_file_is_error(
@@ -83,10 +124,10 @@ def test_run_parser_unreadable_file_is_error(
 ) -> None:
     path = write("a.txt", b"abc")
 
-    def refuse(*_args: object, **_kwargs: object) -> None:
-        raise PermissionError
+    def refuse(*_args: object, **_kwargs: object) -> bytes:
+        raise OSError
 
-    monkeypatch.setattr(Path, "open", refuse)
+    monkeypatch.setattr(os, "read", refuse)
     result = common.run_parser(path, "demo", 100, build_upper)
     assert result.status is SectionStatus.ERROR
     assert result.reason == "input file cannot be read"
@@ -111,7 +152,16 @@ def test_clean_text_removes_controls_and_cuts() -> None:
 
 @pytest.mark.parametrize(
     "payload",
-    [b"\xff\xfe", b"{", b'{"a": 1, "a": 2}', b"NaN", b"[Infinity]", b"[" * 100000],
+    [
+        b"\xff\xfe",
+        b"{",
+        b'{"a": 1, "a": 2}',
+        b"NaN",
+        b"[Infinity]",
+        b"[1e999]",
+        b'{"a": -1e999}',
+        b"[" * 100000,
+    ],
 )
 def test_load_json_rejects_bad_documents(payload: bytes) -> None:
     with pytest.raises(InvalidInputError):
@@ -237,3 +287,21 @@ def test_dumps_is_sorted_ascii_and_newline_terminated() -> None:
     assert text == '{\n  "a": "\\u00e9",\n  "b": 1\n}\n'
     with pytest.raises(ValueError, match="Out of range"):
         common.dumps({"a": float("nan")})
+
+
+def test_bounded() -> None:
+    assert common.bounded([1, 2], 2, "x") == [1, 2]
+    with pytest.raises(InvalidInputError, match="more than 1"):
+        common.bounded([1, 2], 1, "x")
+
+
+def test_optional_containers() -> None:
+    assert common.optional_list({}, "a", "x") == []
+    assert common.optional_list({"a": None}, "a", "x") == []
+    assert common.optional_list({"a": [1]}, "a", "x") == [1]
+    assert common.optional_object({}, "a", "x") == {}
+    assert common.optional_object({"a": {"b": 1}}, "a", "x") == {"b": 1}
+    with pytest.raises(InvalidInputError):
+        common.optional_list({"a": {}}, "a", "x")
+    with pytest.raises(InvalidInputError):
+        common.optional_object({"a": []}, "a", "x")

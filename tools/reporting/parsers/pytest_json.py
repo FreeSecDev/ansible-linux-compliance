@@ -41,6 +41,13 @@ def _build(data: bytes) -> TestsData:
     if total == 0 or total != sum(counts.values()):
         message = "summary.total is zero or does not equal the sum of the outcome counts"
         raise InvalidInputError(message)
+    exitcode = as_count(require(document, "exitcode", "pytest report"), "exitcode")
+    if exitcode not in {0, 1}:
+        message = f"pytest did not complete normally (exit code {exitcode})"
+        raise InvalidInputError(message)
+    if (exitcode == 0) != (counts["failed"] + counts["error"] == 0):
+        message = "the pytest exit code contradicts the outcome counts"
+        raise InvalidInputError(message)
     failed_cases = _failed_cases(document)
     return TestsData(
         total=total,

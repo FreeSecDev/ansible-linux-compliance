@@ -100,3 +100,51 @@ def test_module_entry_point(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         runpy.run_module("tools.reporting", run_name="__main__")
     assert raised.value.code == 0
     assert output.exists()
+
+
+def test_cli_exits_one_when_a_supplied_input_is_missing(tmp_path: Path) -> None:
+    output = tmp_path / "report.json"
+    argv = [
+        "--scope",
+        "fleet",
+        "--output",
+        str(output),
+        "--scan-run",
+        str(tmp_path / "absent.json"),
+    ]
+    assert run(argv) == 1
+    document = json.loads(output.read_text(encoding="utf-8"))
+    assert document["overview"]["unavailable"][0] == "codebuild"
+    assert document["sections"]["compliance"]["gaps"][0]["status"] == "unavailable"
+
+
+def test_cli_exits_one_for_a_partial_section(kit: Any, tmp_path: Path) -> None:
+    output = tmp_path / "report.json"
+    argv = [
+        "--scope",
+        "fleet",
+        "--output",
+        str(output),
+        "--junit",
+        str(kit.REPORTING / "junit.xml"),
+        "--junit",
+        str(tmp_path / "absent.xml"),
+    ]
+    assert run(argv) == 1
+    assert json.loads(output.read_text(encoding="utf-8"))["overview"]["partial"] == ["tests"]
+
+
+def test_cli_rejects_a_scope_that_the_data_contradicts(
+    kit: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = tmp_path / "report.json"
+    paths: list[str] = []
+    for name in ("a", "b"):
+        path = tmp_path / f"{name}.xml"
+        path.write_text(kit.xccdf_text(name), encoding="utf-8")
+        paths += ["--xccdf", str(path)]
+    status = run(["--scope", "single_host", "--output", str(output), *paths])
+    assert status == 2
+    assert "2 hosts" in capsys.readouterr().err
+    assert not output.exists()
+    assert run(["--scope", "fleet", "--output", str(output), *paths]) == 0

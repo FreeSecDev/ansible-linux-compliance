@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
@@ -22,7 +22,16 @@ from tools.reporting.common import (
     dig,
     to_json,
 )
-from tools.reporting.compliance import ComplianceData, rollup, summarize_rollup
+from tools.reporting.compliance import (
+    ComplianceData,
+    Entry,
+    aggregate_figures,
+    figure,
+    group_figures,
+    host_key,
+    pairs,
+    rollup,
+)
 from tools.reporting.parsers.cobertura import CoverageData, parse_cobertura
 from tools.reporting.parsers.codebuild import CodeBuildData, parse_codebuild
 from tools.reporting.parsers.grype import VulnerabilityData, parse_grype
@@ -47,10 +56,22 @@ SECTION_NAMES: Final[tuple[str, ...]] = (
     "tests",
     "vulnerabilities",
 )
-_STATUS_BADNESS: Final[tuple[SectionStatus, ...]] = (
-    SectionStatus.ERROR,
-    SectionStatus.UNAVAILABLE,
-    SectionStatus.AVAILABLE,
+SECTION_INPUTS: Final[dict[str, tuple[str, ...]]] = {
+    "codebuild": ("codebuild",),
+    "compliance": ("xccdf", "arf", "scan_run"),
+    "coverage": ("cobertura",),
+    "lint": ("lint",),
+    "molecule": ("molecule",),
+    "packer": ("packer",),
+    "sbom": ("sbom",),
+    "tests": ("junit", "pytest_json"),
+    "vulnerabilities": ("grype",),
+}
+MAX_INPUTS: Final[int] = 1000
+MAX_RULES: Final[int] = 1_000_000
+MAX_GROUPS: Final[int] = 100_000
+FAILED_BUILD_STATUSES: Final[frozenset[str]] = frozenset(
+    {"FAILED", "FAULT", "TIMED_OUT", "STOPPED"}
 )
 _COMMIT: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{7,64}")
 _PULL_REQUEST: Final[re.Pattern[str]] = re.compile(r"[1-9][0-9]{0,8}")
@@ -144,29 +165,45 @@ def _item(result: ParseResult[object]) -> dict[str, Json]:
     }
 
 
-def _worst(statuses: Sequence[SectionStatus]) -> SectionStatus:
+def _section_status(statuses: Sequence[SectionStatus]) -> SectionStatus:
+    """Return the section state: error beats partial, partial beats unavailable."""
     if not statuses:
         return SectionStatus.UNAVAILABLE
-    return min(statuses, key=_STATUS_BADNESS.index)
+    if SectionStatus.ERROR in statuses:
+        return SectionStatus.ERROR
+    if all(status is SectionStatus.AVAILABLE for status in statuses):
+        return SectionStatus.AVAILABLE
+    if SectionStatus.AVAILABLE in statuses:
+        return SectionStatus.PARTIAL
+    return SectionStatus.UNAVAILABLE
+
+
+def _reason(results: Sequence[ParseResult[object]]) -> str | None:
+    if not results:
+        return "no input was supplied"
+    missing = sum(1 for result in results if result.status is SectionStatus.UNAVAILABLE)
+    invalid = sum(1 for result in results if result.status is SectionStatus.ERROR)
+    if not missing and not invalid:
+        return None
+    return f"{missing} of {len(results)} input(s) are missing and {invalid} are invalid"
 
 
 def _section[T](
     results: Sequence[ParseResult[T]], summarize: Callable[[list[T]], Json] | None = None
 ) -> dict[str, Json]:
-    status = _worst([result.status for result in results])
-    problems = sum(1 for result in results if result.status is not SectionStatus.AVAILABLE)
-    if not results:
-        reason: str | None = "no input was supplied"
-    elif problems:
-        reason = f"{problems} of {len(results)} input(s) are unavailable or invalid"
-    else:
-        reason = None
+    status = _section_status([result.status for result in results])
     summary: Json = None
     if status is SectionStatus.AVAILABLE and summarize is not None:
         summary = summarize([result.data for result in results if result.data is not None])
+    gaps: list[Json] = [
+        {"artifact": result.artifact.path, "reason": result.reason, "status": result.status.value}
+        for result in results
+        if result.status is not SectionStatus.AVAILABLE
+    ]
     return {
+        "gaps": gaps,
         "items": [_item(result) for result in results],
-        "reason": reason,
+        "reason": _reason(results),
         "status": status.value,
         "summary": summary,
     }
@@ -191,16 +228,64 @@ def _severity_summary(items: Sequence[LintData | VulnerabilityData]) -> Json:
     return {"by_severity": severities, "total": sum(item.total for item in items)}
 
 
-def _compliance_section(results: Sequence[ParseResult[ComplianceData]]) -> dict[str, Json]:
+def _codebuild_summary(items: list[CodeBuildData]) -> Json:
+    statuses = [build.status for item in items for build in item.builds]
+    return {
+        "failed": sum(1 for status in statuses if status in FAILED_BUILD_STATUSES),
+        "in_progress": statuses.count("IN_PROGRESS"),
+        "succeeded": statuses.count("SUCCEEDED"),
+        "total": len(statuses),
+    }
+
+
+def check_scope(scope: Scope, entries: list[Entry]) -> None:
+    """Reject a declared scope that the data contradicts.
+
+    Raises:
+        ReportError: If ``single_host`` covers several hosts or ``benchmark`` covers
+            several benchmarks or content versions.
+    """
+    hosts = {host_key(*entry) for entry in entries}
+    if scope is Scope.SINGLE_HOST and len(hosts) > 1:
+        message = f"scope single_host, but the inputs describe {len(hosts)} hosts"
+        raise ReportError(message)
+    versions = pairs(entries)
+    if scope is Scope.BENCHMARK and len(versions) > 1:
+        message = f"scope benchmark, but the inputs cover {len(versions)} benchmark versions"
+        raise ReportError(message)
+
+
+def _unique_entries(results: Sequence[ParseResult[ComplianceData]]) -> list[Entry]:
+    seen: set[str | None] = set()
+    entries: list[Entry] = []
+    for result in results:
+        if result.data is not None and result.artifact.sha256 not in seen:
+            seen.add(result.artifact.sha256)
+            entries.append((result.artifact.path, result.data))
+    return entries
+
+
+def _compliance_section(
+    results: Sequence[ParseResult[ComplianceData]], scope: Scope
+) -> dict[str, Json]:
     section = _section(results)
-    section["rules"] = []
+    entries = _unique_entries(results)
+    check_scope(scope, entries)
+    section.update({"aggregates": [], "groups": [], "rules": []})
     if section["status"] != SectionStatus.AVAILABLE.value:
         return section
-    entries = [(result.artifact.path, result.data) for result in results if result.data is not None]
     rules = rollup(entries)
-    statuses = [data.scan_status for _, data in entries]
-    section["summary"] = to_json(summarize_rollup(rules, statuses))
+    groups = group_figures(entries)
+    if len(rules) > MAX_RULES or len(groups) > MAX_GROUPS:
+        message = "the compliance data exceeds the report size limits"
+        raise ReportError(message)
+    versions = pairs(entries)
     section["rules"] = [to_json(rule) for rule in rules]
+    section["groups"] = [to_json(group) for group in groups]
+    if scope is not Scope.SINGLE_HOST:
+        section["aggregates"] = [to_json(a) for a in aggregate_figures(entries, scope.value)]
+    if len(versions) == 1:
+        section["summary"] = to_json(figure(entries))
     return section
 
 
@@ -237,12 +322,23 @@ def _metadata(metadata: RunMetadata) -> Json:
     }
 
 
+def _check_input_counts(inputs: ReportInputs) -> None:
+    for names in SECTION_INPUTS.values():
+        if sum(len(getattr(inputs, name)) for name in names) > MAX_INPUTS:
+            message = f"more than {MAX_INPUTS} inputs for one section"
+            raise ReportError(message)
+
+
 def build_report(inputs: ReportInputs) -> dict[str, Json]:
     """Parse every input and assemble the report document.
 
     The result is plain JSON data that validates against ``schema/report-v1.json``.
     Equal inputs give equal documents.
+
+    Raises:
+        ReportError: If the declared scope contradicts the data or a limit is exceeded.
     """
+    _check_input_counts(inputs)
     size = inputs.max_bytes
     compliance = (
         _parse_all(inputs.xccdf, parse_xccdf, size)
@@ -262,8 +358,8 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
     )
     molecule = _parse_all(inputs.molecule, parse_molecule, size)
     sections: dict[str, dict[str, Json]] = {
-        "codebuild": _section(codebuild),
-        "compliance": _compliance_section(compliance),
+        "codebuild": _section(codebuild, _codebuild_summary),
+        "compliance": _compliance_section(compliance, inputs.scope),
         "coverage": _section(coverage),
         "lint": _section(lint, _severity_summary),
         "molecule": _section(molecule, _molecule_summary),
@@ -300,3 +396,11 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
 def has_error(report: dict[str, Json]) -> bool:
     """Return whether any section of ``report`` is in the ``error`` state."""
     return bool(dig(report, "overview", "error"))
+
+
+def has_gap(report: dict[str, Json]) -> bool:
+    """Return whether a supplied input is missing or invalid in any section."""
+    return any(
+        bool(dig(section, "gaps"))
+        for section in cast("dict[str, Json]", report["sections"]).values()
+    )

@@ -32,8 +32,10 @@ def _build(data: bytes) -> ComplianceData:
         started_at=run.started_at,
         finished_at=run.finished_at,
         host=run.host,
+        reported_host=None,
         content_version=run.content.content_version,
         findings=run.findings,
+        not_selected=0,
         scan_run=run,
         summary=summarize(tally_findings(run.findings), status, 1, unfinished),
     )

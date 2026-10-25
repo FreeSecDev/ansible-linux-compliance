@@ -55,6 +55,20 @@ def _case(node: XmlNode) -> tuple[str, FailedCase | None]:
     return "passed", None
 
 
+def _check_suite(node: XmlNode) -> None:
+    cases = [child for child in node.children if child.local == "testcase"]
+    actual = {
+        "tests": len(cases),
+        "failures": sum(1 for c in cases if any(k.local == "failure" for k in c.children)),
+        "errors": sum(1 for c in cases if any(k.local == "error" for k in c.children)),
+    }
+    for attribute, count in actual.items():
+        stated = node.attributes.get(attribute)
+        if stated is not None and stated != str(count):
+            message = f"the testsuite {attribute} attribute does not match its test cases"
+            raise InvalidInputError(message)
+
+
 def _build(data: bytes) -> TestsData:
     root = parse_xml(data)
     if root.local not in ROOT_NAMES:
@@ -63,6 +77,8 @@ def _build(data: bytes) -> TestsData:
     totals = {"passed": 0, "failure": 0, "error": 0, "skipped": 0}
     failed_cases: list[FailedCase] = []
     for node in root.descendants():
+        if node.local == "testsuite":
+            _check_suite(node)
         if node.local != "testcase":
             continue
         kind, failed = _case(node)

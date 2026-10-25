@@ -1,8 +1,10 @@
 """Command line: parse report inputs and write the normalized JSON report.
 
-Exit status: 0 when the report was written and no section is in the ``error``
-state, 1 when it was written but at least one section is ``error``, 2 for invalid
-arguments or metadata or when the output cannot be written.
+Exit status: 0 when the report was written and every supplied input parsed, 1 when it
+was written but a supplied input is missing or invalid (a section is ``partial`` or
+``error``), 2 for invalid arguments or metadata, a scope that the data contradicts,
+or an output that cannot be written. A section without any input is ``unavailable``
+and is not an error.
 """
 
 import argparse
@@ -19,6 +21,7 @@ from tools.reporting.report import (
     Scope,
     build_report,
     has_error,
+    has_gap,
 )
 
 EXIT_OK: Final[int] = 0
@@ -81,7 +84,11 @@ def main(argv: Sequence[str]) -> int:
         max_bytes=arguments["max_bytes"],
         **{name: tuple(arguments[name]) for name in INPUT_OPTIONS},
     )
-    report = build_report(inputs)
+    try:
+        report = build_report(inputs)
+    except ReportError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return EXIT_USAGE
     output: Path = arguments["output"]
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -90,4 +97,4 @@ def main(argv: Sequence[str]) -> int:
         print(f"error: cannot write the report: {error.strerror}", file=sys.stderr)
         return EXIT_USAGE
     print(f"report written to {output}; the HTML dashboard is pending FREES-77")
-    return EXIT_SECTION_ERROR if has_error(report) else EXIT_OK
+    return EXIT_SECTION_ERROR if has_error(report) or has_gap(report) else EXIT_OK

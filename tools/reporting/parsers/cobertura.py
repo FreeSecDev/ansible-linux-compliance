@@ -85,6 +85,11 @@ def _build(data: bytes) -> CoverageData:
         message = "the root element is not coverage"
         raise InvalidInputError(message)
     counts = {name: _optional_count(root, name) for name in COUNT_ATTRIBUTES}
+    for kind in ("lines", "branches"):
+        covered, valid = counts[f"{kind}-covered"], counts[f"{kind}-valid"]
+        if covered is not None and valid is not None and covered > valid:
+            message = f"{kind}-covered is larger than {kind}-valid"
+            raise InvalidInputError(message)
     packages = _packages(root)
     return CoverageData(
         line_rate=_rate(root, "line-rate"),

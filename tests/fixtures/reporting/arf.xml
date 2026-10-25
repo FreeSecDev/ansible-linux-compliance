@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <arf:asset-report-collection xmlns:arf="http://scap.nist.gov/schema/asset-reporting-format/1.1" xmlns:core="http://scap.nist.gov/schema/reporting-core/1.1" id="synthetic-arf">
   <core:relationships/>
+  <arf:assets>
+    <arf:asset id="synthetic-asset">
+      <ai:computing-device xmlns:ai="http://scap.nist.gov/schema/asset-identification/1.1">
+        <ai:fqdn>Host.Example</ai:fqdn>
+        <ai:hostname>host</ai:hostname>
+      </ai:computing-device>
+    </arf:asset>
+  </arf:assets>
   <arf:reports>
     <arf:report id="synthetic-report">
       <arf:content>
         <TestResult xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_org.example.synthetic_testresult_demo" start-time="2026-10-25T10:00:00+00:00" end-time="2026-10-25T10:00:09+00:00" version="1.0">
           <benchmark id="xccdf_org.example.synthetic_benchmark_demo"/>
           <profile idref="xccdf_org.example.synthetic_profile_baseline"/>
+          <target>host.example</target>
+          <target-facts>
+            <fact name="urn:xccdf:fact:asset:identifier:fqdn" type="string">host.example</fact>
+          </target-facts>
           <rule-result idref="xccdf_org.example.synthetic_rule_alpha" severity="high" time="2026-10-25T10:00:01+00:00">
             <result>pass</result>
           </rule-result>

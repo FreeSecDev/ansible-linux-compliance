@@ -149,6 +149,7 @@ lint-actions: require-uv
 	$(RUN) actionlint
 
 lint-repo: require-uv
+	@if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$$'; then printf 'error: compiled Python files are tracked\n' >&2; exit 1; fi
 	$(TRACKED) -- '*.yml' '*.yaml' '*.py' | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py
 
 lint-skills: require-uv

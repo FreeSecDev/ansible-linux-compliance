@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import math
+import os
 import stat
 import unicodedata
 from collections.abc import Callable, Mapping
@@ -16,6 +18,11 @@ MAX_DETAIL_ITEMS: Final[int] = 1000
 MAX_COUNT: Final[int] = 10**9
 MAX_EPOCH_SECONDS: Final[int] = 10**11
 MAX_PATH_LENGTH: Final[int] = 4096
+MAX_ENTRIES: Final[int] = 10000
+MAX_SUBENTRIES: Final[int] = 1000
+_READ_CHUNK: Final[int] = 1024 * 1024
+_DIRECTORY_FLAGS: Final[int] = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+_FILE_FLAGS: Final[int] = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 _KEPT_CONTROLS: Final[frozenset[str]] = frozenset({"\n", "\t"})
 _DROPPED_CATEGORIES: Final[frozenset[str]] = frozenset({"Cc", "Cf", "Zl", "Zp"})
 
@@ -28,6 +35,7 @@ class SectionStatus(Enum):
     AVAILABLE = "available"
     UNAVAILABLE = "unavailable"
     ERROR = "error"
+    PARTIAL = "partial"
 
 
 class InvalidInputError(ValueError):
@@ -68,31 +76,55 @@ def clean_text(value: str, limit: int = MAX_TEXT_LENGTH) -> str:
     return kept[:limit]
 
 
+def _open_regular(path: Path) -> int:
+    parts = path.parts[1:] if path.is_absolute() else path.parts
+    if not parts:
+        message = "input path is not a regular file"
+        raise InvalidInputError(message)
+    directory = os.open("/" if path.is_absolute() else ".", _DIRECTORY_FLAGS)
+    try:
+        for name in parts[:-1]:
+            child = os.open(name, _DIRECTORY_FLAGS | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        return os.open(parts[-1], _FILE_FLAGS, dir_fd=directory)
+    finally:
+        os.close(directory)
+
+
 def _read_bytes(path: Path, max_bytes: int) -> bytes:
     try:
-        info = path.lstat()
+        descriptor = _open_regular(path)
     except FileNotFoundError:
         message = "input file does not exist"
         raise MissingInputError(message) from None
     except OSError:
-        message = "input file cannot be inspected"
+        message = "input file cannot be opened without following symbolic links"
         raise InvalidInputError(message) from None
-    if not stat.S_ISREG(info.st_mode):
-        message = "input path is not a regular file"
-        raise InvalidInputError(message)
     try:
-        with path.open("rb") as handle:
-            data = handle.read(max_bytes + 1)
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            message = "input path is not a regular file"
+            raise InvalidInputError(message)
+        chunks: list[bytes] = []
+        total = 0
+        while total <= max_bytes:
+            chunk = os.read(descriptor, min(_READ_CHUNK, max_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
     except OSError:
         message = "input file cannot be read"
         raise InvalidInputError(message) from None
-    if len(data) > max_bytes:
+    finally:
+        os.close(descriptor)
+    if total > max_bytes:
         message = f"input is larger than {max_bytes} bytes"
         raise InvalidInputError(message)
-    if not data:
+    if not total:
         message = "input file is empty"
         raise InvalidInputError(message)
-    return data
+    return b"".join(chunks)
 
 
 def run_parser[T](
@@ -132,6 +164,22 @@ def _no_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
+def _finite_float(text: str) -> float:
+    number = float(text)
+    if not math.isfinite(number):
+        message = "JSON document contains a non-finite number"
+        raise InvalidInputError(message)
+    return number
+
+
+def bounded[T](items: list[T], limit: int, name: str) -> list[T]:
+    """Return ``items`` or raise :class:`InvalidInputError` when it has more than ``limit``."""
+    if len(items) > limit:
+        message = f"{name} has more than {limit} entries"
+        raise InvalidInputError(message)
+    return items
+
+
 def _no_constant(_constant: str) -> object:
     message = "JSON document contains a non-finite number"
     raise InvalidInputError(message)
@@ -150,7 +198,12 @@ def load_json(data: bytes) -> object:
     """Parse strict JSON: UTF-8 only, no duplicate keys, no NaN or Infinity."""
     text = decode_text(data)
     try:
-        return json.loads(text, object_pairs_hook=_no_duplicates, parse_constant=_no_constant)
+        return json.loads(
+            text,
+            object_pairs_hook=_no_duplicates,
+            parse_constant=_no_constant,
+            parse_float=_finite_float,
+        )
     except InvalidInputError:
         raise
     except (ValueError, RecursionError):

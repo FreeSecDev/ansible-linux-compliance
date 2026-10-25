@@ -81,6 +81,28 @@ def scan_run(
     )
 
 
+def xccdf_text(
+    target: str | None,
+    outcome: str = "pass",
+    version: str = "1.0",
+    results: list[tuple[str, str]] | None = None,
+) -> str:
+    host = "" if target is None else f"<target>{target}</target>"
+    rules = "".join(
+        f'<rule-result idref="{RULE_PREFIX}{name}" severity="medium">'
+        f"<result>{state}</result></rule-result>"
+        for name, state in (results or [("a", outcome)])
+    )
+    stamps = 'start-time="2026-10-25T10:00:00+00:00" end-time="2026-10-25T10:00:09+00:00"'
+    return (
+        f'<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="{BENCHMARK}">'
+        f"<version>{version}</version>"
+        f'<TestResult id="x" {stamps} version="{version}">'
+        f'<benchmark id="{BENCHMARK}"/><profile idref="{PROFILE}"/>{host}{rules}'
+        "</TestResult></Benchmark>"
+    )
+
+
 class Kit:
     """Helpers and fixture paths shared by the reporting tests."""
 
@@ -88,6 +110,8 @@ class Kit:
     waived = staticmethod(waived)
     expired = staticmethod(expired)
     scan_run = staticmethod(scan_run)
+    xccdf_text = staticmethod(xccdf_text)
+    RULE_PREFIX = RULE_PREFIX
     HOST = HOST
     REPORTING = REPORTING
     XCCDF = XCCDF

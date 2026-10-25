@@ -7,12 +7,14 @@ from typing import Final
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
     MAX_DETAIL_ITEMS,
+    MAX_SUBENTRIES,
     SEVERITY_ORDER,
     InvalidInputError,
     ParseResult,
     as_list,
     as_object,
     as_text,
+    bounded,
     dig,
     load_json,
     maybe_text,
@@ -57,21 +59,36 @@ class VulnerabilityData:
     truncated: bool
 
 
+def _severity(vulnerability: dict[str, object], match: dict[str, object]) -> str:
+    related = [
+        dig(item, "severity") for item in optional_list(match, "relatedVulnerabilities", "match")
+    ]
+    names = [
+        SEVERITY_NAMES.get((maybe_text(value) or "").lower(), "unknown")
+        for value in [vulnerability.get("severity"), *related]
+    ]
+    return min(names, key=SEVERITY_ORDER.index)
+
+
 def _match(raw: object) -> Vulnerability:
     match = as_object(raw, "match")
     vulnerability = as_object(require(match, "vulnerability", "match"), "vulnerability")
     artifact = as_object(require(match, "artifact", "match"), "artifact")
-    severity = (maybe_text(vulnerability.get("severity")) or "").lower()
     fix = optional_object(vulnerability, "fix", "vulnerability")
     return Vulnerability(
         vulnerability_id=as_text(require(vulnerability, "id", "vulnerability"), "vulnerability.id"),
-        severity=SEVERITY_NAMES.get(severity, "unknown"),
+        severity=_severity(vulnerability, match),
         package=as_text(require(artifact, "name", "artifact"), "artifact.name"),
         version=as_text(require(artifact, "version", "artifact"), "artifact.version"),
         fix_state=maybe_text(fix.get("state")),
         fixed_versions=tuple(
             sorted(
-                {as_text(item, "fix.versions") for item in optional_list(fix, "versions", "fix")}
+                {
+                    as_text(item, "fix.versions")
+                    for item in bounded(
+                        optional_list(fix, "versions", "fix"), MAX_SUBENTRIES, "fix.versions"
+                    )
+                }
             )
         ),
     )
@@ -86,7 +103,12 @@ def _build(data: bytes) -> VulnerabilityData:
     matches = as_list(require(document, "matches", "grype report"), "matches")
     unique: dict[tuple[str, str, str], Vulnerability] = {}
     for item in (_match(raw) for raw in matches):
-        unique.setdefault((item.vulnerability_id, item.package, item.version), item)
+        key = (item.vulnerability_id, item.package, item.version)
+        current = unique.get(key)
+        if current is None or SEVERITY_ORDER.index(item.severity) < SEVERITY_ORDER.index(
+            current.severity
+        ):
+            unique[key] = item
     ordered = sorted(
         unique.values(),
         key=lambda item: (
