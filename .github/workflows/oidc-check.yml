@@ -1,0 +1,31 @@
+---
+name: oidc-check
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: oidc-check
+  cancel-in-progress: false
+
+jobs:
+  assume-plan-role:
+    name: assume-plan-role
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Assume the plan role through OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: oidc-check
+          role-duration-seconds: 900
+      - name: Print the assumed identity
+        run: aws sts get-caller-identity

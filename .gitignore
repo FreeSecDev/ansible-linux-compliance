@@ -24,8 +24,10 @@ infra/bootstrap/bootstrap.local.sh
 credentials
 *.pem
 *.key
-*.tfstate
-*.tfstate.*
+*.tfstate*
+backend.hcl
+*.local.tfvars
+*.tfplan
 *.tfvars
 !*.example.tfvars
 .terraform/

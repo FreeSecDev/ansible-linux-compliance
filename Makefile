@@ -14,6 +14,15 @@ COLLECTION_LINK := build/collections/$(COLLECTION_PATH)
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
 	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
 TREE_SORT := sort -z
+AWS_ACCOUNT_ID := 910736812072
+AWS_REGION := eu-west-1
+GITHUB_REPOSITORY := FreeSecDev/ansible-linux-compliance
+STATE_BUCKET := freesecdev-tfstate-$(AWS_ACCOUNT_ID)-$(AWS_REGION)
+IAC_ROOT_MODULES := infra/account
+BOOTSTRAP_TEMPLATE := infra/bootstrap/bootstrap.sh.tmpl
+BOOTSTRAP_SCRIPT := infra/bootstrap/bootstrap.local.sh
+BOOTSTRAP_RENDER_SED := -e 's|@@AWS_ACCOUNT_ID@@|$(AWS_ACCOUNT_ID)|g' -e 's|@@AWS_REGION@@|$(AWS_REGION)|g' \
+	-e 's|@@STATE_BUCKET@@|$(STATE_BUCKET)|g' -e 's|@@GITHUB_REPOSITORY@@|$(GITHUB_REPOSITORY)|g'
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
@@ -30,18 +39,18 @@ Setup
 
 Formatting and linting
   format                Apply Ruff fixes and formatting
-  lint                  Run every implemented linter (repo, skills, python, yaml, actions, ansible)
+  lint                  Run every implemented linter (lock, repo, skills, python, yaml, actions, ansible)
   lint-python           Ruff lint, Ruff format check and Pylint
   lint-yaml             yamllint in strict mode
   lint-actions          actionlint for GitHub workflows
   lint-repo             Repository source rules (document start, comments, banned modules)
   lint-skills           Validate agent skills under .agents/skills
   lint-ansible          ansible-lint (production profile), role argument spec check and antsibull-changelog lint
-  lint-iac              [pending FREES-30] OpenTofu validation and Checkov
+  lint-iac              tofu fmt check, tofu validate per root module and shellcheck of the rendered bootstrap script
   lint-packer           [pending FREES-64] Packer validation
 
 Security and types
-  security              Bandit, gitleaks history scan and zizmor
+  security              Bandit, Checkov, gitleaks history scan and zizmor
   typecheck             mypy strict and Pyright strict
 
 Tests
@@ -60,7 +69,8 @@ Tests
 Images and AWS
   packer-validate       [pending FREES-64] Validate Packer templates
   packer-build          [pending FREES-64] Build images with Packer
-  aws-bootstrap         [pending FREES-33] Bootstrap AWS prerequisites
+  aws-bootstrap-render  Render the gitignored bootstrap script from its template
+  aws-bootstrap         Render and run the one-time interactive AWS account bootstrap
   image-build           [pending FREES-36] Build the runner image on AWS
 
 Reporting, docs and release
@@ -75,12 +85,12 @@ Housekeeping
   collection-tree       Assemble the temporary collection tree under build/collection
   collection-link       Link plugins/ and roles/ into build/collections for pytest, type checkers and ansible-lint
   clean                 Remove caches and generated files
-  ci                    Run the credential-free CI stages locally
+  ci                    Run the credential-free CI stages locally (needs tofu on PATH)
 endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
-	lint-iac lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons \
 	test-integration test-coverage test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -103,6 +113,7 @@ install: require-uv collection-link
 
 bootstrap: install
 	@command -v git >/dev/null || { printf 'error: git is required\n' >&2; exit 1; }
+	@command -v tofu >/dev/null || { printf 'error: tofu is required but was not found on PATH\n' >&2; printf 'install the pinned version with tools/iac/install-tofu.sh\n' >&2; exit 1; }
 	@command -v jq >/dev/null || { printf 'error: jq is required by make package but was not found on PATH\n' >&2; printf 'install it with your package manager, for example: sudo apt-get install jq\n' >&2; exit 1; }
 	$(RUN) python --version
 	$(RUN) pre-commit --version
@@ -111,7 +122,10 @@ format: require-uv
 	$(RUN) ruff check --fix .
 	$(RUN) ruff format .
 
-lint: lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible
+lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible
+
+lock-check: require-uv
+	uv lock --check
 
 lint-python: require-uv collection-link
 	$(RUN) ruff check .
@@ -135,8 +149,19 @@ lint-ansible: require-uv collection-link
 	$(RUN) python tools/roles/check_role_specs.py roles
 	$(RUN) antsibull-changelog lint
 
-lint-iac:
-	$(call NOT_IMPLEMENTED,lint-iac,FREES-30)
+lint-iac: require-uv
+	@command -v tofu >/dev/null || { printf 'error: tofu is required; run tools/iac/install-tofu.sh\n' >&2; exit 1; }
+	tofu fmt -check -recursive infra/
+	$(MAKE) --no-print-directory tofu-validate
+	mkdir -p build
+	sed $(BOOTSTRAP_RENDER_SED) $(BOOTSTRAP_TEMPLATE) > build/bootstrap.rendered.sh
+	$(RUN) shellcheck build/bootstrap.rendered.sh tools/iac/install-tofu.sh
+
+tofu-validate:
+	@for module in $(IAC_ROOT_MODULES); do \
+		tofu -chdir="$$module" init -backend=false -input=false -lockfile=readonly && \
+		tofu -chdir="$$module" validate; \
+	done
 
 lint-packer:
 	$(call NOT_IMPLEMENTED,lint-packer,FREES-64)
@@ -145,6 +170,7 @@ security: require-uv
 	$(RUN) bandit -c pyproject.toml -r tools plugins -q -x plugins/module_utils/compliance/process.py
 	$(RUN) bandit -c pyproject.toml -q -s B404,B603 plugins/module_utils/compliance/process.py
 	$(RUN) pre-commit run gitleaks-history --hook-stage manual --all-files
+	$(RUN) checkov --config-file .checkov.yaml
 	$(RUN) zizmor --persona $(ZIZMOR_PERSONA) .github/workflows
 
 typecheck: require-uv collection-link
@@ -194,8 +220,17 @@ packer-validate:
 packer-build:
 	$(call NOT_IMPLEMENTED,packer-build,FREES-64)
 
-aws-bootstrap:
-	$(call NOT_IMPLEMENTED,aws-bootstrap,FREES-33)
+aws-bootstrap-render:
+	@printf '%s' '$(AWS_ACCOUNT_ID)' | grep -Eq '^[0-9]{12}$$' || { printf 'error: AWS_ACCOUNT_ID must be 12 digits\n' >&2; exit 1; }
+	@printf '%s' '$(AWS_REGION)' | grep -Eq '^(eu-west-[123]|eu-central-1|eu-north-1)$$' || { printf 'error: AWS_REGION is not allow-listed\n' >&2; exit 1; }
+	@printf '%s' '$(STATE_BUCKET)' | grep -Eq '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$$' || { printf 'error: STATE_BUCKET is not a valid S3 bucket name\n' >&2; exit 1; }
+	@printf '%s' '$(GITHUB_REPOSITORY)' | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$$' || { printf 'error: GITHUB_REPOSITORY must be owner/name\n' >&2; exit 1; }
+	@mkdir -p $(dir $(BOOTSTRAP_SCRIPT))
+	sed $(BOOTSTRAP_RENDER_SED) $(BOOTSTRAP_TEMPLATE) > $(BOOTSTRAP_SCRIPT)
+	chmod 0700 $(BOOTSTRAP_SCRIPT)
+
+aws-bootstrap: aws-bootstrap-render
+	bash $(BOOTSTRAP_SCRIPT)
 
 image-build:
 	$(call NOT_IMPLEMENTED,image-build,FREES-36)
@@ -251,4 +286,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint typecheck test-coverage security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage security docs test-sanity test-ansible-units package-check

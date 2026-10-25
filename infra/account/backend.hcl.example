@@ -1,0 +1,3 @@
+bucket = "freesecdev-tfstate-910736812072-eu-west-1"
+key    = "account/terraform.tfstate"
+region = "eu-west-1"
