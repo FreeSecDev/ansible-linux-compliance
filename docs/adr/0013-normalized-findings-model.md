@@ -240,3 +240,32 @@ verdict from findings alone. These invariants apply to every backend and every r
   <https://docs.ansible.com/projects/ansible/devel/reference_appendices/release_and_maintenance.html>
 - [ADR 0010](0010-initial-os-and-benchmark-scope.md), [ADR 0011](0011-control-toggles-and-cleanup.md)
 - [Collection design](../collection-design.md)
+
+## Amendment 2026-10-25: audit module semantics (FREES-49)
+
+`freesecdev.linux_compliance.compliance_scan` is the first producer of `ScanRun` documents on managed hosts
+([audit guide](../audit.md)). The model is unchanged; these are the producer rules.
+
+- **`changed` is always false.** An audit never changes the configuration of a host (AGENTS.md rule 7). The evidence that
+  a run writes (scanner output, the tailoring file and `scan-run.json`, in a new root-owned `0700` run directory with
+  `0600` files) is reported separately as `evidence_written` and `evidence.files` (path, kind, SHA-256, size), so a
+  report can always tell a host change from an audit record. Evidence is never overwritten; a repeated run reports
+  `changed: false` again and writes a new run directory.
+- **Check mode scans and keeps nothing.** The scan is read-only, so check mode runs it and returns the real findings,
+  but into a private `0700` directory `<output_dir>/.check-<run_id>` that is removed with every file in it before the
+  module returns, also on failure (`cleanup_failed` if that is impossible). `evidence_written` is false and no evidence
+  file is listed. Check mode never creates the output directory; when it is missing no scan runs and the run status is
+  `not_run`.
+- **Scanner failures are results, not exceptions.** A `failed` or `timed_out` run is returned with all findings `error`
+  and, by default (`fail_on_incomplete: true`), the task fails with `error_type: scan_incomplete` and the full result.
+  The audit role registers the result first and fails afterwards, so the evidence of a failed scan is kept.
+- **The scanner reads only a verified private copy.** Hashing the operator's file before and after the scan does not
+  bind what `oscap` read: the file could be swapped during the scan and restored. The module therefore copies the
+  datastream into the root-only `0700` run directory (`content/<name>`, `0600`), hashes exactly the bytes it writes and
+  stops with `digest_mismatch` unless they are the pinned content; `oscap` reads only that copy, which only root can
+  change. The copy is removed after the scan and reported as `content` (`source_path`, `sha256`, `size`,
+  `private_copy`, `copy_removed`). A completed run whose recorded `content.content_sha256` differs from the pinned
+  digest still becomes `failed`.
+- **Summary.** The module summary is the count per outcome, the total and `run_status`; it contains no percentage and no
+  compliance statement ([ADR 0016](0016-report-schema-and-summary-semantics.md)). `scan-run.json` is the `model.dumps`
+  document that the reporting package reads as ScanRun JSON.

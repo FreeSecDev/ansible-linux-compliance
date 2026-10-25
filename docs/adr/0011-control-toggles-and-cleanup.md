@@ -214,3 +214,22 @@ error `unsupported_platform` instead of an `AttributeError` or `ImportError`.
 - ansible-core has no `py.typed` marker. `typings/ansible/module_utils/` holds minimal stubs for `AnsibleModule` and
   `patch_module_args`, which Pyright reads as its default `stubPath` and mypy through `mypy_path`. The directory is not
   part of the collection.
+
+## Amendment 2026-10-25: disabled rules in the audit (FREES-49)
+
+The audit side of this decision is implemented by `freesecdev.linux_compliance.compliance_scan` and
+`plugins/module_utils/compliance/audit.py` ([audit guide](../audit.md)).
+
+- The toggle variables are not generated yet (FREES-55). Until they are, the module takes a validated `disabled_rules`
+  list (`rule_id`, optional `disabled_by`) and the audit role passes `linux_compliance_audit_disabled_rules`. The
+  default `disabled_by` is `linux_compliance_rule_<short id>_enabled`; a short identifier that is not a valid variable
+  name needs an explicit `disabled_by`, which must match `linux_compliance_<name>_enabled`. FREES-55 will compute the
+  list from the toggles; the module interface does not change.
+- Disabled rules are excluded through a generated XCCDF 1.2 tailoring file, as decided above: a profile with the
+  identifier `<profile>_freesecdev_audit_tailored` that `extends` the requested profile and deselects each disabled rule.
+  It is written into the new run directory with mode `0600`, passed with `--tailoring-file`, and its SHA-256 is recorded
+  in the provenance (ADR 0013, amendment of FREES-48). The reported scan run keeps the requested profile identifier.
+- Each disabled rule is a `disabled` finding with `disabled_by` set and a message that names the variable. In a run
+  that did not complete it is an `error` finding instead, because ADR 0013 allows only `error` findings there; the
+  message still names the variable. A disabled rule that the profile does not select is an argument error, and
+  disabling every rule of a profile is `nothing_to_scan`. Nothing is silently dropped.

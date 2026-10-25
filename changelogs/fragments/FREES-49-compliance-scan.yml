@@ -1,0 +1,22 @@
+---
+minor_changes:
+  - >-
+    Add the module ``freesecdev.linux_compliance.compliance_scan``, backed by
+    ``plugins/module_utils/compliance/audit.py``. It verifies the pinned datastream and the profile, runs the OpenSCAP
+    backend (``oscap xccdf eval`` through the audited process helper only) and returns the normalized scan run, a
+    summary per outcome, the provenance and the paths and SHA-256 of the evidence files. It never changes the host
+    and always returns ``changed: false``; evidence written below a root-owned ``0700`` directory with ``0600`` files
+    is reported as ``evidence_written``. The scanner reads only a private copy of the datastream in the root-only run
+    directory, verified against the pin while it is copied and removed after the scan. A timeout, crash or unexpected
+    exit status is a ``failed`` or ``timed_out`` run in which every rule is ``error``. Check mode runs the same
+    read-only scan into a temporary directory below an existing output directory, returns the real findings and removes
+    the directory before returning; it never creates the output directory and keeps no evidence.
+  - >-
+    Rules listed in ``disabled_rules`` (ADR 0011) are excluded from the scan through a generated XCCDF tailoring
+    file and reported as ``disabled`` findings that name the controlling variable.
+  - >-
+    The ``audit`` role is implemented. It checks the facts of the ``discover`` role, runs ``compliance_scan`` and
+    publishes the fact ``linux_compliance_audited``. It gains the variables ``linux_compliance_audit_backend``,
+    ``linux_compliance_audit_output_dir``, ``linux_compliance_audit_scan_timeout`` and
+    ``linux_compliance_audit_disabled_rules``, fails when the scan did not complete, and fails on failed or errored
+    rules when ``linux_compliance_audit_fail_on_noncompliant`` is true.

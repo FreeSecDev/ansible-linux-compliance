@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role).
 
 ## Layout
 
@@ -13,8 +13,8 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 |---|---|
 | `galaxy.yml` | Namespace `freesecdev`, name `linux_compliance`, Apache-2.0, repository links, tags and `build_ignore` |
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
-| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root) |
-| `plugins/modules/` | `control_state.py` (ledger) and the read-only discovery modules `benchmark_info.py` and `profile_info.py` |
+| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root), `audit.py` (audit orchestration behind `compliance_scan`) |
+| `plugins/modules/` | `control_state.py` (ledger), the read-only discovery modules `benchmark_info.py` and `profile_info.py`, and the audit module `compliance_scan.py` |
 | `content/manifest.yml` | Pinned ComplianceAsCode release, archive SHA-512, datastream SHA-256 and profiles ([ADR 0015](adr/0015-content-acquisition-and-pinning.md)); the only file in `content/` |
 | `tools/content/fetch_content.py` | Controller-side tool that downloads or reads the pinned archive and extracts only the listed datastreams |
 | `typings/` | Minimal type stubs for the two `ansible.module_utils` modules that the plugins and tests import, because ansible-core ships no stubs |
@@ -22,7 +22,7 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
 | `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; inert data, shipped with the tests in the tarball |
-| `roles/` | The `discover`, `audit`, `remediate`, `verify` and `evidence` role skeletons (FREES-40) |
+| `roles/` | The `discover` and `audit` roles and the `remediate`, `verify` and `evidence` role skeletons (FREES-40) |
 | `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
 
@@ -31,22 +31,25 @@ development and is listed in `build_ignore`, so it is not part of the tarball.
 
 ## Roles and playbooks
 
-The `discover` role is implemented (FREES-43). The other roles are skeletons: each validates its inputs and then fails
-with a message that names the issue that tracks its implementation, so a playbook can never report success for work
-that does not exist yet. The skeletons use only `ansible.builtin.assert` and `ansible.builtin.fail`; `discover` uses
-`assert`, `benchmark_info`, `profile_info` and `set_fact`, none of which changes the host. The platforms in each `meta/main.yml` are intended targets
+The `discover` (FREES-43) and `audit` (FREES-49) roles are implemented. The other roles are skeletons: each validates
+its inputs and then fails with a message that names the issue that tracks its implementation, so a playbook can never
+report success for work that does not exist yet. The skeletons use only `ansible.builtin.assert` and
+`ansible.builtin.fail`; `discover` uses `assert`, `benchmark_info`, `profile_info` and `set_fact`, and `audit` uses
+`assert`, `compliance_scan` and `set_fact`. None of them changes the configuration of the host; `audit` writes evidence
+files ([audit guide](audit.md)). The platforms in each `meta/main.yml` are intended targets
 ([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)); none is tested.
 
 | Role | Changes the host | Tracked in | Variables (default) |
 |---|---|---|---|
 | `discover` | Never | FREES-43 (implemented) | `linux_compliance_discover_profile` (`cis_level1_server`), `linux_compliance_discover_content_path` (empty, required), `linux_compliance_discover_content_sha256` (empty, required) |
-| `audit` | Never | FREES-49 | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`) |
+| `audit` | Never; writes evidence files | FREES-49 (implemented) | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`), `linux_compliance_audit_backend` (`openscap`), `linux_compliance_audit_output_dir` (`/var/lib/freesecdev/linux_compliance/evidence`), `linux_compliance_audit_scan_timeout` (`1800`), `linux_compliance_audit_disabled_rules` (`[]`) |
 | `remediate` | Only with explicit opt-in | FREES-52 | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
 | `verify` | Never | FREES-54 | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`) |
 | `evidence` | Never; writes on the controller only | FREES-51 | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_host_facts` (`false`) |
 
 Per-rule and per-family toggles do not exist yet; they are generated from the rule catalogue by FREES-55
-([ADR 0011](adr/0011-control-toggles-and-cleanup.md)). The variables of each role are documented in its
+([ADR 0011](adr/0011-control-toggles-and-cleanup.md)). Until then the audit takes the disabled rules as the list
+`linux_compliance_audit_disabled_rules`. The variables of each role are documented in its
 `README.md` and in `meta/argument_specs.yml`.
 `tools/roles/check_role_specs.py` (part of `make lint-ansible`) fails when a role's `defaults/main.yml` and
 `meta/argument_specs.yml` disagree in names, types or values, when an option lacks a description or default, or when
@@ -288,3 +291,16 @@ fetched content the comparison is skipped locally.
 3. Mirror the tests under `tests/unit/plugins/`, keeping 100% line and branch coverage of `plugins/`.
 4. Add a changelog fragment in `changelogs/fragments/`.
 5. Run `make ci`.
+
+## Audit module
+
+Jira: FREES-49. Guide: [audit](audit.md). `compliance_scan` (`plugins/modules/compliance_scan.py`) is a thin wrapper
+around `plugins/module_utils/compliance/audit.py`, which plans the audit (argument validation, digest and profile
+verification through `catalog.py`, disabled rules, output directory inspection) and executes it (run directory,
+tailoring file, backend from `backends.default_registry()`, evidence). The module returns the `ScanRun` of ADR 0013, a
+summary per outcome, the provenance and the evidence paths, always with `changed: false`; evidence writes are reported
+as `evidence_written`. The scanner reads only a private, digest-verified copy of the datastream in the run directory,
+which is removed after the scan and reported as `content`. Check mode runs the scan into a temporary directory that is removed before the module returns and
+keeps no evidence; `make test-oscap-integration` runs it against a real `oscap`. The test seams `owner_uid`, `registry` and `clock` are keyword-only
+arguments of `audit.Auditor`; the module constructs `Auditor()` and the repository guard bans the `owner_uid` and
+`clock` keywords in plugin code.

@@ -818,6 +818,7 @@ def test_repository_helper_is_the_only_plugin_file_importing_subprocess() -> Non
 SANCTIONED_SANITY_IGNORE = (
     "plugins/module_utils/compliance/process.py pylint:ansible-bad-function\n"
     "plugins/modules/benchmark_info.py validate-modules:missing-gplv3-license\n"
+    "plugins/modules/compliance_scan.py validate-modules:missing-gplv3-license\n"
     "plugins/modules/control_state.py validate-modules:missing-gplv3-license\n"
     "plugins/modules/profile_info.py validate-modules:missing-gplv3-license\n"
 )

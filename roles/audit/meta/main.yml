@@ -5,7 +5,6 @@ galaxy_info:
   author: FreeSecDev contributors
   description: >-
     Audit a host against a compliance profile (read-only).
-    Skeleton only: not implemented yet, tracked in FREES-49.
     The platforms below are intended targets and none is tested yet.
   license: Apache-2.0
   min_ansible_version: "2.20"

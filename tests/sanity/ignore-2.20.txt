@@ -1,4 +1,5 @@
 plugins/module_utils/compliance/process.py pylint:ansible-bad-function
 plugins/modules/benchmark_info.py validate-modules:missing-gplv3-license
+plugins/modules/compliance_scan.py validate-modules:missing-gplv3-license
 plugins/modules/control_state.py validate-modules:missing-gplv3-license
 plugins/modules/profile_info.py validate-modules:missing-gplv3-license
