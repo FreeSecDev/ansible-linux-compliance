@@ -40,21 +40,21 @@ MAX_DOCUMENT_CHARS: Final[int] = 128 * 1024 * 1024
 
 TIMESTAMP_FORMAT: Final[str] = "%Y-%m-%dT%H:%M:%SZ"
 
-_TIMESTAMP: Final[re.Pattern[str]] = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
-_SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
-_MACHINE_ID: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{32}")
-_TOKEN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:+-]*")
-_SLUG: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9._-]*")
-_VARIABLE: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]*")
+_TIMESTAMP: Final[str] = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
+_SHA256: Final[str] = r"[0-9a-f]{64}"
+_MACHINE_ID: Final[str] = r"[0-9a-f]{32}"
+_IDENTIFIER_PATTERN: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._:+-]*"
+_SLUG: Final[str] = r"[a-z0-9][a-z0-9._-]*"
+_VARIABLE: Final[str] = r"[a-z][a-z0-9_]*"
 _IDENTIFIER_FORBIDDEN_CATEGORIES: Final[frozenset[str]] = frozenset({"Cc", "Cf", "Zl", "Zp"})
 _TEXT_ALLOWED_CONTROLS: Final[frozenset[str]] = frozenset({"\t", "\n", "\r"})
 _BIDI_CONTROLS: Final[frozenset[str]] = frozenset(
     {"\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u2066", "\u2067", "\u2068", "\u2069"}
 )
 MAX_ECHO_LENGTH: Final[int] = 64
-_XCCDF_PATTERNS: Final[Mapping[str, re.Pattern[str]]] = MappingProxyType(
+_XCCDF_PATTERNS: Final[Mapping[str, str]] = MappingProxyType(
     {
-        kind: re.compile(rf"xccdf_[A-Za-z0-9_.-]+?_{kind}_[A-Za-z0-9_.+-]+")
+        kind: rf"xccdf_[A-Za-z0-9_.-]+?_{kind}_[A-Za-z0-9_.+-]+"
         for kind in ("rule", "profile", "benchmark")
     }
 )
@@ -272,7 +272,7 @@ def _text(
     name: str,
     *,
     max_length: int = MAX_TITLE_LENGTH,
-    pattern: re.Pattern[str] | None = None,
+    pattern: str | None = None,
     multiline: bool = False,
 ) -> str:
     if not isinstance(value, str):
@@ -285,7 +285,7 @@ def _text(
         _fail(f"{name} exceeds {max_length} characters")
     if _has_forbidden_characters(value, multiline=multiline):
         _fail(f"{name} contains control or formatting characters")
-    if pattern is not None and pattern.fullmatch(value) is None:
+    if pattern is not None and re.fullmatch(pattern, value) is None:
         _fail(f"{name} has an invalid format")
     return value
 
@@ -335,7 +335,7 @@ def _texts(
     name: str,
     *,
     max_length: int = MAX_ID_LENGTH,
-    pattern: re.Pattern[str] | None = None,
+    pattern: str | None = None,
 ) -> tuple[str, ...]:
     items = _items(value, name, str)
     for item in items:
@@ -346,10 +346,6 @@ def _texts(
 def _unique(values: tuple[object, ...], name: str) -> None:
     if len(set(values)) != len(values):
         _fail(f"{name} contains duplicates")
-
-
-def _store(instance: object, field: str, value: object) -> None:
-    object.__setattr__(instance, field, value)
 
 
 def _timestamp(value: object, name: str) -> str:
@@ -476,7 +472,7 @@ class ScannerInfo:
     def __post_init__(self) -> None:
         """Validate the scanner description."""
         _text(self.name, "scanner.name", max_length=64, pattern=_SLUG)
-        _text(self.version, "scanner.version", max_length=64, pattern=_TOKEN)
+        _text(self.version, "scanner.version", max_length=64, pattern=_IDENTIFIER_PATTERN)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping."""
@@ -545,11 +541,13 @@ class Applicability:
     def __post_init__(self) -> None:
         """Validate and canonically order the applicability."""
         _text(self.distribution_id, "applicability.distribution_id", max_length=64, pattern=_SLUG)
-        versions = _texts(self.versions, "applicability.versions", max_length=32, pattern=_TOKEN)
+        versions = _texts(
+            self.versions, "applicability.versions", max_length=32, pattern=_IDENTIFIER_PATTERN
+        )
         if not versions:
             _fail("applicability.versions must not be empty")
         _unique(versions, "applicability.versions")
-        _store(self, "versions", tuple(sorted(versions)))
+        object.__setattr__(self, "versions", tuple(sorted(versions)))
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping."""
@@ -634,12 +632,12 @@ class Rule:
         references = _items(self.references, "rule.references", Reference, 256)
         _unique(tuple(item.sort_key() for item in references), "rule.references")
         self._check_consistency()
-        _store(
+        object.__setattr__(
             self,
             "applicability",
             tuple(sorted(applicability, key=lambda item: item.distribution_id)),
         )
-        _store(self, "references", tuple(sorted(references, key=Reference.sort_key)))
+        object.__setattr__(self, "references", tuple(sorted(references, key=Reference.sort_key)))
 
     def _check_consistency(self) -> None:
         if self.evaluation_method not in _CLASS_EVALUATION[self.control_class]:
@@ -720,7 +718,7 @@ class Profile:
         for rule_id in rule_ids:
             _xccdf_id(rule_id, "profile.rule_ids item", "rule")
         _unique(rule_ids, "profile.rule_ids")
-        _store(self, "rule_ids", tuple(sorted(rule_ids)))
+        object.__setattr__(self, "rule_ids", tuple(sorted(rule_ids)))
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping."""
@@ -760,8 +758,10 @@ class Benchmark:
         for profile in profiles:
             if not set(profile.rule_ids) <= set(rule_ids):
                 _fail(f"profile {profile.profile_id} selects a rule that the benchmark lacks")
-        _store(self, "profiles", tuple(sorted(profiles, key=lambda item: item.profile_id)))
-        _store(self, "rules", tuple(sorted(rules, key=lambda item: item.rule_id)))
+        object.__setattr__(
+            self, "profiles", tuple(sorted(profiles, key=lambda item: item.profile_id))
+        )
+        object.__setattr__(self, "rules", tuple(sorted(rules, key=lambda item: item.rule_id)))
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping."""
@@ -818,9 +818,14 @@ class HostIdentity:
 
     def __post_init__(self) -> None:
         """Validate the host identity."""
-        _text(self.hostname, "host.hostname", max_length=253, pattern=_TOKEN)
+        _text(self.hostname, "host.hostname", max_length=253, pattern=_IDENTIFIER_PATTERN)
         _text(self.distribution_id, "host.distribution_id", max_length=64, pattern=_SLUG)
-        _text(self.distribution_version, "host.distribution_version", max_length=32, pattern=_TOKEN)
+        _text(
+            self.distribution_version,
+            "host.distribution_version",
+            max_length=32,
+            pattern=_IDENTIFIER_PATTERN,
+        )
         _text(self.architecture, "host.architecture", max_length=32, pattern=_SLUG)
         if self.machine_id is not None:
             _text(self.machine_id, "host.machine_id", max_length=32, pattern=_MACHINE_ID)
@@ -894,7 +899,9 @@ class ExceptionStatus:
             if any(detail is not None for detail in details):
                 _fail("exception details require an active or expired exception")
             return
-        _text(self.exception_id, "exception.exception_id", max_length=128, pattern=_TOKEN)
+        _text(
+            self.exception_id, "exception.exception_id", max_length=128, pattern=_IDENTIFIER_PATTERN
+        )
         _text(self.reason, "exception.reason", max_length=MAX_TEXT_LENGTH, multiline=True)
         _timestamp(self.expires_at, "exception.expires_at")
 
@@ -993,7 +1000,7 @@ class Finding:
         flags = _items(self.flags, "finding.flags", ResultFlag, len(ResultFlag))
         _unique(flags, "finding.flags")
         self._check_links()
-        _store(self, "flags", tuple(sorted(flags, key=lambda flag: flag.value)))
+        object.__setattr__(self, "flags", tuple(sorted(flags, key=lambda flag: flag.value)))
 
     def _check_links(self) -> None:
         waived = self.outcome is Outcome.WAIVED
@@ -1080,7 +1087,7 @@ class ScanRun:
 
     def __post_init__(self) -> None:
         """Validate and canonically order the scan run."""
-        _text(self.run_id, "scan_run.run_id", max_length=128, pattern=_TOKEN)
+        _text(self.run_id, "scan_run.run_id", max_length=128, pattern=_IDENTIFIER_PATTERN)
         started = _timestamp(self.started_at, "scan_run.started_at")
         finished = _timestamp(self.finished_at, "scan_run.finished_at")
         if finished < started:
@@ -1096,7 +1103,9 @@ class ScanRun:
         _unique(tuple(finding.rule_id for finding in findings), "scan_run.findings")
         self._check_status(findings)
         self._check_exceptions(findings)
-        _store(self, "findings", tuple(sorted(findings, key=lambda finding: finding.rule_id)))
+        object.__setattr__(
+            self, "findings", tuple(sorted(findings, key=lambda finding: finding.rule_id))
+        )
 
     def _check_exceptions(self, findings: tuple[Finding, ...]) -> None:
         started = _instant(self.started_at)

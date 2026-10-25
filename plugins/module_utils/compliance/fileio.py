@@ -397,9 +397,7 @@ class SafeDirectory:
         """
         plain = _check_name(name)
         directory = self._open_descriptor()
-        pattern = re.compile(
-            re.escape(f".{plain}.") + TEMPORARY_HEX_PATTERN + re.escape(TEMPORARY_SUFFIX)
-        )
+        pattern = re.escape(f".{plain}.") + TEMPORARY_HEX_PATTERN + re.escape(TEMPORARY_SUFFIX)
         try:
             with os.scandir(directory) as entries:
                 candidates = [entry.name for entry in entries]
@@ -408,7 +406,7 @@ class SafeDirectory:
         return sum(
             self._sweep_one(directory, candidate)
             for candidate in candidates
-            if pattern.fullmatch(candidate) is not None
+            if re.fullmatch(pattern, candidate) is not None
         )
 
     def _sweep_one(self, directory: int, candidate: str) -> bool:

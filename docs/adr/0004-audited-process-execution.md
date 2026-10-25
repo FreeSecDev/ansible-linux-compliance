@@ -132,3 +132,109 @@ narrow policy changes; everything else is unchanged.
   the backend, is mode 0700 and never reused, so only the same user or root could swap it.
 - Known limitation (N4): options are allow-listed per executable, not per sub-command, so `oscap info --tailoring-file x`
   passes the policy. It is harmless today; a per-sub-command table is a follow-up if a second sub-command needs options.
+
+## Amendment 2026-10-25: reflection and private-access bans (FREES-125)
+
+FREES-125 closes the routes that the independent reviews of FREES-47 and FREES-48 left open. All rules apply under
+`plugins/` outside `process.py`, and each has regression tests in `tests/unit/tools/test_check_repo_rules.py` (first round) and
+`tests/unit/tools/test_check_repo_rules_hardening.py` (later rounds).
+
+- String-based reflection: the attribute names `builtins`, `operator`, `eval`, `exec`, `compile`, `attrgetter`,
+  `methodcaller`, `_evaluate` and `evaluate_forward_ref` are banned (also as imported or aliased names and as literal
+  `getattr` names), and a module-level `__getattr__` is banned. This stops `typing.operator.attrgetter("os")(os.path)`,
+  `dataclasses.builtins.eval(...)` and `typing.ForwardRef(...)._evaluate`.
+- Function internals: `__kwdefaults__`, `__defaults__`, `__code__`, `__closure__` and `__globals__` are banned wherever
+  they appear as attribute names.
+- Imported modules are read-only: assigning, augmenting or deleting an attribute or item whose root is a name bound by
+  an import statement, and `setattr` or `delattr` on such a name, are banned.
+- Cross-module private access: any underscore-prefixed attribute may only be read, called or assigned through `self` or
+  `cls`, the first parameter of an enclosing method in a class body (R-C below). `openscap._expat.ParserCreate()`,
+  `openscap._parse_stream(...)` and `backend._runner = ...` fail, as do importing underscore-prefixed names or modules
+  and `getattr` with an underscore-prefixed literal on another object.
+
+### Second round: dunders, aliases and import-time policy (FREES-125 review)
+
+The independent review of the first round showed that dunder methods bypassed every name-based ban
+(`process.__getattribute__("subprocess").__getattribute__("Popen")` ran a shell, `process.__setattr__("ALLOWED_EXECUTABLES", ...)`
+followed by `process.run(...)` succeeded) and that aliases of imported modules defeated the assignment ban. The guard is now
+deny-by-default for these:
+
+- Dunders (G1): reading `__name__`, `__qualname__`, `__doc__` and `__module__` is the only dunder attribute access that is
+  allowed. Every other dunder attribute read, call, write or delete is banned (`__getattribute__`, `__setattr__`, `__delattr__`,
+  `__self__`, `__class__`, `__dict__`, `__call__`, `__init_subclass__`), as are dunder names in `getattr` and `setattr`
+  literals, imports of dunder names, and the names `__class__`, `__loader__` and `__spec__`. Dunder methods that a class
+  defines remain allowed. The single exception is `object.__setattr__(self, "<literal>", value)` with exactly three
+  positional arguments, `self` as the intact first parameter of the method, a literal field name that is not itself banned,
+  and `__post_init__` as the directly enclosing function. `model.py` uses it to normalise frozen dataclass fields; its former
+  `_store` helper was inlined for this reason.
+- Frame and code introspection: the attribute names `currentframe`, `f_builtins`, `f_globals`, `f_locals`, `f_back`, `f_code`,
+  `gi_frame`, `gi_code`, `cr_frame`, `cr_code`, `ag_frame`, `ag_code`, `tb_frame`, `tb_next`, `co_code`, `co_consts`,
+  `co_names`, `CodeType`, `FunctionType`, `LambdaType` and `MethodType` are banned.
+- `types`: only `from types import MappingProxyType` is allowed; `import types` and any other name fail.
+- R-B, no module traversal: when an attribute chain is rooted at a name bound to a module, an attribute (and a
+  `from m import name` name, and a literal `getattr` name on such a chain) that is the name of a standard library
+  top-level module outside the import allow-list (`sys.stdlib_module_names`, so `dataclasses.inspect`, `enum.sys`,
+  `pathlib.posixpath` and `pathlib.io` fail) or of a module of this collection (stems of `plugins/**/*.py`, so
+  `scanner.process` fails) is banned. The rule is deliberately limited to module-rooted chains: an enumeration of the
+  module-typed attributes of every allow-listed module found no route to a module that does not start at a module name,
+  so ordinary attributes such as `{}.copy()`, `obj.time`, `other.scanner` and `error.code` stay allowed. The explicit
+  frame, code and reflection names above stay banned on every object, and so do module aliases that are not module names:
+  `bltns` (`enum.bltns` is `builtins`), `_bltin`, `stdlib_re` (`typing.stdlib_re` is `re`), `_os` and `_sys`.
+- `super()`: only `super().__init__(...)` and `super().__post_init__()` (or the `super(Cls, self)` form with `self` or `cls`
+  the intact first parameter) may call a dunder on `super()`. The allow-list (`SUPER_DUNDERS`) is the minimum plugin code
+  needs, by least privilege: `__new__`, `__call__`, `__init_subclass__`, `__reduce__`, `__reduce_ex__`, `__getattr__`,
+  `__get__`, `__set_name__`, `__repr__`, `__format__` and every other dunder on `super()` (including `__dict__`,
+  `__class__`, `__getattribute__`, `__setattr__`, `__delattr__`) and any non-call use stay denied. The names `super` and
+  `object` are protected builtins: any binding of them (assignment, augmented or annotated assignment, walrus, `for`,
+  `with`, `except` and `match` targets, import-as, `def`, `class`, parameters, `global`, `nonlocal`, `del`) is banned, so
+  the allowed forms cannot be turned into a dunder call on another object. No merged plugin module calls `super()`; widen
+  the set only with a documented need. Reaching an allow-listed module through an attribute chain (for example
+  `json.decoder.re`) grants no capability beyond importing it directly, so it stays allowed.
+- Submodule values: a module-rooted attribute that is itself a module (`os.path`, `json.decoder`, `collections.abc`,
+  `xml.parsers.expat`; computed at lint time from the dotted allow-list components and the module-typed attributes of each
+  allow-listed module) may appear only as the base of another attribute access. `x = os.path`, `f(json.decoder)` and
+  `return collections.abc` fail, which closes the gap where a stored submodule escaped R-A, the read-only rule and R-B.
+  A from-import of such a name (`from json import decoder`, `from typing import functools`, also with `as`) binds a tracked
+  module name, so R-A and R-B apply to it as well. The name sets are checked-in constants (`STDLIB_MODULE_NAMES`,
+  `KNOWN_SUBMODULE_ATTRIBUTES` in `tools/lint/check_repo_rules.py`), the union over CPython 3.9 to 3.15, not values read from
+  the controller interpreter, because plugins run on 3.9 to 3.14. A unit test asserts that the sets of the running
+  interpreter are subsets, so a new Python release fails CI instead of opening a gap. The reflection names `evaluate`,
+  `call_evaluate_function` and `annotationlib` (the 3.14 counterparts of `ForwardRef._evaluate`) are banned.
+  `openscap.py` therefore imports `from xml.parsers import expat` (an import, so R-A applies to the name) instead of
+  storing `xml.parsers.expat` in `_expat`; the per-file allowance names that exact form and no other `xml.parsers` name.
+- R-A, module names are not values: a name bound by an import of a module (`import a.b`, `import a as b`, or `from pkg import
+  mod` where `mod` is an allow-listed standard library module, a file or package of this collection, or a lower-case name
+  imported straight from `ansible` or `ansible.module_utils`) may appear only as the base of an attribute access,
+  `name.attribute`. Assignment, an argument, a return or yield, a container element, a comparison, a decorator argument, a
+  default value, a walrus target, unpacking, `del`, and `global` or `nonlocal` declarations all fail.
+- R-C, `self` is really `self`: `self` and `cls` are exempt from the private-attribute rule only when they are the first
+  parameter of a method (not a `staticmethod`) and the method never rebinds, deletes or shadows the name by assignment,
+  `for`, `with`, `except`, `import`, `match` capture, a nested `def`, `class` or `lambda` parameter, or `global` or
+  `nonlocal`.
+- Import-time policy binding (defence in depth): `process.py` builds `check_policy` and `run` in a factory (`bind_policy`)
+  that deep-copies the allowed executables (each `ExecutablePolicy` is rebuilt with frozenset and tuple fields, so nothing
+  shared with the public mapping is reachable), the trusted directories and the forbidden options, words and sequences into
+  immutable structures held only in the closures. Rebinding `ALLOWED_EXECUTABLES`, `TRUSTED_DIRECTORIES` or the `FORBIDDEN_*` module globals after import
+  has no effect on them, and a test proves that `run()` still refuses `sh` after those globals are monkeypatched.
+- Plugin refactors needed to satisfy the bans without exempting any file: the `compile` ban removed `re.compile`, so the
+  compliance modules keep patterns as string constants and call `re.fullmatch` and `re.search` (`_TOKEN` became
+  `_IDENTIFIER_PATTERN` because Ruff S105 reads `_TOKEN` as a password); `OpenScapBackend._evaluate` became
+  `_run_evaluation`; and the `_store` helper was inlined as `object.__setattr__(self, "<literal>", ...)` in each
+  `__post_init__`, because the single permitted `__setattr__` form needs a literal field name. The public Python API is
+  unchanged (`ScanRun.scanner` and `_Reader.array` keep their names).
+
+- File-I/O helper reach (merged with ADR 0011): `fileio` may not be named as an attribute or as a literal `getattr` name in any
+  plugin file except `ledger.py` (`ledger.fileio.open_directory(...)`, `getattr(ledger, "fileio")`, `compliance.fileio`), in
+  addition to the existing import restriction. The permitted attributes of `fileio.py` (`FILE_IO_ATTRIBUTES`) are exempt from
+  the submodule-value rule, so `os.stat(...)` keeps working there. The ledger and file-I/O helper replaced `re.compile` with
+  string patterns for the same reason as the other compliance modules.
+
+Accepted residual risk (lead architect): private state on objects stays reachable through an unbound method call such as
+`C.f(obj)`, which writes `obj._runner` through the `self` of `f`. It grants no ability to execute anything: a runner cannot
+weaken `process.run` (the `**` splat and the test-only keywords are banned and the policy is bound at import time), and
+plugin code can already build any `ScanRun` directly. The guard remains static analysis, not a sandbox: it reviews syntax,
+it does not track data flow, and independent security review stays required.
+
+Unused allow-list entries, on `main` before this change and left in place: the dunder reads `__qualname__`, `__doc__` and
+`__module__`, and the imports `collections` (bare), `functools`, `itertools` and `os.path`. No guarded plugin uses them
+today; remove them if they stay unused.

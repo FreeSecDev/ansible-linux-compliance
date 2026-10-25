@@ -153,7 +153,28 @@ YAML and Python files (ADR 0005):
   `compile` and `__import__` are banned, process, fork and `run_command` attributes are banned, `shell=True` and
   `use_unsafe_shell` and the test-only `owner_uid`, `policies` and `trusted_dirs` keywords are banned, `subprocess`,
   `pty`, `posix`, `os` and `sys` are banned as imported names or attributes, `vars`, `globals`, `locals`, `__dict__`
-  and `get_type_hints` are banned, and `getattr` needs a literal permitted name. Only
+  and `get_type_hints` are banned, and `getattr` needs a literal permitted name. Since FREES-125 the attribute names
+  `builtins`, `operator`, `eval`, `exec`, `compile`, `attrgetter`, `methodcaller`, `_evaluate` and
+  `evaluate_forward_ref` are banned (use `re.fullmatch(PATTERN, text)` with a string constant instead of
+  `re.compile`), a module-level `__getattr__` is banned, `__kwdefaults__`, `__defaults__`, `__code__`, `__closure__`
+  and `__globals__` are banned, assigning to an attribute or item of a name bound by an import (and `setattr` or
+  `delattr` on it) is banned, and an underscore-prefixed attribute may only be read, called or assigned through
+  `self` or `cls` inside a class body, so `openscap._expat`, `backend._runner = ...` and imports of
+  underscore-prefixed names fail. Dunders are denied by default: only reading `__name__`, `__qualname__`, `__doc__` and
+  `__module__` is allowed, plus the single form `object.__setattr__(self, "<literal>", value)` directly in `__post_init__`;
+  dunder methods that your own classes define stay allowed. Frame and code attributes (`currentframe`, `f_builtins`,
+  `co_code`, `CodeType`, `FunctionType` and the like) are banned, `types` may only provide `MappingProxyType`, and
+  attribute names that equal a standard library module or a module of this collection are banned when the chain starts
+  at a module name (`dataclasses.inspect`, `enum.sys`, `scanner.process`), while `{}.copy()`, `obj.time` and
+  `other.scanner` stay allowed; `bltns`, `_bltin` and `stdlib_re` are banned everywhere. Only
+  `super().__init__(...)` and `super().__post_init__()` may call a dunder on `super()`, and `super` and `object` must
+  never be rebound. A submodule reached by attribute (`os.path`, `json.decoder`) is a module value too and may only be
+  the base of an attribute access, so import `from xml.parsers import expat` rather than storing `xml.parsers.expat`.
+  A name bound to a module
+  may only be used as `name.attribute`, never assigned, passed, returned or stored, and `self` or `cls` count as such only
+  when they are the never rebound first parameter of a method. Object-level private writes through `C.f(obj)` are an
+  accepted residual risk (ADR 0004).
+  The guard is static analysis, not a sandbox. Only
   `plugins/module_utils/compliance/process.py` is exempt. Extend the allow-list in `tools/lint/check_repo_rules.py`
   with a justification when a new module is genuinely needed.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,

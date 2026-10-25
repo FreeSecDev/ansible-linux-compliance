@@ -58,11 +58,11 @@ from __future__ import annotations
 import hashlib
 import re
 import stat
-import xml.parsers.expat
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, NoReturn
+from xml.parsers import expat
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     model,
@@ -74,7 +74,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
     from typing import BinaryIO
 
-_expat = xml.parsers.expat
 BACKEND_NAME: Final[str] = "openscap"
 XCCDF_NAMESPACE: Final[str] = "http://checklists.nist.gov/xccdf/1.2"
 RESULTS_FILE_NAME: Final[str] = "results.xml"
@@ -93,8 +92,8 @@ HASH_CHUNK_BYTES: Final[int] = 1024 * 1024
 SOURCE_NAME_LENGTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 1024 * 1024
 
-_LABEL_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._+-]{1,64}")
-_VERSION_LINE: Final[re.Pattern[str]] = re.compile(r"\(oscap\)\s+([0-9][A-Za-z0-9._+-]{0,63})")
+_LABEL_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
+_VERSION_LINE: Final[str] = r"\(oscap\)\s+([0-9][A-Za-z0-9._+-]{0,63})"
 _SEVERITIES: Final[dict[str, model.Severity]] = {item.value: item for item in model.Severity}
 _ERROR_OUTCOMES: Final[frozenset[model.Outcome]] = frozenset(
     {model.Outcome.FAIL, model.Outcome.ERROR}
@@ -319,8 +318,8 @@ def _scan_for_declarations(previous: bytes, chunk: bytes) -> bytes:
 
 def _parse_stream(chunks: Iterable[bytes], limits: XmlLimits) -> _Builder:
     builder = _Builder(limits)
-    parser = _expat.ParserCreate(encoding="utf-8", namespace_separator="}")
-    parser.SetParamEntityParsing(_expat.XML_PARAM_ENTITY_PARSING_NEVER)
+    parser = expat.ParserCreate(encoding="utf-8", namespace_separator="}")
+    parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
     parser.buffer_text = True
     parser.StartElementHandler = builder.start
     parser.EndElementHandler = builder.end
@@ -342,8 +341,8 @@ def _parse_stream(chunks: Iterable[bytes], limits: XmlLimits) -> _Builder:
         if received == 0:
             _fail("the document is empty")
         parser.Parse(b"", _FINAL)
-    except _expat.ExpatError as error:
-        _fail(f"not well-formed XML: {_expat.ErrorString(error.code)} at line {error.lineno}")
+    except expat.ExpatError as error:
+        _fail(f"not well-formed XML: {expat.ErrorString(error.code)} at line {error.lineno}")
     return builder
 
 
@@ -498,7 +497,7 @@ class _Provenance:
 
 def _label_name(path: str, kind: str) -> str:
     name = Path(path).name
-    if _LABEL_NAME.fullmatch(name) is None:
+    if re.fullmatch(_LABEL_NAME, name) is None:
         message = (
             f"{kind} file name must match [A-Za-z0-9._+-]{{1,{SOURCE_NAME_LENGTH}}}: {_clip(name)}"
         )
@@ -605,7 +604,7 @@ class OpenScapBackend:
         outcome = (
             probe
             if isinstance(probe, _Failure)
-            else self._evaluate(request, content, tailoring, output)
+            else self._run_evaluation(request, content, tailoring, output)
         )
         unchanged = _sha256(content) == digest and (
             tailoring is None or _sha256(tailoring) == tailoring_digest
@@ -648,7 +647,7 @@ class OpenScapBackend:
         if result.returncode != 0:
             status = f"oscap --version exited with status {result.returncode}"
             return _Failure(model.ScanStatus.FAILED, status)
-        match = _VERSION_LINE.search(result.stdout.decode("utf-8", "replace"))
+        match = re.search(_VERSION_LINE, result.stdout.decode("utf-8", "replace"))
         return UNKNOWN_VERSION if match is None else match.group(1)
 
     def _arguments(
@@ -666,7 +665,7 @@ class OpenScapBackend:
         ]
         return tuple(arguments)
 
-    def _evaluate(
+    def _run_evaluation(
         self, request: scanner.ScanRequest, content: str, tailoring: str | None, output: str
     ) -> ParsedResults | _Failure:
         spec = process.CommandSpec(

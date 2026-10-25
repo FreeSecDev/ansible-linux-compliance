@@ -9,7 +9,7 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -994,3 +994,66 @@ class TestHardening:
             assert result.returncode == 0
         finally:
             os.kill(pid, signal.SIGKILL)
+
+
+class TestImportTimePolicy:
+    """The policy is bound when the module is imported."""
+
+    def test_rebinding_module_globals_does_not_weaken_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(process, "ALLOWED_EXECUTABLES", POLICIES)
+        monkeypatch.setattr(process, "TRUSTED_DIRECTORIES", ("/bin", "/usr/bin"))
+        monkeypatch.setattr(process, "FORBIDDEN_OPTIONS", frozenset[str]())
+        monkeypatch.setattr(process, "FORBIDDEN_WORDS", frozenset[str]())
+        monkeypatch.setattr(process, "FORBIDDEN_SEQUENCES", frozenset[tuple[str, ...]]())
+        spec = process.CommandSpec("sh", ("-c", "echo hi"), FAST)
+        with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
+            process.run(spec)
+        remediate = process.CommandSpec("oscap", ("xccdf", "eval", "--remediate", "x"), FAST)
+        with pytest.raises(process.ProcessPolicyError, match="forbidden"):
+            process.check_policy(
+                remediate,
+                dict(
+                    POLICIES,
+                    oscap=process.ExecutablePolicy(
+                        "oscap", frozenset({"--remediate"}), command_prefixes=ANY_ARGUMENTS
+                    ),
+                ),
+            )
+
+    def test_rebinding_the_forbidden_options_does_not_weaken_check_policy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(process, "FORBIDDEN_OPTIONS", frozenset[str]())
+        policies = {
+            "oscap": process.ExecutablePolicy(
+                "oscap", frozenset({"--fetch-remote-resources"}), command_prefixes=ANY_ARGUMENTS
+            )
+        }
+        spec = process.CommandSpec("oscap", ("--fetch-remote-resources",), FAST)
+        with pytest.raises(process.ProcessPolicyError, match="forbidden"):
+            process.check_policy(spec, policies)
+
+    def test_the_bound_policy_is_a_copy(self) -> None:
+        policies = {"true": POLICIES["true"]}
+        none = frozenset[str]()
+        run = process.bind_policy(policies, ("/bin",), none, none, frozenset[tuple[str, ...]]())[1]
+        policies["sh"] = SHELL
+        with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
+            run(process.CommandSpec("sh", ("-c", "echo hi"), FAST))
+
+    def test_the_bound_policy_values_are_deep_copies(self) -> None:
+        mutable = {"-x"}
+        loose = process.ExecutablePolicy(
+            "true",
+            allowed_options=cast("frozenset[str]", mutable),
+            command_prefixes=ANY_ARGUMENTS,
+        )
+        none = frozenset[str]()
+        run = process.bind_policy(
+            {"true": loose}, ("/bin",), none, none, frozenset[tuple[str, ...]]()
+        )[1]
+        mutable.add("--evil")
+        with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
+            run(process.CommandSpec("true", ("--evil",), FAST))

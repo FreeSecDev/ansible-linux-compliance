@@ -53,11 +53,11 @@ ERROR_TYPES: Final[frozenset[str]] = fileio.REASONS | frozenset(
     {"corrupt", "unsupported_schema", "invalid_entry", "conflict", "ledger_full"}
 )
 
-_RULE_ID: Final[re.Pattern[str]] = re.compile(r"xccdf_[A-Za-z0-9_.-]+?_rule_[A-Za-z0-9_.+-]+")
-_FAMILY: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9._-]*")
-_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/@+-]*")
-_VERSION: Final[re.Pattern[str]] = re.compile(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?")
-_TIMESTAMP: Final[re.Pattern[str]] = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+_RULE_ID: Final[str] = r"xccdf_[A-Za-z0-9_.-]+?_rule_[A-Za-z0-9_.+-]+"
+_FAMILY: Final[str] = r"[a-z0-9][a-z0-9._-]*"
+_NAME: Final[str] = r"[A-Za-z0-9][A-Za-z0-9_.:/@+-]*"
+_VERSION: Final[str] = r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?"
+_TIMESTAMP: Final[str] = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
 _ALLOWED_CONTROLS: Final[frozenset[str]] = frozenset({"\t", "\n", "\r"})
 _BIDI_CONTROLS: Final[frozenset[str]] = frozenset(
     chr(code) for code in (0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069)
@@ -96,12 +96,12 @@ def _invalid(message: str) -> NoReturn:
     _fail("invalid_entry", message)
 
 
-def _text(value: object, name: str, max_length: int, pattern: re.Pattern[str]) -> str:
+def _text(value: object, name: str, max_length: int, pattern: str) -> str:
     if not isinstance(value, str):
         _invalid(f"{name} must be a string")
     if not value or len(value) > max_length:
         _invalid(f"{name} must have 1 to {max_length} characters")
-    if pattern.fullmatch(value) is None:
+    if re.fullmatch(pattern, value) is None:
         _invalid(f"{name} has an invalid format")
     return value
 

@@ -35,7 +35,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final, NoReturn, cast
+from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -268,44 +268,15 @@ def _option_name(argument: str) -> str:
     return argument.split("=", 1)[0]
 
 
-def check_policy(spec: CommandSpec, policies: Mapping[str, ExecutablePolicy]) -> ExecutablePolicy:
-    """Check the executable and the options of ``spec`` against ``policies``.
-
-    Args:
-        spec: The command to check.
-        policies: Allow-list keyed by executable name.
-
-    Returns:
-        The policy of the executable.
-
-    Raises:
-        ProcessPolicyError: If the executable is not allow-listed, or an
-            command is not an allowed sub-command of the executable, an
-            argument is forbidden, or an option is not allow-listed.
-    """
-    _reject_forbidden_words(spec.args)
-    policy = policies.get(spec.executable)
-    if policy is None:
-        _deny(f"executable is not allow-listed: {_safe(spec.executable)}")
-    if spec.args in policy.standalone_commands:
-        return policy
-    prefix = _matching_prefix(spec.args, policy)
-    for argument in spec.args[len(prefix) :]:
-        if not argument.startswith("-"):
-            continue
-        name = _option_name(argument)
-        if name in FORBIDDEN_OPTIONS:
-            _deny(f"option is forbidden: {_safe(name)}")
-        if name not in policy.allowed_options:
-            _deny(f"option is not allow-listed for {spec.executable}: {_safe(argument)}")
-    return policy
-
-
-def _reject_forbidden_words(args: tuple[str, ...]) -> None:
+def _reject_forbidden_words(
+    args: tuple[str, ...],
+    words: frozenset[str],
+    sequences: frozenset[tuple[str, ...]],
+) -> None:
     for index, argument in enumerate(args):
-        if _option_name(argument) in FORBIDDEN_WORDS:
+        if _option_name(argument) in words:
             _deny(f"argument is forbidden: {_safe(argument)}")
-        for sequence in FORBIDDEN_SEQUENCES:
+        for sequence in sequences:
             if args[index : index + len(sequence)] == sequence:
                 _deny(f"argument sequence is forbidden: {_safe(' '.join(sequence))}")
 
@@ -492,58 +463,7 @@ def _wait_for_exit(process: subprocess.Popen[bytes], deadline: float) -> bool:
     return False
 
 
-def run(
-    spec: CommandSpec,
-    *,
-    policies: Mapping[str, ExecutablePolicy] | None = None,
-    trusted_dirs: Sequence[str] | None = None,
-    owner_uid: int = ROOT_UID,
-) -> CommandResult:
-    """Run ``spec`` under the execution policy and return the bounded result.
-
-    The process runs in its own session with closed standard input. Output is
-    read in chunks from both pipes and only the first ``max_output_bytes`` of
-    each stream are kept; the rest is drained and discarded. The whole process
-    group is killed after the leader exits, so detached members do not outlive
-    the run, and when the timeout expires. A timeout sets ``timed_out``. A
-    descendant in another session that keeps the pipes open also ends in
-    ``timed_out``, even if the leader exited with status 0.
-
-    The specification is validated again here, so a specification that was
-    altered after construction cannot bypass the argument checks.
-
-    ``policies``, ``trusted_dirs`` and ``owner_uid`` exist only so that unit tests can run
-    harmless system utilities. Production callers never pass them.
-
-    Args:
-        spec: The command to run.
-        policies: Test-only replacement for :data:`ALLOWED_EXECUTABLES`.
-        trusted_dirs: Test-only replacement for :data:`TRUSTED_DIRECTORIES`.
-        owner_uid: Test-only replacement for the required owner, root.
-
-    Returns:
-        The captured result.
-
-    Raises:
-        ProcessPolicyError: If the policy rejects the command; nothing ran.
-        ProcessExecutionError: If the executable is missing, cannot be
-            started or the output cannot be read.
-    """
-    spec = CommandSpec(
-        spec.executable,
-        spec.args,
-        spec.timeout_seconds,
-        spec.max_output_bytes,
-        spec.env_allow,
-        spec.cwd,
-    )
-    check_policy(spec, ALLOWED_EXECUTABLES if policies is None else policies)
-    executable = resolve_executable(
-        spec.executable,
-        TRUSTED_DIRECTORIES if trusted_dirs is None else trusted_dirs,
-        owner_uid,
-    )
-    argv = (executable, *spec.args)
+def _supervise(spec: CommandSpec, argv: tuple[str, ...]) -> CommandResult:
     out = _Capture(spec.max_output_bytes)
     err = _Capture(spec.max_output_bytes)
     started = time.monotonic()
@@ -582,3 +502,149 @@ def run(
         duration_seconds=time.monotonic() - started,
         timed_out=timed_out,
     )
+
+
+class _PolicyChecker(Protocol):
+    def __call__(
+        self, spec: CommandSpec, policies: Mapping[str, ExecutablePolicy]
+    ) -> ExecutablePolicy: ...
+
+
+class _Runner(Protocol):
+    def __call__(
+        self,
+        spec: CommandSpec,
+        *,
+        policies: Mapping[str, ExecutablePolicy] | None = None,
+        trusted_dirs: Sequence[str] | None = None,
+        owner_uid: int = ROOT_UID,
+    ) -> CommandResult: ...
+
+
+def bind_policy(
+    allowed: Mapping[str, ExecutablePolicy],
+    trusted: Sequence[str],
+    forbidden_options: frozenset[str],
+    forbidden_words: frozenset[str],
+    forbidden_sequences: frozenset[tuple[str, ...]],
+) -> tuple[_PolicyChecker, _Runner]:
+    """Bind the execution policy at import time and return the checker and the runner.
+
+    The returned functions read private immutable copies that live only in their
+    closures, so rebinding ``ALLOWED_EXECUTABLES``, ``TRUSTED_DIRECTORIES`` or the
+    ``FORBIDDEN_*`` names of this module after import has no effect on them.
+    """
+    bound_policies = MappingProxyType(
+        {
+            key: ExecutablePolicy(
+                policy.name,
+                frozenset(policy.allowed_options),
+                tuple(tuple(prefix) for prefix in policy.command_prefixes),
+                tuple(tuple(command) for command in policy.standalone_commands),
+            )
+            for key, policy in allowed.items()
+        }
+    )
+    bound_trusted = tuple(trusted)
+    options = frozenset(forbidden_options)
+    words = frozenset(forbidden_words)
+    sequences = frozenset(forbidden_sequences)
+
+    def check_policy(
+        spec: CommandSpec, policies: Mapping[str, ExecutablePolicy]
+    ) -> ExecutablePolicy:
+        """Check the executable and the options of ``spec`` against ``policies``.
+
+        Args:
+            spec: The command to check.
+            policies: Allow-list keyed by executable name.
+
+        Returns:
+            The policy of the executable.
+
+        Raises:
+            ProcessPolicyError: If the executable is not allow-listed, or an
+                command is not an allowed sub-command of the executable, an
+                argument is forbidden, or an option is not allow-listed.
+        """
+        _reject_forbidden_words(spec.args, words, sequences)
+        policy = policies.get(spec.executable)
+        if policy is None:
+            _deny(f"executable is not allow-listed: {_safe(spec.executable)}")
+        if spec.args in policy.standalone_commands:
+            return policy
+        prefix = _matching_prefix(spec.args, policy)
+        for argument in spec.args[len(prefix) :]:
+            if not argument.startswith("-"):
+                continue
+            name = _option_name(argument)
+            if name in options:
+                _deny(f"option is forbidden: {_safe(name)}")
+            if name not in policy.allowed_options:
+                _deny(f"option is not allow-listed for {spec.executable}: {_safe(argument)}")
+        return policy
+
+    def run(
+        spec: CommandSpec,
+        *,
+        policies: Mapping[str, ExecutablePolicy] | None = None,
+        trusted_dirs: Sequence[str] | None = None,
+        owner_uid: int = ROOT_UID,
+    ) -> CommandResult:
+        """Run ``spec`` under the execution policy and return the bounded result.
+
+        The process runs in its own session with closed standard input. Output is
+        read in chunks from both pipes and only the first ``max_output_bytes`` of
+        each stream are kept; the rest is drained and discarded. The whole process
+        group is killed after the leader exits, so detached members do not outlive
+        the run, and when the timeout expires. A timeout sets ``timed_out``. A
+        descendant in another session that keeps the pipes open also ends in
+        ``timed_out``, even if the leader exited with status 0.
+
+        The specification is validated again here, so a specification that was
+        altered after construction cannot bypass the argument checks.
+
+        ``policies``, ``trusted_dirs`` and ``owner_uid`` exist only so that unit tests can run
+        harmless system utilities. Production callers never pass them.
+
+        Args:
+            spec: The command to run.
+            policies: Test-only replacement for :data:`ALLOWED_EXECUTABLES` bound at import.
+            trusted_dirs: Test-only replacement for :data:`TRUSTED_DIRECTORIES` bound at import.
+            owner_uid: Test-only replacement for the required owner, root.
+
+        Returns:
+            The captured result.
+
+        Raises:
+            ProcessPolicyError: If the policy rejects the command; nothing ran.
+            ProcessExecutionError: If the executable is missing, cannot be
+                started or the output cannot be read.
+        """
+        spec = CommandSpec(
+            spec.executable,
+            spec.args,
+            spec.timeout_seconds,
+            spec.max_output_bytes,
+            spec.env_allow,
+            spec.cwd,
+        )
+        check_policy(spec, bound_policies if policies is None else policies)
+        executable = resolve_executable(
+            spec.executable,
+            bound_trusted if trusted_dirs is None else trusted_dirs,
+            owner_uid,
+        )
+        argv = (executable, *spec.args)
+        return _supervise(spec, argv)
+
+    return check_policy, run
+
+
+check_policy, run = bind_policy(
+    ALLOWED_EXECUTABLES,
+    TRUSTED_DIRECTORIES,
+    FORBIDDEN_OPTIONS,
+    FORBIDDEN_WORDS,
+    FORBIDDEN_SEQUENCES,
+)

@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    Harden the plugin repository guard: ban string-based reflection names, function internals,
+    assignment to attributes of imported modules, cross-module underscore-prefixed access, all
+    dunder attributes except a few reads, frame and code attributes, module names as values and
+    attributes named like modules. The audited process helper binds its policy at import time.
+    The regular expression patterns of the compliance modules are string constants.
