@@ -263,7 +263,9 @@ today; remove them if they stay unused.
   through `xmlsafe.open_regular` and `xmlsafe.iter_handle_chunks`) and `xmlsafe.parse_text` (text), and keeps only the
   XCCDF semantics: the namespace checks, the leaf-element and mixed-content rules, and the extraction. It passes its
   bounds (`XmlLimits`, default 2,000,000 elements and depth 64, now taken from `xmlsafe`) and re-raises `xmlsafe.XmlSafetyError` as
-  `XccdfParseError` with the same message, so the public API and every message are unchanged.
+  `XccdfParseError` with the same message, so the public API and every message are unchanged. An `OSError` raised when the results handle is closed, the
+  only file operation outside `xmlsafe`, becomes "the results file cannot be read: ..." as before (independent review
+  of PR #16).
 - `xmlsafe.py` gained only what the move needed, and nothing weaker: `parse_text` (UTF-8 encoding of a text document,
   then `parse_chunks`, so every check applies) and a keyword-only `subject` for `open_regular`, `iter_handle_chunks`
   and `iter_file_chunks`, which only changes the wording of error messages ("the results file" instead of "the file").
