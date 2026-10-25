@@ -59,8 +59,29 @@ class XmlSafetyError(ValueError):
     """Raised when a document is unsafe, malformed, too large or unreadable."""
 
 
+class CloseError(XmlSafetyError):
+    """Raised when closing a file that was read fails.
+
+    The message has the same wording as a read error. The ``OSError`` that the
+    close raised is both the cause of this error and ``os_error``.
+
+    Attributes:
+        os_error: The error that the close raised.
+    """
+
+    def __init__(self, message: str, os_error: OSError) -> None:
+        """Create the error from its message and the ``OSError`` of the close."""
+        super().__init__(message)
+        self.os_error = os_error
+
+
 def _fail(message: str) -> NoReturn:
     raise XmlSafetyError(message)
+
+
+def _unreadable(subject: str, error: OSError) -> str:
+    reason = error.strerror or type(error).__name__
+    return f"the {_subject(subject, 'file')} cannot be read: {reason}"
 
 
 @dataclass(frozen=True)
@@ -218,8 +239,50 @@ def open_regular(path: str, max_bytes: int, *, subject: str = "") -> BinaryIO:
             _fail(f"the {_subject(subject, 'file')} is larger than {max_bytes} bytes")
         return target.open("rb")
     except OSError as error:
-        reason = error.strerror or type(error).__name__
-        _fail(f"the {_subject(subject, 'file')} cannot be read: {reason}")
+        _fail(_unreadable(subject, error))
+
+
+class RegularFile:
+    """Context manager that opens a file with :func:`open_regular` and closes it.
+
+    Entering applies every check of :func:`open_regular` and returns the handle.
+    Leaving closes the handle. An ``OSError`` raised by the close becomes a
+    :class:`CloseError`, an :class:`XmlSafetyError` worded like a read error
+    ("the file cannot be read: ...") whose cause is the ``OSError``, so callers
+    need no file handling of their own. When the block itself raised, that error
+    propagates unchanged and a failing close does not replace it. Leaving
+    without having entered does nothing.
+
+    Raises:
+        XmlSafetyError: On entry, for every rejection of :func:`open_regular`.
+        CloseError: On exit, if the close fails and the block did not raise.
+    """
+
+    def __init__(self, path: str, max_bytes: int, *, subject: str = "") -> None:
+        """Remember the arguments for :func:`open_regular`; nothing is opened yet."""
+        self.path = path
+        self.max_bytes = max_bytes
+        self.subject = subject
+        self.handle: BinaryIO | None = None
+
+    def __enter__(self) -> BinaryIO:
+        """Open the file and return its handle."""
+        self.handle = open_regular(self.path, self.max_bytes, subject=self.subject)
+        return self.handle
+
+    def __exit__(self, error_type: object, error: object, traceback: object) -> None:
+        """Close the handle, turning a close-time ``OSError`` into :class:`CloseError`."""
+        handle = self.handle
+        self.handle = None
+        if handle is None:
+            return
+        try:
+            handle.close()
+        except OSError as close_error:
+            if error is None:
+                raise CloseError(
+                    _unreadable(self.subject, close_error), close_error
+                ) from close_error
 
 
 def iter_handle_chunks(handle: BinaryIO, max_bytes: int, *, subject: str = "") -> Iterator[bytes]:
@@ -241,15 +304,14 @@ def iter_handle_chunks(handle: BinaryIO, max_bytes: int, *, subject: str = "") -
                 _fail(f"the {_subject(subject, 'file')} is larger than {max_bytes} bytes")
             yield chunk
     except OSError as error:
-        reason = error.strerror or type(error).__name__
-        _fail(f"the {_subject(subject, 'file')} cannot be read: {reason}")
+        _fail(_unreadable(subject, error))
 
 
 def iter_file_chunks(path: str, max_bytes: int, *, subject: str = "") -> Iterator[bytes]:
     """Yield the bytes of a regular, non-symlink file with a size bound.
 
     Nothing is checked until the iterator is first advanced. See
-    :func:`open_regular` and :func:`iter_handle_chunks` for the checks and errors.
+    :class:`RegularFile` and :func:`iter_handle_chunks` for the checks and errors.
     """
-    with open_regular(path, max_bytes, subject=subject) as handle:
+    with RegularFile(path, max_bytes, subject=subject) as handle:
         yield from iter_handle_chunks(handle, max_bytes, subject=subject)

@@ -606,6 +606,38 @@ class TestCloseErrors:
         assert str(caught.value) == f"the results file cannot be read: {message}"
         assert caught.value.__cause__ is error
 
+    def test_the_close_is_handled_by_xmlsafe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        error = OSError(5, "Input/output error")
+        data = (XCCDF / "all-pass.xml").read_bytes()
+
+        class Manager:
+            """Stand-in for xmlsafe.RegularFile whose exit reports a close error."""
+
+            def __init__(self, path: str, max_bytes: int, *, subject: str = "") -> None:
+                self.arguments = (path, max_bytes, subject)
+
+            def __enter__(self) -> io.BytesIO:
+                return io.BytesIO(data)
+
+            def __exit__(self, *_details: object) -> None:
+                message = "the results file cannot be read: reported by xmlsafe"
+                raise xmlsafe.CloseError(message, error) from error
+
+        monkeypatch.setattr(xmlsafe, "RegularFile", Manager)
+        with pytest.raises(openscap.XccdfParseError) as caught:
+            openscap.read_results("/results.xml", 1_000_000)
+        assert str(caught.value) == "the results file cannot be read: reported by xmlsafe"
+        assert caught.value.__cause__ is error
+
+    def test_a_parse_error_is_not_replaced_by_a_close_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "results.xml"
+        path.write_bytes(b"<Benchmark")
+        fail_on_close(monkeypatch, path, OSError(5, "Input/output error"))
+        with pytest.raises(openscap.XccdfParseError, match="not well-formed"):
+            openscap.read_results(str(path), 1_000_000)
+
 
 class TestCompletedScans:
     """Scans that finish and are normalized."""

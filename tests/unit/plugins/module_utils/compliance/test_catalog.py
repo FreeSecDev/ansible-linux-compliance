@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 from pathlib import Path
 from typing import Any
@@ -673,3 +674,90 @@ class TestFailClosed:
         monkeypatch.setattr(Path, "lstat", understated)
         with pytest.raises(catalog.CatalogError, match="larger than 10 bytes"):
             catalog.read_benchmarks(path, sha, max_bytes=10)
+
+
+class CloseFails(io.BytesIO):
+    """In-memory handle whose first close fails like an I/O error on a network file system."""
+
+    def __init__(self, data: bytes, error: OSError) -> None:
+        super().__init__(data)
+        self.error = error
+
+    def close(self) -> None:
+        first = not self.closed
+        super().close()
+        if first:
+            raise self.error
+
+
+def fail_on_close(monkeypatch: pytest.MonkeyPatch, target: str, error: OSError) -> None:
+    real: Any = Path.open
+    path = Path(target)
+    data = path.read_bytes()
+
+    def opener(self: Path, *arguments: Any, **keywords: Any) -> Any:
+        if self == path:
+            return CloseFails(data, error)
+        return real(self, *arguments, **keywords)
+
+    monkeypatch.setattr(Path, "open", opener)
+
+
+class TestCloseErrors:
+    """An error while the datastream is closed is a catalog error, never a bare OSError."""
+
+    @pytest.mark.parametrize(
+        ("error", "message"),
+        [
+            (OSError(5, "Input/output error"), "the file cannot be read: Input/output error"),
+            (OSError(), "the file cannot be read: OSError"),
+        ],
+    )
+    def test_verify_digest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: OSError, message: str
+    ) -> None:
+        path, expected = write(tmp_path, collection(benchmark()))
+        fail_on_close(monkeypatch, path, error)
+        with pytest.raises(catalog.CatalogError) as caught:
+            catalog.verify_digest(path, expected)
+        assert not isinstance(caught.value, catalog.DigestMismatchError)
+        assert catalog.error_type(caught.value) == "invalid_content"
+        assert str(caught.value) == message
+        assert isinstance(caught.value.__cause__, xmlsafe.CloseError)
+        assert caught.value.__cause__.__cause__ is error
+
+    @pytest.mark.parametrize(
+        ("error", "message"),
+        [
+            (OSError(5, "Input/output error"), "the file cannot be read: Input/output error"),
+            (OSError(), "the file cannot be read: OSError"),
+        ],
+    )
+    def test_read_benchmarks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: OSError, message: str
+    ) -> None:
+        path, expected = write(tmp_path, collection(benchmark()))
+        fail_on_close(monkeypatch, path, error)
+        with pytest.raises(catalog.CatalogError) as caught:
+            catalog.read_benchmarks(path, expected)
+        assert not isinstance(caught.value, catalog.DigestMismatchError)
+        assert catalog.error_type(caught.value) == "invalid_content"
+        assert str(caught.value) == message
+        assert isinstance(caught.value.__cause__, xmlsafe.CloseError)
+        assert caught.value.__cause__.__cause__ is error
+
+    def test_a_digest_mismatch_is_not_replaced_by_a_close_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = write(tmp_path, collection(benchmark()))[0]
+        fail_on_close(monkeypatch, path, OSError(5, "Input/output error"))
+        with pytest.raises(catalog.DigestMismatchError, match="digest mismatch"):
+            catalog.read_benchmarks(path, "0" * 64)
+
+    def test_a_parse_error_is_not_replaced_by_a_close_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path, expected = write(tmp_path, b"<ds:data-stream-collection")
+        fail_on_close(monkeypatch, path, OSError(5, "Input/output error"))
+        with pytest.raises(catalog.CatalogError, match="not well-formed"):
+            catalog.read_benchmarks(path, expected)

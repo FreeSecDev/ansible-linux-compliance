@@ -1006,3 +1006,122 @@ def test_the_ledger_may_name_fileio_as_an_attribute(tmp_path: Path) -> None:
     source = "def f(x):\n    getattr(x, 'fileio')\n    return x.fileio\n"
     assert process_messages(tmp_path, source, LEDGER_FILE) == []
     assert process_messages(tmp_path, source, "plugins/module_utils/compliance/fileio.py")
+
+
+XMLSAFE_IMPORT = (
+    "from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import"
+    " xmlsafe\n"
+)
+XMLSAFE_PACKAGE = "ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance"
+EXPAT_REACH = {
+    "attribute-call": ("expat", XMLSAFE_IMPORT + "xmlsafe.expat.ParserCreate()\n"),
+    "getattr-on-the-module": ("expat", XMLSAFE_IMPORT + 'getattr(xmlsafe, "expat")\n'),
+    "getattr-then-call": (
+        "expat",
+        XMLSAFE_IMPORT + 'getattr(xmlsafe, "expat").ParserCreate()\n',
+    ),
+    "assignment": ("expat", XMLSAFE_IMPORT + "x = xmlsafe.expat\n"),
+    "parsers-chain-parsers": ("parsers", XMLSAFE_IMPORT + "xmlsafe.parsers.expat\n"),
+    "parsers-chain-expat": ("expat", XMLSAFE_IMPORT + "xmlsafe.parsers.expat\n"),
+    "plain-attribute": ("expat", "def f(x):\n    return x.expat.ParserCreate()\n"),
+    "plain-parsers-attribute": ("parsers", "def f(x):\n    return x.parsers\n"),
+    "getattr-on-a-value": ("expat", "def f(x):\n    return getattr(x, 'expat')\n"),
+    "getattr-parsers": ("parsers", "def f(x):\n    return getattr(x, 'parsers')\n"),
+    "getattr-default": ("expat", "def f(x):\n    return getattr(x, 'expat', None)\n"),
+    "setattr": ("expat", "def f(x):\n    setattr(x, 'expat', None)\n"),
+    "attribute-store": ("expat", "def f(x):\n    x.expat = None\n"),
+    "match-class-keyword": (
+        "expat",
+        "def f(x):\n    match x:\n        case object(expat=e):\n            return e\n",
+    ),
+    "relative-from-import": ("expat", "from .xmlsafe import expat\nexpat.ParserCreate()\n"),
+    "relative-from-import-alias": ("expat", "from .xmlsafe import expat as e\n"),
+    "absolute-from-import": ("expat", "from " + XMLSAFE_PACKAGE + ".xmlsafe import expat\n"),
+    "from-import-path": ("expat", "from .xmlsafe.expat import ParserCreate\n"),
+    "from-import-parsers-path": ("parsers", "from " + XMLSAFE_PACKAGE + ".parsers import x\n"),
+    "plain-import-path": ("expat", "import " + XMLSAFE_PACKAGE + ".xmlsafe.expat as e\n"),
+}
+EXPAT_REACH_FILES = [
+    "plugins/module_utils/compliance/openscap.py",
+    "plugins/module_utils/compliance/catalog.py",
+    "plugins/module_utils/compliance/model.py",
+    "plugins/module_utils/compliance/fileio.py",
+    "plugins/module_utils/compliance/ledger.py",
+    "plugins/module_utils/compliance/xmlsafe_other.py",
+    "plugins/module_utils/other/xmlsafe.py",
+    "plugins/modules/benchmark_info.py",
+    "plugins/modules/profile_info.py",
+    "plugins/modules/control_state.py",
+    "plugins/modules/xmlsafe.py",
+    "plugins/action/other.py",
+]
+
+
+@pytest.mark.parametrize("name", EXPAT_REACH_FILES)
+@pytest.mark.parametrize("case", EXPAT_REACH.values(), ids=EXPAT_REACH.keys())
+def test_raw_expat_is_not_reachable_outside_the_shared_parser(
+    tmp_path: Path, name: str, case: tuple[str, str]
+) -> None:
+    attribute, source = case
+    expected = f"{attribute!r} is restricted to {EXPAT_FILE}"
+    messages = process_messages(tmp_path, source, name)
+    assert any(message.endswith(expected) for message in messages), messages
+
+
+EXPAT_OWNER_ALLOWED = {
+    "package-import-call": "from xml.parsers import expat\nexpat.ParserCreate()\n",
+    "package-import-constants": (
+        "from xml.parsers import expat\nexpat.XML_PARAM_ENTITY_PARSING_NEVER\nexpat.ExpatError\n"
+    ),
+    "dotted-import-call": "import xml.parsers.expat\nxml.parsers.expat.ParserCreate()\n",
+    "plain-attribute": "def f(x):\n    return x.expat\n",
+    "plain-parsers-attribute": "def f(x):\n    return x.parsers\n",
+    "getattr-on-a-value": "def f(x):\n    return getattr(x, 'expat')\n",
+    "getattr-parsers": "def f(x):\n    return getattr(x, 'parsers')\n",
+    "match-class-keyword": (
+        "def f(x):\n    match x:\n        case object(expat=e):\n            return e\n"
+    ),
+}
+
+
+@pytest.mark.parametrize("source", EXPAT_OWNER_ALLOWED.values(), ids=EXPAT_OWNER_ALLOWED.keys())
+def test_the_shared_parser_may_use_its_reserved_names(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source, EXPAT_FILE) == []
+
+
+def test_the_shared_parser_itself_passes_the_guard(tmp_path: Path) -> None:
+    source = (rules.REPO_ROOT / EXPAT_FILE).read_text(encoding="utf-8")
+    assert "expat.ParserCreate" in source
+    assert process_messages(tmp_path, source, EXPAT_FILE) == []
+
+
+def test_the_shared_parser_still_may_not_store_expat(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "from xml.parsers import expat\nx = expat\n", EXPAT_FILE)
+    assert messages == ["module name 'expat' may only be used as expat.attribute in plugins"]
+
+
+EXPAT_NEIGHBOURS_ALLOWED = {
+    "other-xmlsafe-attribute": XMLSAFE_IMPORT + "xmlsafe.parse_chunks([b'<a/>'], events)\n",
+    "other-xmlsafe-import": "from .xmlsafe import RegularFile, XmlSafetyError\n",
+    "lookalike-attribute": "def f(x):\n    return x.expatriate, x.parsers_seen, x.expat_\n",
+    "lookalike-getattr": "def f(x):\n    return getattr(x, 'expats')\n",
+    "match-class-other-keyword": (
+        "def f(x):\n    match x:\n        case object(real=e):\n            return e\n"
+    ),
+    "plain-import-other-path": "import " + XMLSAFE_PACKAGE + ".xmlsafe\n",
+}
+
+
+@pytest.mark.parametrize(
+    "source", EXPAT_NEIGHBOURS_ALLOWED.values(), ids=EXPAT_NEIGHBOURS_ALLOWED.keys()
+)
+def test_other_names_near_the_reserved_ones_stay_allowed(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source, "plugins/module_utils/compliance/openscap.py") == []
+
+
+def test_the_reserved_names_are_derived_from_the_extra_imports_only() -> None:
+    assert dict(rules.RESERVED_ATTRIBUTES) == {"expat": EXPAT_FILE, "parsers": EXPAT_FILE}
+    assert not set(rules.RESERVED_ATTRIBUTES) & rules.SHARED_SUBMODULE_ATTRIBUTES
+    assert {"path", "abc"} <= rules.SHARED_SUBMODULE_ATTRIBUTES
+    expected = rules.SHARED_SUBMODULE_ATTRIBUTES | {"expat", "parsers"}
+    assert expected == rules.SUBMODULE_ATTRIBUTES

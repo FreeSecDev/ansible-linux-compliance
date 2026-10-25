@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 from pathlib import Path
 from typing import Any, cast
@@ -302,3 +303,114 @@ def test_a_read_error_names_the_subject() -> None:
 
     with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the results file cannot be read: OSError$"):
         list(xmlsafe.iter_handle_chunks(cast("Any", Broken()), 10, subject="results"))
+
+
+class CloseFails(io.BytesIO):
+    """In-memory handle whose first close fails like an I/O error on a network file system."""
+
+    def __init__(self, data: bytes, error: OSError) -> None:
+        super().__init__(data)
+        self.error = error
+
+    def close(self) -> None:
+        first = not self.closed
+        super().close()
+        if first:
+            raise self.error
+
+
+def fail_on_close(monkeypatch: pytest.MonkeyPatch, target: Path, error: OSError) -> None:
+    real: Any = Path.open
+    data = target.read_bytes()
+
+    def opener(self: Path, *arguments: Any, **keywords: Any) -> Any:
+        if self == target:
+            return CloseFails(data, error)
+        return real(self, *arguments, **keywords)
+
+    monkeypatch.setattr(Path, "open", opener)
+
+
+class TestRegularFile:
+    """The context manager owns the open and the close of a file."""
+
+    def test_it_returns_a_readable_handle_and_closes_it(self, tmp_path: Path) -> None:
+        path = tmp_path / "data.xml"
+        path.write_bytes(b"x" * 10)
+        with xmlsafe.RegularFile(str(path), 10) as handle:
+            assert b"".join(xmlsafe.iter_handle_chunks(handle, 10)) == b"x" * 10
+        assert handle.closed
+
+    def test_entering_applies_the_checks_of_open_regular(self, tmp_path: Path) -> None:
+        path = tmp_path / "data.xml"
+        path.write_bytes(b"x" * 11)
+        link = tmp_path / "link.xml"
+        link.symlink_to(path)
+        oversized = pytest.raises(
+            xmlsafe.XmlSafetyError, match=r"^the file is larger than 10 bytes$"
+        )
+        with oversized, xmlsafe.RegularFile(str(path), 10):
+            pytest.fail("an oversized file must not be opened")
+        symlinked = pytest.raises(xmlsafe.XmlSafetyError, match=r"^the path is not a regular file$")
+        with symlinked, xmlsafe.RegularFile(str(link), 100):
+            pytest.fail("a symlink must not be opened")
+
+    @pytest.mark.parametrize(
+        ("error", "subject", "message"),
+        [
+            (OSError(5, "Input/output error"), "", "the file cannot be read: Input/output error"),
+            (OSError(), "", "the file cannot be read: OSError"),
+            (
+                OSError(5, "Input/output error"),
+                "results",
+                "the results file cannot be read: Input/output error",
+            ),
+        ],
+    )
+    def test_a_close_error_is_a_structured_error_with_the_os_error_as_cause(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        error: OSError,
+        subject: str,
+        message: str,
+    ) -> None:
+        path = tmp_path / "data.xml"
+        path.write_bytes(b"<a/>")
+        fail_on_close(monkeypatch, path, error)
+        manager = xmlsafe.RegularFile(str(path), 10, subject=subject)
+        with pytest.raises(xmlsafe.CloseError) as caught, manager as handle:
+            handle.read()
+        assert isinstance(caught.value, xmlsafe.XmlSafetyError)
+        assert str(caught.value) == message
+        assert caught.value.__cause__ is error
+        assert caught.value.os_error is error
+
+    def test_an_error_in_the_block_is_not_replaced_by_a_close_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "data.xml"
+        path.write_bytes(b"<a")
+        fail_on_close(monkeypatch, path, OSError(5, "Input/output error"))
+        manager = xmlsafe.RegularFile(str(path), 10)
+        expected = pytest.raises(xmlsafe.XmlSafetyError, match="not well-formed")
+        with expected as caught, manager as handle:
+            xmlsafe.parse_chunks(xmlsafe.iter_handle_chunks(handle, 10), Recorder())
+        assert not isinstance(caught.value, xmlsafe.CloseError)
+
+    def test_leaving_without_entering_does_nothing(self, tmp_path: Path) -> None:
+        manager = xmlsafe.RegularFile(str(tmp_path / "missing.xml"), 10)
+        manager.__exit__(None, None, None)
+        assert manager.handle is None
+        assert not (tmp_path / "missing.xml").exists()
+
+    def test_file_chunks_report_a_close_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "data.xml"
+        path.write_bytes(b"x" * 10)
+        error = OSError(5, "Input/output error")
+        fail_on_close(monkeypatch, path, error)
+        with pytest.raises(xmlsafe.CloseError, match=r"^the file cannot be read: Input/") as caught:
+            list(xmlsafe.iter_file_chunks(str(path), 10))
+        assert caught.value.__cause__ is error
