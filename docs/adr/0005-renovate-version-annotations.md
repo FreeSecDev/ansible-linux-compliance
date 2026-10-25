@@ -1,6 +1,6 @@
 # 0005. Version annotations on pinned GitHub Actions
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
 - **Jira:** pending (CI/CD epic)
@@ -53,7 +53,9 @@ that a pinned commit SHA corresponds to, and a bare SHA is not auditable.
 
 Scope and enforcement: the comment must match exactly `# vX.Y.Z` after at least one space and follow a
 `rev: <40-hex>` value, so mutable tags and any other comment remain rejected. `tools/lint/check_repo_rules.py`
-allows exactly these two forms. Only non-Python hook repositories are pinned this way; Python tools run as
+allows exactly these two forms. Only remote hook repositories that are not tools declared in `pyproject.toml` are
+pinned this way (pre-commit-hooks, gitleaks, markdownlint-cli2). pre-commit-hooks is itself a Python package, but its
+version is the hook revision owned by Renovate, not a project dependency. Tools declared in `pyproject.toml` run as
 local hooks from the locked environment and are owned by Dependabot through `pyproject.toml` and `uv.lock`.
 
 Introduced in: [pull request #3](https://github.com/FreeSecDev/ansible-linux-compliance/pull/3) (FREES-69, FREES-71).

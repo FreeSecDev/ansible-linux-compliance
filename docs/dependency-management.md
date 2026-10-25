@@ -70,9 +70,11 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
 GitHub's dependency graph does not cover container images, pre-commit hooks, Ansible Galaxy collections, OpenTofu
 providers or Packer plugins, and Renovate's own vulnerability alerts are disabled to avoid competing security pull
 requests. A security fix in one of these ecosystems therefore arrives with the next weekly Renovate run, after the
-7-day (or 14-day for majors) release age. Image and dependency scanning in CI (Grype, ADR 0006) fails a build on a
-fixable critical or high finding, and the response targets below then require a manual update pull request within
-the target time. Revisit this if Renovate's OSV-based alerts can be scoped to these ecosystems without overlapping
+7-day (or 14-day for majors) release age. Image and dependency scanning in CI with Grype (ADR 0006) is planned in
+FREES-82 and is not active yet. Once active it will fail a build on a fixable critical or high finding in container
+images and Python dependencies, and the response targets below then require a manual update pull request. It will
+not cover pre-commit hooks, Galaxy collections, OpenTofu providers or Packer plugins; for those, fixes arrive only
+through the Renovate schedule unless a maintainer acts on an advisory. Revisit this if Renovate's OSV-based alerts can be scoped to these ecosystems without overlapping
 Dependabot. Tracked on FREES-81.
 
 ## Vulnerability response targets
