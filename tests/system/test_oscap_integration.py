@@ -66,7 +66,8 @@ def golden_rule_count() -> int:
             for profile in stream["profiles"]:
                 if profile["id"] == PROFILE:
                     return int(profile["rule_count"])
-    pytest.fail("the golden file has no entry for the profile")
+    message = "the golden file has no entry for the profile"
+    raise AssertionError(message)
 
 
 def pinned_datastream() -> tuple[Path, str]:
@@ -156,6 +157,20 @@ def test_a_check_mode_scan_without_tailoring_evaluates_the_whole_profile(
     assert sorted(output_root.rglob("*")) == []
 
 
+def check_raw_results(path: Path, enabled: set[str]) -> None:
+    raw = openscap.read_results(str(path), 512 * 1024 * 1024)
+    assert raw.profile_id == PROFILE + audit.TAILORED_PROFILE_SUFFIX
+    by_rule = {finding.rule_id: finding for finding in raw.findings}
+    for rule_id in DISABLED:
+        assert model.ResultFlag.NOTSELECTED in by_rule[rule_id].flags
+    not_evaluated = sorted(
+        rule_id
+        for rule_id in enabled
+        if rule_id not in by_rule or model.ResultFlag.NOTSELECTED in by_rule[rule_id].flags
+    )
+    assert not_evaluated == []
+
+
 def test_a_tailored_scan_excludes_the_disabled_rules(
     datastream: tuple[Path, str], output_root: Path
 ) -> None:
@@ -183,17 +198,7 @@ def test_a_tailored_scan_excludes_the_disabled_rules(
     enabled = {key: value for key, value in findings.items() if key not in DISABLED}
     assert all(item["outcome"] != "disabled" for item in enabled.values())
     assert [key for key, item in enabled.items() if item["message"] == MISSING_RESULT] == []
-    raw = openscap.read_results(str(run_dir / "scan" / "results.xml"), 512 * 1024 * 1024)
-    assert raw.profile_id == PROFILE + audit.TAILORED_PROFILE_SUFFIX
-    by_rule = {finding.rule_id: finding for finding in raw.findings}
-    for rule_id in DISABLED:
-        assert model.ResultFlag.NOTSELECTED in by_rule[rule_id].flags
-    not_evaluated = [
-        rule_id
-        for rule_id in enabled
-        if rule_id not in by_rule or model.ResultFlag.NOTSELECTED in by_rule[rule_id].flags
-    ]
-    assert not_evaluated == []
+    check_raw_results(run_dir / "scan" / "results.xml", set(enabled))
     report(
         "raw results",
         {
