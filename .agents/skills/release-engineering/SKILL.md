@@ -14,7 +14,7 @@ Releases are rare, verified and reproducible. A release is never a side effect o
 ## When to use
 
 - Adding a user-visible change that needs a changelog fragment.
-- Preparing, tagging or publishing a release of the collection.
+- Preparing or publishing a release of the collection, including the version-bump pull request that triggers it.
 - Releasing or consuming a new runner image version.
 - Changing `make package`, `make release-check` or the release workflow.
 
@@ -38,7 +38,7 @@ Releases are rare, verified and reproducible. A release is never a side effect o
 - Every user-visible change adds a changelog fragment reviewed in its pull request.
 - Releases start only when a reviewed pull request that bumps the `galaxy.yml` version (or the runner version file) is merged to `main`. The release workflow runs from `main`, validates the release, then creates the annotated `vX.Y.Z` tag and the release. Never trigger a release by pushing a tag, and never release an arbitrary commit without a version bump.
 - Use every GitHub-native release feature in [ADR 0012](../../../docs/adr/0012-github-native-releases-and-packages.md). Releases are immutable, so complete every publishing step before making a release public. Attest every asset and image so `gh attestation verify` succeeds. Generate notes from `.github/release.yml` categories, announce in Discussions, and publish the collection and content mirror as signed OCI artifacts on GHCR alongside Galaxy.
-- The release workflow verifies: the tag commit is on `main`; it came from an approved pull request; all required checks passed; the artifacts rebuild reproducibly (`SOURCE_DATE_EPOCH` set from the tag commit, deterministic tarball); security scans passed.
+- The release workflow, running on `push` to `main`, verifies before publishing: the merge commit came from a pull request approved by `freesecdev-review`; all required checks passed; the version is new SemVer with a changelog; no `vX.Y.Z` tag or release exists yet (otherwise it fails); the artifacts rebuild reproducibly (`SOURCE_DATE_EPOCH` set from the merge commit, deterministic tarball); security scans passed. It then creates the tag on the merge commit and the release.
 - It publishes the tarball, checksums, SBOM and provenance attestation to GitHub Releases and the collection to Ansible Galaxy.
 - The Galaxy API key is stored only as a secret of the `release` environment, which accepts deployments from `main` only. Galaxy offers no OIDC publishing, so this key is the one long-lived credential and is rotated on schedule.
 - Runner images are released from the runner repository with immutable version tags and consumed here by digest only.
@@ -55,7 +55,7 @@ Releases are rare, verified and reproducible. A release is never a side effect o
 
 ## Common failures
 
-- Tagging a commit that is not on `main`, or tagging before the release pull request merged.
+- Pushing a `vX.Y.Z` tag by hand or triggering a release from a tag; a pre-existing tag makes the release workflow fail by design.
 - A lightweight tag instead of an annotated one.
 - Non-reproducible tarballs from timestamps, file ordering or ownership.
 - Publishing to Galaxy from a workflow without the protected environment.

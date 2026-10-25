@@ -1,28 +1,23 @@
 # Release checklist
 
-Mark each item only after it actually ran. Do not paste secrets.
+Mark each item only after it actually ran. Do not paste secrets. Releases are cut from protected `main` by the release
+workflow; nobody pushes `v*` tags by hand ([ADR 0012](../../../../docs/adr/0012-github-native-releases-and-packages.md)).
 
-## Before tagging
+## Release pull request
 
 - [ ] All changes since the last release have changelog fragments in `changelogs/fragments/`.
-- [ ] Version chosen by SemVer; major bump has an accepted ADR.
-- [ ] Release pull request bumps `galaxy.yml` and the generated changelog; approved by an independent reviewer; squash merged.
-- [ ] `make release-check` passes on `main` at the merge commit.
-- [ ] Required checks and security scans are green on that commit.
-- [ ] Runner image reference in use is a digest of an immutable version tag.
+- [ ] Version chosen by SemVer; a major bump has an accepted ADR.
+- [ ] The pull request bumps `galaxy.yml` (or the runner version file) and the generated changelog.
+- [ ] Approved by `freesecdev-review` after the last push; squash merged into `main`.
+- [ ] Runner image reference in use is a digest of an immutable version.
 
-## Tagging
+## Release workflow gates (on push to `main`)
 
-- [ ] Annotated tag `vX.Y.Z` created on the merge commit on `main`.
-- [ ] Tag version equals `galaxy.yml` version.
-
-## Release workflow verification
-
-- [ ] Tag commit is on `main` and came from an approved pull request.
-- [ ] All required checks passed for the tag commit.
-- [ ] Tarball rebuilt twice with `SOURCE_DATE_EPOCH`; SHA-256 sums identical.
-- [ ] Security scans passed.
-- [ ] Automated gate passed in the workflow running from `main`: commit merged from a pull request approved by `freesecdev-review`, all required checks green, new SemVer version with changelog, artifacts reproducible. The tag was created by the workflow, not pushed by hand.
+- [ ] Merge commit came from a pull request approved by `freesecdev-review`.
+- [ ] All required checks and security scans passed on the merge commit.
+- [ ] Version is new SemVer with a changelog entry, and no `vX.Y.Z` tag or release exists yet.
+- [ ] Tarball rebuilt twice with `SOURCE_DATE_EPOCH` from the merge commit; SHA-256 sums identical.
+- [ ] Workflow created the annotated `vX.Y.Z` tag on the merge commit and the release.
 
 ## Published artifacts
 

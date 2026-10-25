@@ -720,12 +720,14 @@ epics:
           - Pull requests carry changelog fragments; release notes are generated.
       - id: s1802-release-workflow
         type: Story
-        summary: Tag-driven verified release workflow
+        summary: Main-driven verified release workflow
         skill: release-engineering
         complexity: L
         depends_on: [s1401-pr-workflow, s1801-changelog]
         acceptance:
-          - Releases verify tag, approved commit, checks and reproducibility, then publish to GitHub and Galaxy.
+          - "The release workflow runs only on push to protected main after a reviewed version bump and is never triggered by a tag."
+          - "It verifies the bot-approved pull request, required checks, a new SemVer version with changelog and reproducibility, then creates the vX.Y.Z tag and release and publishes to GitHub and Galaxy."
+          - "It fails if the vX.Y.Z tag or release already exists, so it never attaches to a hand-pushed tag."
       - id: s1803-github-release-features
         type: Story
         summary: GitHub-native release features
@@ -733,7 +735,7 @@ epics:
         complexity: M
         depends_on: [s1802-release-workflow]
         acceptance:
-          - "Immutable releases, the release-tags ruleset and the tag-restricted release environment are enabled in both repositories."
+          - "Immutable releases, the release-tags ruleset and the main-only release environment are enabled in both repositories."
           - "Release notes are generated with label categories from .github/release.yml and include the changelog."
           - "Each release has build-provenance and SBOM attestations verifiable with gh attestation verify, and posts a Discussions announcement."
           - "Milestones and Jira fix versions mirror planned versions."

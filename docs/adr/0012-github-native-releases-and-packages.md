@@ -46,13 +46,14 @@ GitHub Packages has no native registry for Ansible collections or Python package
   GitHub rejects the built-in GitHub Actions app as a bypass actor on repository rulesets, so restricting creation
   needs a dedicated org-owned release App. That App is tracked in FREES-124.
 - A **`release` deployment environment** accepts deployments from `main` only. Administrator bypass is disabled. It
-  holds the publishing secrets, and the AWS release role's OIDC trust is pinned to this environment.
+  holds the publishing secrets. The AWS release role's OIDC trust must be pinned to this environment when it is built (FREES-31).
 - The environment has no human required reviewers: the project owner decided on 2026-10-25 not to be asked for
   approvals. The gate is automated instead. Before anything is published, the release workflow, running from `main`,
   verifies all of the following and fails otherwise:
   - the commit was merged from a pull request approved by the `freesecdev-review` App;
   - every required check passed on that commit;
   - the version is new, follows SemVer and has a changelog entry;
+  - no `vX.Y.Z` tag or release exists yet, so a hand-pushed tag makes the release fail instead of being reused;
   - the artifacts rebuild reproducibly.
 
   See residual risks below.
