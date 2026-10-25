@@ -1,0 +1,57 @@
+---
+name: Bug report
+description: Report something that does not work as documented
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The project is pre-alpha and nothing is supported yet, but reports help. Do not report security
+        vulnerabilities here; use private vulnerability reporting. Never paste credentials, tokens or real host evidence.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal commands or playbook. Use synthetic data only.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: Commit SHA or tag you used.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Controller and managed host operating systems, ansible-core and Python versions.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Redact secrets, hostnames and account identifiers first.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: This report contains no secrets and no restricted benchmark content.
+          required: true

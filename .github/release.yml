@@ -1,0 +1,36 @@
+---
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking-change
+    - title: Security
+      labels:
+        - security
+    - title: Features
+      labels:
+        - feature
+    - title: Fixes
+      labels:
+        - fix
+    - title: Compliance content
+      labels:
+        - compliance-content
+    - title: Documentation
+      labels:
+        - docs
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: CI
+      labels:
+        - ci
+    - title: Maintenance
+      labels:
+        - chore
+    - title: Other changes
+      labels:
+        - "*"

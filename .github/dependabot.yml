@@ -1,0 +1,29 @@
+---
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: build(deps)
+    groups:
+      dev-tools:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      python-runtime:
+        applies-to: version-updates
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
