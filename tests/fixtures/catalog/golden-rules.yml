@@ -1,0 +1,84 @@
+---
+schema_version: 1
+datastreams:
+- name: ubuntu2404
+  sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+  profiles:
+  - id: xccdf_org.ssgproject.content_profile_cis_level1_server
+    rule_count: 408
+    rule_ids_sha256: f0b5c6740d89d98f03d2b1cfa291fd42002029044918e40c0c342c30920422a6
+  - id: xccdf_org.ssgproject.content_profile_cis_level1_workstation
+    rule_count: 399
+    rule_ids_sha256: 5182c7b971c97a0500e077a5988933d00068f231a46accea2a0c4e03d742fd51
+  - id: xccdf_org.ssgproject.content_profile_cis_level2_server
+    rule_count: 510
+    rule_ids_sha256: 94d0eebdbf47f947272aa05c3e865080c3bd4274d0e8df535913f5cdaec0ebfd
+  - id: xccdf_org.ssgproject.content_profile_cis_level2_workstation
+    rule_count: 507
+    rule_ids_sha256: 3f50048c50687491cfc27f644ebb50bbd31b902832090a6f038660f530b92775
+  - id: xccdf_org.ssgproject.content_profile_stig
+    rule_count: 239
+    rule_ids_sha256: 4369921196bc36bff59f55e53ae23dd2622090e7eaee1ca69ed5e141b7ec38c2
+- name: rhel9
+  sha256: 92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f
+  profiles:
+  - id: xccdf_org.ssgproject.content_profile_anssi_bp28_enhanced
+    rule_count: 310
+    rule_ids_sha256: f6a117562c7bee0e648b10b9d08431ddd542b38e1fc9884f538ce2b3d606fee3
+  - id: xccdf_org.ssgproject.content_profile_anssi_bp28_high
+    rule_count: 388
+    rule_ids_sha256: a020cc380593982f177252ca6a9b6158cae903ff0bfe7428c943bc6a759117de
+  - id: xccdf_org.ssgproject.content_profile_anssi_bp28_intermediary
+    rule_count: 227
+    rule_ids_sha256: 10f392e4ba4a74bdb9a8d4140a9eb7b01db1d88a236eb4f9588fdbfe500f9d9f
+  - id: xccdf_org.ssgproject.content_profile_anssi_bp28_minimal
+    rule_count: 40
+    rule_ids_sha256: c44b4eaaca6ada86aaf986e045ce938aa66d2e9ee6d53ffcc2d12a1ead782bef
+  - id: xccdf_org.ssgproject.content_profile_bsi
+    rule_count: 192
+    rule_ids_sha256: b65a4120857093628d3bda439d52b9ced5b99f8e2ffc541d6398b789e02ad923
+  - id: xccdf_org.ssgproject.content_profile_ccn_advanced
+    rule_count: 153
+    rule_ids_sha256: 74b5b094315b50310ac0c6ca9f6ad15718efc9b3add367955fe389d5c5198178
+  - id: xccdf_org.ssgproject.content_profile_ccn_basic
+    rule_count: 101
+    rule_ids_sha256: 2d38022a2c6ed44bfa17bcc2d94b720a453f2d1d26e5812adf6c772193889037
+  - id: xccdf_org.ssgproject.content_profile_ccn_intermediate
+    rule_count: 140
+    rule_ids_sha256: a3b53ebe3249b7e68714d916fb92ddb34bcf0547669ed340c8e7ddd357a4115a
+  - id: xccdf_org.ssgproject.content_profile_cis
+    rule_count: 401
+    rule_ids_sha256: 3f92c2021a6b925e34154400e0978985035f76367562729a90eb16e560d8510a
+  - id: xccdf_org.ssgproject.content_profile_cis_server_l1
+    rule_count: 295
+    rule_ids_sha256: 9ea006bee08c9d90288c27faf3fc8d80fe1111f9aa87b92063a0e52e53ec204f
+  - id: xccdf_org.ssgproject.content_profile_cis_workstation_l1
+    rule_count: 288
+    rule_ids_sha256: f40d402f53122b0ec420a9f4f7dd95d32354566461a951cde88cd9be6a31979f
+  - id: xccdf_org.ssgproject.content_profile_cis_workstation_l2
+    rule_count: 395
+    rule_ids_sha256: cd9ba806ee5f3e810783f46137c9f501523672f067b6895db80f2736dc66f30d
+  - id: xccdf_org.ssgproject.content_profile_cui
+    rule_count: 139
+    rule_ids_sha256: d4aa23ec48142f71c3b7e715f03ce3938055c60ddaf86648c6feda8bc96c8ef6
+  - id: xccdf_org.ssgproject.content_profile_e8
+    rule_count: 94
+    rule_ids_sha256: 8042e9bcddcb8620343184b33dcd0c2f4d663c1afd626f2ce7fe449548d1a227
+  - id: xccdf_org.ssgproject.content_profile_hipaa
+    rule_count: 131
+    rule_ids_sha256: 68063b909b7dbf683aac3004cea970d1d4104d7bea54aa99e2ab18075915ebc8
+  - id: xccdf_org.ssgproject.content_profile_ism_o
+    rule_count: 146
+    rule_ids_sha256: 0feeefa6360bcd119aeed8fd0325917458aba93770de19bd5cf10b847f774e13
+  - id: xccdf_org.ssgproject.content_profile_ospp
+    rule_count: 139
+    rule_ids_sha256: d4aa23ec48142f71c3b7e715f03ce3938055c60ddaf86648c6feda8bc96c8ef6
+  - id: xccdf_org.ssgproject.content_profile_pci-dss
+    rule_count: 252
+    rule_ids_sha256: 030c02632ae8626d78bcb7193eedd70c0e007bcf0f261bd5bcd569f6108c70ba
+  - id: xccdf_org.ssgproject.content_profile_stig
+    rule_count: 481
+    rule_ids_sha256: ae0874b29c051a1062eebf258c35ab6798979ec666b25fe2320ceeef828a9fac
+  - id: xccdf_org.ssgproject.content_profile_stig_gui
+    rule_count: 477
+    rule_ids_sha256: 2b1791e0b375b7e52ff1a8e5528c4daea7f5cc5c0bd96f2b2295d33ce7b51d14

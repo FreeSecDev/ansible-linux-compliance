@@ -642,14 +642,16 @@ def test_guard_denies_other_constructs_by_default(tmp_path: Path, source: str) -
 
 
 EXPAT_FILE = "plugins/module_utils/compliance/openscap.py"
+XMLSAFE_FILE = "plugins/module_utils/compliance/xmlsafe.py"
 
 
 @pytest.mark.parametrize(
     "source",
     ["import xml.parsers.expat\n", "from xml.parsers.expat import ParserCreate\n"],
 )
-def test_expat_is_allowed_only_in_the_xccdf_parser(tmp_path: Path, source: str) -> None:
-    assert process_messages(tmp_path, source, EXPAT_FILE) == []
+@pytest.mark.parametrize("name", [EXPAT_FILE, XMLSAFE_FILE])
+def test_expat_is_allowed_only_in_the_xml_parsers(tmp_path: Path, source: str, name: str) -> None:
+    assert process_messages(tmp_path, source, name) == []
 
 
 @pytest.mark.parametrize(
@@ -659,6 +661,10 @@ def test_expat_is_allowed_only_in_the_xccdf_parser(tmp_path: Path, source: str) 
         "plugins/module_utils/compliance/model.py",
         "plugins/module_utils/compliance/scanner.py",
         "plugins/module_utils/compliance/openscap_other.py",
+        "plugins/module_utils/compliance/xmlsafe_other.py",
+        "plugins/module_utils/compliance/catalog.py",
+        "plugins/modules/xmlsafe.py",
+        "plugins/module_utils/other/xmlsafe.py",
         "plugins/module_utils/other/openscap.py",
         "plugins/modules/openscap.py",
     ],
@@ -672,16 +678,18 @@ def test_expat_is_denied_in_every_other_plugin_file(tmp_path: Path, name: str) -
     assert messages == [expected]
 
 
-def test_the_parser_file_keeps_every_other_restriction(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", [EXPAT_FILE, XMLSAFE_FILE])
+def test_the_parser_file_keeps_every_other_restriction(tmp_path: Path, name: str) -> None:
     source = "import xml.parsers.expat\nimport subprocess\nimport xml.sax\nf(runner=g)\nf(**h)\n"
-    messages = process_messages(tmp_path, source, EXPAT_FILE)
+    messages = process_messages(tmp_path, source, name)
     assert len(messages) >= 4
     assert not any("xml.parsers.expat" in message for message in messages)
 
 
-def test_the_extra_import_table_names_only_the_parser() -> None:
+def test_the_extra_import_table_names_only_the_parsers() -> None:
     assert {str(path): imports for path, imports in rules.EXTRA_IMPORTS.items()} == {
-        EXPAT_FILE: frozenset({"xml.parsers.expat"})
+        EXPAT_FILE: frozenset({"xml.parsers.expat"}),
+        XMLSAFE_FILE: frozenset({"xml.parsers.expat"}),
     }
 
 
@@ -797,7 +805,9 @@ def test_repository_helper_is_the_only_plugin_file_importing_subprocess() -> Non
 
 SANCTIONED_SANITY_IGNORE = (
     "plugins/module_utils/compliance/process.py pylint:ansible-bad-function\n"
+    "plugins/modules/benchmark_info.py validate-modules:missing-gplv3-license\n"
     "plugins/modules/control_state.py validate-modules:missing-gplv3-license\n"
+    "plugins/modules/profile_info.py validate-modules:missing-gplv3-license\n"
 )
 
 

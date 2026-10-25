@@ -4,13 +4,44 @@
     that:
       - linux_compliance_discover_profile is string
       - linux_compliance_discover_profile | length > 0
-    fail_msg: The discover role received an invalid input; see meta/argument_specs.yml.
+      - linux_compliance_discover_content_path is string
+      - linux_compliance_discover_content_path | length > 0
+      - linux_compliance_discover_content_sha256 is string
+      - linux_compliance_discover_content_sha256 is match('^[0-9a-fA-F]{64}$')
+    fail_msg: >-
+      The discover role received an invalid input; see meta/argument_specs.yml.
+      The content path and its pinned SHA-256 from content/manifest.yml are required.
     quiet: true
   tags:
     - always
 
-- name: Discover | Stop because the role is not implemented yet
-  ansible.builtin.fail:
-    msg: The discover role is not implemented yet (tracked in FREES-43). No change was made to the host.
+- name: Discover | Verify the datastream and describe its benchmark
+  freesecdev.linux_compliance.benchmark_info:
+    content_path: "{{ linux_compliance_discover_content_path }}"
+    expected_sha256: "{{ linux_compliance_discover_content_sha256 }}"
+  register: linux_compliance_discover_benchmark
+  tags:
+    - always
+
+- name: Discover | List the rules of the requested profile
+  freesecdev.linux_compliance.profile_info:
+    content_path: "{{ linux_compliance_discover_content_path }}"
+    expected_sha256: "{{ linux_compliance_discover_content_sha256 }}"
+    profile_id: "xccdf_org.ssgproject.content_profile_{{ linux_compliance_discover_profile }}"
+  register: linux_compliance_discover_profile_rules
+  tags:
+    - always
+
+- name: Discover | Publish the discovered facts
+  ansible.builtin.set_fact:
+    linux_compliance_discovered:
+      content_path: "{{ linux_compliance_discover_benchmark.content_path }}"
+      content_sha256: "{{ linux_compliance_discover_benchmark.content_sha256 }}"
+      benchmark_id: "{{ linux_compliance_discover_benchmark.benchmark_id }}"
+      benchmark_version: "{{ linux_compliance_discover_benchmark.benchmark_version }}"
+      profiles: "{{ linux_compliance_discover_benchmark.profiles }}"
+      profile_id: "{{ linux_compliance_discover_profile_rules.profile_id }}"
+      rule_ids: "{{ linux_compliance_discover_profile_rules.rule_ids }}"
+      rules: "{{ linux_compliance_discover_profile_rules.rules }}"
   tags:
     - always

@@ -1,2 +1,4 @@
 ---
 linux_compliance_discover_profile: "cis_level1_server"
+linux_compliance_discover_content_path: ""
+linux_compliance_discover_content_sha256: ""

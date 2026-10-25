@@ -15,6 +15,7 @@
 | [0011](0011-control-toggles-and-cleanup.md) | Per-rule and per-topic control toggles with cleanup on disable | proposed |
 | [0012](0012-github-native-releases-and-packages.md) | GitHub-native releases, packages and supply-chain features | proposed |
 | [0013](0013-normalized-findings-model.md) | Normalized compliance findings model | accepted |
+| [0015](0015-content-acquisition-and-pinning.md) | Content acquisition and pinning | proposed |
 | [0014](0014-aws-account-bootstrap.md) | AWS account bootstrap | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

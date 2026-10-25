@@ -35,6 +35,7 @@ Role variables are documented in each role `README.md` and in `meta/argument_spe
 |---|---|---|
 | `linux_compliance_target_hosts` | group `linux_compliance` | all playbooks |
 | `linux_compliance_<role>_profile` | `cis_level1_server` | `discover`, `audit`, `remediate`, `verify` |
+| `linux_compliance_discover_content_path`, `linux_compliance_discover_content_sha256` | empty, required | `discover` |
 | `linux_compliance_audit_fail_on_noncompliant` | `false` | `audit` |
 | `linux_compliance_verify_fail_on_regression` | `true` | `verify` |
 
