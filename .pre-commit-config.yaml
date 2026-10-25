@@ -101,7 +101,7 @@ repos:
         name: bandit
         entry: >-
           uv run --frozen bandit -c pyproject.toml -r tools plugins -q
-          -x plugins/module_utils/compliance/process.py,plugins/module_utils/compliance/openscap.py
+          -x plugins/module_utils/compliance/process.py
         language: system
         types: [python]
         pass_filenames: false
@@ -111,15 +111,6 @@ repos:
         entry: >-
           uv run --frozen bandit -c pyproject.toml -q -s B404,B603
           plugins/module_utils/compliance/process.py
-        language: system
-        types: [python]
-        pass_filenames: false
-        stages: [pre-push]
-      - id: bandit-xccdf-parser
-        name: bandit (XCCDF parser)
-        entry: >-
-          uv run --frozen bandit -c pyproject.toml -q -s B405
-          plugins/module_utils/compliance/openscap.py
         language: system
         types: [python]
         pass_filenames: false

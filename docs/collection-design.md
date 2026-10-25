@@ -17,7 +17,7 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 | `plugins/{modules,action,filter,lookup}/` | Created together with the first plugin of each kind; Git cannot track empty directories and Galaxy does not need placeholders |
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
-| `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; copied to the test tree, excluded from the tarball |
+| `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; inert data, shipped with the tests in the tarball |
 | `roles/` | The `discover`, `audit`, `remediate`, `verify` and `evidence` role skeletons (FREES-40) |
 | `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
@@ -121,8 +121,8 @@ Jira: FREES-48. Code: `plugins/module_utils/compliance/scanner.py`, `openscap.py
 
 | Item | Contract |
 |---|---|
-| `ScanSettings` | `content_root`, `output_root` (absolute), `timeout_seconds` (default 1800, at most 3600) and `max_result_bytes` (default 256 MiB). Fixed when a backend is created |
-| `ScanRequest` | `run_id`, `host`, `benchmark_id`, `profile_id`, `content_path`, `output_dir`, optional `tailoring_path` and `expected_rule_ids`. `benchmark_id`, `host` and `run_id` are required because a `ScanRun` needs them even when the scanner fails; `expected_rule_ids` lets a failed run list every selected rule as `error` |
+| `ScanSettings` | `content_root`, `output_root` (absolute), `timeout_seconds` (default 1800, at most 3600) and `max_result_bytes` (default 128 MiB). Fixed when a backend is created |
+| `ScanRequest` | `run_id`, `host`, `benchmark_id`, `profile_id`, `content_path`, `output_dir`, a required non-empty `expected_rule_ids` (the rules that the profile selects, supplied by the caller) and an optional `tailoring_path`. `benchmark_id`, `host` and `run_id` are required because a `ScanRun` needs them even when the scanner fails |
 | `ScanBackend.audit(request)` | Returns a `model.ScanRun`. Raises `ScanRequestError` for an invalid or unsafe request, before anything runs |
 | `BackendRegistry` | `register(name, factory)`, `create(name, settings)`, `names()`. Orchestration asks `backends.default_registry()` for a backend by name and never imports `openscap` |
 
@@ -138,8 +138,8 @@ The backend builds `oscap xccdf eval --profile <id> [--tailoring-file <path>] --
 `--fetch-remote-resources`, and the helper would refuse both. Content, tailoring and output paths go through
 `process.confined_path`, so `..` escapes and symlinks are rejected. The output directory is created by the backend
 with mode 0700, must not exist, and is never reused, so existing files are never overwritten. The SHA-256 of the
-datastream is recorded in `ScanRun.content`; it is computed before the scan and again afterwards, and a difference is a
-scanner failure.
+datastream is recorded in `ScanRun.content`; the SHA-256 of a tailoring file goes into `content.source` next to the
+datastream name. Both are computed before the scan and again afterwards, and a difference is a scanner failure.
 
 | Situation | Result |
 |---|---|
@@ -149,27 +149,34 @@ scanner failure.
 | Any other exit status, including a signal | `failed` |
 | Timeout | `timed_out` |
 | `oscap` missing or not startable | `failed` |
-| Unreadable, hostile or incomplete results, or results for another profile or benchmark | `failed` |
+| Unreadable, hostile or incomplete results, results for another profile or benchmark, a result for a rule the profile does not select, a duplicate result, or a rule-result or result in another namespace | `failed` |
+| Exit status `2` and a rule of the profile without a result | `completed`; that rule is an `error` finding |
 
 A `failed` or `timed_out` run carries an `error_message` and only `error` findings, one per `expected_rule_ids` entry.
-A scanner failure is never `pass` or `fail` (ADR 0013).
+A scanner failure is never `pass` or `fail`, and a run that is not `completed` counts every expected rule as `error` and
+is never summarised as compliant (ADR 0013, amendment of FREES-48).
 
 ### XCCDF results parser
 
 Results come from a host and are untrusted. The parser uses only the standard library and layers its defences:
 
-1. The file must be a regular file and not a symlink, is bounded by `max_result_bytes` before and while it is read, and
-   must be non-empty UTF-8.
-2. Any `<!DOCTYPE` or `<!ENTITY` in the text is rejected before parsing, so entity expansion (billion laughs) and
-   external entities (XXE) cannot occur.
+1. The file must be a regular file and not a symlink. It is streamed in 1 MiB chunks into the parser and bounded by
+   `max_result_bytes` before and while it is read, so memory does not grow with its size (about 25 MB peak for a 115 MB
+   file with 1,000,000 elements and 4,600 rules, measured on Python 3.9 and 3.12).
+2. Any `<!DOCTYPE` or `<!ENTITY` in the raw bytes is rejected before the chunk that holds it is parsed, including a marker
+   split across two chunks, so entity expansion (billion laughs) and external entities (XXE) cannot occur. UTF-16 and
+   UTF-32 byte order marks are rejected and the parser is told to read UTF-8, so other encodings are malformed.
 3. The expat parser is created directly with `SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)` and has no
-   external entity handler; its DOCTYPE, entity declaration and external entity handlers reject again if the text check
+   external entity handler; its DOCTYPE, entity declaration and external entity handlers reject again if the byte check
    were bypassed. The standard library is safe enough here because of this layering, not because of the expat version:
    the amplification limits of expat 2.4.0 and later, and the differing expat builds of Python 3.9 to 3.14, are not
    relied upon.
-4. Element count (default 2,000,000) and depth (default 64) are bounded while parsing. Only the root, the benchmark
-   `version` and the `TestResult` subtree are kept in memory.
-5. Only the XCCDF 1.2 namespace is accepted; a missing or other namespace is an error.
+4. Element count (default 2,000,000) and depth (default 64) are bounded while parsing.
+5. Only the XCCDF 1.2 namespace is accepted; a missing or other namespace is an error, and a `rule-result` or `result`
+   element in another namespace is an error instead of being dropped.
+6. Elements are never stored. Each `rule-result` is reduced to its identifier, severity and result text when it ends.
+   Text is read only before the first child element of an element (never merged from after a child), and a `result` or
+   `ident` element with children is malformed.
 
 `rule-result/result` values go through `model.map_xccdf_result`, so unknown values become `error` with a message.
 The rule ID (full `xccdf_*_rule_*` form), severity (`unknown` when absent or unrecognised), profile ID, benchmark ID

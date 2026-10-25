@@ -18,25 +18,33 @@ An exit status that contradicts the results file (``0`` with a failed or errored
 rule, ``2`` with neither) is also a failure, as are results that name another
 profile or benchmark than the request and content that changed during the scan.
 
+Result integrity: the request names the rules the profile selects. A rule without
+a rule-result becomes an ``error`` finding, a rule-result for a rule that was not
+selected, a duplicate rule-result or a rule-result or result element in another
+namespace fails the run, and a failed run reports every selected rule as ``error``.
+
 XML hardening
 -------------
 
 Results come from a process on a managed host, so they are untrusted. The
-standard library parser is used because this code must run on managed hosts
+standard library expat parser is used because this code must run on managed hosts
 with nothing but the Python standard library. It is made safe by layering:
 
-1. The file must be a regular file, not a symlink, and is bounded before and
-   while it is read.
-2. The text must be valid UTF-8 and may not contain a DOCTYPE or ENTITY
-   declaration, so the entity expansion and external entity paths of the parser
-   are unreachable for accepted input. The expat handlers reject the same
-   declarations again if the textual check were bypassed.
-3. The expat parser is created directly with parameter entity parsing turned
-   off (``SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)``) and no
-   external entity handler, so an external subset or entity is never loaded.
-4. Element count and nesting depth are bounded while parsing, before a tree of
-   that size can exist, and only the elements that the extraction needs are kept.
+1. The file must be a regular file, not a symlink, and is read in chunks that are
+   bounded before and while reading, so memory does not grow with its size.
+2. A DOCTYPE or ENTITY declaration is rejected in the raw bytes before the chunk
+   that holds it is parsed, across chunk boundaries, so the entity expansion and
+   external entity paths of the parser are unreachable for accepted input. The
+   expat handlers reject the same declarations again if that check were bypassed.
+3. The expat parser is created directly with the encoding forced to UTF-8,
+   parameter entity parsing turned off
+   (``SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)``) and no external
+   entity handler, so an external subset or entity is never loaded.
+4. Element count and nesting depth are bounded while parsing.
 5. Only the XCCDF 1.2 namespace is accepted.
+6. Elements are never stored. Each rule-result is reduced to its identifier,
+   severity and result text when it ends. Text is read only before the first child
+   element, and a result or ident element with children is malformed.
 
 Python and expat versions differ in their entity-expansion defences: the
 billion-laughs limits arrived with expat 2.4.0 (2.4.1 for the final fixes) and
@@ -50,9 +58,8 @@ from __future__ import annotations
 import hashlib
 import re
 import stat
-import xml.etree.ElementTree as ET
 import xml.parsers.expat
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, NoReturn
@@ -64,7 +71,8 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable, Iterator
+    from typing import BinaryIO
 
 _expat = xml.parsers.expat
 BACKEND_NAME: Final[str] = "openscap"
@@ -82,12 +90,22 @@ OUTPUT_DIRECTORY_MODE: Final[int] = 0o700
 MAX_MESSAGE_LENGTH: Final[int] = 1024
 EXCERPT_BYTES: Final[int] = 512
 HASH_CHUNK_BYTES: Final[int] = 1024 * 1024
+SOURCE_NAME_LENGTH: Final[int] = 64
+READ_CHUNK_BYTES: Final[int] = 1024 * 1024
 
 _VERSION_LINE: Final[re.Pattern[str]] = re.compile(r"\(oscap\)\s+([0-9][A-Za-z0-9._+-]{0,63})")
 _SEVERITIES: Final[dict[str, model.Severity]] = {item.value: item for item in model.Severity}
 _ERROR_OUTCOMES: Final[frozenset[model.Outcome]] = frozenset(
     {model.Outcome.FAIL, model.Outcome.ERROR}
 )
+
+
+_MORE: Final[bool] = False
+_FINAL: Final[bool] = True
+_DECLARATION_MARKERS: Final[tuple[bytes, ...]] = (b"<!DOCTYPE", b"<!ENTITY")
+_MARKER_OVERLAP: Final[int] = max(len(marker) for marker in _DECLARATION_MARKERS) - 1
+_NON_UTF8_MARKS: Final[tuple[bytes, ...]] = (b"\xff\xfe", b"\xfe\xff")
+_TEST_ATTRIBUTES: Final[frozenset[str]] = frozenset({"start-time", "end-time", "version"})
 
 
 def _qualified(local: str) -> str:
@@ -101,7 +119,17 @@ _BENCHMARK_REF: Final[str] = _qualified("benchmark")
 _PROFILE: Final[str] = _qualified("profile")
 _RULE_RESULT: Final[str] = _qualified("rule-result")
 _RESULT: Final[str] = _qualified("result")
-_ROOT_CHILDREN: Final[frozenset[str]] = frozenset({_TEST_RESULT, _VERSION})
+_IDENT: Final[str] = _qualified("ident")
+
+_ROOT: Final[str] = "root"
+_TEST: Final[str] = "test-result"
+_RULE: Final[str] = "rule-result"
+_RESULT_VALUE: Final[str] = "result"
+_IDENT_VALUE: Final[str] = "ident"
+_VERSION_VALUE: Final[str] = "version"
+_OTHER: Final[str] = "other"
+_LEAVES: Final[frozenset[str]] = frozenset({_RESULT_VALUE, _IDENT_VALUE})
+_COLLECTING: Final[frozenset[str]] = frozenset({_RESULT_VALUE, _VERSION_VALUE})
 
 
 class XccdfParseError(ValueError):
@@ -146,21 +174,52 @@ class ParsedResults:
     findings: tuple[model.Finding, ...]
 
 
+class _RawRule:
+    __slots__ = ("idref", "results", "severity")
+
+    def __init__(self, idref: str | None, severity: str | None) -> None:
+        self.idref = idref
+        self.severity = severity
+        self.results: list[str | None] = []
+
+
 class _Frame:
-    def __init__(self, element: ET.Element | None, *, inside_result: bool) -> None:
-        self.element = element
-        self.inside_result = inside_result
+    __slots__ = ("had_child", "kind", "text")
+
+    def __init__(self, kind: str) -> None:
+        self.kind = kind
+        self.had_child = False
         self.text: list[str] = []
 
 
+def _reject_foreign(tag: str, local: str) -> None:
+    if tag.rsplit("}", 1)[-1] == local:
+        _fail(f"a {local} element outside the XCCDF 1.2 namespace is not allowed")
+
+
 class _Builder:
-    """Expat handlers that bound the document and keep only what is needed."""
+    """Expat handlers that bound the document and stream compact rule data.
+
+    Nothing but the few values the extraction needs is kept: rule results are
+    reduced to ``(idref, severity, result text)`` as each one ends and the
+    elements themselves are never stored, so memory does not grow with the size
+    of the document. Text is collected only before the first child element of
+    an element, so text that follows a child is never merged into its parent.
+    """
 
     def __init__(self, limits: XmlLimits) -> None:
         self.limits = limits
-        self.root = ET.Element("")
         self.count = 0
         self.frames: list[_Frame] = []
+        self.root_tag = ""
+        self.root_id: str | None = None
+        self.version: str | None = None
+        self.test_results = 0
+        self.test_attributes: dict[str, str] = {}
+        self.benchmark_ref: str | None = None
+        self.profile_idref: str | None = None
+        self.rule = _RawRule(None, None)
+        self.rules: list[tuple[str | None, str | None, str | None]] = []
 
     def reject_declaration(self, *_arguments: object) -> NoReturn:
         _fail("DOCTYPE, ENTITY and external entity declarations are not allowed")
@@ -173,42 +232,92 @@ class _Builder:
             _fail(f"document is nested deeper than {self.limits.max_depth} levels")
         namespace, separator, local = name.partition("}")
         tag = f"{{{namespace}}}{local}" if separator else name
-        if not self.frames:
-            self.root = ET.Element(tag, attributes)
-            self.frames.append(_Frame(self.root, inside_result=tag == _TEST_RESULT))
-            return
-        parent = self.frames[-1]
-        parent_element = parent.element
-        if parent_element is not None and (
-            parent.inside_result or (len(self.frames) == 1 and tag in _ROOT_CHILDREN)
-        ):
-            element = ET.SubElement(parent_element, tag, attributes)
-            self.frames.append(
-                _Frame(element, inside_result=parent.inside_result or tag == _TEST_RESULT)
-            )
+        if self.frames:
+            parent = self.frames[-1]
+            parent.had_child = True
+            kind = self._classify(parent.kind, tag, attributes)
         else:
-            self.frames.append(_Frame(None, inside_result=False))
+            self.root_tag = tag
+            self.root_id = attributes.get("id")
+            kind = _ROOT
+            if tag == _TEST_RESULT:
+                self._open_test(attributes)
+                kind = _TEST
+        self.frames.append(_Frame(kind))
+
+    def _open_test(self, attributes: dict[str, str]) -> None:
+        self.test_results += 1
+        if self.test_results == 1:
+            self.test_attributes = {
+                key: value for key, value in attributes.items() if key in _TEST_ATTRIBUTES
+            }
+
+    def _classify(self, parent_kind: str, tag: str, attributes: dict[str, str]) -> str:
+        if parent_kind in _LEAVES:
+            _fail("a result or ident element may not contain child elements")
+        if parent_kind == _TEST:
+            return self._classify_test_child(tag, attributes)
+        if parent_kind == _RULE:
+            return self._classify_rule_child(tag)
+        if parent_kind == _ROOT:
+            return self._classify_root_child(tag, attributes)
+        return _OTHER
+
+    def _classify_root_child(self, tag: str, attributes: dict[str, str]) -> str:
+        if tag == _TEST_RESULT:
+            self._open_test(attributes)
+            return _TEST
+        return _VERSION_VALUE if tag == _VERSION else _OTHER
+
+    def _classify_test_child(self, tag: str, attributes: dict[str, str]) -> str:
+        if tag == _RULE_RESULT:
+            self.rule = _RawRule(attributes.get("idref"), attributes.get("severity"))
+            return _RULE
+        if tag == _BENCHMARK_REF:
+            self.benchmark_ref = self.benchmark_ref or attributes.get("id")
+        elif tag == _PROFILE:
+            self.profile_idref = self.profile_idref or attributes.get("idref")
+        else:
+            _reject_foreign(tag, "rule-result")
+        return _OTHER
+
+    @staticmethod
+    def _classify_rule_child(tag: str) -> str:
+        if tag == _RESULT:
+            return _RESULT_VALUE
+        if tag == _IDENT:
+            return _IDENT_VALUE
+        _reject_foreign(tag, "result")
+        return _OTHER
 
     def end(self, _name: str) -> None:
         frame = self.frames.pop()
-        if frame.element is not None:
-            frame.element.text = "".join(frame.text).strip() or None
+        value = "".join(frame.text).strip() or None
+        if frame.kind == _VERSION_VALUE and self.version is None:
+            self.version = value
+        elif frame.kind == _RESULT_VALUE:
+            self.rule.results.append(value)
+        elif frame.kind == _RULE:
+            results = self.rule.results
+            raw = results[0] if len(results) == 1 else None
+            self.rules.append((self.rule.idref, self.rule.severity, raw))
 
     def text(self, data: str) -> None:
         frame = self.frames[-1]
-        if frame.element is not None:
+        if frame.kind in _COLLECTING and not frame.had_child:
             frame.text.append(data)
 
 
-def _reject_markup(document: str) -> None:
-    if "<!DOCTYPE" in document or "<!ENTITY" in document:
+def _scan_for_declarations(previous: bytes, chunk: bytes) -> bytes:
+    window = previous + chunk
+    if any(marker in window for marker in _DECLARATION_MARKERS):
         _fail("DOCTYPE and ENTITY declarations are not allowed")
+    return window[-_MARKER_OVERLAP:]
 
 
-def _parse_tree(document: str, limits: XmlLimits) -> ET.Element:
-    _reject_markup(document)
+def _parse_stream(chunks: Iterable[bytes], limits: XmlLimits) -> _Builder:
     builder = _Builder(limits)
-    parser = _expat.ParserCreate(namespace_separator="}")
+    parser = _expat.ParserCreate(encoding="utf-8", namespace_separator="}")
     parser.SetParamEntityParsing(_expat.XML_PARAM_ENTITY_PARSING_NEVER)
     parser.buffer_text = True
     parser.StartElementHandler = builder.start
@@ -217,11 +326,21 @@ def _parse_tree(document: str, limits: XmlLimits) -> ET.Element:
     parser.StartDoctypeDeclHandler = builder.reject_declaration
     parser.EntityDeclHandler = builder.reject_declaration
     parser.ExternalEntityRefHandler = builder.reject_declaration
+    previous = b""
+    received = 0
     try:
-        parser.Parse(document, True)
+        for chunk in chunks:
+            if received == 0 and chunk.startswith(_NON_UTF8_MARKS):
+                _fail("the document is UTF-16 or UTF-32, only UTF-8 is accepted")
+            received += len(chunk)
+            previous = _scan_for_declarations(previous, chunk)
+            parser.Parse(chunk, _MORE)
+        if received == 0:
+            _fail("the document is empty")
+        parser.Parse(b"", _FINAL)
     except _expat.ExpatError as error:
         _fail(f"not well-formed XML: {_expat.ErrorString(error.code)} at line {error.lineno}")
-    return builder.root
+    return builder
 
 
 def _utc_timestamp(value: str | None, name: str) -> str:
@@ -244,24 +363,20 @@ def _clip(value: object) -> str:
     return repr(str(value)[: model.MAX_ECHO_LENGTH])
 
 
-def _finding(rule_result: ET.Element) -> model.Finding:
-    rule_id = rule_result.get("idref")
+def _finding(rule_id: str | None, severity: str | None, raw: str | None) -> model.Finding:
     if rule_id is None:
         _fail("a rule-result has no idref")
-    results = rule_result.findall(_RESULT)
-    raw = results[0].text if len(results) == 1 else None
     mapping = model.map_xccdf_result(raw)
     message = None
     if mapping.outcome is model.Outcome.ERROR and raw != "error":
         message = f"scanner result {_clip(raw)} was mapped to error"
-    severity = _SEVERITIES.get(rule_result.get("severity", ""), model.Severity.UNKNOWN)
     flags = () if mapping.flag is None else (mapping.flag,)
     try:
         return model.Finding(
             rule_id=rule_id,
             outcome=mapping.outcome,
             evaluated_outcome=mapping.outcome,
-            severity=severity,
+            severity=_SEVERITIES.get(severity or "", model.Severity.UNKNOWN),
             message=message,
             evidence=(),
             exception=model.ExceptionStatus.none(),
@@ -273,46 +388,41 @@ def _finding(rule_result: ET.Element) -> model.Finding:
         _fail(f"invalid rule-result: {error}")
 
 
-def _single_result(root: ET.Element) -> ET.Element:
-    results = [root] if root.tag == _TEST_RESULT else root.findall(_TEST_RESULT)
-    if len(results) != 1:
-        _fail(f"expected exactly one TestResult, found {len(results)}")
-    return results[0]
-
-
-def _benchmark_id(root: ET.Element, result: ET.Element) -> str:
-    reference = result.find(_BENCHMARK_REF)
-    value = None if reference is None else reference.get("id")
-    if value is None and root.tag == _BENCHMARK:
-        value = root.get("id")
-    if value is None:
+def _extract(builder: _Builder) -> ParsedResults:
+    if builder.root_tag not in {_BENCHMARK, _TEST_RESULT}:
+        _fail("the root element is not an XCCDF 1.2 Benchmark or TestResult")
+    if builder.test_results != 1:
+        _fail(f"expected exactly one TestResult, found {builder.test_results}")
+    findings = tuple(_finding(*raw) for raw in builder.rules)
+    rule_ids = [finding.rule_id for finding in findings]
+    if len(set(rule_ids)) != len(rule_ids):
+        _fail("the results contain a rule more than once")
+    attributes = builder.test_attributes
+    benchmark_id = builder.benchmark_ref
+    if benchmark_id is None and builder.root_tag == _BENCHMARK:
+        benchmark_id = builder.root_id
+    if benchmark_id is None:
         _fail("the results do not identify the benchmark")
-    return value
-
-
-def _benchmark_version(root: ET.Element, result: ET.Element) -> str:
-    version = root.find(_VERSION)
-    value = None if version is None else version.text
-    if value is None:
-        value = result.get("version")
-    if value is None:
+    version = builder.version or attributes.get("version")
+    if version is None:
         _fail("the results do not state the benchmark version")
-    return value
-
-
-def _profile_id(result: ET.Element) -> str:
-    profile = result.find(_PROFILE)
-    value = None if profile is None else profile.get("idref")
-    if value is None:
+    if builder.profile_idref is None:
         _fail("the results do not identify the profile")
-    return value
+    return ParsedResults(
+        benchmark_id=benchmark_id,
+        benchmark_version=version,
+        profile_id=builder.profile_idref,
+        started_at=_utc_timestamp(attributes.get("start-time"), "start-time"),
+        finished_at=_utc_timestamp(attributes.get("end-time"), "end-time"),
+        findings=findings,
+    )
 
 
 def parse_results(document: str, limits: XmlLimits | None = None) -> ParsedResults:
-    """Parse and map an XCCDF 1.2 results document.
+    """Parse and map an XCCDF 1.2 results document held in memory.
 
     Args:
-        document: Decoded document text.
+        document: Document text.
         limits: Element and depth bounds; the defaults apply when omitted.
 
     Returns:
@@ -324,35 +434,33 @@ def parse_results(document: str, limits: XmlLimits | None = None) -> ParsedResul
         XccdfParseError: If the document is unsafe, malformed, not XCCDF 1.2
             or lacks required data. A document is never treated as a pass.
     """
-    root = _parse_tree(document, XmlLimits() if limits is None else limits)
-    if root.tag not in {_BENCHMARK, _TEST_RESULT}:
-        _fail("the root element is not an XCCDF 1.2 Benchmark or TestResult")
-    result = _single_result(root)
-    findings = tuple(_finding(item) for item in result.findall(_RULE_RESULT))
-    rule_ids = [finding.rule_id for finding in findings]
-    if len(set(rule_ids)) != len(rule_ids):
-        _fail("the results contain a rule more than once")
-    return ParsedResults(
-        benchmark_id=_benchmark_id(root, result),
-        benchmark_version=_benchmark_version(root, result),
-        profile_id=_profile_id(result),
-        started_at=_utc_timestamp(result.get("start-time"), "start-time"),
-        finished_at=_utc_timestamp(result.get("end-time"), "end-time"),
-        findings=findings,
-    )
+    limits = XmlLimits() if limits is None else limits
+    return _extract(_parse_stream([document.encode("utf-8")], limits))
+
+
+def _bounded_chunks(handle: BinaryIO, max_bytes: int) -> Iterator[bytes]:
+    total = 0
+    while chunk := handle.read(READ_CHUNK_BYTES):
+        total += len(chunk)
+        if total > max_bytes:
+            _fail(f"the results file is larger than {max_bytes} bytes")
+        yield chunk
 
 
 def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> ParsedResults:
-    """Read a results file with bounds and parse it.
+    """Stream a results file through the parser with bounds.
 
-    The file must be a regular file that is not a symlink, at most ``max_bytes``
-    long (checked before reading and again while reading), non-empty, valid
-    UTF-8 and free of DOCTYPE and ENTITY declarations.
+    The file must be a regular file that is not a symlink and at most
+    ``max_bytes`` long (checked before reading and again while reading). It is
+    read in chunks, so memory does not grow with its size. The parser is told
+    that the text is UTF-8, so other encodings are malformed, and DOCTYPE and
+    ENTITY declarations are rejected before the chunk that holds them is parsed.
 
     Raises:
         XccdfParseError: For every rejection, including unreadable files.
     """
     target = Path(path)
+    limits = XmlLimits() if limits is None else limits
     try:
         info = target.lstat()
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
@@ -360,18 +468,9 @@ def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> 
         if info.st_size > max_bytes:
             _fail(f"the results file is larger than {max_bytes} bytes")
         with target.open("rb") as handle:
-            data = handle.read(max_bytes + 1)
+            return _extract(_parse_stream(_bounded_chunks(handle, max_bytes), limits))
     except OSError as error:
         _fail(f"the results file cannot be read: {error.strerror or type(error).__name__}")
-    if len(data) > max_bytes:
-        _fail(f"the results file is larger than {max_bytes} bytes")
-    if not data:
-        _fail("the results file is empty")
-    try:
-        document = data.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        _fail("the results file is not valid UTF-8")
-    return parse_results(document, limits)
 
 
 @dataclass(frozen=True)
@@ -383,10 +482,18 @@ class _Failure:
 @dataclass(frozen=True)
 class _Provenance:
     scanner_version: str
-    content_name: str
+    source: str
     content_sha256: str
     started: datetime
     finished: datetime
+
+
+def _source_label(content: str, tailoring: str | None, tailoring_digest: str | None) -> str:
+    label = _clean(Path(content).name, SOURCE_NAME_LENGTH)
+    if tailoring is None:
+        return label
+    name = _clean(Path(tailoring).name, SOURCE_NAME_LENGTH)
+    return f"{label} tailoring={name} tailoring_sha256={tailoring_digest}"
 
 
 def _clean(text: str, limit: int = MAX_MESSAGE_LENGTH) -> str:
@@ -469,6 +576,7 @@ class OpenScapBackend:
             else _existing_file(self._settings.content_root, request.tailoring_path, "tailoring")
         )
         digest = _sha256(content)
+        tailoring_digest = None if tailoring is None else _sha256(tailoring)
         output = self._make_output_directory(request.output_dir)
         started = self._clock()
         probe = self._probe_version()
@@ -478,10 +586,16 @@ class OpenScapBackend:
             if isinstance(probe, _Failure)
             else self._evaluate(request, content, tailoring, output)
         )
-        if isinstance(outcome, ParsedResults) and _sha256(content) != digest:
-            outcome = _Failure(model.ScanStatus.FAILED, "content changed during the scan")
+        unchanged = _sha256(content) == digest and (
+            tailoring is None or _sha256(tailoring) == tailoring_digest
+        )
+        if isinstance(outcome, ParsedResults) and not unchanged:
+            outcome = _Failure(
+                model.ScanStatus.FAILED, "content or tailoring file changed during the scan"
+            )
         finished = max(started, self._clock())
-        provenance = _Provenance(version, Path(content).name, digest, started, finished)
+        source = _source_label(content, tailoring, tailoring_digest)
+        provenance = _Provenance(version, source, digest, started, finished)
         return self._build_run(request, outcome, provenance)
 
     def _make_output_directory(self, candidate: str) -> str:
@@ -562,18 +676,30 @@ class OpenScapBackend:
     def _verify(
         request: scanner.ScanRequest, returncode: int, parsed: ParsedResults
     ) -> ParsedResults | _Failure:
+        reported = {finding.rule_id for finding in parsed.findings}
+        missing = tuple(
+            _error_finding(rule_id, "the results contain no rule-result for this rule")
+            for rule_id in request.expected_rule_ids
+            if rule_id not in reported
+        )
+        findings = (*parsed.findings, *missing)
+        unsatisfied = any(finding.outcome in _ERROR_OUTCOMES for finding in findings)
+        unexpected = len(reported - set(request.expected_rule_ids))
         problem = None
-        unsatisfied = any(finding.outcome in _ERROR_OUTCOMES for finding in parsed.findings)
         if parsed.profile_id != request.profile_id:
             problem = "the results are for a different profile than requested"
         elif parsed.benchmark_id != request.benchmark_id:
             problem = "the results are for a different benchmark than requested"
+        elif unexpected:
+            problem = f"the results contain {unexpected} rule(s) that the profile does not select"
         elif returncode == EXIT_ALL_PASSED and unsatisfied:
-            problem = "oscap reported success but the results contain failed or errored rules"
+            problem = (
+                "oscap reported success but the results contain failed, errored or missing rules"
+            )
         elif returncode == EXIT_RULES_FAILED and not unsatisfied:
             problem = "oscap reported failed rules but the results contain none"
         if problem is None:
-            return parsed
+            return replace(parsed, findings=findings)
         return _Failure(model.ScanStatus.FAILED, problem)
 
     def _build_run(
@@ -583,7 +709,7 @@ class OpenScapBackend:
         facts: _Provenance,
     ) -> model.ScanRun:
         info = model.ScannerInfo(BACKEND_NAME, facts.scanner_version)
-        source = facts.content_name
+        source = facts.source
         digest = facts.content_sha256
         if isinstance(outcome, ParsedResults):
             try:

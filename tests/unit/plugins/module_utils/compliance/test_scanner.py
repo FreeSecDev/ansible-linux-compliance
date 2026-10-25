@@ -28,6 +28,7 @@ def request(**fields: Any) -> scanner.ScanRequest:
         "profile_id": PROFILE,
         "content_path": "ds.xml",
         "output_dir": "out-1",
+        "expected_rule_ids": (RULE,),
     }
     values.update(fields)
     return scanner.ScanRequest(**values)
@@ -77,7 +78,7 @@ class TestRequest:
     def test_minimal_request(self) -> None:
         built = request()
         assert built.tailoring_path is None
-        assert built.expected_rule_ids == ()
+        assert built.expected_rule_ids == (RULE,)
 
     def test_full_request(self) -> None:
         built = request(tailoring_path="t.xml", expected_rule_ids=(RULE,))
@@ -113,7 +114,9 @@ class TestRequest:
         with pytest.raises(scanner.ScanRequestError, match="benchmark_id"):
             request(benchmark_id=PROFILE)
 
-    @pytest.mark.parametrize("path", ["", "-evil", "a\x00b", "/" + "a" * 5000, 5, None])
+    @pytest.mark.parametrize(
+        "path", ["", "-evil", "a\x00b", "a\nb", "a\x7fb", "/" + "a" * 5000, 5, None]
+    )
     def test_rejects_bad_paths(self, path: Any) -> None:
         with pytest.raises(scanner.ScanRequestError, match="content_path"):
             request(content_path=path)
@@ -125,11 +128,30 @@ class TestRequest:
 
     @pytest.mark.parametrize(
         "rules",
-        [[RULE], (PROFILE,), (RULE, RULE), (5,), tuple([RULE] * (scanner.MAX_EXPECTED_RULES + 1))],
+        [
+            [RULE],
+            (),
+            (PROFILE,),
+            (RULE, RULE),
+            (5,),
+            tuple([RULE] * (scanner.MAX_EXPECTED_RULES + 1)),
+        ],
     )
     def test_rejects_bad_expected_rules(self, rules: Any) -> None:
         with pytest.raises(scanner.ScanRequestError, match="expected_rule_ids"):
             request(expected_rule_ids=rules)
+
+    def test_expected_rules_are_required(self) -> None:
+        values: dict[str, Any] = {
+            "run_id": "run-1",
+            "host": HOST,
+            "benchmark_id": BENCHMARK,
+            "profile_id": PROFILE,
+            "content_path": "ds.xml",
+            "output_dir": "out-1",
+        }
+        with pytest.raises(TypeError):
+            scanner.ScanRequest(**values)
 
     def test_identifier_patterns_agree_with_the_model(self) -> None:
         for kind, value in (("rule", RULE), ("profile", PROFILE), ("benchmark", BENCHMARK)):

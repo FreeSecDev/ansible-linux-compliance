@@ -142,9 +142,8 @@ lint-packer:
 	$(call NOT_IMPLEMENTED,lint-packer,FREES-64)
 
 security: require-uv
-	$(RUN) bandit -c pyproject.toml -r tools plugins -q -x plugins/module_utils/compliance/process.py,plugins/module_utils/compliance/openscap.py
+	$(RUN) bandit -c pyproject.toml -r tools plugins -q -x plugins/module_utils/compliance/process.py
 	$(RUN) bandit -c pyproject.toml -q -s B404,B603 plugins/module_utils/compliance/process.py
-	$(RUN) bandit -c pyproject.toml -q -s B405 plugins/module_utils/compliance/openscap.py
 	$(RUN) pre-commit run gitleaks-history --hook-stage manual --all-files
 	$(RUN) zizmor --persona $(ZIZMOR_PERSONA) .github/workflows
 

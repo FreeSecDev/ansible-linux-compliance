@@ -14,8 +14,10 @@ Rules:
   attributes, never import or name ``subprocess``, ``pty``, ``posix``, ``sys`` or
   ``os`` as an imported name or attribute, never use ``vars``, ``globals``,
   ``locals``, ``__dict__`` or ``get_type_hints``, never pass ``shell=True``,
-  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``policies`` and
-  ``trusted_dirs`` keywords, and only call ``getattr`` with a literal permitted name. Only
+  ``use_unsafe_shell`` or the test-only ``owner_uid``, ``policies``, ``trusted_dirs``,
+  ``runner``, ``clock`` and ``limits`` keywords, never use a ``**`` dict splat in a call, and
+  only call ``getattr`` with a literal permitted name. ``xml.parsers.expat`` may be imported
+  only by ``plugins/module_utils/compliance/openscap.py``. Only
   ``plugins/module_utils/compliance/process.py`` is exempt (ADR 0004).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
@@ -32,12 +34,13 @@ import sys
 import tokenize
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Protocol, cast
 
 import yaml
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
 YAML_SUFFIXES: Final[frozenset[str]] = frozenset({".yml", ".yaml"})
 PYTHON_SUFFIXES: Final[frozenset[str]] = frozenset({".py"})
@@ -81,8 +84,10 @@ ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
         "typing",
         "unicodedata",
         "xml.etree.ElementTree",
-        "xml.parsers.expat",
     }
+)
+EXTRA_IMPORTS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
+    {Path("plugins/module_utils/compliance/openscap.py"): frozenset({"xml.parsers.expat"})}
 )
 ALLOWED_IMPORT_PREFIXES: Final[tuple[str, ...]] = (
     "ansible.module_utils",
@@ -127,7 +132,7 @@ BANNED_ATTRIBUTES: Final[frozenset[str]] = (
 BANNED_ATTRIBUTE_PREFIXES: Final[tuple[str, ...]] = ("spawn", "fork", "posix_spawn", "_create_")
 EXEC_FAMILY: Final[re.Pattern[str]] = re.compile(r"f?exec[lv][a-z]*")
 BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
-    {"use_unsafe_shell", "owner_uid", "policies", "trusted_dirs"}
+    {"use_unsafe_shell", "owner_uid", "policies", "trusted_dirs", "runner", "clock", "limits"}
 )
 OS_MODULE: Final[str] = "os"
 OS_PATH: Final[str] = "path"
@@ -387,9 +392,13 @@ def _is_banned_attribute(name: str) -> bool:
     )
 
 
-def _is_allowed_import(name: str) -> bool:
-    return name in ALLOWED_IMPORTS or any(
-        name == prefix or name.startswith(prefix + ".") for prefix in ALLOWED_IMPORT_PREFIXES
+def _is_allowed_import(name: str, extra: frozenset[str]) -> bool:
+    return (
+        name in ALLOWED_IMPORTS
+        or name in extra
+        or any(
+            name == prefix or name.startswith(prefix + ".") for prefix in ALLOWED_IMPORT_PREFIXES
+        )
     )
 
 
@@ -404,16 +413,16 @@ def _alias_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
             yield f"import under the name {alias.asname!r} is not allowed in plugins"
 
 
-def _import_findings(node: ast.Import | ast.ImportFrom) -> Iterable[str]:
+def _import_findings(node: ast.Import | ast.ImportFrom, extra: frozenset[str]) -> Iterable[str]:
     """Yield a description for each import on ``node`` that is not allow-listed."""
     yield from _alias_findings(node)
     if isinstance(node, ast.Import):
         for alias in node.names:
-            if not _is_allowed_import(alias.name):
+            if not _is_allowed_import(alias.name, extra):
                 yield _not_allowed(alias.name)
         return
     module = node.module or ""
-    if not node.level and module != OS_MODULE and not _is_allowed_import(module):
+    if not node.level and module != OS_MODULE and not _is_allowed_import(module, extra):
         yield _not_allowed(module)
     for alias in node.names:
         if alias.name == "*":
@@ -436,6 +445,8 @@ def _dynamic_attribute_findings(node: ast.Call) -> Iterable[str]:
 def _call_findings(node: ast.Call) -> Iterable[str]:
     """Yield descriptions for forbidden keywords and dynamic attribute access."""
     for keyword in node.keywords:
+        if keyword.arg is None:
+            yield "dict splat (**) in a call is not allowed in plugins"
         if keyword.arg in BANNED_KEYWORDS:
             yield f"keyword {keyword.arg!r} is not allowed in plugins"
         if (
@@ -461,11 +472,11 @@ def _name_findings(
 
 
 def _process_findings(
-    node: ast.AST, call_targets: set[int], os_path_bases: set[int]
+    node: ast.AST, call_targets: set[int], os_path_bases: set[int], extra: frozenset[str]
 ) -> Iterable[str]:
     """Yield a description for each forbidden construct on ``node`` itself."""
     if isinstance(node, (ast.Import, ast.ImportFrom)):
-        yield from _import_findings(node)
+        yield from _import_findings(node, extra)
     elif isinstance(node, ast.Name):
         yield from _name_findings(node, call_targets, os_path_bases)
     elif isinstance(node, ast.Attribute):
@@ -475,7 +486,9 @@ def _process_findings(
         yield from _call_findings(node)
 
 
-def check_process_isolation(path: Path, data: bytes) -> list[Violation]:
+def check_process_isolation(
+    path: Path, data: bytes, extra_imports: frozenset[str] = frozenset()
+) -> list[Violation]:
     """Reject, by default, anything in plugin code that could run a process.
 
     Only allow-listed imports are accepted, ``exec``, ``eval``, ``compile`` and
@@ -501,7 +514,7 @@ def check_process_isolation(path: Path, data: bytes) -> list[Violation]:
         {
             Violation(path, getattr(node, "lineno", 1), message)
             for node in nodes
-            for message in _process_findings(node, call_targets, os_path_bases)
+            for message in _process_findings(node, call_targets, os_path_bases, extra_imports)
         }
     )
 
@@ -518,7 +531,8 @@ def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
     if suffix in PYTHON_SUFFIXES:
         violations = check_python_comments(path, data)
         if is_process_scope(path, root):
-            violations.extend(check_process_isolation(path, data))
+            extra = EXTRA_IMPORTS.get(path.resolve().relative_to(root.resolve()), frozenset())
+            violations.extend(check_process_isolation(path, data, extra))
         return violations
     try:
         text = data.decode("utf-8")

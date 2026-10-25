@@ -5,6 +5,7 @@ import hashlib
 import os
 import stat
 import time
+import tracemalloc
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -42,8 +43,8 @@ def non_utf8_file(directory: Path) -> Path:
     return path
 
 
-def skip_markup_check(_document: str) -> None:
-    return None
+def skip_declaration_scan(_previous: bytes, _chunk: bytes) -> bytes:
+    return b""
 
 
 def text(name: str, folder: Path = XCCDF) -> str:
@@ -335,8 +336,8 @@ class TestParseResults:
                 parsed.findings,
             )
 
-    def test_empty_text_has_no_root(self) -> None:
-        with pytest.raises(openscap.XccdfParseError, match="not well-formed XML"):
+    def test_empty_text_is_rejected(self) -> None:
+        with pytest.raises(openscap.XccdfParseError, match="empty"):
             openscap.parse_results("")
 
     def test_markup_free_of_elements_is_not_a_pass(self) -> None:
@@ -362,7 +363,7 @@ class TestHardening:
     def test_parser_rejects_declarations_even_if_the_text_check_is_bypassed(
         self, name: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(openscap, "_reject_markup", skip_markup_check)
+        monkeypatch.setattr(openscap, "_scan_for_declarations", skip_declaration_scan)
         with pytest.raises(openscap.XccdfParseError, match="not allowed"):
             parse(name, ADVERSARIAL)
 
@@ -378,7 +379,7 @@ class TestHardening:
         with pytest.raises(openscap.XccdfParseError) as caught:
             openscap.parse_results(document)
         assert "TOP-SECRET-VALUE" not in str(caught.value)
-        monkeypatch.setattr(openscap, "_reject_markup", skip_markup_check)
+        monkeypatch.setattr(openscap, "_scan_for_declarations", skip_declaration_scan)
         with pytest.raises(openscap.XccdfParseError) as bypassed:
             openscap.parse_results(document)
         assert "TOP-SECRET-VALUE" not in str(bypassed.value)
@@ -407,7 +408,7 @@ class TestHardening:
     def test_defaults_are_documented_values(self) -> None:
         limits = openscap.XmlLimits()
         assert (limits.max_elements, limits.max_depth) == (2_000_000, 64)
-        assert scanner.DEFAULT_MAX_RESULT_BYTES == 256 * 1024 * 1024
+        assert scanner.DEFAULT_MAX_RESULT_BYTES == 128 * 1024 * 1024
 
     def test_error_messages_are_bounded(self) -> None:
         document = text("all-pass.xml").replace("rule_alpha", "rule_" + "Z" * 500 + " bad", 1)
@@ -493,12 +494,20 @@ class TestReadResults:
             self.read(path)
 
     def test_non_utf8_file_is_rejected(self, tmp_path: Path) -> None:
-        with pytest.raises(openscap.XccdfParseError, match="not valid UTF-8"):
+        with pytest.raises(openscap.XccdfParseError, match="not well-formed"):
             self.read(non_utf8_file(tmp_path))
 
     def test_utf16_file_is_rejected(self, tmp_path: Path) -> None:
         path = tmp_path / "utf16.xml"
         path.write_bytes((XCCDF / "all-pass.xml").read_text(encoding="utf-8").encode("utf-16"))
+        with pytest.raises(openscap.XccdfParseError, match="UTF-16 or UTF-32"):
+            self.read(path)
+
+    @pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be", "utf-32"])
+    def test_other_encodings_are_never_parsed(self, tmp_path: Path, encoding: str) -> None:
+        document = text("all-pass.xml", XCCDF).replace("<status>", "<!DOCTYPE x><status>")
+        path = tmp_path / "wide.xml"
+        path.write_bytes(document.encode(encoding))
         with pytest.raises(openscap.XccdfParseError):
             self.read(path)
 
@@ -550,7 +559,14 @@ class TestCompletedScans:
     def test_unknown_result_values_become_error_findings(self, tmp_path: Path) -> None:
         setup = harness(tmp_path, text("unknown-result-value.xml", ADVERSARIAL))
         setup.runner.evaluation = command_result(2)
-        run = setup.audit()
+        run = setup.audit(
+            expected_rule_ids=(
+                "xccdf_org.example.synthetic_rule_alpha",
+                "xccdf_org.example.synthetic_rule_beta",
+                "xccdf_org.example.synthetic_rule_gamma",
+                "xccdf_org.example.synthetic_rule_delta",
+            )
+        )
         assert run.status is model.ScanStatus.COMPLETED
         assert [f.outcome for f in run.findings].count(model.Outcome.ERROR) == 3
 
@@ -641,7 +657,7 @@ class TestCompletedScans:
 
     def test_reversed_result_times_are_a_failure(self, tmp_path: Path) -> None:
         setup = harness(tmp_path, text("end-before-start.xml", ADVERSARIAL))
-        run = setup.audit()
+        run = setup.audit(expected_rule_ids=(RULE_ALPHA,))
         assert run.status is model.ScanStatus.FAILED
         assert run.error_message is not None
         assert "precedes" in run.error_message
@@ -760,7 +776,7 @@ class TestResultFailures:
             path.write_bytes(NON_UTF8)
 
         setup.runner.on_evaluate = write
-        assert_failure(setup.audit(), model.ScanStatus.FAILED, "not valid UTF-8")
+        assert_failure(setup.audit(), model.ScanStatus.FAILED, "not well-formed")
 
     def test_symlinked_results_path_is_a_failure(self, tmp_path: Path) -> None:
         setup = Harness(tmp_path, FakeRunner(None))
@@ -791,7 +807,17 @@ class TestResultFailures:
 
     def test_exit_zero_with_an_errored_rule_is_inconsistent(self, tmp_path: Path) -> None:
         setup = harness(tmp_path, text("unknown-result-value.xml", ADVERSARIAL))
-        assert_failure(setup.audit(), model.ScanStatus.FAILED, "reported success")
+        run = setup.audit(
+            expected_rule_ids=(
+                "xccdf_org.example.synthetic_rule_alpha",
+                "xccdf_org.example.synthetic_rule_beta",
+                "xccdf_org.example.synthetic_rule_gamma",
+                "xccdf_org.example.synthetic_rule_delta",
+            )
+        )
+        assert run.status is model.ScanStatus.FAILED
+        assert run.error_message is not None
+        assert "reported success" in run.error_message
 
     def test_exit_two_without_a_failed_rule_is_inconsistent(self, tmp_path: Path) -> None:
         setup = harness(tmp_path)
@@ -821,15 +847,10 @@ class TestResultFailures:
 
         setup.runner.on_evaluate = tamper
         run = setup.audit()
-        assert_failure(run, model.ScanStatus.FAILED, "content changed during the scan")
+        assert_failure(
+            run, model.ScanStatus.FAILED, "content or tailoring file changed during the scan"
+        )
         assert run.content.content_sha256 == hashlib.sha256(DATASTREAM).hexdigest()
-
-    def test_failure_without_expected_rules_has_no_findings(self, tmp_path: Path) -> None:
-        setup = harness(tmp_path)
-        setup.runner.evaluation = command_result(1)
-        run = setup.audit(expected_rule_ids=())
-        assert run.status is model.ScanStatus.FAILED
-        assert run.findings == ()
 
 
 class TestRequestSafety:
@@ -998,3 +1019,231 @@ class TestSeams:
         run = backend.audit(setup.request())
         assert run.status is model.ScanStatus.FAILED
         assert {f.outcome for f in run.findings} == {model.Outcome.ERROR}
+
+
+def strip_rule(document: str, name: str) -> str:
+    start = document.index(f'    <rule-result idref="xccdf_org.example.synthetic_rule_{name}"')
+    end = document.index("    </rule-result>\n", start) + len("    </rule-result>\n")
+    return document[:start] + document[end:]
+
+
+class TestResultIntegrity:
+    """Results are reconciled with the rules that the profile selects."""
+
+    def test_zero_results_report_every_rule_as_error(self, tmp_path: Path) -> None:
+        document = strip_rule(strip_rule(text("all-pass.xml"), "alpha"), "beta")
+        setup = harness(tmp_path, document)
+        setup.runner.evaluation = command_result(2)
+        run = setup.audit()
+        assert run.status is model.ScanStatus.COMPLETED
+        assert [(f.rule_id, f.outcome) for f in run.findings] == [
+            (RULE_ALPHA, model.Outcome.ERROR),
+            (RULE_BETA, model.Outcome.ERROR),
+        ]
+        assert all(f.message and "no rule-result" in f.message for f in run.findings)
+
+    def test_zero_results_with_exit_zero_fail_the_run(self, tmp_path: Path) -> None:
+        document = strip_rule(strip_rule(text("all-pass.xml"), "alpha"), "beta")
+        run = harness(tmp_path, document).audit()
+        assert_failure(run, model.ScanStatus.FAILED, "failed, errored or missing")
+
+    def test_partial_results_report_the_missing_rule_as_error(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path, strip_rule(text("all-pass.xml"), "beta"))
+        setup.runner.evaluation = command_result(2)
+        run = setup.audit()
+        assert run.status is model.ScanStatus.COMPLETED
+        assert {f.rule_id: f.outcome for f in run.findings} == {
+            RULE_ALPHA: model.Outcome.PASS,
+            RULE_BETA: model.Outcome.ERROR,
+        }
+
+    def test_partial_results_with_exit_zero_fail_the_run(self, tmp_path: Path) -> None:
+        run = harness(tmp_path, strip_rule(text("all-pass.xml"), "beta")).audit()
+        assert_failure(run, model.ScanStatus.FAILED, "failed, errored or missing")
+
+    def test_unexpected_rule_fails_the_run(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path)
+        run = setup.audit(expected_rule_ids=(RULE_ALPHA,))
+        assert run.status is model.ScanStatus.FAILED
+        assert run.error_message == "the results contain 1 rule(s) that the profile does not select"
+        assert [f.rule_id for f in run.findings] == [RULE_ALPHA]
+        assert run.findings[0].outcome is model.Outcome.ERROR
+
+    def test_duplicate_rule_results_fail_the_run(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path, text("duplicate-rule.xml", ADVERSARIAL))
+        setup.runner.evaluation = command_result(2)
+        assert_failure(setup.audit(), model.ScanStatus.FAILED, "more than once")
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "foreign-namespace-rule-result.xml",
+            "no-namespace-rule-result.xml",
+            "foreign-namespace-result.xml",
+        ],
+    )
+    def test_foreign_namespace_results_fail_the_run(self, tmp_path: Path, name: str) -> None:
+        setup = harness(tmp_path, text(name, ADVERSARIAL))
+        setup.runner.evaluation = command_result(2)
+        assert_failure(setup.audit(), model.ScanStatus.FAILED, "outside the XCCDF 1.2 namespace")
+
+    @pytest.mark.parametrize(
+        ("name", "message"),
+        [
+            ("foreign-namespace-rule-result.xml", "rule-result element outside"),
+            ("no-namespace-rule-result.xml", "rule-result element outside"),
+            ("foreign-namespace-result.xml", "result element outside"),
+        ],
+    )
+    def test_parser_rejects_foreign_namespace_results(self, name: str, message: str) -> None:
+        with pytest.raises(openscap.XccdfParseError, match=message):
+            parse(name, ADVERSARIAL)
+
+    def test_foreign_elements_with_other_names_are_ignored(self) -> None:
+        document = text("all-pass.xml").replace(
+            "<title>Synthetic scan</title>", '<note xmlns="urn:example:other">x</note>'
+        )
+        assert len(openscap.parse_results(document).findings) == 2
+
+    def test_a_repeated_benchmark_or_profile_reference_keeps_the_first(self) -> None:
+        document = text("all-pass.xml").replace(
+            "<title>Synthetic scan</title>",
+            '<benchmark id="xccdf_org.example.synthetic_benchmark_other"/>'
+            '<profile idref="xccdf_org.example.synthetic_profile_other"/>',
+        )
+        parsed = openscap.parse_results(document)
+        assert (parsed.benchmark_id, parsed.profile_id) == (BENCHMARK, PROFILE)
+
+
+class TestMixedContent:
+    """Text and elements are never merged."""
+
+    @pytest.mark.parametrize("name", ["mixed-content-result.xml", "mixed-content-ident.xml"])
+    def test_leaf_elements_with_children_are_malformed(self, name: str) -> None:
+        with pytest.raises(openscap.XccdfParseError, match="may not contain child elements"):
+            parse(name, ADVERSARIAL)
+
+    def test_a_mixed_content_result_fails_the_run(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path, text("mixed-content-result.xml", ADVERSARIAL))
+        assert_failure(setup.audit(), model.ScanStatus.FAILED, "child elements")
+
+    def test_text_after_a_child_is_not_merged_into_the_parent(self) -> None:
+        document = text("all-pass.xml").replace(
+            "<version>1.0</version>", "<version>1.0<x/>9.9</version>"
+        )
+        assert openscap.parse_results(document).benchmark_version == "1.0"
+
+    def test_text_before_a_child_is_not_lost(self) -> None:
+        document = text("all-pass.xml").replace(
+            "<version>1.0</version>", "<version>1.0<x>fail</x></version>"
+        )
+        assert openscap.parse_results(document).benchmark_version == "1.0"
+
+
+class TestStreaming:
+    """The file is parsed in chunks and memory does not follow its size."""
+
+    def test_small_chunks_give_the_same_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        expected = openscap.read_results(str(XCCDF / "all-pass.xml"), 10**6)
+        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 7)
+        assert openscap.read_results(str(XCCDF / "all-pass.xml"), 10**6) == expected
+
+    @pytest.mark.parametrize("size", [1, 2, 3, 5, 8, 9, 13])
+    @pytest.mark.parametrize("name", ["doctype.xml", "billion-laughs.xml", "external-entity.xml"])
+    def test_declarations_split_across_chunks_are_rejected_by_the_scan(
+        self, monkeypatch: pytest.MonkeyPatch, name: str, size: int
+    ) -> None:
+        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", size)
+        with pytest.raises(openscap.XccdfParseError, match="DOCTYPE and ENTITY"):
+            openscap.read_results(str(ADVERSARIAL / name), 10**6)
+
+    def test_size_is_enforced_across_chunks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 16)
+        path = str(XCCDF / "all-pass.xml")
+        size = (XCCDF / "all-pass.xml").stat().st_size
+        assert openscap.read_results(path, size)
+        with pytest.raises(openscap.XccdfParseError, match="larger than"):
+            openscap.read_results(path, size - 1)
+
+    def test_elements_are_not_retained(self, tmp_path: Path) -> None:
+        rule = (
+            '<rule-result idref="xccdf_org.example.synthetic_rule_r{n}" severity="low">'
+            "<result>pass</result><message severity='info'>" + "x" * 4000 + "</message>"
+            "</rule-result>\n"
+        )
+        head = text("all-pass.xml").split("    <rule-result")[0]
+        body = "".join(rule.format(n=n) for n in range(3000))
+        path = tmp_path / "big.xml"
+        path.write_text(head + body + "  </TestResult>\n</Benchmark>\n", encoding="utf-8")
+        tracemalloc.start()
+        parsed = openscap.read_results(str(path), 10**8)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        assert len(parsed.findings) == 3000
+        assert peak < path.stat().st_size // 2
+
+
+class TestTailoringProvenance:
+    """The tailoring file is hashed next to the datastream."""
+
+    def tailoring(self, setup: Harness) -> Path:
+        path = setup.content_root / "tailoring.xml"
+        path.write_text("<tailoring/>", encoding="utf-8")
+        return path
+
+    def test_digest_is_recorded_in_the_provenance(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path)
+        self.tailoring(setup)
+        run = setup.audit(tailoring_path="tailoring.xml")
+        digest = hashlib.sha256(b"<tailoring/>").hexdigest()
+        assert run.content.source == f"ds.xml tailoring=tailoring.xml tailoring_sha256={digest}"
+        assert run.content.content_sha256 == hashlib.sha256(DATASTREAM).hexdigest()
+
+    def test_failed_runs_record_it_too(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path)
+        self.tailoring(setup)
+        setup.runner.evaluation = command_result(1)
+        run = setup.audit(tailoring_path="tailoring.xml")
+        assert "tailoring_sha256=" in run.content.source
+
+    def test_without_tailoring_the_source_is_the_file_name(self, tmp_path: Path) -> None:
+        assert harness(tmp_path).audit().content.source == "ds.xml"
+
+    def test_tailoring_that_changes_during_the_scan_is_rejected(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path)
+        path = self.tailoring(setup)
+
+        def tamper(_path: Path) -> None:
+            path.write_text("<other/>", encoding="utf-8")
+
+        setup.runner.on_evaluate = tamper
+        run = setup.audit(tailoring_path="tailoring.xml")
+        assert_failure(run, model.ScanStatus.FAILED, "changed during the scan")
+
+    def test_unreadable_tailoring_is_a_request_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        setup = harness(tmp_path)
+        path = self.tailoring(setup)
+        real: Any = Path.open
+
+        def refuse(self: Path, *arguments: Any, **keywords: Any) -> Any:
+            if self == path:
+                raise PermissionError(13, "Permission denied")
+            return real(self, *arguments, **keywords)
+
+        monkeypatch.setattr(Path, "open", refuse)
+        with pytest.raises(scanner.ScanRequestError, match="cannot be read"):
+            setup.audit(tailoring_path="tailoring.xml")
+
+    def test_awkward_file_names_are_cleaned_and_bounded(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path)
+        long_name = "t" * 200 + ".xml"
+        (setup.content_root / long_name).write_text("<tailoring/>", encoding="utf-8")
+        run = setup.audit(tailoring_path=long_name)
+        assert f"tailoring={'t' * 64} " in run.content.source
+        assert len(run.content.source) <= 256
+        odd = setup.content_root / "caf\u00e9.xml"
+        odd.write_bytes(DATASTREAM)
+        other = setup.audit(content_path=odd.name, output_dir="odd")
+        assert other.content.source == "caf?.xml"

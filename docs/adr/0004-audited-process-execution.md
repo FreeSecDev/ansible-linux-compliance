@@ -108,18 +108,27 @@ Deviations and decisions:
 
 ## Amendment 2026-10-25: OpenSCAP backend (FREES-48)
 
-The OpenSCAP backend (`plugins/module_utils/compliance/openscap.py`) is the first caller of the helper. It required two
+The OpenSCAP backend (`plugins/module_utils/compliance/openscap.py`) is the first caller of the helper. It required
 narrow policy changes; everything else is unchanged.
 
 - `oscap` option allow-list: `--tailoring-file` was added so that an operator tailoring file can be passed to
   `oscap xccdf eval`. The sub-command prefixes, `FORBIDDEN_OPTIONS`, the forbidden words (`remediate`, `generate fix`)
   and the rule that every `-` argument must be allow-listed still apply, and a test asserts that the new entry opens
   no other option. The backend never passes `--remediate`, `--fetch-remote-resources` or `--report`.
-- Import allow-list for `plugins/`: `xml.parsers.expat` was added. The XCCDF parser needs the expat parser object to
-  turn off parameter entity parsing (`SetParamEntityParsing`), which the high-level `ElementTree` parser does not
-  expose. `xml.etree.ElementTree` was already allowed; the parser uses it only to hold the kept elements. Other XML
-  modules (`xml.dom`, `xml.sax`, `xml.etree.cElementTree`) stay denied and are covered by repository-rule tests.
-- Bandit reports B405 for importing `xml.etree.ElementTree`. Bandit has no per-file skip and inline `nosec` comments
-  are banned, so `make security` and the pre-push hook run Bandit once more on `openscap.py` alone with only B405
-  skipped, and exclude that file from the unskipped run. Ruff S405 and FBT003 are ignored for the same file in
-  `pyproject.toml`, each with a justification. The B314 family (calls that parse with `ElementTree`) stays active.
+- Import allow-list for `plugins/`: `xml.parsers.expat` is allowed **only in `plugins/module_utils/compliance/openscap.py`**
+  (`EXTRA_IMPORTS` in `tools/lint/check_repo_rules.py`); every other plugin file that imports it fails the guard, which
+  tests show for several paths. The XCCDF parser needs the expat parser object to turn off parameter entity parsing
+  (`SetParamEntityParsing`) and to force UTF-8, which the high-level `ElementTree` parser does not expose. The parser does
+  not import `xml.etree.ElementTree` at all: it never stores elements, so Bandit B405 and Ruff S405 do not apply and no
+  suppression is needed. Other XML modules (`xml.dom`, `xml.sax`, `xml.etree.cElementTree`) stay denied.
+- The test-only seams of `OpenScapBackend` and the parser, `runner`, `clock` and `limits`, join `owner_uid`, `policies`
+  and `trusted_dirs` as keywords that the guard bans in every plugin file (`process.py` stays exempt). The backend defines
+  them as parameters and never passes them as call keywords. A `**` dict splat in a call is banned everywhere under
+  `plugins/`, because it could carry a banned keyword; no plugin code used one. The guard remains static analysis, not a
+  sandbox. Guard gaps that predate this change (reassigning module constants, `__kwdefaults__`, `setattr` on modules) are
+  tracked in FREES-125.
+- Residual risk (N2): `read_results` calls `lstat` and then `open`, so a path swapped for a symlink or FIFO in between is
+  followed. `O_NOFOLLOW` with `fstat` is not available under the `os.path`-only rule. The output directory is created by
+  the backend, is mode 0700 and never reused, so only the same user or root could swap it.
+- Known limitation (N4): options are allow-listed per executable, not per sub-command, so `oscap info --tailoring-file x`
+  passes the policy. It is harmless today; a per-sub-command table is a follow-up if a second sub-command needs options.

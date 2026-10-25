@@ -7,5 +7,6 @@ minor_changes:
     (``plugins/module_utils/compliance/openscap.py``). ``oscap xccdf eval`` runs
     only through the audited process helper, exit status 2 is a normal result,
     and a missing binary, timeout, bad exit status or untrusted results are a
-    scanner failure with ``error`` findings. The ``oscap`` allow-list gains
+    scanner failure with ``error`` findings. Results are reconciled with the
+    rules that the request expects, and the parser streams the file. The ``oscap`` allow-list gains
     ``--tailoring-file``.

@@ -203,6 +203,23 @@ with provenance (AGENTS.md rule 9).
   `make test-ansible-units` run the collection through `ansible-test`, and `make package` builds the tarball.
 - When ansible-core 2.20 leaves support, raising `requires_ansible` is a deliberate change with its own review.
 
+## Amendment 2026-10-25: result integrity (FREES-48)
+
+The scanner backends reconcile results with the rules that the caller selected, and consumers must not derive a
+verdict from findings alone. These invariants apply to every backend and every report.
+
+- A `ScanRequest` names the rules that the profile selects (`expected_rule_ids`, required and non-empty). The audit module
+  supplies them from the selected profile.
+- On a `completed` run, every expected rule without a rule-result is an `error` finding whose message says why. A result
+  for a rule that was not expected, a duplicate result for one rule, or a result element in another XCCDF namespace makes
+  the run `failed`, because findings would otherwise be dropped silently.
+- A run whose status is not `completed` counts **every expected rule as `error`** in reports and summaries. A backend
+  fills the findings accordingly, but a consumer must apply the rule even when it receives fewer findings.
+- A `ScanRun` whose status is not `completed` is never summarised as compliant or partially compliant, and "0 failures"
+  is never derived from the findings of such a run. Reports and summaries show the run status first, before any count.
+- The SHA-256 of a tailoring file is recorded in `Provenance.source` next to the datastream name, because the model has
+  no separate field; a dedicated field is a candidate for the next schema version.
+
 ## References
 
 - ansible-core release and maintenance matrix:

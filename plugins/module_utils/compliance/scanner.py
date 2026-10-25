@@ -26,11 +26,13 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 )
 
 DEFAULT_TIMEOUT_SECONDS: Final[float] = 1800.0
-DEFAULT_MAX_RESULT_BYTES: Final[int] = 256 * 1024 * 1024
+DEFAULT_MAX_RESULT_BYTES: Final[int] = 128 * 1024 * 1024
 MAX_RESULT_BYTES_LIMIT: Final[int] = 1024 * 1024 * 1024
 MAX_PATH_LENGTH: Final[int] = 4096
 MAX_EXPECTED_RULES: Final[int] = model.MAX_ITEMS
 MAX_ECHO_LENGTH: Final[int] = 64
+_FIRST_PRINTABLE: Final[int] = 32
+_DELETE: Final[int] = 127
 
 _BACKEND_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 _RUN_ID: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}")
@@ -85,10 +87,12 @@ def _check_path(value: object, name: str) -> str:
         not isinstance(value, str)
         or not value
         or len(value) > MAX_PATH_LENGTH
-        or "\x00" in value
+        or any(
+            ord(character) < _FIRST_PRINTABLE or ord(character) == _DELETE for character in value
+        )
         or value.startswith("-")
     ):
-        _reject(f"{name} must be a non-empty path without NUL that does not start with '-'")
+        _reject(f"{name} must be a non-empty path without control characters or a leading '-'")
     return value
 
 
@@ -132,6 +136,8 @@ def _check_rule_ids(value: object) -> None:
     if not isinstance(value, tuple):
         _reject("expected_rule_ids must be a tuple")
     rule_ids = cast("tuple[object, ...]", value)
+    if not rule_ids:
+        _reject("expected_rule_ids must not be empty")
     if len(rule_ids) > MAX_EXPECTED_RULES:
         _reject(f"expected_rule_ids exceeds {MAX_EXPECTED_RULES} items")
     for rule_id in rule_ids:
@@ -177,9 +183,11 @@ class ScanRequest:
         content_path: Datastream path, absolute or relative to the content root.
         output_dir: Directory the backend creates for its output files,
             absolute or relative to the output root. It must not exist.
+        expected_rule_ids: Non-empty tuple of the rules that the profile
+            selects, supplied by the caller. A rule without a result, and every
+            rule when the scanner fails, is reported as an ``error`` finding;
+            a result for any other rule makes the run fail.
         tailoring_path: Optional tailoring file, confined like the content.
-        expected_rule_ids: Rules that the profile selects. When the scanner
-            fails, each one is reported as an ``error`` finding.
     """
 
     run_id: str
@@ -188,8 +196,8 @@ class ScanRequest:
     profile_id: str
     content_path: str
     output_dir: str
+    expected_rule_ids: tuple[str, ...]
     tailoring_path: str | None = None
-    expected_rule_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """Validate every field."""
