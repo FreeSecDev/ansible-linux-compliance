@@ -55,3 +55,12 @@ in `linux_compliance_remediate_allow_disruptive`, for example
 without JSON passes a string and fails the input validation; this is intentional and fails closed.
 
 Per-rule and per-family toggles do not exist yet (FREES-55).
+
+## Tags
+
+Every validation and stop task in the roles is tagged `always`, so `--tags` cannot bypass them: for example,
+`--tags nothing` still validates inputs and stops with the role's tracking key.
+
+`--skip-tags always` is unsupported. It skips input validation, the not-implemented stop and fact gathering, so the
+play runs nothing and exits 0. That exit status must not be read as success. A role cannot prevent this, because any
+guard it adds is itself tagged `always`.
