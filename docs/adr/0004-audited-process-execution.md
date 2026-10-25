@@ -262,13 +262,17 @@ today; remove them if they stay unused.
 - `openscap.py` contains no XML parsing code. Its results parser is an event receiver for `xmlsafe.parse_chunks` (files,
   through `xmlsafe.open_regular` and `xmlsafe.iter_handle_chunks`) and `xmlsafe.parse_text` (text), and keeps only the
   XCCDF semantics: the namespace checks, the leaf-element and mixed-content rules, and the extraction. It passes its
-  own bounds (`XmlLimits`, default 2,000,000 elements and depth 64) and re-raises `xmlsafe.XmlSafetyError` as
+  bounds (`XmlLimits`, default 2,000,000 elements and depth 64, now taken from `xmlsafe`) and re-raises `xmlsafe.XmlSafetyError` as
   `XccdfParseError` with the same message, so the public API and every message are unchanged.
 - `xmlsafe.py` gained only what the move needed, and nothing weaker: `parse_text` (UTF-8 encoding of a text document,
   then `parse_chunks`, so every check applies) and a keyword-only `subject` for `open_regular`, `iter_handle_chunks`
   and `iter_file_chunks`, which only changes the wording of error messages ("the results file" instead of "the file").
   The size bounds, the DOCTYPE, ENTITY, NUL, UTF-16 and UTF-32 rejection, the expat settings and the element and depth
   bounds are the code that both parsers already had in identical form.
+- The one property in which the two parsers differed was the default element bound: 2,000,000 in `openscap.py` and
+  5,000,000 in `xmlsafe.py`. The stricter value is now the `xmlsafe` default, so datastreams parsed by `catalog.py` are
+  bounded at 2,000,000 elements too. The pinned datastreams have 154,758 (RHEL 9) and 69,788 (Ubuntu 24.04) elements,
+  and `make test-content-golden` still passes.
 - `subject` is not a test seam and not a banned keyword; it cannot change what is accepted. No new exemption was added
   to the guard.
 - A differential test (`tests/unit/plugins/module_utils/compliance/test_openscap_differential.py`) compares the parser

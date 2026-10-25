@@ -31,8 +31,8 @@ contains no XML parsing code: every byte goes through :mod:`xmlsafe`, which boun
 the file size before and while reading, refuses symlinks and other non-regular
 files, rejects DOCTYPE and ENTITY declarations before parsing, forces UTF-8,
 rejects UTF-16, UTF-32 and NUL bytes, turns parameter entities off and bounds the
-element count and nesting depth. This module applies its own, stricter element
-bound (:data:`DEFAULT_MAX_ELEMENTS`) and keeps only the XCCDF semantics:
+element count and nesting depth (:class:`XmlLimits`, whose defaults are those of
+:mod:`xmlsafe`). This module keeps only the XCCDF semantics:
 
 1. Only the XCCDF 1.2 namespace is accepted for the root, the test result, the
    rule results and their result elements.
@@ -65,8 +65,8 @@ XCCDF_NAMESPACE: Final[str] = "http://checklists.nist.gov/xccdf/1.2"
 RESULTS_FILE_NAME: Final[str] = "results.xml"
 ARF_FILE_NAME: Final[str] = "results-arf.xml"
 UNKNOWN_VERSION: Final[str] = "unknown"
-DEFAULT_MAX_ELEMENTS: Final[int] = 2_000_000
-DEFAULT_MAX_DEPTH: Final[int] = 64
+DEFAULT_MAX_ELEMENTS: Final[int] = xmlsafe.DEFAULT_MAX_ELEMENTS
+DEFAULT_MAX_DEPTH: Final[int] = xmlsafe.DEFAULT_MAX_DEPTH
 EXIT_ALL_PASSED: Final[int] = 0
 EXIT_RULES_FAILED: Final[int] = 2
 VERSION_TIMEOUT_SECONDS: Final[float] = 30.0

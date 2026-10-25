@@ -43,7 +43,7 @@ from xml.parsers import expat
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-DEFAULT_MAX_ELEMENTS: Final[int] = 5_000_000
+DEFAULT_MAX_ELEMENTS: Final[int] = 2_000_000
 DEFAULT_MAX_DEPTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 1024 * 1024
 

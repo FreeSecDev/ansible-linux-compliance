@@ -167,8 +167,8 @@ is never summarised as compliant (ADR 0013, amendment of FREES-48).
 Results come from a host and are untrusted. The parser uses only the standard library and layers its defences.
 Layers 1 to 4 are implemented once, in `plugins/module_utils/compliance/xmlsafe.py`, which `catalog.py` uses too;
 `openscap.py` contains no XML parsing code of its own (FREES-126). It calls `xmlsafe.open_regular`,
-`xmlsafe.iter_handle_chunks` and `xmlsafe.parse_chunks` for files and `xmlsafe.parse_text` for text, passes its own
-element bound, turns every `xmlsafe.XmlSafetyError` into an `XccdfParseError` with the same message, and implements
+`xmlsafe.iter_handle_chunks` and `xmlsafe.parse_chunks` for files and `xmlsafe.parse_text` for text, passes its
+`XmlLimits` bounds, turns every `xmlsafe.XmlSafetyError` into an `XccdfParseError` with the same message, and implements
 layers 5 and 6 in its event receiver:
 
 1. The file must be a regular file and not a symlink. It is streamed in 1 MiB chunks into the parser and bounded by
@@ -182,8 +182,8 @@ layers 5 and 6 in its event receiver:
    were bypassed. The standard library is safe enough here because of this layering, not because of the expat version:
    the amplification limits of expat 2.4.0 and later, and the differing expat builds of Python 3.9 to 3.14, are not
    relied upon.
-4. Element count (default 2,000,000 for results, stricter than the `xmlsafe` default of 5,000,000 that datastreams
-   use) and depth (default 64) are bounded while parsing.
+4. Element count (default 2,000,000) and depth (default 64) are bounded while parsing. Since FREES-126 these are the
+   `xmlsafe` defaults for datastreams too, which were 5,000,000 elements before.
 5. Only the XCCDF 1.2 namespace is accepted; a missing or other namespace is an error, and a `rule-result` or `result`
    element in another namespace is an error instead of being dropped.
 6. Elements are never stored. Each `rule-result` is reduced to its identifier, severity and result text when it ends.

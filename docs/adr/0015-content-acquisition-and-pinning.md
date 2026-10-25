@@ -125,7 +125,8 @@ The result can never be wrong content, because the bytes read are hashed, and an
 ## Security implications
 
 The datastream is untrusted until its digest matches the pin, and is still parsed defensively afterwards. The parser
-rejects DOCTYPE and entities, UTF-16, NUL bytes, files over 256 MiB, more than 5,000,000 elements and nesting deeper
+rejects DOCTYPE and entities, UTF-16, NUL bytes, files over 256 MiB, more than 2,000,000 elements (5,000,000 before FREES-126, which took the stricter bound of
+the results parser; the pinned datastreams have about 155,000 and 70,000 elements) and nesting deeper
 than 64. The fetch tool cannot be made to write outside its output directory or to extract a link. A compromised
 upstream release is detected only if the pin is reviewed against an independent source; the manifest records the
 publication time so a reviewer can enforce the seven-day rule.

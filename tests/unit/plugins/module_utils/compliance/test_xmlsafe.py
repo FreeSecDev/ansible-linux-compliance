@@ -158,7 +158,7 @@ def test_errors_from_the_receiver_propagate() -> None:
 
 def test_default_bounds_are_documented_values() -> None:
     bounds = xmlsafe.XmlBounds()
-    assert (bounds.max_elements, bounds.max_depth) == (5_000_000, 64)
+    assert (bounds.max_elements, bounds.max_depth) == (2_000_000, 64)
 
 
 def test_a_regular_file_is_streamed_in_chunks(tmp_path: Path) -> None:
