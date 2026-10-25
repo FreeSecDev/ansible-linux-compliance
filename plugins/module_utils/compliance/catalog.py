@@ -58,10 +58,10 @@ _TEXT_BUDGET: Final[int] = MAX_TEXT_LENGTH * 4
 HASH_CHUNK_BYTES: Final[int] = xmlsafe.READ_CHUNK_BYTES
 SEVERITIES: Final[frozenset[str]] = frozenset({"unknown", "info", "low", "medium", "high"})
 
-_GROUP_ID: Final[re.Pattern[str]] = re.compile(r"xccdf_[A-Za-z0-9_.+-]+")
+_GROUP_ID: Final[str] = r"xccdf_[A-Za-z0-9_.+-]+"
 _MAX_ID_LENGTH: Final[int] = 256
-_SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
-_VERSION: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+:~-]{0,63}")
+_SHA256: Final[str] = r"[0-9a-f]{64}"
+_VERSION: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._+:~-]{0,63}"
 _XML_LANG: Final[str] = "http://www.w3.org/XML/1998/namespace}lang"
 _DROPPED_CATEGORIES: Final[frozenset[str]] = frozenset({"Cc", "Cf", "Zl", "Zp"})
 _BOOLEANS: Final[dict[str, bool]] = {"true": True, "1": True, "false": False, "0": False}
@@ -324,7 +324,7 @@ class _Collector:
 
     def _open_group(self, attributes: dict[str, str]) -> _Frame:
         group_id = attributes.get("id", "")
-        if len(group_id) > _MAX_ID_LENGTH or _GROUP_ID.fullmatch(group_id) is None:
+        if len(group_id) > _MAX_ID_LENGTH or re.fullmatch(_GROUP_ID, group_id) is None:
             _fail("group id is missing or malformed")
         groups = self.benchmark.groups
         if group_id in groups:
@@ -419,7 +419,7 @@ class _Collector:
         value = "".join(self.parts).strip()
         if benchmark.version is not None:
             return
-        if _VERSION.fullmatch(value) is None:
+        if re.fullmatch(_VERSION, value) is None:
             _fail("the benchmark version is not a valid version string")
         benchmark.version = value
 
@@ -460,7 +460,7 @@ def parse_benchmarks(
 
 
 def _expected_digest(value: object) -> str:
-    if not isinstance(value, str) or _SHA256.fullmatch(value.lower()) is None:
+    if not isinstance(value, str) or re.fullmatch(_SHA256, value.lower()) is None:
         _fail("the expected SHA-256 must be 64 hexadecimal characters")
     return value.lower()
 

@@ -31,15 +31,14 @@ rejected before parsing.
 from __future__ import annotations
 
 import stat
-import xml.parsers.expat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Final, NoReturn, Protocol
+from xml.parsers import expat
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-_expat = xml.parsers.expat
 DEFAULT_MAX_ELEMENTS: Final[int] = 5_000_000
 DEFAULT_MAX_DEPTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 1024 * 1024
@@ -141,8 +140,8 @@ def parse_chunks(
             bounds. Errors raised by ``events`` propagate unchanged.
     """
     guard = _Guard(events, XmlBounds() if bounds is None else bounds)
-    parser = _expat.ParserCreate(encoding="utf-8", namespace_separator="}")
-    parser.SetParamEntityParsing(_expat.XML_PARAM_ENTITY_PARSING_NEVER)
+    parser = expat.ParserCreate(encoding="utf-8", namespace_separator="}")
+    parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
     parser.buffer_text = True
     parser.StartElementHandler = guard.start
     parser.EndElementHandler = guard.end
@@ -164,8 +163,8 @@ def parse_chunks(
         if received == 0:
             _fail("the document is empty")
         parser.Parse(b"", _FINAL)
-    except _expat.ExpatError as error:
-        _fail(f"not well-formed XML: {_expat.ErrorString(error.code)} at line {error.lineno}")
+    except expat.ExpatError as error:
+        _fail(f"not well-formed XML: {expat.ErrorString(error.code)} at line {error.lineno}")
 
 
 def open_regular(path: str, max_bytes: int) -> BinaryIO:
