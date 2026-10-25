@@ -69,6 +69,11 @@ class ParseResult[T]:
     data: T | None
 
 
+def sha256_hex(data: bytes) -> str:
+    """Return the SHA-256 of ``data`` as lower-case hex."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def clean_text(value: str, limit: int = MAX_TEXT_LENGTH) -> str:
     """Remove control and formatting characters and cut the text to ``limit`` characters."""
     kept = "".join(
@@ -151,7 +156,7 @@ def run_parser[T](
     except InvalidInputError as error:
         unread = ArtifactRef(display, None, None)
         return ParseResult(format_name, SectionStatus.ERROR, str(error), unread, None)
-    reference = ArtifactRef(display, hashlib.sha256(data).hexdigest(), len(data))
+    reference = ArtifactRef(display, sha256_hex(data), len(data))
     try:
         payload = build(data)
     except InvalidInputError as error:

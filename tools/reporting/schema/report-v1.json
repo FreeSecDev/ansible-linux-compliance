@@ -739,6 +739,9 @@
             }
           ]
         },
+        "input_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
         "kind": {
           "enum": [
             "scan_run",
@@ -789,6 +792,7 @@
         "findings",
         "finished_at",
         "host",
+        "input_sha256",
         "kind",
         "not_selected",
         "profile_id",
@@ -2244,9 +2248,55 @@
       "type": "object"
     },
     "hostKey": {
-      "maxLength": 286,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]*$",
-      "type": "string"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "hostname": {
+              "$ref": "#/$defs/host"
+            },
+            "input_sha256": {
+              "type": "null"
+            },
+            "machine_id": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/machineId"
+                }
+              ]
+            }
+          },
+          "required": [
+            "hostname",
+            "input_sha256",
+            "machine_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "hostname": {
+              "type": "null"
+            },
+            "input_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "machine_id": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "hostname",
+            "input_sha256",
+            "machine_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "lintData": {
       "additionalProperties": false,
@@ -2696,6 +2746,10 @@
         "summary"
       ],
       "type": "object"
+    },
+    "machineId": {
+      "pattern": "^[0-9a-f]{32}$",
+      "type": "string"
     },
     "moleculeData": {
       "additionalProperties": false,

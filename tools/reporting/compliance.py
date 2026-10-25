@@ -16,7 +16,6 @@ Counting rules:
   one host. Figures of different benchmarks or versions are never pooled.
 """
 
-import hashlib
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
 from typing import Final, NamedTuple
@@ -181,6 +180,7 @@ class ComplianceData:
     finished_at: str
     host: model.HostIdentity | None
     reported_host: str | None
+    input_sha256: str
     content_version: str
     findings: tuple[model.Finding, ...]
     not_selected: int
@@ -198,6 +198,7 @@ class ComplianceData:
             "finished_at": self.finished_at,
             "findings": [] if embedded else [finding.to_dict() for finding in self.findings],
             "host": None if self.host is None else self.host.to_dict(),
+            "input_sha256": self.input_sha256,
             "kind": self.kind,
             "not_selected": self.not_selected,
             "profile_id": self.profile_id,
@@ -206,6 +207,28 @@ class ComplianceData:
             "scan_status": self.scan_status,
             "started_at": self.started_at,
             "summary": to_json(self.summary),
+        }
+
+
+@dataclass(frozen=True, order=True)
+class HostKey:
+    """The identity that groups inputs by host, compared on its fields, never on joined text.
+
+    A named host has a lower-cased ``hostname`` and, for a ScanRun that has one, a
+    ``machine_id``. An input that names no host has only ``input_sha256``, the SHA-256
+    of its content, so it equals nothing but itself. An empty string means absent.
+    """
+
+    hostname: str = ""
+    machine_id: str = ""
+    input_sha256: str = ""
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible mapping with absent fields as ``None``."""
+        return {
+            "hostname": self.hostname or None,
+            "input_sha256": self.input_sha256 or None,
+            "machine_id": self.machine_id or None,
         }
 
 
@@ -229,7 +252,7 @@ class RuleRollup:
     """
 
     rule_id: str
-    host: str
+    host: HostKey
     content_version: str
     outcome: model.Outcome
     severity: model.Severity
@@ -245,22 +268,18 @@ class _Evaluation(NamedTuple):
 type Entry = tuple[str, ComplianceData]
 
 
-def unnamed_host(artifact: str) -> str:
-    """Return a stable pseudo host name for an input that names no host."""
-    return "unnamed:" + hashlib.sha256(artifact.encode("utf-8")).hexdigest()[:16]
+def host_key(data: ComplianceData) -> HostKey:
+    """Return the host identity of an input.
 
-
-def host_key(artifact: str, data: ComplianceData) -> str:
-    """Return the identity used to group inputs by host.
-
-    A ScanRun uses its host name, plus the machine ID when there is one. XCCDF and ARF
-    use the validated, self-asserted name from the file. An input that names no host is
-    its own host, keyed by a hash of its path, so it is never merged with another.
+    A ScanRun uses its host name and machine ID. XCCDF and ARF use the validated,
+    self-asserted name from the file. Both are lower-cased. An input that names no host
+    is its own host, identified by the SHA-256 of its content, and is never merged.
     """
     if data.host is not None:
-        machine = data.host.machine_id
-        return data.host.hostname if machine is None else f"{data.host.hostname}:{machine}"
-    return unnamed_host(artifact) if data.reported_host is None else data.reported_host
+        return HostKey(data.host.hostname.lower(), data.host.machine_id or "", "")
+    if data.reported_host is not None:
+        return HostKey(data.reported_host.lower(), "", "")
+    return HostKey("", "", data.input_sha256)
 
 
 def worse(first: model.Outcome, second: model.Outcome) -> model.Outcome:
@@ -278,7 +297,7 @@ def higher(first: model.Severity, second: model.Severity) -> model.Severity:
 
 
 def _collapse(
-    rule_id: str, host: str, content_version: str, evaluations: list[_Evaluation]
+    rule_id: str, host: HostKey, content_version: str, evaluations: list[_Evaluation]
 ) -> RuleRollup:
     outcome = evaluations[0].finding.outcome
     severity = evaluations[0].finding.severity
@@ -310,9 +329,9 @@ def rollup(entries: list[Entry]) -> list[RuleRollup]:
     ``entries`` pairs each input's artifact path with its data. Different hosts and
     different content versions stay separate, and so does any input without a host name.
     """
-    groups: dict[tuple[str, str, str], list[_Evaluation]] = {}
+    groups: dict[tuple[HostKey, str, str], list[_Evaluation]] = {}
     for artifact, data in entries:
-        host = host_key(artifact, data)
+        host = host_key(data)
         for finding in data.findings:
             source = RuleSource(
                 artifact,
@@ -356,7 +375,7 @@ class GroupFigure:
 
     benchmark_id: str
     content_version: str
-    host: str
+    host: HostKey
     summary: Summary
 
 
@@ -373,9 +392,9 @@ class AggregateFigure:
 
 def group_figures(entries: list[Entry]) -> list[GroupFigure]:
     """Return one figure per (benchmark, content version, host)."""
-    groups: dict[tuple[str, str, str], list[Entry]] = {}
+    groups: dict[tuple[str, str, HostKey], list[Entry]] = {}
     for entry in entries:
-        key = (entry[1].benchmark_id, entry[1].content_version, host_key(*entry))
+        key = (entry[1].benchmark_id, entry[1].content_version, host_key(entry[1]))
         groups.setdefault(key, []).append(entry)
     return [
         GroupFigure(benchmark, version, host, figure(members))
@@ -397,7 +416,7 @@ def aggregate_figures(entries: list[Entry], scope: str) -> list[AggregateFigure]
         AggregateFigure(
             benchmark,
             version,
-            len({host_key(*entry) for entry in members}),
+            len({host_key(entry[1]) for entry in members}),
             scope,
             figure(members),
         )

@@ -77,9 +77,10 @@ Rules are deduplicated by full rule ID within the same host and content version 
 once however many frameworks reference it). The worst outcome wins (`error`, `fail`, `notchecked`, `waived`,
 `pass`, `notapplicable`, `disabled`), the highest severity is kept and every originating artifact, benchmark and
 profile is listed in `sources` with the outcome each source reported. Different content versions and different hosts
-stay separate. A ScanRun host is its host name plus machine ID; XCCDF and ARF files name their host (`target`, fqdn
-fact, ARF asset), which is self-asserted. A name must satisfy the ScanRun host rule or the file is an error. Files are grouped only when the names are equal, a file without a name is its
-own host, and an ARF asset that disagrees with its TestResult target is an error. Input files with the same SHA-256 count
+stay separate. A host key is a structured object (lower-cased host name, machine ID, or the content hash of an input that names no
+host), never joined text, so a crafted name cannot take over another key. A ScanRun host is its host name plus machine ID; XCCDF and ARF files name their host (`target`, fqdn
+fact, ARF asset), which is self-asserted. A name must satisfy the ScanRun host rule or the file is an error. Files are grouped only when the keys are equal, a file without a name is its
+own host and is never merged, and an ARF asset that disagrees with its TestResult target is an error. Input files with the same SHA-256 count
 once.
 
 ### Determinism and input-supplied times

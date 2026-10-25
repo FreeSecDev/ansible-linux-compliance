@@ -100,12 +100,16 @@ with more than one benchmark or content version, is rejected (exit 2). The schem
 
 A host name taken from a file must satisfy the ScanRun host rule (letters, digits and `._:+-`, starting with a letter or
 digit, at most 253 characters), otherwise the file is an error. The schema applies the same pattern wherever a host
-appears. A file that names no host is keyed `unnamed:<hash of its path>`. A host is identified by `host.hostname` (plus `machine_id` when present) for ScanRun JSON, and by the self-asserted
+appears. Host keys are structured objects, never joined text: `groups[].host` and `rules[].host` are
+`{hostname, machine_id, input_sha256}` where a named host has `hostname` (lower-cased for ScanRun and XCCDF/ARF alike) and
+`machine_id` (ScanRun only) and an input that names no host has only `input_sha256`, the SHA-256 of its content. An
+unnamed input is never merged with anything, and a crafted name cannot take over another key. A host is identified by `host.hostname` (plus `machine_id` when present) for ScanRun JSON, and by the self-asserted
 name in the file for XCCDF (`target` or the fqdn fact) and ARF (asset fqdn and hostname, which must match the
-TestResult target, otherwise the file is an error). A file that names no host is its own host, keyed by its path. Names
+TestResult target, otherwise the file is an error). Names
 are lower-cased, and files are grouped only when the names are equal; differing identities are never merged. Input
 files with the same SHA-256 count once. When several input files claim the same self-asserted host, they are
-merged and `notes` records it as a structured entry, `{"kind": "shared_self_asserted_host", "host": ..., "sources": [sha256, ...]}`;
+merged and `notes` records it as a structured entry (whenever a host group combines several inputs and at least one is a
+self-asserted XCCDF or ARF file), `{"kind": "shared_self_asserted_host", "host": ..., "sources": [sha256, ...]}`;
 consumers build the wording, so no input text becomes prose.
 
 | Field | Meaning |

@@ -25,6 +25,7 @@ from tools.reporting.common import (
 from tools.reporting.compliance import (
     ComplianceData,
     Entry,
+    HostKey,
     aggregate_figures,
     figure,
     group_figures,
@@ -246,7 +247,7 @@ def check_scope(scope: Scope, entries: list[Entry]) -> None:
         ReportError: If ``single_host`` covers several hosts or ``benchmark`` covers
             several benchmarks or content versions.
     """
-    hosts = {host_key(*entry) for entry in entries}
+    hosts = {host_key(entry[1]) for entry in entries}
     if scope is Scope.SINGLE_HOST and len(hosts) > 1:
         message = f"scope single_host, but the inputs describe {len(hosts)} hosts"
         raise ReportError(message)
@@ -270,15 +271,14 @@ def _unique_inputs(
 
 
 def _host_notes(inputs: list[tuple[str, ComplianceData, str]]) -> list[dict[str, Json]]:
-    claims: dict[str, list[str]] = {}
+    members: dict[HostKey, list[tuple[ComplianceData, str]]] = {}
     for _, data, digest in inputs:
-        if data.host is None and data.reported_host is not None:
-            claims.setdefault(data.reported_host, []).append(digest)
+        members.setdefault(host_key(data), []).append((data, digest))
     notes: list[dict[str, Json]] = []
-    for name, digests in sorted(claims.items()):
-        if len(digests) > 1:
-            sources = list[Json](sorted(digests))
-            notes.append({"host": name, "kind": SHARED_HOST_NOTE, "sources": sources})
+    for key, group in sorted(members.items()):
+        if len(group) > 1 and any(data.host is None for data, _ in group):
+            sources = list[Json](sorted(digest for _, digest in group))
+            notes.append({"host": key.hostname, "kind": SHARED_HOST_NOTE, "sources": sources})
     return notes
 
 

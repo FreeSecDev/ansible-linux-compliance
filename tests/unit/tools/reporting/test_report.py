@@ -291,7 +291,7 @@ def test_non_completed_scan_run_is_never_summarised_as_compliant(
     summary: dict[str, Any] = section["summary"]
     assert section["aggregates"][0]["host_count"] == 2
     assert section["aggregates"][0]["scope"] == "multi_host"
-    by_host = {group["host"]: group["summary"] for group in section["groups"]}
+    by_host = {group["host"]["hostname"]: group["summary"] for group in section["groups"]}
     assert by_host["b.example"]["run_status"] == "failed"
     assert by_host["b.example"]["compliance_percent"] is None
     assert by_host["host.example"]["compliance_percent"] == 100.0
@@ -474,7 +474,8 @@ def test_scope_single_host_accepts_one_host_in_several_files(
     second = write("two.xml", kit.xccdf_text("web01"))
     document = build(ReportInputs(scope=Scope.SINGLE_HOST, xccdf=(first, second)))
     assert errors(document) == []
-    assert [group["host"] for group in document["sections"]["compliance"]["groups"]] == ["web01"]
+    groups = document["sections"]["compliance"]["groups"]
+    assert [group["host"]["hostname"] for group in groups] == ["web01"]
     anonymous = write("three.xml", kit.xccdf_text(None))
     with pytest.raises(ReportError):
         report.build_report(ReportInputs(scope=Scope.SINGLE_HOST, xccdf=(first, anonymous)))
@@ -490,7 +491,7 @@ def test_figures_are_never_pooled_across_benchmark_versions_or_hosts(
     section = document["sections"]["compliance"]
     assert section["summary"] is None
     assert {
-        (g["content_version"], g["host"], g["summary"]["compliance_percent"])
+        (g["content_version"], g["host"]["hostname"], g["summary"]["compliance_percent"])
         for g in section["groups"]
     } == {
         ("0.1.75", "rhel9", 100.0),
@@ -687,9 +688,9 @@ def test_files_claiming_the_same_host_are_merged_with_a_note(
 
 SHA_PATTERN = "^[0-9a-f]{64}$"
 HOST_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:+-]*$"
+MACHINE_PATTERN = "^[0-9a-f]{32}$"
 BEHAVIOURAL = "checked by the timestamp agreement test"
 MAX_HOST = 253
-MAX_HOST_KEY = MAX_HOST + 1 + 32
 STRUCTURAL = {0, 1}
 
 
@@ -715,7 +716,6 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/properties/overview/properties/\w+/maxItems$", len(report.SECTION_NAMES)),
     (r"/properties/custom_data/maxProperties$", common.MAX_SUBENTRIES),
     (r"/\$defs/counts/maxProperties$", common.MAX_ENTRIES),
-    (r"/\$defs/hostKey/maxLength$", MAX_HOST_KEY),
     (r"/\$defs/host/maxLength$", MAX_HOST),
     (r"/properties/(path|artifact)/maxLength$", common.MAX_PATH_LENGTH),
     (r"/properties/content/maxLength$", model.MAX_EVIDENCE_LENGTH),
@@ -726,7 +726,8 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/maxLength$", model.MAX_TEXT_LENGTH),
     (r"/\$defs/timestamp/pattern$", BEHAVIOURAL),
     (r"/\$defs/sha256/pattern$", SHA_PATTERN),
-    (r"/\$defs/(host|hostKey)/pattern$", HOST_PATTERN),
+    (r"/\$defs/host/pattern$", HOST_PATTERN),
+    (r"/\$defs/machineId/pattern$", MACHINE_PATTERN),
     (r"/properties/commit/oneOf/\d+/pattern$", anchored(report.COMMIT_PATTERN)),
     (
         r"/properties/pull_request/oneOf/\d+/pattern$",
@@ -836,7 +837,7 @@ def test_a_hostile_host_name_is_an_input_error_not_prose(
     valid = build(
         ReportInputs(scope=Scope.FLEET, xccdf=(write("v.xml", kit.xccdf_text("Web-01.Example")),))
     )
-    assert valid["sections"]["compliance"]["groups"][0]["host"] == "web-01.example"
+    assert valid["sections"]["compliance"]["groups"][0]["host"]["hostname"] == "web-01.example"
 
 
 def test_the_schema_rejects_prose_in_host_fields_and_notes(
@@ -875,3 +876,109 @@ def test_host_and_sha_patterns_agree_with_the_model() -> None:
         except model.ModelError:
             accepted = False
         assert accepted == (re.fullmatch(SHA_PATTERN, digest) is not None), digest
+
+
+def test_host_patterns_agree_for_machine_ids() -> None:
+    for machine in ("a" * 32, "A" * 32, "a" * 31, "g" * 32, ""):
+        try:
+            model.HostIdentity("web01", "rhel", "9", "x86_64", machine)
+            accepted = True
+        except model.ModelError:
+            accepted = False
+        assert accepted == (re.fullmatch(MACHINE_PATTERN, machine) is not None), machine
+
+
+def machine_run(kit: Any, name: str, machine: str | None, outcome: model.Outcome) -> model.ScanRun:
+    host = model.HostIdentity(name, "rhel", "9", "x86_64", machine)
+    run: model.ScanRun = kit.scan_run((kit.finding("a", outcome),), host=host)
+    return run
+
+
+def groups_of(document: dict[str, Any]) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = document["sections"]["compliance"]["groups"]
+    return groups
+
+
+def test_xccdf_target_cannot_borrow_a_scan_runs_machine_key(
+    kit: Any, write: Callable[..., Path], write_run: Callable[..., Path]
+) -> None:
+    machine = "a" * 32
+    victim = write_run("victim.json", machine_run(kit, "web01", machine, model.Outcome.FAIL))
+    attacker = write("attacker.xml", kit.xccdf_text("web01:" + machine, "pass"))
+    document = build(ReportInputs(scope=Scope.FLEET, scan_run=(victim,), xccdf=(attacker,)))
+    assert errors(document) == []
+    keys = [group["host"] for group in groups_of(document)]
+    assert {"hostname": "web01", "input_sha256": None, "machine_id": machine} in keys
+    assert {"hostname": "web01:" + machine, "input_sha256": None, "machine_id": None} in keys
+    with pytest.raises(ReportError, match="2 hosts"):
+        report.build_report(
+            ReportInputs(scope=Scope.SINGLE_HOST, scan_run=(victim,), xccdf=(attacker,))
+        )
+
+
+def test_scan_run_hostname_cannot_borrow_a_scan_runs_machine_key(
+    kit: Any, write_run: Callable[..., Path]
+) -> None:
+    machine = "a" * 32
+    victim = write_run("victim.json", machine_run(kit, "web01", machine, model.Outcome.FAIL))
+    spoof = write_run("spoof.json", machine_run(kit, "web01:" + machine, None, model.Outcome.PASS))
+    with pytest.raises(ReportError, match="2 hosts"):
+        report.build_report(ReportInputs(scope=Scope.SINGLE_HOST, scan_run=(victim, spoof)))
+    document = build(ReportInputs(scope=Scope.FLEET, scan_run=(victim, spoof)))
+    percents = sorted(g["summary"]["compliance_percent"] for g in groups_of(document))
+    assert percents == [0.0, 100.0]
+
+
+def test_a_predictable_unnamed_key_cannot_be_claimed_by_a_name(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    unnamed = write("unnamed.xml", kit.xccdf_text(None, "fail"))
+    digest = hashlib.sha256(unnamed.read_bytes()).hexdigest()
+    path_hash = "unnamed:" + hashlib.sha256(str(unnamed).encode()).hexdigest()[:16]
+    claimant = write("claimant.xml", kit.xccdf_text(path_hash, "pass"))
+    document = build(ReportInputs(scope=Scope.FLEET, xccdf=(unnamed, claimant)))
+    keys = [group["host"] for group in groups_of(document)]
+    assert {"hostname": None, "input_sha256": digest, "machine_id": None} in keys
+    assert {"hostname": path_hash, "input_sha256": None, "machine_id": None} in keys
+    assert document["sections"]["compliance"]["notes"] == []
+
+
+def test_two_unnamed_inputs_stay_separate(kit: Any, write: Callable[..., Path]) -> None:
+    first = write("one.xml", kit.xccdf_text(None, "pass"))
+    second = write("two.xml", kit.xccdf_text(None, "fail"))
+    document = build(ReportInputs(scope=Scope.FLEET, xccdf=(first, second)))
+    assert errors(document) == []
+    groups = groups_of(document)
+    assert len({group["host"]["input_sha256"] for group in groups}) == 2
+    assert all(group["host"]["hostname"] is None for group in groups)
+    assert document["sections"]["compliance"]["notes"] == []
+    with pytest.raises(ReportError, match="2 hosts"):
+        report.build_report(ReportInputs(scope=Scope.SINGLE_HOST, xccdf=(first, second)))
+
+
+def test_host_case_does_not_split_or_merge_groups_inconsistently(
+    kit: Any, write: Callable[..., Path], write_run: Callable[..., Path]
+) -> None:
+    scan = write_run("scan.json", machine_run(kit, "WEB01", None, model.Outcome.PASS))
+    xccdf = write("x.xml", kit.xccdf_text("Web01", "fail"))
+    document = build(ReportInputs(scope=Scope.SINGLE_HOST, scan_run=(scan,), xccdf=(xccdf,)))
+    assert errors(document) == []
+    assert [group["host"]["hostname"] for group in groups_of(document)] == ["web01"]
+    notes = document["sections"]["compliance"]["notes"]
+    assert [(note["kind"], note["host"], len(note["sources"])) for note in notes] == [
+        ("shared_self_asserted_host", "web01", 2)
+    ]
+
+
+def test_the_schema_rejects_mixed_host_key_shapes(kit: Any, write: Callable[..., Path]) -> None:
+    document = build(
+        ReportInputs(scope=Scope.FLEET, xccdf=(write("x.xml", kit.xccdf_text("web01")),))
+    )
+    group = ("sections", "compliance", "groups", 0, "host")
+    assert mutate_many(document, group, {"input_sha256": "a" * 64})
+    assert mutate_many(document, group, {"hostname": None})
+    assert mutate_many(document, group, {"machine_id": "short"})
+    assert mutate_many(document, group, {"extra": 1})
+    assert mutate_many(
+        document, ("sections", "compliance", "rules", 0, "host"), {"hostname": "a b"}
+    )

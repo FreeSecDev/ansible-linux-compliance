@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import pytest
@@ -187,6 +188,7 @@ def data_for(
         finished_at=run.finished_at,
         host=run.host if scan_run else None,
         reported_host=reported_host,
+        input_sha256=hashlib.sha256(model.dumps(run).encode()).hexdigest(),
         content_version=run.content.content_version,
         findings=run.findings,
         not_selected=0,
@@ -225,7 +227,7 @@ def test_rollup_keeps_different_hosts_and_content_versions_apart(kit: Any) -> No
     entries = [(f"{index}.json", data_for(run)) for index, run in enumerate(runs)]
     rules = compliance.rollup(entries)
     assert len(rules) == 3
-    assert {(rule.host, rule.content_version, rule.outcome) for rule in rules} == {
+    assert {(rule.host.hostname, rule.content_version, rule.outcome) for rule in rules} == {
         ("host.example", "1.0", OC.PASS),
         ("other.example", "1.0", OC.FAIL),
         ("host.example", "2.0", OC.ERROR),
@@ -238,10 +240,11 @@ def test_rollup_never_merges_hostless_inputs(kit: Any) -> None:
     rules = compliance.rollup(
         [("one.xml", data_for(run, scan_run=False)), ("two.xml", data_for(failing, scan_run=False))]
     )
-    assert {(rule.host, rule.outcome) for rule in rules} == {
-        (compliance.unnamed_host("one.xml"), OC.PASS),
-        (compliance.unnamed_host("two.xml"), OC.FAIL),
+    assert {(rule.host.hostname, rule.host.input_sha256 != "", rule.outcome) for rule in rules} == {
+        ("", True, OC.PASS),
+        ("", True, OC.FAIL),
     }
+    assert len({rule.host for rule in rules}) == 2
 
 
 def test_rollup_reports_any_expired_waiver_in_the_group(kit: Any) -> None:
@@ -275,17 +278,61 @@ def test_a_single_failed_run_keeps_its_own_status(kit: Any) -> None:
     assert single.compliance_percent is None
 
 
-def test_host_key_uses_machine_id_reported_host_or_the_path(kit: Any) -> None:
+def test_host_key_uses_fields_not_joined_text(kit: Any) -> None:
     run = kit.scan_run((kit.finding("a"),))
     with_machine = model.HostIdentity("h.example", "rhel", "9", "x86_64", "a" * 32)
     machine_run = kit.scan_run((kit.finding("a"),), host=with_machine)
-    assert compliance.host_key("p", data_for(run)) == "host.example"
-    assert compliance.host_key("p", data_for(machine_run)) == "h.example:" + "a" * 32
+    key = compliance.HostKey
+    assert compliance.host_key(data_for(run)) == key("host.example")
+    assert compliance.host_key(data_for(machine_run)) == key("h.example", "a" * 32)
     named = data_for(run, scan_run=False, reported_host="web01")
-    assert compliance.host_key("p", named) == "web01"
-    assert compliance.host_key("p", data_for(run, scan_run=False)) == compliance.unnamed_host("p")
-    assert compliance.unnamed_host("p") != compliance.unnamed_host("q")
-    assert compliance.unnamed_host("p").startswith("unnamed:")
+    assert compliance.host_key(named) == key("web01")
+    unnamed = data_for(run, scan_run=False)
+    assert compliance.host_key(unnamed) == key(input_sha256=unnamed.input_sha256)
+    assert compliance.host_key(unnamed).to_dict() == {
+        "hostname": None,
+        "input_sha256": unnamed.input_sha256,
+        "machine_id": None,
+    }
+    assert compliance.host_key(machine_run).to_dict()["machine_id"] == "a" * 32
+
+
+def test_host_names_are_lower_cased_for_scan_runs_and_xccdf_alike(kit: Any) -> None:
+    def named(name: str) -> model.ScanRun:
+        host = model.HostIdentity(name, "rhel", "9", "x", None)
+        run: model.ScanRun = kit.scan_run((kit.finding("a"),), host=host)
+        return run
+
+    upper, lower = named("WEB01"), named("web01")
+    assert compliance.host_key(data_for(upper)) == compliance.host_key(data_for(lower))
+    xccdf_upper = data_for(lower, scan_run=False, reported_host="WEB01")
+    assert compliance.host_key(xccdf_upper) == compliance.host_key(data_for(lower))
+
+
+def test_a_crafted_name_cannot_take_over_another_hosts_key(kit: Any) -> None:
+    machine = "a" * 32
+    run = kit.scan_run((kit.finding("a"),))
+
+    def scan_key(name: str, machine_id: str | None) -> compliance.HostKey:
+        host = model.HostIdentity(name, "rhel", "9", "x", machine_id)
+        return compliance.host_key(data_for(kit.scan_run((kit.finding("a"),), host=host)))
+
+    def xccdf_key(name: str | None) -> compliance.HostKey:
+        return compliance.host_key(data_for(run, scan_run=False, reported_host=name))
+
+    victim = scan_key("web01", machine)
+    predictable = "unnamed:" + hashlib.sha256(b"path.xml").hexdigest()[:16]
+    others = [
+        scan_key("web01:" + machine, None),
+        xccdf_key("web01:" + machine),
+        xccdf_key(None),
+        xccdf_key(predictable),
+    ]
+    assert victim.hostname == "web01"
+    assert victim.machine_id == machine
+    assert victim not in others
+    assert xccdf_key(None).hostname == ""
+    assert xccdf_key(predictable).input_sha256 == ""
 
 
 def test_same_hostname_with_different_machine_ids_is_not_merged(kit: Any) -> None:
@@ -328,9 +375,9 @@ def test_group_figures_are_per_benchmark_version_and_host(kit: Any) -> None:
         for g in groups
         if g.benchmark_id == kit.BENCHMARK
     } == {
-        ("1.0", "host.example", 100.0),
-        ("1.0", "other.example", 0.0),
-        ("2.0", "host.example", 0.0),
+        ("1.0", compliance.HostKey("host.example"), 100.0),
+        ("1.0", compliance.HostKey("other.example"), 0.0),
+        ("2.0", compliance.HostKey("host.example"), 0.0),
     }
 
 

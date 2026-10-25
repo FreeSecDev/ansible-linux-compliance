@@ -10,6 +10,7 @@ from tools.reporting.common import (
     clean_text,
     decode_text,
     run_parser,
+    sha256_hex,
 )
 from tools.reporting.compliance import ComplianceData, summarize, tally_findings
 
@@ -33,6 +34,7 @@ def _build(data: bytes) -> ComplianceData:
         finished_at=run.finished_at,
         host=run.host,
         reported_host=None,
+        input_sha256=sha256_hex(data),
         content_version=run.content.content_version,
         findings=run.findings,
         not_selected=0,

@@ -28,6 +28,7 @@ from tools.reporting.common import (
     clean_text,
     decode_text,
     run_parser,
+    sha256_hex,
 )
 from tools.reporting.compliance import COMPLETED, ComplianceData, summarize, tally_findings
 from tools.reporting.xmlsafe import XmlNode, parse_xml
@@ -74,7 +75,7 @@ def _asset_names(tree: XmlNode) -> set[str]:
     return names
 
 
-def _convert(document: str, kind: str, reported_host: str | None) -> ComplianceData:
+def _convert(document: str, kind: str, reported_host: str | None, digest: str) -> ComplianceData:
     try:
         parsed = openscap.parse_results(document)
     except openscap.XccdfParseError as error:
@@ -97,6 +98,7 @@ def _convert(document: str, kind: str, reported_host: str | None) -> ComplianceD
         finished_at=parsed.finished_at,
         host=None,
         reported_host=reported_host,
+        input_sha256=digest,
         content_version=parsed.benchmark_version,
         findings=selected,
         not_selected=not_selected,
@@ -106,7 +108,9 @@ def _convert(document: str, kind: str, reported_host: str | None) -> ComplianceD
 
 
 def _build_xccdf(data: bytes) -> ComplianceData:
-    return _convert(decode_text(data), "xccdf", _first(_host_names(parse_xml(data))))
+    return _convert(
+        decode_text(data), "xccdf", _first(_host_names(parse_xml(data))), sha256_hex(data)
+    )
 
 
 def _build_arf(data: bytes) -> ComplianceData:
@@ -124,7 +128,9 @@ def _build_arf(data: bytes) -> ComplianceData:
     if assets and any(name not in assets for name in names):
         message = "the ARF asset names a different host than the XCCDF TestResult target"
         raise InvalidInputError(message)
-    return _convert(tostring(results[0], encoding="unicode"), "arf", _first(names))
+    return _convert(
+        tostring(results[0], encoding="unicode"), "arf", _first(names), sha256_hex(data)
+    )
 
 
 def parse_xccdf(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[ComplianceData]:
