@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 import yaml
+from jsonschema import Draft202012Validator, FormatChecker
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     exceptions,
@@ -155,7 +156,49 @@ def test_the_schema_identifier_patterns_match_the_model(kind: str, value: str, v
 def test_the_policy_page_states_the_cap() -> None:
     text = POLICY_PATH.read_text(encoding="utf-8")
     assert f"{exceptions.MAX_VALIDITY_DAYS} days" in text
-    assert (
-        "docs/schemas/exceptions-v1.schema.json" in text
-        or "schemas/exceptions-v1.schema.json" in text
-    )
+    assert "schemas/exceptions-v1.schema.json" in text
+
+
+def validator() -> Any:
+    document = schema()
+    Draft202012Validator.check_schema(document)
+    return Draft202012Validator(document, format_checker=FormatChecker())
+
+
+def test_the_example_validates_against_the_schema() -> None:
+    loaded = yamlsubset.load(EXAMPLE_PATH.read_text(encoding="utf-8"))
+    assert list(validator().iter_errors(loaded)) == []
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("scope",), {}),
+        (("scope",), {"hosts": []}),
+        (("scope",), {"groups": ["all"]}),
+        (("scope",), {"hosts": ["a", "a"]}),
+        (("scope", "benchmark"), {"id": "xccdf_org.ssgproject.content_benchmark_X"}),
+        (("risk",), "none"),
+        (("framework",), "iso27001"),
+        (("rule",), "sshd_disable_root_login"),
+        (("id",), "-bad"),
+        (("created",), "2026/10/01"),
+        (("owner",), " padded"),
+        (("justification",), "   "),
+        (("approval",), {"approver": "a"}),
+        (("comment",), "x"),
+        (("owner",), None),
+    ],
+)
+def test_the_schema_rejects_what_the_validator_rejects(
+    path: tuple[str, ...], value: object
+) -> None:
+    loaded = cast("dict[str, Any]", yamlsubset.load(EXAMPLE_PATH.read_text(encoding="utf-8")))
+    entry = loaded["exceptions"][0]
+    if path == ("scope", "benchmark"):
+        entry["scope"] = {"benchmark": value}
+    else:
+        entry[path[0]] = value
+    assert list(validator().iter_errors(loaded))
+    with pytest.raises(exceptions.ExceptionsError):
+        exceptions.parse_document(loaded, NOW)

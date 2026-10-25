@@ -199,11 +199,20 @@ invalid file fails the task with a message that names the entry or line.
 
 ## Reporting
 
-`tools/reporting` is introduced by pull request #12 (FREES-75), which was not merged when this page was written. In
-that pull request a waived finding is its own count and never a pass, each finding keeps its exception identifier and
-state, and `expired_waivers` counts failures whose exception expired. It has no view of stale exceptions and does not
-read the evaluation document. That is a known gap, to be closed after both changes are merged by reading the
-`exceptions` list of the evaluation document (or by calling `exceptions.stale_exception_ids`).
+Write the `scan_run` of an evaluation document to a JSON file and pass it to `tools/reporting` (FREES-75) with
+`--scan-run`. The report then shows:
+
+- waived findings as their own `waived` count, which never counts as a pass and stays in the denominator;
+- the exception identifier, state, reason and expiry of every finding, in the embedded scan run;
+- `expired_waivers`, the number of failures whose exception expired.
+
+`tests/unit/tools/reporting/test_exceptions_report.py` runs a scan run through `exceptions.evaluate_run` and then
+through the report, and checks all three against the report schema.
+
+**Known gap:** the report does not read the evaluation document itself, so it has no view of the per-exception
+statuses and does not list stale exceptions. Until it does, use the `stale_exceptions` filter or
+`exceptions.stale_exception_ids` on the evaluation documents. Closing the gap changes the report schema, so it needs
+its own `schema_version` decision under [ADR 0016](adr/0016-report-schema-and-summary-semantics.md).
 
 ## Security notes
 

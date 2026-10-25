@@ -296,7 +296,9 @@ exceptions leave the finding `fail` with state `expired`, and every exception ge
 the `audit` and `verify` roles do not call them yet (FREES-49, FREES-54). Both filter files pass the deny-by-default
 plugin guard without an exemption. Unit tests cover the loader, every required field, the expiry boundaries, scope
 matching and the filters; `tests/unit/tools/test_exceptions_schema.py` compares the loader with PyYAML and the JSON
-Schema with the validator's constants, so the two cannot drift.
+Schema with the validator's constants and validates the example with `jsonschema`, so the two cannot drift.
+`tests/unit/tools/reporting/test_exceptions_report.py` feeds an evaluated scan run through `tools/reporting`; stale
+exceptions are not yet part of the report (see [exceptions](exceptions.md#reporting)).
 
 ## Adding plugins
 
