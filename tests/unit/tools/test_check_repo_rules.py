@@ -607,10 +607,10 @@ BENIGN_PLUGIN_SOURCES = {
     "stdlib": (
         "import json\nimport re\nimport unicodedata\nfrom dataclasses import dataclass\n"
         "from datetime import datetime\nfrom enum import Enum\nfrom types import MappingProxyType\n"
-        "import hashlib\nimport functools\nimport itertools\nimport stat\n"
-        "from pathlib import Path\nimport collections\nfrom collections import abc\n"
+        "import hashlib\nimport stat\nfrom pathlib import Path\n"
         "from collections.abc import Mapping\n"
     ),
+    "collections-abc-import": "import collections.abc\ncollections.abc.Mapping\n",
     "os-path-import": "import os.path\nos.path.join('a', 'b')\n",
     "os-path-from-import": "from os import path\npath.join('a', 'b')\n",
     "os-path-module": "from os.path import join\n",

@@ -226,7 +226,7 @@ def test_an_error_without_a_message_names_its_type(
 def test_a_handle_can_be_read_twice(tmp_path: Path) -> None:
     path = tmp_path / "data.xml"
     path.write_bytes(b"x" * 10)
-    with xmlsafe.open_regular(str(path), 10) as handle:
+    with xmlsafe.RegularFile(str(path), 10) as handle:
         first = b"".join(xmlsafe.iter_handle_chunks(handle, 10))
         second = b"".join(xmlsafe.iter_handle_chunks(handle, 10))
     assert first == second == b"x" * 10
@@ -281,7 +281,7 @@ def test_the_subject_names_the_file_in_messages(tmp_path: Path) -> None:
     with pytest.raises(xmlsafe.XmlSafetyError, match=r"^the results file cannot be read: "):
         next(xmlsafe.iter_file_chunks(str(tmp_path / "missing.xml"), 10, subject="results"))
     grown = r"^the results file is larger than 5 bytes$"
-    with xmlsafe.open_regular(str(path), 11) as handle, pytest.raises(ValueError, match=grown):
+    with xmlsafe.RegularFile(str(path), 11) as handle, pytest.raises(ValueError, match=grown):
         list(xmlsafe.iter_handle_chunks(handle, 5, subject="results"))
 
 
@@ -341,7 +341,7 @@ class TestRegularFile:
             assert b"".join(xmlsafe.iter_handle_chunks(handle, 10)) == b"x" * 10
         assert handle.closed
 
-    def test_entering_applies_the_checks_of_open_regular(self, tmp_path: Path) -> None:
+    def test_entering_applies_the_checks_of_the_private_open(self, tmp_path: Path) -> None:
         path = tmp_path / "data.xml"
         path.write_bytes(b"x" * 11)
         link = tmp_path / "link.xml"

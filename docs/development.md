@@ -46,6 +46,8 @@ make help
 | `test` | implemented | Alias for `test-unit` |
 | `test-unit` | implemented | `pytest tests/unit`, including the collection plugin tests |
 | `test-coverage` | implemented | Unit tests with branch coverage, 95% overall, 100% on `tools/` and on `plugins/` |
+| `test-name-sets` | implemented | `NAME_SET_PYTHON=<version>`: probes that interpreter with `python -I -S` and checks the guard name sets against it (subset, and equality with the recorded snapshot of the same release); run by the `name-sets` CI matrix |
+| `name-sets` | implemented | Probes Python 3.9 to 3.15 (`uv python find`) and regenerates `tools/lint/name_sets.json` and the name-set constants of the guard |
 | `test-sanity` | implemented | `ansible-test sanity --local` on the temporary collection tree, no Docker; installs Python 3.9 to 3.14 with `uv python install` |
 | `test-ansible-units` | implemented | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
 | `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
@@ -152,7 +154,8 @@ YAML and Python files (ADR 0005):
 - Python files under `plugins/` are checked deny-by-default (ADR 0004): only allow-listed standard library modules,
   `ansible.module_utils` and this collection may be imported, `os` is usable only as `os.path`, `exec`, `eval`,
   `compile` and `__import__` are banned, process, fork and `run_command` attributes are banned, `shell=True` and
-  `use_unsafe_shell` and the test-only `owner_uid`, `policies` and `trusted_dirs` keywords are banned, `subprocess`,
+  `use_unsafe_shell` and the test-seam keywords (`owner_uid`, `state_dir`, `lock_timeout`, `policies`, `trusted_dirs`,
+  `runner`, `clock`, `limits` and, since FREES-129, `registry`) are banned, `subprocess`,
   `pty`, `posix`, `os` and `sys` are banned as imported names or attributes, `vars`, `globals`, `locals`, `__dict__`
   and `get_type_hints` are banned, and `getattr` needs a literal permitted name. Since FREES-125 the attribute names
   `builtins`, `operator`, `eval`, `exec`, `compile`, `attrgetter`, `methodcaller`, `_evaluate` and
@@ -161,8 +164,9 @@ YAML and Python files (ADR 0005):
   and `__globals__` are banned, assigning to an attribute or item of a name bound by an import (and `setattr` or
   `delattr` on it) is banned, and an underscore-prefixed attribute may only be read, called or assigned through
   `self` or `cls` inside a class body, so `openscap._expat`, `backend._runner = ...` and imports of
-  underscore-prefixed names fail. Dunders are denied by default: only reading `__name__`, `__qualname__`, `__doc__` and
-  `__module__` is allowed, plus the single form `object.__setattr__(self, "<literal>", value)` directly in `__post_init__`;
+  underscore-prefixed names fail. Dunders are denied by default: only reading `__name__` is allowed (FREES-129 removed
+  the unused `__qualname__`, `__doc__` and `__module__`), plus the single form `object.__setattr__(self, "<literal>", value)`
+  directly in `__post_init__`;
   dunder methods that your own classes define stay allowed. Frame and code attributes (`currentframe`, `f_builtins`,
   `co_code`, `CodeType`, `FunctionType` and the like) are banned, `types` may only provide `MappingProxyType`, and
   attribute names that equal a standard library module or a module of this collection are banned when the chain starts
@@ -177,10 +181,36 @@ YAML and Python files (ADR 0005):
   accepted residual risk (ADR 0004).
   The guard is static analysis, not a sandbox. Only
   `plugins/module_utils/compliance/process.py` is exempt. Extend the allow-list in `tools/lint/check_repo_rules.py`
-  with a justification when a new module is genuinely needed.
+  with a justification when a new module is genuinely needed. Since FREES-129 the import allow-list holds only modules
+  that plugins use: `collections` (bare), `functools` and `itertools` were removed, `collections.abc` stays. A new
+  keyword-only parameter of plugin code must be classified in `tests/unit/tools/test_check_repo_rules_followups.py`
+  as a test seam (and then added to `BANNED_KEYWORDS`) or as a production keyword. Files are opened through
+  `xmlsafe.RegularFile`; the open helper behind it is private (`_open_regular`), so no other plugin file can call it.
+  The standard library name sets of the guard (`STDLIB_MODULE_NAMES`, `KNOWN_SUBMODULE_ATTRIBUTES`) are generated:
+  `make name-sets` runs `tools/lint/name_set_probe.py` in a clean interpreter of every version from 3.9 to 3.15,
+  records the result per version in `tools/lint/name_sets.json` and writes the union into the guard
+  (`tools/lint/generate_name_sets.py`). Run it after changing the import allow-list or when a Python release adds
+  names; the `name-sets` CI job fails until then.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
   including the `ansible.builtin.`, `ansible.legacy.`, `ansible.windows.` and `community.windows.` forms and the `action` / `local_action` spellings.
-  The scan covers `extensions/` and `tests/` as well.
+  The scan covers `extensions/` and `tests/` as well. Since FREES-128 the check knows where Ansible reads a module name:
+  - A document whose root is a sequence is a playbook or a task file, wherever it lives (role `tasks/` and `handlers/`
+    files, Molecule playbooks, files that `include_tasks`, `import_tasks` or `import_playbook` load). Every mapping in
+    it is treated as both a play and a task, and the task lists `tasks`, `pre_tasks`, `post_tasks`, `handlers`,
+    `block`, `rescue` and `always` are followed to any depth, through aliases and YAML merge keys (`<<`).
+  - Only the keys of a play or task are checked, plus the value of `action` and `local_action`: the first word of the
+    string form and of every `module` key of the mapping form (`module: shell echo hi` names `shell`). A templated
+    module name there (`action: "{{ name }}"`) is denied, because it cannot be checked statically.
+  - Module parameters and keyword data are not checked, so `community.docker.docker_container: {command: ...}`, play
+    and task `vars`, `set_fact` data, `loop` items, `environment` and `module_defaults` may contain the banned words.
+  - The file that `include_tasks`, `import_tasks` or `import_playbook` loads, and `tasks_from` and `handlers_from` of
+    `include_role` and `import_role`, must end in `.yml` or `.yaml`, because Ansible would also load a `.json` or
+    suffix-less file that the check never scans. A repository test keeps every file below a `tasks` or `handlers`
+    directory a YAML file, which covers the default `main` entry point of a role.
+  - A document with any other root (a mapping such as `molecule.yml`, a vars file or a workflow) can never be loaded as
+    plays or tasks; it stays checked deny-by-default for banned keys and `action` values at any depth. A `redirect` to a
+    banned module (`plugin_routing` in `meta/runtime.yml`) is denied there too, because it would make another name an
+    alias of that module.
 
 Every lint ignore lives in `pyproject.toml` with its reason in `[tool.freesecdev.lint-justifications]` or
 `[tool.freesecdev.pylint-justifications]`.
@@ -208,6 +238,7 @@ Configuration relaxations, each with its reason:
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
 | `test` | `make test-coverage`, `make test-content-golden`, `make test-browser` |
+| `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
 | `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |

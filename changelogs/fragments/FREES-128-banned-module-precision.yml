@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    Repository guard: the banned-module check reads YAML the way Ansible does. In playbooks and task files it checks
+    only the keys of plays and tasks (through task lists, blocks, aliases and merge keys) and their action and
+    local_action values, so module parameters such as community.docker.docker_container command, vars and set_fact data
+    no longer fail. Templated module names in actions, included files without a .yml or .yaml suffix and plugin
+    routing redirects to a banned module are denied.

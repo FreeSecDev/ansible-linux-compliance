@@ -214,8 +214,14 @@ def parse_text(document: str, events: XmlEvents, bounds: XmlBounds | None = None
     parse_chunks([encoded], events, bounds)
 
 
-def open_regular(path: str, max_bytes: int, *, subject: str = "") -> BinaryIO:
+def _open_regular(path: str, max_bytes: int, *, subject: str = "") -> BinaryIO:
     """Open a regular, non-symlink file of at most ``max_bytes`` for binary reading.
+
+    The function is private: callers outside this module open files through
+    :class:`RegularFile`, which also turns an ``OSError`` raised by the close
+    into :class:`CloseError`. The repository guard bans underscore-prefixed
+    attributes of another module and imports of underscore-prefixed names, so
+    no other plugin file can call it (FREES-129).
 
     The caller uses the returned handle for every pass over the file, so the path
     is opened once. The repository guard allows ``os`` only as ``os.path``, so
@@ -243,9 +249,9 @@ def open_regular(path: str, max_bytes: int, *, subject: str = "") -> BinaryIO:
 
 
 class RegularFile:
-    """Context manager that opens a file with :func:`open_regular` and closes it.
+    """Context manager that opens a file with :func:`_open_regular` and closes it.
 
-    Entering applies every check of :func:`open_regular` and returns the handle.
+    Entering applies every check of :func:`_open_regular` and returns the handle.
     Leaving closes the handle. An ``OSError`` raised by the close becomes a
     :class:`CloseError`, an :class:`XmlSafetyError` worded like a read error
     ("the file cannot be read: ...") whose cause is the ``OSError``, so callers
@@ -254,12 +260,12 @@ class RegularFile:
     without having entered does nothing.
 
     Raises:
-        XmlSafetyError: On entry, for every rejection of :func:`open_regular`.
+        XmlSafetyError: On entry, for every rejection of :func:`_open_regular`.
         CloseError: On exit, if the close fails and the block did not raise.
     """
 
     def __init__(self, path: str, max_bytes: int, *, subject: str = "") -> None:
-        """Remember the arguments for :func:`open_regular`; nothing is opened yet."""
+        """Remember the arguments for :func:`_open_regular`; nothing is opened yet."""
         self.path = path
         self.max_bytes = max_bytes
         self.subject = subject
@@ -267,7 +273,7 @@ class RegularFile:
 
     def __enter__(self) -> BinaryIO:
         """Open the file and return its handle."""
-        self.handle = open_regular(self.path, self.max_bytes, subject=self.subject)
+        self.handle = _open_regular(self.path, self.max_bytes, subject=self.subject)
         return self.handle
 
     def __exit__(self, error_type: object, error: object, traceback: object) -> None:
@@ -290,7 +296,7 @@ def iter_handle_chunks(handle: BinaryIO, max_bytes: int, *, subject: str = "") -
 
     The handle is rewound first, so it can be read again for a second pass. The
     size is checked while reading, so memory does not grow with the file size.
-    ``subject`` names the file in error messages, as for :func:`open_regular`.
+    ``subject`` names the file in error messages, as for :func:`_open_regular`.
 
     Raises:
         XmlSafetyError: If the file is larger than ``max_bytes`` or cannot be read.
