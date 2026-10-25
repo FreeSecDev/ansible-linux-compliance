@@ -37,6 +37,7 @@ Releases are rare, verified and reproducible. A release is never a side effect o
 - Semantic Versioning: breaking changes to module arguments, role variables, report schema or exception format are major; additive changes are minor; fixes are patch.
 - Every user-visible change adds a changelog fragment reviewed in its pull request.
 - Releases come only from annotated tags `vX.Y.Z` whose version equals the `galaxy.yml` version. Never release from an arbitrary commit on `main`.
+- Use every GitHub-native release feature in [ADR 0012](../../../docs/adr/0012-github-native-releases-and-packages.md). Releases are immutable, so complete every publishing step before making a release public. Attest every asset and image so `gh attestation verify` succeeds. Generate notes from `.github/release.yml` categories, announce in Discussions, and publish the collection and content mirror as signed OCI artifacts on GHCR alongside Galaxy.
 - The release workflow verifies: the tag commit is on `main`; it came from an approved pull request; all required checks passed; the artifacts rebuild reproducibly (`SOURCE_DATE_EPOCH` set from the tag commit, deterministic tarball); security scans passed.
 - It publishes the tarball, checksums, SBOM and provenance attestation to GitHub Releases and the collection to Ansible Galaxy.
 - The Galaxy API key is stored only as a secret of the protected `release` environment, which requires reviewers. Galaxy offers no OIDC publishing, so this key is the one long-lived credential and is rotated on schedule.

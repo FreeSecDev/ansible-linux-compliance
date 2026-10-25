@@ -214,6 +214,15 @@ epics:
         depends_on: [s0501-containerfile]
         acceptance:
           - Every bundled tool reports its version inside the constrained container.
+      - id: s0505-report-image
+        type: Story
+        summary: Publish the report generator as a runner image variant on GHCR
+        skill: container-security
+        complexity: M
+        depends_on: [s0503-supply-chain, s1503-html]
+        acceptance:
+          - "ghcr.io/freesecdev/linux-compliance-report is built from the shared build definition, signed, attested and consumed by digest."
+        security: Same hardening, scanning and signing gates as the runner image (ADR 0012).
 
   - id: e06-collection
     summary: Ansible collection architecture
@@ -647,6 +656,14 @@ epics:
         depends_on: [s1301-makefile]
         acceptance:
           - make docs runs markdownlint and link checks in CI.
+      - id: s1603-pages
+        type: Task
+        summary: Publish documentation and approved sample reports with GitHub Pages
+        skill: documentation
+        complexity: S
+        depends_on: [s1602-docs-quality]
+        acceptance:
+          - "Pages deploys from a pinned Actions workflow and contains no host evidence or secrets."
 
   - id: e17-supply-chain
     summary: Supply-chain security
@@ -670,6 +687,15 @@ epics:
         depends_on: [s1401-pr-workflow]
         acceptance:
           - Vulnerability, secret and IaC scans block merges on unjustified findings.
+      - id: s1703-code-scanning
+        type: Story
+        summary: CodeQL advanced setup and SARIF ingestion into code scanning
+        skill: security-review
+        complexity: M
+        depends_on: [s1401-pr-workflow]
+        acceptance:
+          - "A pinned CodeQL workflow scans Python and GitHub Actions in both repositories."
+          - "zizmor, Checkov, Grype and ansible-lint upload SARIF so findings appear in the Security tab."
 
   - id: e18-release
     summary: Release and distribution
@@ -693,6 +719,28 @@ epics:
         depends_on: [s1401-pr-workflow, s1801-changelog]
         acceptance:
           - Releases verify tag, approved commit, checks and reproducibility, then publish to GitHub and Galaxy.
+      - id: s1803-github-release-features
+        type: Story
+        summary: GitHub-native release features
+        skill: release-engineering
+        complexity: M
+        depends_on: [s1802-release-workflow]
+        acceptance:
+          - "Immutable releases, the release-tags ruleset and the tag-restricted release environment are enabled in both repositories."
+          - "Release notes are generated with label categories from .github/release.yml and include the changelog."
+          - "Each release has build-provenance and SBOM attestations verifiable with gh attestation verify, and posts a Discussions announcement."
+          - "Milestones and Jira fix versions mirror planned versions."
+        security: Immutable releases and tag rulesets prevent post-publication tampering (ADR 0012).
+      - id: s1804-ghcr-artifacts
+        type: Story
+        summary: Publish the collection and content mirror as signed OCI artifacts on GHCR
+        skill: release-engineering
+        complexity: M
+        depends_on: [s1802-release-workflow, s0701-content-manifest]
+        acceptance:
+          - "The collection tarball on GHCR is byte-identical to the Galaxy and GitHub Release tarball, signed and attested."
+          - "The ComplianceAsCode content mirror carries licence, upstream version and digest provenance."
+          - "Offline installation from the OCI artifacts is documented and tested."
 
   - id: e19-acceptance
     summary: End-to-end acceptance testing

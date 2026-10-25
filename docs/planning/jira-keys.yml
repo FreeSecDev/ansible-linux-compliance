@@ -39,6 +39,7 @@ keys:
   s0502-aws-build: FREES-36
   s0503-supply-chain: FREES-37
   s0504-smoke-tests: FREES-38
+  s0505-report-image: FREES-121
   s0601-skeleton: FREES-39
   s0602-roles-skeleton: FREES-40
   s0603-playbooks: FREES-41
@@ -81,10 +82,14 @@ keys:
   s1504-ci-publish: FREES-78
   s1601-docs-tree: FREES-79
   s1602-docs-quality: FREES-80
+  s1603-pages: FREES-122
   s1701-renovate-dependabot: FREES-81
   s1702-scanning: FREES-82
+  s1703-code-scanning: FREES-120
   s1801-changelog: FREES-83
   s1802-release-workflow: FREES-84
+  s1803-github-release-features: FREES-118
+  s1804-ghcr-artifacts: FREES-119
   s1901-workflow-a: FREES-85
   s1902-workflow-b: FREES-86
   s1903-workflow-c: FREES-87
