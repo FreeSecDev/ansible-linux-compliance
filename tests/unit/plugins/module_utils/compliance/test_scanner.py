@@ -172,6 +172,12 @@ class TestRegistry:
         assert created.settings is settings
         assert registry.names() == ("alpha", "zeta")
 
+    def test_the_protocol_method_is_abstract(self) -> None:
+        protocol_method: Any = scanner.ScanBackend.audit
+        backend = Backend(scanner.ScanSettings("/a", "/b"))
+        with pytest.raises(NotImplementedError):
+            protocol_method(backend, request())
+
     def test_rejects_duplicates(self) -> None:
         registry = scanner.BackendRegistry()
         registry.register("one", Backend)

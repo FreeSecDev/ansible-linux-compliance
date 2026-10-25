@@ -213,6 +213,7 @@ class ScanBackend(Protocol):
         Raises:
             ScanRequestError: If the request is invalid or unsafe; nothing ran.
         """
+        raise NotImplementedError
 
 
 BackendFactory = Callable[[ScanSettings], ScanBackend]
