@@ -33,6 +33,15 @@ VERSION_OUTPUT = b"OpenSCAP command line tool (oscap) 1.3.10\nCopyright 2010--20
 DATASTREAM = b"synthetic datastream bytes\n"
 
 
+NON_UTF8 = bytes.fromhex((ADVERSARIAL / "non-utf8.xml.hex").read_text(encoding="ascii").strip())
+
+
+def non_utf8_file(directory: Path) -> Path:
+    path = directory / "non-utf8.xml"
+    path.write_bytes(NON_UTF8)
+    return path
+
+
 def skip_markup_check(_document: str) -> None:
     return None
 
@@ -483,9 +492,9 @@ class TestReadResults:
         with pytest.raises(openscap.XccdfParseError, match="empty"):
             self.read(path)
 
-    def test_non_utf8_file_is_rejected(self) -> None:
+    def test_non_utf8_file_is_rejected(self, tmp_path: Path) -> None:
         with pytest.raises(openscap.XccdfParseError, match="not valid UTF-8"):
-            self.read(ADVERSARIAL / "non-utf8.xml")
+            self.read(non_utf8_file(tmp_path))
 
     def test_utf16_file_is_rejected(self, tmp_path: Path) -> None:
         path = tmp_path / "utf16.xml"
@@ -748,7 +757,7 @@ class TestResultFailures:
         setup = Harness(tmp_path, FakeRunner(None))
 
         def write(path: Path) -> None:
-            path.write_bytes((ADVERSARIAL / "non-utf8.xml").read_bytes())
+            path.write_bytes(NON_UTF8)
 
         setup.runner.on_evaluate = write
         assert_failure(setup.audit(), model.ScanStatus.FAILED, "not valid UTF-8")

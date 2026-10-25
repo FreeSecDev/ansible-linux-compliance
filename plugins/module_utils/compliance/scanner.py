@@ -213,7 +213,6 @@ class ScanBackend(Protocol):
         Raises:
             ScanRequestError: If the request is invalid or unsafe; nothing ran.
         """
-        ...
 
 
 BackendFactory = Callable[[ScanSettings], ScanBackend]

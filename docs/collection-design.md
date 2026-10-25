@@ -181,7 +181,7 @@ parse error. Parse errors never produce a pass.
 
 Unit tests fake the process layer and run no `oscap`. They use hand-written synthetic XCCDF fixtures in
 `tests/fixtures/xccdf/` and hostile samples in `tests/fixtures/adversarial/` (billion laughs, external entity, DOCTYPE,
-parameter entity, oversized, deeply nested, unknown result value, missing namespace, truncated, non-UTF-8); cases that
+parameter entity, oversized, deeply nested, unknown result value, missing namespace, truncated, non-UTF-8 stored as hex because sanity tooling rejects invalid text files); cases that
 depend on the filesystem, such as a symlinked results path, are created inside the tests. A real `oscap`
 run against real content belongs to a later Molecule story and is not covered here.
 
