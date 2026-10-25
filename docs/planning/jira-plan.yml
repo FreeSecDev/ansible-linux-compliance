@@ -37,13 +37,14 @@ epics:
           - AGENTS.md states traceability rules, hard rules and the skill index without duplicating skill detail.
       - id: s0103-contribution-files
         type: Task
-        summary: Add CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, CODEOWNERS and templates to both repositories
+        summary: Add CONTRIBUTING, SECURITY, CODE_OF_CONDUCT and templates to both repositories
         skill: documentation
         complexity: M
         depends_on: [s0302-create-repos]
         acceptance:
           - Both repositories contain the community health files and issue and pull request templates.
           - SECURITY.md defines private vulnerability reporting.
+          - "No CODEOWNERS file: code-owner rules would request the owner's review, contrary to the owner's no-ask decision (FREES-22)."
 
   - id: e02-architecture
     summary: Architecture and security design

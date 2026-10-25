@@ -50,6 +50,16 @@
       "enabled": false
     },
     {
+      "description": "setup-python resolves Python versions through actions/python-versions; the runtime is changed only by a deliberate pull request",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "actions/python-versions"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Major updates wait longer and are labelled for review; nobody is asked to approve them on the dashboard",
       "matchUpdateTypes": [
         "major"
@@ -112,5 +122,8 @@
       "depNameTemplate": "{{{org}}}/packer-plugin-{{{plugin}}}",
       "extractVersionTemplate": "^v?(?<version>.+)$"
     }
-  ]
+  ],
+  "pre-commit": {
+    "enabled": true
+  }
 }

@@ -27,16 +27,20 @@ The configuration files are committed, but the bots are not confirmed active:
 | Packer plugins (future `extensions/packer/**/*.pkr.hcl`) | Renovate | Custom regex manager over `required_plugins` blocks |
 | Ansible Galaxy collection requirements | Renovate | Galaxy is not supported by Dependabot |
 | `astral-sh/setup-uv` `version:` input (the uv tool version) | Renovate | Read by the `github-actions` manager; Dependabot does not manage it |
-| Python runtime version (`.python-version`, `setup-python` inputs) | Manual pull request | A runtime change needs full testing; Renovate's `python-version` datasource is disabled |
-| Security updates for every ecosystem, including GitHub Actions | Dependabot | GitHub security updates are enabled for the repository; Renovate's `vulnerabilityAlerts` is disabled |
+| Python runtime version (`.python-version`, `setup-python` inputs) | Manual pull request | A runtime change needs full testing; Renovate disables the `python-version` datasource and the `actions/python-versions` package that `setup-python` resolves through |
+| Security updates for ecosystems in GitHub's dependency graph (Python `uv`, GitHub Actions) | Dependabot | GitHub security updates are enabled for the repository; Renovate's `vulnerabilityAlerts` is disabled |
+| Security fixes for container digests, pre-commit hooks, Galaxy, OpenTofu providers and Packer plugins | Renovate (scheduled) | No advisory-driven pull requests exist for these; see residual risk below |
 
 Renovate runs only an explicit allow-list of managers, none of which is a Python manager. Two enabled managers could
 still see Python data, so Renovate also disables the `pypi` datasource (Python packages in pre-commit
-`additional_dependencies`) and the `python-version` datasource (`setup-python` inputs). Python tools used by pre-commit
+`additional_dependencies`), the `python-version` datasource and the `actions/python-versions` package that the
+`setup-python` action's version input resolves through. Renovate's `pre-commit` manager is off by default, so it is
+enabled explicitly; listing it in `enabledManagers` alone does not turn it on. Python tools used by pre-commit
 run as local hooks through `uv`, so their versions live only in `pyproject.toml` and `uv.lock`, which Dependabot owns.
 
 Dependabot version updates cover the `uv` ecosystem only. GitHub's Dependabot security updates are enabled for the whole
-repository, so security pull requests for any ecosystem, including GitHub Actions, come from Dependabot.
+repository, so security pull requests for ecosystems in GitHub's dependency graph, Python (`uv`) and GitHub Actions,
+come from Dependabot.
 Renovate's `vulnerabilityAlerts` is disabled so the two bots never open competing security pull requests.
 
 One overlap is accepted on purpose: a Dependabot security update to a GitHub Action can land between Renovate's
@@ -49,7 +53,7 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
 
 - Routine updates run weekly, on Monday morning (Europe/Amsterdam), and are grouped where related.
 - Renovate waits 7 days after a release before proposing it (`minimumReleaseAge`) to reduce supply-chain risk.
-  Security fixes come from Dependabot security updates and are not delayed.
+  Dependabot security updates for Python and GitHub Actions are not delayed by that wait or by the schedule.
 - Major updates wait 14 days, are labelled `breaking-change` and get their own pull request. Like every other update,
   they are reviewed by the `freesecdev-review` App and must pass the required checks. Nobody is asked to approve them
   on the dependency dashboard, which is informational only.
@@ -60,6 +64,16 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
 - Update pull requests are untrusted code: they receive no cloud role and no secrets. Reviewers check changelogs,
   provenance, new maintainers and licence changes, and confirm that an action or image digest matches its release.
 - Hash-locked files are regenerated, never edited by hand.
+
+## Residual risk
+
+GitHub's dependency graph does not cover container images, pre-commit hooks, Ansible Galaxy collections, OpenTofu
+providers or Packer plugins, and Renovate's own vulnerability alerts are disabled to avoid competing security pull
+requests. A security fix in one of these ecosystems therefore arrives with the next weekly Renovate run, after the
+7-day (or 14-day for majors) release age. Image and dependency scanning in CI (Grype, ADR 0006) fails a build on a
+fixable critical or high finding, and the response targets below then require a manual update pull request within
+the target time. Revisit this if Renovate's OSV-based alerts can be scoped to these ecosystems without overlapping
+Dependabot. Tracked on FREES-81.
 
 ## Vulnerability response targets
 

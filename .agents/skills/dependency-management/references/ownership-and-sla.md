@@ -12,8 +12,14 @@
 | Ansible Galaxy collection requirements | Renovate |
 | pre-commit hooks | Renovate |
 | Python (pip, uv) versions and security updates | Dependabot |
+| `setup-uv` `version:` input | Renovate |
+| Python runtime (`.python-version`, `setup-python`) | Manual pull request |
+| Security updates for Python and GitHub Actions | Dependabot security updates |
+| Security fixes for images, hooks, Galaxy, providers, plugins | Renovate schedule (documented residual risk) |
 
-Renovate Python managers stay disabled.
+Renovate Python managers stay disabled, and Renovate also disables the `pypi` and `python-version` datasources and
+the `actions/python-versions` package. Renovate's `vulnerabilityAlerts` is disabled. The `pre-commit` manager is
+enabled explicitly because it is off by default.
 
 ## Severity SLA
 
