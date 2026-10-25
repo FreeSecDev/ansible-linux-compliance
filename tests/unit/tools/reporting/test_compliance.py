@@ -238,10 +238,10 @@ def test_rollup_never_merges_hostless_inputs(kit: Any) -> None:
     rules = compliance.rollup(
         [("one.xml", data_for(run, scan_run=False)), ("two.xml", data_for(failing, scan_run=False))]
     )
-    assert [(rule.host, rule.outcome) for rule in rules] == [
-        ("one.xml", OC.PASS),
-        ("two.xml", OC.FAIL),
-    ]
+    assert {(rule.host, rule.outcome) for rule in rules} == {
+        (compliance.unnamed_host("one.xml"), OC.PASS),
+        (compliance.unnamed_host("two.xml"), OC.FAIL),
+    }
 
 
 def test_rollup_reports_any_expired_waiver_in_the_group(kit: Any) -> None:
@@ -280,10 +280,12 @@ def test_host_key_uses_machine_id_reported_host_or_the_path(kit: Any) -> None:
     with_machine = model.HostIdentity("h.example", "rhel", "9", "x86_64", "a" * 32)
     machine_run = kit.scan_run((kit.finding("a"),), host=with_machine)
     assert compliance.host_key("p", data_for(run)) == "host.example"
-    assert compliance.host_key("p", data_for(machine_run)) == "h.example|" + "a" * 32
+    assert compliance.host_key("p", data_for(machine_run)) == "h.example:" + "a" * 32
     named = data_for(run, scan_run=False, reported_host="web01")
     assert compliance.host_key("p", named) == "web01"
-    assert compliance.host_key("p", data_for(run, scan_run=False)) == "p"
+    assert compliance.host_key("p", data_for(run, scan_run=False)) == compliance.unnamed_host("p")
+    assert compliance.unnamed_host("p") != compliance.unnamed_host("q")
+    assert compliance.unnamed_host("p").startswith("unnamed:")
 
 
 def test_same_hostname_with_different_machine_ids_is_not_merged(kit: Any) -> None:

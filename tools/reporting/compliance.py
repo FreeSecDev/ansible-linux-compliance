@@ -16,6 +16,7 @@ Counting rules:
   one host. Figures of different benchmarks or versions are never pooled.
 """
 
+import hashlib
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
 from typing import Final, NamedTuple
@@ -244,17 +245,22 @@ class _Evaluation(NamedTuple):
 type Entry = tuple[str, ComplianceData]
 
 
+def unnamed_host(artifact: str) -> str:
+    """Return a stable pseudo host name for an input that names no host."""
+    return "unnamed:" + hashlib.sha256(artifact.encode("utf-8")).hexdigest()[:16]
+
+
 def host_key(artifact: str, data: ComplianceData) -> str:
     """Return the identity used to group inputs by host.
 
     A ScanRun uses its host name, plus the machine ID when there is one. XCCDF and ARF
-    use the self-asserted name from the file. An input that names no host is its own
-    host, keyed by its path, so it is never merged with another.
+    use the validated, self-asserted name from the file. An input that names no host is
+    its own host, keyed by a hash of its path, so it is never merged with another.
     """
     if data.host is not None:
         machine = data.host.machine_id
-        return data.host.hostname if machine is None else f"{data.host.hostname}|{machine}"
-    return artifact if data.reported_host is None else data.reported_host
+        return data.host.hostname if machine is None else f"{data.host.hostname}:{machine}"
+    return unnamed_host(artifact) if data.reported_host is None else data.reported_host
 
 
 def worse(first: model.Outcome, second: model.Outcome) -> model.Outcome:

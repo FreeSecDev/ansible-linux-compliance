@@ -68,14 +68,15 @@ SECTION_INPUTS: Final[dict[str, tuple[str, ...]]] = {
     "vulnerabilities": ("grype",),
 }
 MAX_INPUTS: Final[int] = 1000
+SHARED_HOST_NOTE: Final[str] = "shared_self_asserted_host"
 MAX_RULES: Final[int] = 1_000_000
 MAX_GROUPS: Final[int] = 100_000
 FAILED_BUILD_STATUSES: Final[frozenset[str]] = frozenset(
     {"FAILED", "FAULT", "TIMED_OUT", "STOPPED"}
 )
-_COMMIT: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{7,64}")
-_PULL_REQUEST: Final[re.Pattern[str]] = re.compile(r"[1-9][0-9]{0,8}")
-_WORKFLOW_RUN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._:/@#-]{1,256}")
+COMMIT_PATTERN: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{7,64}")
+PULL_REQUEST_PATTERN: Final[re.Pattern[str]] = re.compile(r"[1-9][0-9]{0,8}")
+WORKFLOW_RUN_PATTERN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._:/@#-]{1,256}")
 _TIMESTAMP: Final[re.Pattern[str]] = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"
 )
@@ -127,9 +128,9 @@ class RunMetadata:
 
     def __post_init__(self) -> None:
         """Validate the supplied values."""
-        _checked(self.commit, "commit", _COMMIT)
-        _checked(self.pull_request, "pull_request", _PULL_REQUEST)
-        _checked(self.workflow_run, "workflow_run", _WORKFLOW_RUN)
+        _checked(self.commit, "commit", COMMIT_PATTERN)
+        _checked(self.pull_request, "pull_request", PULL_REQUEST_PATTERN)
+        _checked(self.workflow_run, "workflow_run", WORKFLOW_RUN_PATTERN)
         for name in ("started_at", "finished_at", "generated_at"):
             _checked_time(getattr(self, name), name)
 
@@ -255,33 +256,38 @@ def check_scope(scope: Scope, entries: list[Entry]) -> None:
         raise ReportError(message)
 
 
-def _unique_entries(results: Sequence[ParseResult[ComplianceData]]) -> list[Entry]:
-    seen: set[str | None] = set()
-    entries: list[Entry] = []
+def _unique_inputs(
+    results: Sequence[ParseResult[ComplianceData]],
+) -> list[tuple[str, ComplianceData, str]]:
+    seen: set[str] = set()
+    inputs: list[tuple[str, ComplianceData, str]] = []
     for result in results:
-        if result.data is not None and result.artifact.sha256 not in seen:
-            seen.add(result.artifact.sha256)
-            entries.append((result.artifact.path, result.data))
-    return entries
+        digest = result.artifact.sha256
+        if result.data is not None and digest is not None and digest not in seen:
+            seen.add(digest)
+            inputs.append((result.artifact.path, result.data, digest))
+    return inputs
 
 
-def _host_notes(entries: list[Entry]) -> list[str]:
-    claims: dict[str, int] = {}
-    for _, data in entries:
+def _host_notes(inputs: list[tuple[str, ComplianceData, str]]) -> list[dict[str, Json]]:
+    claims: dict[str, list[str]] = {}
+    for _, data, digest in inputs:
         if data.host is None and data.reported_host is not None:
-            claims[data.reported_host] = claims.get(data.reported_host, 0) + 1
-    return [
-        f"{count} input files claim the self-asserted host {name} and are merged"
-        for name, count in sorted(claims.items())
-        if count > 1
-    ]
+            claims.setdefault(data.reported_host, []).append(digest)
+    notes: list[dict[str, Json]] = []
+    for name, digests in sorted(claims.items()):
+        if len(digests) > 1:
+            sources = list[Json](sorted(digests))
+            notes.append({"host": name, "kind": SHARED_HOST_NOTE, "sources": sources})
+    return notes
 
 
 def _compliance_section(
     results: Sequence[ParseResult[ComplianceData]], scope: Scope
 ) -> dict[str, Json]:
     section = _section(results)
-    entries = _unique_entries(results)
+    inputs = _unique_inputs(results)
+    entries: list[Entry] = [(path, data) for path, data, _ in inputs]
     check_scope(scope, entries)
     section.update({"aggregates": [], "groups": [], "notes": [], "rules": []})
     if section["status"] != SectionStatus.AVAILABLE.value:
@@ -292,7 +298,7 @@ def _compliance_section(
         message = "the compliance data exceeds the report size limits"
         raise ReportError(message)
     versions = pairs(entries)
-    section["notes"] = [to_json(note) for note in _host_notes(entries)]
+    section["notes"] = list[Json](_host_notes(inputs))
     section["rules"] = [to_json(rule) for rule in rules]
     section["groups"] = [to_json(group) for group in groups]
     if scope is not Scope.SINGLE_HOST:

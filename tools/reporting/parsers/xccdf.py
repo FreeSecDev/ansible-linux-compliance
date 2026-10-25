@@ -37,11 +37,19 @@ ARF_ROOT_TAG: Final[str] = (
 )
 TEST_RESULT_TAG: Final[str] = "{http://checklists.nist.gov/xccdf/1.2}TestResult"
 FQDN_FACT: Final[str] = "urn:xccdf:fact:asset:identifier:fqdn"
-MAX_HOST_LENGTH: Final[int] = 255
 
 
 def _name(text: str) -> str | None:
-    return clean_text(text.strip(), MAX_HOST_LENGTH).strip().lower() or None
+    stripped = text.strip()
+    if not stripped:
+        return None
+    name = stripped.lower()
+    try:
+        model.HostIdentity(name, "unknown", "0", "unknown", None)
+    except model.ModelError:
+        message = "the host name in the results is not a valid host name"
+        raise InvalidInputError(message) from None
+    return name
 
 
 def _host_names(tree: XmlNode) -> list[str]:

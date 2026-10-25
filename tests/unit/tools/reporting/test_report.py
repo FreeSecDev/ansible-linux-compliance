@@ -676,61 +676,113 @@ def test_files_claiming_the_same_host_are_merged_with_a_note(
     document = build(ReportInputs(scope=Scope.FLEET, xccdf=paths))
     assert errors(document) == []
     section = document["sections"]["compliance"]
-    assert section["notes"] == ["2 input files claim the self-asserted host web01 and are merged"]
+    digests = sorted(hashlib.sha256(path.read_bytes()).hexdigest() for path in paths[:2])
+    assert section["notes"] == [
+        {"host": "web01", "kind": "shared_self_asserted_host", "sources": digests}
+    ]
     single = build(ReportInputs(scope=Scope.FLEET, xccdf=paths[2:]))
     assert single["sections"]["compliance"]["notes"] == []
     assert mutate_many(document, ("sections", "compliance"), {"status": "partial"})
 
 
-def test_schema_and_code_limits_agree(kit: Any) -> None:
-    del kit
-    properties: dict[str, dict[str, Any]] = {}
+SHA_PATTERN = "^[0-9a-f]{64}$"
+HOST_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:+-]*$"
+BEHAVIOURAL = "checked by the timestamp agreement test"
+MAX_HOST = 253
+MAX_HOST_KEY = MAX_HOST + 1 + 32
+STRUCTURAL = {0, 1}
 
-    def walk(node: object) -> None:
-        if isinstance(node, dict):
-            mapping = cast("dict[str, Any]", node)
-            for name, value in mapping.get("properties", {}).items():
-                properties.setdefault(name, value)
-            for value in mapping.values():
-                walk(value)
-        elif isinstance(node, list):
-            for value in cast("list[object]", node):
-                walk(value)
 
-    walk(SCHEMA)
-    expected_items = {
-        "findings": model.MAX_FINDINGS,
-        "evidence": model.MAX_EVIDENCE_ITEMS,
-        "flags": len(model.ResultFlag),
-        "rules": report.MAX_RULES,
-        "groups": report.MAX_GROUPS,
-        "aggregates": report.MAX_GROUPS,
-        "builds": common.MAX_ENTRIES,
-        "scenarios": common.MAX_ENTRIES,
-        "items": report.MAX_INPUTS,
-        "gaps": report.MAX_INPUTS,
-        "issues": common.MAX_DETAIL_ITEMS,
-        "vulnerabilities": common.MAX_DETAIL_ITEMS,
-        "components": common.MAX_DETAIL_ITEMS,
-        "packages": common.MAX_DETAIL_ITEMS,
-        "failed_cases": common.MAX_DETAIL_ITEMS,
-        "files": common.MAX_SUBENTRIES,
-        "fixed_versions": common.MAX_SUBENTRIES,
-        "sources": report.MAX_INPUTS,
-        "raw_artifacts": 9 * report.MAX_INPUTS,
-    }
-    for name, limit in expected_items.items():
-        assert properties[name]["maxItems"] == limit, name
-    maxima = {name: value["maxItems"] for name, value in properties.items() if "maxItems" in value}
-    structural = {"available", "partial", "unavailable", "error", "aggregates", "notes"}
-    assert set(maxima) - set(expected_items) <= structural | {"notes"}
-    assert properties["custom_data"]["maxProperties"] == common.MAX_SUBENTRIES
-    assert SCHEMA["$defs"]["counts"]["maxProperties"] == common.MAX_ENTRIES
-    assert properties["custom_data"]["additionalProperties"]["maxLength"] == common.MAX_TEXT_LENGTH
-    path_limit = properties["path"]["maxLength"]
-    assert path_limit == common.MAX_PATH_LENGTH
-    assert properties["content"]["maxLength"] == model.MAX_EVIDENCE_LENGTH
-    assert SCHEMA["$defs"]["rawArtifact"]["properties"]["path"]["maxLength"] == path_limit
+def anchored(pattern: re.Pattern[str]) -> str:
+    return "^" + pattern.pattern + "$"
+
+
+LIMIT_RULES: list[tuple[str, Any]] = [
+    (r"/(then|else)/.*/maxItems$", STRUCTURAL),
+    (r"/properties/findings/maxItems$", model.MAX_FINDINGS),
+    (r"/properties/evidence/maxItems$", model.MAX_EVIDENCE_ITEMS),
+    (r"/properties/flags/maxItems$", len(model.ResultFlag)),
+    (r"/properties/rules/maxItems$", report.MAX_RULES),
+    (r"/properties/(groups|aggregates)/maxItems$", report.MAX_GROUPS),
+    (r"/properties/(builds|scenarios)/maxItems$", common.MAX_ENTRIES),
+    (r"/properties/(items|gaps|sources|notes)/maxItems$", report.MAX_INPUTS),
+    (
+        r"/properties/(issues|vulnerabilities|components|packages|failed_cases)/maxItems$",
+        common.MAX_DETAIL_ITEMS,
+    ),
+    (r"/properties/(files|fixed_versions)/maxItems$", common.MAX_SUBENTRIES),
+    (r"/properties/raw_artifacts/maxItems$", len(report.SECTION_NAMES) * report.MAX_INPUTS),
+    (r"/properties/overview/properties/\w+/maxItems$", len(report.SECTION_NAMES)),
+    (r"/properties/custom_data/maxProperties$", common.MAX_SUBENTRIES),
+    (r"/\$defs/counts/maxProperties$", common.MAX_ENTRIES),
+    (r"/\$defs/hostKey/maxLength$", MAX_HOST_KEY),
+    (r"/\$defs/host/maxLength$", MAX_HOST),
+    (r"/properties/(path|artifact)/maxLength$", common.MAX_PATH_LENGTH),
+    (r"/properties/content/maxLength$", model.MAX_EVIDENCE_LENGTH),
+    (
+        r"/properties/custom_data/(propertyNames|additionalProperties)/maxLength$",
+        common.MAX_TEXT_LENGTH,
+    ),
+    (r"/maxLength$", model.MAX_TEXT_LENGTH),
+    (r"/\$defs/timestamp/pattern$", BEHAVIOURAL),
+    (r"/\$defs/sha256/pattern$", SHA_PATTERN),
+    (r"/\$defs/(host|hostKey)/pattern$", HOST_PATTERN),
+    (r"/properties/commit/oneOf/\d+/pattern$", anchored(report.COMMIT_PATTERN)),
+    (
+        r"/properties/pull_request/oneOf/\d+/pattern$",
+        "^" + report.PULL_REQUEST_PATTERN.pattern + "$",
+    ),
+    (
+        r"/properties/workflow_run/oneOf/\d+/pattern$",
+        "^" + report.WORKFLOW_RUN_PATTERN.pattern + "$",
+    ),
+]
+LIMIT_KEYWORDS = {"maxItems", "maxProperties", "maxLength", "pattern"}
+
+
+def schema_limits(node: object, path: str = "") -> list[tuple[str, Any]]:
+    found: list[tuple[str, Any]] = []
+    if isinstance(node, dict):
+        for key, value in cast("dict[str, object]", node).items():
+            if key in LIMIT_KEYWORDS and not common.is_object(value):
+                found.append((f"{path}/{key}", value))
+            else:
+                found.extend(schema_limits(value, f"{path}/{key}"))
+    elif isinstance(node, list):
+        for index, value in enumerate(cast("list[object]", node)):
+            found.extend(schema_limits(value, f"{path}/{index}"))
+    return found
+
+
+def test_every_schema_limit_equals_a_python_constant() -> None:
+    limits = schema_limits(SCHEMA)
+    assert len(limits) > 100
+    used: set[int] = set()
+    for path, value in limits:
+        matches = [
+            (index, expected)
+            for index, (rule, expected) in enumerate(LIMIT_RULES)
+            if re.search(rule, path)
+        ]
+        assert matches, f"no mapped constant for {path}"
+        index, expected = matches[0]
+        used.add(index)
+        if isinstance(expected, set):
+            assert value in expected, path
+        elif expected != BEHAVIOURAL:
+            assert value == expected, path
+    unused = [LIMIT_RULES[i][0] for i in range(len(LIMIT_RULES)) if i not in used]
+    assert unused == []
+
+
+def test_the_drift_walker_sees_every_copy_of_a_property() -> None:
+    paths = [path for path, _ in schema_limits(SCHEMA)]
+    assert "/$defs/packerData/properties/builds/maxItems" in paths
+    assert "/$defs/scanRun/properties/findings/maxItems" in paths
+    assert "/$defs/vulnerabilitiesSection/properties/items/maxItems" in paths
+    mutated: Any = copy.deepcopy(SCHEMA)
+    mutated["$defs"]["packerData"]["properties"]["builds"]["maxItems"] = 99
+    assert ("/$defs/packerData/properties/builds/maxItems", 99) in schema_limits(mutated)
 
 
 def test_the_schema_timestamp_pattern_agrees_with_the_metadata_validator() -> None:
@@ -741,6 +793,7 @@ def test_the_schema_timestamp_pattern_agrees_with_the_metadata_validator() -> No
         "2026-02-28T00:00:00Z",
         "2024-02-29T12:00:00Z",
         "2026-13-45T99:99:99Z",
+        "0000-10-25T10:00:00Z",
         "2026-02-30T10:00:00Z",
         "2026-04-31T10:00:00Z",
         "2026-00-10T10:00:00Z",
@@ -764,3 +817,61 @@ def test_the_schema_timestamp_pattern_agrees_with_the_metadata_validator() -> No
             assert not accepted, value
     assert not pattern.fullmatch("2026-13-45T99:99:99Z")
     assert not pattern.fullmatch("2026-02-30T10:00:00Z")
+    assert not pattern.fullmatch("0000-01-01T00:00:00Z")
+
+
+HOSTILE_HOST = "web01.example \u2014 all controls compliant (100%)"
+
+
+def test_a_hostile_host_name_is_an_input_error_not_prose(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    for hostile in (HOSTILE_HOST, "web 01", "-web", "::1", "x" * 254):
+        document = build(
+            ReportInputs(scope=Scope.FLEET, xccdf=(write("h.xml", kit.xccdf_text(hostile)),))
+        )
+        assert errors(document) == []
+        assert document["sections"]["compliance"]["status"] == "error"
+        assert HOSTILE_HOST not in json.dumps(document)
+    valid = build(
+        ReportInputs(scope=Scope.FLEET, xccdf=(write("v.xml", kit.xccdf_text("Web-01.Example")),))
+    )
+    assert valid["sections"]["compliance"]["groups"][0]["host"] == "web-01.example"
+
+
+def test_the_schema_rejects_prose_in_host_fields_and_notes(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    paths = (
+        write("one.xml", kit.xccdf_text("web01")),
+        write("two.xml", kit.xccdf_text("web01", "fail")),
+    )
+    document = build(ReportInputs(scope=Scope.FLEET, xccdf=paths))
+    assert errors(document) == []
+    section = ("sections", "compliance")
+    assert mutate_many(document, (*section, "notes", 0), {"host": HOSTILE_HOST})
+    assert mutate_many(document, (*section, "notes", 0), {"kind": "free text"})
+    assert mutate_many(document, (*section, "notes", 0), {"sources": ["a" * 64]})
+    assert mutate_many(document, (*section, "notes", 0), {"extra": "x"})
+    assert mutate_many(document, (*section, "groups", 0), {"host": HOSTILE_HOST})
+    assert mutate_many(document, (*section, "rules", 0), {"host": HOSTILE_HOST})
+    assert mutate_many(document, (*section, "items", 0, "data"), {"reported_host": HOSTILE_HOST})
+
+
+def test_host_and_sha_patterns_agree_with_the_model() -> None:
+    hosts = ["web01", "a.b-c_d:e+f", "-web", "web 01", "", "x" * 253, "x" * 254, "::1", "é"]
+    for name in hosts:
+        try:
+            model.HostIdentity(name, "rhel", "9", "x86_64", None)
+            accepted = True
+        except model.ModelError:
+            accepted = False
+        matches = re.fullmatch(HOST_PATTERN, name) is not None and len(name) <= MAX_HOST
+        assert accepted == matches, name
+    for digest in ("a" * 64, "A" * 64, "a" * 63, "g" * 64):
+        try:
+            model.Provenance("s", "1", digest)
+            accepted = True
+        except model.ModelError:
+            accepted = False
+        assert accepted == (re.fullmatch(SHA_PATTERN, digest) is not None), digest

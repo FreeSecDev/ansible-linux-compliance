@@ -78,7 +78,7 @@ once however many frameworks reference it). The worst outcome wins (`error`, `fa
 `pass`, `notapplicable`, `disabled`), the highest severity is kept and every originating artifact, benchmark and
 profile is listed in `sources` with the outcome each source reported. Different content versions and different hosts
 stay separate. A ScanRun host is its host name plus machine ID; XCCDF and ARF files name their host (`target`, fqdn
-fact, ARF asset), which is self-asserted. Files are grouped only when the names are equal, a file without a name is its
+fact, ARF asset), which is self-asserted. A name must satisfy the ScanRun host rule or the file is an error. Files are grouped only when the names are equal, a file without a name is its
 own host, and an ARF asset that disagrees with its TestResult target is an error. Input files with the same SHA-256 count
 once.
 

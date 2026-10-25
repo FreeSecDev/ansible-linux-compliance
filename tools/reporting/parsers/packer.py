@@ -9,6 +9,7 @@ from tools.reporting.common import (
     MAX_ENTRIES,
     MAX_EPOCH_SECONDS,
     MAX_SUBENTRIES,
+    MAX_TEXT_LENGTH,
     InvalidInputError,
     ParseResult,
     as_list,
@@ -65,11 +66,18 @@ def _timestamp(value: object) -> str | None:
     return datetime.fromtimestamp(seconds, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _short(value: object, name: str) -> str:
+    if isinstance(value, str) and len(value) > MAX_TEXT_LENGTH:
+        message = f"{name} is longer than {MAX_TEXT_LENGTH} characters"
+        raise InvalidInputError(message)
+    return as_text(value, name)
+
+
 def _custom_data(entry: dict[str, object]) -> dict[str, str]:
     mapping = optional_object(entry, "custom_data", "build")
     items = bounded(sorted(mapping.items()), MAX_SUBENTRIES, "custom_data")
     return {
-        as_text(key, "custom_data key"): as_text(item, "custom_data value") for key, item in items
+        _short(key, "custom_data key"): _short(item, "custom_data value") for key, item in items
     }
 
 

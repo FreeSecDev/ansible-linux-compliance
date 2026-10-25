@@ -78,8 +78,9 @@ lists every item that is not `available` with its path, status and reason.
   `reason` is a string and `gaps` lists the missing or invalid inputs. Available items keep their `data`.
 - Limits of the schema: JSON Schema 2020-12 cannot compare counts or sum values, so a forged document with
   `all_evaluated_passed` next to non-zero `fail` counts, or a section `summary` next to groups of two versions, still
-  validates; the producer never writes them. A test keeps every `maxItems`, `maxProperties` and `maxLength` equal to the
-  Python constants, and the timestamp pattern accepts only valid months, days (29 February in any year) and times.
+  validates; the producer never writes them. A test walks the whole schema and compares every `maxItems`, `maxProperties`, `maxLength` and `pattern` with
+  a Python constant by its full path; a limit without a mapping fails the test. The timestamp pattern accepts only
+  years from 0001, valid months, days (29 February in any year) and times.
 - The schema enforces these couplings (status against items, gaps, reason, summary, overview, and an available item
   having a checksum and size), so a consumer can rely on them. Every array has a `maxItems`.
 
@@ -97,12 +98,15 @@ The declared `scope` is checked against the data. `single_host` with inputs from
 with more than one benchmark or content version, is rejected (exit 2). The schema also bounds `aggregates` (none for
 `single_host`, at most one for `benchmark`).
 
-A host is identified by `host.hostname` (plus `machine_id` when present) for ScanRun JSON, and by the self-asserted
+A host name taken from a file must satisfy the ScanRun host rule (letters, digits and `._:+-`, starting with a letter or
+digit, at most 253 characters), otherwise the file is an error. The schema applies the same pattern wherever a host
+appears. A file that names no host is keyed `unnamed:<hash of its path>`. A host is identified by `host.hostname` (plus `machine_id` when present) for ScanRun JSON, and by the self-asserted
 name in the file for XCCDF (`target` or the fqdn fact) and ARF (asset fqdn and hostname, which must match the
 TestResult target, otherwise the file is an error). A file that names no host is its own host, keyed by its path. Names
 are lower-cased, and files are grouped only when the names are equal; differing identities are never merged. Input
 files with the same SHA-256 count once. When several input files claim the same self-asserted host, they are
-merged and `notes` says so.
+merged and `notes` records it as a structured entry, `{"kind": "shared_self_asserted_host", "host": ..., "sources": [sha256, ...]}`;
+consumers build the wording, so no input text becomes prose.
 
 | Field | Meaning |
 |---|---|
@@ -170,7 +174,7 @@ Common behaviour of every parser:
 | ansible-lint | `parsers/lint.py` | SARIF 2.1.0 (levels map to severities: error high, warning medium, note low, none info) or JSON/code-climate (blocker and critical map to critical, major high, minor medium, info info; others unknown). The SARIF driver must be `ansible-lint`; `executionSuccessful: false` or a `toolExecutionNotifications` entry at level `error` makes the file an error. The JSON format carries no tool name. A clean run with zero issues is `available`. |
 | Grype | `parsers/grype.py` | `descriptor.name` must be `grype`. Severities: Negligible is `info`, unlisted values are `unknown`. The severity is the highest of the match and its `relatedVulnerabilities`. Matches are deduplicated by vulnerability, package and version, keeping the highest severity. The database date is read from `descriptor.db.status.built` or `descriptor.db.built`, else `null`. Ignored matches are not read. |
 | SPDX and CycloneDX | `parsers/sbom.py` | SPDX-2.2 and SPDX-2.3 JSON (not SPDX 3, not tag-value; the document must be `SPDXRef-DOCUMENT` with a namespace and every package an `SPDXID`) and CycloneDX 1.4 to 1.6 JSON (every component a `type`). Other versions are errors. Only top-level packages or components are read. A licence is the first asserted of `licenseConcluded` and `licenseDeclared`, or the first CycloneDX licence id, name or expression. An SBOM with no components, or more than 10000 distinct licences, is an error. |
-| Packer manifest | `parsers/packer.py` | Requires at least one build with `name`, `builder_type` and `artifact_id`. `build_time` (epoch seconds from the file) is written in UTC and must be valid if present. `in_last_run` marks the builds of `last_run_uuid`. `custom_data` keys and values must be non-empty strings of at most 512 characters, at most 1000 keys. At most 10000 builds and 1000 files. |
+| Packer manifest | `parsers/packer.py` | Requires at least one build with `name`, `builder_type` and `artifact_id`. `build_time` (epoch seconds from the file) is written in UTC and must be valid if present. `in_last_run` marks the builds of `last_run_uuid`. `custom_data` keys and values must be non-empty strings of at most 512 characters (longer is an error, never cut), at most 1000 keys. At most 10000 builds and 1000 files. |
 | CodeBuild | `parsers/codebuild.py` | `batch-get-builds` output. `buildStatus` must be a known CodeBuild status. Any entry in `buildsNotFound` makes the file an error, because a requested build is missing. The section summary counts succeeded, failed and in-progress builds, so a failed build is never shown as clean. Times are numbers (epoch seconds, written in UTC) or strings as supplied. |
 | Molecule summary | `parsers/molecule.py` | The project-defined format below. |
 

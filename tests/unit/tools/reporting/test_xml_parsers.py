@@ -285,6 +285,15 @@ def test_arf_notselected_rules_are_counted_separately(kit: Any, write: Callable[
     assert len(data.findings) == 2
 
 
+def test_arf_asset_names_are_validated_too(kit: Any, write: Callable[..., Path]) -> None:
+    arf = (kit.REPORTING / "arf.xml").read_text(encoding="utf-8")
+    result = xccdf.parse_arf(
+        write("a.xml", arf.replace("<target>host.example", "<target>bad host"))
+    )
+    assert result.status is SectionStatus.ERROR
+    assert result.reason == "the host name in the results is not a valid host name"
+
+
 def test_arf_asset_must_match_the_target(kit: Any, write: Callable[..., Path]) -> None:
     arf = (kit.REPORTING / "arf.xml").read_text(encoding="utf-8")
     result = xccdf.parse_arf(

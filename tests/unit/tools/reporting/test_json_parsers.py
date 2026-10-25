@@ -683,6 +683,19 @@ def test_sbom_distinct_licences_are_bounded(
     ).data
 
 
+@pytest.mark.parametrize(
+    "custom_data", [{"k" * 513: "v"}, {"k": "v" * 513}, {"k" * 512: "v" * 512}]
+)
+def test_packer_custom_data_is_never_silently_cut(
+    write: Callable[..., Path], custom_data: dict[str, str]
+) -> None:
+    base = {"name": "n", "builder_type": "b", "artifact_id": "a"}
+    document = {"builds": [{**base, "custom_data": custom_data}]}
+    too_long = any(len(text) > 512 for pair in custom_data.items() for text in pair)
+    result = packer.parse_packer(write("p.json", json.dumps(document)))
+    assert (result.status is SectionStatus.ERROR) is too_long
+
+
 def test_packer_custom_data_keys_are_cleaned_and_must_not_be_empty(
     write: Callable[..., Path],
 ) -> None:
