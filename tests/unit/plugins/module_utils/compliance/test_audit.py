@@ -810,9 +810,9 @@ def test_a_run_directory_that_vanishes_is_unsafe(
     planned = audit.plan(harness.job(), UID)
     original = Path.mkdir
 
-    def vanishing_mkdir(self: Path, mode: int = 0o777, *args: Any, **kwargs: Any) -> None:
+    def vanishing_mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
         if self.name != "run-1":
-            original(self, mode, *args, **kwargs)
+            original(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "mkdir", vanishing_mkdir)
     with pytest.raises(audit.AuditError, match="run directory vanished"):
@@ -951,7 +951,8 @@ def test_a_backend_that_writes_no_output_still_gets_a_recorded_run(harness: Harn
     result = cast(
         "dict[str, Any]", auditor.run(harness.job(disabled_rules=disabled), check_mode=False)
     )
-    (request,) = backend.requests
+    assert len(backend.requests) == 1
+    request = backend.requests[0]
     assert request.profile_id == TAILORED
     assert request.expected_rule_ids == (BETA,)
     assert request.output_dir == "scan"
