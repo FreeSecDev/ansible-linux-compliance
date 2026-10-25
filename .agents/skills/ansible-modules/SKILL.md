@@ -53,7 +53,7 @@ where external processes run, and only through one audited helper.
 
 - `make test-unit` and `ansible-test units` pass; `make test-sanity` validates the documentation blocks.
 - `make typecheck`, `make lint-python` and `make security` pass without new suppressions.
-- A guard test fails if `subprocess`, `os.system` or `shell=True` appears outside `process.py`.
+- The repository rule is deny-by-default for `plugins/` outside `process.py`: allow-listed imports only, `os` only as `os.path`, no `exec`, `eval`, `compile`, `__import__`, `getattr` with a computed name, `run_command`, `use_unsafe_shell` or `shell=True`. Ask for an allow-list extension instead of working around it.
 - Security decision logic (path confinement, argument validation, XML rejection, outcome mapping) has 100% branch coverage.
 - Every module has a negative test for bad arguments and a check-mode test.
 

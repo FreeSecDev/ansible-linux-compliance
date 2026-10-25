@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import dataclasses
 import errno
+import inspect
 import math
+import os
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -14,13 +17,15 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     process,
 )
 
-SHELL = process.ExecutablePolicy("sh", frozenset({"-c"}))
+ANY_ARGUMENTS = ((),)
+OWNER = os.getuid()
+SHELL = process.ExecutablePolicy("sh", frozenset({"-c"}), command_prefixes=(("-c",),))
 POLICIES = {
     "sh": SHELL,
-    "true": process.ExecutablePolicy("true"),
-    "false": process.ExecutablePolicy("false"),
-    "yes": process.ExecutablePolicy("yes"),
-    "sleep": process.ExecutablePolicy("sleep"),
+    "true": process.ExecutablePolicy("true", command_prefixes=ANY_ARGUMENTS),
+    "false": process.ExecutablePolicy("false", command_prefixes=ANY_ARGUMENTS),
+    "yes": process.ExecutablePolicy("yes", command_prefixes=ANY_ARGUMENTS),
+    "sleep": process.ExecutablePolicy("sleep", command_prefixes=ANY_ARGUMENTS),
 }
 FAST = 10.0
 PLANTED = "canary-value"
@@ -28,6 +33,10 @@ PLANTED = "canary-value"
 
 def shell(script: str, *args: str, timeout: float = FAST, **fields: Any) -> process.CommandSpec:
     return process.CommandSpec("sh", ("-c", script, "sh", *args), timeout, **fields)
+
+
+def resolve(name: Any, directories: Any) -> str:
+    return process.resolve_executable(name, directories, OWNER)
 
 
 def execute(spec: process.CommandSpec, **keywords: Any) -> process.CommandResult:
@@ -61,7 +70,10 @@ def make_tool(directory: Path, name: str = "tool", mode: int = 0o755) -> Path:
 
 def run_in(trusted: Path, executable: str = "true") -> process.CommandResult:
     return process.run(
-        process.CommandSpec(executable, (), FAST), policies=POLICIES, trusted_dirs=[str(trusted)]
+        process.CommandSpec(executable, (), FAST),
+        policies=POLICIES,
+        trusted_dirs=[str(trusted)],
+        owner_uid=OWNER,
     )
 
 
@@ -254,21 +266,25 @@ class TestPolicy:
 
     def test_remote_fetching_is_forbidden_even_if_a_policy_lists_it(self) -> None:
         policies = {
-            "oscap": process.ExecutablePolicy("oscap", frozenset({"--fetch-remote-resources"}))
+            "oscap": process.ExecutablePolicy(
+                "oscap", frozenset({"--fetch-remote-resources"}), command_prefixes=ANY_ARGUMENTS
+            )
         }
         spec = process.CommandSpec("oscap", ("--fetch-remote-resources",), 1)
         with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
             process.check_policy(spec, policies)
 
     def test_option_value_that_looks_like_an_option_is_rejected(self) -> None:
-        spec = process.CommandSpec("oscap", ("--profile", "--fetch-remote-resources"), 1)
+        spec = process.CommandSpec(
+            "oscap", ("xccdf", "eval", "--profile", "--fetch-remote-resources"), 1
+        )
         with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
             process.check_policy(spec, process.ALLOWED_EXECUTABLES)
 
     def test_policy_rejection_happens_before_any_resolution(self, trusted: Path) -> None:
-        spec = process.CommandSpec("oscap", ("--fetch-remote-resources",), 1)
+        spec = process.CommandSpec("oscap", ("xccdf", "eval", "--fetch-remote-resources"), 1)
         with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
-            process.run(spec, trusted_dirs=[str(trusted)])
+            process.run(spec, trusted_dirs=[str(trusted)], owner_uid=OWNER)
 
 
 class TestResolveExecutable:
@@ -289,22 +305,22 @@ class TestResolveExecutable:
     )
     def test_rejects_traversal_and_malformed_names(self, name: Any, trusted: Path) -> None:
         with pytest.raises(process.ProcessPolicyError, match="invalid executable name"):
-            process.resolve_executable(name, [str(trusted)])
+            resolve(name, [str(trusted)])
 
     def test_missing_binary(self, trusted: Path) -> None:
         with pytest.raises(process.ProcessExecutionError, match="not found"):
-            process.resolve_executable("missing", [str(trusted)])
+            resolve("missing", [str(trusted)])
 
     def test_missing_directories_are_skipped(self, trusted: Path, tmp_path: Path) -> None:
         tool = make_tool(trusted)
-        resolved = process.resolve_executable("tool", [str(tmp_path / "absent"), str(trusted)])
+        resolved = resolve("tool", [str(tmp_path / "absent"), str(trusted)])
         assert resolved == str(tool)
 
     def test_a_file_is_not_a_trusted_directory(self, trusted: Path, tmp_path: Path) -> None:
         make_tool(trusted)
         blocker = tmp_path / "blocker"
         blocker.write_text("x", encoding="utf-8")
-        resolved = process.resolve_executable("tool", [str(blocker), str(trusted)])
+        resolved = resolve("tool", [str(blocker), str(trusted)])
         assert resolved == str(trusted / "tool")
 
     def test_first_trusted_directory_wins(self, tmp_path: Path) -> None:
@@ -312,29 +328,31 @@ class TestResolveExecutable:
         second = tmp_path / "second"
         make_tool(first)
         make_tool(second)
-        assert process.resolve_executable("tool", [str(first), str(second)]) == str(first / "tool")
+        assert resolve("tool", [str(first), str(second)]) == str(first / "tool")
 
     @pytest.mark.parametrize("directory", ["relative/dir", "", "bin", 5, "/usr\x00"])
     def test_rejects_untrusted_directory_declarations(self, directory: Any) -> None:
         with pytest.raises(process.ProcessPolicyError, match="absolute path"):
-            process.resolve_executable("tool", [directory])
+            resolve("tool", [directory])
 
     def test_rejects_a_world_writable_directory(self, trusted: Path) -> None:
         make_tool(trusted)
         trusted.chmod(0o777)
-        with pytest.raises(process.ProcessPolicyError, match="directory is world-writable"):
-            process.resolve_executable("tool", [str(trusted)])
+        with pytest.raises(
+            process.ProcessPolicyError, match="directory is writable by group or others"
+        ):
+            resolve("tool", [str(trusted)])
 
     def test_rejects_a_symlink_that_points_outside(self, trusted: Path, tmp_path: Path) -> None:
         outside = make_tool(tmp_path / "outside", "real")
         (trusted / "tool").symlink_to(outside)
         with pytest.raises(process.ProcessPolicyError, match="outside the trusted directories"):
-            process.resolve_executable("tool", [str(trusted)])
+            resolve("tool", [str(trusted)])
 
     def test_rejects_a_symlink_to_a_system_file_outside(self, trusted: Path) -> None:
         (trusted / "tool").symlink_to("/etc/hostname")
         with pytest.raises(process.ProcessPolicyError, match="outside the trusted directories"):
-            process.resolve_executable("tool", [str(trusted)])
+            resolve("tool", [str(trusted)])
 
     def test_accepts_a_symlink_chain_that_resolves_inside(
         self, trusted: Path, tmp_path: Path
@@ -345,17 +363,17 @@ class TestResolveExecutable:
         hop = hop_dir / "hop"
         hop.symlink_to(real)
         (trusted / "tool").symlink_to(hop)
-        assert process.resolve_executable("tool", [str(trusted)]) == str(trusted / "tool")
+        assert resolve("tool", [str(trusted)]) == str(trusted / "tool")
 
     def test_accepts_a_symlink_inside_the_trusted_directories(self, trusted: Path) -> None:
         make_tool(trusted, "real")
         (trusted / "alias").symlink_to("real")
-        assert process.resolve_executable("alias", [str(trusted)]) == str(trusted / "alias")
+        assert resolve("alias", [str(trusted)]) == str(trusted / "alias")
 
     def test_rejects_a_symlink_loop(self, trusted: Path) -> None:
         (trusted / "tool").symlink_to("tool")
         with pytest.raises(process.ProcessError):
-            process.resolve_executable("tool", [str(trusted)])
+            resolve("tool", [str(trusted)])
 
     def test_rejects_an_unresolvable_candidate(
         self, trusted: Path, monkeypatch: pytest.MonkeyPatch
@@ -370,35 +388,35 @@ class TestResolveExecutable:
         make_tool(trusted)
         monkeypatch.setattr(Path, "resolve", explode)
         with pytest.raises(process.ProcessPolicyError, match="cannot be resolved"):
-            process.resolve_executable("tool", [str(trusted)])
+            resolve("tool", [str(trusted)])
 
     def test_a_broken_symlink_inside_is_not_found(self, trusted: Path) -> None:
         (trusted / "tool").symlink_to("gone")
         with pytest.raises(process.ProcessExecutionError, match="not found"):
-            process.resolve_executable("tool", [str(trusted)])
+            resolve("tool", [str(trusted)])
 
     def test_rejects_a_world_writable_binary(self, trusted: Path) -> None:
         make_tool(trusted, mode=0o777)
-        with pytest.raises(process.ProcessPolicyError, match="world-writable"):
-            process.resolve_executable("tool", [str(trusted)])
+        with pytest.raises(process.ProcessPolicyError, match="writable by group or others"):
+            resolve("tool", [str(trusted)])
 
     def test_rejects_a_directory(self, trusted: Path) -> None:
         (trusted / "tool").mkdir()
         with pytest.raises(process.ProcessPolicyError, match="not a regular file"):
-            process.resolve_executable("tool", [str(trusted)])
+            resolve("tool", [str(trusted)])
 
     def test_rejects_a_non_executable_file(self, trusted: Path) -> None:
         make_tool(trusted, mode=0o644)
         with pytest.raises(process.ProcessPolicyError, match="not executable"):
-            process.resolve_executable("tool", [str(trusted)])
+            resolve("tool", [str(trusted)])
 
     def test_unsafe_file_in_an_earlier_directory_is_not_skipped(self, tmp_path: Path) -> None:
         first = tmp_path / "first"
         second = tmp_path / "second"
         make_tool(first, mode=0o777)
         make_tool(second)
-        with pytest.raises(process.ProcessPolicyError, match="world-writable"):
-            process.resolve_executable("tool", [str(first), str(second)])
+        with pytest.raises(process.ProcessPolicyError, match="writable by group or others"):
+            resolve("tool", [str(first), str(second)])
 
 
 class TestConfinedPath:
@@ -583,14 +601,14 @@ class TestRun:
 
     def test_uses_the_hardened_process_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, Any] = {}
-        real: Any = process.SpawnProcess
+        real: Any = subprocess.Popen
 
         def spy(argv: Any, **keywords: Any) -> Any:
             captured["argv"] = argv
             captured.update(keywords)
             return real(argv, **keywords)
 
-        monkeypatch.setattr(process, "SpawnProcess", spy)
+        monkeypatch.setattr(subprocess, "Popen", spy)
         execute(process.CommandSpec("true", (), FAST))
         assert isinstance(captured["argv"], tuple)
         assert captured["shell"] is False
@@ -686,14 +704,14 @@ class TestRunFailures:
     def test_default_policy_missing_oscap(self, trusted: Path) -> None:
         spec = process.CommandSpec("oscap", ("--version",), 1)
         with pytest.raises(process.ProcessExecutionError, match="not found"):
-            process.run(spec, trusted_dirs=[str(trusted)])
+            process.run(spec, trusted_dirs=[str(trusted)], owner_uid=OWNER)
 
     def test_unsafe_binary_is_refused_before_running(self, trusted: Path, tmp_path: Path) -> None:
         marker = tmp_path / "ran"
         tool = trusted / "true"
         tool.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
         tool.chmod(0o777)
-        with pytest.raises(process.ProcessPolicyError, match="world-writable"):
+        with pytest.raises(process.ProcessPolicyError, match="writable by group or others"):
             run_in(trusted)
         assert not marker.exists()
 
@@ -728,7 +746,7 @@ class TestRunFailures:
         def explode(*_: Any, **__: Any) -> Any:
             raise OSError
 
-        monkeypatch.setattr(process, "SpawnProcess", explode)
+        monkeypatch.setattr(subprocess, "Popen", explode)
         with pytest.raises(process.ProcessExecutionError, match="OSError"):
             execute(process.CommandSpec("true", (), 1))
 
@@ -747,7 +765,7 @@ class TestRunFailures:
         def broken(descriptor: int) -> bytes:
             raise OSError(errno.EIO, f"Input/output error on {descriptor}")
 
-        monkeypatch.setattr(process, "SpawnProcess", Recording)
+        monkeypatch.setattr(subprocess, "Popen", Recording)
         monkeypatch.setattr(process, "_read_chunk", broken)
         with pytest.raises(process.ProcessExecutionError, match="Input/output error"):
             execute(shell("echo hi; sleep 30"))
@@ -771,3 +789,176 @@ class TestExceptions:
         assert "\t" not in message
         assert "\\t" in message
         assert "z" * 100 not in message
+
+
+class TestSubcommands:
+    """Sub-command allow-list: only evaluation and information are permitted."""
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("xccdf", "eval"),
+            (
+                "xccdf",
+                "eval",
+                "--profile",
+                "p",
+                "--results",
+                "r.xml",
+                "--report",
+                "r.html",
+                "d.xml",
+            ),
+            ("info",),
+            ("info", "datastream.xml"),
+            ("--version",),
+        ],
+    )
+    def test_permitted_commands(self, args: tuple[str, ...]) -> None:
+        spec = process.CommandSpec("oscap", args, 1)
+        assert process.check_policy(spec, process.ALLOWED_EXECUTABLES).name == "oscap"
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("xccdf", "remediate", "--results", "r.xml", "arf.xml"),
+            ("xccdf", "generate", "fix", "arf.xml"),
+            ("xccdf", "generate", "guide", "arf.xml"),
+            ("xccdf", "eval", "--remediate", "d.xml"),
+            ("xccdf", "eval", "--remediate=1", "d.xml"),
+            ("xccdf", "eval", "remediate"),
+            ("xccdf", "eval", "d.xml", "generate", "fix"),
+            ("--remediate",),
+            ("remediate",),
+            ("generate", "fix"),
+            ("info", "--remediate"),
+            ("info", "remediate"),
+            ("xccdf",),
+            ("eval",),
+            ("oval", "eval", "d.xml"),
+            ("xccdf", "--profile", "p", "eval"),
+            ("--version", "extra"),
+            ("--version", "--version"),
+            ("-V",),
+            (),
+        ],
+    )
+    def test_rejected_commands(self, args: tuple[str, ...]) -> None:
+        spec = process.CommandSpec("oscap", args, 1)
+        with pytest.raises(process.ProcessPolicyError):
+            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+
+    def test_remediation_is_refused_before_resolution(self, trusted: Path) -> None:
+        spec = process.CommandSpec("oscap", ("xccdf", "remediate", "a.xml"), 1)
+        with pytest.raises(process.ProcessPolicyError, match="forbidden"):
+            process.run(spec, trusted_dirs=[str(trusted)], owner_uid=OWNER)
+
+    def test_forbidden_words_are_rejected_for_every_policy(self) -> None:
+        policies = {"true": process.ExecutablePolicy("true", command_prefixes=ANY_ARGUMENTS)}
+        for args in (("remediate",), ("--remediate",), ("generate", "fix")):
+            spec = process.CommandSpec("true", args, 1)
+            with pytest.raises(process.ProcessPolicyError, match="forbidden"):
+                process.check_policy(spec, policies)
+
+    def test_a_policy_without_commands_permits_nothing(self) -> None:
+        policies = {"true": process.ExecutablePolicy("true")}
+        with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
+            process.check_policy(process.CommandSpec("true", (), 1), policies)
+
+
+class TestHardening:
+    """Ownership, encoding, re-validation and cleanup of detached children."""
+
+    def test_defaults_are_strict(self) -> None:
+        assert process.ROOT_UID == 0
+        for function in (process.resolve_executable, process.run):
+            assert inspect.signature(function).parameters["owner_uid"].default == 0
+
+    def test_rejects_a_directory_with_the_wrong_owner(self, trusted: Path) -> None:
+        make_tool(trusted)
+        with pytest.raises(process.ProcessPolicyError, match="directory has the wrong owner"):
+            process.resolve_executable("tool", [str(trusted)], OWNER + 1)
+
+    def test_rejects_a_file_with_the_wrong_owner(
+        self, trusted: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        make_tool(trusted)
+        real = Path.stat
+
+        def foreign(path: Path, *args: Any, **keywords: Any) -> os.stat_result:
+            info = real(path, *args, **keywords)
+            if path.name != "tool":
+                return info
+            fields = list(info)
+            fields[4] = OWNER + 1
+            return os.stat_result(tuple(fields))
+
+        monkeypatch.setattr(Path, "stat", foreign)
+        with pytest.raises(process.ProcessPolicyError, match="executable has the wrong owner"):
+            resolve("tool", [str(trusted)])
+
+    def test_rejects_a_group_writable_binary(self, trusted: Path) -> None:
+        make_tool(trusted, mode=0o775)
+        with pytest.raises(process.ProcessPolicyError, match="executable is writable"):
+            resolve("tool", [str(trusted)])
+
+    def test_rejects_a_group_writable_directory(self, trusted: Path) -> None:
+        make_tool(trusted)
+        trusted.chmod(0o775)
+        with pytest.raises(process.ProcessPolicyError, match="directory is writable"):
+            resolve("tool", [str(trusted)])
+
+    def test_run_passes_the_owner_requirement_on(self, trusted: Path) -> None:
+        make_tool(trusted, "true")
+        spec = process.CommandSpec("true", (), 1)
+        with pytest.raises(process.ProcessPolicyError, match="wrong owner"):
+            process.run(spec, policies=POLICIES, trusted_dirs=[str(trusted)], owner_uid=OWNER + 1)
+
+    @pytest.mark.parametrize("argument", ["\ud800", "a\udfffb"])
+    def test_rejects_arguments_the_operating_system_cannot_encode(self, argument: str) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="cannot be encoded"):
+            process.CommandSpec("oscap", (argument,), 1)
+
+    def test_accepts_surrogate_escaped_bytes(self) -> None:
+        spec = process.CommandSpec("oscap", ("\udc80",), 1)
+        assert os.fsencode(spec.args[0]) == b"\x80"
+
+    def test_rejects_a_cwd_the_operating_system_cannot_encode(self) -> None:
+        with pytest.raises(process.ProcessPolicyError, match="cannot be encoded"):
+            process.CommandSpec("oscap", (), 1, cwd="/\ud800")
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("args", ("a\x00b",)),
+            ("args", ("x",) * (process.MAX_ARGUMENTS + 1)),
+            ("args", ("\ud800",)),
+            ("args", (7,)),
+            ("timeout_seconds", 0.0),
+            ("max_output_bytes", process.MAX_OUTPUT_BYTES + 1),
+            ("env_allow", ("SECRET_TOKEN",)),
+            ("cwd", "relative"),
+            ("executable", "../true"),
+        ],
+    )
+    def test_run_validates_a_mutated_specification_again(self, field: str, value: Any) -> None:
+        spec = process.CommandSpec("true", (), FAST)
+        object.__setattr__(spec, field, value)
+        with pytest.raises(process.ProcessPolicyError):
+            execute(spec)
+
+    def test_a_detached_group_member_is_killed_after_a_normal_exit(self) -> None:
+        result = execute(shell("sleep 60 >/dev/null 2>&1 & echo $!; exit 0"))
+        pid = int(result.stdout.split()[0])
+        assert not result.timed_out
+        assert result.returncode == 0
+        assert wait_until_dead(pid)
+
+    def test_a_session_leader_holding_the_pipes_is_reported_as_timed_out(self) -> None:
+        result = execute(shell("setsid sleep 60 & echo $!; exit 0", timeout=1.0))
+        pid = int(result.stdout.split()[0])
+        try:
+            assert result.timed_out
+            assert result.returncode == 0
+        finally:
+            os.kill(pid, signal.SIGKILL)

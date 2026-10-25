@@ -23,7 +23,6 @@ them. The environment of the child is never returned, logged or echoed.
 
 from __future__ import annotations
 
-import functools
 import math
 import os
 import re
@@ -39,7 +38,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, NoReturn, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
     from typing import IO
 
 TRUSTED_DIRECTORIES: Final[tuple[str, ...]] = ("/usr/bin", "/usr/sbin", "/bin", "/sbin")
@@ -56,18 +55,19 @@ MAX_ARGUMENTS: Final[int] = 64
 MAX_ARGUMENT_LENGTH: Final[int] = 4096
 MAX_ECHO_LENGTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 65536
-
-SpawnProcess: Final = cast(
-    "Callable[..., subprocess.Popen[bytes]]", functools.partial(subprocess.Popen)
-)
+WAIT_POLL_SECONDS: Final[float] = 0.01
+ROOT_UID: Final[int] = 0
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
+FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})
+FORBIDDEN_SEQUENCES: Final[frozenset[tuple[str, ...]]] = frozenset({("generate", "fix")})
 
 _EXECUTABLE_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 _ENVIRONMENT_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 _FIRST_PRINTABLE: Final[int] = 32
 _DELETE: Final[int] = 127
 _EXECUTE_BITS: Final[int] = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+_GROUP_OR_OTHER_WRITE: Final[int] = stat.S_IWGRP | stat.S_IWOTH
 
 
 class ProcessError(Exception):
@@ -108,22 +108,39 @@ class ExecutablePolicy:
 
     Attributes:
         name: The bare executable name.
-        allowed_options: The exact option names that may appear in the
-            arguments. An option may carry a value as ``--name=value``.
+        allowed_options: The exact option names that may appear after the
+            command prefix. An option may carry a value as ``--name=value``.
+        command_prefixes: The leading argument sequences that select a
+            permitted sub-command. The arguments must start with one of them.
+            An empty prefix permits any leading arguments and is meant for
+            tests; the default permits nothing.
+        standalone_commands: Argument sequences that are permitted only when
+            they are the complete argument list.
     """
 
     name: str
     allowed_options: frozenset[str] = frozenset()
+    command_prefixes: tuple[tuple[str, ...], ...] = ()
+    standalone_commands: tuple[tuple[str, ...], ...] = ()
 
 
 ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
     {
         "oscap": ExecutablePolicy(
             "oscap",
-            frozenset({"--profile", "--results-arf", "--results", "--report", "--version"}),
+            frozenset({"--profile", "--results-arf", "--results", "--report"}),
+            command_prefixes=(("xccdf", "eval"), ("info",)),
+            standalone_commands=(("--version",),),
         )
     }
 )
+
+
+def _check_encodable(value: str) -> None:
+    try:
+        os.fsencode(value)
+    except UnicodeEncodeError:
+        _deny(f"value cannot be encoded for the operating system: {_safe(value)}")
 
 
 def _check_argument(argument: object) -> str:
@@ -137,6 +154,7 @@ def _check_argument(argument: object) -> str:
         ord(character) < _FIRST_PRINTABLE or ord(character) == _DELETE for character in argument
     ):
         _deny(f"argument contains a control character or NUL: {_safe(argument)}")
+    _check_encodable(argument)
     return argument
 
 
@@ -174,6 +192,7 @@ def _check_cwd(value: object) -> str | None:
         return None
     if not isinstance(value, str) or "\x00" in value:
         _deny(f"cwd must be a string without NUL: {_safe(value)}")
+    _check_encodable(value)
     if not value.startswith("/") or not Path(value).is_dir():
         _deny(f"cwd must be an absolute existing directory: {_safe(value)}")
     return value
@@ -261,12 +280,17 @@ def check_policy(spec: CommandSpec, policies: Mapping[str, ExecutablePolicy]) ->
 
     Raises:
         ProcessPolicyError: If the executable is not allow-listed, or an
-            argument starting with ``-`` is forbidden or not allow-listed.
+            command is not an allowed sub-command of the executable, an
+            argument is forbidden, or an option is not allow-listed.
     """
+    _reject_forbidden_words(spec.args)
     policy = policies.get(spec.executable)
     if policy is None:
         _deny(f"executable is not allow-listed: {_safe(spec.executable)}")
-    for argument in spec.args:
+    if spec.args in policy.standalone_commands:
+        return policy
+    prefix = _matching_prefix(spec.args, policy)
+    for argument in spec.args[len(prefix) :]:
         if not argument.startswith("-"):
             continue
         name = _option_name(argument)
@@ -277,7 +301,23 @@ def check_policy(spec: CommandSpec, policies: Mapping[str, ExecutablePolicy]) ->
     return policy
 
 
-def _trusted_directories(search_dirs: Sequence[str]) -> list[tuple[Path, Path]]:
+def _reject_forbidden_words(args: tuple[str, ...]) -> None:
+    for index, argument in enumerate(args):
+        if _option_name(argument) in FORBIDDEN_WORDS:
+            _deny(f"argument is forbidden: {_safe(argument)}")
+        for sequence in FORBIDDEN_SEQUENCES:
+            if args[index : index + len(sequence)] == sequence:
+                _deny(f"argument sequence is forbidden: {_safe(' '.join(sequence))}")
+
+
+def _matching_prefix(args: tuple[str, ...], policy: ExecutablePolicy) -> tuple[str, ...]:
+    for prefix in policy.command_prefixes:
+        if args[: len(prefix)] == prefix:
+            return prefix
+    return _deny(f"command is not allow-listed for {policy.name}: {_safe(' '.join(args))}")
+
+
+def _trusted_directories(search_dirs: Sequence[str], owner_uid: int) -> list[tuple[Path, Path]]:
     directories: list[tuple[Path, Path]] = []
     for directory in search_dirs:
         if not _is_text(directory) or not directory.startswith("/") or "\x00" in directory:
@@ -289,24 +329,30 @@ def _trusted_directories(search_dirs: Sequence[str]) -> list[tuple[Path, Path]]:
             continue
         if not stat.S_ISDIR(mode):
             continue
-        if mode & stat.S_IWOTH:
-            _deny(f"trusted directory is world-writable: {_safe(directory)}")
+        if mode & _GROUP_OR_OTHER_WRITE:
+            _deny(f"trusted directory is writable by group or others: {_safe(directory)}")
+        if real.stat().st_uid != owner_uid:
+            _deny(f"trusted directory has the wrong owner: {_safe(directory)}")
         directories.append((Path(directory), real))
     return directories
 
 
-def resolve_executable(name: str, search_dirs: Sequence[str] = TRUSTED_DIRECTORIES) -> str:
+def resolve_executable(
+    name: str, search_dirs: Sequence[str] = TRUSTED_DIRECTORIES, owner_uid: int = ROOT_UID
+) -> str:
     """Resolve ``name`` to an absolute path inside a trusted directory.
 
     The caller's ``PATH`` is never used. A symlink is accepted only if it
     resolves to a file directly inside one of the trusted directories. The
-    file must be a regular, executable file that is not world-writable. The
+    file must be a regular, executable file owned by ``owner_uid`` that is not
+    writable by group or others, and so must every trusted directory. The
     returned path is the vetted path inside the trusted directory, not the
     symlink target, so multi-call binaries keep their name.
 
     Args:
         name: Bare executable name; separators and traversal are rejected.
         search_dirs: Absolute trusted directories, searched in order.
+        owner_uid: Required owner of directories and file. Only tests change it.
 
     Returns:
         The absolute path of the executable.
@@ -317,7 +363,7 @@ def resolve_executable(name: str, search_dirs: Sequence[str] = TRUSTED_DIRECTORI
     """
     if not _is_text(name) or not _EXECUTABLE_NAME.fullmatch(name):
         _deny(f"invalid executable name: {_safe(name)}")
-    directories = _trusted_directories(search_dirs)
+    directories = _trusted_directories(search_dirs, owner_uid)
     real_directories = {pair[1] for pair in directories}
     for pair in directories:
         candidate = pair[0] / name
@@ -328,13 +374,16 @@ def resolve_executable(name: str, search_dirs: Sequence[str] = TRUSTED_DIRECTORI
         if resolved.parent not in real_directories:
             _deny(f"executable resolves outside the trusted directories: {_safe(candidate)}")
         try:
-            mode = resolved.stat().st_mode
+            info = resolved.stat()
         except OSError:
             continue
+        mode = info.st_mode
         if not stat.S_ISREG(mode):
             _deny(f"executable is not a regular file: {_safe(candidate)}")
-        if mode & stat.S_IWOTH:
-            _deny(f"executable is world-writable: {_safe(candidate)}")
+        if mode & _GROUP_OR_OTHER_WRITE:
+            _deny(f"executable is writable by group or others: {_safe(candidate)}")
+        if info.st_uid != owner_uid:
+            _deny(f"executable has the wrong owner: {_safe(candidate)}")
         if not mode & _EXECUTE_BITS or not os.access(resolved, os.X_OK):
             _deny(f"file is not executable: {_safe(candidate)}")
         return str(candidate)
@@ -431,12 +480,16 @@ def _pump(process: subprocess.Popen[bytes], deadline: float, out: _Capture, err:
                     key.data.feed(chunk)
                 else:
                     selector.unregister(key.fileobj)
-    if not timed_out:
-        try:
-            process.wait(timeout=max(deadline - time.monotonic(), 0.0))
-        except subprocess.TimeoutExpired:
-            timed_out = True
-    return timed_out
+    return timed_out or _wait_for_exit(process, deadline)
+
+
+def _wait_for_exit(process: subprocess.Popen[bytes], deadline: float) -> bool:
+    flags = os.WEXITED | os.WNOHANG | os.WNOWAIT
+    while os.waitid(os.P_PID, process.pid, flags) is None:
+        if time.monotonic() >= deadline:
+            return True
+        time.sleep(WAIT_POLL_SECONDS)
+    return False
 
 
 def run(
@@ -444,21 +497,29 @@ def run(
     *,
     policies: Mapping[str, ExecutablePolicy] | None = None,
     trusted_dirs: Sequence[str] | None = None,
+    owner_uid: int = ROOT_UID,
 ) -> CommandResult:
     """Run ``spec`` under the execution policy and return the bounded result.
 
     The process runs in its own session with closed standard input. Output is
     read in chunks from both pipes and only the first ``max_output_bytes`` of
-    each stream are kept; the rest is drained and discarded. When the timeout
-    expires the whole process group is killed and ``timed_out`` is set.
+    each stream are kept; the rest is drained and discarded. The whole process
+    group is killed after the leader exits, so detached members do not outlive
+    the run, and when the timeout expires. A timeout sets ``timed_out``. A
+    descendant in another session that keeps the pipes open also ends in
+    ``timed_out``, even if the leader exited with status 0.
 
-    ``policies`` and ``trusted_dirs`` exist only so that unit tests can run
+    The specification is validated again here, so a specification that was
+    altered after construction cannot bypass the argument checks.
+
+    ``policies``, ``trusted_dirs`` and ``owner_uid`` exist only so that unit tests can run
     harmless system utilities. Production callers never pass them.
 
     Args:
         spec: The command to run.
         policies: Test-only replacement for :data:`ALLOWED_EXECUTABLES`.
         trusted_dirs: Test-only replacement for :data:`TRUSTED_DIRECTORIES`.
+        owner_uid: Test-only replacement for the required owner, root.
 
     Returns:
         The captured result.
@@ -468,16 +529,26 @@ def run(
         ProcessExecutionError: If the executable is missing, cannot be
             started or the output cannot be read.
     """
+    spec = CommandSpec(
+        spec.executable,
+        spec.args,
+        spec.timeout_seconds,
+        spec.max_output_bytes,
+        spec.env_allow,
+        spec.cwd,
+    )
     check_policy(spec, ALLOWED_EXECUTABLES if policies is None else policies)
     executable = resolve_executable(
-        spec.executable, TRUSTED_DIRECTORIES if trusted_dirs is None else trusted_dirs
+        spec.executable,
+        TRUSTED_DIRECTORIES if trusted_dirs is None else trusted_dirs,
+        owner_uid,
     )
     argv = (executable, *spec.args)
     out = _Capture(spec.max_output_bytes)
     err = _Capture(spec.max_output_bytes)
     started = time.monotonic()
     try:
-        process = SpawnProcess(
+        process = subprocess.Popen(
             argv,
             shell=False,
             stdin=subprocess.DEVNULL,
@@ -494,8 +565,7 @@ def run(
     with process:
         try:
             timed_out = _pump(process, started + spec.timeout_seconds, out, err)
-            if timed_out:
-                _kill_group(process)
+            _kill_group(process)
             returncode = process.wait()
         except OSError as error:
             _fail(f"cannot read output of {_safe(spec.executable)}: {error.strerror}")
