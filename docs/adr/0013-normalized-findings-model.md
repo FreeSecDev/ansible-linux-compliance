@@ -260,4 +260,5 @@ verdict from findings alone. These invariants apply to every backend and every r
 - **Pinned digest at scan time.** A completed run whose `content.content_sha256` differs from the pinned digest is turned
   into a `failed` run, so content swapped between verification and scan never yields `pass` or `fail`.
 - **Summary.** The module summary is the count per outcome, the total and `run_status`; it contains no percentage and no
-  compliance statement (ADR 0016, proposed in pull request #12).
+  compliance statement ([ADR 0016](0016-report-schema-and-summary-semantics.md)). `scan-run.json` is the `model.dumps`
+  document that the reporting package reads as ScanRun JSON.
