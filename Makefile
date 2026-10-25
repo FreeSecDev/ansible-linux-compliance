@@ -12,7 +12,7 @@ COLLECTION_PATH := ansible_collections/freesecdev/linux_compliance
 COLLECTION_TREE := build/collection/$(COLLECTION_PATH)
 COLLECTION_LINK := build/collections/$(COLLECTION_PATH)
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
-	tests/unit/plugins tests/sanity tests/integration extensions
+	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
 TREE_SORT := sort -z
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
@@ -142,8 +142,9 @@ lint-packer:
 	$(call NOT_IMPLEMENTED,lint-packer,FREES-64)
 
 security: require-uv
-	$(RUN) bandit -c pyproject.toml -r tools plugins -q -x plugins/module_utils/compliance/process.py
+	$(RUN) bandit -c pyproject.toml -r tools plugins -q -x plugins/module_utils/compliance/process.py,plugins/module_utils/compliance/openscap.py
 	$(RUN) bandit -c pyproject.toml -q -s B404,B603 plugins/module_utils/compliance/process.py
+	$(RUN) bandit -c pyproject.toml -q -s B405 plugins/module_utils/compliance/openscap.py
 	$(RUN) pre-commit run gitleaks-history --hook-stage manual --all-files
 	$(RUN) zizmor --persona $(ZIZMOR_PERSONA) .github/workflows
 

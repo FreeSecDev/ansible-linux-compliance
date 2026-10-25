@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TestResult xmlns="http://checklists.nist.gov/xccdf/1.2" id="x" start-time="2026-10-25T10:00:00+00:00" end-time="2026-10-25T10:00:09+00:00" version="1.0">
+    <benchmark id="xccdf_org.example.synthetic_benchmark_demo"/>
+    <profile idref="xccdf_org.example.synthetic_profile_baseline"/>
+    <rule-result idref="xccdf_org.example.synthetic_rule_alpha" severity="high" time="2026-10-25T10:00:01+00:00">
+      <result>pass</result>
+    </rule-result>
+</TestResult>

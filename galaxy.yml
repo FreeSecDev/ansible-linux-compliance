@@ -52,6 +52,7 @@ build_ignore:
   - docs/research
   - htmlcov
   - pyproject.toml
+  - tests/fixtures
   - tests/unit/tools
   - tools
   - uv.lock

@@ -81,6 +81,7 @@ ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
         "typing",
         "unicodedata",
         "xml.etree.ElementTree",
+        "xml.parsers.expat",
     }
 )
 ALLOWED_IMPORT_PREFIXES: Final[tuple[str, ...]] = (

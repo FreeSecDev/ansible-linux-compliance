@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_org.example.synthetic_benchmark_demo">
+  <status>draft</status>
+  <title>Synthetic benchmark</title>
+  <version>1.0</version>
+  <TestResult id="xccdf_org.example.synthetic_testresult_demo" start-time="2026-10-25T10:00:00+00:00" end-time="2026-10-25T10:00:09+00:00" version="1.0">
+    <benchmark href="#synthetic-datastream" id="xccdf_org.example.synthetic_benchmark_demo"/>
+    <profile idref="xccdf_org.example.synthetic_profile_baseline"/>
+    <title>Synthetic scan</title>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_pass" severity="high" time="2026-10-25T10:00:01+00:00">
+      <result>pass</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_fail" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>fail</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_na" severity="low" time="2026-10-25T10:00:01+00:00">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_nc" severity="info" time="2026-10-25T10:00:01+00:00">
+      <result>notchecked</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_err" severity="unknown" time="2026-10-25T10:00:01+00:00">
+      <result>error</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_fixed" severity="high" time="2026-10-25T10:00:01+00:00">
+      <result>fixed</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_info" severity="info" time="2026-10-25T10:00:01+00:00">
+      <result>informational</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_nsel" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_r_unk" severity="bogus" time="2026-10-25T10:00:01+00:00">
+      <result>unknown</result>
+    </rule-result>
+  </TestResult>
+</Benchmark>

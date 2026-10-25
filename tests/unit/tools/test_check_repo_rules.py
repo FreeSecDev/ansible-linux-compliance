@@ -510,6 +510,12 @@ OTHER_BYPASSES = {
     "import-asyncio": "import asyncio\n",
     "import-multiprocessing": "import multiprocessing\n",
     "import-shlex": "import shlex\n",
+    "import-xml-dom": "import xml.dom.minidom\n",
+    "import-xml-sax": "import xml.sax\n",
+    "import-xml-expat-reader": "import xml.parsers.expatreader\n",
+    "import-xml-parsers-package": "from xml.parsers import expat\n",
+    "import-xml-etree-celementtree": "import xml.etree.cElementTree\n",
+    "import-xml-etree-from": "from xml.etree import ElementTree\n",
     "import-prefix-lookalike": "import ansible.module_utils_evil\n",
     "import-collection-lookalike": "import ansible_collections.freesecdev.linux_compliance_evil\n",
     "import-other-collection": "import ansible_collections.other.collection.plugins\n",
@@ -586,6 +592,7 @@ BENIGN_PLUGIN_SOURCES = {
         "import hashlib\nimport functools\nimport itertools\nimport stat\n"
         "from pathlib import Path\nimport collections\nfrom collections import abc\n"
         "from collections.abc import Mapping\nimport xml.etree.ElementTree\n"
+        "import xml.parsers.expat\n"
     ),
     "os-path-import": "import os.path\nos.path.join('a', 'b')\n",
     "os-path-from-import": "from os import path\npath.join('a', 'b')\n",

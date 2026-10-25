@@ -53,7 +53,7 @@ standard-library only and supports Python 3.9 to 3.14. The shipped interface is:
 | `CommandSpec` | Frozen. `executable` (bare name matching `[a-z][a-z0-9_-]{0,63}`), `args` (tuple of str), `timeout_seconds` (required, above 0 and at most `MAX_TIMEOUT_SECONDS`, 3600), `max_output_bytes` (1 to 16 MiB, default 1 MiB, applied to stdout and stderr each), `env_allow`, `cwd` (absolute existing directory or `None`) |
 | Arguments | Each is a non-empty `str` of at most 4096 characters without NUL or other control characters, at most 64 arguments. Shell metacharacters are data because no shell is involved |
 | Options | An argument starting with `-` must name an option in the executable's `ExecutablePolicy.allowed_options`; `--name=value` is matched on the name. `FORBIDDEN_OPTIONS` (`--fetch-remote-resources`) is rejected for every executable, even if a policy lists it, so remote fetching cannot be enabled |
-| Allow-list | `ALLOWED_EXECUTABLES` holds only `oscap`. Its sub-commands are allow-listed as leading argument sequences: `xccdf eval` and `info`, each followed only by allow-listed options (`--profile`, `--results-arf`, `--results`, `--report`) and positional values, and `--version` alone. Any other sequence is refused, so `xccdf remediate`, `xccdf generate fix`, `oval eval` and a bare `xccdf` never run. The words `remediate` and `--remediate` and the sequence `generate fix` are refused anywhere in the arguments for every executable, because running upstream fix scripts is excluded by ADR 0003. A policy with no command prefixes permits nothing. Adding an executable, sub-command or option requires a security review |
+| Allow-list | `ALLOWED_EXECUTABLES` holds only `oscap`. Its sub-commands are allow-listed as leading argument sequences: `xccdf eval` and `info`, each followed only by allow-listed options (`--profile`, `--results-arf`, `--results`, `--report`, `--tailoring-file`) and positional values, and `--version` alone. Any other sequence is refused, so `xccdf remediate`, `xccdf generate fix`, `oval eval` and a bare `xccdf` never run. The words `remediate` and `--remediate` and the sequence `generate fix` are refused anywhere in the arguments for every executable, because running upstream fix scripts is excluded by ADR 0003. A policy with no command prefixes permits nothing. Adding an executable, sub-command or option requires a security review |
 | `resolve_executable(name, search_dirs, owner_uid)` | Searches only `TRUSTED_DIRECTORIES` (`/usr/bin`, `/usr/sbin`, `/bin`, `/sbin`), never `PATH`. Rejects names with separators or traversal, trusted directories and files that are not owned by `owner_uid` (root, 0, by default) or are writable by group or others, symlinks that resolve outside the trusted directories, non-regular files and non-executable files. A missing file raises `ProcessExecutionError`. It returns the vetted path inside the trusted directory, not the symlink target |
 | `confined_path(base, candidate)` | Returns the normalised absolute path, rejects NUL, escapes from `base` and any symlink below `base`. Callers still validate their own path arguments |
 | `run(spec)` | Returns a frozen `CommandResult` (`argv`, `returncode`, `stdout`, `stderr`, `stdout_truncated`, `stderr_truncated`, `duration_seconds`, `timed_out`). The child gets `shell=False`, `stdin=DEVNULL`, `close_fds=True`, `start_new_session=True` and an explicit environment |
@@ -83,7 +83,7 @@ Deviations and decisions:
 - `tools/lint/check_repo_rules.py` applies a deny-by-default rule to Python files under `plugins/` other than
   `process.py`. They may import only allow-listed standard library modules (`__future__`, `collections`,
   `collections.abc`, `dataclasses`, `datetime`, `enum`, `functools`, `hashlib`, `itertools`, `json`, `os.path`,
-  `pathlib`, `re`, `stat`, `types`, `typing`, `unicodedata`, `xml.etree.ElementTree`), `ansible.module_utils` and this
+  `pathlib`, `re`, `stat`, `types`, `typing`, `unicodedata`, `xml.etree.ElementTree`, `xml.parsers.expat`), `ansible.module_utils` and this
   collection; star imports and `from os import` of anything but `path` fail. `os` is usable only as `os.path`. `exec`,
   `eval`, `compile` and `__import__` are banned. Attribute names `system`, `popen`, `run_command`, `Popen`,
   `import_module`, `create_subprocess_*`, `exec*`, `spawn*`, `fork*`, `posix_spawn*` and class-walking dunders are
@@ -105,3 +105,21 @@ Deviations and decisions:
   those two files, and is excluded from the built collection. This departs from the Ansible Automation Platform
   certification ignore policy, which the collection does not target. A repository test fails if the ignore files
   contain anything else.
+
+## Amendment 2026-10-25: OpenSCAP backend (FREES-48)
+
+The OpenSCAP backend (`plugins/module_utils/compliance/openscap.py`) is the first caller of the helper. It required two
+narrow policy changes; everything else is unchanged.
+
+- `oscap` option allow-list: `--tailoring-file` was added so that an operator tailoring file can be passed to
+  `oscap xccdf eval`. The sub-command prefixes, `FORBIDDEN_OPTIONS`, the forbidden words (`remediate`, `generate fix`)
+  and the rule that every `-` argument must be allow-listed still apply, and a test asserts that the new entry opens
+  no other option. The backend never passes `--remediate`, `--fetch-remote-resources` or `--report`.
+- Import allow-list for `plugins/`: `xml.parsers.expat` was added. The XCCDF parser needs the expat parser object to
+  turn off parameter entity parsing (`SetParamEntityParsing`), which the high-level `ElementTree` parser does not
+  expose. `xml.etree.ElementTree` was already allowed; the parser uses it only to hold the kept elements. Other XML
+  modules (`xml.dom`, `xml.sax`, `xml.etree.cElementTree`) stay denied and are covered by repository-rule tests.
+- Bandit reports B405 for importing `xml.etree.ElementTree`. Bandit has no per-file skip and inline `nosec` comments
+  are banned, so `make security` and the pre-push hook run Bandit once more on `openscap.py` alone with only B405
+  skipped, and exclude that file from the unskipped run. Ruff S405 and FBT003 are ignored for the same file in
+  `pyproject.toml`, each with a justification. The B314 family (calls that parse with `ElementTree`) stays active.

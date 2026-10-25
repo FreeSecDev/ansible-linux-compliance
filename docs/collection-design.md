@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks).
 
 ## Layout
 
@@ -13,10 +13,11 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-69 (ansibl
 |---|---|
 | `galaxy.yml` | Namespace `freesecdev`, name `linux_compliance`, Apache-2.0, repository links, tags and `build_ignore` |
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
-| `plugins/module_utils/compliance/` | Shared target-side code; currently `model.py`, the findings model |
+| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF parser), `backends.py` (composition root) |
 | `plugins/{modules,action,filter,lookup}/` | Created together with the first plugin of each kind; Git cannot track empty directories and Galaxy does not need placeholders |
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
+| `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; copied to the test tree, excluded from the tarball |
 | `roles/` | The `discover`, `audit`, `remediate`, `verify` and `evidence` role skeletons (FREES-40) |
 | `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
@@ -107,6 +108,82 @@ without name or time. `make package-check`, which CI runs, builds twice from tre
 fails unless the two SHA-256 values are identical. The remaining assumption is the same `tar`, `gzip` and `jq`
 behaviour; byte-identical output across different machines was checked by comparing a local build with the CI build of
 the same commit (see the pull request that introduced it).
+
+## OpenSCAP backend
+
+Jira: FREES-48. Code: `plugins/module_utils/compliance/scanner.py`, `openscap.py` and `backends.py`; the decisions are in
+[ADR 0004](adr/0004-audited-process-execution.md) (process policy) and
+[ADR 0013](adr/0013-normalized-findings-model.md) (outcomes).
+
+### Interface
+
+`scanner.py` is backend-neutral and standard library only (Python 3.9 or newer).
+
+| Item | Contract |
+|---|---|
+| `ScanSettings` | `content_root`, `output_root` (absolute), `timeout_seconds` (default 1800, at most 3600) and `max_result_bytes` (default 256 MiB). Fixed when a backend is created |
+| `ScanRequest` | `run_id`, `host`, `benchmark_id`, `profile_id`, `content_path`, `output_dir`, optional `tailoring_path` and `expected_rule_ids`. `benchmark_id`, `host` and `run_id` are required because a `ScanRun` needs them even when the scanner fails; `expected_rule_ids` lets a failed run list every selected rule as `error` |
+| `ScanBackend.audit(request)` | Returns a `model.ScanRun`. Raises `ScanRequestError` for an invalid or unsafe request, before anything runs |
+| `BackendRegistry` | `register(name, factory)`, `create(name, settings)`, `names()`. Orchestration asks `backends.default_registry()` for a backend by name and never imports `openscap` |
+
+The factory receives only `ScanSettings`. The `runner` and `clock` parameters of `OpenScapBackend` exist so that unit
+tests can inject a fake process layer; they are not settings, are not reachable through the registry and are never
+passed by production code. The repository rule that bans the `policies`, `trusted_dirs` and `owner_uid` keywords in
+`plugins/` still applies.
+
+### Running oscap
+
+The backend builds `oscap xccdf eval --profile <id> [--tailoring-file <path>] --results-arf <dir>/results-arf.xml
+--results <dir>/results.xml <datastream>` and runs it only through `process.run`. It never passes `--remediate` or
+`--fetch-remote-resources`, and the helper would refuse both. Content, tailoring and output paths go through
+`process.confined_path`, so `..` escapes and symlinks are rejected. The output directory is created by the backend
+with mode 0700, must not exist, and is never reused, so existing files are never overwritten. The SHA-256 of the
+datastream is recorded in `ScanRun.content`; it is computed before the scan and again afterwards, and a difference is a
+scanner failure.
+
+| Situation | Result |
+|---|---|
+| Exit status `0` and results with no `fail` or `error` | `completed` |
+| Exit status `2` and at least one `fail` or `error` | `completed`; a failed rule is a normal result |
+| Exit status `0` with a failed or errored rule, or `2` with none | `failed`: the status contradicts the results |
+| Any other exit status, including a signal | `failed` |
+| Timeout | `timed_out` |
+| `oscap` missing or not startable | `failed` |
+| Unreadable, hostile or incomplete results, or results for another profile or benchmark | `failed` |
+
+A `failed` or `timed_out` run carries an `error_message` and only `error` findings, one per `expected_rule_ids` entry.
+A scanner failure is never `pass` or `fail` (ADR 0013).
+
+### XCCDF results parser
+
+Results come from a host and are untrusted. The parser uses only the standard library and layers its defences:
+
+1. The file must be a regular file and not a symlink, is bounded by `max_result_bytes` before and while it is read, and
+   must be non-empty UTF-8.
+2. Any `<!DOCTYPE` or `<!ENTITY` in the text is rejected before parsing, so entity expansion (billion laughs) and
+   external entities (XXE) cannot occur.
+3. The expat parser is created directly with `SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)` and has no
+   external entity handler; its DOCTYPE, entity declaration and external entity handlers reject again if the text check
+   were bypassed. The standard library is safe enough here because of this layering, not because of the expat version:
+   the amplification limits of expat 2.4.0 and later, and the differing expat builds of Python 3.9 to 3.14, are not
+   relied upon.
+4. Element count (default 2,000,000) and depth (default 64) are bounded while parsing. Only the root, the benchmark
+   `version` and the `TestResult` subtree are kept in memory.
+5. Only the XCCDF 1.2 namespace is accepted; a missing or other namespace is an error.
+
+`rule-result/result` values go through `model.map_xccdf_result`, so unknown values become `error` with a message.
+The rule ID (full `xccdf_*_rule_*` form), severity (`unknown` when absent or unrecognised), profile ID, benchmark ID
+and version, and the start and end times (normalised to UTC; a timestamp without a zone is an error) are read into
+`model` types. A rule that appears twice, a rule ID that the model rejects, or a missing profile, version or time is a
+parse error. Parse errors never produce a pass.
+
+### Tests and what is not covered
+
+Unit tests fake the process layer and run no `oscap`. They use hand-written synthetic XCCDF fixtures in
+`tests/fixtures/xccdf/` and hostile samples in `tests/fixtures/adversarial/` (billion laughs, external entity, DOCTYPE,
+parameter entity, oversized, deeply nested, unknown result value, missing namespace, truncated, non-UTF-8); cases that
+depend on the filesystem, such as a symlinked results path, are created inside the tests. A real `oscap`
+run against real content belongs to a later Molecule story and is not covered here.
 
 ## Adding plugins
 
