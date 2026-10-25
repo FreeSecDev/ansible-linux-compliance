@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly EXPECTED_ACCOUNT_ID='@@AWS_ACCOUNT_ID@@'
+readonly EXPECTED_REGION='@@AWS_REGION@@'
+readonly STATE_BUCKET='@@STATE_BUCKET@@'
+readonly TARGET_REPOSITORY='@@GITHUB_REPOSITORY@@'
+readonly STATE_KEY='account/terraform.tfstate'
+readonly NONCURRENT_VERSION_RETENTION_DAYS=90
+readonly NONCURRENT_VERSIONS_KEPT=10
+readonly INCOMPLETE_UPLOAD_RETENTION_DAYS=7
+readonly ACCOUNT_STACK_DIR='infra/account'
+readonly BACKEND_FILE='backend.hcl'
+readonly TFVARS_FILE='account.local.tfvars'
+readonly PLAN_FILE='account.tfplan'
+readonly IDENTITY_CONFIRMATION="yes-${EXPECTED_ACCOUNT_ID}"
+readonly APPLY_CONFIRMATION="apply-${EXPECTED_ACCOUNT_ID}"
+
+fail() {
+  printf 'error: %s\n' "$1" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" > /dev/null 2>&1 || fail "$1 is required but was not found on PATH"
+}
+
+require_terminal() {
+  [[ -t 0 ]] || fail 'this script asks for typed confirmations and must run in an interactive terminal'
+}
+
+confirm() {
+  local expected="$1"
+  local answer
+  printf 'Type %s to continue: ' "${expected}"
+  read -r answer
+  [[ "${answer}" == "${expected}" ]] || fail 'confirmation did not match; nothing was changed'
+}
+
+enter_repository_root() {
+  cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+  [[ -d "${ACCOUNT_STACK_DIR}" ]] || fail "${ACCOUNT_STACK_DIR} not found; run this from a checkout of ${TARGET_REPOSITORY}"
+}
+
+resolve_region() {
+  local configured_region
+  configured_region="${AWS_REGION:-${AWS_DEFAULT_REGION:-$(aws configure get region 2> /dev/null || true)}}"
+  [[ "${configured_region}" == "${EXPECTED_REGION}" ]] ||
+    fail "configured region is '${configured_region:-unset}', expected ${EXPECTED_REGION}; export AWS_REGION=${EXPECTED_REGION}"
+  export AWS_REGION="${EXPECTED_REGION}"
+  export AWS_DEFAULT_REGION="${EXPECTED_REGION}"
+}
+
+verify_identity() {
+  local account_id caller_arn
+  account_id="$(aws sts get-caller-identity --query Account --output text)"
+  caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
+  printf 'Caller ARN: %s\nAccount:    %s\nRegion:     %s\n' "${caller_arn}" "${account_id}" "${AWS_REGION}"
+  [[ "${account_id}" == "${EXPECTED_ACCOUNT_ID}" ]] ||
+    fail "credentials belong to account ${account_id}, expected ${EXPECTED_ACCOUNT_ID}"
+  if [[ "${caller_arn}" == *:root ]]; then
+    printf '\n!!! WARNING: these are ROOT credentials. !!!\n'
+    printf '!!! Root is accepted for this one-time bootstrap only (ADR 0014). !!!\n'
+    printf '!!! CI never uses root or access keys. Enable root MFA and stop using root afterwards. !!!\n\n'
+  fi
+  printf 'This script creates the state bucket %s and applies %s.\n' "${STATE_BUCKET}" "${ACCOUNT_STACK_DIR}"
+  confirm "${IDENTITY_CONFIRMATION}"
+}
+
+bucket_exists() {
+  aws s3api head-bucket --bucket "${STATE_BUCKET}" --expected-bucket-owner "${EXPECTED_ACCOUNT_ID}" > /dev/null 2>&1
+}
+
+create_bucket_if_missing() {
+  if bucket_exists; then
+    printf 'State bucket %s already exists in this account; verifying its hardening.\n' "${STATE_BUCKET}"
+    return
+  fi
+  printf 'Creating state bucket %s.\n' "${STATE_BUCKET}"
+  aws s3api create-bucket \
+    --bucket "${STATE_BUCKET}" \
+    --create-bucket-configuration "LocationConstraint=${EXPECTED_REGION}" \
+    --object-ownership BucketOwnerEnforced > /dev/null
+  aws s3api wait bucket-exists --bucket "${STATE_BUCKET}"
+}
+
+tls_only_policy() {
+  cat << POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::${STATE_BUCKET}", "arn:aws:s3:::${STATE_BUCKET}/*"],
+      "Condition": {"Bool": {"aws:SecureTransport": "false"}}
+    },
+    {
+      "Sid": "DenyOutdatedTls",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::${STATE_BUCKET}", "arn:aws:s3:::${STATE_BUCKET}/*"],
+      "Condition": {"NumericLessThan": {"s3:TlsVersion": "1.2"}}
+    }
+  ]
+}
+POLICY
+}
+
+lifecycle_configuration() {
+  cat << LIFECYCLE
+{
+  "Rules": [
+    {
+      "ID": "expire-noncurrent-state-versions",
+      "Status": "Enabled",
+      "Filter": {},
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": ${NONCURRENT_VERSION_RETENTION_DAYS},
+        "NewerNoncurrentVersions": ${NONCURRENT_VERSIONS_KEPT}
+      },
+      "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": ${INCOMPLETE_UPLOAD_RETENTION_DAYS}}
+    }
+  ]
+}
+LIFECYCLE
+}
+
+harden_bucket() {
+  aws s3api put-public-access-block \
+    --bucket "${STATE_BUCKET}" \
+    --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
+  aws s3api put-bucket-ownership-controls \
+    --bucket "${STATE_BUCKET}" \
+    --ownership-controls 'Rules=[{ObjectOwnership=BucketOwnerEnforced}]'
+  aws s3api put-bucket-versioning \
+    --bucket "${STATE_BUCKET}" \
+    --versioning-configuration 'Status=Enabled'
+  aws s3api put-bucket-encryption \
+    --bucket "${STATE_BUCKET}" \
+    --server-side-encryption-configuration \
+    '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"},"BucketKeyEnabled":true}]}'
+  aws s3api put-bucket-policy --bucket "${STATE_BUCKET}" --policy "$(tls_only_policy)"
+  aws s3api put-bucket-lifecycle-configuration \
+    --bucket "${STATE_BUCKET}" \
+    --lifecycle-configuration "$(lifecycle_configuration)"
+  aws s3api put-bucket-tagging \
+    --bucket "${STATE_BUCKET}" \
+    --tagging "TagSet=[{Key=project,Value=freesecdev},{Key=repository,Value=${TARGET_REPOSITORY}},{Key=managed-by,Value=bootstrap-script},{Key=owner,Value=freesecdev},{Key=cost-center,Value=freesecdev}]"
+}
+
+expect_value() {
+  local description="$1" expected="$2" actual="$3"
+  [[ "${actual}" == "${expected}" ]] || fail "state bucket ${description} is '${actual}', expected '${expected}'"
+  printf 'verified: %s = %s\n' "${description}" "${actual}"
+}
+
+verify_bucket() {
+  expect_value 'versioning' 'Enabled' \
+    "$(aws s3api get-bucket-versioning --bucket "${STATE_BUCKET}" --query Status --output text)"
+  expect_value 'public access block' 'True True True True' \
+    "$(aws s3api get-public-access-block --bucket "${STATE_BUCKET}" \
+      --query 'PublicAccessBlockConfiguration.[BlockPublicAcls,IgnorePublicAcls,BlockPublicPolicy,RestrictPublicBuckets]' \
+      --output text)"
+  expect_value 'object ownership' 'BucketOwnerEnforced' \
+    "$(aws s3api get-bucket-ownership-controls --bucket "${STATE_BUCKET}" \
+      --query 'OwnershipControls.Rules[0].ObjectOwnership' --output text)"
+  expect_value 'default encryption' 'aws:kms' \
+    "$(aws s3api get-bucket-encryption --bucket "${STATE_BUCKET}" \
+      --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' \
+      --output text)"
+  expect_value 'lifecycle rule' 'expire-noncurrent-state-versions' \
+    "$(aws s3api get-bucket-lifecycle-configuration --bucket "${STATE_BUCKET}" --query 'Rules[0].ID' --output text)"
+  aws s3api get-bucket-policy --bucket "${STATE_BUCKET}" --query Policy --output text |
+    grep -q 'aws:SecureTransport' || fail 'state bucket policy has no TLS-only statement'
+  printf 'verified: TLS-only bucket policy\n'
+}
+
+render_backend_file() {
+  printf 'bucket = "%s"\nkey    = "%s"\nregion = "%s"\n' "${STATE_BUCKET}" "${STATE_KEY}" "${EXPECTED_REGION}" \
+    > "${ACCOUNT_STACK_DIR}/${BACKEND_FILE}"
+  printf 'Wrote %s/%s\n' "${ACCOUNT_STACK_DIR}" "${BACKEND_FILE}"
+}
+
+ensure_tfvars_file() {
+  local email
+  if [[ -f "${ACCOUNT_STACK_DIR}/${TFVARS_FILE}" ]]; then
+    printf 'Using existing %s/%s\n' "${ACCOUNT_STACK_DIR}" "${TFVARS_FILE}"
+    return
+  fi
+  printf 'Budget alert email address (stored only in the gitignored %s): ' "${TFVARS_FILE}"
+  read -r email
+  [[ "${email}" =~ ^[^@[:space:]\"]+@[^@[:space:]\"]+\.[^@[:space:]\"]+$ ]] || fail 'that does not look like an email address'
+  printf 'budget_alert_email = "%s"\n' "${email}" > "${ACCOUNT_STACK_DIR}/${TFVARS_FILE}"
+}
+
+apply_account_stack() {
+  trap 'rm -f "${ACCOUNT_STACK_DIR}/${PLAN_FILE}"' EXIT
+  tofu -chdir="${ACCOUNT_STACK_DIR}" init -input=false -lockfile=readonly -backend-config="${BACKEND_FILE}"
+  tofu -chdir="${ACCOUNT_STACK_DIR}" plan -input=false -var-file="${TFVARS_FILE}" -out="${PLAN_FILE}"
+  tofu -chdir="${ACCOUNT_STACK_DIR}" show "${PLAN_FILE}"
+  printf '\nReview the plan above. Applying creates the OIDC provider, the budget and the plan role.\n'
+  confirm "${APPLY_CONFIRMATION}"
+  tofu -chdir="${ACCOUNT_STACK_DIR}" apply -input=false "${PLAN_FILE}"
+}
+
+set_repository_variables() {
+  local plan_role_arn
+  plan_role_arn="$(tofu -chdir="${ACCOUNT_STACK_DIR}" output -raw plan_role_arn)"
+  gh variable set AWS_REGION --repo "${TARGET_REPOSITORY}" --body "${EXPECTED_REGION}"
+  gh variable set AWS_PLAN_ROLE_ARN --repo "${TARGET_REPOSITORY}" --body "${plan_role_arn}"
+  gh variable list --repo "${TARGET_REPOSITORY}" | grep -E '^(AWS_REGION|AWS_PLAN_ROLE_ARN)[[:space:]]'
+}
+
+print_verification_steps() {
+  printf '\nBootstrap finished. Verify OIDC from a workflow (it trusts main only, so merge first):\n\n'
+  printf '  gh workflow run oidc-check.yml --repo %s --ref main\n' "${TARGET_REPOSITORY}"
+  printf '  gh run watch --repo %s\n\n' "${TARGET_REPOSITORY}"
+  printf 'Expect aws sts get-caller-identity to print an assumed-role ARN ending in\n'
+  printf 'assumed-role/freesecdev-gha-ansible-linux-compliance-plan/<session>.\n\n'
+  printf 'Now stop using root: enable MFA on the root user and sign out of the root session.\n'
+}
+
+main() {
+  require_command aws
+  require_command tofu
+  require_command gh
+  require_terminal
+  enter_repository_root
+  gh auth status > /dev/null 2>&1 || fail 'gh is not authenticated; run gh auth login'
+  resolve_region
+  verify_identity
+  create_bucket_if_missing
+  harden_bucket
+  verify_bucket
+  render_backend_file
+  ensure_tfvars_file
+  apply_account_stack
+  set_repository_variables
+  print_verification_steps
+}
+
+main "$@"

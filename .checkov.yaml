@@ -1,0 +1,11 @@
+---
+directory:
+  - infra
+framework:
+  - terraform
+skip-path:
+  - .terraform
+compact: true
+quiet: true
+skip-download: true
+soft-fail: false

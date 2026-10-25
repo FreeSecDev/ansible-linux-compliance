@@ -12,6 +12,7 @@ dev = [
     "ansible-lint==26.10.1",
     "antsibull-changelog==0.35.2",
     "bandit==1.9.4",
+    "checkov==3.3.29",
     "coverage==7.16.2",
     "mypy==2.4.0",
     "pre-commit==4.7.0",
@@ -70,6 +71,7 @@ known-first-party = ["tools", "ansible_collections"]
 "bandit B404 and B603 (plugins/module_utils/compliance/process.py)" = "Bandit has no per-file skip and inline nosec comments are banned, so make security runs Bandit twice: once on everything except the process helper with no skips, and once on the helper alone with only B404 and B603 skipped. A subprocess use anywhere else is still reported (ADR 0004)."
 "sanity ignore pylint:ansible-bad-function (plugins/module_utils/compliance/process.py)" = "ansible-test sanity pylint forbids subprocess.Popen in favour of AnsibleModule.run_command, which has no timeout, no output bound and no process-group handling (ADR 0004). The exception is declared in tests/sanity/ignore-2.20.txt and ignore-2.21.txt and lists exactly this one entry; a unit test fails if either file changes. ansible-lint does not permit this ignore (sanity[cannot-ignore]), and its allowed list is not configurable, so .ansible-lint-ignore skips that rule for those two files only. This departs from the Ansible Automation Platform certification ignore policy, which this collection does not target."
 "ruff S404 and S603 (plugins/module_utils/compliance/process.py)" = "ADR 0004: this is the single audited process helper. It runs an argument list with shell=False, an absolute allow-listed executable, validated arguments and a timeout; a repository rule forbids subprocess everywhere else."
+"zizmor undocumented-permissions (.github/zizmor.yml)" = "The pedantic persona demands a comment next to every write permission, but YAML comments are banned repository-wide (ADR 0005). The only write permission, id-token: write in oidc-check.yml, is explained in docs/aws/bootstrap.md and ADR 0014. No other audit is relaxed."
 "ruff D203" = "Mutually exclusive with D211; D211 is enforced instead."
 "ruff D213" = "Mutually exclusive with D212; D212 is enforced instead."
 "ruff TRY003" = "Overlaps with EM101 and EM102; messages are built from named variables in one place, and long messages in custom exception types add no value."

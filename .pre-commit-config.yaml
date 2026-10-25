@@ -60,6 +60,24 @@ repos:
         entry: uv run --frozen shellcheck
         language: system
         types: [shell]
+      - id: tofu-fmt
+        name: tofu fmt
+        entry: tofu fmt -check -recursive infra/
+        language: system
+        files: ^infra/.*\.(tf|tfvars|hcl)$
+        pass_filenames: false
+      - id: tofu-validate
+        name: tofu validate
+        entry: make --no-print-directory tofu-validate
+        language: system
+        files: ^infra/.*\.(tf|hcl)$
+        pass_filenames: false
+      - id: checkov
+        name: checkov
+        entry: uv run --frozen checkov --config-file .checkov.yaml
+        language: system
+        files: ^(infra/|\.checkov\.yaml$)
+        pass_filenames: false
       - id: repo-rules
         name: repository source rules
         entry: uv run --frozen python tools/lint/check_repo_rules.py

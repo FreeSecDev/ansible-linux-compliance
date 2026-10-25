@@ -5,7 +5,8 @@ credential-free stage locally and is what the pull request workflow runs, split 
 
 Jira: FREES-68 (Makefile), FREES-69 (pre-commit), FREES-70 (Python tooling),
 FREES-71 (pull request workflow), FREES-91 (skill validator tests), FREES-39 (collection skeleton and
-ansible tooling), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons).
+ansible tooling), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons),
+FREES-30, FREES-31, FREES-33, FREES-34 (AWS bootstrap, OpenTofu, Checkov).
 
 ## Bootstrap
 
@@ -21,7 +22,8 @@ make help
 `make bootstrap` runs `uv sync --frozen` (exact versions from `uv.lock`), installs the `pre-commit` and
 `pre-push` git hooks and prints tool versions. A missing `uv` produces an error with install instructions. `make bootstrap` also checks that
 `jq` is on `PATH` and fails with an install hint when it is missing, because `make package` cannot run without it.
-OpenTofu and Packer checks join `make bootstrap` with FREES-30 and FREES-64.
+`make bootstrap` also requires OpenTofu `1.13.2` on `PATH`; install the pinned, checksum-verified release with
+`tools/iac/install-tofu.sh`. Packer checks join with FREES-64.
 
 ## Makefile targets
 
@@ -38,7 +40,8 @@ OpenTofu and Packer checks join `make bootstrap` with FREES-30 and FREES-64.
 | `lint-actions` | implemented | actionlint |
 | `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on tracked and new YAML and Python files |
 | `lint-skills` | implemented | `tools/skills/validate_skills.py` |
-| `security` | implemented | Bandit (`tools`, `plugins`), gitleaks history scan, zizmor (pedantic persona) |
+| `security` | implemented | Bandit (`tools`, `plugins`), Checkov on `infra/`, gitleaks history scan, zizmor (pedantic persona) |
+| `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
 | `typecheck` | implemented | mypy strict, Pyright strict |
 | `test` | implemented | Alias for `test-unit` |
 | `test-unit` | implemented | `pytest tests/unit`, including the collection plugin tests |
@@ -51,8 +54,9 @@ OpenTofu and Packer checks join `make bootstrap` with FREES-30 and FREES-64.
 | `collection-link` | implemented | Links `plugins/` into `build/collections` for pytest and the type checkers |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches and coverage output |
-| `ci` | implemented | `lint typecheck test-coverage security docs test-sanity test-ansible-units package-check` |
-| `lint-iac` | pending FREES-30 | OpenTofu validation and Checkov |
+| `ci` | implemented | `lint lint-iac typecheck test-coverage security docs test-sanity test-ansible-units package-check` |
+| `lint-iac` | implemented | `tofu fmt -check -recursive infra/`, `tofu init -backend=false` and `tofu validate` per root module, shellcheck of the rendered bootstrap script; needs `tofu` on `PATH`, runs in the `iac` CI job and in `make ci`, not in `make lint` |
+| `aws-bootstrap-render` | implemented | Renders `infra/bootstrap/bootstrap.sh.tmpl` to the gitignored `infra/bootstrap/bootstrap.local.sh` |
 | `lint-packer` | pending FREES-64 | Packer validation |
 | `test-integration` | pending FREES-60 | Integration tests |
 | `test-idempotency` | pending FREES-60 | Idempotency checks |
@@ -62,7 +66,6 @@ OpenTofu and Packer checks join `make bootstrap` with FREES-30 and FREES-64.
 | `test-molecule-golden` | pending FREES-63 | Golden image scenarios |
 | `packer-validate` | pending FREES-64 | Packer template validation |
 | `packer-build` | pending FREES-64 | Packer image build |
-| `aws-bootstrap` | pending FREES-33 | AWS bootstrap |
 | `image-build` | pending FREES-36 | Runner image build on AWS |
 | `report` | pending FREES-77 | HTML report generation |
 | `report-serve` | pending FREES-77 | Local report server |
@@ -77,7 +80,7 @@ Configuration: `.pre-commit-config.yaml`. Install the hooks with `make install`.
 
 | Stage | Hooks |
 |---|---|
-| `pre-commit` (fast) | trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml, check-merge-conflict, check-added-large-files, detect-private-key, gitleaks (staged), ruff check, ruff format, yamllint, ansible-lint, markdownlint-cli2, shellcheck, repository source rules, skill validator, markdown relative links |
+| `pre-commit` (fast) | trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml, check-merge-conflict, check-added-large-files, detect-private-key, gitleaks (staged), ruff check, ruff format, yamllint, ansible-lint, markdownlint-cli2, shellcheck, tofu fmt, tofu validate, Checkov, repository source rules, skill validator, markdown relative links |
 | `pre-push` | mypy, pyright, pylint, bandit, pytest |
 | `manual` (CI only) | gitleaks history scan, actionlint, zizmor |
 
@@ -92,8 +95,9 @@ uv run pre-commit run --all-files --hook-stage manual
 `pre-commit run` only sees files known to git; `git add` new files first.
 
 The ansible-lint hook (FREES-69) runs the whole project with the `production` profile whenever a collection
-file changes. Hooks for OpenTofu and Checkov (FREES-30, FREES-31) and Packer (FREES-64) are pending the issues
-that introduce their sources. They are intentionally absent rather than faked.
+file changes. The `tofu-fmt`, `tofu-validate` (system `tofu`) and `checkov` (`uv run --frozen`) hooks run when files
+under `infra/` change (FREES-69). Packer hooks (FREES-64) are pending the issue that introduces their sources. They are
+intentionally absent rather than faked.
 
 The mypy, pyright, pylint and pytest hooks need the `build/collections` link that `make install` creates; pytest
 stops with the hint "run 'make install'" when it is missing.
@@ -184,6 +188,7 @@ Configuration relaxations, each with its reason:
 | `test` | `make test-coverage` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
+| `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |
 | `ci-gate` | none; fails unless every needed job succeeded |
 
 `ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. Job names
@@ -204,3 +209,6 @@ follow-up work tracked with the runner image issue (FREES-35); it is not simulat
   ([dependency management](dependency-management.md)).
 - GitHub Actions are pinned to full commit SHAs with a `# vX.Y.Z` annotation.
 - The `uv` version used in CI is pinned in `.github/workflows/ci.yml`.
+- OpenTofu `1.13.2` (a security release, exempt from the seven-day rule) is pinned in `infra/account/versions.tf` and
+  `tools/iac/install-tofu.sh` with SHA-256 checksums; the AWS provider `6.69.1` is pinned in `versions.tf` and
+  `infra/account/.terraform.lock.hcl` (`linux_amd64` and `linux_arm64`); Checkov is pinned in `pyproject.toml`.
