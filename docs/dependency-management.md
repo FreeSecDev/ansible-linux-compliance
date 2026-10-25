@@ -55,6 +55,9 @@ A new ecosystem must be assigned to exactly one bot in this table in the same pu
 - Both bots wait 7 days after a release before proposing it, 14 days for majors, to reduce supply-chain risk:
   Renovate through `minimumReleaseAge` and Dependabot through `cooldown`.
   Dependabot security updates for Python and GitHub Actions are not delayed by that wait or by the schedule.
+- The release-age wait applies to direct and transitive Python version updates alike, through the Dependabot cooldown
+  and review. `uv.lock` is deliberately not filtered by release age (no `exclude-newer`), so that a security fix is
+  never held back; a locked version with a known vulnerability is fixed immediately whatever its age.
 - Major updates wait 14 days, are labelled `breaking-change` and get their own pull request. Like every other update,
   they are reviewed by the `freesecdev-review` App and must pass the required checks. Nobody is asked to approve them
   on the dependency dashboard, which is informational only.

@@ -49,6 +49,12 @@ repos:
         entry: uv run --frozen yamllint --strict
         language: system
         types: [yaml]
+      - id: ansible-lint
+        name: ansible-lint
+        entry: uv run --frozen ansible-lint
+        language: system
+        files: ^(galaxy\.yml|\.ansible-lint|meta/|plugins/|roles/|playbooks/|extensions/|changelogs/)
+        pass_filenames: false
       - id: shellcheck
         name: shellcheck
         entry: uv run --frozen shellcheck
@@ -86,14 +92,14 @@ repos:
         stages: [pre-push]
       - id: pylint
         name: pylint
-        entry: uv run --frozen pylint tools tests
+        entry: uv run --frozen pylint tools tests plugins
         language: system
         types: [python]
         pass_filenames: false
         stages: [pre-push]
       - id: bandit
         name: bandit
-        entry: uv run --frozen bandit -c pyproject.toml -r tools -q
+        entry: uv run --frozen bandit -c pyproject.toml -r tools plugins -q
         language: system
         types: [python]
         pass_filenames: false

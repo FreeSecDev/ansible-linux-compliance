@@ -11,6 +11,8 @@ Status: initial design, pending ADR acceptance. Update this file when components
 
 ## Collection components
 
+The repository root is the collection root; see [collection design](../../../../docs/collection-design.md). The findings model is specified in [ADR 0013](../../../../docs/adr/0013-normalized-findings-model.md) and is implemented.
+
 | Component | Location | Runs on | Responsibility |
 |---|---|---|---|
 | Findings model | `plugins/module_utils/compliance/model.py` | host and controller | Typed outcomes, rules, findings, provenance |

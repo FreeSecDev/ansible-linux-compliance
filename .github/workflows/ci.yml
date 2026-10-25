@@ -93,10 +93,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: make security
 
+  collection:
+    name: collection
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Run collection sanity, unit and package targets
+        run: make test-sanity test-ansible-units package-check
+
   ci-gate:
     name: ci-gate
     if: always()
-    needs: [lint, typecheck, test, security]
+    needs: [lint, typecheck, test, security, collection]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}

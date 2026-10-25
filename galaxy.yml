@@ -1,0 +1,55 @@
+---
+namespace: freesecdev
+name: linux_compliance
+version: 0.1.0
+readme: README.md
+authors:
+  - FreeSecDev contributors
+description: >-
+  Audit, remediate, verify and report on Linux host compliance against open
+  security baselines (OpenSCAP and ComplianceAsCode) with typed modules and
+  native-module remediation.
+license:
+  - Apache-2.0
+tags:
+  - compliance
+  - security
+  - hardening
+  - linux
+  - audit
+  - openscap
+  - cis
+  - stig
+dependencies: {}
+repository: https://github.com/FreeSecDev/ansible-linux-compliance
+documentation: https://github.com/FreeSecDev/ansible-linux-compliance/tree/main/docs
+homepage: https://github.com/FreeSecDev/ansible-linux-compliance
+issues: https://github.com/FreeSecDev/ansible-linux-compliance/issues
+build_ignore:
+  - .agents
+  - .claude
+  - .github
+  - .gitignore
+  - .python-version
+  - .pre-commit-config.yaml
+  - .yamllint.yaml
+  - .markdownlint-cli2.yaml
+  - .renovaterc.json
+  - .ansible-lint
+  - .coverage
+  - .mypy_cache
+  - .pytest_cache
+  - .ruff_cache
+  - .venv
+  - AGENTS.md
+  - Makefile
+  - build
+  - coverage.xml
+  - dist
+  - docs/planning
+  - docs/research
+  - htmlcov
+  - pyproject.toml
+  - tests/unit/tools
+  - tools
+  - uv.lock
