@@ -35,7 +35,9 @@ body:
     id: redistribution
     attributes:
       label: Redistribution terms
-      description: Can the content be redistributed, mirrored or only referenced? Quote the terms by URL, not by pasting restricted text.
+      description: >-
+        Can the content be redistributed, mirrored or only referenced?
+        Quote the terms by URL, not by pasting restricted text.
     validations:
       required: true
   - type: input

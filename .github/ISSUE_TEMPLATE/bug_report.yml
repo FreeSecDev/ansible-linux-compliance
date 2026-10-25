@@ -9,7 +9,8 @@ body:
     attributes:
       value: |
         The project is pre-alpha and nothing is supported yet, but reports help. Do not report security
-        vulnerabilities here; use private vulnerability reporting. Never paste credentials, tokens or real host evidence.
+        vulnerabilities here; use private vulnerability reporting. Never paste credentials, tokens or real
+        host evidence.
   - type: textarea
     id: summary
     attributes:
