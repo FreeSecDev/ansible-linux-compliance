@@ -510,6 +510,13 @@ OTHER_BYPASSES = {
     "import-asyncio": "import asyncio\n",
     "import-multiprocessing": "import multiprocessing\n",
     "import-shlex": "import shlex\n",
+    "import-xml-dom": "import xml.dom.minidom\n",
+    "import-xml-sax": "import xml.sax\n",
+    "import-xml-expat-reader": "import xml.parsers.expatreader\n",
+    "import-xml-parsers-package": "from xml.parsers import expat\n",
+    "import-xml-etree-celementtree": "import xml.etree.cElementTree\n",
+    "import-xml-etree": "import xml.etree.ElementTree\n",
+    "import-xml-etree-from": "from xml.etree import ElementTree\n",
     "import-prefix-lookalike": "import ansible.module_utils_evil\n",
     "import-collection-lookalike": "import ansible_collections.freesecdev.linux_compliance_evil\n",
     "import-other-collection": "import ansible_collections.other.collection.plugins\n",
@@ -561,6 +568,22 @@ RE_REVIEW_BYPASSES = {
     "owner-uid-resolve": "resolve_executable('oscap', owner_uid=1)\n",
     "policies-keyword": "run(spec, policies=custom)\n",
     "trusted-dirs-keyword": "run(spec, trusted_dirs=['/tmp'])\n",
+    "runner-keyword": "OpenScapBackend(settings, runner=custom)\n",
+    "clock-keyword": "OpenScapBackend(settings, clock=custom)\n",
+    "limits-keyword": "OpenScapBackend(settings, limits=XmlLimits(max_depth=10**9))\n",
+    "runner-via-partial": "functools.partial(factory, runner=process.run)\n",
+    "dict-splat-literal": "run(spec, **{'owner_uid': 1000, 'trusted_dirs': ('/tmp',)})\n",
+    "dict-splat-name": "run(spec, **options)\n",
+    "dict-splat-partial": (
+        "import functools\nfunctools.partial(run, **{'trusted_dirs': ('/tmp',)})\n"
+    ),
+    "dict-splat-reviewer-bypass": (
+        "OpenScapBackend(s, clock=c, limits=XmlLimits(max_depth=10**9, max_elements=10**12))\n"
+        "register('x', functools.partial(process.run, **{'owner_uid': 1000}))\n"
+    ),
+    "expat-import": "import xml.parsers.expat\n",
+    "expat-from-import": "from xml.parsers.expat import ParserCreate\n",
+    "expat-package-import": "from xml.parsers import expat\n",
     "vars-nested": "import os.path\nvars(vars(os.path)['os'])['sys' + 'tem']('id')\n",
     "vars-reference": "f = vars\n",
     "dunder-dict": "import os.path\nos.path.__dict__['os']\n",
@@ -585,7 +608,7 @@ BENIGN_PLUGIN_SOURCES = {
         "from datetime import datetime\nfrom enum import Enum\nfrom types import MappingProxyType\n"
         "import hashlib\nimport functools\nimport itertools\nimport stat\n"
         "from pathlib import Path\nimport collections\nfrom collections import abc\n"
-        "from collections.abc import Mapping\nimport xml.etree.ElementTree\n"
+        "from collections.abc import Mapping\n"
     ),
     "os-path-import": "import os.path\nos.path.join('a', 'b')\n",
     "os-path-from-import": "from os import path\npath.join('a', 'b')\n",
@@ -600,7 +623,7 @@ BENIGN_PLUGIN_SOURCES = {
     "relative": "from . import helper\nfrom .helper import thing\nfrom .. import other\n",
     "object-setattr": "object.__setattr__(x, 'field', 1)\n",
     "getattr-literal": "getattr(x, 'field')\nsetattr(x, 'field', 1)\ngetattr(x, 'field', None)\n",
-    "shell-false": "f(shell=False)\nf(shell=flag)\nf(other=True)\nf(*args, **kwargs)\n",
+    "shell-false": "f(shell=False)\nf(shell=flag)\nf(other=True)\nf(*args)\n",
     "plain-calls": "factory()()\nobj.system_name\nobj.executable\nobj.execute\n",
     "unrelated-name": "x = 'subprocess'\nosmosis = 1\n",
     "relative-lookalike": "from .subprocess import thing\n",
@@ -616,6 +639,50 @@ def test_guard_flags_every_crafted_bypass(tmp_path: Path, source: str) -> None:
 @pytest.mark.parametrize("source", OTHER_BYPASSES.values(), ids=OTHER_BYPASSES.keys())
 def test_guard_denies_other_constructs_by_default(tmp_path: Path, source: str) -> None:
     assert process_messages(tmp_path, source)
+
+
+EXPAT_FILE = "plugins/module_utils/compliance/openscap.py"
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["import xml.parsers.expat\n", "from xml.parsers.expat import ParserCreate\n"],
+)
+def test_expat_is_allowed_only_in_the_xccdf_parser(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source, EXPAT_FILE) == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "plugins/modules/other.py",
+        "plugins/module_utils/compliance/model.py",
+        "plugins/module_utils/compliance/scanner.py",
+        "plugins/module_utils/compliance/openscap_other.py",
+        "plugins/module_utils/other/openscap.py",
+        "plugins/modules/openscap.py",
+    ],
+)
+def test_expat_is_denied_in_every_other_plugin_file(tmp_path: Path, name: str) -> None:
+    messages = process_messages(tmp_path, "import xml.parsers.expat\n", name)
+    expected = (
+        "import of 'xml.parsers.expat' is not allowed in plugins outside "
+        "plugins/module_utils/compliance/process.py"
+    )
+    assert messages == [expected]
+
+
+def test_the_parser_file_keeps_every_other_restriction(tmp_path: Path) -> None:
+    source = "import xml.parsers.expat\nimport subprocess\nimport xml.sax\nf(runner=g)\nf(**h)\n"
+    messages = process_messages(tmp_path, source, EXPAT_FILE)
+    assert len(messages) >= 4
+    assert not any("xml.parsers.expat" in message for message in messages)
+
+
+def test_the_extra_import_table_names_only_the_parser() -> None:
+    assert {str(path): imports for path, imports in rules.EXTRA_IMPORTS.items()} == {
+        EXPAT_FILE: frozenset({"xml.parsers.expat"})
+    }
 
 
 @pytest.mark.parametrize("source", BENIGN_PLUGIN_SOURCES.values(), ids=BENIGN_PLUGIN_SOURCES.keys())

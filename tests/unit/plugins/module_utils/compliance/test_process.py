@@ -216,7 +216,13 @@ class TestPolicy:
     def test_default_allow_list_is_only_oscap(self) -> None:
         assert set(process.ALLOWED_EXECUTABLES) == {"oscap"}
         options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
-        assert {"--profile", "--results-arf", "--results", "--report"} <= options
+        assert {
+            "--profile",
+            "--results-arf",
+            "--results",
+            "--report",
+            "--tailoring-file",
+        } <= options
         assert not options & process.FORBIDDEN_OPTIONS
 
     def test_default_trusted_directories_are_fixed(self) -> None:
@@ -243,6 +249,32 @@ class TestPolicy:
         )
         policy = process.check_policy(spec, process.ALLOWED_EXECUTABLES)
         assert policy.name == "oscap"
+
+    def test_accepts_the_openscap_backend_command_line(self) -> None:
+        arguments = (
+            "xccdf",
+            "eval",
+            "--profile",
+            "xccdf_x_profile_y",
+            "--tailoring-file",
+            "/srv/tailoring.xml",
+            "--results-arf",
+            "/srv/out/results-arf.xml",
+            "--results",
+            "/srv/out/results.xml",
+            "/srv/content/ds.xml",
+        )
+        spec = process.CommandSpec("oscap", arguments, 1)
+        assert process.check_policy(spec, process.ALLOWED_EXECUTABLES).name == "oscap"
+
+    @pytest.mark.parametrize(
+        "extra",
+        [("--remediate",), ("--tailoring-file=/x", "--fetch-remote-resources"), ("--tailoring",)],
+    )
+    def test_tailoring_support_does_not_open_other_options(self, extra: tuple[str, ...]) -> None:
+        spec = process.CommandSpec("oscap", ("xccdf", "eval", *extra), 1)
+        with pytest.raises(process.ProcessPolicyError):
+            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
 
     @pytest.mark.parametrize(
         "argument",

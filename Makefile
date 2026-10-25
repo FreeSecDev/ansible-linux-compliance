@@ -12,7 +12,7 @@ COLLECTION_PATH := ansible_collections/freesecdev/linux_compliance
 COLLECTION_TREE := build/collection/$(COLLECTION_PATH)
 COLLECTION_LINK := build/collections/$(COLLECTION_PATH)
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
-	tests/unit/plugins tests/sanity tests/integration extensions
+	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
 TREE_SORT := sort -z
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14

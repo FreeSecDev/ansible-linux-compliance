@@ -203,6 +203,37 @@ with provenance (AGENTS.md rule 9).
   `make test-ansible-units` run the collection through `ansible-test`, and `make package` builds the tarball.
 - When ansible-core 2.20 leaves support, raising `requires_ansible` is a deliberate change with its own review.
 
+## Amendment 2026-10-25: result integrity (FREES-48)
+
+The scanner backends reconcile results with the rules that the caller selected, and consumers must not derive a
+verdict from findings alone. These invariants apply to every backend and every report.
+
+- A `ScanRequest` names the rules that the profile selects (`expected_rule_ids`, required and non-empty). The audit module
+  supplies them from the selected profile.
+- On a `completed` run, every expected rule without a rule-result is an `error` finding whose message says why. This holds
+  for exit status 2. With exit status 0 oscap promises that every rule passed, so a missing expected rule contradicts it
+  and the run is `failed` (with `error` findings for all expected rules).
+- oscap lists every rule of the benchmark, writing `notselected` for the rules that the profile does not select. A
+  rule-result whose rule is not in `expected_rule_ids` **and** whose result is `notselected` is skipped (it is not counted
+  in the run, because the model has no field for it). Any other result for a rule that was not expected, a duplicate
+  result for one rule (selected or not), or a result element in another XCCDF namespace makes the run `failed`, because
+  findings would otherwise be dropped silently. An expected rule that reports `notselected` maps through the table above
+  (`notchecked` with the `notselected` flag).
+- A run whose status is not `completed` counts **every expected rule as `error`** in reports and summaries. A backend
+  fills the findings accordingly, but a consumer must apply the rule even when it receives fewer findings.
+- A `ScanRun` whose status is not `completed` is never summarised as compliant or partially compliant, and "0 failures"
+  is never derived from the findings of such a run. Reports and summaries show the run status first, before any count.
+- The SHA-256 of a tailoring file is recorded in `Provenance.source` next to the datastream name, because the model has
+  no separate field; a dedicated field is a candidate for the next schema version. The OpenSCAP backend writes the label
+  with this grammar, where file names are restricted to the alphabet below and anything else is a request error, so the
+  label cannot be spoofed by a file name:
+
+  ```text
+  source   = name [ " tailoring=" name " tailoring_sha256=" hex64 ]
+  name     = 1*64( ALPHA / DIGIT / "." / "_" / "+" / "-" )
+  hex64    = 64( DIGIT / %x61-66 )
+  ```
+
 ## References
 
 - ansible-core release and maintenance matrix:

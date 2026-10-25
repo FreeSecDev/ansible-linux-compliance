@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_org.example.synthetic_benchmark_demo">
+  <status>draft</status>
+  <title>Synthetic benchmark</title>
+  <version>1.0</version>
+  <TestResult id="xccdf_org.example.synthetic_testresult_demo" start-time="2026-10-25T10:00:00+00:00" end-time="2026-10-25T10:00:09+00:00" version="1.0">
+    <benchmark href="#synthetic-datastream" id="xccdf_org.example.synthetic_benchmark_demo"/>
+    <profile idref="xccdf_org.example.synthetic_profile_baseline"/>
+    <title>Synthetic scan</title>
+    <rule-result idref="xccdf_org.example.synthetic_rule_alpha" severity="high" time="2026-10-25T10:00:01+00:00">
+      <result>pa<x/>ss</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_beta" severity="low" time="2026-10-25T10:00:01+00:00">
+      <result>pass</result>
+    </rule-result>
+  </TestResult>
+</Benchmark>

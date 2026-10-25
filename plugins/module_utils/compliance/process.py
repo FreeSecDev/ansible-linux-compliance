@@ -128,7 +128,7 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
     {
         "oscap": ExecutablePolicy(
             "oscap",
-            frozenset({"--profile", "--results-arf", "--results", "--report"}),
+            frozenset({"--profile", "--results-arf", "--results", "--report", "--tailoring-file"}),
             command_prefixes=(("xccdf", "eval"), ("info",)),
             standalone_commands=(("--version",),),
         )
