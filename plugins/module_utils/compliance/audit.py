@@ -10,8 +10,13 @@ An audit has two steps. :func:`plan` validates every input, verifies the datastr
 against its pinned SHA-256, resolves the profile and the disabled rules and inspects
 the output directory without creating anything. :func:`execute` then creates the
 run directory, writes the tailoring file for disabled rules, runs the backend and
-stores the evidence. Check mode stops after :func:`plan`, so nothing is written and
-no scanner runs.
+stores the evidence.
+
+Check mode runs the same read-only scan, because operators expect real findings
+from ``--check``, but keeps nothing: :meth:`Auditor.preview` scans into a private
+temporary directory below the existing output root and removes it, and every file
+in it, before it returns, also on failure. Check mode never creates the output root;
+when it does not exist no scan runs and the run status is ``not_run``.
 
 Disabled rules (ADR 0011) are excluded from the scan through a generated XCCDF
 tailoring file whose profile extends the requested one and deselects them. They are
@@ -92,6 +97,9 @@ ERROR_NOTHING_TO_SCAN: Final[str] = "nothing_to_scan"
 ERROR_UNKNOWN_BACKEND: Final[str] = "unknown_backend"
 ERROR_INVALID_REQUEST: Final[str] = "invalid_request"
 ERROR_EVIDENCE: Final[str] = "evidence_write_failed"
+ERROR_CLEANUP: Final[str] = "cleanup_failed"
+PREVIEW_PREFIX: Final[str] = ".check-"
+MAX_DISCARD_DEPTH: Final[int] = 4
 
 
 class AuditError(ValueError):
@@ -789,27 +797,74 @@ def summarize(run: model.ScanRun | None) -> dict[str, object] | None:
     return counts
 
 
-def report(audit_plan: AuditPlan, outcome: AuditOutcome | None) -> dict[str, object]:
-    """Return the module result for a planned or executed audit.
+def report(
+    audit_plan: AuditPlan,
+    run: model.ScanRun | None,
+    evidence: tuple[EvidenceFile, ...] | None,
+    message: str,
+) -> dict[str, object]:
+    """Return the module result for an audit.
+
+    Args:
+        audit_plan: The plan of the audit.
+        run: The scan run, or ``None`` when no scanner ran.
+        evidence: The kept evidence files, or ``None`` when nothing was kept
+            (check mode).
+        message: Human-readable summary returned as ``msg``.
 
     ``changed`` is always false: an audit never changes the configuration of the
     host. Evidence files are reported in ``evidence`` and ``evidence_written``.
     """
-    run = None if outcome is None else outcome.run
     return {
         "changed": False,
         "disabled_rules": [rule.to_dict() for rule in audit_plan.job.disabled_rules],
         "evidence": {
-            "directory": None if outcome is None else audit_plan.run_dir,
-            "files": [] if outcome is None else [item.to_dict() for item in outcome.evidence],
+            "directory": None if evidence is None else audit_plan.run_dir,
+            "files": [] if evidence is None else [item.to_dict() for item in evidence],
         },
-        "evidence_written": outcome is not None,
+        "evidence_written": evidence is not None,
+        "msg": message,
         "planned": audit_plan.to_dict(),
         "run_id": audit_plan.job.run_id,
         "run_status": RUN_STATUS_NOT_RUN if run is None else run.status.value,
         "scan_run": None if run is None else run.to_dict(),
         "summary": summarize(run),
     }
+
+
+def _discard_tree(path: Path, depth: int = 0) -> None:
+    if depth > MAX_DISCARD_DEPTH:
+        message = f"the temporary check-mode directory is nested too deeply: {_safe(path)}"
+        raise AuditError(ERROR_CLEANUP, message, str(path))
+    entries = sorted(path.iterdir())
+    if len(entries) > MAX_EVIDENCE_ENTRIES:
+        message = f"the temporary check-mode directory has too many entries: {_safe(path)}"
+        raise AuditError(ERROR_CLEANUP, message, str(path))
+    for entry in entries:
+        if stat.S_ISDIR(entry.lstat().st_mode):
+            _discard_tree(entry, depth + 1)
+        else:
+            entry.unlink()
+    path.rmdir()
+
+
+def discard_preview(path: Path) -> None:
+    """Remove a temporary check-mode run directory and everything in it.
+
+    Symlinks inside it are removed, never followed. Nesting is bounded.
+
+    Raises:
+        AuditError: With ``cleanup_failed`` and the directory as
+            ``evidence_dir`` if anything cannot be removed.
+    """
+    try:
+        _discard_tree(path)
+    except OSError as error:
+        message = (
+            "the temporary check-mode directory could not be removed: "
+            f"{error.strerror or type(error).__name__}"
+        )
+        raise AuditError(ERROR_CLEANUP, message, str(path)) from error
 
 
 class Auditor:
@@ -834,6 +889,12 @@ class Auditor:
         self._registry = backends.default_registry() if registry is None else registry
         self._clock = _utc_now if clock is None else clock
 
+    def _scan(self, audit_plan: AuditPlan, run_dir: Path) -> model.ScanRun:
+        if audit_plan.tailored:
+            tailoring = run_dir / TAILORING_FILE_NAME
+            _write_new_file(tailoring, tailoring_document(audit_plan, self._clock()))
+        return finalize_run(audit_plan, _run_backend(audit_plan, run_dir, self._registry))
+
     def execute(self, audit_plan: AuditPlan) -> AuditOutcome:
         """Create the run directory, run the backend and store the evidence.
 
@@ -846,12 +907,10 @@ class Auditor:
         run_dir = Path(audit_plan.run_dir)
         _secure_directory(run_dir, self._owner_uid)
         try:
+            run = self._scan(audit_plan, run_dir)
             evidence: list[EvidenceFile] = []
             if audit_plan.tailored:
-                tailoring = run_dir / TAILORING_FILE_NAME
-                _write_new_file(tailoring, tailoring_document(audit_plan, self._clock()))
-                evidence.append(_record(tailoring, "tailoring"))
-            run = finalize_run(audit_plan, _run_backend(audit_plan, run_dir, self._registry))
+                evidence.append(_record(run_dir / TAILORING_FILE_NAME, "tailoring"))
             evidence.extend(_scanner_files(run_dir / SCAN_DIRECTORY_NAME))
             record = run_dir / SCAN_RUN_FILE_NAME
             _write_new_file(record, model.dumps(run) + "\n")
@@ -861,12 +920,36 @@ class Auditor:
             raise AuditError(ERROR_EVIDENCE, message, str(run_dir)) from error
         return AuditOutcome(audit_plan, run, tuple(sorted(evidence, key=lambda item: item.path)))
 
-    def run(self, job: AuditJob, *, check_mode: bool) -> dict[str, object]:
-        """Plan an audit and, outside check mode, execute it.
+    def preview(self, audit_plan: AuditPlan) -> model.ScanRun:
+        """Run the scan for check mode and keep nothing.
 
-        Args:
-            job: The validated job.
-            check_mode: Plan only: no directory, file or scanner process is created.
+        The scan runs into a new private directory ``<output_dir>/.check-<run_id>``
+        (mode 0700, vetted like a run directory) below the existing, vetted output
+        root. The directory and every file in it are removed before this returns,
+        also when the scan or anything else fails. The output root is never created.
+
+        Raises:
+            AuditError: As :meth:`execute`, and ``cleanup_failed`` if the
+                temporary directory cannot be removed.
+        """
+        inspect_output_root(audit_plan.job.output_root, self._owner_uid, create=False)
+        scratch = Path(audit_plan.job.output_root) / f"{PREVIEW_PREFIX}{audit_plan.job.run_id}"
+        _secure_directory(scratch, self._owner_uid)
+        try:
+            return self._scan(audit_plan, scratch)
+        except OSError as error:
+            message = f"the check-mode scan failed: {error.strerror or type(error).__name__}"
+            raise AuditError(ERROR_EVIDENCE, message) from error
+        finally:
+            discard_preview(scratch)
+
+    def run(self, job: AuditJob, *, check_mode: bool) -> dict[str, object]:
+        """Plan an audit and run it.
+
+        Outside check mode the evidence is kept in the run directory. In check
+        mode the scan runs through :meth:`preview` and nothing is kept; when the
+        output root does not exist, check mode does not create it and no scan
+        runs (``run_status`` ``not_run``).
 
         Returns:
             The module result from :func:`report`.
@@ -880,6 +963,22 @@ class Auditor:
             message = f"unknown scanner backend {_safe(job.backend)}; known: {', '.join(names)}"
             raise AuditError(ERROR_UNKNOWN_BACKEND, message)
         planned = plan(job, self._owner_uid)
+        if check_mode and not planned.output_root_exists:
+            message = (
+                f"check mode: output_dir {job.output_root} does not exist and check mode does "
+                "not create it, so no scan ran"
+            )
+            return report(planned, None, None, message)
         if check_mode:
-            return report(planned, None)
-        return report(planned, self.execute(planned))
+            run = self.preview(planned)
+            message = (
+                f"check mode: scan finished with run_status {run.status.value}; it ran in a "
+                "temporary directory that was removed, and no evidence was kept"
+            )
+            return report(planned, run, None, message)
+        outcome = self.execute(planned)
+        message = (
+            f"scan finished with run_status {outcome.run.status.value}; "
+            f"evidence in {planned.run_dir}"
+        )
+        return report(planned, outcome.run, outcome.evidence, message)

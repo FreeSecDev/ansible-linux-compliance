@@ -244,11 +244,12 @@ def test_evidence_is_restrictive_and_matches_the_reported_run(harness: Harness) 
     assert not list(run_dir.glob(".*"))
 
 
-def test_check_mode_runs_nothing_and_writes_nothing(harness: Harness) -> None:
+def test_check_mode_never_creates_the_output_root_and_then_runs_nothing(harness: Harness) -> None:
     result = harness.run(check_mode=True)
     assert result["changed"] is False
     assert result["evidence_written"] is False
     assert result["run_status"] == "not_run"
+    assert "does not exist and check mode does not create it" in result["msg"]
     assert result["scan_run"] is None
     assert result["summary"] is None
     assert result["evidence"] == {"directory": None, "files": []}
@@ -263,12 +264,155 @@ def test_check_mode_runs_nothing_and_writes_nothing(harness: Harness) -> None:
     assert planned["content_sha256"] == SHA256
 
 
-def test_check_mode_with_an_existing_root_creates_no_run_directory(harness: Harness) -> None:
+def snapshot(root: Path) -> list[str]:
+    return sorted(str(path.relative_to(root)) for path in root.rglob("*"))
+
+
+def test_check_mode_scans_for_real_and_keeps_nothing(harness: Harness) -> None:
     harness.output_root.mkdir(mode=0o700)
+    seen: list[Path] = []
+
+    def observe(results: Path) -> None:
+        seen.append(results)
+        assert results.parent.parent.name == ".check-run-1"
+        assert mode(results.parent.parent) == 0o700
+
+    harness.runner.on_evaluate = observe
     result = harness.run(check_mode=True, expected_sha256=SHA256.upper())
+    assert result["changed"] is False
+    assert result["evidence_written"] is False
+    assert result["evidence"] == {"directory": None, "files": []}
+    assert result["run_status"] == "completed"
+    assert outcomes(result) == {ALPHA: "pass", BETA: "fail"}
+    assert result["summary"]["fail"] == 1
+    assert result["scan_run"]["content"]["content_sha256"] == SHA256
+    assert "temporary directory that was removed" in result["msg"]
     assert result["planned"]["output_root_exists"] is True
-    assert result["planned"]["content_sha256"] == SHA256
-    assert list(harness.output_root.iterdir()) == []
+    assert len(harness.runner.evaluations) == 1
+    assert seen
+    assert snapshot(harness.output_root) == []
+
+
+def test_check_mode_with_tailoring_removes_the_tailoring_file(harness: Harness) -> None:
+    harness.output_root.mkdir(mode=0o700)
+    harness.runner.results = {ALPHA: "notselected", BETA: "pass"}
+    harness.runner.returncode = 0
+    disabled = audit.parse_disabled_rules([{"rule_id": ALPHA}])
+    result = harness.run(check_mode=True, disabled_rules=disabled)
+    (spec,) = harness.runner.evaluations
+    assert spec.args[spec.args.index("--tailoring-file") + 1].endswith(
+        "/.check-run-1/tailoring.xml"
+    )
+    assert outcomes(result) == {ALPHA: "disabled", BETA: "pass"}
+    assert snapshot(harness.output_root) == []
+
+
+@pytest.mark.parametrize("failure", ["exit", "timeout", "missing", "malformed", "planted"])
+def test_check_mode_keeps_nothing_when_the_scan_fails(harness: Harness, failure: str) -> None:
+    harness.output_root.mkdir(mode=0o700)
+    outside = harness.root / "outside"
+    outside.write_text("keep", encoding="utf-8")
+    if failure == "exit":
+        harness.runner.returncode = 1
+    elif failure == "timeout":
+        harness.runner.timed_out = True
+    elif failure == "missing":
+        harness.runner.error = process.ProcessExecutionError("executable not found: 'oscap'")
+    elif failure == "malformed":
+        harness.runner.document = "<Benchmark"
+    else:
+
+        def plant(results: Path) -> None:
+            (results.parent / "link").symlink_to(outside)
+            (results.parent / "nested" / "deeper").mkdir(parents=True)
+            (results.parent / "nested" / "deeper" / "file").write_text("x", encoding="utf-8")
+
+        harness.runner.on_evaluate = plant
+        harness.runner.returncode = 1
+    result = harness.run(check_mode=True)
+    assert result["run_status"] in {"failed", "timed_out"}
+    assert set(outcomes(result).values()) == {"error"}
+    assert result["evidence_written"] is False
+    assert snapshot(harness.output_root) == []
+    assert outside.read_text(encoding="utf-8") == "keep"
+
+
+def test_check_mode_keeps_nothing_when_the_backend_refuses(harness: Harness) -> None:
+    harness.output_root.mkdir(mode=0o700)
+    real = harness.root / "real-content"
+    real.mkdir()
+    shutil.copyfile(SYNTHETIC, real / "synthetic-ds.xml")
+    (harness.root / "linked").symlink_to(real)
+    with pytest.raises(audit.AuditError) as raised:
+        harness.run(check_mode=True, content_path=str(harness.root / "linked" / "synthetic-ds.xml"))
+    assert raised.value.error_type == "invalid_request"
+    assert snapshot(harness.output_root) == []
+
+
+def test_check_mode_keeps_nothing_when_writing_fails(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness.output_root.mkdir(mode=0o700)
+
+    def failing_write(path: Path, _text: str) -> None:
+        path.write_text("partial", encoding="utf-8")
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(audit, "_write_new_file", failing_write)
+    disabled = audit.parse_disabled_rules([{"rule_id": ALPHA}])
+    with pytest.raises(audit.AuditError, match="check-mode scan failed") as raised:
+        harness.run(check_mode=True, disabled_rules=disabled)
+    assert raised.value.error_type == "evidence_write_failed"
+    assert snapshot(harness.output_root) == []
+    assert harness.runner.specs == []
+
+
+def test_a_check_mode_directory_that_already_exists_is_never_reused(harness: Harness) -> None:
+    harness.output_root.mkdir(mode=0o700)
+    planted = harness.output_root / ".check-run-1"
+    planted.mkdir()
+    (planted / "keep").write_text("x", encoding="utf-8")
+    with pytest.raises(audit.AuditError) as raised:
+        harness.run(check_mode=True)
+    assert raised.value.error_type == "output_exists"
+    assert (planted / "keep").exists()
+    assert harness.runner.specs == []
+
+
+def test_a_check_mode_directory_that_cannot_be_removed_is_reported(harness: Harness) -> None:
+    harness.output_root.mkdir(mode=0o700)
+    locked: list[Path] = []
+
+    def lock(results: Path) -> None:
+        directory = results.parent / "locked"
+        directory.mkdir()
+        (directory / "file").write_text("x", encoding="utf-8")
+        directory.chmod(0o500)
+        locked.append(directory)
+
+    harness.runner.on_evaluate = lock
+    try:
+        with pytest.raises(audit.AuditError, match="could not be removed") as raised:
+            harness.run(check_mode=True)
+        assert raised.value.error_type == "cleanup_failed"
+        assert raised.value.evidence_dir == str(harness.output_root / ".check-run-1")
+    finally:
+        for directory in locked:
+            directory.chmod(0o700)
+
+
+def test_cleanup_refuses_deep_or_crowded_trees(tmp_path: Path) -> None:
+    deep = tmp_path / "deep"
+    (deep / "a" / "b" / "c" / "d" / "e" / "f").mkdir(parents=True)
+    with pytest.raises(audit.AuditError, match="nested too deeply") as nested:
+        audit.discard_preview(deep)
+    assert nested.value.error_type == "cleanup_failed"
+    crowded = tmp_path / "crowded"
+    crowded.mkdir()
+    for index in range(audit.MAX_EVIDENCE_ENTRIES + 1):
+        (crowded / f"f{index}").write_text("x", encoding="utf-8")
+    with pytest.raises(audit.AuditError, match="too many entries"):
+        audit.discard_preview(crowded)
 
 
 def test_repeated_runs_never_change_the_host_and_never_reuse_evidence(harness: Harness) -> None:

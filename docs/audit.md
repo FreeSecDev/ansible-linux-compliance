@@ -42,14 +42,15 @@ The variables are listed in the [role README](../roles/audit/README.md).
 
 `compliance_scan` is a thin wrapper around `plugins/module_utils/compliance/audit.py`.
 
-1. **Plan** (also in check mode). Validate every argument; resolve the content path; verify the datastream SHA-256 and
+1. **Plan**. Validate every argument; resolve the content path; verify the datastream SHA-256 and
    parse it with the hardened catalog parser; find the profile (a missing profile is `profile_not_found`, never
    replaced); check that every disabled rule is selected by the profile and that at least one rule stays enabled;
    inspect the output directory without creating anything.
-2. **Execute** (not in check mode). Create missing components of the output directory (mode `0700`), create the run
+2. **Execute** (outside check mode). Create missing components of the output directory (mode `0700`), create the run
    directory `<output_dir>/<run_id>` (mode `0700`, must not exist), write the tailoring file when rules are disabled,
    run the backend, set every scanner output file to mode `0600`, and write the normalized scan run to
    `scan-run.json`.
+3. **Preview** (check mode). Run the same scan into a private temporary directory and keep nothing; see below.
 
 The scan runs through the backend registry (`backends.default_registry()`). The only backend is OpenSCAP, which runs
 `oscap xccdf eval --profile <id> [--tailoring-file <run>/tailoring.xml] --results-arf <run>/scan/results-arf.xml
@@ -86,11 +87,23 @@ audit recorded what it saw". A second run with the same inputs is idempotent wit
 
 ### Check mode
 
-Check mode performs the plan only: it verifies the datastream, the profile, the disabled rules and the output
-directory, then returns `run_status: not_run`, `evidence_written: false` and in `planned` what would run (backend,
-profile, evaluated profile, rule counts, run directory, timeout, whether a tailoring file is needed). No scanner
-process starts, no directory is created and no file is written. This differs from the discovery modules, whose check
-mode is a normal run, because a scan writes evidence.
+The scan only reads the host, and operators who run `--check` expect real findings, so check mode runs the same scan
+(as the ansible-modules skill requires) but keeps nothing:
+
+1. The plan runs as usual, including the digest, profile, disabled-rule and output directory checks.
+2. When the output directory exists and passes the rules below, the scan runs into a new private directory
+   `<output_dir>/.check-<run_id>` (mode `0700`, owner and permissions vetted like a run directory, must not exist; a
+   run identifier can never start with `.`, so it cannot collide with a real run). The tailoring file and the scanner
+   output are written there.
+3. The results are parsed and returned in full (`scan_run`, `summary`, `run_status`).
+4. In a `finally`, before the module returns, the directory and every file in it are removed, also when the scan failed,
+   timed out or the backend refused the request. Symlinks inside it are removed, never followed, and nesting and entry
+   counts are bounded. If removal fails, the task fails with `cleanup_failed` and names the directory.
+
+The result has `evidence_written: false`, an empty `evidence.files`, `changed: false` and a `msg` that says no evidence
+was kept. Check mode never creates the output directory: when it does not exist, no scan runs, `run_status` is
+`not_run`, `scan_run` and `summary` are null, `planned` shows what would run, and `msg` says why. Residual: `oscap`
+itself may use temporary files outside the run directory (for example in `/tmp`), which the module does not control.
 
 ### Output directory rules
 
@@ -150,7 +163,8 @@ an error, and disabling every rule is `nothing_to_scan`.
 | `unknown_backend` | The backend is not registered |
 | `digest_mismatch`, `profile_not_found`, `unsupported_content`, `invalid_content` | Content errors from the catalog |
 | `invalid_request` | The backend refused the request (for example a symlink in the content path); `evidence_dir` names the run directory |
-| `evidence_write_failed` | An evidence file could not be written |
+| `evidence_write_failed` | An evidence file could not be written, or the check-mode scan could not write its files |
+| `cleanup_failed` | The temporary check-mode directory could not be removed; `evidence_dir` names it |
 | `scan_incomplete` | The scan did not complete and `fail_on_incomplete` is true; the full result is included |
 
 ## Tests
@@ -160,10 +174,28 @@ use a fake process layer and never run `oscap`. They cover exit statuses 0, 1, 2
 scanner, contradicting results, malformed, hostile (billion laughs, external entity, DOCTYPE), oversized and foreign
 results, content swapped after verification, malicious profile, rule, toggle and run identifiers, path traversal,
 symlinked output directories and ancestors, planted run directories, open permissions, foreign owners, races during
-directory creation, tailoring, check mode and repeated runs. `audit.py` and the module have 100% line and branch
-coverage.
+directory creation, tailoring, check mode (real findings, and nothing left behind on success, scanner failure, timeout,
+a missing scanner, malformed results, planted symlinks and nested directories, a backend refusal and a write failure)
+and repeated runs. `audit.py` and the module have 100% line and branch coverage.
 
-Not covered yet: a Molecule scenario that runs a real `oscap` scan and asserts that audit mode changes nothing, that
-check mode writes nothing and that a second run is idempotent. The Docker Molecule framework (FREES-59, pull
-request 14) had not merged when this was written, so that scenario is a follow-up for FREES-60. The generated tailoring
-file has therefore not yet been evaluated by a real `oscap`.
+`make test-oscap-integration` (CI job `oscap-integration`) runs a real `oscap`. It fetches the pinned Ubuntu 24.04
+datastream through `tools/content/fetch_content.py` (archive SHA-512 and datastream SHA-256 verified) and runs
+`tests/system/test_oscap_integration.py` with the production backend and process helper:
+
+- a check-mode scan of `cis_level1_server` without tailoring must complete with exactly the 408 rules recorded in
+  `tests/fixtures/catalog/golden-rules.yml`, none of them missing a result, and leave nothing in the output directory;
+- a normal scan with three disabled rules (the filesystem-wide checks `file_permissions_unauthorized_world_writable`,
+  `file_permissions_ungroupowned` and `no_files_unowned_by_user`) must complete; the raw `results.xml` must report the
+  tailored profile and `notselected` for exactly those rules and a result for every other selected rule; the normalized
+  findings must show them as `disabled` with their toggle variable; the reported `profile_id` must be the original
+  one; and `content.source` must carry the SHA-256 of the tailoring file that the evidence lists.
+
+CI installs `openscap-scanner` from the Ubuntu 24.04 archive at the exact version `1.3.9+dfsg-1.1ubuntu2`, checks the
+installed version and prints `oscap --version`, and sets `FREESECDEV_REQUIRE_OSCAP=1`, so the tests fail instead of
+skipping when `oscap` or the content is missing. Locally they skip only when `/usr/bin/oscap` is absent. The scans run
+as the unprivileged runner user (the tests pass the expected owner explicitly), so rules that need root may report
+other results than on a managed host; the assertions are about the protocol, not about the host's compliance.
+
+Not covered yet: a Molecule scenario on a managed host that asserts that the audit role changes nothing, that check
+mode leaves nothing behind and that a second run is idempotent. The Docker Molecule framework (FREES-59, pull request
+14) had not merged when this was written, so that scenario is a follow-up for FREES-60.

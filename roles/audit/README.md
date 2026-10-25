@@ -16,7 +16,9 @@ scenario runs a real scan yet.
 
 The `audit` role never changes the configuration of the managed host. It writes evidence files (mode `0600`) into a new
 run directory (mode `0700`) below `linux_compliance_audit_output_dir`; the module reports that as `evidence_written`, not
-as `changed`. Only the scan task uses `become`. In check mode nothing runs and nothing is written.
+as `changed`. Only the scan task uses `become`. In check mode the scan runs for real into a temporary directory below
+an existing output directory that is removed before the task returns, so the findings are real and nothing is kept;
+when the output directory does not exist, check mode does not create it and the result is `not_run`.
 
 ## Order
 
@@ -44,7 +46,7 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 ## Result
 
 `linux_compliance_audited` holds `run_id`, `run_status` (`completed`, `failed`, `timed_out`, or `not_run` in check
-mode), `summary` (counts per outcome), `scan_run` (the normalized findings document of ADR 0013), `evidence`
+mode without an existing output directory), `summary` (counts per outcome), `scan_run` (the normalized findings document of ADR 0013), `evidence`
 (`directory` and `files` with path, kind, SHA-256 and size), `evidence_written`, `disabled_rules` and `planned`.
 
 ## Running

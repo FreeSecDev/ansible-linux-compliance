@@ -147,19 +147,22 @@ attributes:
   check_mode:
     support: full
     description:
-      - Check mode validates every argument, verifies the datastream and the profile and inspects
-        the output directory, then reports in RV(planned) what would run.
-      - It starts no scanner, creates no directory and writes no file, and RV(run_status) is
-        C(not_run).
+      - Check mode runs the same read-only scan and returns the real findings, but keeps no
+        evidence. The scan runs in a private temporary directory C(<output_dir>/.check-<run_id>)
+        (mode C(0700)), which is removed with every file in it before the module returns, also
+        when the scan fails or times out. RV(evidence_written) is false and RV(evidence) is empty.
+      - Check mode never creates O(output_dir). When it does not exist, no scan runs,
+        RV(run_status) is C(not_run) and RV(msg) says why.
   diff_mode:
     support: none
     description: The module never changes the host, so there is no difference to show.
 notes:
   - The module needs root, usually through C(become), because the output directory must be owned by
     root and the scanner reads system state.
-  - Each run writes C(<output_dir>/<run_id>/scan/results.xml) and C(results-arf.xml) (scanner
-    output), C(<output_dir>/<run_id>/scan-run.json) (the normalized scan run) and, when rules are
-    disabled, C(<output_dir>/<run_id>/tailoring.xml). Directories have mode C(0700), files C(0600).
+  - Outside check mode each run writes C(<output_dir>/<run_id>/scan/results.xml) and
+    C(results-arf.xml) (scanner output), C(<output_dir>/<run_id>/scan-run.json) (the normalized
+    scan run) and, when rules are disabled, C(<output_dir>/<run_id>/tailoring.xml). Directories
+    have mode C(0700), files C(0600).
   - Exit status 2 of C(oscap) means that rules failed; it is a completed scan. Any other non-zero
     status, a signal or a timeout is a scanner failure.
   - A scan result is evidence about one host, not a certification and not a claim of compliance
@@ -207,13 +210,18 @@ EXAMPLES = r"""
 """
 
 RETURN = r"""
+msg:
+  description: Short summary of what ran and where the evidence is, or why no scan ran.
+  returned: always
+  type: str
+  sample: scan finished with run_status completed; evidence in /var/lib/freesecdev/evidence/run-1
 changed:
   description: Always false. Writing evidence is not a change to the host; see RV(evidence_written).
   returned: always
   type: bool
   sample: false
 evidence_written:
-  description: Whether evidence files were written. False in check mode.
+  description: Whether evidence files were kept. Always false in check mode.
   returned: always
   type: bool
   sample: true
@@ -224,14 +232,15 @@ run_id:
   sample: 20261025T100000.123456Z
 run_status:
   description:
-    - C(completed), C(failed) or C(timed_out) after a scan, C(not_run) in check mode.
+    - C(completed), C(failed) or C(timed_out) after a scan, also in check mode.
+    - C(not_run) in check mode when O(output_dir) does not exist.
     - Only a C(completed) run says anything about the rules; read it before any count.
   returned: success
   type: str
   sample: completed
 summary:
   description:
-    - Number of findings per outcome, the total and the run status. Null in check mode.
+    - Number of findings per outcome, the total and the run status. Null when no scan ran.
     - It never states compliance. A run that did not complete has only C(error) findings.
   returned: success
   type: dict
@@ -249,7 +258,7 @@ scan_run:
   description:
     - The normalized scan run (findings model schema 1.0, ADR 0013), with its provenance
       (C(scanner), C(content) with the verified SHA-256 and the tailoring digest, C(host), times).
-    - Findings are sorted by rule identifier. Null in check mode.
+    - Findings are sorted by rule identifier. Null when no scan ran.
   returned: success
   type: dict
   sample:
@@ -317,7 +326,7 @@ disabled_rules:
       disabled_by: linux_compliance_rule_package_aide_installed_enabled
 planned:
   description:
-    - What the scan does or would do in check mode.
+    - What the scan does; C(run_dir) is where a run outside check mode keeps its evidence.
   returned: success
   type: dict
   sample:
@@ -341,7 +350,8 @@ error_type:
   description:
     - Stable identifier of the failure.
     - C(invalid_argument), C(unsafe_output_dir), C(output_exists), C(nothing_to_scan),
-      C(unknown_backend), C(invalid_request), C(evidence_write_failed), C(scan_incomplete),
+      C(unknown_backend), C(invalid_request), C(evidence_write_failed), C(cleanup_failed),
+      C(scan_incomplete),
       C(digest_mismatch), C(profile_not_found), C(unsupported_content) or C(invalid_content).
   returned: failure
   type: str
@@ -426,6 +436,7 @@ def main() -> None:
             summary=result["summary"],
         )
     module.exit_json(
+        msg=result["msg"],
         changed=False,
         evidence_written=result["evidence_written"],
         evidence=result["evidence"],

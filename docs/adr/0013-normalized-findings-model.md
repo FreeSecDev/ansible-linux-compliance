@@ -251,9 +251,11 @@ verdict from findings alone. These invariants apply to every backend and every r
   `0600` files) is reported separately as `evidence_written` and `evidence.files` (path, kind, SHA-256, size), so a
   report can always tell a host change from an audit record. Evidence is never overwritten; a repeated run reports
   `changed: false` again and writes a new run directory.
-- **Check mode runs no scanner and writes nothing.** It validates the arguments, verifies the digest and the profile,
-  inspects the output directory and returns `run_status: not_run` with the planned scan. This deliberately differs from
-  the read-only discovery modules, because a scan writes evidence.
+- **Check mode scans and keeps nothing.** The scan is read-only, so check mode runs it and returns the real findings,
+  but into a private `0700` directory `<output_dir>/.check-<run_id>` that is removed with every file in it before the
+  module returns, also on failure (`cleanup_failed` if that is impossible). `evidence_written` is false and no evidence
+  file is listed. Check mode never creates the output directory; when it is missing no scan runs and the run status is
+  `not_run`.
 - **Scanner failures are results, not exceptions.** A `failed` or `timed_out` run is returned with all findings `error`
   and, by default (`fail_on_incomplete: true`), the task fails with `error_type: scan_incomplete` and the full result.
   The audit role registers the result first and fails afterwards, so the evidence of a failed scan is kept.

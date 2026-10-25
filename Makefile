@@ -66,6 +66,7 @@ Tests
   test-ansible-units    ansible-test units on the temporary collection tree, no Docker
   test-coverage         Unit tests with branch coverage thresholds
   test-content-golden   Fetch the pinned content and compare the catalog with the recorded rule lists
+  test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
@@ -99,7 +100,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
 	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons \
-	test-integration test-coverage test-content-golden test-molecule-docker test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
 	require-uv
@@ -201,6 +202,10 @@ test-coverage: require-uv collection-link
 test-content-golden: require-uv collection-link
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content
 	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py --no-cov
+
+test-oscap-integration: require-uv collection-link
+	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
+	$(RUN) pytest tests/system --no-cov -v -s -p no:cacheprovider
 
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)

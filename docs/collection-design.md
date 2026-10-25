@@ -299,6 +299,7 @@ around `plugins/module_utils/compliance/audit.py`, which plans the audit (argume
 verification through `catalog.py`, disabled rules, output directory inspection) and executes it (run directory,
 tailoring file, backend from `backends.default_registry()`, evidence). The module returns the `ScanRun` of ADR 0013, a
 summary per outcome, the provenance and the evidence paths, always with `changed: false`; evidence writes are reported
-as `evidence_written`. Check mode plans only. The test seams `owner_uid`, `registry` and `clock` are keyword-only
+as `evidence_written`. Check mode runs the scan into a temporary directory that is removed before the module returns and
+keeps no evidence; `make test-oscap-integration` runs it against a real `oscap`. The test seams `owner_uid`, `registry` and `clock` are keyword-only
 arguments of `audit.Auditor`; the module constructs `Auditor()` and the repository guard bans the `owner_uid` and
 `clock` keywords in plugin code.

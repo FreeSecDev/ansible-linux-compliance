@@ -208,8 +208,40 @@ def test_check_mode_reports_the_plan_and_runs_nothing(
     assert result["run_status"] == "not_run"
     assert result["scan_run"] is None
     assert result["planned"]["expected_rule_count"] == 2
+    assert "does not create it" in result["msg"]
     assert runner.calls == 0
     assert not (content.parent.parent / "evidence").exists()
+
+
+def test_check_mode_with_an_existing_output_dir_returns_real_findings(
+    capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
+) -> None:
+    root = content.parent.parent / "evidence"
+    root.mkdir(mode=0o700)
+    code, result = run(capsys, arguments(content, _ansible_check_mode=True))
+    assert code == 0
+    assert result["changed"] is False
+    assert result["evidence_written"] is False
+    assert result["evidence"] == {"directory": None, "files": []}
+    assert result["run_status"] == "completed"
+    findings = {item["rule_id"]: item["outcome"] for item in result["scan_run"]["findings"]}
+    assert findings == {ALPHA: "pass", BETA: "fail"}
+    assert "no evidence was kept" in result["msg"]
+    assert runner.calls == 2
+    assert list(root.iterdir()) == []
+
+
+def test_an_incomplete_check_mode_scan_fails_and_keeps_nothing(
+    capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
+) -> None:
+    root = content.parent.parent / "evidence"
+    root.mkdir(mode=0o700)
+    runner.timed_out = True
+    code, result = run(capsys, arguments(content, _ansible_check_mode=True))
+    assert code == 1
+    assert result["error_type"] == "scan_incomplete"
+    assert result["evidence_written"] is False
+    assert list(root.iterdir()) == []
 
 
 @pytest.mark.usefixtures("runner")
