@@ -126,6 +126,13 @@ epics:
           - {id: t030302-rulesets, summary: "Create main branch rulesets with required checks"}
           - {id: t030303-security-features, summary: "Enable secret scanning, push protection, private vulnerability reporting"}
           - {id: t030304-verify-policy, summary: "Verify direct pushes to main are rejected"}
+      - id: s0304-second-release-approver
+        type: Task
+        summary: "[Superseded] Add a second release approver and enable prevent-self-review"
+        skill: github-actions
+        complexity: S
+        acceptance:
+          - "Superseded on 2026-10-25: the owner chose automated release gates without human approval (ADR 0012)."
 
   - id: e04-aws
     summary: AWS infrastructure and OIDC

@@ -40,7 +40,7 @@ that `make ci` reproduces CI locally. Pull request validation and publishing are
 - Never use `pull_request_target`, and never use `workflow_run` with secrets on untrusted input.
 - Untrusted values (branch names, titles, inputs) pass through `env:` and are never interpolated into `run:`.
 - Caches are keyed so a cache written by an untrusted pull request cannot be restored by a privileged job.
-- Publishing jobs run only from trusted refs, use GitHub environments with required reviewers and assume AWS OIDC roles.
+- Publishing jobs run only from trusted refs, run in tag- or branch-restricted GitHub environments and assume AWS OIDC roles. Environments have no human required reviewers; gates are automated checks in the workflow (ADR 0012).
 - Every workflow sets `concurrency`; every job sets `timeout-minutes`.
 - The aggregate `ci-gate` job runs with `if: always()`, depends on all required jobs and fails if any needed job failed or was cancelled, so required checks always report.
 - Support the `merge_group` trigger alongside `pull_request`.
@@ -68,7 +68,7 @@ that `make ci` reproduces CI locally. Pull request validation and publishing are
 
 - Workflows from forks get a read-only token and no secrets and no AWS role.
 - `id-token: write` is granted only to the specific job that assumes a role.
-- Environments for publishing require reviewers; secrets are scoped to environments.
+- Publishing environments are restricted to trusted refs, have administrator bypass disabled and scope their secrets; they never list human required reviewers.
 - Artifacts and summaries never contain tokens or sensitive host data.
 - Every workflow change is reviewed by `security-review`.
 

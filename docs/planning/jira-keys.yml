@@ -30,6 +30,7 @@ keys:
   s0301-org-audit: FREES-27
   s0302-create-repos: FREES-28
   s0303-repo-security: FREES-29
+  s0304-second-release-approver: FREES-123
   s0401-state-backend: FREES-30
   s0402-oidc: FREES-31
   s0403-build-services: FREES-32

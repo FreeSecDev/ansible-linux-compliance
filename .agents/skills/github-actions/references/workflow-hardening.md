@@ -12,7 +12,7 @@
 - [ ] `permissions: {}` at the top level.
 - [ ] Each job lists the minimum scopes; `id-token: write` only where a role is assumed.
 - [ ] `persist-credentials: false` on every checkout.
-- [ ] Environments with required reviewers guard publishing jobs.
+- [ ] Ref-restricted environments without admin bypass guard publishing jobs, and the job verifies its automated release gates before publishing.
 
 ## Injection
 

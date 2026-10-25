@@ -22,7 +22,7 @@ Mark each item only after it actually ran. Do not paste secrets.
 - [ ] All required checks passed for the tag commit.
 - [ ] Tarball rebuilt twice with `SOURCE_DATE_EPOCH`; SHA-256 sums identical.
 - [ ] Security scans passed.
-- [ ] Publishing job waited for approval from the `release` environment reviewers.
+- [ ] Automated gate passed: tag commit on `main`, merged from a pull request approved by `freesecdev-review`, all required checks green, version matches, artifacts reproducible.
 
 ## Published artifacts
 
