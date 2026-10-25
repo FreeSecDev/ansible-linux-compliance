@@ -1,0 +1,22 @@
+---
+argument_specs:
+  main:
+    short_description: "Audit a host against a compliance profile (read-only)"
+    description:
+      - "Scans the host against the selected profile and produces normalized findings."
+      - "Skeleton only: the role validates its inputs and then fails until FREES-49 is implemented."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_audit_profile:
+        type: str
+        default: "cis_level1_server"
+        description:
+          - "ComplianceAsCode profile short identifier, without the XCCDF prefix."
+          - "The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010)."
+          - "A profile is never substituted silently for another benchmark."
+      linux_compliance_audit_fail_on_noncompliant:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the audit reports at least one failed rule."
+          - "The audit never changes the host either way."

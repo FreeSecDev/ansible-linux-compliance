@@ -1,0 +1,16 @@
+---
+argument_specs:
+  main:
+    short_description: "Discover host facts and available benchmark content (read-only)"
+    description:
+      - "Collects the facts and benchmark content metadata that later roles need."
+      - "Skeleton only: the role validates its inputs and then fails until FREES-43 is implemented."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_discover_profile:
+        type: str
+        default: "cis_level1_server"
+        description:
+          - "ComplianceAsCode profile short identifier, without the XCCDF prefix."
+          - "The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010)."
+          - "A profile is never substituted silently for another benchmark."

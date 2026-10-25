@@ -1,0 +1,21 @@
+---
+argument_specs:
+  main:
+    short_description: "Export an evidence bundle (controller side)"
+    description:
+      - "Exports findings and run metadata as an evidence bundle on the controller."
+      - "Skeleton only: the role validates its inputs and then fails until FREES-51 is implemented."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_evidence_output_dir:
+        type: path
+        default: "evidence"
+        description:
+          - "Controller directory that receives the evidence bundle."
+          - "A relative path is resolved against the playbook directory."
+      linux_compliance_evidence_include_host_facts:
+        type: bool
+        default: false
+        description:
+          - "Include gathered host facts in the bundle."
+          - "Facts can identify the host, so they are excluded by default."

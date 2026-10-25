@@ -8,7 +8,7 @@
 | GitHub Actions SHAs | Renovate |
 | Packer plugins | Renovate |
 | OpenTofu providers | Renovate |
-| Pinned tool versions (Makefile, version files) | Renovate custom managers |
+| Pinned tool versions (Makefile, version files) | planned (FREES-81): no Renovate custom manager is configured yet |
 | Ansible Galaxy collection requirements | Renovate |
 | pre-commit hooks | Renovate |
 | Python (pip, uv) versions and security updates | Dependabot |

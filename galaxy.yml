@@ -36,6 +36,7 @@ build_ignore:
   - .markdownlint-cli2.yaml
   - .renovaterc.json
   - .ansible-lint
+  - ansible.cfg
   - .coverage
   - .mypy_cache
   - .pytest_cache

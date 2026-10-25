@@ -14,6 +14,6 @@
 | [0010](0010-initial-os-and-benchmark-scope.md) | Initial operating system and benchmark scope | proposed |
 | [0011](0011-control-toggles-and-cleanup.md) | Per-rule and per-topic control toggles with cleanup on disable | proposed |
 | [0012](0012-github-native-releases-and-packages.md) | GitHub-native releases, packages and supply-chain features | proposed |
-| [0013](0013-normalized-findings-model.md) | Normalized compliance findings model | proposed |
+| [0013](0013-normalized-findings-model.md) | Normalized compliance findings model | accepted |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

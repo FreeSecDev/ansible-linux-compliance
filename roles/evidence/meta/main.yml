@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  role_name: evidence
+  namespace: freesecdev
+  author: FreeSecDev contributors
+  description: >-
+    Export an evidence bundle (controller side).
+    Skeleton only: not implemented yet, tracked in FREES-51.
+    The platforms below are intended targets and none is tested yet.
+  license: Apache-2.0
+  min_ansible_version: "2.20"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - compliance
+    - security
+    - evidence
+dependencies: []

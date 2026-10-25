@@ -25,7 +25,7 @@ Usage: make <target>
 
 Setup
   help                  Show this help
-  bootstrap             Install tooling and git hooks, then verify the environment
+  bootstrap             Install tooling and git hooks, then verify the environment (git, jq)
   install               Sync the locked Python environment and install pre-commit and pre-push hooks
 
 Formatting and linting
@@ -36,7 +36,7 @@ Formatting and linting
   lint-actions          actionlint for GitHub workflows
   lint-repo             Repository source rules (document start, comments, banned modules)
   lint-skills           Validate agent skills under .agents/skills
-  lint-ansible          ansible-lint (production profile) and antsibull-changelog lint
+  lint-ansible          ansible-lint (production profile), role argument spec check and antsibull-changelog lint
   lint-iac              [pending FREES-30] OpenTofu validation and Checkov
   lint-packer           [pending FREES-64] Packer validation
 
@@ -73,7 +73,7 @@ Reporting, docs and release
 
 Housekeeping
   collection-tree       Assemble the temporary collection tree under build/collection
-  collection-link       Link plugins/ into build/collections for pytest and type checkers
+  collection-link       Link plugins/ and roles/ into build/collections for pytest, type checkers and ansible-lint
   clean                 Remove caches and generated files
   ci                    Run the credential-free CI stages locally
 endef
@@ -103,6 +103,7 @@ install: require-uv collection-link
 
 bootstrap: install
 	@command -v git >/dev/null || { printf 'error: git is required\n' >&2; exit 1; }
+	@command -v jq >/dev/null || { printf 'error: jq is required by make package but was not found on PATH\n' >&2; printf 'install it with your package manager, for example: sudo apt-get install jq\n' >&2; exit 1; }
 	$(RUN) python --version
 	$(RUN) pre-commit --version
 
@@ -129,8 +130,9 @@ lint-repo: require-uv
 lint-skills: require-uv
 	$(RUN) python tools/skills/validate_skills.py
 
-lint-ansible: require-uv
-	$(RUN) ansible-lint
+lint-ansible: require-uv collection-link
+	ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' $(RUN) ansible-lint
+	$(RUN) python tools/roles/check_role_specs.py roles
 	$(RUN) antsibull-changelog lint
 
 lint-iac:
@@ -231,6 +233,7 @@ package-check: require-uv
 collection-link:
 	mkdir -p $(COLLECTION_LINK)
 	ln -sfn ../../../../../plugins $(COLLECTION_LINK)/plugins
+	ln -sfn ../../../../../roles $(COLLECTION_LINK)/roles
 
 collection-tree:
 	rm -rf build/collection

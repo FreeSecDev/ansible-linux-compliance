@@ -1,0 +1,3 @@
+---
+linux_compliance_evidence_output_dir: "evidence"
+linux_compliance_evidence_include_host_facts: false
