@@ -18,6 +18,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     openscap,
     process,
     scanner,
+    xmlsafe,
 )
 
 if TYPE_CHECKING:
@@ -364,7 +365,7 @@ class TestHardening:
     def test_parser_rejects_declarations_even_if_the_text_check_is_bypassed(
         self, name: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(openscap, "_scan_for_declarations", skip_declaration_scan)
+        monkeypatch.setattr(xmlsafe, "_scan_for_declarations", skip_declaration_scan)
         with pytest.raises(openscap.XccdfParseError, match="not allowed"):
             parse(name, ADVERSARIAL)
 
@@ -380,7 +381,7 @@ class TestHardening:
         with pytest.raises(openscap.XccdfParseError) as caught:
             openscap.parse_results(document)
         assert "TOP-SECRET-VALUE" not in str(caught.value)
-        monkeypatch.setattr(openscap, "_scan_for_declarations", skip_declaration_scan)
+        monkeypatch.setattr(xmlsafe, "_scan_for_declarations", skip_declaration_scan)
         with pytest.raises(openscap.XccdfParseError) as bypassed:
             openscap.parse_results(document)
         assert "TOP-SECRET-VALUE" not in str(bypassed.value)
@@ -530,7 +531,7 @@ class TestReadResults:
     ) -> None:
         path = tmp_path / "nul.xml"
         path.write_bytes((XCCDF / "all-pass.xml").read_bytes().replace(b"draft", b"dr\x00ft"))
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 64)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", 64)
         with pytest.raises(openscap.XccdfParseError, match="NUL byte"):
             self.read(path)
 
@@ -1172,7 +1173,7 @@ class TestStreaming:
 
     def test_small_chunks_give_the_same_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
         expected = openscap.read_results(str(XCCDF / "all-pass.xml"), 10**6)
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 7)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", 7)
         assert openscap.read_results(str(XCCDF / "all-pass.xml"), 10**6) == expected
 
     @pytest.mark.parametrize("size", [1, 2, 3, 5, 8, 9, 13])
@@ -1180,12 +1181,12 @@ class TestStreaming:
     def test_declarations_split_across_chunks_are_rejected_by_the_scan(
         self, monkeypatch: pytest.MonkeyPatch, name: str, size: int
     ) -> None:
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", size)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", size)
         with pytest.raises(openscap.XccdfParseError, match="DOCTYPE and ENTITY"):
             openscap.read_results(str(ADVERSARIAL / name), 10**6)
 
     def test_size_is_enforced_across_chunks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 16)
+        monkeypatch.setattr(xmlsafe, "READ_CHUNK_BYTES", 16)
         path = str(XCCDF / "all-pass.xml")
         size = (XCCDF / "all-pass.xml").stat().st_size
         assert openscap.read_results(path, size)

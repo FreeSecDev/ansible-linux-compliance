@@ -1,0 +1,6 @@
+---
+trivial:
+  - >-
+    The OpenSCAP results parser now parses through the shared hardened XML parser
+    ``plugins/module_utils/compliance/xmlsafe.py`` and contains no XML parsing code of its own. Results and error
+    messages are unchanged. Only ``xmlsafe.py`` may import ``xml.parsers.expat``.

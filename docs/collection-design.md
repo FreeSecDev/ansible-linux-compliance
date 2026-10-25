@@ -13,7 +13,7 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 |---|---|
 | `galaxy.yml` | Namespace `freesecdev`, name `linux_compliance`, Apache-2.0, repository links, tags and `build_ignore` |
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
-| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF parser), `xmlsafe.py` (hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root) |
+| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root) |
 | `plugins/modules/` | `control_state.py` (ledger) and the read-only discovery modules `benchmark_info.py` and `profile_info.py` |
 | `content/manifest.yml` | Pinned ComplianceAsCode release, archive SHA-512, datastream SHA-256 and profiles ([ADR 0015](adr/0015-content-acquisition-and-pinning.md)); the only file in `content/` |
 | `tools/content/fetch_content.py` | Controller-side tool that downloads or reads the pinned archive and extracts only the listed datastreams |
@@ -164,7 +164,12 @@ is never summarised as compliant (ADR 0013, amendment of FREES-48).
 
 ### XCCDF results parser
 
-Results come from a host and are untrusted. The parser uses only the standard library and layers its defences:
+Results come from a host and are untrusted. The parser uses only the standard library and layers its defences.
+Layers 1 to 4 are implemented once, in `plugins/module_utils/compliance/xmlsafe.py`, which `catalog.py` uses too;
+`openscap.py` contains no XML parsing code of its own (FREES-126). It calls `xmlsafe.open_regular`,
+`xmlsafe.iter_handle_chunks` and `xmlsafe.parse_chunks` for files and `xmlsafe.parse_text` for text, passes its own
+element bound, turns every `xmlsafe.XmlSafetyError` into an `XccdfParseError` with the same message, and implements
+layers 5 and 6 in its event receiver:
 
 1. The file must be a regular file and not a symlink. It is streamed in 1 MiB chunks into the parser and bounded by
    `max_result_bytes` before and while it is read, so memory does not grow with its size (about 25 MB peak for a 115 MB
@@ -177,7 +182,8 @@ Results come from a host and are untrusted. The parser uses only the standard li
    were bypassed. The standard library is safe enough here because of this layering, not because of the expat version:
    the amplification limits of expat 2.4.0 and later, and the differing expat builds of Python 3.9 to 3.14, are not
    relied upon.
-4. Element count (default 2,000,000) and depth (default 64) are bounded while parsing.
+4. Element count (default 2,000,000 for results, stricter than the `xmlsafe` default of 5,000,000 that datastreams
+   use) and depth (default 64) are bounded while parsing.
 5. Only the XCCDF 1.2 namespace is accepted; a missing or other namespace is an error, and a `rule-result` or `result`
    element in another namespace is an error instead of being dropped.
 6. Elements are never stored. Each `rule-result` is reduced to its identifier, severity and result text when it ends.
@@ -197,6 +203,12 @@ Unit tests fake the process layer and run no `oscap`. They use hand-written synt
 parameter entity, oversized, deeply nested, unknown result value, missing namespace, truncated, non-UTF-8 stored as hex because sanity tooling rejects invalid text files); cases that
 depend on the filesystem, such as a symlinked results path, are created inside the tests. A real `oscap`
 run against real content belongs to a later Molecule story and is not covered here.
+
+`tests/unit/plugins/module_utils/compliance/test_openscap_differential.py` compares the parser with the results that
+the parser of `main` at commit `fdc788c` (before FREES-126 moved it onto `xmlsafe.py`) gave for every XML fixture of
+the repository, through both entry points, with element, depth and size bounds, small read chunks and the symlink,
+directory, missing and empty cases. The expected data in `tests/fixtures/differential/openscap-results.json` was
+generated from that commit and is never regenerated from the code under test.
 
 ## State ledger
 
@@ -239,8 +251,10 @@ each profile by identifier and title as read from the datastream.
 
 ### Catalog and modules
 
-`xmlsafe.py` offers `parse_chunks(chunks, events, bounds)` and `iter_file_chunks(path, max_bytes)` with the same layers
-as the results parser, and `catalog.py` builds on it. Its public functions are `read_benchmarks(path,
+`xmlsafe.py` offers `parse_chunks(chunks, events, bounds)`, `parse_text(document, events, bounds)`,
+`open_regular(path, max_bytes)`, `iter_handle_chunks(handle, max_bytes)` and `iter_file_chunks(path, max_bytes)`; the
+three file functions take an optional keyword `subject` that names the file in error messages (`"results"` gives
+"the results file"). It is the parser behind the results parser, and `catalog.py` builds on it too. Its public functions are `read_benchmarks(path,
 expected_sha256)` (hash first, parse second, hash again during the parse), `locate_datastreams(directory)`,
 `resolve_content_path(path)`, `single_benchmark`, `find_profile`, `profile_rules` and the module reports
 `benchmark_report` and `profile_report`. A digest mismatch raises `DigestMismatchError` before any parsing. Errors map

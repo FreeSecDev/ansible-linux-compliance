@@ -641,7 +641,7 @@ def test_guard_denies_other_constructs_by_default(tmp_path: Path, source: str) -
     assert process_messages(tmp_path, source)
 
 
-EXPAT_FILE = "plugins/module_utils/compliance/openscap.py"
+OPENSCAP_FILE = "plugins/module_utils/compliance/openscap.py"
 XMLSAFE_FILE = "plugins/module_utils/compliance/xmlsafe.py"
 
 
@@ -649,9 +649,22 @@ XMLSAFE_FILE = "plugins/module_utils/compliance/xmlsafe.py"
     "source",
     ["import xml.parsers.expat\n", "from xml.parsers.expat import ParserCreate\n"],
 )
-@pytest.mark.parametrize("name", [EXPAT_FILE, XMLSAFE_FILE])
-def test_expat_is_allowed_only_in_the_xml_parsers(tmp_path: Path, source: str, name: str) -> None:
-    assert process_messages(tmp_path, source, name) == []
+def test_expat_is_allowed_only_in_the_shared_xml_parser(tmp_path: Path, source: str) -> None:
+    assert process_messages(tmp_path, source, XMLSAFE_FILE) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import xml.parsers.expat\n",
+        "from xml.parsers.expat import ParserCreate\n",
+        "from xml.parsers import expat\n",
+    ],
+)
+def test_expat_is_no_longer_allowed_in_the_openscap_backend(tmp_path: Path, source: str) -> None:
+    messages = process_messages(tmp_path, source, OPENSCAP_FILE)
+    assert messages
+    assert all("is not allowed in plugins outside" in message for message in messages)
 
 
 @pytest.mark.parametrize(
@@ -663,6 +676,7 @@ def test_expat_is_allowed_only_in_the_xml_parsers(tmp_path: Path, source: str, n
         "plugins/module_utils/compliance/openscap_other.py",
         "plugins/module_utils/compliance/xmlsafe_other.py",
         "plugins/module_utils/compliance/catalog.py",
+        OPENSCAP_FILE,
         "plugins/modules/xmlsafe.py",
         "plugins/module_utils/other/xmlsafe.py",
         "plugins/module_utils/other/openscap.py",
@@ -678,17 +692,15 @@ def test_expat_is_denied_in_every_other_plugin_file(tmp_path: Path, name: str) -
     assert messages == [expected]
 
 
-@pytest.mark.parametrize("name", [EXPAT_FILE, XMLSAFE_FILE])
-def test_the_parser_file_keeps_every_other_restriction(tmp_path: Path, name: str) -> None:
+def test_the_parser_file_keeps_every_other_restriction(tmp_path: Path) -> None:
     source = "import xml.parsers.expat\nimport subprocess\nimport xml.sax\nf(runner=g)\nf(**h)\n"
-    messages = process_messages(tmp_path, source, name)
+    messages = process_messages(tmp_path, source, XMLSAFE_FILE)
     assert len(messages) >= 4
     assert not any("xml.parsers.expat" in message for message in messages)
 
 
-def test_the_extra_import_table_names_only_the_parsers() -> None:
+def test_the_extra_import_table_names_only_the_shared_parser() -> None:
     assert {str(path): imports for path, imports in rules.EXTRA_IMPORTS.items()} == {
-        EXPAT_FILE: frozenset({"xml.parsers.expat"}),
         XMLSAFE_FILE: frozenset({"xml.parsers.expat"}),
     }
 

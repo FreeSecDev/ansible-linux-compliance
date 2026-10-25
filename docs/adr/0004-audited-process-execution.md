@@ -249,3 +249,29 @@ today; remove them if they stay unused.
   other plugin file that imports expat still fails the guard, and a test shows it for several paths. `openscap.py`
   keeps its own copy of the parser for now; moving it onto `xmlsafe.py` is a follow-up.
 - The public bounds parameter of `xmlsafe` is named `bounds`, because `limits` stays banned as a call keyword.
+
+## Amendment 2026-10-25: one XML parser (FREES-126)
+
+- Import allow-list for `plugins/`: `xml.parsers.expat` is allowed in exactly one file,
+  `plugins/module_utils/compliance/xmlsafe.py` (`EXTRA_IMPORTS` in `tools/lint/check_repo_rules.py`), in the form
+  `from xml.parsers import expat`. `plugins/module_utils/compliance/openscap.py` has lost the allowance that FREES-48
+  gave it and fails the guard if it imports expat in any form, as does every other plugin file; tests in
+  `tests/unit/tools/test_check_repo_rules.py` show this for `openscap.py` and several other paths. The guard tests that
+  exercise the allowed file (`EXPAT_FILE` in `tests/unit/tools/test_check_repo_rules_hardening.py`) now name
+  `xmlsafe.py`.
+- `openscap.py` contains no XML parsing code. Its results parser is an event receiver for `xmlsafe.parse_chunks` (files,
+  through `xmlsafe.open_regular` and `xmlsafe.iter_handle_chunks`) and `xmlsafe.parse_text` (text), and keeps only the
+  XCCDF semantics: the namespace checks, the leaf-element and mixed-content rules, and the extraction. It passes its
+  own bounds (`XmlLimits`, default 2,000,000 elements and depth 64) and re-raises `xmlsafe.XmlSafetyError` as
+  `XccdfParseError` with the same message, so the public API and every message are unchanged.
+- `xmlsafe.py` gained only what the move needed, and nothing weaker: `parse_text` (UTF-8 encoding of a text document,
+  then `parse_chunks`, so every check applies) and a keyword-only `subject` for `open_regular`, `iter_handle_chunks`
+  and `iter_file_chunks`, which only changes the wording of error messages ("the results file" instead of "the file").
+  The size bounds, the DOCTYPE, ENTITY, NUL, UTF-16 and UTF-32 rejection, the expat settings and the element and depth
+  bounds are the code that both parsers already had in identical form.
+- `subject` is not a test seam and not a banned keyword; it cannot change what is accepted. No new exemption was added
+  to the guard.
+- A differential test (`tests/unit/plugins/module_utils/compliance/test_openscap_differential.py`) compares the parser
+  with expected data generated from the old parser on `main` at `fdc788c` for every XML fixture, both entry points,
+  element, depth and size bounds, small read chunks and the symlink, directory, missing and empty cases. The test file
+  passes unchanged against both implementations.

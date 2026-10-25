@@ -21,6 +21,10 @@ the Python standard library. It is made safe by layering:
 Element names reach the caller in Clark notation (``{namespace}local``), so a
 caller that wants one namespace compares full names and rejects the rest.
 
+Every caller in ``plugins/`` parses XML through this module, which is the only
+plugin file that the repository guard lets import expat (ADR 0004). Callers keep
+only the semantics of their document type in their event receivers.
+
 Python and expat versions differ in their entity-expansion defences: the
 billion-laughs limits arrived with expat 2.4.0 (2.4.1 for the final fixes) and
 Python bundles or links different expat versions across 3.9 to 3.14. This module
@@ -167,7 +171,29 @@ def parse_chunks(
         _fail(f"not well-formed XML: {expat.ErrorString(error.code)} at line {error.lineno}")
 
 
-def open_regular(path: str, max_bytes: int) -> BinaryIO:
+def _subject(subject: str, noun: str) -> str:
+    return f"{subject} {noun}" if subject else noun
+
+
+def parse_text(document: str, events: XmlEvents, bounds: XmlBounds | None = None) -> None:
+    """Parse a document held in memory as text, forwarding events.
+
+    The text is encoded as UTF-8 and parsed by :func:`parse_chunks` as one chunk,
+    so every check of that function applies.
+
+    Raises:
+        XmlSafetyError: If the text cannot be encoded, for example because it
+            holds a lone surrogate, or for any rejection of :func:`parse_chunks`.
+            Errors raised by ``events`` propagate unchanged.
+    """
+    try:
+        encoded = document.encode("utf-8")
+    except UnicodeEncodeError:
+        _fail("the document is not valid Unicode text")
+    parse_chunks([encoded], events, bounds)
+
+
+def open_regular(path: str, max_bytes: int, *, subject: str = "") -> BinaryIO:
     """Open a regular, non-symlink file of at most ``max_bytes`` for binary reading.
 
     The caller uses the returned handle for every pass over the file, so the path
@@ -175,6 +201,9 @@ def open_regular(path: str, max_bytes: int) -> BinaryIO:
     ``O_NOFOLLOW`` is not available; a path swapped between the check and the open
     is covered by the callers, which compare the digest of the bytes they actually
     read with the pinned digest.
+
+    ``subject`` names the file in error messages: ``"results"`` turns "the file"
+    into "the results file" and "the path" into "the results path".
 
     Raises:
         XmlSafetyError: If the path is not a regular file, is a symlink, is
@@ -184,19 +213,21 @@ def open_regular(path: str, max_bytes: int) -> BinaryIO:
     try:
         info = target.lstat()
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            _fail("the path is not a regular file")
+            _fail(f"the {_subject(subject, 'path')} is not a regular file")
         if info.st_size > max_bytes:
-            _fail(f"the file is larger than {max_bytes} bytes")
+            _fail(f"the {_subject(subject, 'file')} is larger than {max_bytes} bytes")
         return target.open("rb")
     except OSError as error:
-        _fail(f"the file cannot be read: {error.strerror or type(error).__name__}")
+        reason = error.strerror or type(error).__name__
+        _fail(f"the {_subject(subject, 'file')} cannot be read: {reason}")
 
 
-def iter_handle_chunks(handle: BinaryIO, max_bytes: int) -> Iterator[bytes]:
+def iter_handle_chunks(handle: BinaryIO, max_bytes: int, *, subject: str = "") -> Iterator[bytes]:
     """Yield the bytes of an open file from its start, bounded by ``max_bytes``.
 
     The handle is rewound first, so it can be read again for a second pass. The
     size is checked while reading, so memory does not grow with the file size.
+    ``subject`` names the file in error messages, as for :func:`open_regular`.
 
     Raises:
         XmlSafetyError: If the file is larger than ``max_bytes`` or cannot be read.
@@ -207,17 +238,18 @@ def iter_handle_chunks(handle: BinaryIO, max_bytes: int) -> Iterator[bytes]:
         while chunk := handle.read(READ_CHUNK_BYTES):
             total += len(chunk)
             if total > max_bytes:
-                _fail(f"the file is larger than {max_bytes} bytes")
+                _fail(f"the {_subject(subject, 'file')} is larger than {max_bytes} bytes")
             yield chunk
     except OSError as error:
-        _fail(f"the file cannot be read: {error.strerror or type(error).__name__}")
+        reason = error.strerror or type(error).__name__
+        _fail(f"the {_subject(subject, 'file')} cannot be read: {reason}")
 
 
-def iter_file_chunks(path: str, max_bytes: int) -> Iterator[bytes]:
+def iter_file_chunks(path: str, max_bytes: int, *, subject: str = "") -> Iterator[bytes]:
     """Yield the bytes of a regular, non-symlink file with a size bound.
 
     Nothing is checked until the iterator is first advanced. See
     :func:`open_regular` and :func:`iter_handle_chunks` for the checks and errors.
     """
-    with open_regular(path, max_bytes) as handle:
-        yield from iter_handle_chunks(handle, max_bytes)
+    with open_regular(path, max_bytes, subject=subject) as handle:
+        yield from iter_handle_chunks(handle, max_bytes, subject=subject)

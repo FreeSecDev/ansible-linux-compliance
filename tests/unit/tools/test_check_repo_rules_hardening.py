@@ -872,7 +872,7 @@ SUBMODULE_ALLOWED = {
     "function-named-like-a-submodule": "import os.path\nx = os.path.join\n",
 }
 
-EXPAT_FILE = "plugins/module_utils/compliance/openscap.py"
+EXPAT_FILE = "plugins/module_utils/compliance/xmlsafe.py"
 
 
 @pytest.mark.parametrize("name", SUPER_REBINDING_BYPASSES)
