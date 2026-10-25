@@ -133,6 +133,9 @@ def test_the_schema_matches_the_validator() -> None:
     for kind, node in xccdf:
         assert node["pattern"] == f"^{model.XCCDF_ID_PATTERNS[kind]}$"
         assert node["maxLength"] == model.MAX_ID_LENGTH
+    for name in ("hosts", "groups", "profiles"):
+        assert scope[name]["uniqueItems"] is True
+        assert scope[name]["minItems"] == 1
     version = scope["benchmark"]["properties"]["version"]
     assert version["pattern"] == f"^{exceptions.TRIMMED_PATTERN}$"
     assert version["minLength"] == 1

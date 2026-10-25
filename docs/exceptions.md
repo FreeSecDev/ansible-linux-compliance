@@ -216,15 +216,19 @@ A scan run whose findings already carry exception data is rejected, so a waiver 
 ## Using the filters from a role
 
 The filters run on the controller. The exceptions file is read with `ansible.builtin.file`, which reads it on the
-controller as well, so the file never has to be copied to a managed host. The `audit` and `verify` roles (FREES-49,
-FREES-54) are expected to call them after the scan, roughly like this:
+controller as well, so the file never has to be copied to a managed host.
+
+The `audit` role (FREES-49) is implemented and publishes the scan run as `linux_compliance_audited.scan_run`, but it
+does not apply exceptions yet: its `linux_compliance_audit_fail_on_noncompliant` check counts the failures the scan
+reported, before any waiver. The `verify` role (FREES-54) is still a skeleton. Wiring the filters into these roles is a
+separate follow-up. Until then a play can apply them after the `audit` role, for example:
 
 ```yaml
 ---
 - name: Apply the exceptions file to the scan run
   ansible.builtin.set_fact:
     linux_compliance_audit_evaluation: >-
-      {{ linux_compliance_audit_scan_run
+      {{ linux_compliance_audited.scan_run
          | freesecdev.linux_compliance.apply_exceptions(
              lookup('ansible.builtin.file', linux_compliance_audit_exceptions_file),
              inventory_hostname, group_names) }}
@@ -241,9 +245,9 @@ FREES-54) are expected to call them after the scan, roughly like this:
   when: linux_compliance_audit_exceptions_file | length > 0
 ```
 
-`linux_compliance_audit_scan_run` stands for the scan run that the scan module returns, either as a mapping or as its
-JSON text. The variable names are illustrative; the roles define the real ones when they wire the filters in. An
-invalid file fails the task with a message that names the entry or line.
+The filter accepts the scan run as a mapping or as its JSON text. `linux_compliance_audit_exceptions_file` and
+`linux_compliance_audit_evaluation` are illustrative names in the play, not role variables; the roles will define
+their own when they wire the filters in. An invalid file fails the task with a message that names the entry or line.
 
 ## Reporting
 

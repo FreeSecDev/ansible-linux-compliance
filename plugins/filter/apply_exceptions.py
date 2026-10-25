@@ -76,7 +76,7 @@ EXAMPLES = r"""
 - name: Apply the exceptions file to the scan run of this host
   ansible.builtin.set_fact:
     linux_compliance_audit_evaluation: >-
-      {{ linux_compliance_audit_scan_run
+      {{ linux_compliance_audited.scan_run
          | freesecdev.linux_compliance.apply_exceptions(
              lookup('ansible.builtin.file', linux_compliance_audit_exceptions_file),
              inventory_hostname, group_names) }}

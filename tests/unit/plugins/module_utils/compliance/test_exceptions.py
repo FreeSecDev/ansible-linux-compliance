@@ -775,6 +775,22 @@ def test_an_exception_does_not_apply_to_scans_before_its_approval() -> None:
     assert by_rule(early)[RULE].exception.state is model.ExceptionState.NONE
 
 
+@pytest.mark.parametrize(
+    "controller",
+    [instant("2026-10-05T00:00:00Z"), instant("2026-10-05T12:00:00Z"), NOW],
+)
+def test_approval_is_judged_at_the_scan_start_not_at_the_controller_time(
+    controller: datetime,
+) -> None:
+    values = entry(created="2026-10-01", approval={"approver": "ciso", "date": "2026-10-05"})
+    run = scan_run(started="2026-10-04T23:59:59Z")
+    evaluation = evaluate(values, run=run, controller=controller)
+    assert evaluation.timing.evaluated_at >= instant("2026-10-05T00:00:00Z")
+    assert statuses(evaluation) == {"EXC-001": "not_yet_effective"}
+    assert by_rule(evaluation)[RULE].outcome is model.Outcome.FAIL
+    assert by_rule(evaluation)[RULE].exception == model.ExceptionStatus.none()
+
+
 def test_overlapping_exceptions_choose_the_earliest_expiry() -> None:
     evaluation = evaluate(
         entry(id="EXC-LATE", expires="2027-03-31"),

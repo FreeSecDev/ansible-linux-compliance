@@ -295,7 +295,9 @@ exceptions leave the finding `fail`, and every exception gets a status per run. 
 profiles, and expiry is judged at the later of the scan start and the controller time, so neither a shared benchmark
 identifier nor a host clock that runs behind widens a waiver. The filters
 `freesecdev.linux_compliance.apply_exceptions` and `freesecdev.linux_compliance.stale_exceptions` wrap it for roles;
-the `audit` and `verify` roles do not call them yet (FREES-49, FREES-54). Both filter files pass the deny-by-default
+the implemented `audit` role (FREES-49) does not call them yet, and neither does the `verify` skeleton (FREES-54);
+a play can apply them to `linux_compliance_audited.scan_run` after the `audit` role (see
+[exceptions](exceptions.md#using-the-filters-from-a-role)). Both filter files pass the deny-by-default
 plugin guard without an exemption. Unit tests cover the loader, every required field, the expiry boundaries, scope
 matching and the filters; `tests/unit/tools/test_exceptions_schema.py` compares the JSON Schema with the
 validator's constants and validates the example with `jsonschema`, so the two cannot drift, and
