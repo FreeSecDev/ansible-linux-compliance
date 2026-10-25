@@ -1,0 +1,9 @@
+---
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/FreeSecDev/ansible-linux-compliance/security/advisories/new
+    about: Do not open a public issue for vulnerabilities. Use private vulnerability reporting.
+  - name: Ask a question or discuss an idea
+    url: https://github.com/FreeSecDev/ansible-linux-compliance/discussions
+    about: Questions, usage help and open-ended ideas belong in Discussions.

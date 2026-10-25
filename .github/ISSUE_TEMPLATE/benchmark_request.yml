@@ -1,0 +1,70 @@
+---
+name: Benchmark request
+description: Request support for a security benchmark or profile
+title: "benchmark: "
+labels:
+  - compliance-content
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Restricted benchmark content, such as CIS benchmark PDFs or CIS-CAT content, must not be attached, pasted or
+        linked to unauthorised copies. Provide only the public source URL. Coverage is never invented: a benchmark is
+        added only when its licence allows it and tests exist.
+  - type: input
+    id: name
+    attributes:
+      label: Benchmark name
+      placeholder: Name of the benchmark or profile
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Benchmark version
+    validations:
+      required: true
+  - type: input
+    id: licence
+    attributes:
+      label: Licence
+      description: Licence name or terms of the benchmark or its content.
+    validations:
+      required: true
+  - type: textarea
+    id: redistribution
+    attributes:
+      label: Redistribution terms
+      description: >-
+        Can the content be redistributed, mirrored or only referenced?
+        Quote the terms by URL, not by pasting restricted text.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: Distribution, release and architecture
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source URL
+      description: Official public page for the benchmark.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Why you need it, and any ComplianceAsCode profile that already covers it.
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have not attached or pasted restricted benchmark content.
+          required: true
