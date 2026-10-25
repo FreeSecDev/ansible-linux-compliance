@@ -80,7 +80,7 @@
   const ATTRIBUTE = /^(?:aria-[a-z]+|role|id|class|type|tabindex|scope|colspan|for|lang|dir|value|autocomplete|spellcheck)$/;
 
   let counter = 0;
-  const regionLabels = new Map();
+  let renderingPanel = "";
   const toneOf = new Map();
   Object.keys(TONES).forEach(function (tone) {
     TONES[tone].forEach(function (value) {
@@ -88,10 +88,11 @@
     });
   });
 
-  function regionLabel(caption) {
-    const seen = (regionLabels.get(caption) || 0) + 1;
-    regionLabels.set(caption, seen);
-    return seen === 1 ? caption : caption + " (" + seen + ")";
+  function regionLabel(caption, label) {
+    if (label) {
+      return label;
+    }
+    return renderingPanel ? renderingPanel + ": " + caption : caption;
   }
 
   function nextId(prefix) {
@@ -217,7 +218,7 @@
     ]);
   }
 
-  function simpleTable(caption, headers, rows) {
+  function simpleTable(caption, headers, rows, label) {
     const table = el("table", null, [
       el("caption", null, caption),
       el("thead", null, el("tr", null, headers.map(function (header) {
@@ -229,7 +230,12 @@
         }));
       }))
     ]);
-    return el("div", { class: "table-wrap", role: "region", "aria-label": regionLabel(caption), tabindex: "0" }, table);
+    return el("div", {
+      class: "table-wrap",
+      role: "region",
+      "aria-label": regionLabel(caption, label),
+      tabindex: "0"
+    }, table);
   }
 
   function compareKeys(left, right) {
@@ -255,6 +261,7 @@
 
   function dataTable(config) {
     const id = nextId("table");
+    const tableLabel = regionLabel(config.caption);
     const columns = config.columns;
     const rows = config.rows;
     const state = { sort: -1, direction: "none", page: 0, size: PAGE_SIZES[0], query: "", filters: {} };
@@ -339,7 +346,7 @@
     root.appendChild(el("div", {
       class: "table-wrap",
       role: "region",
-      "aria-label": regionLabel(config.caption),
+      "aria-label": tableLabel,
       tabindex: "0"
     }, table));
 
@@ -491,7 +498,7 @@
         if (config.detail && expanded.has(index)) {
           fragment.appendChild(el("tr", { class: "detail-row", id: id + "-detail-" + index }, el("td", {
             colspan: String(width)
-          }, config.detail(row))));
+          }, config.detail(row, tableLabel + ", row " + (index + 1)))));
         }
       }
       tbody.replaceChildren(fragment);
@@ -710,7 +717,7 @@
       })));
   }
 
-  function countsTable(caption, counts, order) {
+  function countsTable(caption, counts, order, label) {
     const fields = obj(counts);
     const keys = order ? order.filter(function (key) {
       return key in fields;
@@ -719,7 +726,7 @@
     }).sort()) : Object.keys(fields).sort();
     return simpleTable(caption, ["Name", "Count"], keys.map(function (key) {
       return [badge(key), val(fields[key])];
-    }));
+    }), label);
   }
 
   function summaryPairs(summary, keys) {
@@ -745,7 +752,7 @@
     ]);
   }
 
-  function complianceSummary(summary, caption) {
+  function complianceSummary(summary, caption, context) {
     const fields = obj(summary);
     const counts = obj(fields.counts);
     return el("div", { class: "figure" }, [
@@ -765,9 +772,9 @@
       simpleTable(caption + ": rules per outcome", ["Outcome", "Rules", "In the denominator"],
         OUTCOME_ORDER.map(function (outcome) {
           return [badge(outcome), val(counts[outcome]), IN_DENOMINATOR[outcome]];
-        })),
+        }), context ? context + ": rules per outcome" : null),
       countsTable(caption + ": open rules (fail, error, notchecked) per severity", fields.open_by_severity,
-        SEVERITY_ORDER)
+        SEVERITY_ORDER, context ? context + ": open rules per severity" : null)
     ]);
   }
 
@@ -856,8 +863,8 @@
       parts.push(dataTable({
         caption: "Pooled figures (scope " + scopeLabel() + ")",
         rows: list(section.aggregates).map(obj),
-        detail: function (row) {
-          return complianceSummary(row.summary, "Pooled figure");
+        detail: function (row, context) {
+          return complianceSummary(row.summary, "Pooled figure", context);
         },
         columns: [
           { label: "Benchmark", value: function (row) {
@@ -898,8 +905,8 @@
       rows: list(section.groups).map(function (group, index) {
         return { group: obj(group), index: index };
       }),
-      detail: function (row) {
-        return complianceSummary(row.group.summary, "Host group");
+      detail: function (row, context) {
+        return complianceSummary(row.group.summary, "Host group", context);
       },
       columns: [
         { label: "Host", value: function (row) {
@@ -959,13 +966,13 @@
     parts.push(dataTable({
       caption: "Rules",
       rows: list(section.rules).map(obj),
-      detail: function (row) {
+      detail: function (row, context) {
         return simpleTable("Sources of " + plain(row.rule_id), ["Input", "Benchmark", "Profile", "Outcome", "Expired waiver"],
           list(row.sources).map(function (source) {
             const fields = obj(source);
             return [mono(fields.artifact), val(fields.benchmark_id), val(fields.profile_id), badgeCell(fields.outcome),
               fields.expired_waiver ? badge("expired", "waiver expired") : "no"];
-          }));
+          }), context + ": sources");
       },
       columns: [
         { label: "Rule ID", value: function (row) {
@@ -1465,7 +1472,12 @@
     function render(index) {
       if (!rendered[index]) {
         rendered[index] = true;
-        append(panels[index], definitions[index].render());
+        renderingPanel = definitions[index].label;
+        try {
+          append(panels[index], definitions[index].render());
+        } finally {
+          renderingPanel = "";
+        }
       }
     }
     function select(index, focus) {

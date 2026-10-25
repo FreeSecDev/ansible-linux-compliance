@@ -105,6 +105,10 @@ def test_host_groups_show_identity_sources_merge_notes_and_variants(
     assert any("machine ID" in text for text in labelled)
     assert any("self-asserted (no machine ID)" in text for text in labelled)
     assert any("Merged in this group" in text for text in labelled)
+    badges = view.page.locator(".badge", has_text="machine ID reported by the scan run")
+    assert badges.count() >= 1
+    for index in range(badges.count()):
+        assert badges.nth(index).get_attribute("class") == "badge tone-neutral"
     view.assert_clean()
 
 

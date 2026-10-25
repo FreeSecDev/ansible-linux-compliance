@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -8,6 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from playwright.sync_api import Locator
     from tests.browser.conftest import Dashboard
 
 BLOCKING = frozenset({"serious", "critical"})
@@ -276,4 +278,45 @@ def test_print_view_shows_every_panel_without_controls(
     assert state["tabs"] == "none"
     assert state["toggle"] == "none"
     assert state["controls"]
+    view.assert_clean()
+
+
+def own_table(view: Dashboard, caption: str) -> Locator:
+    exact = re.compile(f"^{re.escape(caption)}$")
+    caption_of = view.page.locator(":scope > .table-wrap > table > caption", has_text=exact)
+    return view.page.locator("#panel-compliance .data-table").filter(has=caption_of).first
+
+
+def region_labels(view: Dashboard) -> list[str]:
+    labels: list[str] = view.page.eval_on_selector_all(
+        "[role=region]", "nodes => nodes.map(node => node.getAttribute('aria-label'))"
+    )
+    return labels
+
+
+def test_region_labels_are_unique_meaningful_and_stable_across_redraws(
+    many_rules: dict[str, Any],
+    render: Callable[[dict[str, Any], str], Path],
+    open_dashboard: Callable[..., Dashboard],
+) -> None:
+    view = open_dashboard(render(many_rules, "labels"))
+    for name in view.tab_names():
+        view.tab(name)
+    view.tab("compliance")
+    for caption in ("Host groups", "Rules"):
+        own_table(view, caption).locator(".details-toggle").first.click()
+    before = region_labels(view)
+    assert len(before) == len(set(before))
+    assert not [label for label in before if re.search(r"\(\d+\)$", label)]
+    assert "Compliance: Rules" in before
+    assert "Compliance: Host groups, row 1: rules per outcome" in before
+    assert "Compliance: Rules, row 1: sources" in before
+    rules = own_table(view, "Rules")
+    size = rules.locator("select").last
+    size.select_option(value="100")
+    size.select_option(value="25")
+    rules.locator(".details-toggle").nth(1).click()
+    rules.locator(".details-toggle").nth(1).click()
+    assert region_labels(view) == before
+    assert blocking(view.run_axe()) == []
     view.assert_clean()
