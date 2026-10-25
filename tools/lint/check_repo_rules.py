@@ -83,7 +83,6 @@ ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
         "types",
         "typing",
         "unicodedata",
-        "xml.etree.ElementTree",
     }
 )
 EXTRA_IMPORTS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(

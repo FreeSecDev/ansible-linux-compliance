@@ -139,7 +139,7 @@ The backend builds `oscap xccdf eval --profile <id> [--tailoring-file <path>] --
 `process.confined_path`, so `..` escapes and symlinks are rejected. The output directory is created by the backend
 with mode 0700, must not exist, and is never reused, so existing files are never overwritten. The SHA-256 of the
 datastream is recorded in `ScanRun.content`; the SHA-256 of a tailoring file goes into `content.source` next to the
-datastream name. Both are computed before the scan and again afterwards, and a difference is a scanner failure.
+datastream name (`name [ " tailoring=" name " tailoring_sha256=" hex64 ]`; file names must match `[A-Za-z0-9._+-]{1,64}`, anything else is a request error, so the label cannot be spoofed). Both are computed before the scan and again afterwards, and a difference is a scanner failure.
 
 | Situation | Result |
 |---|---|
@@ -150,7 +150,8 @@ datastream name. Both are computed before the scan and again afterwards, and a d
 | Timeout | `timed_out` |
 | `oscap` missing or not startable | `failed` |
 | Unreadable, hostile or incomplete results, results for another profile or benchmark, a result for a rule the profile does not select, a duplicate result, or a rule-result or result in another namespace | `failed` |
-| Exit status `2` and a rule of the profile without a result | `completed`; that rule is an `error` finding |
+| Exit status `2` and a rule of the profile without a result | `completed`; that rule is an `error` finding (with exit status `0` the same situation is `failed`) |
+| A `notselected` result for a rule the profile does not select (oscap lists the whole benchmark) | skipped, not counted; any other result for such a rule fails the run |
 
 A `failed` or `timed_out` run carries an `error_message` and only `error` findings, one per `expected_rule_ids` entry.
 A scanner failure is never `pass` or `fail`, and a run that is not `completed` counts every expected rule as `error` and
@@ -165,7 +166,7 @@ Results come from a host and are untrusted. The parser uses only the standard li
    file with 1,000,000 elements and 4,600 rules, measured on Python 3.9 and 3.12).
 2. Any `<!DOCTYPE` or `<!ENTITY` in the raw bytes is rejected before the chunk that holds it is parsed, including a marker
    split across two chunks, so entity expansion (billion laughs) and external entities (XXE) cannot occur. UTF-16 and
-   UTF-32 byte order marks are rejected and the parser is told to read UTF-8, so other encodings are malformed.
+   UTF-32 byte order marks and any NUL byte in the file are rejected and the parser is told to read UTF-8, so other encodings, with or without a mark, are never parsed.
 3. The expat parser is created directly with `SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)` and has no
    external entity handler; its DOCTYPE, entity declaration and external entity handlers reject again if the byte check
    were bypassed. The standard library is safe enough here because of this layering, not because of the expat version:

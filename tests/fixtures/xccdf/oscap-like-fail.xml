@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_org.example.synthetic_benchmark_demo">
+  <status>draft</status>
+  <title>Synthetic benchmark</title>
+  <version>1.0</version>
+  <TestResult id="xccdf_org.example.synthetic_testresult_demo" start-time="2026-10-25T10:00:00+00:00" end-time="2026-10-25T10:00:09+00:00" version="1.0">
+    <benchmark href="#synthetic-datastream" id="xccdf_org.example.synthetic_benchmark_demo"/>
+    <profile idref="xccdf_org.example.synthetic_profile_baseline"/>
+    <title>Synthetic scan</title>
+    <rule-result idref="xccdf_org.example.synthetic_rule_alpha" severity="high" time="2026-10-25T10:00:01+00:00">
+      <result>pass</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_000" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_001" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_002" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_003" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_004" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_005" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_006" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_007" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_008" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_009" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_010" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_011" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_012" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_013" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_014" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_015" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_016" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_017" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_018" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_019" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_beta" severity="low" time="2026-10-25T10:00:01+00:00">
+      <result>fail</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_020" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_021" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_022" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_023" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_024" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_025" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_026" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_027" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_028" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_029" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_030" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_031" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_032" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_033" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_034" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_035" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_036" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_037" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_038" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_039" severity="medium" time="2026-10-25T10:00:01+00:00">
+      <result>notselected</result>
+    </rule-result>
+  </TestResult>
+</Benchmark>

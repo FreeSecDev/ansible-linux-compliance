@@ -3,6 +3,7 @@ from __future__ import annotations
 import calendar
 import hashlib
 import os
+import re
 import stat
 import time
 import tracemalloc
@@ -503,13 +504,39 @@ class TestReadResults:
         with pytest.raises(openscap.XccdfParseError, match="UTF-16 or UTF-32"):
             self.read(path)
 
-    @pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be", "utf-32"])
-    def test_other_encodings_are_never_parsed(self, tmp_path: Path, encoding: str) -> None:
+    @pytest.mark.parametrize("encoding", ["utf-16", "utf-32"])
+    def test_other_encodings_with_a_mark_are_never_parsed(
+        self, tmp_path: Path, encoding: str
+    ) -> None:
         document = text("all-pass.xml", XCCDF).replace("<status>", "<!DOCTYPE x><status>")
         path = tmp_path / "wide.xml"
         path.write_bytes(document.encode(encoding))
-        with pytest.raises(openscap.XccdfParseError):
+        with pytest.raises(openscap.XccdfParseError, match="UTF-16 or UTF-32"):
             self.read(path)
+
+    @pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be"])
+    @pytest.mark.parametrize("declaration", ["", "<!DOCTYPE x>"])
+    def test_other_encodings_without_a_mark_are_never_parsed(
+        self, tmp_path: Path, encoding: str, declaration: str
+    ) -> None:
+        document = text("all-pass.xml", XCCDF).replace("<status>", declaration + "<status>")
+        path = tmp_path / "wide.xml"
+        path.write_bytes(document.encode(encoding))
+        with pytest.raises(openscap.XccdfParseError, match="NUL byte"):
+            self.read(path)
+
+    def test_a_nul_byte_in_a_later_chunk_is_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "nul.xml"
+        path.write_bytes((XCCDF / "all-pass.xml").read_bytes().replace(b"draft", b"dr\x00ft"))
+        monkeypatch.setattr(openscap, "READ_CHUNK_BYTES", 64)
+        with pytest.raises(openscap.XccdfParseError, match="NUL byte"):
+            self.read(path)
+
+    def test_a_lone_surrogate_is_a_structured_error(self) -> None:
+        with pytest.raises(openscap.XccdfParseError, match="not valid Unicode"):
+            openscap.parse_results("<a>\ud800</a>")
 
     def test_truncated_file_is_not_a_pass(self) -> None:
         with pytest.raises(openscap.XccdfParseError, match="not well-formed"):
@@ -1236,14 +1263,114 @@ class TestTailoringProvenance:
         with pytest.raises(scanner.ScanRequestError, match="cannot be read"):
             setup.audit(tailoring_path="tailoring.xml")
 
-    def test_awkward_file_names_are_cleaned_and_bounded(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "ds.xml tailoring=evil.xml tailoring_sha256=" + "0" * 64 + ".xml",
+            "caf\u00e9.xml",
+            "a b.xml",
+            "semi;colon.xml",
+            "t" * 65,
+        ],
+    )
+    def test_file_names_outside_the_label_alphabet_are_request_errors(
+        self, tmp_path: Path, name: str
+    ) -> None:
         setup = harness(tmp_path)
-        long_name = "t" * 200 + ".xml"
-        (setup.content_root / long_name).write_text("<tailoring/>", encoding="utf-8")
-        run = setup.audit(tailoring_path=long_name)
-        assert f"tailoring={'t' * 64} " in run.content.source
+        (setup.content_root / name).write_text("<tailoring/>", encoding="utf-8")
+        with pytest.raises(scanner.ScanRequestError, match=r"file name must match"):
+            setup.audit(tailoring_path=name)
+        with pytest.raises(scanner.ScanRequestError, match=r"file name must match"):
+            setup.audit(content_path=name, output_dir="other")
+        assert setup.runner.specs == []
+
+    def test_the_label_cannot_be_spoofed(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path)
+        spoof = "ds.xml tailoring=evil.xml tailoring_sha256=" + "0" * 64
+        (setup.content_root / spoof).write_bytes(DATASTREAM)
+        with pytest.raises(scanner.ScanRequestError):
+            setup.audit(content_path=spoof)
+        tailoring = setup.content_root / "t.xml"
+        tailoring.write_text("<tailoring/>", encoding="utf-8")
+        source = setup.audit(tailoring_path="t.xml").content.source
+        name = "[A-Za-z0-9._+-]{1,64}"
+        pattern = f"{name}( tailoring={name} tailoring_sha256=[0-9a-f]{{64}})?"
+        assert re.fullmatch(pattern, source)
+        assert source.count(" tailoring=") == 1
+
+    def test_the_longest_label_fits_the_model(self, tmp_path: Path) -> None:
+        setup = harness(tmp_path)
+        name = "t" * 60 + ".xml"
+        (setup.content_root / name).write_text("<tailoring/>", encoding="utf-8")
+        longest = "d" * 60 + ".xml"
+        (setup.content_root / longest).write_bytes(DATASTREAM)
+        run = setup.audit(content_path=longest, tailoring_path=name)
+        assert run.status is model.ScanStatus.COMPLETED
         assert len(run.content.source) <= 256
-        odd = setup.content_root / "caf\u00e9.xml"
-        odd.write_bytes(DATASTREAM)
-        other = setup.audit(content_path=odd.name, output_dir="odd")
-        assert other.content.source == "caf?.xml"
+
+
+class TestOscapShapedResults:
+    """Real oscap lists every rule of the benchmark, selected or not."""
+
+    @pytest.mark.parametrize(
+        ("name", "code", "beta"),
+        [
+            ("oscap-like-pass.xml", 0, model.Outcome.PASS),
+            ("oscap-like-fail.xml", 2, model.Outcome.FAIL),
+        ],
+    )
+    def test_unselected_rules_are_skipped(
+        self, tmp_path: Path, name: str, code: int, beta: model.Outcome
+    ) -> None:
+        setup = harness(tmp_path, text(name))
+        setup.runner.evaluation = command_result(code)
+        run = setup.audit()
+        assert run.status is model.ScanStatus.COMPLETED
+        assert {f.rule_id: f.outcome for f in run.findings} == {
+            RULE_ALPHA: model.Outcome.PASS,
+            RULE_BETA: beta,
+        }
+        assert len(parse(name).findings) == 42
+
+    def test_an_expected_rule_reported_notselected_is_notchecked(self, tmp_path: Path) -> None:
+        document = text("oscap-like-pass.xml").replace(
+            "<result>pass</result>", "<result>notselected</result>", 1
+        )
+        setup = harness(tmp_path, document)
+        run = setup.audit()
+        by_rule = {f.rule_id: f for f in run.findings}
+        assert by_rule[RULE_ALPHA].outcome is model.Outcome.NOTCHECKED
+        assert by_rule[RULE_ALPHA].flags == (model.ResultFlag.NOTSELECTED,)
+
+    @pytest.mark.parametrize("result", ["pass", "fail", "error", "unknown", "notchecked", "bogus"])
+    def test_other_unexpected_results_still_fail_the_run(self, tmp_path: Path, result: str) -> None:
+        opening = (
+            'unselected_000" severity="medium" time="2026-10-25T10:00:01+00:00">\n      <result>'
+        )
+        document = text("oscap-like-pass.xml").replace(opening + "notselected", opening + result)
+        run = harness(tmp_path, document).audit()
+        assert_failure(run, model.ScanStatus.FAILED, "does not select")
+
+    def test_duplicate_unselected_results_still_fail_the_run(self, tmp_path: Path) -> None:
+        document = text("oscap-like-pass.xml")
+        marker = '    <rule-result idref="xccdf_org.example.synthetic_rule_unselected_001"'
+        start = document.index(marker)
+        end = document.index("    </rule-result>\n", start) + len("    </rule-result>\n")
+        document = document[:end] + document[start:end] + document[end:]
+        assert_failure(
+            harness(tmp_path, document).audit(), model.ScanStatus.FAILED, "more than once"
+        )
+
+    def test_exit_zero_with_a_missing_expected_rule_fails_while_exit_two_reports_error(
+        self, tmp_path: Path
+    ) -> None:
+        document = strip_rule(text("oscap-like-pass.xml"), "beta")
+        assert_failure(
+            harness(tmp_path, document).audit(), model.ScanStatus.FAILED, "or missing rules"
+        )
+        (tmp_path / "two").mkdir()
+        setup = harness(tmp_path / "two", document)
+        setup.runner.evaluation = command_result(2)
+        run = setup.audit()
+        assert run.status is model.ScanStatus.COMPLETED
+        assert {f.rule_id: f.outcome for f in run.findings}[RULE_BETA] is model.Outcome.ERROR

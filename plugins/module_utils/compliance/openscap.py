@@ -93,6 +93,7 @@ HASH_CHUNK_BYTES: Final[int] = 1024 * 1024
 SOURCE_NAME_LENGTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 1024 * 1024
 
+_LABEL_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._+-]{1,64}")
 _VERSION_LINE: Final[re.Pattern[str]] = re.compile(r"\(oscap\)\s+([0-9][A-Za-z0-9._+-]{0,63})")
 _SEVERITIES: Final[dict[str, model.Severity]] = {item.value: item for item in model.Severity}
 _ERROR_OUTCOMES: Final[frozenset[model.Outcome]] = frozenset(
@@ -104,6 +105,7 @@ _MORE: Final[bool] = False
 _FINAL: Final[bool] = True
 _DECLARATION_MARKERS: Final[tuple[bytes, ...]] = (b"<!DOCTYPE", b"<!ENTITY")
 _MARKER_OVERLAP: Final[int] = max(len(marker) for marker in _DECLARATION_MARKERS) - 1
+_NUL: Final[bytes] = b"\x00"
 _NON_UTF8_MARKS: Final[tuple[bytes, ...]] = (b"\xff\xfe", b"\xfe\xff")
 _TEST_ATTRIBUTES: Final[frozenset[str]] = frozenset({"start-time", "end-time", "version"})
 
@@ -332,6 +334,8 @@ def _parse_stream(chunks: Iterable[bytes], limits: XmlLimits) -> _Builder:
         for chunk in chunks:
             if received == 0 and chunk.startswith(_NON_UTF8_MARKS):
                 _fail("the document is UTF-16 or UTF-32, only UTF-8 is accepted")
+            if _NUL in chunk:
+                _fail("the document contains a NUL byte, only UTF-8 text is accepted")
             received += len(chunk)
             previous = _scan_for_declarations(previous, chunk)
             parser.Parse(chunk, _MORE)
@@ -435,7 +439,11 @@ def parse_results(document: str, limits: XmlLimits | None = None) -> ParsedResul
             or lacks required data. A document is never treated as a pass.
     """
     limits = XmlLimits() if limits is None else limits
-    return _extract(_parse_stream([document.encode("utf-8")], limits))
+    try:
+        encoded = document.encode("utf-8")
+    except UnicodeEncodeError:
+        _fail("the document is not valid Unicode text")
+    return _extract(_parse_stream([encoded], limits))
 
 
 def _bounded_chunks(handle: BinaryIO, max_bytes: int) -> Iterator[bytes]:
@@ -488,11 +496,21 @@ class _Provenance:
     finished: datetime
 
 
+def _label_name(path: str, kind: str) -> str:
+    name = Path(path).name
+    if _LABEL_NAME.fullmatch(name) is None:
+        message = (
+            f"{kind} file name must match [A-Za-z0-9._+-]{{1,{SOURCE_NAME_LENGTH}}}: {_clip(name)}"
+        )
+        raise scanner.ScanRequestError(message)
+    return name
+
+
 def _source_label(content: str, tailoring: str | None, tailoring_digest: str | None) -> str:
-    label = _clean(Path(content).name, SOURCE_NAME_LENGTH)
+    label = Path(content).name
     if tailoring is None:
         return label
-    name = _clean(Path(tailoring).name, SOURCE_NAME_LENGTH)
+    name = Path(tailoring).name
     return f"{label} tailoring={name} tailoring_sha256={tailoring_digest}"
 
 
@@ -575,6 +593,9 @@ class OpenScapBackend:
             if request.tailoring_path is None
             else _existing_file(self._settings.content_root, request.tailoring_path, "tailoring")
         )
+        _label_name(content, "content")
+        if tailoring is not None:
+            _label_name(tailoring, "tailoring")
         digest = _sha256(content)
         tailoring_digest = None if tailoring is None else _sha256(tailoring)
         output = self._make_output_directory(request.output_dir)
@@ -676,15 +697,21 @@ class OpenScapBackend:
     def _verify(
         request: scanner.ScanRequest, returncode: int, parsed: ParsedResults
     ) -> ParsedResults | _Failure:
-        reported = {finding.rule_id for finding in parsed.findings}
+        expected_ids = set(request.expected_rule_ids)
+        kept = tuple(
+            finding
+            for finding in parsed.findings
+            if finding.rule_id in expected_ids or model.ResultFlag.NOTSELECTED not in finding.flags
+        )
+        reported = {finding.rule_id for finding in kept}
         missing = tuple(
             _error_finding(rule_id, "the results contain no rule-result for this rule")
             for rule_id in request.expected_rule_ids
             if rule_id not in reported
         )
-        findings = (*parsed.findings, *missing)
+        findings = (*kept, *missing)
         unsatisfied = any(finding.outcome in _ERROR_OUTCOMES for finding in findings)
-        unexpected = len(reported - set(request.expected_rule_ids))
+        unexpected = len(reported - expected_ids)
         problem = None
         if parsed.profile_id != request.profile_id:
             problem = "the results are for a different profile than requested"

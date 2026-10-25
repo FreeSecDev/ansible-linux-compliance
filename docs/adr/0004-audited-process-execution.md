@@ -83,7 +83,7 @@ Deviations and decisions:
 - `tools/lint/check_repo_rules.py` applies a deny-by-default rule to Python files under `plugins/` other than
   `process.py`. They may import only allow-listed standard library modules (`__future__`, `collections`,
   `collections.abc`, `dataclasses`, `datetime`, `enum`, `functools`, `hashlib`, `itertools`, `json`, `os.path`,
-  `pathlib`, `re`, `stat`, `types`, `typing`, `unicodedata`, `xml.etree.ElementTree`, `xml.parsers.expat`), `ansible.module_utils` and this
+  `pathlib`, `re`, `stat`, `types`, `typing`, `unicodedata`; `xml.parsers.expat` for `openscap.py` only), `ansible.module_utils` and this
   collection; star imports and `from os import` of anything but `path` fail. `os` is usable only as `os.path`. `exec`,
   `eval`, `compile` and `__import__` are banned. Attribute names `system`, `popen`, `run_command`, `Popen`,
   `import_module`, `create_subprocess_*`, `exec*`, `spawn*`, `fork*`, `posix_spawn*` and class-walking dunders are

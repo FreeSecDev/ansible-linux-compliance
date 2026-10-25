@@ -515,6 +515,7 @@ OTHER_BYPASSES = {
     "import-xml-expat-reader": "import xml.parsers.expatreader\n",
     "import-xml-parsers-package": "from xml.parsers import expat\n",
     "import-xml-etree-celementtree": "import xml.etree.cElementTree\n",
+    "import-xml-etree": "import xml.etree.ElementTree\n",
     "import-xml-etree-from": "from xml.etree import ElementTree\n",
     "import-prefix-lookalike": "import ansible.module_utils_evil\n",
     "import-collection-lookalike": "import ansible_collections.freesecdev.linux_compliance_evil\n",
@@ -607,7 +608,7 @@ BENIGN_PLUGIN_SOURCES = {
         "from datetime import datetime\nfrom enum import Enum\nfrom types import MappingProxyType\n"
         "import hashlib\nimport functools\nimport itertools\nimport stat\n"
         "from pathlib import Path\nimport collections\nfrom collections import abc\n"
-        "from collections.abc import Mapping\nimport xml.etree.ElementTree\n"
+        "from collections.abc import Mapping\n"
     ),
     "os-path-import": "import os.path\nos.path.join('a', 'b')\n",
     "os-path-from-import": "from os import path\npath.join('a', 'b')\n",
