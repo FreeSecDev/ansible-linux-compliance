@@ -69,7 +69,7 @@ make help
 | `packer-build` | pending FREES-64 | Packer image build |
 | `image-build` | pending FREES-36 | Runner image build on AWS |
 | `report` | implemented | Normalized JSON and the HTML dashboard (`REPORT_SCOPE`, `REPORT_ARGS`, `REPORT_OUTPUT`, `REPORT_HTML`), see [reporting data model](reporting-data-model.md) and the [dashboard guide](dashboard.md) |
-| `report-serve` | implemented | Serves the report directory on 127.0.0.1 only (`REPORT_PORT`, default 8765) |
+| `report-serve` | implemented | Serves `build/report/` on 127.0.0.1 only (`REPORT_PORT`, default 8765); refuses a `REPORT_HTML` outside it |
 | `release-check` | pending FREES-84 | Release readiness |
 
 Pending targets print `not implemented yet: <target> (tracked in FREES-<key>)` to standard error and exit

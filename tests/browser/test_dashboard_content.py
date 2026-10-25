@@ -59,6 +59,26 @@ def test_every_percentage_shown_is_one_the_report_gives(
     view.assert_clean()
 
 
+def group_rows(view: Dashboard) -> list[str]:
+    view.tab("compliance")
+    table = view.page.locator(".data-table").filter(
+        has=view.page.locator("caption", has_text="Host groups")
+    )
+    rows = table.locator("tbody > tr")
+    return [rows.nth(index).inner_text() for index in range(rows.count())]
+
+
+def check_group_row(row: str, extra: dict[str, Any]) -> None:
+    assert extra["sources"]
+    for source in extra["sources"]:
+        assert source["sha256"] in row
+        assert source["format"] in row
+    assert ("Merged in this group" in row) is bool(extra["merges"])
+    for merge in extra["merges"]:
+        for sha in merge["sources"]:
+            assert sha in row
+
+
 def test_host_groups_show_identity_sources_merge_notes_and_variants(
     typical: dict[str, Any],
     render: Callable[[dict[str, Any], str], Path],
@@ -67,13 +87,8 @@ def test_host_groups_show_identity_sources_merge_notes_and_variants(
     groups = typical["sections"]["compliance"]["groups"]
     views: Any = dashboard_views(typical)
     view = open_dashboard(render(typical, "groups"))
-    view.tab("compliance")
-    table = view.page.locator(".data-table").filter(
-        has=view.page.locator("caption", has_text="Host groups")
-    )
-    rows = table.locator("tbody > tr")
-    assert rows.count() == len(groups)
-    texts = [rows.nth(index).inner_text() for index in range(rows.count())]
+    texts = group_rows(view)
+    assert len(texts) == len(groups)
     for group, extra in zip(groups, views["groups"], strict=True):
         host = group["host"]
         row = next(
@@ -82,19 +97,50 @@ def test_host_groups_show_identity_sources_merge_notes_and_variants(
             if (host["hostname"] or host["input_sha256"]) in text
             and (host["machine_id"] or "self-asserted") in text
         )
-        assert extra["sources"]
-        for source in extra["sources"]:
-            assert source["sha256"] in row
-            assert source["format"] in row
-        if extra["notes"]:
-            assert "Merged inputs" in row
+        check_group_row(row, extra)
     labelled = [text for text in texts if "host.example" in text]
     assert len(labelled) == 2
     assert any("variant 1 of 2" in text for text in labelled)
     assert any("variant 2 of 2" in text for text in labelled)
     assert any("machine ID" in text for text in labelled)
     assert any("self-asserted (no machine ID)" in text for text in labelled)
-    assert any("Merged inputs" in text for text in labelled)
+    assert any("Merged in this group" in text for text in labelled)
+    view.assert_clean()
+
+
+def test_a_host_counted_once_across_benchmarks_is_not_shown_as_a_group_merge(
+    across_benchmarks: dict[str, Any],
+    render: Callable[[dict[str, Any], str], Path],
+    open_dashboard: Callable[..., Dashboard],
+) -> None:
+    notes = across_benchmarks["sections"]["compliance"]["notes"]
+    assert len(notes) == 1
+    assert len(notes[0]["sources"]) == 2
+    view = open_dashboard(render(across_benchmarks, "across"))
+    view.tab("compliance")
+    panel = view.page.locator("#panel-compliance").inner_text()
+    assert "Merged in this group" not in panel
+    assert "combined into" not in panel
+    assert "are counted as one host" in panel
+    table = view.page.locator(".data-table").filter(
+        has=view.page.locator("caption", has_text="Host groups")
+    )
+    rows = table.locator("tbody > tr")
+    passing = [
+        rows.nth(index).inner_text()
+        for index in range(rows.count())
+        if "all evaluated rules passed" in rows.nth(index).inner_text()
+        and "web01" in rows.nth(index).inner_text()
+    ]
+    assert len(passing) == 1
+    failing = next(
+        item["artifact"]["sha256"]
+        for item in across_benchmarks["sections"]["compliance"]["items"]
+        if item["artifact"]["path"].endswith("a.xml")
+    )
+    assert failing in notes[0]["sources"]
+    assert failing not in passing[0]
+    assert [sha for sha in notes[0]["sources"] if sha in passing[0]] != []
     view.assert_clean()
 
 

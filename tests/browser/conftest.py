@@ -497,6 +497,19 @@ def degraded(reports: Path) -> dict[str, Any]:
 
 
 @pytest.fixture
+def across_benchmarks(reports: Path) -> dict[str, Any]:
+    """Two self-asserted ``web01`` files for different benchmarks: one failing, one passing."""
+    failing = write(reports, "a.xml", xccdf_text("web01", [("alpha", "pass"), ("beta", "fail")]))
+    other = xccdf_text("WEB01", [("alpha", "pass")]).replace(
+        BENCHMARK, "xccdf_org.example.synthetic_benchmark_other"
+    )
+    passing = write(reports, "b.xml", other)
+    unrelated = write(reports, "c.xml", xccdf_text("db01", [("alpha", "pass")]))
+    inputs = ReportInputs(scope=Scope.FLEET, xccdf=(failing, passing, unrelated))
+    return as_json(build_report(inputs))
+
+
+@pytest.fixture
 def all_passed() -> dict[str, Any]:
     inputs = ReportInputs(scope=Scope.FLEET, xccdf=(FIXTURES / "xccdf" / "all-pass.xml",))
     return as_json(build_report(inputs))

@@ -60,7 +60,7 @@
   const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info", "unknown"];
   const TONES = {
     ok: [
-      "available", "pass", "completed", "all_evaluated_passed", "passed", "SUCCEEDED", "machine_id",
+      "available", "pass", "completed", "all_evaluated_passed", "passed", "SUCCEEDED",
       "applied", "already_compliant"
     ],
     bad: [
@@ -80,12 +80,19 @@
   const ATTRIBUTE = /^(?:aria-[a-z]+|role|id|class|type|tabindex|scope|colspan|for|lang|dir|value|autocomplete|spellcheck)$/;
 
   let counter = 0;
+  const regionLabels = new Map();
   const toneOf = new Map();
   Object.keys(TONES).forEach(function (tone) {
     TONES[tone].forEach(function (value) {
       toneOf.set(value, tone);
     });
   });
+
+  function regionLabel(caption) {
+    const seen = (regionLabels.get(caption) || 0) + 1;
+    regionLabels.set(caption, seen);
+    return seen === 1 ? caption : caption + " (" + seen + ")";
+  }
 
   function nextId(prefix) {
     counter += 1;
@@ -222,7 +229,7 @@
         }));
       }))
     ]);
-    return el("div", { class: "table-wrap", role: "region", "aria-label": caption, tabindex: "0" }, table);
+    return el("div", { class: "table-wrap", role: "region", "aria-label": regionLabel(caption), tabindex: "0" }, table);
   }
 
   function compareKeys(left, right) {
@@ -329,7 +336,12 @@
     });
     const tbody = el("tbody");
     const table = el("table", { id: id }, [el("caption", null, config.caption), el("thead", null, headerRow), tbody]);
-    root.appendChild(el("div", { class: "table-wrap", role: "region", "aria-label": config.caption, tabindex: "0" }, table));
+    root.appendChild(el("div", {
+      class: "table-wrap",
+      role: "region",
+      "aria-label": regionLabel(config.caption),
+      tabindex: "0"
+    }, table));
 
     const first = el("button", { type: "button" }, "First page");
     const previous = el("button", { type: "button" }, "Previous page");
@@ -586,7 +598,7 @@
   function identityBadge(host) {
     const fields = obj(host);
     if (fields.machine_id) {
-      return el("span", null, [badge("machine_id", "machine ID"), " ", mono(fields.machine_id)]);
+      return el("span", null, [badge("machine_id", "machine ID reported by the scan run"), " ", mono(fields.machine_id)]);
     }
     if (!fields.hostname) {
       return el("span", null, [
@@ -759,29 +771,40 @@
     ]);
   }
 
+  function shaList(sources) {
+    return el("ul", { class: "plain" }, list(sources).map(function (source) {
+      return el("li", null, mono(source));
+    }));
+  }
+
   function noteText(note) {
     const fields = obj(note);
     if (fields.kind === "shared_self_asserted_host") {
       return [
-        "Merged inputs: several inputs claim the self-asserted host name ", val(fields.host),
-        " and are combined into one host group. Inputs: ",
-        el("ul", { class: "plain" }, list(fields.sources).map(function (source) {
-          return el("li", null, mono(source));
-        }))
+        "Several inputs claim the self-asserted host name ", val(fields.host),
+        " and are counted as one host. Figures stay separate for each benchmark and content version; "
+          + "a host group shows a merge only when it combines inputs itself. Inputs: ",
+        shaList(fields.sources)
       ];
     }
     return ["Note of kind ", val(fields.kind), " for host ", val(fields.host)];
+  }
+
+  function mergeText(merge) {
+    const note = obj(list(obj(SECTIONS.compliance).notes)[obj(merge).note]);
+    return [
+      "Merged in this group: these inputs claim the self-asserted host name ", val(note.host),
+      " and are combined into this group: ",
+      shaList(obj(merge).sources)
+    ];
   }
 
   function groupSources(index) {
     return list(obj(list(VIEWS.groups)[index]).sources);
   }
 
-  function groupNotes(index) {
-    const notes = list(obj(SECTIONS.compliance).notes);
-    return list(obj(list(VIEWS.groups)[index]).notes).map(function (position) {
-      return notes[position];
-    });
+  function groupMerges(index) {
+    return list(obj(list(VIEWS.groups)[index]).merges);
   }
 
   function sourceList(sources) {
@@ -821,7 +844,7 @@
     }
     const notes = list(section.notes);
     if (notes.length > 0) {
-      parts.push(el("h3", null, "Merge notes"));
+      parts.push(el("h3", null, "Hosts counted as one"));
       parts.push(el("ul", null, notes.map(function (note) {
         return el("li", null, noteText(note));
       })));
@@ -918,14 +941,14 @@
           return sourceList(groupSources(row.index));
         } },
         { label: "Merge notes", sortable: false, value: function (row) {
-          return groupNotes(row.index).length > 0 ? "merged" : "";
+          return groupMerges(row.index).length > 0 ? "merged" : "";
         }, cell: function (row) {
-          const notes = groupNotes(row.index);
-          if (notes.length === 0) {
+          const merges = groupMerges(row.index);
+          if (merges.length === 0) {
             return missing("none");
           }
-          return el("ul", { class: "plain" }, notes.map(function (note) {
-            return el("li", null, noteText(note));
+          return el("ul", { class: "plain" }, merges.map(function (merge) {
+            return el("li", null, mergeText(merge));
           }));
         } }
       ]
@@ -996,7 +1019,7 @@
         const host = obj(row.entry.host);
         if (host.hostname) {
           return el("span", null, [val(host.hostname), " ", host.machine_id
-            ? el("span", null, [badge("machine_id", "machine ID"), " ", mono(host.machine_id)])
+            ? el("span", null, [badge("machine_id", "machine ID reported by the scan run"), " ", mono(host.machine_id)])
             : badge("self_asserted", "self-asserted (no machine ID)")]);
         }
         if (present(row.entry.reported_host)) {

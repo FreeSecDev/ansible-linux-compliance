@@ -86,7 +86,7 @@ Images and AWS
 
 Reporting, docs and release
   report                Write the normalized report JSON and the HTML dashboard from REPORT_ARGS
-  report-serve          Serve the report directory on 127.0.0.1 only (REPORT_PORT, default 8765)
+  report-serve          Serve build/report on 127.0.0.1 only (REPORT_PORT, default 8765)
   docs                  markdownlint and relative link check
   package               Build the collection tarball into dist/ with a canonical FILES.json
   package-check         Build the tarball twice from differently ordered trees and compare SHA-256
@@ -269,16 +269,18 @@ REPORT_ARGS ?=
 REPORT_OUTPUT ?= build/report/report.json
 REPORT_HTML ?= build/report/report.html
 REPORT_PORT ?= 8765
+REPORT_SERVE_DIR := build/report
 
 report: require-uv collection-link
 	@test -n '$(REPORT_SCOPE)' || { printf 'error: set REPORT_SCOPE to single_host, multi_host, benchmark or fleet\n' >&2; exit 2; }
 	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.reporting --scope '$(REPORT_SCOPE)' --output '$(REPORT_OUTPUT)' --html '$(REPORT_HTML)' $(REPORT_ARGS)
 
 report-serve: require-uv
-	@printf '%s' '$(REPORT_PORT)' | grep -Eq '^[1-9][0-9]{3,4}$$' || { printf 'error: REPORT_PORT must be a port from 1000 to 65535\n' >&2; exit 2; }
+	@printf '%s' '$(REPORT_PORT)' | grep -Eq '^[1-9][0-9]{3,4}$$' && [ '$(REPORT_PORT)' -le 65535 ] || { printf 'error: REPORT_PORT must be a port from 1000 to 65535\n' >&2; exit 2; }
+	@served="$$(realpath -m -- '$(REPORT_SERVE_DIR)')" && [ "$$served" = "$$(realpath -m -- .)/$(REPORT_SERVE_DIR)" ] && [ "$$(realpath -m -- '$(dir $(REPORT_HTML))')" = "$$served" ] || { printf 'error: report-serve serves only %s; REPORT_HTML must be a file directly inside it\n' '$(REPORT_SERVE_DIR)' >&2; exit 2; }
 	@test -f '$(REPORT_HTML)' || { printf 'error: %s does not exist; run make report first\n' '$(REPORT_HTML)' >&2; exit 2; }
-	@printf 'serving %s on http://127.0.0.1:%s/ (loopback only, stop with Ctrl+C)\n' '$(REPORT_HTML)' '$(REPORT_PORT)'
-	$(RUN) python -m http.server --bind 127.0.0.1 --directory '$(dir $(REPORT_HTML))' '$(REPORT_PORT)'
+	@printf 'serving %s on http://127.0.0.1:%s/ (loopback only, stop with Ctrl+C)\n' '$(REPORT_SERVE_DIR)' '$(REPORT_PORT)'
+	$(RUN) python -m http.server --bind 127.0.0.1 --directory '$(REPORT_SERVE_DIR)' '$(REPORT_PORT)'
 
 docs: require-uv
 	$(RUN) pre-commit run markdownlint-cli2 --all-files

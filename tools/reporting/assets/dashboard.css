@@ -436,6 +436,8 @@ pre.v {
 
 @media print {
   :root,
+  :root:not([data-theme="light"]),
+  :root[data-theme="light"],
   :root[data-theme="dark"] {
     color-scheme: light;
     --bg: #ffffff;

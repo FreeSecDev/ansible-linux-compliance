@@ -11,12 +11,17 @@ if TYPE_CHECKING:
     from tests.browser.conftest import Dashboard
 
 BLOCKING = frozenset({"serious", "critical"})
+ALWAYS_BLOCKING = frozenset({"landmark-unique"})
 LIGHT_BACKGROUND = "rgb(255, 255, 255)"
 DARK_BACKGROUND = "rgb(17, 20, 24)"
 
 
 def blocking(violations: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [violation for violation in violations if violation["impact"] in BLOCKING]
+    return [
+        violation
+        for violation in violations
+        if violation["impact"] in BLOCKING or violation["id"] in ALWAYS_BLOCKING
+    ]
 
 
 def background(view: Dashboard) -> str:
@@ -50,8 +55,8 @@ def test_axe_finds_no_serious_violation_on_any_tab(
     for name in view.tab_names():
         view.tab(name)
         toggles = view.page.locator(f"#panel-{name} .details-toggle")
-        if toggles.count() > 0:
-            toggles.first.click()
+        for index in range(min(3, toggles.count())):
+            toggles.nth(index).click()
         found = blocking(view.run_axe())
         if found:
             failures[name] = found
@@ -223,6 +228,29 @@ def test_status_is_never_conveyed_by_colour_alone(
     )
     assert any("tone-bad" in style and "solid" in style for style in styles)
     assert any("tone-warn" in style and "dashed" in style for style in styles)
+    view.assert_clean()
+
+
+@pytest.mark.parametrize(("scheme", "toggle"), [("dark", False), ("light", True), ("dark", True)])
+def test_print_uses_the_light_palette_whatever_the_theme(
+    scheme: str,
+    toggle: bool,
+    typical: dict[str, Any],
+    render: Callable[[dict[str, Any], str], Path],
+    open_dashboard: Callable[..., Dashboard],
+) -> None:
+    view = open_dashboard(render(typical, f"print-{scheme}-{toggle}"), color_scheme=scheme)
+    if toggle:
+        view.page.locator("#theme-toggle").click()
+    view.page.emulate_media(media="print")
+    colours = view.page.evaluate(
+        """() => {
+            const body = getComputedStyle(document.body);
+            const badge = getComputedStyle(document.querySelector('.badge'));
+            return [body.color, body.backgroundColor, badge.color];
+        }"""
+    )
+    assert colours == ["rgb(0, 0, 0)", LIGHT_BACKGROUND, "rgb(0, 0, 0)"]
     view.assert_clean()
 
 

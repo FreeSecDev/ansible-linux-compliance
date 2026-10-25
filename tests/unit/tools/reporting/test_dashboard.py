@@ -209,7 +209,8 @@ def test_views_join_each_group_to_its_inputs_notes_and_identity(
             }
             assert dashboard.item_host(item["data"]) == dashboard.key_of(group["host"])
         merged = group["host"]["hostname"] == "web01" and group["host"]["machine_id"] is None
-        assert (view["notes"] == [0]) is merged
+        own = sorted(source["sha256"] for source in view["sources"])
+        assert view["merges"] == ([{"note": 0, "sources": own}] if merged else [])
         assert len(view["sources"]) == (2 if merged else 1)
     assert section["notes"][0]["host"] == "web01"
     hosts = {(host["hostname"], host["machine_id"]): host for host in views["hosts"]}
@@ -261,17 +262,115 @@ def test_cli_writes_the_dashboard_next_to_the_report(
     assert html.read_text(encoding="utf-8") == dashboard.render_dashboard(document)
 
 
-def test_cli_writes_nothing_when_the_dashboard_cannot_be_rendered(
+def other_benchmark(text: str, kit: Any) -> str:
+    return text.replace(kit.BENCHMARK, "xccdf_org.example.synthetic_benchmark_other")
+
+
+def test_a_host_note_across_benchmarks_is_never_a_group_merge(
+    kit: Any, write: Callable[[str, str | bytes], Path]
+) -> None:
+    first = write("a.xml", kit.xccdf_text("web01", "fail", results=[("a", "pass"), ("b", "fail")]))
+    second = write("b.xml", other_benchmark(kit.xccdf_text("WEB01", "pass"), kit))
+    third = write("c.xml", kit.xccdf_text("other", "pass"))
+    document = build(scope=Scope.FLEET, xccdf=(first, second, third))
+    section = document["sections"]["compliance"]
+    assert [note["host"] for note in section["notes"]] == ["web01"]
+    assert len(section["notes"][0]["sources"]) == 2
+    views: Any = dashboard.dashboard_views(document)
+    assert len(views["groups"]) == 3
+    for view in views["groups"]:
+        assert view["merges"] == []
+        assert len(view["sources"]) == 1
+
+
+def test_a_group_merge_lists_only_the_inputs_of_that_group(
+    kit: Any, write: Callable[[str, str | bytes], Path]
+) -> None:
+    first = write("a.xml", kit.xccdf_text("web01", "fail"))
+    second = write("b.xml", kit.xccdf_text("WEB01", "pass", results=[("b", "pass")]))
+    third = write("c.xml", other_benchmark(kit.xccdf_text("web01", "pass"), kit))
+    document = build(scope=Scope.FLEET, xccdf=(first, second, third))
+    section = document["sections"]["compliance"]
+    assert len(section["notes"][0]["sources"]) == 3
+    views: Any = dashboard.dashboard_views(document)
+    merges = {
+        group["benchmark_id"]: view["merges"]
+        for group, view in zip(section["groups"], views["groups"], strict=True)
+    }
+    own = sorted(
+        item["artifact"]["sha256"]
+        for item in section["items"]
+        if item["data"]["benchmark_id"] == kit.BENCHMARK
+    )
+    assert merges == {
+        kit.BENCHMARK: [{"note": 0, "sources": own}],
+        "xccdf_org.example.synthetic_benchmark_other": [],
+    }
+
+
+def test_cli_writes_the_json_but_not_a_dashboard_above_the_cap(
     kit: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(dashboard, "MAX_EMBEDDED_BYTES", 10)
     output = tmp_path / "report.json"
     html = tmp_path / "report.html"
+    html.write_text("stale dashboard", encoding="utf-8")
     argv = ["--scope", "fleet", "--output", str(output), "--html", str(html)]
-    assert cli.main([*argv, "--junit", str(kit.REPORTING / "junit.xml")]) == 2
-    assert "too large for the dashboard" in capsys.readouterr().err
-    assert not output.exists()
+    assert cli.main([*argv, "--junit", str(kit.REPORTING / "junit.xml")]) == 3
+    captured = capsys.readouterr()
+    assert "warning: the dashboard was not written" in captured.err
+    assert "too large for the dashboard" in captured.err
+    assert f"report written to {output}" in captured.out
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == "1.0"
     assert not html.exists()
+
+
+def test_cli_warns_when_an_earlier_dashboard_cannot_be_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(dashboard, "MAX_EMBEDDED_BYTES", 10)
+    html = tmp_path / "report.html"
+    html.mkdir()
+    argv = ["--scope", "fleet", "--output", str(tmp_path / "r.json"), "--html", str(html)]
+    assert cli.main(argv) == 3
+    assert "cannot remove the earlier dashboard" in capsys.readouterr().err
+    assert html.is_dir()
+
+
+def test_cli_refuses_the_same_file_for_report_and_dashboard(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = tmp_path / "report.json"
+    same = tmp_path / "sub" / ".." / "report.json"
+    assert cli.main(["--scope", "fleet", "--output", str(output), "--html", str(same)]) == 2
+    assert "must name different files" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_outputs_are_written_atomically_with_private_permissions(tmp_path: Path) -> None:
+    target = tmp_path / "deep" / "report.json"
+    cli.write_atomic(target, "first")
+    assert target.read_text(encoding="utf-8") == "first"
+    assert target.stat().st_mode & 0o777 == 0o600
+    cli.write_atomic(target, "second")
+    assert target.read_text(encoding="utf-8") == "second"
+    assert sorted(path.name for path in target.parent.iterdir()) == ["report.json"]
+
+
+def test_a_failed_write_keeps_the_previous_file_and_leaves_no_temporary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "report.json"
+    cli.write_atomic(target, "previous")
+
+    def broken(_descriptor: int) -> None:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr("tools.reporting.cli.os.fsync", broken)
+    with pytest.raises(OSError, match="No space left"):
+        cli.write_atomic(target, "new content")
+    assert target.read_text(encoding="utf-8") == "previous"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["report.json"]
 
 
 def test_cli_reports_an_unwritable_dashboard(

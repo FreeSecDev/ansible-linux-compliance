@@ -162,12 +162,14 @@ def _group_view(
     host = key_of(fields.get("host"))
     key = (_text(fields.get("benchmark_id")), _text(fields.get("content_version")), host)
     matching = sorted(sources.get(key, []), key=lambda source: json.dumps(source, sort_keys=True))
-    note_indexes: list[Json] = [
-        index
-        for index, note in enumerate(notes)
-        if host[0] and not host[1] and _mapping(note).get("host") == host[0]
-    ]
-    return {"notes": note_indexes, "sources": list[Json](matching)}
+    own = {_text(_mapping(source).get("sha256")) for source in matching}
+    merges: list[Json] = []
+    for index, note in enumerate(notes):
+        fields = _mapping(note)
+        merged = sorted(own.intersection(_text(sha) for sha in _sequence(fields.get("sources"))))
+        if host[0] and not host[1] and fields.get("host") == host[0] and len(merged) > 1:
+            merges.append({"note": index, "sources": list[Json](merged)})
+    return {"merges": merges, "sources": list[Json](matching)}
 
 
 def _label(host: HostTuple) -> tuple[bool, str]:
@@ -203,8 +205,11 @@ def _host_table(hosts: set[HostTuple]) -> list[Json]:
 def dashboard_views(report: Mapping[str, Json]) -> dict[str, Json]:
     """Return the view that the page needs beside the report. It holds no figures.
 
-    ``groups[i]`` lists the input files (format, path, SHA-256) and the indexes of the
-    merge notes of ``sections.compliance.groups[i]``. ``hosts`` lists every host key of
+    ``groups[i]`` lists the input files (format, path, SHA-256) of
+    ``sections.compliance.groups[i]`` and its merges. The report writes one merge note per
+    self-asserted host, across benchmarks and content versions, so a note is attached to a
+    group only when at least two of its sources are inputs of that group, and the group
+    lists only those sources. ``hosts`` lists every host key of
     the groups and rules once, with whether a machine ID identifies it or the name is
     self-asserted, and a variant number when several keys share one name.
     """

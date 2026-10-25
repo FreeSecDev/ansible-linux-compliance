@@ -21,7 +21,7 @@ which share a name stay distinguishable, with their identity, input sources and 
 - `tools/reporting/dashboard.py` renders one HTML file. `python -m tools.reporting --html PATH` (and `make report`)
   write it from the same in-memory document as the JSON report. Equal reports give byte-identical files.
 - The page embeds the report **unchanged** together with a small view: for each compliance group its input files
-  (format, path, SHA-256) and merge-note indexes, and for each host key whether a machine ID identifies it or its name
+  (format, path, SHA-256) and its merges, and for each host key whether a machine ID identifies it or its name
   is self-asserted, plus a variant number when keys share a name. The view holds no figures. Its host key derivation
   repeats `compliance.host_key` on the JSON and a unit test compares the two.
 - The page script computes no figure. It shows counts, percentages and assessments only where the report has them,
@@ -37,7 +37,17 @@ which share a name stay distinguishable, with their identity, input sources and 
   inline styles or handlers.
 - Tables are paginated (25, 100 or 500 rows) and only the current page is in the DOM. Searching, filtering and sorting
   run over the in-memory rows.
-- The embedded data is capped at 128 MiB; a larger report is refused, and nothing is written.
+- The embedded data is capped at 128 MiB. Above the cap the JSON report is still written, the dashboard is not, a
+  dashboard left at that path by an earlier run is removed, and the command exits with the distinct status 3, which
+  takes precedence over status 1. A browser limit must not block the JSON pipeline (FREES-78), and a distinct status
+  lets CI tell "no dashboard" apart from both success and a damaged input. Both outputs are written atomically
+  (temporary file in the same directory, `fsync`, rename) with mode 0600, and `--html` must differ from `--output`.
+- Merge notes: the report writes one `shared_self_asserted_host` note per host across benchmarks and content versions
+  (ADR 0016). A group shows a merge only when at least two of the note's sources are inputs of that group, and lists
+  only those; the note itself is shown at report level as "counted as one host". A note is never attached to a group by
+  host name alone, because that would claim that a figure includes inputs it does not.
+- A machine ID is shown in a neutral tone as "reported by the scan run": the scanned host writes it, so it is a
+  stronger identity than a bare name but it is not verified.
 - Tabs follow the WAI-ARIA tabs pattern with automatic activation; a section tab exists only when inputs were
   supplied, and the overview lists the rest.
 - Browser tests use Playwright for Python (a `uv` development dependency, hash-locked, owned by Dependabot) driving a
@@ -70,7 +80,11 @@ size.
 - The whole report is embedded, so findings appear both in the items and in the deduplicated rules.
 - A browser without Trusted Types support still enforces the hash policy; only the additional sink protection is lost.
 - The test browser and axe-core are pinned in a script, not by a bot, and are updated by hand (FREES-81).
-- The Chrome for Testing download publishes no checksum of its own; the pinned SHA-256 was taken on first download.
+- Chrome for Testing publishes no checksum file. The headless shell is downloaded from the upstream bucket
+  (`storage.googleapis.com/chrome-for-testing-public`); on 2026-10-25 that object was byte-identical to the
+  `cdn.playwright.dev` mirror (same SHA-256), and the pinned SHA-256 of the zip and of the extracted binary were taken
+  then. The binary and `axe.min.js` are re-verified on every run, also from the cache. The axe-core tarball is checked
+  against both a pinned SHA-256 and npm's published `dist.integrity` SHA-512.
 
 ## Security implications
 

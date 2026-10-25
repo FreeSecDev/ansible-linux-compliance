@@ -14,10 +14,13 @@ python -m tools.reporting --scope fleet --output build/report/report.json --html
 
 `make report` writes `build/report/report.json` and `build/report/report.html` (`REPORT_OUTPUT` and `REPORT_HTML`
 override them). With `--html` the command line renders the dashboard from the same document that it writes as JSON.
-When the dashboard cannot be rendered, nothing is written and the exit status is 2; the other exit statuses are the
+Both files are written atomically with mode 0600. When the report is above the dashboard size cap, the JSON is
+still written, the dashboard is not (an older dashboard at that path is removed) and the exit status is 3. `--html` and
+`--output` must name different files. The other exit statuses are the
 ones in the data model page.
 
-Open the HTML file directly in a browser. `make report-serve` serves the report directory on `127.0.0.1` only
+Open the HTML file directly in a browser. `make report-serve` serves `build/report/` on `127.0.0.1` only, and refuses
+a `REPORT_HTML` outside that directory
 (`REPORT_PORT`, default 8765), for browsers that restrict `file://` pages.
 
 Equal reports give byte-identical dashboards: the file has no generation time, no random identifiers and a fixed
@@ -34,7 +37,7 @@ The tabs are:
 | Tab | Content |
 |---|---|
 | Overview | The scope, the run metadata, the compliance summary and the status of every section, plus the report types that were not supplied |
-| Compliance | Summary, merge notes, figures per benchmark and content version, figures per host, rules, inputs and findings |
+| Compliance | Summary, hosts counted as one, figures per benchmark and content version, figures per host, rules, inputs and findings |
 | Tests, Coverage, Ansible lint, Vulnerabilities, SBOM, Molecule, Packer images, AWS CodeBuild | The section status, its summary when the report has one, its inputs and the entries of each input |
 | Raw artifacts | Every input file as supplied, with its format, status, SHA-256 and size |
 
@@ -66,10 +69,16 @@ The dashboard shows figures only as the report gives them. It does not compute, 
 Each row of "Figures per host" is one benchmark and content version on one host, and shows:
 
 - the host name, or "unnamed input" when the input file names no host;
-- its identity: the machine ID when a scan run supplied one, otherwise "self-asserted", because the name comes from
-  the input file and is not verified;
+- its identity: "machine ID reported by the scan run" with the ID when a scan run supplied one, otherwise
+  "self-asserted", because the name comes from the input file. Neither is verified by the dashboard: the machine ID is
+  also written by the scanned host, so it is shown in a neutral tone, not as a trusted identity;
 - its input sources: the format, SHA-256 and path of every input that contributed to the group;
-- its merge notes, when several inputs claim the same self-asserted host name and were combined.
+- its merge notes: "Merged in this group" with the SHA-256 of each combined input, only when at least two inputs
+  that claim the same self-asserted host name were combined into this group.
+
+The report writes one note per self-asserted host across all benchmarks and content versions. The Compliance tab lists
+these under "Hosts counted as one": the inputs are counted as one host, but their figures stay separate for each
+benchmark and content version, so such a note never appears inside a group that combined nothing.
 
 Two hosts that share a name, for example a machine-identified `web01` and a self-asserted `web01`, are separate
 groups. They are marked "same name as another host: variant 1 of 2" and "variant 2 of 2" with a dashed outline, and
@@ -109,8 +118,8 @@ the theme button. Each table prints its current page.
 
 ## Limits
 
-- The embedded report (as escaped JSON) may be at most 128 MiB. A larger report is refused with exit status 2 and no
-  file is written. Split such a report by benchmark or host.
+- The embedded report (as escaped JSON) may be at most 128 MiB. For a larger report only the JSON is written, and the
+  exit status is 3. Split such a report by benchmark or host.
 - This cap is below some schema maxima: a report with the schema's maximum of 1,000,000 rules, each with its findings,
   is several hundred megabytes and above the string size a browser can parse. The browser tests use a report at the
   cap, with 1000 inputs in every section, 9000 raw artifacts, detail lists past their 1000-entry cap and about

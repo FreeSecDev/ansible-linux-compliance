@@ -39,9 +39,15 @@ Exit status:
 - 0: the report was written and every supplied input parsed. A section without any input is `unavailable`; that is
   not an error, and it is never shown as passed.
 - 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`).
-- 2: invalid arguments or metadata, a scope that the data contradicts (below), a report that the dashboard cannot
-  render (more than 128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)), or an output that cannot be
-  written. No report is written for a contradicted scope or a report that the dashboard refuses.
+- 2: invalid arguments or metadata, `--html` naming the same file as `--output`, a scope that the data contradicts
+  (below), or an output that cannot be written. No report is written for a contradicted scope.
+- 3: the JSON report was written, but the dashboard was not, because the report is above the dashboard size cap
+  (128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)). A dashboard left at that path by an earlier
+  run is removed. Status 3 takes precedence over 1; the sections of the JSON still show any missing or invalid input.
+
+Both files are written atomically (a temporary file in the target directory, synced, then renamed over the target),
+so a crash or a full disk never leaves a truncated file. They are created with mode 0600, because a report can hold
+host evidence.
 
 At most 1000 input files per section are accepted.
 
@@ -110,10 +116,14 @@ unnamed input is never merged with anything, and a crafted name cannot take over
 name in the file for XCCDF (`target` or the fqdn fact) and ARF (asset fqdn and hostname, which must match the
 TestResult target, otherwise the file is an error). Names
 are lower-cased, and files are grouped only when the names are equal; differing identities are never merged. Input
-files with the same SHA-256 count once. When several input files claim the same self-asserted host, they are
-merged and `notes` records it as a structured entry (whenever a host group combines several inputs and at least one is a
-self-asserted XCCDF or ARF file), `{"kind": "shared_self_asserted_host", "host": ..., "sources": [sha256, ...]}`;
-consumers build the wording, so no input text becomes prose.
+files with the same SHA-256 count once. When several input files claim the same self-asserted host, they count as one
+host, and `notes` records it as a structured entry `{"kind": "shared_self_asserted_host", "host": ..., "sources":
+[sha256, ...]}`; consumers build the wording, so no input text becomes prose. A note is written **per host, not per host
+group**: it is written whenever several inputs share a host key and at least one of them is a self-asserted XCCDF or
+ARF file, and `sources` lists every such input, across all benchmarks and content versions. Figures stay separate per
+(benchmark, content version, host), so the inputs of one note can sit in different groups that combine nothing. The
+dashboard therefore shows a merge inside a group only when at least two of the note's sources are inputs of that group,
+and lists only those. Notes per host group in the report itself are tracked in FREES-130.
 
 | Field | Meaning |
 |---|---|
