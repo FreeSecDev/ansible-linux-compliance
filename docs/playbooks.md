@@ -14,7 +14,8 @@ reference roles and other playbooks by FQCN, apart from the generated run-start 
 | `playbooks/evidence.yml` | `discover` and the `audit` role's `deferred.yml`, after the `evidence` role's `reached.yml`; the stale-exceptions report on `localhost`; on every target host the `audit` role's `enforce.yml` with the `evidence` role in its `always` section (with the stale result of the run), failing no host; the `evidence` role's `summary.yml` on `localhost`, which writes the collection summary; then `enforce.yml` and the `evidence` role's `collected.yml` on every target host, which fail the gated hosts and the hosts whose collection failed | `audit`; the `evidence` role's host `stat` and fetch only |
 
 Every one of these playbooks first imports `playbooks/run_start.yml`, which `make role-guards` generates (ADR 0004,
-FREES-157). Its one play on `localhost` refuses the run before anything else when an inventory host or `localhost`
+FREES-157). Its one play targets `all:localhost` and runs its one assertion once, so every `--limit` keeps it, and it
+never connects to a host. It refuses the run before anything else when an inventory host or `localhost`
 already has an internal `__linux_compliance_*` variable or a role output (`linux_compliance_audited`,
 `linux_compliance_discovered`, `linux_compliance_audit_stale_exceptions`, `linux_compliance_baseline` and every other
 `linux_compliance_*` fact that a role sets) in `hostvars`, that is from an extra variable (`-e`), the inventory,
@@ -26,6 +27,13 @@ whatever their value. The cacheable baseline marker of the `verify` role is exem
 role check it where they read it. When `remediate.yml` imports `audit.yml` and `verify.yml`, and `verify.yml` imports
 `audit.yml`, they pass the play variable `linux_compliance_run_start_checked: true`, so the imported check does not
 refuse the facts of the earlier plays; the marker itself is refused as an extra or inventory variable.
+
+`--limit` cannot skip the run-start check: it targets `all:localhost`, so it runs once for any limit that selects a host,
+and its assertion never connects, also when the selected host is unreachable. The other plays on `localhost` (the
+stale-exceptions report, and the collection summary of `evidence.yml`) are skipped by a limit that does not name
+`localhost`, and that fails closed: no stale warning is printed and no gate depends on it, and without a summary a
+report has host coverage `unknown`, which `--require-host-coverage` refuses. Add `localhost` to a limit, for example
+`--limit web01,localhost`, to get both ([evidence bundles](evidence.md)).
 
 Run one shipped playbook per `ansible-playbook` invocation. Two of them in one invocation, for example
 `ansible-playbook playbooks/audit.yml playbooks/remediate.yml`, are refused by design: the run-start check of the

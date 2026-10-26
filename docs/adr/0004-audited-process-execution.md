@@ -892,8 +892,8 @@ adds an exemption, and no lint limit was raised.
   validation, which also templates it; the `vars` of a `roles` entry, which ranked below the role's facts, are
   refused now as well.
 - Run-start check: the generator also writes `playbooks/run_start.yml` (`tools/roles/run_start.py`), and every
-  shipped playbook imports it first. Its one play on `localhost` refuses the run when an inventory host or
-  `localhost` already has, in `hostvars`, any `__linux_compliance_*` name or a role output: every public
+  shipped playbook imports it first. Its one play (on `all:localhost` since the `--limit` item below) refuses the run
+  when an inventory host or `localhost` already has, in `hostvars`, any `__linux_compliance_*` name or a role output: every public
   `linux_compliance_*` fact that a role sets (`role_outputs`), among them `linux_compliance_audited`,
   `linux_compliance_discovered`, `linux_compliance_audit_stale_exceptions` and `linux_compliance_baseline`. It also
   refuses `inventory_hostname` and `group_names` as extra variables (see below). As in the FREES-150 Molecule guard it reads only the magic
@@ -932,6 +932,26 @@ adds an exemption, and no lint limit was raised.
   that group applied to. `exceptions_apply.yml` now derives the groups of the host from `groups` (every group except
   `all` that lists `inventory_hostname`), and the run-start check compares the `<host> <group>` pairs of
   `hostvars[*].group_names` with those of `groups` and refuses any difference.
+- `--limit` (review of PR #44 at 98d95ea): the run-start play targeted `localhost`, which a limit keeps only when it
+  names `localhost`, so `playbooks/remediate.yml --limit web01 -e '<plan template>'` skipped the check and published
+  the forged plan; the role guards cannot refuse an extra variable, because its name is in `hostvars` and both sides
+  of the nonce check read the same value. The play now targets `all:localhost` with `run_once: true` and
+  `gather_facts: false`, so it runs once whatever the limit selects. Its only task is an assertion, an action that
+  reads `hostvars` and `groups` on the controller and never connects, also for an unreachable host. A limit that
+  selects no host ends the run before any play. `make test-role-guards` refuses a forged `-e` with `--limit web01` for
+  `remediate.yml`, `audit.yml`, `evidence.yml` and `verify.yml` and with `--limit lost01`, an unreachable host, and
+  runs the plain playbooks with `--limit web01`, `lost01` and `localhost` without a connection. The other plays on
+  `localhost` stay there, because their results are facts of `localhost` that later plays and roles read, and
+  skipping them fails closed:
+  - The stale-exceptions play (`audit.yml`, so also `remediate.yml` and `verify.yml`, and `evidence.yml`) only
+    reports: no stale warning is printed, the bundles of `evidence.yml` get no `exceptions/stale.json` (the evidence
+    role passes an empty mapping), and the report computes the review of every exception from the evaluations itself.
+    No gate, waiver or comparison depends on it.
+  - The summary play of `evidence.yml`: no collection summary is written, so a report over the bundles has host
+    coverage `unknown` and `--require-host-coverage` exits 1; the last play still fails every host whose collection
+    failed. `docs/evidence.md` already tells operators to add `localhost` to a limit.
+  - The `run_once` tasks of the roles (the exceptions file read and validation, `reached.yml`, the stale and summary
+    tasks) run on the first host of their play, which is a selected host whenever the play runs at all.
 - Two shipped playbooks in one `ansible-playbook` invocation are refused by the run-start check of the second, because
   the first left role outputs and internal facts in `hostvars`. This fails closed and is intended: the shipped
   playbooks that need another one import it with the marker, and facts of a finished playbook must not seed the next.

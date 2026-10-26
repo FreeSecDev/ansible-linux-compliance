@@ -592,6 +592,17 @@ status=0; $(RUN_START_PLAYBOOK) $(3) playbooks/$(2).yml > '$(ROLE_GUARDS_DIR)/ru
 		{ printf 'error: run start %s went on after the first play\n' '$(1)' >&2; exit 1; }
 endef
 
+RUN_START_LIMIT := -i tests/playbooks/inventory/run-start-limit.yml --limit
+
+define run_start_limit_plain
+$(RUN_START_PLAYBOOK) $(RUN_START_LIMIT) $(2) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log' 2>&1 || \
+	{ cat '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log'; printf 'error: %s refused a plain run limited to %s\n' '$(1)' '$(2)' >&2; exit 1; }
+grep -qE '^ok: \[$(2)\]' '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log' || \
+	{ printf 'error: the run-start check of %s did not run with --limit %s\n' '$(1)' '$(2)' >&2; exit 1; }
+if grep -qE 'UNREACHABLE|unreachable=[1-9]' '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log'; then \
+	printf 'error: the run-start check of %s connected to a host with --limit %s\n' '$(1)' '$(2)' >&2; exit 1; fi
+endef
+
 define run_start_expect_success
 $(RUN_START_PLAYBOOK) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log' 2>&1 || \
 	{ cat '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log'; printf 'error: %s refused a plain run\n' '$(1)' >&2; exit 1; }
@@ -627,6 +638,14 @@ test-role-guards: require-uv collection-link
 	$(call run_start_expect_refusal,group_names,audit,-e '{"group_names": ["web"]}',none)
 	$(call run_start_expect_refusal,group_names_grouped,audit,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e '{"group_names": ["web"]}',none)
 	$(REMEDIATE_CHECK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/internal-variables-hostname.yml
+	$(call run_start_expect_refusal,limit_plan,remediate,$(RUN_START_LIMIT) web01 -e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,limit_audited,audit,$(RUN_START_LIMIT) web01 -e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,limit_unreachable,remediate,$(RUN_START_LIMIT) lost01 -e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,limit_evidence,evidence,$(RUN_START_LIMIT) web01 -e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,limit_verify,verify,$(RUN_START_LIMIT) web01 -e '{"__linux_compliance_verify_comparison": {}}',__linux_compliance_verify_comparison)
+	$(call run_start_limit_plain,remediate,web01)
+	$(call run_start_limit_plain,remediate,lost01)
+	$(call run_start_limit_plain,audit,localhost)
 	status=0; $(RUN_START_PLAYBOOK) playbooks/audit.yml playbooks/audit.yml > '$(ROLE_GUARDS_DIR)/run-start-twice.log' 2>&1 \
 		|| status=$$?; cat '$(ROLE_GUARDS_DIR)/run-start-twice.log'; \
 		test "$$status" -eq 2 || { printf 'error: two shipped playbooks in one invocation gave status %s\n' "$$status" >&2; exit 1; }; \

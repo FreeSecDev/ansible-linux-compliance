@@ -15,8 +15,9 @@ security_fixes:
     an inventory host or ``localhost`` already has an internal ``__linux_compliance_*`` variable or a role output such
     as ``linux_compliance_audited`` or ``linux_compliance_discovered`` from an extra variable, the inventory,
     ``group_vars``, ``host_vars`` or a fact cache, or when ``inventory_hostname`` is an extra variable. It reads only
-    magic variables and literals. The cacheable baseline marker of the verify role is exempt, and a shipped playbook
-    that imports another passes ``linux_compliance_run_start_checked`` as a play variable.
+    magic variables and literals, and its play targets ``all:localhost`` with ``run_once``, so ``--limit`` cannot skip
+    it and it never connects to a host. The cacheable baseline marker of the verify role is exempt, and a shipped
+    playbook that imports another passes ``linux_compliance_run_start_checked`` as a play variable.
   - >-
     audit role - right after it publishes ``linux_compliance_audited`` the role checks that the fact, also as read
     through ``hostvars``, holds the ``run_id`` of the scan that just ran, so an override of its own output fails before

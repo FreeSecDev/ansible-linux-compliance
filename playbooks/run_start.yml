@@ -1,6 +1,6 @@
 ---
 - name: Refuse internal variables and role outputs that exist before the run starts
-  hosts: localhost
+  hosts: all:localhost
   gather_facts: false
   tasks:
     - name: Refuse internal variables and role outputs supplied from outside the run

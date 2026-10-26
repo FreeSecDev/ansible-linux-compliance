@@ -34,7 +34,7 @@ def names_of(expression: str) -> set[str]:
 def the_task() -> dict[str, object]:
     plays = load(REPOSITORY_ROOT / run_start.RUN_START)
     assert len(plays) == 1
-    assert plays[0]["hosts"] == "localhost"
+    assert plays[0]["hosts"] == "all:localhost"
     assert plays[0]["gather_facts"] is False
     assert "vars" not in plays[0]
     tasks = cast("list[dict[str, object]]", plays[0]["tasks"])
