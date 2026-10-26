@@ -696,18 +696,39 @@ until it is classified.
   template, which Ansible templates when it renders the outer one. Workflows hold GitHub expressions, not Jinja,
   and `!unsafe` and `!vault` values are never templated. A template that does not lex is refused; a bare
   expression that does not lex cannot be compiled by Ansible either and is ignored.
-- Every other text file that Ansible can render or load as variables is read as one template, whatever its
-  suffix (independent review of PR #45): every file below `roles/`, `playbooks/`, `tests/playbooks/` and
-  `extensions/`, every file below a `templates`, `files`, `vars` or `defaults` directory anywhere, every file with
-  a `.j2`, `.jinja` or `.jinja2` suffix, and inventory text (files below `inventory`, `inventories`, `host_vars`
-  and `group_vars`, and files named `hosts` or `inventory`). That covers a role's `files/`, which the `template`
-  lookup and module and `{% include %}` render, the values of an INI inventory, and `.json` and extensionless
-  vars files. A `.json` file and an extensionless file in an inventory, `host_vars`, `group_vars`, `vars` or
-  `defaults` directory are also composed as YAML, as `include_vars`, the `host_group_vars` plugin and the `yaml`
-  inventory plugin load them, so their keys and decoded values get the YAML lookup and variable rules. A file with
-  a NUL byte is binary and skipped; text that is not UTF-8 is refused. Reading the whole text as a template is a
-  superset of what an INI parser passes to the templar: an INI value whose quoting or escapes (`\x27`) would
-  change the expression does not lex as Jinja and is refused. No tracked file needed an exception.
+- Every tracked file outside `.github/` is read as one template, whatever its suffix and location (independent
+  reviews of PR #45 at 403e751 and b5538dd, `tools/lint/repo_rules/rendered_files.py`), because the `template`
+  lookup and module render any file they are pointed at and `vars_files` loads any path. That covers a role's
+  `files/`, which `{% include %}` also renders, the values of an INI inventory, and vars files of any suffix.
+  `.github/` holds GitHub expressions, not Jinja, and GitHub runs it, not Ansible.
+  - A file is binary only when its content starts with the magic bytes of a known binary format and its suffix
+    names that format (`BINARY_FORMATS`: PNG, JPEG, GIF, ICO, WebP, gzip, bzip2, xz, zstd, zip, tar, PDF, WOFF,
+    WOFF2, OpenType, TrueType, qcow2). A binary is still checked when it holds a template marker, because the
+    template module would render it. A NUL byte in any other file is refused: ansible-core 2.21.5 renders a file
+    with a NUL and runs its lookups, so a NUL cannot mark a file as binary. Text that is not UTF-8 is refused.
+  - A file that Ansible may also load value by value (a file below `roles/`, `playbooks/`, `tests/playbooks/` or
+    `extensions/`, below a `templates`, `files`, `vars` or `defaults` directory, with a template suffix, inventory
+    text, or `.json`) is checked strictly: a template that does not lex is refused, because each value is
+    templated on its own. Any other file can only be rendered whole, and a template that does not lex fails to
+    compile before any lookup runs, so a lexer error there is not a finding; its lookups and other refused Jinja
+    are. YAML files are checked value by value by the YAML rules and whole by this rule.
+  - Every `.json` file, and an extensionless file in an inventory, `host_vars`, `group_vars`, `vars` or
+    `defaults` directory, is also composed as YAML, as `include_vars`, the `host_group_vars` plugin and the `yaml`
+    inventory plugin load it, so its keys and decoded values get the YAML lookup and variable rules. Reading an
+    INI inventory whole is a superset of what its parser passes to the templar: a value whose quoting or escapes
+    (`\x27`) would change the expression does not lex and is refused.
+  - No tracked file needed an exception or a rewrite.
+- Load and render targets (`tools/lint/repo_rules/exec_targets.py`): a `vars_files` entry, the `file`, free form
+  and `dir` of `include_vars`, the `src` of the `template` module and the first term of the `template` lookup must
+  be a literal relative path, without `..` except in `vars_files`, which Ansible resolves against the playbook,
+  and must resolve inside the repository and outside `.github/`. The one templated form is `{{ role_path }}/` in a
+  file of a role or `{{ playbook_dir }}/` in a playbook, followed by a literal path, resolved against the role or
+  the playbook directory (`roles/audit/tasks/toggles.yml` and `tests/playbooks/remediate-check-mode.yml` load
+  `roles/remediate/vars/rules.yml` that way). A vars file must be `.yml`, `.yaml` or `.json`, the files that the
+  guard reads value by value, and `extensions` of `include_vars` is refused, so `include_vars` with `dir` loads
+  only those suffixes. With every file scanned, the target rule is defence in depth: it keeps a target from
+  leaving the repository, where nothing is scanned, and keeps vars files to the suffixes whose values are checked
+  one by one.
 - An `include`, `import`, `extends` or `from` tag must name a literal relative template without `..` that is not
   itself templated, followed by the end of the tag or a keyword (`as`, `import`, `ignore missing`,
   `with context`); a computed name (`{% include name %}`, `'a' ~ x`, a list) could load any template and is
@@ -825,11 +846,10 @@ until it is classified.
 - An `--index-modes` listing that cannot be read ends the guard with a clear message and exit status 2 instead of a
   traceback.
 
-**Residuals.** The guard reads the repository, not the run. A vars file, template or inventory loaded from outside
-the repository (an absolute `include_vars`, `vars_files` or `src`) is outside its control, as is a dictionary key
-built at run time (`{'ansible_' ~ 'python_interpreter': x}`). Inside the repository every file that Ansible can
-render or load as variables is scanned, and template names in `include`, `import`, `extends` and `from` must be
-literal. Options of
+**Residuals.** The guard reads the repository, not the run. Every file inside the repository outside `.github/` is
+scanned, and every load and render target and template name must be literal and resolve inside it, so what remains
+is a file from outside the repository that the run supplies (an inventory, extra variables or a vars file passed on
+the command line) and a dictionary key built at run time (`{'ansible_' ~ 'python_interpreter': x}`). Options of
 connection, become and shell plugins of other collections are refused only by the name patterns above. Settings
 outside the repository (`~/.ansible.cfg`, `ANSIBLE_CONFIG`, the operator's environment) stay the documented
 residual of FREES-156. The change closes routes around AGENTS.md rule 1 and needs the independent review that the

@@ -249,8 +249,10 @@ def test_prose_that_mentions_a_lookup_is_not_a_template(tmp_path: Path) -> None:
     assert found(tmp_path, "roles/r/tasks/main.yml", text) == []
 
 
-def test_an_unsafe_or_vaulted_value_is_never_templated(tmp_path: Path) -> None:
-    text = "---\nprobe: !unsafe \"{{ lookup('pipe', 'id') }}\"\nother: !vault x\n"
+def test_an_unsafe_or_vaulted_value_is_never_templated_as_a_variable(tmp_path: Path) -> None:
+    text = "---\nprobe: !unsafe \"{{ q('pipe', 'id') }}\"\nother: !vault x\n"
+    assert found(tmp_path, "roles/r/vars/main.yml", text) == [f"lookup 'pipe' {RUNS}"]
+    text = '---\nprobe: !unsafe "{{ x }}"\nother: !vault x\n'
     assert found(tmp_path, "roles/r/vars/main.yml", text) == []
 
 

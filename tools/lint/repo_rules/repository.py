@@ -18,6 +18,7 @@ from tools.lint.repo_rules.common import (
 )
 from tools.lint.repo_rules.exec_config import config_file_findings, molecule_config_findings
 from tools.lint.repo_rules.exec_modules import module_parameter_findings
+from tools.lint.repo_rules.exec_targets import target_findings
 from tools.lint.repo_rules.exec_variables import (
     is_inventory_text,
     text_setting_findings,
@@ -25,12 +26,7 @@ from tools.lint.repo_rules.exec_variables import (
 )
 from tools.lint.repo_rules.imports import file_io_import_findings
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
-from tools.lint.repo_rules.jinja_calls import (
-    BINARY_MARKER,
-    is_template_file,
-    template_file_findings,
-    yaml_jinja_findings,
-)
+from tools.lint.repo_rules.jinja_calls import is_template_file, yaml_jinja_findings
 from tools.lint.repo_rules.load_config import (
     EXECUTED_YAML_DIRECTORY,
     MOLECULE_FILE_NAMES,
@@ -47,6 +43,7 @@ from tools.lint.repo_rules.load_locations import (
     repository_path,
 )
 from tools.lint.repo_rules.names import FILE_IO_IMPORTERS, SHEBANG_PREFIX
+from tools.lint.repo_rules.rendered_files import NUL, rendered_file_findings
 from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_comments
 
 if TYPE_CHECKING:
@@ -115,26 +112,48 @@ def check_file(
     except OSError as error:
         return [*violations, Violation(path, 1, f"cannot read file: {error}")]
     if suffix in PYTHON_SUFFIXES:
-        rendered = (
-            template_file_findings(path, data)
-            if relative is not None and is_template_file(relative)
-            else []
-        )
-        return [
-            *violations,
-            *_python_violations(path, root, data, relative, configured),
-            *rendered,
-        ]
-    if suffix in YAML_SUFFIXES:
-        return [*violations, *_yaml_violations(path, data, relative)]
-    return [*violations, *_text_violations(path, data, relative)]
+        found = _python_violations(path, root, data, relative, configured)
+    elif suffix in YAML_SUFFIXES:
+        found = _yaml_violations(path, data, relative)
+    else:
+        found = _text_violations(path, data, relative)
+    rendered = [
+        violation
+        for violation in _rendered_violations(path, data, relative)
+        if violation not in found
+    ]
+    return [*violations, *found, *rendered]
+
+
+def _is_executed(relative: Path | None) -> bool:
+    """Return whether ``relative`` is below ``.github/``, whose YAML GitHub runs, not Ansible."""
+    return relative is not None and relative.parts[:1] == (EXECUTED_YAML_DIRECTORY,)
 
 
 def _is_readable(path: Path, relative: Path | None) -> bool:
-    """Return whether a rule reads ``path``: YAML, Python, configuration, template or inventory."""
+    """Return whether a rule reads ``path``.
+
+    That is YAML, Python and configuration text anywhere, and every file of the repository
+    outside ``.github/``, which Ansible could render as a template (FREES-159).
+    """
     if path.suffix.lower() in YAML_SUFFIXES | PYTHON_SUFFIXES or is_configuration_text(path):
         return True
-    return relative is not None and (is_template_file(relative) or is_inventory_text(relative))
+    return relative is not None and not _is_executed(relative)
+
+
+def _rendered_violations(path: Path, data: bytes, relative: Path | None) -> list[Violation]:
+    """Read a repository file outside ``.github/`` as the template Ansible could render it as.
+
+    A file that Ansible may also load value by value (a template or vars location, inventory
+    text, ``.json``) is checked strictly; YAML is checked value by value by the YAML rules.
+    """
+    if relative is None or _is_executed(relative):
+        return []
+    suffix = path.suffix.lower()
+    strict = suffix not in YAML_SUFFIXES and (
+        is_template_file(relative) or is_inventory_text(relative) or suffix == JSON_SUFFIX
+    )
+    return rendered_file_findings(path, data, strict=strict)
 
 
 def _text_violations(path: Path, data: bytes, relative: Path | None) -> list[Violation]:
@@ -149,10 +168,8 @@ def _text_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
             violations.extend(text_setting_findings(path, relative, data))
     elif relative is not None and is_inventory_text(relative):
         violations.extend(text_setting_findings(path, relative, data))
-    if relative is not None and (is_template_file(relative) or is_inventory_text(relative)):
-        violations.extend(template_file_findings(path, data))
-        if _is_variable_file(relative):
-            violations.extend(_variable_file_violations(path, data, relative))
+    if relative is not None and not _is_executed(relative) and _is_variable_file(relative):
+        violations.extend(_variable_file_violations(path, data, relative))
     return sorted(set(violations))
 
 
@@ -175,9 +192,9 @@ def _variable_file_violations(path: Path, data: bytes, relative: Path) -> list[V
 
     ``include_vars``, the ``host_group_vars`` plugin and the ``yaml`` inventory plugin load
     such files as YAML, and JSON is YAML, so their values and keys get the YAML rules. A file
-    that is not YAML is still read as a template by ``template_file_findings``.
+    that is not YAML is still read as a template by ``rendered_file_findings``.
     """
-    if BINARY_MARKER in data:
+    if NUL in data:
         return []
     documents = _documents(data.decode("utf-8", errors="replace"))
     return [
@@ -204,7 +221,7 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
         text = data.decode("utf-8")
     except UnicodeDecodeError as error:
         return [Violation(path, 1, f"file is not valid UTF-8: {error}")]
-    executed = relative is not None and relative.parts[:1] == (EXECUTED_YAML_DIRECTORY,)
+    executed = _is_executed(relative)
     documents = _documents(text)
     violations = [
         *check_document_start(path, text),
@@ -212,6 +229,7 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
         *check_banned_modules(path, text),
         *yaml_setting_findings(path, text, executed=executed),
         *module_parameter_findings(path, documents),
+        *target_findings(path, relative, documents),
         *yaml_variable_findings(path, relative, documents),
     ]
     if not executed:

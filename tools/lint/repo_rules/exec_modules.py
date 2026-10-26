@@ -31,6 +31,7 @@ MODULE_PARAMETERS: Final[dict[str, frozenset[str]]] = {
     "dnf": frozenset({"conf_file"}),
     "dnf5": frozenset({"conf_file"}),
     "gather_facts": frozenset({"fact_path"}),
+    "include_vars": frozenset({"extensions"}),
     "git": frozenset({"executable", "ssh_opts"}),
     "lineinfile": VALIDATE,
     "mount_facts": frozenset({"mount_binary"}),

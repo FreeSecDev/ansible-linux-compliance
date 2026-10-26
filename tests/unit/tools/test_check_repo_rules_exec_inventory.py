@@ -44,7 +44,6 @@ REVIEWED_MODULES = frozenset(
         "import_tasks",
         "include_role",
         "include_tasks",
-        "include_vars",
         "iptables",
         "known_hosts",
         "meta",

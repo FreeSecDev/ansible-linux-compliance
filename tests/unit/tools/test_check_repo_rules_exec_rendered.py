@@ -188,9 +188,10 @@ def test_a_literal_template_name_passes(tmp_path: Path, template: str) -> None:
     assert found(tmp_path, "roles/r/templates/x.j2", template + "\n") == []
 
 
-def test_a_binary_file_in_a_role_is_not_a_template(tmp_path: Path) -> None:
+def test_a_nul_byte_does_not_make_a_role_file_binary(tmp_path: Path) -> None:
     target = write(tmp_path, "roles/r/files/blob.bin", b"\x00\xff{{ lookup('pipe', 'id') }}")
-    assert rules.check_paths([target], tmp_path) == []
+    messages = [v.message for v in rules.check_paths([target], tmp_path)]
+    assert has(messages, "NUL byte in a text file is not allowed")
 
 
 def test_undecodable_text_in_a_role_is_refused(tmp_path: Path) -> None:
@@ -209,7 +210,7 @@ def test_ordinary_text_in_the_ansible_trees_passes(tmp_path: Path) -> None:
     assert found(tmp_path, "extensions/ci/x/Containerfile", "FROM scratch\n") == []
     assert found(tmp_path, "roles/r/vars/x.json", '{"a": "{{ b }}"}\n') == []
     assert found(tmp_path, "group_vars/all", "[not yaml\n") == []
-    assert found(tmp_path, "docs/notes.txt", PIPE) == []
+    assert found(tmp_path, "docs/notes.txt", "Never use the pipe lookup.\n") == []
 
 
 @pytest.mark.parametrize(
@@ -221,6 +222,12 @@ def test_a_rendered_directory_outside_the_ansible_trees_is_scanned(
     assert has(found(tmp_path, name, PIPE + "\n"), RUNS)
 
 
-def test_a_binary_json_file_is_not_variables(tmp_path: Path) -> None:
+def test_a_json_file_with_a_nul_byte_is_refused_not_read_as_variables(tmp_path: Path) -> None:
     target = write(tmp_path, "roles/r/vars/blob.json", b'{"a": "\x00{{ lookup(\'pipe\') }}"}')
-    assert rules.check_paths([target], tmp_path) == []
+    messages = [v.message for v in rules.check_paths([target], tmp_path)]
+    assert messages == [
+        (
+            "NUL byte in a text file is not allowed: Ansible renders the file as a "
+            "template anyway, so the byte cannot mark it as binary"
+        )
+    ]

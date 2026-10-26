@@ -87,7 +87,9 @@ ANSIBLE_TREES: Final[tuple[Path, ...]] = (
 )
 INCLUDE_TAGS: Final[frozenset[str]] = frozenset({"include", "import", "extends", "from"})
 INCLUDE_FOLLOWERS: Final[frozenset[str]] = frozenset({"block_end", "name"})
-BINARY_MARKER: Final[bytes] = b"\0"
+LEX_ERROR: Final[str] = "template cannot be checked for lookups"
+TEMPLATE_LOOKUP: Final[str] = "template"
+TEMPLATE_CALL_TOKENS: Final[int] = 5
 MAX_DEPTH: Final[int] = 8
 CALL_END: Final[frozenset[str]] = frozenset({"comma", "rparen"})
 CALL_TOKENS: Final[int] = 3
@@ -151,13 +153,52 @@ def _tokens(text: str, state: str | None) -> list[Token] | str:
             return str(error.message)
 
 
+def _bare_lookup(name: str) -> str:
+    return next(
+        (name[len(prefix) :] for prefix in LOOKUP_PREFIXES if name.startswith(prefix)), name
+    )
+
+
+def target_problem(name: str) -> str | None:
+    """Return why a literal template or vars file target is refused, or ``None``.
+
+    It must be a relative path without ``..`` that is not templated, so that it stays
+    inside the search path of the role or playbook that names it (FREES-159).
+    """
+    if name.startswith(("/", "~")) or ".." in name.split("/") or is_possibly_template(name):
+        return f"target {name!r} must be a relative path without '..' that is not templated"
+    return None
+
+
+def _template_lookup_problem(tokens: list[Token], index: int) -> str:
+    """Require a literal relative template as the first term of the ``template`` lookup."""
+    following = tokens[index + 1 : index + 1 + TEMPLATE_CALL_TOKENS]
+    types = [token.type for token in following]
+    if (
+        len(types) == TEMPLATE_CALL_TOKENS
+        and types[2:4] == ["comma", "string"]
+        and types[4] in CALL_END
+    ):
+        problem = target_problem(str(following[3].value))
+        return "" if problem is None else f"template lookup {problem}"
+    return (
+        "the template lookup must name a literal template as its first term; a computed "
+        "name could render any file"
+    )
+
+
 def _call_problem(tokens: list[Token], index: int) -> str:
     name = tokens[index].value
     following = tokens[index + 1 : index + 1 + CALL_TOKENS]
     types = [token.type for token in following]
     if len(types) == CALL_TOKENS and types[:2] == ["lparen", "string"] and types[2] in CALL_END:
-        problem = lookup_problem(str(following[1].value))
-        return "" if problem is None else problem
+        lookup = str(following[1].value)
+        problem = lookup_problem(lookup)
+        if problem is not None:
+            return problem
+        if _bare_lookup(lookup) == TEMPLATE_LOOKUP:
+            return _template_lookup_problem(tokens, index)
+        return ""
     return (
         f"{name} must be called with a literal lookup name as its first argument; a computed "
         "lookup name could run any lookup"
@@ -177,10 +218,8 @@ def _include_problem(tokens: list[Token], index: int) -> str:
         and following[0].type == "string"
         and following[1].type in INCLUDE_FOLLOWERS
     ):
-        name = str(following[0].value)
-        if name.startswith(("/", "~")) or ".." in name.split("/") or is_possibly_template(name):
-            return f"{tag} target {name!r} must be a relative path without '..'"
-        return ""
+        problem = target_problem(str(following[0].value))
+        return "" if problem is None else f"{tag} {problem}"
     return f"{tag} must name a literal template; a computed name could load any template"
 
 
@@ -220,7 +259,7 @@ def template_findings(text: str, depth: int = 0) -> Iterator[tuple[int, str]]:
         return
     tokens = _tokens(text, None)
     if isinstance(tokens, str):
-        yield 1, f"template cannot be checked for lookups: {tokens}"
+        yield 1, f"{LEX_ERROR}: {tokens}"
         return
     yield from _token_findings(tokens, depth)
 
@@ -287,20 +326,3 @@ def _node_findings(documents: Iterable[yaml.Node]) -> Iterator[tuple[int, str]]:
 def yaml_jinja_findings(path: Path, documents: Iterable[yaml.Node]) -> list[Violation]:
     """Reject command lookups, computed lookups and delimiter overrides in YAML documents."""
     return sorted({Violation(path, line, message) for line, message in _node_findings(documents)})
-
-
-def template_file_findings(path: Path, data: bytes) -> list[Violation]:
-    """Reject command lookups, computed lookups and delimiter overrides in a template file.
-
-    The whole text is read as a template, as the ``template`` lookup and module read it, so
-    a lookup in an INI inventory value, a JSON vars file or a role's ``files/`` is found
-    too. A file with a NUL byte is binary and never rendered; text that is not UTF-8 is
-    refused, because the check cannot read it.
-    """
-    if BINARY_MARKER in data:
-        return []
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError as error:
-        return [Violation(path, 1, f"template is not valid UTF-8: {error}")]
-    return sorted({Violation(path, line, message) for line, message in template_findings(text)})

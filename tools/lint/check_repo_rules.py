@@ -23,7 +23,10 @@ Rules:
 * Commands may not run without the banned modules either (FREES-159): ``expect`` and ``cron``
   are banned as tasks, module parameters that name a command or an executable are refused, the
   ``pipe`` and ``lines`` lookups, computed lookup names, lookups outside ansible-core and Jinja
-  delimiter overrides are refused in YAML values, conditionals and template files, variables and
+  delimiter overrides are refused in YAML values, conditionals and every tracked file outside
+  ``.github/``, which is read as a template whatever its suffix (only a real binary is skipped,
+  and a NUL byte elsewhere is refused), computed or escaping ``vars_files``, ``include_vars`` and
+  ``template`` targets and template names are refused, variables and
   keywords that set an interpreter, executable, arguments or flags or select a plugin outside
   ansible-core are refused wherever they are set, except the reviewed ``ALLOWED_SETTINGS``, and
   configuration settings, environment variables and command-line options that run code are refused.
