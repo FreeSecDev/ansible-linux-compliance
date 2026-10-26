@@ -80,11 +80,14 @@ Offline validation (no AWS access): `make lint-iac` and `uv run --frozen checkov
 
 ## Role and trust model
 
-OpenTofu in `infra/account` creates the GitHub OIDC provider `token.actions.githubusercontent.com` with audience
-`sts.amazonaws.com`, a monthly cost budget, and the role `freesecdev-gha-ansible-linux-compliance-plan`.
+OpenTofu in `infra/account` reads the existing GitHub OIDC provider `token.actions.githubusercontent.com` as a data
+source, and creates a monthly cost budget and the role `freesecdev-gha-ansible-linux-compliance-plan`.
 
-AWS no longer requires or uses a thumbprint for the GitHub OIDC provider, because it validates the identity
-provider through its own trusted CA library, so the configuration sets no `thumbprint_list`.
+An AWS account can hold only one provider per URL, and other projects in this account already use it. The stack
+therefore never creates, changes or destroys the provider; `tofu destroy` of `infra/account` leaves it in place. The
+provider must exist with audience `sts.amazonaws.com` before the bootstrap runs, and a postcondition fails the plan
+otherwise. The stack looks it up by ARN, because a lookup by URL calls `iam:ListOpenIDConnectProviders`, which can
+only be granted on `*` and which the plan role does not have.
 
 The role trust policy allows `sts:AssumeRoleWithWebIdentity` only for tokens where all of these hold:
 

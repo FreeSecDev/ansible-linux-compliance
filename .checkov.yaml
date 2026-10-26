@@ -9,3 +9,4 @@ compact: true
 quiet: true
 skip-download: true
 soft-fail: false
+baseline: infra/.checkov.baseline

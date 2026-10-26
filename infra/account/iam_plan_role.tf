@@ -6,7 +6,7 @@ data "aws_iam_policy_document" "plan_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
     }
 
     condition {
@@ -46,7 +46,7 @@ data "aws_iam_policy_document" "plan_permissions" {
     sid       = "ReadOidcProvider"
     effect    = "Allow"
     actions   = ["iam:GetOpenIDConnectProvider", "iam:ListOpenIDConnectProviderTags"]
-    resources = [aws_iam_openid_connect_provider.github.arn]
+    resources = [data.aws_iam_openid_connect_provider.github.arn]
   }
 
   statement {
