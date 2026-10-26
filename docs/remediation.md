@@ -67,7 +67,9 @@ Rule toggles are not declared in either role (ADR 0011, amendment of FREES-53). 
 rules, declaring each as a default and an argument specification option made every role run several seconds slower
 per host; the measurements are in the ADR. A rule toggle that is not set follows its family toggle in the shared
 resolution code, exactly as a declared default would, and a rule toggle that is set is validated by the role before
-anything changes.
+anything changes. Because rule toggles are not argument specification options, set them as inventory, play, task or
+`include_role` `vars`, or with `-e`, never as role parameters: the role argument validation rejects an undeclared
+role parameter. Topic toggles are declared and also work as role parameters.
 
 Every other variable and option of those files is kept, in its order, and toggles that the catalogue no longer
 contains are removed. Both YAML files are written in one canonical style that is checked to load back to the same data.

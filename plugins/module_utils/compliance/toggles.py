@@ -55,6 +55,16 @@ DISRUPTIVE_FAMILIES: Final[frozenset[str]] = frozenset(
     }
 )
 RULE_NAMESPACE: Final[str] = "rule"
+RULE_TOGGLE_PREFIX: Final[str] = f"linux_compliance_{RULE_NAMESPACE}_"
+HINTS: Final[dict[str, str]] = {
+    "rule": (
+        "; rule toggle names are linux_compliance_rule_<short id>_enabled with the short rule "
+        "identifier in lower case and every character other than a letter, a digit or _ "
+        "replaced by _, for example "
+        "linux_compliance_rule_kernel_module_usb_storage_disabled_enabled"
+    ),
+    "family": "",
+}
 AUDIT_ONLY: Final[str] = "audit_only"
 STRATEGIES: Final[tuple[str, ...]] = (
     AUDIT_ONLY,
@@ -312,7 +322,7 @@ def check_toggles(
     for name in sorted(toggles):
         match = re.fullmatch(TOGGLE_PATTERN, name)
         topic = match.group(1) if match is not None else ""
-        if topic.startswith(f"{RULE_NAMESPACE}_"):
+        if name.startswith(RULE_TOGGLE_PREFIX):
             known = name in rule_toggles
             kind = "rule"
         elif name in ROLE_TOGGLE_VARIABLES:
@@ -329,7 +339,7 @@ def check_toggles(
             kind = "family"
         value = toggles[name]
         if not known:
-            errors.add(f"{show(name)} is not the toggle of a catalogued {kind}")
+            errors.add(f"{show(name)} is not the toggle of a catalogued {kind}{HINTS[kind]}")
         elif not isinstance(value, bool):
             errors.add(
                 f"{name} must be a boolean; pass it as JSON, for example -e '{{\"{name}\": false}}'"

@@ -63,6 +63,13 @@ must belong to a catalogued rule and be a boolean. A value copied into the inven
 both declare every topic toggle; a template that names a variable that is defined nowhere
 fails both roles.
 
+Because rule toggles are not argument specification options, set them as inventory
+variables (`group_vars`, `host_vars`), play or task `vars`, `include_role` `vars` or extra
+variables (`-e`), never as role parameters (`roles: [{role: ..., <toggle>: false}]` or
+`include_role` parameters outside `vars`): the role argument validation rejects an
+undeclared role parameter before anything runs. Topic toggles are declared and work as
+role parameters too.
+
 ## Topic toggles
 
 | Variable | Family | Disruptive | Default | Catalogued rules | Native | `audit_only` |

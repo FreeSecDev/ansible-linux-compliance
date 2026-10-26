@@ -377,7 +377,7 @@ def test_a_disruptive_rule_that_would_still_be_applied_is_not_pending_cleanup() 
         ),
         (
             {"linux_compliance_rule_enabled": False},
-            "'linux_compliance_rule_enabled' is not the toggle of a catalogued family",
+            "'linux_compliance_rule_enabled' is not the toggle of a catalogued rule; rule toggle",
         ),
         (
             {"something_else": False},
@@ -400,7 +400,9 @@ def test_a_disruptive_rule_that_would_still_be_applied_is_not_pending_cleanup() 
     ],
 )
 def test_unknown_or_invalid_toggles_are_errors(given: dict[str, object], message: str) -> None:
-    assert errors_of(toggles=given) == [message]
+    errors = errors_of(toggles=given)
+    assert len(errors) == 1
+    assert errors[0].startswith(message)
 
 
 def test_toggles_must_be_a_mapping() -> None:

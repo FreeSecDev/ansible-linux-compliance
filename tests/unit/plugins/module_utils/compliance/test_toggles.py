@@ -222,3 +222,29 @@ def test_two_rules_with_the_same_toggle_are_an_error() -> None:
             f"{PREFIX}a-b"
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "linux_compliance_rule_kernel_module_usb-storage_disabled_enabled",
+        "linux_compliance_rule_installed_OS_is_vendor_supported_enabled",
+        "linux_compliance_rule_typo_enabled",
+    ],
+)
+def test_an_untransformed_rule_toggle_name_explains_the_naming(name: str) -> None:
+    errors = toggles.Errors()
+    toggles.load_catalogue(catalogue(), {"ssh": [USB]}, FAMILIES, {name: False}, errors)
+    assert len(errors.items) == 1
+    assert "is not the toggle of a catalogued rule" in errors.items[0]
+    assert "rule toggle names are linux_compliance_rule_<short id>_enabled" in errors.items[0]
+    assert "in lower case" in errors.items[0]
+    assert "catalogued family" not in errors.items[0]
+
+
+def test_an_unknown_family_toggle_has_no_rule_naming_hint() -> None:
+    errors = toggles.Errors()
+    toggles.load_catalogue(catalogue(), {}, FAMILIES, {"linux_compliance_sshd_enabled": 1}, errors)
+    assert errors.items == [
+        "'linux_compliance_sshd_enabled' is not the toggle of a catalogued family"
+    ]

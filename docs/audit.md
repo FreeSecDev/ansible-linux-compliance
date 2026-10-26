@@ -495,7 +495,9 @@ The toggles are validated as in the remediate role: an unknown family or rule to
 role (for example the likely typo `linux_compliance_audit_enabled` for the auditd topic) and a value that is not a
 boolean fail the role before any host is scanned. The audit role carries the same generated topic toggle defaults as
 the remediate role (`make toggles` writes them into both); rule toggles are declared in neither role and follow their
-family toggle when they are not set (ADR 0011, amendment of FREES-53). So a value copied into the inventory, such as a
+family toggle when they are not set (ADR 0011, amendment of FREES-53). Set rule toggles as inventory, play, task or
+`include_role` `vars`, or with `-e`, never as role parameters: the role argument validation rejects an undeclared
+role parameter. So a value copied into the inventory, such as a
 rule toggle set to `"{{ linux_compliance_<family>_enabled }}"` without the family toggle, resolves the same way in
 both roles. Only catalogued rules have toggles; for the pinned profiles that is every rule. A topic toggle does not
 disable rules of content that the catalogue does not describe; disable those through
