@@ -7,6 +7,7 @@ import yaml
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     audit,
+    collection,
     evidence,
     openscap,
 )
@@ -98,8 +99,17 @@ def imports(path: Path) -> list[str]:
     ]
 
 
-def test_the_playbook_enforces_the_gates_before_it_collects_and_names_the_missing_hosts() -> None:
+def role_of(task: dict[str, object]) -> object:
+    return task.get("ansible.builtin.include_role", task.get("ansible.builtin.import_role"))
+
+
+def test_the_playbook_writes_the_summary_before_any_gate_or_collection_fails_a_host() -> None:
     plays = cast("list[dict[str, object]]", load(REPOSITORY_ROOT / "playbooks" / "evidence.yml"))
+    assert len(plays) == 5
+    reached = cast("list[dict[str, object]]", plays[0]["pre_tasks"])
+    assert [role_of(task) for task in reached] == [
+        {"name": "freesecdev.linux_compliance.evidence", "tasks_from": "reached.yml"}
+    ]
     audit = cast("list[dict[str, object]]", plays[0]["tasks"])[0]
     assert audit["ansible.builtin.import_role"] == {
         "name": "freesecdev.linux_compliance.audit",
@@ -107,14 +117,60 @@ def test_the_playbook_enforces_the_gates_before_it_collects_and_names_the_missin
     }
     assert audit["become"] is True
     assert "vars" not in plays[0]
-    collect = cast("list[dict[str, object]]", plays[2]["tasks"])[0]
-    enforce = cast("list[dict[str, object]]", collect["block"])[0]["ansible.builtin.include_role"]
-    gather = cast("list[dict[str, object]]", collect["always"])[0]["ansible.builtin.include_role"]
-    assert enforce == {"name": "freesecdev.linux_compliance.audit", "tasks_from": "enforce.yml"}
-    assert gather == {"name": "freesecdev.linux_compliance.evidence"}
-    summary = cast("list[dict[str, object]]", plays[3]["tasks"])[0]["ansible.builtin.import_role"]
-    assert summary == {"name": "freesecdev.linux_compliance.evidence", "tasks_from": "summary.yml"}
+    collect = cast("list[dict[str, object]]", plays[2]["tasks"])
+    assert len(collect) == 1
+    enforce = cast("list[dict[str, object]]", collect[0]["block"])
+    assert [role_of(task) for task in enforce] == [
+        {"name": "freesecdev.linux_compliance.audit", "tasks_from": "enforce.yml"}
+    ]
+    rescued = cast("list[dict[str, object]]", collect[0]["rescue"])
+    assert [module_of(task) for task in rescued] == ["ansible.builtin.debug"]
+    always = cast("list[dict[str, object]]", collect[0]["always"])
+    assert len(always) == 1
+    gather = cast("list[dict[str, object]]", always[0]["block"])
+    assert [role_of(task) for task in gather] == [{"name": "freesecdev.linux_compliance.evidence"}]
+    rescued = cast("list[dict[str, object]]", always[0]["rescue"])
+    assert [module_of(task) for task in rescued] == ["ansible.builtin.debug"]
+    summary = cast("list[dict[str, object]]", plays[3]["tasks"])
+    assert [role_of(task) for task in summary] == [
+        {"name": "freesecdev.linux_compliance.evidence", "tasks_from": "summary.yml"}
+    ]
     assert plays[3]["hosts"] == "localhost"
+    final = cast("list[dict[str, object]]", plays[4]["tasks"])
+    assert plays[4]["hosts"] == plays[2]["hosts"] == plays[0]["hosts"]
+    assert [role_of(task) for task in final] == [
+        {"name": "freesecdev.linux_compliance.audit", "tasks_from": "enforce.yml"},
+        {"name": "freesecdev.linux_compliance.evidence", "tasks_from": "collected.yml"},
+    ]
+    for play in plays:
+        for task in cast("list[dict[str, object]]", play.get("tasks", [])):
+            assert "ignore_errors" not in task
+            assert "when" not in task
+
+
+def test_the_summary_reads_the_bundle_fact_that_the_role_publishes() -> None:
+    published = next(
+        task
+        for task in tasks(ROLE / "tasks" / "collect.yml")
+        if task["name"] == "Evidence | Publish the collected bundle"
+    )
+    fact = cast("dict[str, object]", published["ansible.builtin.set_fact"])
+    bundle = cast("dict[str, object]", fact["linux_compliance_evidence_bundle"])
+    assert tuple(sorted(bundle)) == collection.BUNDLE_FACT_KEYS
+
+
+def test_the_summary_is_written_with_mode_0600_and_never_overwritten() -> None:
+    written = [
+        task
+        for task in tasks(ROLE / "tasks" / "summary.yml")
+        if module_of(task) in {"ansible.builtin.copy", "ansible.builtin.file"}
+    ]
+    assert [module_of(task) for task in written] == ["ansible.builtin.file", "ansible.builtin.copy"]
+    directory = cast("dict[str, object]", written[0]["ansible.builtin.file"])
+    summary = cast("dict[str, object]", written[1]["ansible.builtin.copy"])
+    assert directory["mode"] == "0700"
+    assert summary["mode"] == "0600"
+    assert summary["force"] is False
 
 
 def test_only_the_deferred_entry_points_skip_the_gates_and_no_variable_does() -> None:

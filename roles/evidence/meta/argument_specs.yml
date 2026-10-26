@@ -46,12 +46,26 @@ argument_specs:
           - "When exceptions were applied, it is written to the bundle as exceptions/stale.json."
           - "It must come from the same exceptions file and include this host."
           - "An empty mapping writes no stale result."
+  reached.yml:
+    short_description: "Record the hosts of the audit play and that this host completed fact gathering"
+    description:
+      - "Runs in the audit play after fact gathering, as the pre_tasks of playbooks/evidence.yml do."
+      - "Records the hosts of the play (ansible_play_hosts_all) once, on localhost."
+      - "Records linux_compliance_evidence_reached on every host that completed fact gathering."
+      - "summary.yml uses both to tell unreachable and limited-out hosts apart."
+    author: "FreeSecDev contributors"
+    options: {}
   summary.yml:
-    short_description: "Name the target hosts that have no evidence bundle"
+    short_description: "Account for every target host and write the collection summary"
     description:
       - "Runs once on the controller after the collection play, as playbooks/evidence.yml does."
       - "Publishes linux_compliance_evidence_collection with the target, collected and missing hosts."
-      - "Missing hosts are split into no audit result, no evidence written and collection failed."
+      - "Missing hosts are split into unreachable, limited out, no audit result, no evidence written"
+      - "and collection failed."
+      - "Writes collection-<collection_id>.json with mode 0600 in the output directory of the bundles."
+      - "The summary names every target host, the run identity and the manifest SHA-256 of every bundle."
+      - "The report reads it with --evidence-collection; the format is documented in docs/evidence.md."
+      - "An existing summary is never overwritten. Check mode writes nothing."
       - "Prints a WARNING that names every target host without a bundle."
     author: "FreeSecDev contributors"
     options:
@@ -61,3 +75,17 @@ argument_specs:
         required: true
         description:
           - "Inventory host names that the run targets, for example from the inventory_hostnames lookup."
+      linux_compliance_evidence_output_dir:
+        type: path
+        default: "evidence"
+        description:
+          - "Output directory of the bundles, as for the main entry point."
+          - "Used only when no bundle was collected; otherwise the summary goes where the bundles are."
+  collected.yml:
+    short_description: "Fail a host whose evidence was written but not collected"
+    description:
+      - "Runs on every target host after summary.yml, as the last play of playbooks/evidence.yml does."
+      - "The collection play does not fail a host whose collection failed, so that the summary runs."
+      - "This entry point fails it once the collection summary is written."
+    author: "FreeSecDev contributors"
+    options: {}

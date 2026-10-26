@@ -9,9 +9,9 @@
 - name: Audit | Report that the result gates are deferred
   ansible.builtin.debug:
     msg: >-
-      The result gates of {{ inventory_hostname }} are deferred: neither a scan that did not complete nor failed rules
-      fail the host yet, and linux_compliance_audited.gate records deferred true and enforced false. The playbook must
-      run the enforce.yml entry point of the audit role on this host, as playbooks/evidence.yml does; an evidence
-      bundle is never written for a gate that was not enforced.
+      WARNING: the result gates of {{ inventory_hostname }} are deferred: neither a scan that did not complete
+      nor failed rules fail the host yet, and linux_compliance_audited.gate records deferred true and enforced
+      false. The playbook must run the enforce.yml entry point of the audit role on this host, as
+      playbooks/evidence.yml does; an evidence bundle is never written for a gate that was not enforced.
   tags:
     - always
