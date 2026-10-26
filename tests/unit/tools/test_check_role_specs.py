@@ -287,6 +287,9 @@ def test_tasks_must_be_a_list(tmp_path: Path) -> None:
         {"name": "x"},
         {"name": "x", "tags": ["other"]},
         {"name": "x", "tags": "always"},
+        {"name": "x", "tags": ["linux_compliance_demo_guard", "other"]},
+        {"name": "x", "tags": ["linux_compliance_other_guard"]},
+        {"name": "x", "tags": "linux_compliance_demo_guard"},
         "x",
     ],
 )
@@ -294,3 +297,121 @@ def test_every_task_must_be_tagged_always(tmp_path: Path, task: object) -> None:
     role = write_role(tmp_path)
     (role / "tasks" / "main.yml").write_text(yaml.safe_dump([task]))
     assert "tagged always" in specs.check_role(role)[0]
+
+
+GUARD = ["linux_compliance_demo_guard"]
+GUARD_TASKS = [
+    {
+        "name": "Arm",
+        "ansible.builtin.set_fact": {"__linux_compliance_demo_dispatched": False},
+        "tags": GUARD,
+    },
+    {"name": "Check", "ansible.builtin.assert": {"that": ["x"]}, "tags": GUARD},
+    {"name": "Stop", "ansible.builtin.fail": {"msg": "x"}, "tags": GUARD},
+]
+
+
+def test_the_guard_tasks_of_a_role_are_allowed(tmp_path: Path) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "main.yml").write_text(yaml.safe_dump([*TASKS, *GUARD_TASKS]))
+    (role / "tasks" / "other.yml").write_text(yaml.safe_dump(TASKS))
+    assert specs.check_role(role) == []
+    assert specs.guard_tag("remediate") == "linux_compliance_remediate_guard"
+    assert specs.dispatched_variable("remediate") == "__linux_compliance_remediate_dispatched"
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        {
+            "name": "x",
+            "ansible.builtin.file": {"path": "/etc/crontab", "mode": "0600"},
+            "tags": GUARD,
+        },
+        {
+            "name": "x",
+            "ansible.builtin.set_fact": {"__linux_compliance_demo_dispatched": False, "other": 1},
+            "tags": GUARD,
+        },
+        {
+            "name": "x",
+            "ansible.builtin.set_fact": {"__linux_compliance_demo_dispatched": True},
+            "tags": GUARD,
+        },
+        {"name": "x", "ansible.builtin.set_fact": {"other": False}, "tags": GUARD},
+        {"name": "x", "ansible.builtin.include_tasks": {"file": "other.yml"}, "tags": GUARD},
+        {"name": "x", "ansible.builtin.import_tasks": {"file": "other.yml"}, "tags": GUARD},
+        {
+            "name": "x",
+            "block": [{"name": "y", "ansible.builtin.file": {"path": "/etc/crontab"}}],
+            "tags": GUARD,
+        },
+        {"name": "x", "ansible.builtin.assert": {"that": ["x"]}, "when": "y", "tags": GUARD},
+        {"name": "x", "ansible.builtin.assert": {"that": ["x"]}, "loop": [1], "tags": GUARD},
+        {
+            "name": "x",
+            "ansible.builtin.assert": {"that": ["x"]},
+            "tags": ["linux_compliance_other_guard"],
+        },
+    ],
+)
+def test_a_guard_tag_on_anything_but_a_guard_task_is_refused(tmp_path: Path, task: object) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "main.yml").write_text(yaml.safe_dump([*TASKS, task]))
+    findings = specs.check_role(role)
+    assert any("guard" in finding for finding in findings), findings
+    assert findings
+
+
+@pytest.mark.parametrize(
+    "tasks",
+    [
+        [{"name": "x", "block": [GUARD_TASKS[1]], "tags": ["always"]}],
+        [{"name": "x", "block": [], "rescue": [GUARD_TASKS[1]], "tags": ["always"]}],
+        [{"name": "x", "block": [], "always": [GUARD_TASKS[2]], "tags": ["always"]}],
+        [
+            {
+                "name": "x",
+                "ansible.builtin.include_tasks": {"file": "other.yml", "apply": {"tags": GUARD}},
+                "tags": ["always"],
+            }
+        ],
+        [{"name": "x", "ansible.builtin.assert": {"that": ["x"]}, "tags": ["always", *GUARD]}],
+    ],
+)
+def test_a_guard_tag_nested_or_combined_in_main_is_refused(
+    tmp_path: Path, tasks: list[object]
+) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "main.yml").write_text(yaml.safe_dump([*TASKS, *tasks]))
+    findings = specs.check_role(role)
+    assert len(findings) == 1
+    assert "the guard tag linux_compliance_demo_guard is allowed only" in findings[0]
+
+
+@pytest.mark.parametrize("guard", GUARD_TASKS)
+def test_a_guard_tag_outside_tasks_main_is_refused(tmp_path: Path, guard: object) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "other.yml").write_text(yaml.safe_dump([guard]))
+    findings = specs.check_role(role)
+    assert len(findings) == 1
+    assert findings[0].startswith("demo: tasks/other.yml: the guard tag")
+
+
+def test_a_task_file_that_is_not_a_list_has_no_guard_findings(tmp_path: Path) -> None:
+    role = write_role(tmp_path)
+    (role / "tasks" / "other.yml").write_text("a: 1\n")
+    assert specs.check_role(role) == []
+
+
+def test_the_guard_tag_of_another_role_is_refused_in_main(tmp_path: Path) -> None:
+    role = write_role(tmp_path)
+    other = {
+        "name": "x",
+        "ansible.builtin.fail": {"msg": "x"},
+        "tags": ["linux_compliance_other_guard"],
+    }
+    (role / "tasks" / "main.yml").write_text(yaml.safe_dump([*TASKS, other]))
+    findings = specs.check_role(role)
+    assert any("must be tagged always" in finding for finding in findings)
+    assert any("found ['linux_compliance_other_guard']" in finding for finding in findings)

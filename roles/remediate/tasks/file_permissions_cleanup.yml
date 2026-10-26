@@ -1,0 +1,110 @@
+---
+- name: File permissions | Refuse to clean up a rule the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'file_permissions'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'file_permissions'
+      - __linux_compliance_remediate_rule.ledger_entry is mapping
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'file_permissions') | list | first | default({}))).cleanup | default([])
+    fail_msg: >-
+      file_permissions_cleanup.yml runs only for a rule that the remediate dispatcher planned to clean
+      up from its ledger entry, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: File permissions | Inspect the target before restoring it
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_fp_stat
+  tags:
+    - always
+
+- name: File permissions | Read the recorded prior mode
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_fp_prior: >-
+      {{ __linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+         | selectattr('name', 'equalto', 'mode')
+         | map(attribute='value') | first | default(none) }}
+    __linux_compliance_remediate_fp_target: "{{ __linux_compliance_remediate_fp_stat.stat.isreg | default(false) }}"
+    __linux_compliance_remediate_fp_absent: "{{ not __linux_compliance_remediate_fp_stat.stat.exists }}"
+  tags:
+    - always
+
+- name: File permissions | Decide whether the prior mode can be restored
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_fp_valid_prior: >-
+      {{ __linux_compliance_remediate_fp_prior is string
+         and __linux_compliance_remediate_fp_prior | length == 4
+         and __linux_compliance_remediate_fp_prior is match('[0-7]{4}') }}
+  tags:
+    - always
+
+- name: File permissions | Name the reason a restore is impossible
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_fp_restorable: >-
+      {{ __linux_compliance_remediate_fp_target and __linux_compliance_remediate_fp_valid_prior }}
+    __linux_compliance_remediate_fp_reason: >-
+      {{ 'target_absent' if __linux_compliance_remediate_fp_absent
+         else 'not_regular_file' if not __linux_compliance_remediate_fp_target
+         else 'invalid_record' if not __linux_compliance_remediate_fp_valid_prior
+         else none }}
+  tags:
+    - always
+
+- name: File permissions | Restore the recorded prior mode
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    mode: "{{ __linux_compliance_remediate_fp_prior }}"
+    state: file
+    follow: false
+  register: __linux_compliance_remediate_fp_restore
+  when: __linux_compliance_remediate_fp_restorable
+  tags:
+    - always
+
+- name: File permissions | Forget the rule in the state ledger after the restore
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  register: __linux_compliance_remediate_fp_forget
+  when: __linux_compliance_remediate_fp_restorable
+  tags:
+    - always
+
+- name: File permissions | Add the result of the cleanup
+  vars:
+    __linux_compliance_remediate_fp_status: >-
+      {{ 'restored' if __linux_compliance_remediate_fp_restorable else 'cleanup_incomplete' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'cleanup',
+           'status': __linux_compliance_remediate_fp_status,
+           'reason': __linux_compliance_remediate_fp_reason,
+           'changed': (__linux_compliance_remediate_fp_restore is changed)
+                      or (__linux_compliance_remediate_fp_forget is changed),
+           'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_fp_status
+                      ~ ((' (' ~ __linux_compliance_remediate_fp_reason ~ ': '
+                          ~ __linux_compliance_remediate_rule.parameters.path
+                          ~ '; the ledger entry is kept and the cleanup is retried on the next run)')
+                         if __linux_compliance_remediate_fp_reason else '')
+         }] }}
+  tags:
+    - always

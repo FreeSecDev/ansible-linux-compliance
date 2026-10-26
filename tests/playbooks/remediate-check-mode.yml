@@ -1,0 +1,591 @@
+---
+- name: Remediate role in check mode | Nothing happens without the opt-in
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Inspect the crontab before the role runs
+      ansible.builtin.stat:
+        path: /etc/crontab
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      register: crontab_before
+
+    - name: Run the remediate role with its defaults
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Inspect the crontab after the role ran
+      ansible.builtin.stat:
+        path: /etc/crontab
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      register: crontab_after
+
+    - name: Check that every rule was skipped and nothing was touched
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.enabled is false
+          - linux_compliance_remediated.check_mode is true
+          - linux_compliance_remediated.results == []
+          - linux_compliance_remediated.rules | map(attribute='action') | unique == ['skip']
+          - linux_compliance_remediated.rules | map(attribute='reason') | unique == ['remediation_disabled']
+          - linux_compliance_remediated.summary.apply == 0
+          - linux_compliance_remediated.summary.cleanup == 0
+          - __linux_compliance_remediate_ledger is skipped
+          - __linux_compliance_remediate_discover_check is skipped
+          - crontab_after.stat.exists == crontab_before.stat.exists
+          - crontab_after.stat.mode | default('') == crontab_before.stat.mode | default('')
+          - crontab_after.stat.ctime | default(0) == crontab_before.stat.ctime | default(0)
+        quiet: true
+
+- name: Remediate role in check mode | The reference rule is planned and nothing changes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Inspect the crontab before the role runs
+      ansible.builtin.stat:
+        path: /etc/crontab
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      register: crontab_before
+
+    - name: Run the remediate role with the opt-in
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Inspect the crontab after the role ran
+      ansible.builtin.stat:
+        path: /etc/crontab
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      register: crontab_after
+
+    - name: Check the plan, the reported result and that the host is unchanged
+      vars:
+        crontab_result: "{{ linux_compliance_remediated.results | first }}"
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.enabled is true
+          - linux_compliance_remediated.rules | length == 1
+          - linux_compliance_remediated.rules[0].action == 'apply'
+          - linux_compliance_remediated.results | length == 1
+          - crontab_result.action == 'apply'
+          - crontab_result.status in ['applied', 'compliant', 'notapplicable', 'not_regular_file']
+          - crontab_result.changed == (crontab_result.status == 'applied')
+          - crontab_after.stat.exists == crontab_before.stat.exists
+          - crontab_after.stat.mode | default('') == crontab_before.stat.mode | default('')
+          - crontab_after.stat.ctime | default(0) == crontab_before.stat.ctime | default(0)
+        quiet: true
+
+- name: Remediate role in check mode | Invalid toggles and allow-list entries fail closed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Try an unknown rule toggle
+      vars:
+        linux_compliance_rule_typo_enabled: false
+      block:
+        - name: Run the remediate role with an unknown rule toggle
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the unknown toggle was accepted
+          ansible.builtin.fail:
+            msg: An unknown rule toggle was accepted.
+      rescue:
+        - name: Check that the unknown rule toggle was named
+          ansible.builtin.assert:
+            that:
+              - "'linux_compliance_rule_typo_enabled' in ansible_failed_result.msg"
+              - "'is not the toggle of a catalogued rule' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try an unknown family toggle
+      vars:
+        linux_compliance_sshd_enabled: false
+      block:
+        - name: Run the remediate role with an unknown family toggle
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the unknown toggle was accepted
+          ansible.builtin.fail:
+            msg: An unknown family toggle was accepted.
+      rescue:
+        - name: Check that the unknown family toggle was named
+          ansible.builtin.assert:
+            that:
+              - "'linux_compliance_sshd_enabled' in ansible_failed_result.msg"
+              - "'is not the toggle of a catalogued family' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try a toggle that is a string instead of a boolean
+      vars:
+        linux_compliance_file_permissions_enabled: "false"
+      block:
+        - name: Run the remediate role with a string toggle
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the string toggle was accepted
+          ansible.builtin.fail:
+            msg: A string toggle was accepted.
+      rescue:
+        - name: Check that the string toggle was refused
+          ansible.builtin.assert:
+            that:
+              - "'linux_compliance_file_permissions_enabled must be a boolean' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try an allow-list entry that is not a disruptive family
+      vars:
+        linux_compliance_remediate_allow_disruptive:
+          - file_permissions
+      block:
+        - name: Run the remediate role with an invalid allow-list
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the invalid allow-list was accepted
+          ansible.builtin.fail:
+            msg: An invalid allow-list entry was accepted.
+      rescue:
+        - name: Check that the argument specification refused the entry
+          ansible.builtin.assert:
+            that:
+              - "'linux_compliance_remediate_allow_disruptive' in ansible_failed_result.msg"
+              - "'file_permissions' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try a discovered profile that selects no rule
+      vars:
+        linux_compliance_discovered:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          rule_ids: []
+      block:
+        - name: Run the remediate role with an empty profile
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the empty profile was accepted
+          ansible.builtin.fail:
+            msg: An empty profile was accepted, which would clean up every applied rule.
+      rescue:
+        - name: Check that the empty profile was refused
+          ansible.builtin.assert:
+            that:
+              - "'Run the freesecdev.linux_compliance.discover role first' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try a profile that differs from the discovered one
+      vars:
+        linux_compliance_discovered:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level2_server
+          rule_ids:
+            - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+      block:
+        - name: Run the remediate role for another profile than the discovered one
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the profile mismatch was accepted
+          ansible.builtin.fail:
+            msg: A profile mismatch was accepted.
+      rescue:
+        - name: Check that the profile mismatch was refused
+          ansible.builtin.assert:
+            that:
+              - "'Run the freesecdev.linux_compliance.discover role first' in ansible_failed_result.msg"
+            quiet: true
+
+- name: Remediate role in check mode | A disruptive family is skipped without the allow-list
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+        - xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Add a synthetic disruptive rule whose family has no task file
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_rules:
+          - rule_id: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+            family: file_permissions
+            disruptive: false
+            reversible: true
+            revert_strategy: recorded_value
+            toggle: linux_compliance_rule_file_permissions_crontab_enabled
+            runbook: null
+            parameters:
+              path: /etc/crontab
+              max_mode: "0600"
+          - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+            family: ssh
+            disruptive: true
+            reversible: true
+            revert_strategy: owned_dropin
+            toggle: linux_compliance_rule_sshd_disable_root_login_enabled
+            runbook: null
+            parameters: {}
+
+    - name: Run the remediate role without an allow-list
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Check that the disruptive rule was skipped and reported with its reason
+      vars:
+        ssh_rule: >-
+          {{ linux_compliance_remediated.rules
+             | selectattr('rule_id', 'equalto', 'xccdf_org.ssgproject.content_rule_sshd_disable_root_login')
+             | first }}
+      ansible.builtin.assert:
+        that:
+          - ssh_rule.action == 'skip'
+          - ssh_rule.reason == 'disruptive_not_allowed'
+          - linux_compliance_remediated.results | map(attribute='family') | unique == ['file_permissions']
+          - linux_compliance_remediated.notices | select('search', 'family ssh is disruptive') | list | length == 1
+        quiet: true
+
+- name: Remediate role in check mode | The file_permissions helpers keep the ledger contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    fixtures: "{{ playbook_dir }}/fixtures/remediate"
+    base_rule:
+      rule_id: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+      family: file_permissions
+      disruptive: false
+      reversible: true
+      revert_strategy: recorded_value
+      toggle: linux_compliance_rule_file_permissions_crontab_enabled
+      runbook: null
+      parameters:
+        path: "{{ playbook_dir }}/fixtures/remediate/target-file"
+        max_mode: "0000"
+      action: apply
+      reason: enabled
+      disabled_by: null
+      ledger_entry: null
+    recorded:
+      rule_id: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+      family: file_permissions
+      revert_strategy: recorded_value
+      prior_values:
+        - name: mode
+          value: "0600"
+          sensitive: false
+          redacted: false
+      collection_version: "0.1.0"
+      applied_at: "2026-10-26T00:00:00Z"
+    cases:
+      - name: apply without a ledger entry records the prior mode first
+        helper: apply
+        rule: {}
+        expect: {status: applied, ledger_skipped: false, change_skipped: false}
+      - name: apply with a ledger entry never re-records
+        helper: apply
+        rule: {ledger_entry: "{{ recorded }}"}
+        expect: {status: applied, ledger_skipped: true, change_skipped: false}
+      - name: apply leaves a symbolic link alone
+        helper: apply
+        rule: {parameters: {path: "{{ fixtures }}/link-to-target"}}
+        expect: {status: not_regular_file, ledger_skipped: true, change_skipped: true}
+      - name: apply on an absent target changes nothing
+        helper: apply
+        rule: {parameters: {path: "{{ fixtures }}/absent"}}
+        expect: {status: notapplicable, ledger_skipped: true, change_skipped: true}
+      - name: cleanup restores a valid recorded mode and forgets the rule
+        helper: cleanup
+        rule: {action: cleanup, ledger_entry: "{{ recorded }}"}
+        expect: {status: restored, ledger_skipped: false, change_skipped: false}
+      - name: cleanup refuses a recorded mode that is not octal
+        helper: cleanup
+        rule:
+          action: cleanup
+          ledger_entry: "{{ recorded | combine({'prior_values': [{'name': 'mode', 'value': 'abc'}]}) }}"
+        expect: {status: cleanup_incomplete, reason: invalid_record, ledger_skipped: true, change_skipped: true}
+      - name: cleanup refuses a recorded mode with five digits
+        helper: cleanup
+        rule:
+          action: cleanup
+          ledger_entry: "{{ recorded | combine({'prior_values': [{'name': 'mode', 'value': '06440'}]}) }}"
+        expect: {status: cleanup_incomplete, reason: invalid_record, ledger_skipped: true, change_skipped: true}
+      - name: cleanup refuses a recorded mode with a trailing newline
+        helper: cleanup
+        rule:
+          action: cleanup
+          ledger_entry: "{{ recorded | combine({'prior_values': [{'name': 'mode', 'value': '0644\n'}]}) }}"
+        expect: {status: cleanup_incomplete, reason: invalid_record, ledger_skipped: true, change_skipped: true}
+      - name: cleanup refuses a record without a mode
+        helper: cleanup
+        rule:
+          action: cleanup
+          ledger_entry: "{{ recorded | combine({'prior_values': [{'name': 'owner', 'value': 'root'}]}) }}"
+        expect: {status: cleanup_incomplete, reason: invalid_record, ledger_skipped: true, change_skipped: true}
+      - name: cleanup never follows a symbolic link and keeps the entry
+        helper: cleanup
+        rule: {action: cleanup, ledger_entry: "{{ recorded }}", parameters: {path: "{{ fixtures }}/link-to-target"}}
+        expect: {status: cleanup_incomplete, reason: not_regular_file, ledger_skipped: true, change_skipped: true}
+      - name: cleanup of an absent target keeps the entry
+        helper: cleanup
+        rule: {action: cleanup, ledger_entry: "{{ recorded }}", parameters: {path: "{{ fixtures }}/absent"}}
+        expect: {status: cleanup_incomplete, reason: target_absent, ledger_skipped: true, change_skipped: true}
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Check that the fixtures are a regular file and a symbolic link
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop:
+        - "{{ fixtures }}/target-file"
+        - "{{ fixtures }}/link-to-target"
+      register: fixture_stats
+
+    - name: Stop when the fixtures were not checked out as expected
+      ansible.builtin.assert:
+        that:
+          - fixture_stats.results[0].stat.isreg
+          - fixture_stats.results[0].stat.mode != '0000'
+          - fixture_stats.results[1].stat.islnk
+        quiet: true
+
+    - name: Run every family case
+      ansible.builtin.include_tasks:
+        file: tasks/remediate-family-case.yml
+      vars:
+        case_rule: "{{ base_rule | combine(case.rule, recursive=True) }}"
+        case_family:
+          name: file_permissions
+          disruptive: false
+          apply: "{{ [case_rule] if case.helper == 'apply' else [] }}"
+          cleanup: "{{ [case_rule] if case.helper == 'cleanup' else [] }}"
+      loop: "{{ cases }}"
+      loop_control:
+        loop_var: case
+        label: "{{ case.name }}"
+
+    - name: Plan the base rule as the dispatcher would
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_plan:
+          enabled: true
+          families:
+            - name: file_permissions
+              disruptive: false
+              apply: ["{{ base_rule }}"]
+              cleanup: []
+
+    - name: Try a helper without the opt-in
+      block:
+        - name: Run the apply helper with remediation disabled
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+            tasks_from: file_permissions_apply.yml
+          vars:
+            linux_compliance_remediate_enabled: false
+            __linux_compliance_remediate_rule: "{{ base_rule }}"
+            __linux_compliance_remediate_family: "{{ __linux_compliance_remediate_plan.families[0] }}"
+
+        - name: Fail because the helper ran without the opt-in
+          ansible.builtin.fail:
+            msg: The apply helper ran without the opt-in.
+      rescue:
+        - name: Check that the helper refused to run
+          ansible.builtin.assert:
+            that:
+              - "'runs only for a rule that the remediate dispatcher planned' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try the family entry file without the opt-in
+      block:
+        - name: Run the family entry file with remediation disabled
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+            tasks_from: file_permissions.yml
+          vars:
+            linux_compliance_remediate_enabled: false
+            __linux_compliance_remediate_family: "{{ __linux_compliance_remediate_plan.families[0] }}"
+
+        - name: Fail because the family file ran without the opt-in
+          ansible.builtin.fail:
+            msg: The family file ran without the opt-in.
+      rescue:
+        - name: Check that the family file refused to run
+          ansible.builtin.assert:
+            that:
+              - "'runs only from the remediate dispatcher' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Plan nothing for the family, as a dispatcher run would that has no work for it
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_plan:
+          enabled: true
+          families:
+            - name: file_permissions
+              disruptive: false
+              apply: []
+              cleanup: []
+
+    - name: Try a helper whose caller claims a rule that the dispatcher did not plan
+      block:
+        - name: Run the apply helper with a family context that lists the unplanned rule
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+            tasks_from: file_permissions_apply.yml
+          vars:
+            __linux_compliance_remediate_rule: "{{ base_rule }}"
+            __linux_compliance_remediate_family:
+              name: file_permissions
+              disruptive: false
+              apply: ["{{ base_rule }}"]
+              cleanup: []
+
+        - name: Fail because the helper trusted the caller instead of the plan
+          ansible.builtin.fail:
+            msg: The apply helper ran for a rule that only the caller, not the dispatcher, planned.
+      rescue:
+        - name: Check that the helper refused the rule the plan does not hold
+          ansible.builtin.assert:
+            that:
+              - "'runs only for a rule that the remediate dispatcher planned' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try the family entry file with a family context that differs from the plan
+      block:
+        - name: Run the family entry file with a forged family context
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+            tasks_from: file_permissions.yml
+          vars:
+            __linux_compliance_remediate_family:
+              name: file_permissions
+              disruptive: false
+              apply: ["{{ base_rule }}"]
+              cleanup: []
+
+        - name: Fail because the family file trusted the forged context
+          ansible.builtin.fail:
+            msg: The family file ran for a family context that the dispatcher did not plan.
+      rescue:
+        - name: Check that the family file refused the forged context
+          ansible.builtin.assert:
+            that:
+              - "'runs only from the remediate dispatcher' in ansible_failed_result.msg"
+            quiet: true
+
+- name: Remediate role in check mode | A registered family without a task file in the role fails closed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Catalogue a rule of the registered sysctl family, which has no task file yet
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_rules:
+          - rule_id: xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space
+            family: sysctl
+            disruptive: false
+            reversible: true
+            revert_strategy: owned_dropin
+            toggle: linux_compliance_rule_sysctl_kernel_randomize_va_space_enabled
+            runbook: null
+            parameters: {}
+
+    - name: Run the role for a family without a task file
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the role found a family file outside the role
+          ansible.builtin.fail:
+            msg: The dispatcher included a family file that the role does not contain.
+      rescue:
+        - name: Check that the run stopped at the dispatch of the family without a task file
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_remediate_plan.errors == []
+              - __linux_compliance_remediate_plan.families | map(attribute='name') | list == ['sysctl']
+              - __linux_compliance_remediate_results == []
+              - __linux_compliance_remediate_dispatched is false
+            quiet: true

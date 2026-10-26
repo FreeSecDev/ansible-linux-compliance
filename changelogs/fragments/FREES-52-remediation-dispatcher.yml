@@ -1,0 +1,30 @@
+---
+minor_changes:
+  - >-
+    The ``remediate`` role is implemented as a dispatcher. It resolves every rule of the catalogue
+    ``roles/remediate/vars/rules.yml`` from its rule toggle (``linux_compliance_rule_<rule_short_id>_enabled``), its
+    family toggle (``linux_compliance_<family>_enabled``) and the global opt-in, applies effective rules through their
+    family task file in a fixed family order, and cleans up rules that the state ledger records as applied and that are
+    no longer effective. Without ``linux_compliance_remediate_enabled: true`` it neither reads nor changes the host.
+    Disruptive families (auditd, services, network, firewall, ssh, pam, sudo, crypto_policy, mounts, bootloader) are
+    applied and cleaned up only when named in ``linux_compliance_remediate_allow_disruptive`` and are otherwise
+    reported as skipped with the reason. Unknown or non-boolean toggles and allow-list entries that are not disruptive
+    families fail the role before anything changes. With the opt-in the role requires the ``discover`` result for the
+    same profile and applies only rules that the profile selects. It publishes the fact ``linux_compliance_remediated``.
+    Tags do not select rules: every task is tagged ``always``, the role fails when a rule planned for apply or cleanup
+    has no result, and ``--skip-tags always`` fails the role instead of silently doing nothing.
+  - >-
+    Add the reference rule ``xccdf_org.ssgproject.content_rule_file_permissions_crontab`` (family
+    ``file_permissions``), which removes the bits beyond ``0600`` from ``/etc/crontab`` with ``ansible.builtin.file``,
+    records the prior mode in the state ledger before changing it and restores it when the rule or its family is
+    disabled. A cleanup that cannot restore the recorded mode keeps the ledger entry and reports
+    ``cleanup_incomplete`` with the reason.
+  - >-
+    Add the filters ``freesecdev.linux_compliance.remediation_plan`` (effective state, validation and the per-family
+    work of the remediate role), ``freesecdev.linux_compliance.remediation_unaccounted`` (planned work without exactly
+    one result) and ``freesecdev.linux_compliance.restricted_mode`` (removes from a file mode the bits a maximum mode
+    does not allow).
+  - >-
+    The ``remediate`` playbook now runs the ``audit`` playbook first and the ``verify`` playbook last. Until the
+    ``verify`` role is implemented (FREES-54), the playbook ends with its "not implemented yet" failure after the
+    remediation has run.

@@ -5,7 +5,7 @@ galaxy_info:
   author: FreeSecDev contributors
   description: >-
     Remediate a host with native modules (opt-in).
-    Skeleton only: not implemented yet, tracked in FREES-52.
+    Dispatches the rule catalogue to native-module control family files (FREES-52).
     The platforms below are intended targets and none is tested yet.
   license: Apache-2.0
   min_ansible_version: "2.20"

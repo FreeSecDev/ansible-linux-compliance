@@ -1,0 +1,101 @@
+---
+- name: File permissions | Refuse to apply a rule the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'file_permissions'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'file_permissions'
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'file_permissions') | list | first | default({}))).apply | default([])
+    fail_msg: >-
+      file_permissions_apply.yml runs only for a rule that the remediate dispatcher planned to apply,
+      with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: File permissions | Inspect the target without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_fp_stat
+  tags:
+    - always
+
+- name: File permissions | Compute the mode without the bits the rule forbids
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_fp_target: "{{ __linux_compliance_remediate_fp_stat.stat.isreg | default(false) }}"
+    __linux_compliance_remediate_fp_mode: >-
+      {{ (__linux_compliance_remediate_fp_stat.stat.mode
+          | freesecdev.linux_compliance.restricted_mode(__linux_compliance_remediate_rule.parameters.max_mode))
+         if __linux_compliance_remediate_fp_stat.stat.isreg | default(false) else none }}
+  tags:
+    - always
+
+- name: File permissions | Decide whether the mode must change
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_fp_needed: >-
+      {{ __linux_compliance_remediate_fp_target
+         and __linux_compliance_remediate_fp_mode != __linux_compliance_remediate_fp_stat.stat.mode }}
+  tags:
+    - always
+
+- name: File permissions | Record the prior mode in the state ledger before changing it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values:
+      - name: mode
+        value: "{{ __linux_compliance_remediate_fp_stat.stat.mode }}"
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+  register: __linux_compliance_remediate_fp_record
+  when:
+    - __linux_compliance_remediate_fp_needed
+    - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: File permissions | Apply the mode
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    mode: "{{ __linux_compliance_remediate_fp_mode }}"
+    state: file
+    follow: false
+  register: __linux_compliance_remediate_fp_apply
+  when: __linux_compliance_remediate_fp_needed
+  tags:
+    - always
+
+- name: File permissions | Add the result of the rule
+  vars:
+    __linux_compliance_remediate_fp_status: >-
+      {{ 'notapplicable' if not __linux_compliance_remediate_fp_stat.stat.exists
+         else 'not_regular_file' if not __linux_compliance_remediate_fp_target
+         else 'applied' if __linux_compliance_remediate_fp_needed
+         else 'compliant' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'apply',
+           'status': __linux_compliance_remediate_fp_status,
+           'reason': none,
+           'changed': __linux_compliance_remediate_fp_apply is changed,
+           'message': __linux_compliance_remediate_rule.parameters.path ~ ': ' ~ __linux_compliance_remediate_fp_status
+         }] }}
+  tags:
+    - always

@@ -53,10 +53,11 @@ make help
 | `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
 | `package-check` | implemented | Builds twice from differently ordered trees and fails unless the SHA-256 values match |
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
-| `collection-link` | implemented | Links `plugins/` into `build/collections` for pytest and the type checkers |
+| `collection-link` | implemented | Links `plugins/` and `roles/` into `build/collections` for pytest, the type checkers, ansible-lint and `test-remediate-check` |
+| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become` ([remediation guide](remediation.md#testing)) |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches and coverage output |
-| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions security docs test-sanity test-ansible-units package-check` |
+| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check security docs test-sanity test-ansible-units package-check` |
 | `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with `ANSIBLE_HOME=build/ansible-home`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play ([audit guide](audit.md#tests)) |
 | `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
 | `lint-iac` | implemented | `tofu fmt -check -recursive infra/`, `tofu init -backend=false` and `tofu validate` per root module, shellcheck of the rendered bootstrap script; needs `tofu` on `PATH`, runs in the `iac` CI job and in `make ci`, not in `make lint` |
@@ -238,7 +239,7 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-content-golden`, `make test-browser` |
+| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-remediate-check`, `make test-content-golden`, `make test-browser` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
