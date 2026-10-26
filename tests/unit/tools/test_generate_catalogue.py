@@ -288,6 +288,23 @@ def test_the_reference_reports_every_family_and_profile(tmp_path: Path) -> None:
     assert gen.outputs(built(tmp_path))[gen.REFERENCE] == reference
 
 
+def test_the_reference_lists_each_umbrella_with_its_families(tmp_path: Path) -> None:
+    document = source_document()
+    families = cast("list[dict[str, object]]", document["families"])
+    families[0]["umbrella"] = "system"
+    families[1]["umbrella"] = "system"
+    catalogue = built(tmp_path, document)
+    reference = gen.reference(catalogue)
+    count = sum(rule["family"] in {"file_permissions", "sysctl"} for rule in catalogue.rules)
+    assert "## Umbrellas" in reference
+    assert (
+        f"| `linux_compliance_system_enabled` | `file_permissions`, `sysctl` | {count} |"
+        in reference
+    )
+    assert "| 1 | `file_permissions` | `system` | The file_permissions topic |" in reference
+    assert "`linux_compliance_ssh_enabled` |" not in reference.split("## Umbrellas", 1)[1]
+
+
 def test_a_rule_below_topic_groups_of_several_umbrellas_is_an_error() -> None:
     document = source_document()
     families = cast("list[dict[str, object]]", document["families"])
