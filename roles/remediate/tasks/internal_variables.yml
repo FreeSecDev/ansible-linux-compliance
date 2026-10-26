@@ -50,6 +50,10 @@
       - __linux_compliance_remediate_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset__'
       - >-
+        __linux_compliance_remediate_audit_only is not defined or __linux_compliance_remediate_audit_only ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_audit_only']
+      - >-
         __linux_compliance_remediate_collection_version is not defined or
         __linux_compliance_remediate_collection_version == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml')
         | ansible.builtin.from_yaml)['__linux_compliance_remediate_collection_version']
