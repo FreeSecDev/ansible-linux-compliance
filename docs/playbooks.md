@@ -1,16 +1,24 @@
 # Playbooks
 
 Scope: the orchestration playbooks shipped in `playbooks/`. Audience: operators and playbook authors.
-Jira: FREES-41. The playbooks contain no component logic; they only reference roles by FQCN. The `discover` and
-`audit` roles are implemented ([audit guide](audit.md)). The other roles are skeletons (FREES-40) that fail with a "not
-implemented yet" message naming their tracking issue, so `remediate.yml` and `verify.yml` stop at their first role
-until that role is implemented.
+Jira: FREES-41, FREES-52. The playbooks contain no component logic; they only reference roles and other playbooks by
+FQCN. The `discover`, `audit` ([audit guide](audit.md)) and `remediate` ([remediation guide](remediation.md)) roles are
+implemented. The `verify` and `evidence` roles are skeletons (FREES-40) that fail with a "not implemented yet" message
+naming their tracking issue.
 
-| Playbook | Roles in order | `become` |
+| Playbook | Plays and roles in order | `become` |
 |---|---|---|
 | `playbooks/audit.yml` | `discover`, `audit`; then the `audit` role's `stale` entry point in a second play on `localhost` | `audit` only |
-| `playbooks/remediate.yml` | `remediate` | `remediate` |
+| `playbooks/remediate.yml` | `audit.yml` (`discover`, `audit`), then `remediate`, then `verify.yml` (`verify`) | `audit`, `remediate`, `verify` |
 | `playbooks/verify.yml` | `verify` | `verify` |
+
+`remediate.yml` imports `freesecdev.linux_compliance.audit` first, so every remediation starts from a verified profile
+and a recorded baseline audit, and the `remediate` role gets the `linux_compliance_discovered` fact it requires. A host
+whose baseline audit fails is removed from the later plays and is not remediated; keep
+`linux_compliance_audit_fail_on_noncompliant` at its default `false` with this playbook, or every non-compliant host is
+skipped. The playbook ends with `freesecdev.linux_compliance.verify`, which is still a skeleton (FREES-54): until it is
+implemented, `remediate.yml` exits with the verify role's "not implemented yet" failure after the remediation has run,
+and `linux_compliance_remediated` holds what the remediation did. That exit status is not a remediation failure.
 
 `discover`, `audit` and `verify` never change the host; `audit` writes evidence files below
 `linux_compliance_audit_output_dir` and reports them separately from `changed`. `remediate` changes a host only after
@@ -50,6 +58,9 @@ Role variables are documented in each role `README.md` and in `meta/argument_spe
 | `linux_compliance_audit_output_dir` | `/var/lib/freesecdev/linux_compliance/evidence` | `audit` |
 | `linux_compliance_audit_scan_timeout` | `1800` | `audit` |
 | `linux_compliance_audit_disabled_rules` | `[]` | `audit` |
+| `linux_compliance_remediate_enabled` | `false` | `remediate` |
+| `linux_compliance_remediate_allow_disruptive` | `[]` | `remediate` |
+| `linux_compliance_<family>_enabled`, `linux_compliance_rule_<rule_short_id>_enabled` | not set (on) | `remediate` |
 | `linux_compliance_verify_fail_on_regression` | `true` | `verify` |
 
 ## Remediation opt-in
@@ -63,17 +74,23 @@ ansible-playbook -i inventory.yml freesecdev.linux_compliance.remediate \
   -e '{"linux_compliance_remediate_enabled": true}'
 ```
 
-Disruptive families (SSH, PAM, sudo, firewall, network, bootloader, mounts, crypto policy) additionally need to be named
-in `linux_compliance_remediate_allow_disruptive`, for example
+Disruptive families (auditd, services, network, firewall, SSH, PAM, sudo, crypto policy, mounts and bootloader)
+additionally need to be named in `linux_compliance_remediate_allow_disruptive`, for example
 `-e '{"linux_compliance_remediate_allow_disruptive": ["ssh"]}'`. Passing `linux_compliance_remediate_enabled=true`
 without JSON passes a string and fails the input validation; this is intentional and fails closed.
 
-Per-rule and per-family toggles do not exist yet (FREES-55).
+Every rule can also be switched off on its own or per topic, with flat booleans such as
+`linux_compliance_file_permissions_enabled` or `linux_compliance_rule_file_permissions_crontab_enabled`. Switching off
+a rule that was applied before cleans it up on the next run with the opt-in. Unknown toggle names fail the role. See the
+[remediation guide](remediation.md) for the effective-state rules and the disruptive families. FREES-55 generates the
+defaults of the toggles from the rule catalogue.
 
 ## Tags
 
-Every validation and stop task in the roles is tagged `always` (in the `audit` role every task is), so `--tags` cannot bypass them: for example,
-`--tags nothing` still validates inputs and stops with the role's tracking key.
+Every validation and stop task in the roles is tagged `always` (in the `audit` and `remediate` roles every task is,
+including the family files that `remediate` includes), so `--tags` cannot bypass them: for example, `--tags nothing`
+still validates inputs and stops with the role's tracking key. Toggles, not tags, select remediation rules
+([ADR 0011](adr/0011-control-toggles-and-cleanup.md)).
 
 `--skip-tags always` is unsupported. It skips input validation, the not-implemented stop and fact gathering, so the
 play runs nothing and exits 0. That exit status must not be read as success. A role cannot prevent this, because any

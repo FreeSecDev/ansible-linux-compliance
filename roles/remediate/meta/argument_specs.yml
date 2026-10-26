@@ -3,8 +3,15 @@ argument_specs:
   main:
     short_description: "Remediate a host with native modules (opt-in)"
     description:
-      - "Applies the selected profile with native Ansible modules, only after explicit opt-in."
-      - "Skeleton only: the role validates its inputs and then fails until FREES-52 is implemented."
+      - "Dispatches the rules of the catalogue roles/remediate/vars/rules.yml to their family task files."
+      - "Does nothing unless linux_compliance_remediate_enabled is true."
+      - "Applies and cleans up disruptive families only when they are named in"
+      - "linux_compliance_remediate_allow_disruptive."
+      - "Resolves each rule from its rule toggle, its family toggle and the global opt-in (ADR 0011)."
+      - "Cleans up rules that the state ledger records as applied and that are no longer effective."
+      - "Unknown rule or family toggles and unknown allow-list entries fail the role before anything changes."
+      - "Publishes the plan and the results as the fact linux_compliance_remediated."
+      - "See docs/remediation.md."
     author: "FreeSecDev contributors"
     options:
       linux_compliance_remediate_enabled:
@@ -12,21 +19,26 @@ argument_specs:
         default: false
         description:
           - "Global opt-in for remediation."
-          - "When false the role must not change the host (ADR 0011)."
+          - "When false the role reads nothing from and changes nothing on the host."
+          - "It only reports every rule as skipped."
+          - "It gates cleanup too: a rule disabled while this is false is cleaned up by the next enabled run."
       linux_compliance_remediate_allow_disruptive:
         type: list
         default: []
         description:
           - "Disruptive control families that may be applied or cleaned up."
-          - "A disruptive family runs only when it is named here, because it can lock operators out."
+          - "A disruptive family runs only when it is named here, because it can lock operators out or stop the host."
+          - "Rules of a disruptive family that is not named are skipped with the reason disruptive_not_allowed."
         elements: str
         choices:
+          - auditd
           - bootloader
           - crypto_policy
           - firewall
           - mounts
           - network
           - pam
+          - services
           - ssh
           - sudo
       linux_compliance_remediate_profile:
@@ -34,5 +46,6 @@ argument_specs:
         default: "cis_level1_server"
         description:
           - "ComplianceAsCode profile short identifier, without the XCCDF prefix."
-          - "The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010)."
+          - "When remediation is enabled it must equal the profile that the discover role verified."
+          - "Only rules that this profile selects are applied; applied rules that it does not select are cleaned up."
           - "A profile is never substituted silently for another benchmark."

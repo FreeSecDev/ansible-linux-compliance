@@ -1,7 +1,13 @@
 ---
+- name: Audit hosts before remediation
+  ansible.builtin.import_playbook: freesecdev.linux_compliance.audit
+
 - name: Remediate hosts against a compliance profile
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
-  gather_facts: true
+  gather_facts: false
   roles:
     - role: freesecdev.linux_compliance.remediate
       become: true
+
+- name: Verify hosts after remediation
+  ansible.builtin.import_playbook: freesecdev.linux_compliance.verify

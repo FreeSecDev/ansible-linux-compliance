@@ -1,0 +1,30 @@
+---
+- name: File permissions | Restore the recorded mode of rules that are no longer effective
+  ansible.builtin.include_tasks:
+    file: file_permissions_cleanup.yml
+    apply:
+      tags:
+        - always
+        - file_permissions
+  loop: "{{ __linux_compliance_remediate_family.cleanup }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+    - file_permissions
+
+- name: File permissions | Apply the effective rules
+  ansible.builtin.include_tasks:
+    file: file_permissions_apply.yml
+    apply:
+      tags:
+        - always
+        - file_permissions
+  loop: "{{ __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+    - file_permissions

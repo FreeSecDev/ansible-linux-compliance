@@ -90,6 +90,7 @@ Tests
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
+  test-remediate-check  Run the remediate role against localhost in check mode only, without become
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
@@ -121,7 +122,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-remediate-check \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -262,6 +263,11 @@ test-audit-exceptions: require-uv collection-link
 	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
 
+test-remediate-check: require-uv collection-link
+	mkdir -p build/ansible-home
+	ANSIBLE_HOME='$(CURDIR)/build/ansible-home' ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' \
+		$(RUN) ansible-playbook -i localhost, --check --diff tests/playbooks/remediate-check-mode.yml
+
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)
 
@@ -357,6 +363,7 @@ collection-link:
 	mkdir -p $(COLLECTION_LINK)
 	ln -sfn ../../../../../plugins $(COLLECTION_LINK)/plugins
 	ln -sfn ../../../../../roles $(COLLECTION_LINK)/roles
+	ln -sfn ../../../../../playbooks $(COLLECTION_LINK)/playbooks
 
 collection-tree:
 	rm -rf build/collection
@@ -373,4 +380,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check security docs test-sanity test-ansible-units package-check

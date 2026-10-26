@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role), FREES-50 (exceptions).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role), FREES-50 (exceptions), FREES-52 (remediation dispatcher).
 
 ## Layout
 
@@ -15,7 +15,7 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
 | `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root), `audit.py` (audit orchestration behind `compliance_scan`), `exceptions.py` (exceptions file and waivers), `yamlsubset.py` (strict YAML subset loader) |
 | `plugins/modules/` | `control_state.py` (ledger), the read-only discovery modules `benchmark_info.py` and `profile_info.py`, and the audit module `compliance_scan.py` |
-| `plugins/filter/` | Controller filters `apply_exceptions`, `stale_exceptions`, `validate_exceptions` and `scan_summary` ([exceptions](exceptions.md)) |
+| `plugins/filter/` | Controller filters `apply_exceptions`, `stale_exceptions`, `validate_exceptions` and `scan_summary` ([exceptions](exceptions.md)), and `remediation_plan` (effective state of every catalogued rule) and `restricted_mode` (file mode restriction) of the remediate role ([remediation guide](remediation.md)) |
 | `docs/schemas/`, `docs/examples/` | JSON Schema and example of the exceptions file |
 | `content/manifest.yml` | Pinned ComplianceAsCode release, archive SHA-512, datastream SHA-256 and profiles ([ADR 0015](adr/0015-content-acquisition-and-pinning.md)); the only file in `content/` |
 | `tools/content/fetch_content.py` | Controller-side tool that downloads or reads the pinned archive and extracts only the listed datastreams |
@@ -24,7 +24,7 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
 | `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; inert data, shipped with the tests in the tarball |
-| `roles/` | The `discover` and `audit` roles and the `remediate`, `verify` and `evidence` role skeletons (FREES-40) |
+| `roles/` | The `discover`, `audit` and `remediate` roles and the `verify` and `evidence` role skeletons (FREES-40) |
 | `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
 
@@ -33,25 +33,28 @@ development and is listed in `build_ignore`, so it is not part of the tarball.
 
 ## Roles and playbooks
 
-The `discover` (FREES-43) and `audit` (FREES-49) roles are implemented. The other roles are skeletons: each validates
+The `discover` (FREES-43), `audit` (FREES-49) and `remediate` (FREES-52, [remediation guide](remediation.md)) roles
+are implemented. The other roles are skeletons: each validates
 its inputs and then fails with a message that names the issue that tracks its implementation, so a playbook can never
 report success for work that does not exist yet. The skeletons use only `ansible.builtin.assert` and
 `ansible.builtin.fail`; `discover` uses `assert`, `benchmark_info`, `profile_info` and `set_fact`, and `audit` uses
 `assert`, `compliance_scan` and `set_fact`. None of them changes the configuration of the host; `audit` writes evidence
-files ([audit guide](audit.md)). The platforms in each `meta/main.yml` are intended targets
+files ([audit guide](audit.md)). `remediate` uses `assert`, `include_vars`, `set_fact`, `include_tasks`, `debug`,
+`control_state`, `stat` and `file`, and changes the host only after the explicit opt-in. The platforms in each `meta/main.yml` are intended targets
 ([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)); none is tested.
 
 | Role | Changes the host | Tracked in | Variables (default) |
 |---|---|---|---|
 | `discover` | Never | FREES-43 (implemented) | `linux_compliance_discover_profile` (`cis_level1_server`), `linux_compliance_discover_content_path` (empty, required), `linux_compliance_discover_content_sha256` (empty, required) |
 | `audit` | Never; writes evidence files | FREES-49 (implemented) | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`), `linux_compliance_audit_backend` (`openscap`), `linux_compliance_audit_output_dir` (`/var/lib/freesecdev/linux_compliance/evidence`), `linux_compliance_audit_scan_timeout` (`1800`), `linux_compliance_audit_disabled_rules` (`[]`), `linux_compliance_audit_fail_on_noncompliant_after_waivers` (`false`), `linux_compliance_exceptions_file` (`null`) |
-| `remediate` | Only with explicit opt-in | FREES-52 | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
+| `remediate` | Only with explicit opt-in | FREES-52 (implemented) | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
 | `verify` | Never | FREES-54 | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`) |
 | `evidence` | Never; writes on the controller only | FREES-51 | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_host_facts` (`false`) |
 
-Per-rule and per-family toggles do not exist yet; they are generated from the rule catalogue by FREES-55
-([ADR 0011](adr/0011-control-toggles-and-cleanup.md)). Until then the audit takes the disabled rules as the list
-`linux_compliance_audit_disabled_rules`. The variables of each role are documented in its
+Per-rule and per-family toggles are read by the `remediate` role, which fails on unknown toggle names; their defaults
+and argument specifications are generated from the rule catalogue by FREES-55
+([ADR 0011](adr/0011-control-toggles-and-cleanup.md)). Until then a toggle that is not set counts as on, and the
+audit takes the disabled rules as the list `linux_compliance_audit_disabled_rules`. The variables of each role are documented in its
 `README.md` and in `meta/argument_specs.yml`.
 `tools/roles/check_role_specs.py` (part of `make lint-ansible`) fails when a role's `defaults/main.yml` and
 `meta/argument_specs.yml` disagree in names, types or values, when an option lacks a description or default, or when
@@ -88,7 +91,8 @@ gap:
   import `ansible_collections.freesecdev.linux_compliance.plugins...`, the same name `ansible-test` uses. Coverage
   resolves the symlink, so measured files are the real ones.
 
-The link directory also links `roles/`, so ansible-lint can resolve the role references in the playbooks. `make lint-ansible` and the ansible-lint hook set
+The link directory also links `roles/` and `playbooks/`, so ansible-lint can resolve the role and playbook
+references in the playbooks and `make test-remediate-check` can run the `remediate` role. `make lint-ansible` and the ansible-lint hook set
 `ANSIBLE_COLLECTIONS_PATH` to `build/collections` for that one invocation only; the repository has no `ansible.cfg`,
 which would override users' own Ansible configuration, and `ansible.cfg` is listed in `build_ignore`.
 `make install` creates the links; the targets that need them depend on it.

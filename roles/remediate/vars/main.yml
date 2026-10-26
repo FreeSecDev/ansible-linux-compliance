@@ -1,0 +1,3 @@
+---
+__linux_compliance_remediate_collection_version: "0.1.0"
+__linux_compliance_remediate_toggle_pattern: "^linux_compliance_.+_enabled$"

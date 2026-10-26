@@ -1,0 +1,259 @@
+# Remediation
+
+Scope: the `freesecdev.linux_compliance.remediate` role, its safety model, its variables, the rule catalogue and the
+contract that every control family task file implements. Audience: operators, playbook authors, family authors and
+reviewers. Jira: FREES-52. Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
+[ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendment of
+FREES-52).
+
+Remediation changes managed hosts. It never runs ComplianceAsCode playbooks, Bash fixes or `oscap --remediate`; every
+change is made by a native Ansible module or by a module of this collection. A remediated rule is not a claim of
+compliance: only a later audit shows whether the rule now passes, and a host scan is never a certification.
+
+## Status
+
+The dispatcher, the safety model and one reference family are implemented. The catalogue holds exactly one rule,
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`). The control families of
+FREES-53, the generated toggles of FREES-55 and the cleanup paths of the other families (FREES-57) follow. The
+reference rule was exercised for real only in a disposable Ubuntu 24.04 container (see [Testing](#testing)); no
+Molecule scenario exists yet.
+
+## Safety model
+
+| Control | Default | Effect |
+|---|---|---|
+| `linux_compliance_remediate_enabled` | `false` | Without it the role neither reads the state ledger nor changes anything. It only reports every rule as `skip` with the reason `remediation_disabled`. It gates cleanup as well, so disabling a rule while remediation is off changes nothing until the next enabled run. |
+| `linux_compliance_remediate_allow_disruptive` | `[]` | Rules of a disruptive family are applied and cleaned up only when the family is named here. Otherwise they are `skip` with the reason `disruptive_not_allowed`, and a notice names them. A rule that the ledger records as applied keeps its ledger entry (`pending_cleanup: true`) until the family is allow-listed. |
+| Profile check | the discovered profile | With the opt-in, the role requires `linux_compliance_discovered` from the `discover` role for the same profile and applies only rules that the verified profile selects. It never substitutes another profile. |
+| Fail closed | always | Unknown rule or family toggles, toggles that are not booleans, allow-list entries that are not disruptive families, an invalid catalogue and a ledger entry whose family contradicts the catalogue stop the role before anything changes. |
+| Check mode | `--check` | Every task runs in check mode: nothing is written, not even the ledger, and the role reports what would change. |
+
+The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_remediate_enabled": true}'`.
+`-e linux_compliance_remediate_enabled=true` passes a string and fails the input validation.
+
+## Variables
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `linux_compliance_remediate_enabled` | `bool` | `false` | Global opt-in. |
+| `linux_compliance_remediate_allow_disruptive` | `list` of `str` | `[]` | Disruptive families that may be applied and cleaned up. The argument specification accepts only the disruptive families of the registry. |
+| `linux_compliance_remediate_profile` | `str` | `cis_level1_server` | Profile short identifier; must equal the profile the `discover` role verified. |
+| `linux_compliance_<family>_enabled` | `bool` | not set (on) | Topic toggle of a registered family, for example `linux_compliance_auditd_enabled: false` turns off every auditd rule. |
+| `linux_compliance_rule_<rule_short_id>_enabled` | `bool` | not set (the family toggle) | Toggle of one catalogued rule, for example `linux_compliance_rule_file_permissions_crontab_enabled`. |
+
+The topic and rule toggles are flat booleans, so any inventory layer can set one of them. FREES-55 will generate their
+defaults and argument specifications from the catalogue. Until then they are optional: a toggle that is not set
+counts as on.
+
+### Effective state of a rule
+
+For every catalogued rule the filter `freesecdev.linux_compliance.remediation_plan` resolves:
+
+1. The **toggle state**: the rule toggle when it is set, else the family toggle when it is set, else on. The variable
+   that switched a rule off is reported as `disabled_by`.
+2. The **action**, in this order:
+
+| Condition | Action | Reason |
+|---|---|---|
+| `linux_compliance_remediate_enabled` is false | `skip` | `remediation_disabled` |
+| The family is disruptive and not allow-listed | `skip` | `disruptive_not_allowed` |
+| Toggle on and the discovered profile selects the rule | `apply` | `enabled` |
+| Otherwise, and the ledger has no entry for the rule | `none` | `disabled_by_toggle` or `not_in_profile` |
+| Otherwise, and the rule is irreversible | `manual` | as above; a notice links the runbook and the ledger entry is kept |
+| Otherwise | `cleanup` | as above |
+
+So disabling a rule or a whole topic that was applied before cleans it up, and switching to a profile that no longer
+selects an applied rule cleans that rule up too.
+
+### Toggle names and reserved names
+
+The role finds every variable that matches `^linux_compliance_.+_enabled$` (`ansible.builtin.varnames`). A name in the
+namespace of a role of the collection (`linux_compliance_<role>_enabled` or `linux_compliance_<role>_*_enabled` for
+`audit`, `discover`, `evidence`, `remediate` and `verify`) is a role variable and is ignored. Every other name must be
+the toggle of a catalogued rule (`linux_compliance_rule_*`) or of a registered family, or the role fails. Family names
+must therefore not equal or start with a role name followed by `_`, and must not be `rule` or start with `rule_`.
+`auditd` is a valid family name; `audit_rules` would not be.
+
+## Disruptive families
+
+The family registry is in `roles/remediate/vars/rules.yml`. Its order is the dispatch order: non-disruptive families
+first, so that a failure in a disruptive family leaves the harmless changes applied, then the families in order of
+growing lock-out risk, with the bootloader last because it takes effect only on the next boot.
+
+| Order | Family | Disruptive | Why |
+|---|---|---|---|
+| 1 | `file_permissions` | no | Tightens modes and owners of system files; no service is restarted |
+| 2 | `sysctl` | no | Kernel hardening parameters that do not change routing or forwarding (those belong to `network`) |
+| 3 | `auditd` | yes | Audit settings can halt the host or drop it to single-user mode when the audit log fills, and immutable rules need a reboot to change |
+| 4 | `services` | yes | Disabling or masking services can stop workloads the host exists for |
+| 5 | `network` | yes | Forwarding, redirects and IPv6 settings can cut routers, container hosts and VPN gateways off |
+| 6 | `firewall` | yes | A default-deny policy can cut every remote session |
+| 7 | `ssh` | yes | sshd settings can lock out every remote operator |
+| 8 | `pam` | yes | Lock-out, password quality and module order can lock out every user, including root |
+| 9 | `sudo` | yes | Can remove administrative access |
+| 10 | `crypto_policy` | yes | Can break TLS and SSH with older peers |
+| 11 | `mounts` | yes | Mount options can break running software; partitioning is irreversible |
+| 12 | `bootloader` | yes | A wrong boot configuration can leave the host unbootable |
+
+Cleanup of a disruptive family is gated exactly like applying it, because reverting SSH, PAM or firewall settings can
+also lock operators out. Every rule of a disruptive family is disruptive; the catalogue rejects a rule whose flag
+differs from its family.
+
+## Rule catalogue
+
+`roles/remediate/vars/rules.yml` holds `__linux_compliance_remediate_families` (the registry above) and
+`__linux_compliance_remediate_rules`. Each rule has exactly these keys; the filter rejects anything else.
+
+| Key | Contract |
+|---|---|
+| `rule_id` | Full ComplianceAsCode XCCDF rule identifier, unique |
+| `family` | A registered family; it names the task file `roles/remediate/tasks/<family>.yml` |
+| `disruptive` | Equals the flag of the family |
+| `reversible` | `false` exactly for the `irreversible` strategy |
+| `revert_strategy` | `owned_dropin`, `recorded_value`, `recorded_state` or `irreversible` (ADR 0011) |
+| `toggle` | `linux_compliance_rule_<rule_short_id>_enabled` |
+| `runbook` | A `docs/` path or `https://` link for an irreversible rule, `null` for every other rule |
+| `parameters` | A mapping that only the family task file interprets |
+
+A rule enters the catalogue only when the pinned content shows that it exists. The reference rule is selected by the
+Ubuntu 24.04 profiles `cis_level1_server`, `cis_level1_workstation`, `cis_level2_server` and `cis_level2_workstation`
+and by the RHEL 9 profiles `bsi`, `cis`, `cis_server_l1`, `cis_workstation_l1`, `cis_workstation_l2` and `pci-dss` of
+the pinned content `v0.1.82`, checked with `catalog.read_benchmarks` on the fetched datastreams. The role does not
+trust this list: it applies a rule only when `linux_compliance_discovered.rule_ids` contains it.
+
+## Dispatch
+
+`tasks/main.yml` only dispatches; every task in it is tagged `always`.
+
+1. Validate the inputs (the argument specification runs first).
+2. Load the catalogue and the registry with `ansible.builtin.include_vars`.
+3. Find the toggle variables.
+4. With the opt-in only: check `linux_compliance_discovered` and read the ledger with `control_state` `list`.
+5. Resolve the plan with `remediation_plan` and stop on any error.
+6. Include `<family>.yml` once for every family that has work, in registry order, with the tag `always` applied to it.
+7. Publish the fact `linux_compliance_remediated` and print the notices (skipped disruptive rules, manual actions,
+   orphaned ledger entries, incomplete cleanups).
+
+Toggles, not tags, select rules. `--tags` cannot skip validation or a family file, because everything runs with
+`always`; `--skip-tags always` is unsupported, as for the other roles ([playbooks](playbooks.md#tags)).
+
+## Family file contract
+
+A family file `roles/remediate/tasks/<family>.yml` receives `__linux_compliance_remediate_family` with `name`,
+`disruptive`, `cleanup` (rules to clean up) and `apply` (rules to apply), each rule being its catalogue entry plus
+`action`, `reason`, `disabled_by` and `ledger_entry` (the ledger entry as `control_state` returns it, or `null`). It
+must:
+
+1. **Clean up first, then apply.** Loop over `cleanup`, then over `apply`; per-rule logic may live in helper files
+   named `<family>_<purpose>.yml`.
+2. **Use native modules only.** No `shell`, `command`, `raw`, `script`, `expect` or anything that executes code
+   indirectly; the repository guard enforces the module ban. Missing functionality becomes a typed module or filter of
+   this collection.
+3. **Record before changing.** For `recorded_value` and `recorded_state`, call `control_state` `record` with the prior
+   values before the first change, and only when the change is needed and `ledger_entry` is `null`. Never re-record an
+   existing entry: the first recorded value is the true prior state. For `owned_dropin`, record an entry without prior
+   values, so the dispatcher knows the rule was applied.
+4. **Clean up from the ledger, never by guessing.** Restore the recorded prior value or remove the owned drop-in, then
+   call `control_state` `remove`. If a prior value is missing or cannot be applied, keep the ledger entry and report
+   `cleanup_incomplete`. `ledger_entry` comes from `control_state` `list`, which redacts sensitive prior values; a
+   family that stores one (through `sensitive_prior_values`) reads it back with `control_state` `get` and
+   `reveal_sensitive: true` in a task with `no_log: true`.
+5. **Honour check mode.** Never set `check_mode: false`, never skip a task in check mode to hide a change, and never
+   use `changed_when: false` or `ignore_errors` to hide a change or a failure. `control_state` writes nothing in check
+   mode.
+6. **Honour diff mode.** Change files with modules that produce a diff; `control_state` shows the ledger entry before
+   and after.
+7. **Be idempotent.** A second run with the same toggles reports zero changes, after apply and after cleanup.
+8. **Report one result per rule** by appending to `__linux_compliance_remediate_results` a mapping with `rule_id`,
+   `family`, `action` (`apply` or `cleanup`), `status`, `changed` and `message`.
+9. **Stay narrow.** One family per file; no rule logic in `tasks/main.yml`.
+10. **Gate nothing itself.** The opt-in, the allow-list, the toggles and the profile are resolved before the file is
+    included; a family file only acts on the lists it receives.
+
+### Reference family: `file_permissions`
+
+`file_permissions_crontab` restricts `/etc/crontab` to at most `0600`, as the ComplianceAsCode fix does
+(`chmod u-xs,g-xwrs,o-xwrt`): the filter `freesecdev.linux_compliance.restricted_mode` computes `current & 0600`, so a
+stricter mode such as `0400` is kept and only the excess bits are removed. Its strategy is `recorded_value`.
+
+| Step | Module | Behaviour |
+|---|---|---|
+| Inspect | `ansible.builtin.stat` with `follow: false` | A missing file is `notapplicable`; a symbolic link or other non-regular file is `not_regular_file`; neither is changed |
+| Record | `freesecdev.linux_compliance.control_state` `record` | Prior mode (for example `0644`), only when the mode must change and no entry exists |
+| Apply | `ansible.builtin.file` with `follow: false` | Sets the restricted mode; status `applied`, or `compliant` when nothing had to change |
+| Clean up | `ansible.builtin.file`, then `control_state` `remove` | Restores the recorded mode (`restored`); a missing file only removes the entry (`target_absent`); a non-regular file or an unusable record keeps the entry (`cleanup_incomplete`) |
+
+## Results
+
+The role publishes `linux_compliance_remediated`:
+
+| Key | Content |
+|---|---|
+| `enabled`, `check_mode`, `profile`, `allow_disruptive` | The run settings |
+| `summary` | Number of rules per action (`apply`, `cleanup`, `manual`, `none`, `skip`) |
+| `rules` | Every rule with `rule_id`, `family`, `action`, `reason`, `disabled_by`, `pending_cleanup` and `runbook` |
+| `results` | One result per applied or cleaned-up rule, from the family files |
+| `disabled_rules` | Rules switched off by a toggle (`rule_id`, `disabled_by`), restricted to the profile when remediation is enabled, in the format of `linux_compliance_audit_disabled_rules`; FREES-55 will feed it to the audit |
+| `orphaned` | Ledger entries for rules that the catalogue no longer contains; nothing is done to them |
+| `notices` | Operator messages |
+
+## Running
+
+Through the playbook, which audits first and runs the `verify` role afterwards ([playbooks](playbooks.md)):
+
+```text
+ansible-playbook -i inventory.yml freesecdev.linux_compliance.remediate \
+  -e linux_compliance_target_hosts=web01 \
+  -e linux_compliance_discover_content_path=/opt/freesecdev/content/ssg-ubuntu2404-ds.xml \
+  -e linux_compliance_discover_content_sha256=<sha256 from content/manifest.yml> \
+  -e '{"linux_compliance_remediate_enabled": true, "linux_compliance_rule_file_permissions_crontab_enabled": true}' \
+  --check --diff
+```
+
+Drop `--check` to apply. To revert the rule, run again with
+`"linux_compliance_rule_file_permissions_crontab_enabled": false` (or `"linux_compliance_file_permissions_enabled":
+false` for the whole topic) and the opt-in.
+
+## Security considerations
+
+| Concern | Handling |
+|---|---|
+| Unintended host changes | The opt-in gates every read and write; the default inventory leaves remediation off |
+| Operator lock-out | Disruptive families need the allow-list for apply and cleanup alike |
+| Typos silently disabling or keeping a control | Unknown and non-boolean toggles and unknown allow-list entries fail closed |
+| Remediating rules the content does not select | Only rules in the digest-verified profile of the `discover` role are applied |
+| Path injection into `include_tasks` | Family names come only from the registry and match `[a-z][a-z0-9_]{0,63}` |
+| Symbolic links at a target | `stat` and `file` use `follow: false`; a non-regular target is neither changed nor restored |
+| Lost or tampered prior state | The root-only ledger of `control_state` (ADR 0011); a restored mode must match `^[0-7]{4}$`, otherwise the entry is kept and the cleanup is reported incomplete |
+| Ledger entries the catalogue no longer knows | Reported as orphaned, never cleaned up by guesswork |
+
+Residual risk: between `stat` and `file` a root-level attacker could replace the target; anyone who can write to `/etc`
+already controls the host. A remediated rule is not proof that the control passes; only the next audit is.
+
+## Testing
+
+| Test | What it proves | Where it runs |
+|---|---|---|
+| `tests/unit/plugins/filter/` | Effective-state resolution, validation and `restricted_mode`, 100% line and branch coverage | `make test-coverage`, `ansible-test units` |
+| `tests/unit/roles/test_remediate_catalogue.py` | The catalogue is valid, the allow-list choices equal the disruptive families, every family with rules has a task file, the recorded collection version equals `galaxy.yml` | `make test-coverage` |
+| `tests/playbooks/remediate-check-mode.yml` | Against localhost, in check mode and without `become`: nothing happens without the opt-in, the reference rule is planned and the host is unchanged, invalid toggles and allow-list entries fail, a disruptive family is skipped without the allow-list. Every play refuses to run without `--check` | `make test-remediate-check`, CI job `test` |
+
+`make test-remediate-check` reads the ledger directory as the calling user; on a host where
+`/var/lib/freesecdev/linux_compliance` already exists and is root-only it fails instead of reading it.
+
+For FREES-52 the role was also run for real, with the opt-in, in a disposable Ubuntu 24.04 container
+(`ubuntu@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac`, no network): apply (`0644` to `0600`,
+ledger entry with prior `0644`), a second run with zero changes, cleanup by rule toggle and by family toggle (back to
+`0644`, entry removed), a further run with zero changes, the rule toggle overriding a disabled family, no cleanup while
+remediation is off, a stricter `0400` kept, and `4755` restricted to `0600` and restored to `4755`. That run is
+evidence from the pull request, not a repeatable CI test.
+
+The Molecule scenario (nothing changes without the opt-in, disruptive families skipped without the allow-list, the
+reference rule applied, idempotent and cleaned up on disable, check mode changing nothing) waits for the Docker Molecule
+framework of FREES-59 and is tracked as a FREES-60 follow-up.
+
+## Related decisions and issues
+
+- [ADR 0003](adr/0003-native-module-remediation.md), [ADR 0011](adr/0011-control-toggles-and-cleanup.md)
+- FREES-52 (this page), FREES-53 (first families), FREES-55 (generated toggles), FREES-57 (cleanup per family),
+  FREES-54 (verify), FREES-59 and FREES-60 (Molecule)

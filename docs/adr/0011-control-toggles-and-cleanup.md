@@ -233,3 +233,43 @@ The audit side of this decision is implemented by `freesecdev.linux_compliance.c
   that did not complete it is an `error` finding instead, because ADR 0013 allows only `error` findings there; the
   message still names the variable. A disabled rule that the profile does not select is an argument error, and
   disabling every rule of a profile is `nothing_to_scan`. Nothing is silently dropped.
+
+## Amendment 2026-10-26: remediation dispatcher (FREES-52)
+
+The remediate role implements the dispatch side of this decision ([remediation guide](../remediation.md)). These
+refinements apply.
+
+- **Effective state.** The filter `freesecdev.linux_compliance.remediation_plan` resolves every catalogued rule. The
+  toggle state is the rule toggle when it is set, else the family toggle when it is set, else on; the variable that
+  switched a rule off is its `disabled_by`. The action is, in this order: `skip` when the global opt-in is false
+  (nothing is read or changed, cleanup included); `skip` when the family is disruptive and not allow-listed (apply and
+  cleanup alike; an applied rule is reported as `pending_cleanup`); `apply` when the toggle is on and the profile selects
+  the rule; otherwise `cleanup` when the ledger records the rule, `manual` instead when the rule is irreversible, and
+  `none` when nothing was applied. The ledger entry of a `manual` rule is kept.
+- **Profile membership** comes from `linux_compliance_discovered.rule_ids`, the rules that the digest-verified
+  datastream selects for the discovered profile, not from a list in the catalogue. With the opt-in the role requires
+  that fact for the same profile, so remediation never applies a rule that the content does not select and never
+  substitutes a profile. Switching to a profile that does not select an applied rule cleans that rule up.
+- **Family toggles default to on.** Until FREES-55 generates the defaults, a toggle that is not set counts as on; the
+  global opt-in is the gate. A rule toggle still wins over its family toggle in both directions.
+- **Unknown names are errors.** Every variable matching `^linux_compliance_.+_enabled$` is examined. Names in the
+  namespace of a role (`audit`, `discover`, `evidence`, `remediate`, `verify`) are role variables and are ignored; every
+  other `linux_compliance_rule_*_enabled` must be a catalogued rule toggle and every other name a registered family
+  toggle, and every toggle must be a boolean. Family names may therefore not equal or start with a role name followed
+  by `_`, nor be `rule` or start with `rule_`. The allow-list accepts only disruptive families of the registry.
+- **Disruptive is a family property.** The registry in `roles/remediate/vars/rules.yml` flags each family, and every
+  rule repeats the flag of its family, which the filter checks. `auditd` and `services` join the disruptive families of
+  the `ansible-collection` skill (SSH, PAM, sudo, firewall, network, bootloader, mounts, crypto policy), because audit
+  settings can halt the host when the log fills and disabling services can stop workloads.
+- **Deterministic order.** Families are dispatched in registry order (non-disruptive first, bootloader last), and a
+  family file cleans up before it applies; rules are sorted by identifier.
+- **Ledger writes belong to family files.** The dispatcher reads the ledger once (`control_state` `list`) and passes
+  each rule's entry to its family. The family records the prior state before the first change and only when no entry
+  exists, so repeated runs never overwrite the true prior value, and removes the entry after a successful cleanup.
+- **Orphaned ledger entries**, for rules that the catalogue of the running collection version does not contain, are
+  reported and left alone rather than cleaned up by guesswork.
+- **Tags do not select rules.** Every task of the role, including the included family files, runs with the tag
+  `always`; toggles are the only selection mechanism, as decided above.
+- **Catalogue shape.** Each rule has exactly `rule_id`, `family`, `disruptive`, `reversible`, `revert_strategy`, `toggle`
+  (`linux_compliance_rule_<short id>_enabled`), `runbook` (required exactly for irreversible rules) and `parameters`
+  (family-specific); anything else fails the role.

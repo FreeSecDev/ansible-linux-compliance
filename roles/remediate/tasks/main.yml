@@ -5,8 +5,9 @@
       - linux_compliance_remediate_enabled is boolean
       - linux_compliance_remediate_allow_disruptive is sequence
       - linux_compliance_remediate_allow_disruptive is not string
+      - linux_compliance_remediate_allow_disruptive is not mapping
       - linux_compliance_remediate_profile is string
-      - linux_compliance_remediate_profile | length > 0
+      - linux_compliance_remediate_profile is match('^[a-z0-9][a-z0-9_]{0,127}$')
     fail_msg: >-
       The remediate role received an invalid input; see meta/argument_specs.yml.
       Boolean variables must be real booleans on the command line, for example
@@ -16,8 +17,116 @@
   tags:
     - always
 
-- name: Remediate | Stop because the role is not implemented yet
-  ansible.builtin.fail:
-    msg: The remediate role is not implemented yet (tracked in FREES-52). No change was made to the host.
+- name: Remediate | Load the rule catalogue and the family registry
+  ansible.builtin.include_vars:
+    file: rules.yml
+  tags:
+    - always
+
+- name: Remediate | Find the toggle variables
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_toggle_names: >-
+      {{ lookup('ansible.builtin.varnames', __linux_compliance_remediate_toggle_pattern, wantlist=True) | sort }}
+  tags:
+    - always
+
+- name: Remediate | Check that the discover role verified the same profile
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_discovered is defined
+      - linux_compliance_discovered is mapping
+      - >-
+        linux_compliance_discovered.profile_id ==
+        'xccdf_org.ssgproject.content_profile_' ~ linux_compliance_remediate_profile
+      - linux_compliance_discovered.rule_ids is sequence
+      - linux_compliance_discovered.rule_ids is not string
+      - linux_compliance_discovered.rule_ids | length > 0
+    fail_msg: >-
+      Run the freesecdev.linux_compliance.discover role first, for the same profile. Remediation
+      applies only rules that the verified profile selects, and it never substitutes another profile.
+      No change was made to the host.
+    quiet: true
+  when: linux_compliance_remediate_enabled
+  tags:
+    - always
+
+- name: Remediate | Read the state ledger
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: __linux_compliance_remediate_ledger
+  when: linux_compliance_remediate_enabled
+  tags:
+    - always
+
+- name: Remediate | Resolve the effective state of every catalogued rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_plan: >-
+      {{ __linux_compliance_remediate_rules | freesecdev.linux_compliance.remediation_plan({
+           'families': __linux_compliance_remediate_families,
+           'enabled': linux_compliance_remediate_enabled,
+           'allow_disruptive': linux_compliance_remediate_allow_disruptive,
+           'toggles': dict(__linux_compliance_remediate_toggle_names | zip(
+             lookup('ansible.builtin.vars', *__linux_compliance_remediate_toggle_names, wantlist=True))),
+           'profile_rule_ids': (linux_compliance_discovered.rule_ids
+                                if linux_compliance_remediate_enabled else none),
+           'ledger_entries': (__linux_compliance_remediate_ledger.entries
+                              if linux_compliance_remediate_enabled else [])}) }}
+  tags:
+    - always
+
+- name: Remediate | Stop on unknown toggles, allow-list entries or catalogue errors
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_plan.errors | length == 0
+    fail_msg: >-
+      The remediation plan is invalid and no change was made to the host:
+      {{ __linux_compliance_remediate_plan.errors | join('; ') }}
+    quiet: true
+  tags:
+    - always
+
+- name: Remediate | Start without results
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: []
+  tags:
+    - always
+
+- name: Remediate | Dispatch every family with work, in registry order
+  ansible.builtin.include_tasks:
+    file: "{{ __linux_compliance_remediate_family.name }}.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  tags:
+    - always
+
+- name: Remediate | Publish the plan and the results
+  ansible.builtin.set_fact:
+    linux_compliance_remediated:
+      enabled: "{{ __linux_compliance_remediate_plan.enabled }}"
+      check_mode: "{{ ansible_check_mode }}"
+      profile: "{{ linux_compliance_remediate_profile }}"
+      allow_disruptive: "{{ linux_compliance_remediate_allow_disruptive | sort }}"
+      summary: "{{ __linux_compliance_remediate_plan.summary }}"
+      rules: "{{ __linux_compliance_remediate_plan.report }}"
+      results: "{{ __linux_compliance_remediate_results }}"
+      disabled_rules: "{{ __linux_compliance_remediate_plan.disabled_rules }}"
+      orphaned: "{{ __linux_compliance_remediate_plan.orphaned }}"
+      notices: >-
+        {{ __linux_compliance_remediate_plan.notices
+           + (__linux_compliance_remediate_results
+              | selectattr('status', 'equalto', 'cleanup_incomplete')
+              | map(attribute='message') | list) }}
+  tags:
+    - always
+
+- name: Remediate | Report skipped rules, manual actions and incomplete cleanups
+  ansible.builtin.debug:
+    msg: "{{ linux_compliance_remediated.notices }}"
+  when: linux_compliance_remediated.notices | length > 0
   tags:
     - always
