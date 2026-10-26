@@ -106,14 +106,44 @@ controller, then copies it into the instance as `/usr/share/freesecdev-molecule/
 ## Localhost guard
 
 `extensions/molecule/shared/guard.yml` runs first in `prepare`, `converge` and `verify`, before anything else runs on
-a target, with `any_errors_fatal`. It targets `hosts: all`, so the implicit `localhost` is never part of it. A target
-is accepted only when all of the following hold. The first group is checked from the inventory alone:
+a target, with `any_errors_fatal`. It targets `hosts: all`, so the implicit `localhost` is never part of it.
+
+Before anything else, the guard refuses variables that it relies on but did not compute itself (FREES-150). Extra
+variables (`-e`) take precedence over everything a play can set: play variables, `vars_files`, task variables,
+include variables, `set_fact` facts and also registered results. With `-e guard_container=<inspect JSON of an isolated
+container>`, an earlier guard accepted a decoy with a host bind mount, and the next task read a host file through
+it; the same worked with `guard_inspect`, `molecule_target` and `inventory_hostname`. Measured with ansible-core
+2.21.5, only the loop variable of a task's own `loop`, the magic variables computed after the extra variables
+(`hostvars`, `vars`, `groups`, `ansible_play_hosts_all`, `ansible_play_batch`, `playbook_dir`) and lookups such as
+`env` are out of reach. `inventory_hostname` is not: it is a host variable. The first task therefore uses only those,
+and literal values:
+
+- No variable named `guard_*`, `molecule_target` or `molecule_docker_default_paths` may exist in
+  `hostvars[inventory_hostname]` when the play starts. `hostvars` holds inventory variables, facts and registered
+  results of earlier plays and extra variables, but not play variables or `vars_files`. Any such name is therefore
+  supplied from outside, whatever its value.
+- `ansible_play_hosts_all`, mapped to each host's `inventory_hostname`, must give back `ansible_play_hosts_all`, which
+  refuses an `inventory_hostname` extra variable.
+- `ansible_host`, `ansible_connection` and `molecule_allowed_connections` come legitimately from the inventory. The
+  task sets each to a sentinel as a task variable, which beats every inventory source, and requires the sentinel to
+  survive, which only an extra variable prevents. The sentinel connection is `ansible.builtin.local`, because the
+  `assert` task loads the connection plugin without using it. An extra variable that repeats a sentinel is refused by
+  the later checks: `ansible.builtin.local` is a local connection, the sentinel address is no recorded address, and
+  a sentinel allow-list contains no connection.
+- The guard reads the instance config from the `MOLECULE_INSTANCE_CONFIG` environment variable, which Molecule sets,
+  and `molecule_instance_config` must equal it.
+
+Once that holds, every fact, registered result and include variable of the guard is the value the guard computed.
+Reading values back and comparing them against a fresh inspection would not help, because the fresh result is a
+registered variable that the same extra variable can shadow. The guard refuses an inventory variable named `guard_*`
+as well. A target is accepted only when all of the following hold. The first group is checked from the inventory
+alone:
 
 - Its name and address match exactly one entry that this scenario's create step wrote to the instance config. The
   address is `ansible_host`, or the inventory name when it is unset, and must have the form
   `fsd-mol-<scenario>-<8 character run id>-<platform>`.
-- The connection is in the allow-list (`community.docker.docker`; a scenario can override
-  `molecule_allowed_connections`) and is not a local connection. An unset connection counts as `ssh` and is refused.
+- The connection is in the allow-list (`community.docker.docker`; a scenario can override it with the inventory
+  variable `molecule_allowed_connections`, never with an extra variable) and is not a local connection. An unset connection counts as `ssh` and is refused.
 - No `ansible_docker_*` or `docker_*` variable is set. This covers `ansible_docker_host`, which takes precedence over
   `ansible_host`, `ansible_docker_extra_args`, which can select another daemon, `ansible_docker_privileged` and
   `ansible_docker_extra_env`. The `ANSIBLE_DOCKER_PRIVILEGED` environment variable must be unset or empty.
@@ -161,11 +191,20 @@ scenario `docker-selftest`, with the instance config in `build/molecule-selftest
    empty directory `build/molecule-selftest/host-directory`, one with `systempaths=unconfined` (started with
    `community.docker.docker_compose_v2`, because the Docker API takes that option only as empty path lists) and one
    with a custom allow-all seccomp profile. It records each decoy in its own instance config, as create would, and
-   writes one inventory per bypass attempt.
+   writes one inventory per bypass attempt. It also writes one extra-variable attempt per variable the guard relies
+   on, into `build/molecule-selftest/extra-vars/<variable>/`: every `guard_*` name that occurs in `shared/guard.yml`,
+   `tasks/guard.yml`, `tasks/guard_isolation.yml` and `tasks/guard_connection.yml`, plus `molecule_target`,
+   `molecule_docker_default_paths`, `molecule_instance_config`, `molecule_allowed_connections`, `ansible_host`,
+   `ansible_connection` and `inventory_hostname`. It fails when one of them has no attempt. Each attempt targets the
+   mounted decoy, records it in its instance config and sets a value that disguises it, for example the inspection of
+   the real instance as `guard_container` or `guard_inspect`, or the real instance's record as `molecule_target`.
 3. The guard accepts the real instance. It refuses each attempt with "Refusing to run": `ansible_docker_host`
    steered to the mounted decoy, `ansible_docker_extra_args`, `ansible_docker_privileged`, a local connection, an
    explicit `localhost`, `127.0.0.1`, an unrecorded container name, and each of the three recorded decoys, which must
-   be refused by the isolation check ("is not isolated").
+   be refused by the isolation check ("is not isolated"). Each extra-variable attempt (39) runs the guard with
+   `-e @extra-vars/<variable>/vars.yml` and must be refused because the variable "was supplied from outside" the
+   guard. Against the guard before FREES-150, the `guard_container`, `guard_inspect`, `molecule_target` and
+   `inventory_hostname` attempts were accepted and a following task read a file in the mounted host directory.
 4. The instance config is emptied and `destroy.yml` must remove all four containers by label. A new `create` follows,
    the instance config is deleted, and `destroy.yml` must again remove the container. `assert_destroyed.yml` checks
    after each destroy that no container with the `docker-selftest` label is left.

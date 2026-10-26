@@ -7,10 +7,37 @@
     - vars/versions.yml
   vars:
     guard_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
-    guard_instances: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml | default([], true) }}"
+    guard_instances: >-
+      {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MOLECULE_INSTANCE_CONFIG'))
+      | from_yaml | default([], true) }}
     guard_connection_variable_pattern: '^(ansible_(host|connection|docker_.*)|docker_.*)$'
     guard_marker_variable: FREESECDEV_MOLECULE_MARKER
   tasks:
+    - name: Refuse guard variables that were supplied from outside the guard
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | map('extract', hostvars, 'inventory_hostname') | list == ansible_play_hosts_all
+          - >-
+            hostvars[inventory_hostname].keys()
+            | select('match', '^(guard_.*|molecule_target|molecule_docker_default_paths)$') | list | length == 0
+          - ansible_host == 'freesecdev-guard-sentinel'
+          - ansible_connection == 'ansible.builtin.local'
+          - molecule_allowed_connections == 'freesecdev-guard-sentinel'
+          - lookup('ansible.builtin.env', 'MOLECULE_INSTANCE_CONFIG') | length > 0
+          - molecule_instance_config | default('') == lookup('ansible.builtin.env', 'MOLECULE_INSTANCE_CONFIG')
+        fail_msg: >-
+          Refusing to run: a variable that the guard relies on was supplied from outside the guard, for example as an
+          extra variable, an inventory variable or a fact of an earlier play. Play hosts {{ ansible_play_hosts_all }},
+          guard variables found {{ (hostvars[inventory_hostname] | default({}, true)).keys()
+          | select('match', '^(guard_.*|molecule_target|molecule_docker_default_paths)$') | list }}.
+          inventory_hostname, ansible_host, ansible_connection and molecule_allowed_connections must not be extra
+          variables, and molecule_instance_config must equal the MOLECULE_INSTANCE_CONFIG environment variable.
+        success_msg: No variable that the guard relies on was supplied from outside the guard.
+      vars:
+        ansible_host: freesecdev-guard-sentinel
+        ansible_connection: ansible.builtin.local
+        molecule_allowed_connections: freesecdev-guard-sentinel
+
     - name: Check the connection of every target
       ansible.builtin.include_tasks:
         file: tasks/guard.yml

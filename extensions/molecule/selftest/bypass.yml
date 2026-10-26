@@ -62,7 +62,108 @@
         probe:
           ansible_host: "{{ selftest_prefix }}-stranger"
           ansible_connection: "{{ selftest_docker }}"
+    selftest_mounted_record: >-
+      {{ selftest_probe | combine({'instance': 'mounted', 'address': selftest_mounted_address}) }}
+    selftest_mounted_instances: "{{ selftest_instances + [selftest_mounted_record] }}"
+    selftest_mounted_hosts:
+      mounted:
+        ansible_host: "{{ selftest_mounted_address }}"
+        ansible_connection: "{{ selftest_docker }}"
+    selftest_pair_hosts: "{{ selftest_inventories.good | combine(selftest_mounted_hosts) }}"
+    selftest_isolated_container: >-
+      {{ selftest_probe_info.container | combine({'Name': '/' ~ selftest_mounted_address}) }}
+    selftest_marker_environ: "FREESECDEV_MOLECULE_MARKER={{ selftest_probe.marker }}"
+    selftest_unprivileged_status: |
+      CapPrm:    0000000000000000
+      CapEff:    0000000000000000
+      CapBnd:    0000000000000000
+      NoNewPrivs:    1
+    selftest_isolated_paths:
+      masked:
+        - /proc/kcore
+      readonly:
+        - /proc/sys
+    selftest_extra_vars:
+      guard_container: "{{ selftest_isolated_container }}"
+      guard_inspect:
+        exists: true
+        container: "{{ selftest_isolated_container }}"
+      guard_host_config: "{{ selftest_probe_info.container.HostConfig }}"
+      guard_labels: "{{ selftest_probe_info.container.Config.Labels }}"
+      guard_label_prefix: org.freesecdev.molecule
+      guard_shared_namespace_pattern: "^$"
+      guard_default_paths: "{{ selftest_isolated_paths }}"
+      guard_daemon:
+        host_info:
+          ServerVersion: 29.0.0
+      guard_daemon_version: 29.0.0
+      guard_daemon_major: "29"
+      guard_instance: "{{ selftest_mounted_record }}"
+      guard_instances: "{{ selftest_mounted_instances }}"
+      guard_scenario: "{{ selftest_scenario }}"
+      guard_hostname: mounted
+      guard_address: "{{ selftest_mounted_address }}"
+      guard_connection: "{{ selftest_docker }}"
+      guard_connection_vars: "{{ selftest_mounted_hosts.mounted }}"
+      guard_connection_variable_pattern: "^$"
+      guard_allowed_connections:
+        - "{{ selftest_docker }}"
+      guard_environment:
+        ANSIBLE_DOCKER_PRIVILEGED: ""
+      guard_forbidden_variables: []
+      guard_matches:
+        - "{{ selftest_mounted_record }}"
+      guard_name_pattern: ".*"
+      guard_loopback_alternatives:
+        - "^$"
+      guard_loopback_pattern: "^$"
+      guard_normalised_hostname: mounted
+      guard_normalised_address: "{{ selftest_mounted_address }}"
+      guard_marker_variable: FREESECDEV_MOLECULE_MARKER
+      guard_init_environ:
+        content: "{{ selftest_marker_environ | b64encode }}"
+      guard_self_status:
+        content: "{{ selftest_unprivileged_status | b64encode }}"
+      guard_environ: "{{ selftest_marker_environ }}"
+      guard_status: "{{ selftest_unprivileged_status }}"
+      molecule_target: "{{ selftest_probe }}"
+      molecule_docker_default_paths:
+        "28": "{{ selftest_isolated_paths }}"
+        "29": "{{ selftest_isolated_paths }}"
+      molecule_instance_config: "{{ molecule_selftest_dir }}/instance_config_mounted.yml"
+      molecule_allowed_connections:
+        - "{{ selftest_docker }}"
+      ansible_host: "{{ selftest_mounted_address }}"
+      ansible_connection: "{{ selftest_docker }}"
+      inventory_hostname: probe
+    selftest_outside_names:
+      - molecule_target
+      - molecule_docker_default_paths
+      - molecule_instance_config
+      - molecule_allowed_connections
+      - ansible_host
+      - ansible_connection
+      - inventory_hostname
+    selftest_guard_files:
+      - guard.yml
+      - tasks/guard.yml
+      - tasks/guard_isolation.yml
+      - tasks/guard_connection.yml
+    selftest_guard_paths: "{{ selftest_guard_files | map('regex_replace', '^', playbook_dir ~ '/../shared/') | list }}"
+    selftest_guard_names: >-
+      {{ query('ansible.builtin.file', *selftest_guard_paths)
+      | map('regex_findall', '\bguard_[a-z0-9_]+\b(?!\.yml)') | flatten | unique | sort }}
   tasks:
+    - name: Check that every variable the guard relies on has an extra-variable bypass attempt
+      ansible.builtin.assert:
+        that:
+          - selftest_guard_names | length > 0
+          - selftest_guard_names | union(selftest_outside_names) | difference(selftest_extra_vars.keys()) | length == 0
+        fail_msg: >-
+          These guard variables have no extra-variable bypass attempt in selftest_extra_vars:
+          {{ selftest_guard_names | union(selftest_outside_names) | difference(selftest_extra_vars.keys()) }}.
+        quiet: true
+
     - name: Inspect the probe instance that the create step started
       community.docker.docker_container_info:
         name: "{{ selftest_probe.address }}"
@@ -155,3 +256,41 @@
       loop: "{{ selftest_decoys }}"
       loop_control:
         label: "{{ item.name }}"
+
+    - name: Create one directory per extra-variable bypass attempt
+      ansible.builtin.file:
+        path: "{{ molecule_selftest_dir }}/extra-vars/{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: "{{ selftest_extra_vars.keys() | sort }}"
+
+    - name: Write the extra variable of each attempt, which disguises the mounted decoy as an isolated instance
+      ansible.builtin.copy:
+        content: "{{ {item.key: item.value} | to_nice_yaml }}"
+        dest: "{{ molecule_selftest_dir }}/extra-vars/{{ item.key }}/vars.yml"
+        mode: "0600"
+      loop: "{{ selftest_extra_vars | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Write the instance config of each attempt, which records the mounted decoy like the create step would
+      ansible.builtin.copy:
+        content: "{{ selftest_mounted_instances | to_nice_yaml }}"
+        dest: "{{ molecule_selftest_dir }}/extra-vars/{{ item }}/instance_config.yml"
+        mode: "0600"
+      loop: "{{ selftest_extra_vars.keys() | sort }}"
+
+    - name: Write the inventory of each attempt, which targets the mounted decoy
+      ansible.builtin.copy:
+        content: >-
+          {{ {'all': {'hosts': selftest_pair_hosts if item == 'inventory_hostname' else selftest_mounted_hosts}}
+          | to_nice_yaml }}
+        dest: "{{ molecule_selftest_dir }}/extra-vars/{{ item }}/inventory.yml"
+        mode: "0600"
+      loop: "{{ selftest_extra_vars.keys() | sort }}"
+
+    - name: List the extra-variable bypass attempts for the self-test recipe
+      ansible.builtin.copy:
+        content: "{{ selftest_extra_vars.keys() | sort | join('\n') }}\n"
+        dest: "{{ molecule_selftest_dir }}/extra-vars/cases"
+        mode: "0600"

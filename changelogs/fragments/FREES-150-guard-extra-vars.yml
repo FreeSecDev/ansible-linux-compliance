@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    Test tooling: the Docker Molecule guard refuses guard_* variables, molecule_target and
+    molecule_docker_default_paths that exist before it runs, and inventory_hostname, ansible_host,
+    ansible_connection and molecule_allowed_connections given as extra variables, because extra variables
+    override its facts and registered results. It reads the instance config from MOLECULE_INSTANCE_CONFIG.
+    make test-molecule-docker-selftest runs one real extra-variable bypass attempt per guard variable.
