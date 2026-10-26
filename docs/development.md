@@ -71,7 +71,7 @@ overriding them.
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |
-| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on tracked and new YAML and Python files and on compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case), which it refuses |
+| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on every tracked and new file, including symbolic links and files without a suffix; it refuses compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case) and code outside `plugins/` in a location from which Ansible loads code (FREES-156) |
 | `lint-skills` | implemented | `tools/skills/validate_skills.py` |
 | `security` | implemented | Bandit (`tools`, `plugins`), Checkov on `infra/`, gitleaks history scan, zizmor (pedantic persona) |
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
@@ -254,6 +254,23 @@ which holds one module per rule group; the name sets and allow-lists live in `to
   records the result per version in `tools/lint/name_sets.json` and writes the union into the guard
   (`tools/lint/generate_name_sets.py`). Run it after changing the import allow-list or when a Python release adds
   names; the `name-sets` CI job fails until then.
+- Since FREES-156 the guard knows every location from which Ansible loads code (ADR 0004). The collection's code
+  lives in `plugins/` at the repository root, as Python source, and nowhere else:
+  - A file in a `library`, `module_utils`, `doc_fragments`, `*_plugins`, `collections`, `ansible_collections` or
+    `plugins` directory anywhere else in the repository (a role, a playbook directory, a Molecule scenario, a test
+    playbook directory, the repository root) is refused, and Python there also gets the deny-by-default rules. The unit
+    tests and type stubs that mirror the collection layout (`tests/unit/plugins`, `typings/ansible/module_utils`) are
+    not load locations; `tests/unit/` and `typings/` may hold only Python source and stubs.
+  - Every file under `plugins/` must end in `.py`, a file in `plugins/modules` must import `ansible.module_utils` or
+    the collection's `module_utils` and contain no control byte, so Ansible always runs it as a new-style Python
+    module, and a Python file may only have a Python shebang.
+  - A symbolic link is refused unless it is `.claude/skills` or the remediation test fixture, and an executable file is
+    refused outside `tools/**/*.sh`.
+  - `ansible.cfg` may not set a module, plugin, role, collection, home or playbook-directory path; a file in a directory
+    that such a setting names is refused as well. The `ANSIBLE_*` environment variables for those paths and
+    `ANSIBLE_CONFIG` are refused as YAML keys, in workflow and `molecule.yml` values, in makefiles and in shell scripts,
+    and so are `--module-path` and `-M`; only the `Makefile` may set `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH`,
+    which point below `build/`. `molecule.yml` may not set the `ansible.cfg` path settings either.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
   including the `ansible.builtin.`, `ansible.legacy.`, `ansible.windows.` and `community.windows.` forms and the `action` / `local_action` spellings.
   The scan covers `extensions/` and `tests/` as well. Since FREES-128 the check knows where Ansible reads a module name:

@@ -1,0 +1,10 @@
+---
+trivial:
+  - >-
+    Repository guard: code is refused in every other location from which Ansible loads it (role and playbook
+    ``library``, ``module_utils``, ``doc_fragments`` and ``*_plugins`` directories, ``collections`` and
+    ``ansible_collections`` trees and ``plugins`` directories below the root, and paths that ``ansible.cfg``, Molecule
+    or the environment would add), and Python there gets the deny-by-default rules; ``plugins/`` holds only Python
+    source, a module must be a new-style Python module, a Python shebang must name Python, symbolic links and
+    executable files are refused outside short allow-lists, and make lint-repo and the pre-commit hook pass every
+    file to the guard.

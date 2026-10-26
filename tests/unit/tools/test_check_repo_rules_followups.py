@@ -51,7 +51,9 @@ FREES_53_KEYWORDS = frozenset({"disruptive", "reason", "recorded", "wanted"})
 PRODUCTION_KEYWORDS = MERGED_PRODUCTION_KEYWORDS | PR_18_KEYWORDS | FREES_53_KEYWORDS
 
 
-def process_messages(root: Path, source: str, name: str = "plugins/modules/other.py") -> list[str]:
+def process_messages(
+    root: Path, source: str, name: str = "plugins/module_utils/other.py"
+) -> list[str]:
     target = root / name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(source, encoding="utf-8")

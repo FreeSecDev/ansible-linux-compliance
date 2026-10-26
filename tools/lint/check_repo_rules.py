@@ -5,6 +5,18 @@ Rules:
 * No compiled module file (``.so``, ``.pyd``, ``.pyc``, ``.pyo``, ``.fwork``, in any
   case) is tracked: the import system loads an extension module or bytecode before, or
   instead of, a ``.py`` source of the same name (FREES-153).
+* Only the repository's ``plugins/`` may hold code that Ansible loads (FREES-156). A file
+  in a ``library``, ``module_utils``, ``doc_fragments``, ``*_plugins``, ``collections``,
+  ``ansible_collections`` or ``plugins`` directory anywhere else, or in a directory that an
+  ``ansible.cfg`` names as a module or plugin path, is refused, and Python there also gets the
+  deny-by-default rules below. The mirrored ``tests/unit/plugins`` and
+  ``typings/ansible/module_utils`` are not load locations; ``tests/unit/`` and ``typings/``
+  hold only Python source and stubs. Every file under ``plugins/`` ends in ``.py``, a module
+  in ``plugins/modules`` matches Ansible's new-style Python pattern and has no control byte,
+  a Python shebang names Python, a symbolic link or an executable file outside its
+  allow-list is refused, and ``ansible.cfg``, ``molecule.yml``, YAML keys, workflow values,
+  makefiles and shell scripts may not set a search path for modules, plugins, roles or
+  collections.
 * Every YAML file starts with ``---`` followed by a newline.
 * YAML files contain no comments, except a trailing ``# vX.Y.Z`` version
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
