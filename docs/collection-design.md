@@ -258,9 +258,10 @@ each profile by identifier and title as read from the datastream.
 ### Catalog and modules
 
 `xmlsafe.py` offers `parse_chunks(chunks, events, bounds)`, `parse_text(document, events, bounds)`,
-`open_regular(path, max_bytes)`, the context manager `RegularFile(path, max_bytes)`, `iter_handle_chunks(handle,
+the context manager `RegularFile(path, max_bytes)`, `iter_handle_chunks(handle,
 max_bytes)` and `iter_file_chunks(path, max_bytes)`; the file functions take an optional keyword `subject` that names
-the file in error messages (`"results"` gives "the results file"). `RegularFile` opens through `open_regular` and turns
+the file in error messages (`"results"` gives "the results file"). `RegularFile` opens through the private `_open_regular`
+(no other plugin file may call it, FREES-129) and turns
 an `OSError` raised by the close into `CloseError`, an `XmlSafetyError` worded like a read error whose cause is the
 `OSError`; an error raised inside the block is never replaced by a close error. `catalog.py` and `openscap.py` open files
 only through it, so a failing close is a `CatalogError` or an `XccdfParseError`, never a bare `OSError` (FREES-131). It is the parser behind the results parser, and `catalog.py` builds on it too. Its public functions are `read_benchmarks(path,

@@ -117,7 +117,7 @@ every profile of both pinned datastreams (all 25), the rule count and the SHA-25
 with it. The CI `test` job runs that target and fails, rather than skips, when the content cannot be fetched. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
 Since FREES-126 `openscap.py` parses through `xmlsafe.py` too and no longer carries its own copy of the parser.
 
-One residual risk remains: `open_regular` checks the type with `lstat` and then opens the path. If an attacker who
+One residual risk remains: the open helper of `xmlsafe` (`_open_regular`, private since FREES-129) checks the type with `lstat` and then opens the path. If an attacker who
 controls the directory swaps a regular file for a FIFO in that window, the open could block until the module times out.
 The result can never be wrong content, because the bytes read are hashed, and an `fstat` check on the descriptor needs
 `os`, which the repository guard forbids in plugins. This is accepted and documented.

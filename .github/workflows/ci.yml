@@ -104,6 +104,41 @@ jobs:
       - name: Run test-oscap-integration
         run: make test-oscap-integration
 
+  name-sets:
+    name: name-sets (${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python:
+          - "3.9.25"
+          - "3.10.21"
+          - "3.11.16"
+          - "3.12.14"
+          - "3.13.15"
+          - "3.14.6"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Install the pinned Python release
+        env:
+          NAME_SET_PYTHON: ${{ matrix.python }}
+        run: uv python install "$NAME_SET_PYTHON"
+      - name: Run test-name-sets
+        env:
+          NAME_SET_PYTHON: ${{ matrix.python }}
+        run: make test-name-sets
+
   security:
     name: security
     runs-on: ubuntu-24.04
@@ -168,7 +203,7 @@ jobs:
   ci-gate:
     name: ci-gate
     if: always()
-    needs: [lint, typecheck, test, oscap-integration, security, collection, iac]
+    needs: [lint, typecheck, test, oscap-integration, name-sets, security, collection, iac]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}

@@ -317,3 +317,55 @@ parser with no declaration scan, no bounds and no reject handlers.
   `CatalogError` (`invalid_content`). It is now a `CatalogError` with the read-error message. `openscap.read_results`
   no longer handles `OSError` itself. It maps `CloseError` to `XccdfParseError` with the same message and keeps the
   `OSError` as the cause, as PR #16 established.
+
+## Amendment 2026-10-26: generated name sets and allow-list cleanup (FREES-129)
+
+Non-blocking follow-ups from the final review of PR #11 (FREES-125) and the reviews of PR #20 (FREES-131) and PR #17
+(FREES-49). Every change tightens the guard; none adds an exemption.
+
+- Generated name sets (regeneration note): `STDLIB_MODULE_NAMES` and `KNOWN_SUBMODULE_ATTRIBUTES` stay checked-in
+  constants in `tools/lint/check_repo_rules.py`, but they are now generated. `tools/lint/name_set_probe.py` (standard
+  library only, Python 3.9 syntax) runs in a clean interpreter, `python -I -S`, so neither the test session nor a `.pth`
+  file of a virtual environment can add to or hide from the result; it imports every probed module first and then
+  reads each module-typed attribute with `getattr`, which also resolves `lazy import` bindings of Python 3.15
+  (`pathlib.shutil`). Python 3.9 has no `sys.stdlib_module_names`, so the probe enumerates the built-in modules, the
+  standard library directories and `lib-dynload` there. Platform-specific names are normalised:
+  `_sysconfigdata__linux_x86_64-linux-gnu` and every other `_sysconfigdata_*` name become `_sysconfigdata`. That entry
+  replaces the platform name in the set; the old name contains `-`, so it could never be an attribute, and an
+  underscore-prefixed `getattr` literal on another object is banned anyway. `tools/lint/generate_name_sets.py` keeps the
+  probe output per version in `tools/lint/name_sets.json` (3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6 from
+  `uv`, and 3.15.1) and writes the union into the guard. Regenerate with `make name-sets` after changing the import
+  allow-list or when a Python release adds names; `python -m tools.lint.generate_name_sets --check` reports drift.
+- The probed modules are the import allow-list, every parent package of a dotted entry (`collections` for
+  `collections.abc`, `os` for `os.path`, because `import collections.abc` binds `collections`) and the per-file extra
+  imports without their parents (their components `parsers` and `expat` stay reserved for `xmlsafe.py`, FREES-131).
+  Compared with the hand-written sets, the generated ones add `_ctypes_test` and `_sysconfigdata` (module names) and
+  `path` and `st` (attributes of `os`) and drop only the platform-specific `_sysconfigdata__linux_x86_64-linux-gnu`.
+- Independence from interpreter state: the subset test no longer reads `vars()` of modules in the test process, where
+  an `import json.tool` anywhere would have added `tool` and failed the test. `tests/unit/tools/test_name_sets.py` runs
+  the probe in a subprocess and asserts that the probed sets are subsets of the constants and, when the interpreter is
+  the release a snapshot was recorded on, that the generator reproduces that snapshot exactly. The CI job `name-sets`
+  runs it on each pinned release from 3.9.25 to 3.14.6 (`fail-fast: false`) and `ci-gate` needs it; the `test` job runs
+  it on the project interpreter. A test pins the matrix to the recorded releases.
+- Allow-list cleanup: the import allow-list no longer contains `collections` (bare), `functools` and `itertools`, and
+  the only dunder read left is `__name__` (`__qualname__`, `__doc__` and `__module__` were removed). No plugin file on
+  `main` used them, including `audit.py` and `compliance_scan.py` from PR #17 (FREES-49), and the open PR #18 adds no
+  use. They are now denied, and `functools` and `itertools` are also banned as module-rooted attributes
+  (`typing.functools`). `os.path` is kept: `audit.py` (PR #17) uses `os.path.normpath` and `os.path.commonpath`, and
+  the `os`-only-as-`os.path` rule and the file-I/O helper rules are built on it.
+- Test seams: `registry` (the backend registry seam of `audit.Auditor`, PR #17) joins `BANNED_KEYWORDS`, and the
+  `Auditor` docstring names it with `owner_uid` and `clock`. A review of
+  every keyword-only parameter in `plugins/` found no other unbanned seam; the remaining keyword-only parameters
+  (`accept`, `create`, `default`, `dry_run`, `max_length`, `multiline`, `pattern`, `replace`, `reveal`, `sensitive`,
+  `subject`, `write`, and `final` and `check_mode` from `audit.py`) are production arguments, and so are the
+  keyword-only parameters that the open PR #18 adds (`required`, `max_scan_lag`, `has_content`, `breaks`,
+  `final_newline`, `nested_sequence`), which were reviewed here so that it needs no classification change. `tests/unit/tools/test_check_repo_rules_followups.py` now fails for any
+  keyword-only plugin parameter that is neither a banned seam nor on that reviewed list, so a new seam cannot be added
+  without a decision.
+- `xmlsafe.open_regular` is private (`_open_regular`). Only `RegularFile` (and through it `iter_file_chunks`) calls
+  it, so a future plugin cannot open a file in a way that lets a close-time `OSError` escape as a bare `OSError`.
+  `audit.copy_content` (PR #17) was the one caller outside `xmlsafe.py` and now opens the datastream through
+  `RegularFile`: a failing close of the source is a `CloseError`, reported as `invalid_content` like every other read
+  failure of the source, instead of `evidence_write_failed`, and a unit test covers it. The
+  existing rules enforce this: an underscore-prefixed attribute of another module and an import of an
+  underscore-prefixed name fail the guard, which tests show for five plugin paths.

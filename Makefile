@@ -26,6 +26,9 @@ BOOTSTRAP_RENDER_SED := -e 's|@@AWS_ACCOUNT_ID@@|$(AWS_ACCOUNT_ID)|g' -e 's|@@AW
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
 BROWSER_TEST_DIR := build/browser-test
+NAME_SET_PYTHONS := 3.9 3.10 3.11 3.12 3.13 3.14 3.15
+NAME_SET_PYTHON ?=
+NAME_SET_DIRECTORY := build/name-sets
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
 
 space := $(subst ,, )
@@ -51,6 +54,7 @@ Formatting and linting
   lint-yaml             yamllint in strict mode
   lint-actions          actionlint for GitHub workflows
   lint-repo             Repository source rules (document start, comments, banned modules)
+  name-sets             Probe Python 3.9 to 3.15 and regenerate the guard name sets
   lint-skills           Validate agent skills under .agents/skills
   lint-ansible          ansible-lint (production profile), role argument spec check and antsibull-changelog lint
   lint-iac              tofu fmt check, tofu validate per root module and shellcheck of the rendered bootstrap script
@@ -70,6 +74,7 @@ Tests
   test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
+  test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
@@ -102,7 +107,7 @@ export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
 	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
-	test-ansible-units package-check collection-tree collection-link sanity-pythons \
+	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
@@ -215,6 +220,20 @@ browser-test-deps:
 
 test-browser: require-uv collection-link browser-test-deps
 	FREESECDEV_BROWSER_TEST_DIR='$(CURDIR)/$(BROWSER_TEST_DIR)' $(RUN) pytest tests/browser --no-cov
+
+name-sets: require-uv
+	rm -rf $(NAME_SET_DIRECTORY)
+	mkdir -p $(NAME_SET_DIRECTORY)
+	modules="$$($(RUN) python -m tools.lint.generate_name_sets --modules)"; \
+	for version in $(NAME_SET_PYTHONS); do \
+		interpreter="$$(uv python find --no-project "$$version")"; \
+		"$$interpreter" -I -S tools/lint/name_set_probe.py $$modules > "$(NAME_SET_DIRECTORY)/$$version.json"; \
+	done
+	$(RUN) python -m tools.lint.generate_name_sets $(NAME_SET_DIRECTORY)/*.json
+
+test-name-sets: require-uv collection-link
+	@test -n '$(NAME_SET_PYTHON)' || { printf 'error: set NAME_SET_PYTHON to an installed Python version, for example 3.9.25\n' >&2; exit 2; }
+	FREESECDEV_NAME_SET_PYTHON="$$(uv python find --no-project '$(NAME_SET_PYTHON)')" $(RUN) pytest tests/unit/tools/test_name_sets.py --no-cov
 
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)

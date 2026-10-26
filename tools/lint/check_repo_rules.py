@@ -5,7 +5,16 @@ Rules:
 * Every YAML file starts with ``---`` followed by a newline.
 * YAML files contain no comments, except a trailing ``# vX.Y.Z`` version
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
-* YAML files contain no banned Ansible command-execution modules.
+* YAML files contain no banned Ansible command-execution modules. A document
+  whose root is a sequence is a playbook or task file: only the keys of its plays
+  and tasks (followed through ``tasks``, ``pre_tasks``, ``post_tasks``,
+  ``handlers``, ``block``, ``rescue`` and ``always`` at any depth, aliases and
+  merge keys) and their ``action`` and ``local_action`` values are checked, so
+  module parameters and ``vars`` data may contain the banned words. A templated
+  module name in an action is denied, and included task files, playbooks and role
+  entry points must have a ``.yml`` or ``.yaml`` suffix. Any other document is
+  checked for banned keys at any depth, and a ``redirect`` to a banned module is
+  denied (FREES-128).
 * Python files contain no comments, except a shebang on the first line.
 * Python files under ``plugins/`` are checked deny-by-default: they import only
   allow-listed standard library modules, ``ansible.module_utils`` and this
@@ -15,7 +24,8 @@ Rules:
   ``os`` as an imported name or attribute, never use ``vars``, ``globals``,
   ``locals``, ``__dict__`` or ``get_type_hints``, never pass ``shell=True``,
   ``use_unsafe_shell`` or the test-only ``owner_uid``, ``state_dir``, ``lock_timeout``,
-  ``policies``, ``trusted_dirs``, ``runner``, ``clock`` and ``limits`` keywords, never use a ``**``
+  ``policies``, ``trusted_dirs``, ``runner``, ``clock``, ``limits`` and ``registry`` keywords,
+  never use a ``**``
   dict splat in a call, never use the attribute ``__self__``, and
   only call ``getattr`` with a literal permitted name. The string-based reflection names
   ``builtins``, ``operator``, ``eval``, ``exec``, ``compile``, ``attrgetter``,
@@ -25,8 +35,8 @@ Rules:
   attribute of an imported name (including ``setattr``) is banned, and underscore-prefixed
   attributes may only be read, called or assigned through ``self`` or ``cls`` inside a class
   (dunder reads such as ``__name__`` stay allowed; dunder assignment does not). Underscore-prefixed
-  names may not be imported. Dunder attributes are denied by default: only reading ``__name__``,
-  ``__qualname__``, ``__doc__`` and ``__module__`` is allowed, plus the single form
+  names may not be imported. Dunder attributes are denied by default: only reading ``__name__``
+  is allowed, plus the single form
   ``object.__setattr__(self, "<literal>", value)`` in ``__post_init__``. Frame and code
   attributes and the ``types`` module (except ``MappingProxyType``) are banned on every
   object, and attributes named like standard library or collection modules are banned when the
@@ -88,6 +98,19 @@ COLLECTION_PREFIXES: Final[tuple[str, ...]] = (
 )
 ACTION_KEYS: Final[frozenset[str]] = frozenset({"action", "local_action"})
 MODULE_KEY: Final[str] = "module"
+TASK_LIST_KEYS: Final[frozenset[str]] = frozenset(
+    {"tasks", "pre_tasks", "post_tasks", "handlers", "block", "rescue", "always"}
+)
+TASK_INCLUDE_MODULES: Final[frozenset[str]] = frozenset(
+    {"include_tasks", "import_tasks", "include", "import_playbook"}
+)
+ROLE_INCLUDE_MODULES: Final[frozenset[str]] = frozenset({"include_role", "import_role"})
+INCLUDE_FILE_KEYS: Final[frozenset[str]] = frozenset({"file", "_raw_params"})
+ROLE_ENTRY_POINT_KEYS: Final[frozenset[str]] = frozenset({"tasks_from", "handlers_from"})
+TASK_FILE_SUFFIXES: Final[tuple[str, ...]] = (".yml", ".yaml")
+TEMPLATE_MARKERS: Final[tuple[str, ...]] = ("{{", "{%", "{#")
+MERGE_TAG: Final[str] = "tag:yaml.org,2002:merge"
+REDIRECT_KEY: Final[str] = "redirect"
 VERSION_ANNOTATION: Final[re.Pattern[str]] = re.compile(r"# v\d+\.\d+\.\d+")
 PINNED_USES: Final[re.Pattern[str]] = re.compile(
     r"\s*(?:-\s+)?uses:\s+[\w.-]+/[\w.-]+(?:/[\w./-]+)?@[0-9a-f]{40}\s*"
@@ -139,14 +162,11 @@ NO_RESTRICTION: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
 ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
     {
         "__future__",
-        "collections",
         "collections.abc",
         "dataclasses",
         "datetime",
         "enum",
-        "functools",
         "hashlib",
-        "itertools",
         "json",
         "os.path",
         "pathlib",
@@ -270,13 +290,12 @@ BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
         "runner",
         "clock",
         "limits",
+        "registry",
     }
 )
 DUNDER: Final[re.Pattern[str]] = re.compile(r"__\w+__")
 OWN_NAMES: Final[frozenset[str]] = frozenset({"self", "cls"})
-DUNDER_READS: Final[frozenset[str]] = frozenset(
-    {"__name__", "__qualname__", "__doc__", "__module__"}
-)
+DUNDER_READS: Final[frozenset[str]] = frozenset({"__name__"})
 SUPER_DUNDERS: Final[frozenset[str]] = frozenset({"__init__", "__post_init__"})
 POST_INIT: Final[str] = "__post_init__"
 
@@ -290,46 +309,45 @@ STDLIB_MODULE_NAMES: Final[frozenset[str]] = _words(
     "__future__ _abc _aix_support _android_support _apple_support _ast _ast_unparse _asyncio "
     "_bisect _blake2 _bootlocale _bootsubprocess _bz2 _codecs _codecs_cn _codecs_hk "
     "_codecs_iso2022 _codecs_jp _codecs_kr _codecs_tw _collections _collections_abc _colorize "
-    "_compat_pickle _compression _contextvars _crypt _csv _ctypes _curses _curses_panel "
-    "_datetime _dbm _decimal _elementtree _frozen_importlib _frozen_importlib_external "
-    "_functools _gdbm _hashlib _heapq _hmac _imp _interpchannels _interpqueues _interpreters "
-    "_io _ios_support _json _locale _lsprof _lzma _markupbase _math_integer _md5 _msi "
-    "_multibytecodec _multiprocessing _opcode _opcode_metadata _operator _osx_support "
-    "_overlapped _peg_parser _pickle _posixshmem _posixsubprocess _py_abc _py_warnings "
-    "_pydatetime _pydecimal _pyio _pylong _pyrepl _queue _random _remote_debugging _scproxy "
-    "_sha1 _sha2 _sha256 _sha3 _sha512 _signal _sitebuiltins _socket _sqlite3 _sre _ssl _stat "
-    "_statistics _string _strptime _struct _suggestions _symtable _sysconfig "
-    "_sysconfigdata__linux_x86_64-linux-gnu _testbuffer _testimportmultiple _testinternalcapi "
-    "_testmultiphase _thread _threading_local _tkinter _tokenize _tracemalloc _types _typing "
-    "_uuid _warnings _weakref _weakrefset _winapi _wmi _xxsubinterpreters _xxtestfuzz _zoneinfo "
-    "_zstd abc aifc annotationlib antigravity argparse array ast asynchat asyncio asyncore "
-    "atexit audioop base64 bdb binascii binhex bisect builtins bz2 cProfile calendar cgi cgitb "
-    "chunk cmath cmd code codecs codeop collections colorsys compileall compression concurrent "
-    "configparser contextlib contextvars copy copyreg crypt csv ctypes curses dataclasses "
-    "datetime dbm decimal difflib dis distutils doctest email encodings ensurepip enum errno "
-    "faulthandler fcntl filecmp fileinput fnmatch formatter fractions ftplib functools gc "
-    "genericpath getopt getpass gettext glob graphlib grp gzip hashlib heapq hmac html http "
-    "idlelib imaplib imghdr imp importlib inspect io ipaddress itertools json keyword lib2to3 "
-    "linecache locale logging lzma mailbox mailcap marshal math mimetypes mmap modulefinder "
-    "msilib msvcrt multiprocessing netrc nis nntplib nt ntpath nturl2path numbers opcode "
-    "operator optparse os ossaudiodev parser pathlib pdb pickle pickletools pipes pkgutil "
-    "platform plistlib poplib posix posixpath pprint profile profiling pstats pty pwd "
-    "py_compile pyclbr pydoc pydoc_data pyexpat queue quopri random re readline reprlib "
-    "resource rlcompleter runpy sched secrets select selectors shelve shlex shutil signal site "
-    "smtpd smtplib sndhdr socket socketserver spwd sqlite3 sre_compile sre_constants sre_parse "
-    "ssl stat statistics string stringprep struct subprocess sunau symbol symtable sys "
+    "_compat_pickle _compression _contextvars _crypt _csv _ctypes _ctypes_test _curses "
+    "_curses_panel _datetime _dbm _decimal _elementtree _frozen_importlib "
+    "_frozen_importlib_external _functools _gdbm _hashlib _heapq _hmac _imp _interpchannels "
+    "_interpqueues _interpreters _io _ios_support _json _locale _lsprof _lzma _markupbase "
+    "_math_integer _md5 _msi _multibytecodec _multiprocessing _opcode _opcode_metadata _operator "
+    "_osx_support _overlapped _peg_parser _pickle _posixshmem _posixsubprocess _py_abc "
+    "_py_warnings _pydatetime _pydecimal _pyio _pylong _pyrepl _queue _random _remote_debugging "
+    "_scproxy _sha1 _sha2 _sha256 _sha3 _sha512 _signal _sitebuiltins _socket _sqlite3 _sre _ssl "
+    "_stat _statistics _string _strptime _struct _suggestions _symtable _sysconfig _sysconfigdata "
+    "_testbuffer _testimportmultiple _testinternalcapi _testmultiphase _thread _threading_local "
+    "_tkinter _tokenize _tracemalloc _types _typing _uuid _warnings _weakref _weakrefset _winapi "
+    "_wmi _xxsubinterpreters _xxtestfuzz _zoneinfo _zstd abc aifc annotationlib antigravity "
+    "argparse array ast asynchat asyncio asyncore atexit audioop base64 bdb binascii binhex bisect "
+    "builtins bz2 cProfile calendar cgi cgitb chunk cmath cmd code codecs codeop collections "
+    "colorsys compileall compression concurrent configparser contextlib contextvars copy copyreg "
+    "crypt csv ctypes curses dataclasses datetime dbm decimal difflib dis distutils doctest email "
+    "encodings ensurepip enum errno faulthandler fcntl filecmp fileinput fnmatch formatter "
+    "fractions ftplib functools gc genericpath getopt getpass gettext glob graphlib grp gzip "
+    "hashlib heapq hmac html http idlelib imaplib imghdr imp importlib inspect io ipaddress "
+    "itertools json keyword lib2to3 linecache locale logging lzma mailbox mailcap marshal math "
+    "mimetypes mmap modulefinder msilib msvcrt multiprocessing netrc nis nntplib nt ntpath "
+    "nturl2path numbers opcode operator optparse os ossaudiodev parser pathlib pdb pickle "
+    "pickletools pipes pkgutil platform plistlib poplib posix posixpath pprint profile profiling "
+    "pstats pty pwd py_compile pyclbr pydoc pydoc_data pyexpat queue quopri random re readline "
+    "reprlib resource rlcompleter runpy sched secrets select selectors shelve shlex shutil signal "
+    "site smtpd smtplib sndhdr socket socketserver spwd sqlite3 sre_compile sre_constants "
+    "sre_parse ssl stat statistics string stringprep struct subprocess sunau symbol symtable sys "
     "sysconfig syslog tabnanny tarfile telnetlib tempfile termios textwrap this threading time "
-    "timeit tkinter token tokenize tomllib trace traceback tracemalloc tty turtle turtledemo "
-    "types typing unicodedata unittest urllib uu uuid venv warnings wave weakref webbrowser "
-    "winreg winsound wsgiref xdrlib xml xmlrpc xxsubtype zipapp zipfile zipimport zlib zoneinfo"
+    "timeit tkinter token tokenize tomllib trace traceback tracemalloc tty turtle turtledemo types "
+    "typing unicodedata unittest urllib uu uuid venv warnings wave weakref webbrowser winreg "
+    "winsound wsgiref xdrlib xml xmlrpc xxsubtype zipapp zipfile zipimport zlib zoneinfo"
 )
 
 KNOWN_SUBMODULE_ATTRIBUTES: Final[frozenset[str]] = _words(
     "_abc _casefix _collections_abc _compiler _constants _hashlib _heapq _local _locale _os "
-    "_parser _sre _sys _thread abc annotationlib bltns builtins codecs collections contextlib "
-    "copy copyreg decoder encoder enum errno errors fnmatch functools genericpath grp inspect "
-    "io itertools keyword model ntpath operator os posixpath pwd re scanner shutil sre_compile "
-    "sre_parse stat stdlib_re sys types warnings"
+    "_parser _sre _sys _thread abc annotationlib bltns builtins codecs collections contextlib copy "
+    "copyreg decoder encoder enum errno errors fnmatch functools genericpath grp inspect io "
+    "itertools keyword model ntpath operator os path posixpath pwd re scanner shutil sre_compile "
+    "sre_parse st stat stdlib_re sys types warnings"
 )
 SETATTR_ARGUMENTS: Final[int] = 3
 SUPER_ARGUMENTS: Final[int] = 2
@@ -515,21 +533,178 @@ def _is_banned(value: str) -> bool:
     return _module_name(value.strip()) in BANNED_MODULES
 
 
-def _banned_in_action(value: yaml.Node) -> yaml.Node | None:
-    """Return the node naming a banned module in an ``action`` style value."""
+def _merged_items(mapping: yaml.MappingNode) -> list[tuple[yaml.Node, yaml.Node]]:
+    """Return the key-value pairs of ``mapping`` with YAML merge keys (``<<``) expanded.
+
+    Ansible constructs the merged mapping, so a task can take its module key from
+    an anchor that is defined anywhere in the document. Every pair is returned,
+    including keys that a later key overrides, and merge cycles terminate.
+    """
+    items: list[tuple[yaml.Node, yaml.Node]] = []
+    seen: set[int] = set()
+    pending: list[yaml.Node] = [mapping]
+    while pending:
+        node = pending.pop()
+        if id(node) in seen or not isinstance(node, yaml.MappingNode):
+            continue
+        seen.add(id(node))
+        for key, value in node.value:
+            if key.tag != MERGE_TAG:
+                items.append((key, value))
+            elif isinstance(value, yaml.SequenceNode):
+                pending.extend(reversed(value.value))
+            else:
+                pending.append(value)
+    return items
+
+
+def _scalar_items(mapping: yaml.MappingNode) -> Iterable[tuple[str, yaml.ScalarNode, yaml.Node]]:
+    """Yield ``(name, key, value)`` for every scalar key of ``mapping``, merges expanded."""
+    for key, value in _merged_items(mapping):
+        if isinstance(key, yaml.ScalarNode):
+            yield str(key.value), key, value
+
+
+def _is_templated(text: str) -> bool:
+    """Return whether ``text`` contains a Jinja expression, statement or comment."""
+    return any(marker in text for marker in TEMPLATE_MARKERS)
+
+
+def _action_modules(value: yaml.Node) -> Iterable[yaml.ScalarNode]:
+    """Yield the scalars that name the module of an ``action`` style value.
+
+    Every ``module`` key of the mapping form is yielded, so a duplicated key
+    cannot hide a banned module behind an allowed one.
+    """
     if isinstance(value, yaml.ScalarNode):
-        words = str(value.value).split(maxsplit=1)
-        return value if words and _is_banned(words[0]) else None
+        yield value
+    elif isinstance(value, yaml.MappingNode):
+        for name, _, inner in _scalar_items(value):
+            if name == MODULE_KEY and isinstance(inner, yaml.ScalarNode):
+                yield inner
+
+
+def _action_findings(value: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield a finding for each banned or templated module named by an ``action`` value.
+
+    Ansible takes the module name from the first word of the string form and of
+    the ``module`` key of the mapping form, so ``module: shell echo hi`` names
+    ``shell``. A templated module name cannot be checked statically and is denied.
+    """
+    for module in _action_modules(value):
+        words = str(module.value).split(maxsplit=1)
+        if not words:
+            continue
+        if _is_banned(words[0]):
+            yield module, f"banned module: {module.value!r}"
+        elif _is_templated(words[0]):
+            yield module, f"templated module name in an action is not allowed: {module.value!r}"
+
+
+def _node_text(node: yaml.Node) -> str:
+    """Return the value of a scalar node, or the kind of any other node."""
+    if isinstance(node, yaml.ScalarNode):
+        return str(node.value)
+    return "sequence" if isinstance(node, yaml.SequenceNode) else "mapping"
+
+
+def _is_task_file_name(node: yaml.Node) -> bool:
+    """Return whether ``node`` is a scalar file name with a YAML suffix."""
+    return isinstance(node, yaml.ScalarNode) and str(node.value).strip().endswith(
+        TASK_FILE_SUFFIXES
+    )
+
+
+def _include_findings(
+    key: yaml.ScalarNode, value: yaml.Node, name: str
+) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield findings for an included task or playbook file that the check cannot scan.
+
+    The included file is itself a task file or a playbook. The check scans every
+    YAML file of the repository, so the target must be a ``.yml`` or ``.yaml``
+    file: a target without that suffix (``tasks.json``) or with a templated suffix
+    could load tasks from a file that is never scanned.
+    """
     if isinstance(value, yaml.MappingNode):
-        for key, inner in value.value:
+        targets = [inner for field, _, inner in _scalar_items(value) if field in INCLUDE_FILE_KEYS]
+    else:
+        targets = [value]
+    if not targets:
+        yield key, f"{name} needs a file name ending in .yml or .yaml"
+    for target in targets:
+        if not _is_task_file_name(target):
+            yield target, f"{name} target must end in .yml or .yaml: {_node_text(target)!r}"
+
+
+def _role_include_findings(value: yaml.Node, name: str) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield findings for a role entry point that the check cannot scan.
+
+    Without a suffix Ansible also tries ``.json`` and the bare name, which the
+    check never scans, so ``tasks_from`` and ``handlers_from`` need ``.yml`` or
+    ``.yaml``. The default entry point is ``main``; a repository test keeps every
+    file below a ``tasks`` or ``handlers`` directory a YAML file. The free-form
+    ``key=value`` string is checked word by word.
+    """
+    if isinstance(value, yaml.ScalarNode):
+        for word in str(value.value).split():
+            field, separator, entry = word.partition("=")
             if (
-                isinstance(key, yaml.ScalarNode)
-                and key.value == MODULE_KEY
-                and isinstance(inner, yaml.ScalarNode)
-                and _is_banned(str(inner.value))
+                separator
+                and field in ROLE_ENTRY_POINT_KEYS
+                and not entry.endswith(TASK_FILE_SUFFIXES)
             ):
-                return inner
-    return None
+                yield value, f"{name} {field} must end in .yml or .yaml: {entry!r}"
+    elif isinstance(value, yaml.MappingNode):
+        for field, _, inner in _scalar_items(value):
+            if field in ROLE_ENTRY_POINT_KEYS and not _is_task_file_name(inner):
+                yield inner, f"{name} {field} must end in .yml or .yaml: {_node_text(inner)!r}"
+
+
+def _task_findings(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield the findings for one mapping that Ansible may load as a play or a task.
+
+    Only the keys of the mapping itself can name the module of a task. Their
+    values are module parameters or keyword data (``vars``, ``set_fact``
+    arguments, ``loop`` items, ``module_defaults``) and are not inspected, except
+    for ``action`` and ``local_action`` and the file names of includes.
+    """
+    for name, key, value in _scalar_items(task):
+        module = _module_name(name.strip())
+        if module in BANNED_MODULES:
+            yield key, f"banned module: {key.value!r}"
+        elif name in ACTION_KEYS:
+            yield from _action_findings(value)
+        elif module in TASK_INCLUDE_MODULES:
+            yield from _include_findings(key, value, name)
+        elif module in ROLE_INCLUDE_MODULES:
+            yield from _role_include_findings(value, name)
+
+
+def _task_mappings(root: yaml.Node) -> Iterable[yaml.MappingNode]:
+    """Yield every mapping that Ansible may load as a play or a task below ``root``.
+
+    ``root`` is a task list: the top-level sequence of a playbook or task file.
+    Every mapping in a task list is treated as both a play and a task, and the
+    task lists of plays (``tasks``, ``pre_tasks``, ``post_tasks``, ``handlers``)
+    and of blocks (``block``, ``rescue``, ``always``) are followed to any depth,
+    through aliases and merge keys. A task list that is a mapping instead of a
+    sequence, and a sequence nested in a task list, are treated as tasks too,
+    which fails safe.
+    """
+    seen: set[int] = set()
+    pending: list[yaml.Node] = [root]
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, yaml.SequenceNode):
+            pending.extend(reversed(node.value))
+        elif isinstance(node, yaml.MappingNode):
+            yield node
+            pending.extend(
+                value for name, _, value in _scalar_items(node) if name in TASK_LIST_KEYS
+            )
 
 
 def _walk_nodes(root: yaml.Node) -> Iterable[yaml.Node]:
@@ -549,21 +724,49 @@ def _walk_nodes(root: yaml.Node) -> Iterable[yaml.Node]:
             pending.extend(node.value)
 
 
-def _banned_nodes(root: yaml.Node) -> Iterable[yaml.Node]:
-    """Yield nodes that name a banned module as a key or as an action value."""
+def _anywhere_findings(root: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield findings for banned module keys, action values and redirects at any depth.
+
+    A ``redirect`` to a banned module (``plugin_routing`` in ``meta/runtime.yml``)
+    would make an allowed-looking name an alias of that module, so it is denied.
+    """
     for node in _walk_nodes(root):
         if not isinstance(node, yaml.MappingNode):
             continue
         for key, value in node.value:
             if not isinstance(key, yaml.ScalarNode):
                 continue
-            key_name = str(key.value)
-            if _is_banned(key_name):
-                yield key
-            elif key_name in ACTION_KEYS:
-                offender = _banned_in_action(value)
-                if offender is not None:
-                    yield offender
+            if _is_banned(str(key.value)):
+                yield key, f"banned module: {key.value!r}"
+            elif key.value in ACTION_KEYS:
+                yield from _action_findings(value)
+            elif (
+                key.value == REDIRECT_KEY
+                and isinstance(value, yaml.ScalarNode)
+                and _is_banned(str(value.value))
+            ):
+                yield value, f"redirect to a banned module: {value.value!r}"
+
+
+def _banned_findings(root: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield each banned-module finding of one YAML document once.
+
+    A document whose root is a sequence may be a playbook or a task file: every
+    role ``tasks/`` and ``handlers/`` file and every included file is one. Only the
+    keys of its plays and tasks name modules, so only they are checked. A
+    document with any other root can never be loaded as plays or tasks; it stays
+    checked deny-by-default for banned keys and action values at any depth.
+    """
+    findings: Iterable[tuple[yaml.Node, str]]
+    if isinstance(root, yaml.SequenceNode):
+        findings = (finding for task in _task_mappings(root) for finding in _task_findings(task))
+    else:
+        findings = _anywhere_findings(root)
+    reported: set[tuple[int, str]] = set()
+    for node, message in findings:
+        if (id(node), message) not in reported:
+            reported.add((id(node), message))
+            yield node, message
 
 
 def _invalid_yaml(path: Path, error: yaml.YAMLError) -> Violation:
@@ -584,9 +787,8 @@ def check_banned_modules(path: Path, text: str) -> list[Violation]:
         loader.check_node()
         for document in iter(loader.get_node, None):
             violations.extend(
-                Violation(path, node.start_mark.line + 1, f"banned module: {node.value!r}")
-                for node in _banned_nodes(document)
-                if isinstance(node, yaml.ScalarNode)
+                Violation(path, node.start_mark.line + 1, message)
+                for node, message in _banned_findings(document)
             )
     except yaml.YAMLError as error:
         violations.append(_invalid_yaml(path, error))
