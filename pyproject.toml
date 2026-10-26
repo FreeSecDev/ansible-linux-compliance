@@ -14,6 +14,7 @@ dev = [
     "ansible-lint==26.10.1",
     "antsibull-changelog==0.35.2",
     "bandit==1.9.4",
+    "bc-python-hcl2==0.4.3",
     "checkov==3.3.29",
     "coverage==7.16.2",
     "jinja2==3.1.6",

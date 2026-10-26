@@ -111,6 +111,14 @@ check only recognises the `repo:<owner>/<repo>:...` subject and fails the strict
 exemption on 2026-10-26. Every other check, and CKV_AWS_358 on any other resource, still applies; a change to the trust
 policy needs the baseline reviewed again.
 
+`tests/unit/infra/test_plan_role_trust.py` is the control that replaces CKV_AWS_358 for `plan_trust`. It parses the
+OpenTofu files with `hcl2` and pins exactly one statement, its effect, action and Federated principal, the five
+`StringEquals` conditions (`aud`, `sub`, `repository_id`, `repository_owner_id`, `job_workflow_ref`), the `plan_subject`
+and `plan_workflow_refs` expressions, the defaults and validations of `github_owner_id` and `github_repository_id`, and
+the `oidc.tf` lookup by `arn` with its audience postcondition. Mutated copies of the files (a `repo:*` subject,
+`StringLike`, a removed or extra condition, a second statement, a changed principal, a URL lookup) must make it fail.
+Any change to the trust policy must update this test in the same reviewed pull request.
+
 ## Operational consequences
 
 `make aws-bootstrap` is run once by the owner; [bootstrap.md](../aws/bootstrap.md) is the procedure. Developers need
