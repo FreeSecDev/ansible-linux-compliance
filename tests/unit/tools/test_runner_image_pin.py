@@ -4,8 +4,8 @@ Every reference to ``ghcr.io/freesecdev/linux-compliance-runner`` in a tracked f
 Markdown must be pinned as ``@sha256:<64 hex>``. A tag, a bare name or a digest combined with a
 tag fails. The private, unsigned ECR staging image (``linux-compliance-runner-staging`` or any
 ``*.dkr.ecr.*`` registry) must not be referenced at all outside the AWS stack that defines it and
-its pinning test. The check reads literal text, so a name assembled from variables or split strings
-is not seen; review catches those.
+its pinning test and snapshot. The check reads literal text, so a name assembled from variables
+or split strings is not seen; review catches those.
 """
 
 from __future__ import annotations
@@ -30,7 +30,11 @@ STAGING: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 EXEMPT_SUFFIXES: Final[frozenset[str]] = frozenset({".md"})
-STAGING_ALLOWED_PREFIXES: Final[tuple[str, ...]] = ("infra/", "tests/unit/infra/")
+STAGING_ALLOWED_PREFIXES: Final[tuple[str, ...]] = (
+    "infra/",
+    "tests/unit/infra/",
+    "tests/fixtures/infra/",
+)
 THIS_FILE: Final[str] = "tests/unit/tools/test_runner_image_pin.py"
 GIT_TIMEOUT_SECONDS: Final[int] = 30
 

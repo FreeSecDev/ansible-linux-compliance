@@ -320,7 +320,23 @@ The same test pins the stack around the trust policy, because an override file, 
 Git tracks in `infra/account` (the gitignored `backend.hcl` and `account.local.tfvars` must stay untracked), the exact
 set of `resource` and `data` blocks across all `*.tf` files, and refuses any `module` block. It also pins every
 attribute of `aws_iam_role.plan`. Adding a file or a resource to `infra/account` therefore needs a deliberate edit of
-`EXPECTED_FILES` or `EXPECTED_BLOCKS` in that test, in the same reviewed pull request.
+`EXPECTED_FILES` or `EXPECTED_BLOCKS` in the same reviewed pull request.
+
+These two constants and the inventory helpers are shared in `tests/unit/infra/account_stack.py`. The plan role
+test and the image build test (below) both import them, so the stack has one inventory.
+
+Three more checks, added with FREES-36:
+
+- **No auto-loaded files on disk:** a test fails if `infra/account` holds any of these, tracked or not:
+  `*.tf.json`, `*.auto.tfvars`, `*.auto.tfvars.json`, `terraform.tfvars`, `terraform.tfvars.json`, `override.tf`
+  or `*_override.tf`. The `.terraform` provider cache is excluded.
+- **No unexpected stack files:** the bootstrap refuses to run when `infra/account` has uncommitted changes, or any
+  untracked file other than the `backend.hcl`, `account.local.tfvars` and plan file it writes itself.
+- **Budget email only in the local tfvars:** the bootstrap refuses an `account.local.tfvars` that sets anything but
+  `budget_alert_email`, exactly once.
+
+`tests/unit/infra/test_bootstrap_guards.py` sources the rendered script and checks both refusals against a
+temporary Git checkout.
 
 ## Operational consequences
 

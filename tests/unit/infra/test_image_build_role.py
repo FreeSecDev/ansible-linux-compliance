@@ -24,29 +24,33 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import re
-import shutil
-import subprocess
 import sys
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
 import pytest
-from hcl2 import api as hcl2_api
+
+from tests.unit.infra.account_stack import (
+    ACCOUNT_DIRECTORY,
+    EXPECTED_BLOCKS,
+    EXPECTED_FILES,
+    REPOSITORY_ROOT,
+    block_inventory,
+    copy_account,
+    file_inventory,
+    load_terraform,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
-REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
-ACCOUNT_DIRECTORY: Final[Path] = REPOSITORY_ROOT / "infra" / "account"
 BASELINE: Final[Path] = REPOSITORY_ROOT / "infra" / ".checkov.baseline"
 SNAPSHOT: Final[Path] = (
     REPOSITORY_ROOT / "tests" / "fixtures" / "infra" / "expected_image_build_blocks.json"
 )
 LINE_MARKER_PREFIX: Final[str] = "__"
-GIT_TIMEOUT_SECONDS: Final[int] = 30
 IMAGE_BUILD_FILES: Final[tuple[str, ...]] = ("image_build.tf", "iam_image_build_role.tf")
 IMAGE_BUILD_VARIABLES: Final[tuple[str, ...]] = (
     "runner_repository",
@@ -63,48 +67,6 @@ IMAGE_BUILD_OUTPUTS: Final[tuple[str, ...]] = (
     "image_build_role_arn",
     "image_build_project_name",
     "image_staging_repository_url",
-)
-EXPECTED_FILES: Final[frozenset[str]] = frozenset(
-    {
-        ".terraform.lock.hcl",
-        "account.example.tfvars",
-        "backend.hcl.example",
-        "budget.tf",
-        "iam_image_build_role.tf",
-        "iam_plan_role.tf",
-        "image_build.tf",
-        "locals.tf",
-        "oidc.tf",
-        "outputs.tf",
-        "providers.tf",
-        "variables.tf",
-        "versions.tf",
-    }
-)
-EXPECTED_BLOCKS: Final[frozenset[str]] = frozenset(
-    {
-        "data.aws_iam_openid_connect_provider.github",
-        "data.aws_iam_policy_document.codebuild_permissions",
-        "data.aws_iam_policy_document.codebuild_trust",
-        "data.aws_iam_policy_document.image_build_permissions",
-        "data.aws_iam_policy_document.image_build_trust",
-        "data.aws_iam_policy_document.plan_image_build_permissions",
-        "data.aws_iam_policy_document.plan_permissions",
-        "data.aws_iam_policy_document.plan_trust",
-        "resource.aws_budgets_budget.monthly",
-        "resource.aws_cloudwatch_log_group.image_build",
-        "resource.aws_codebuild_project.runner_image",
-        "resource.aws_ecr_lifecycle_policy.runner_staging",
-        "resource.aws_ecr_repository.runner_staging",
-        "resource.aws_iam_role.codebuild_service",
-        "resource.aws_iam_role.image_build",
-        "resource.aws_iam_role.plan",
-        "resource.aws_iam_role_policy.codebuild_service",
-        "resource.aws_iam_role_policy.image_build",
-        "resource.aws_iam_role_policy.plan",
-        "resource.aws_iam_role_policy.plan_image_build",
-        "resource.aws_kms_key.image_build",
-    }
 )
 EXPECTED_BASELINE: Final[dict[str, set[tuple[str, str]]]] = {
     "/account/iam_plan_role.tf": {("aws_iam_policy_document.plan_trust", "CKV_AWS_358")},
@@ -308,11 +270,6 @@ EXPECTED_KEY_POLICY: Final[dict[str, object]] = {
 }
 
 
-def load_terraform(path: Path) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as handle:
-        return cast("dict[str, Any]", hcl2_api.load(handle))
-
-
 def normalise(value: object) -> object:
     """Remove python-hcl2's one-element attribute wrappers and line markers, recursively."""
     if isinstance(value, dict):
@@ -333,42 +290,6 @@ def normalise(value: object) -> object:
             return inner
         return items
     return value
-
-
-def file_inventory(directory: Path) -> list[str]:
-    if directory != ACCOUNT_DIRECTORY:
-        return sorted(
-            path.relative_to(directory).as_posix()
-            for path in directory.rglob("*")
-            if path.is_file()
-        )
-    git = shutil.which("git")
-    if git is None:
-        message = "git is required to list the tracked files of infra/account"
-        raise RuntimeError(message)
-    prefix = f"{directory.relative_to(REPOSITORY_ROOT).as_posix()}/"
-    completed = subprocess.run(
-        [git, "-C", str(REPOSITORY_ROOT), "ls-files", "-z", "--", prefix],
-        capture_output=True,
-        check=True,
-        text=True,
-        timeout=GIT_TIMEOUT_SECONDS,
-        env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
-    )
-    return sorted(entry.removeprefix(prefix) for entry in completed.stdout.split("\0") if entry)
-
-
-def block_inventory(directory: Path) -> list[str]:
-    found: set[str] = set()
-    for path in sorted(directory.glob("*.tf")):
-        document = load_terraform(path)
-        for kind in ("resource", "data"):
-            for entry in cast("list[dict[str, dict[str, object]]]", document.get(kind, [])):
-                for type_name, named in entry.items():
-                    found.update(f"{kind}.{type_name}.{name}" for name in named)
-        for module_entry in cast("list[dict[str, object]]", document.get("module", [])):
-            found.update(f"module.{name}" for name in module_entry)
-    return sorted(found)
 
 
 def add_block(blocks: dict[str, object], key: str, value: object) -> None:
@@ -615,13 +536,6 @@ def test_checkov_baseline_exempts_exactly_the_reviewed_findings() -> None:
             assert len(check_ids) == 1, finding
             findings.add((cast("str", finding["resource"]), check_ids[0]))
     assert found == EXPECTED_BASELINE
-
-
-def copy_account(destination: Path) -> Path:
-    destination.mkdir()
-    for name in sorted(EXPECTED_FILES):
-        shutil.copy(ACCOUNT_DIRECTORY / name, destination / name)
-    return destination
 
 
 def append(file_name: str, text: str, directory: Path) -> None:

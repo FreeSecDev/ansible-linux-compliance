@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
-import subprocess
-from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
-from hcl2 import api as hcl2_api
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-ACCOUNT_DIRECTORY = REPOSITORY_ROOT / "infra" / "account"
-GIT_TIMEOUT_SECONDS = 30
+from tests.unit.infra.account_stack import (
+    ACCOUNT_DIRECTORY,
+    EXPECTED_BLOCKS,
+    EXPECTED_FILES,
+    LOCAL_ONLY_FILES,
+    TERRAFORM_FILES,
+    auto_loaded_files_on_disk,
+    block_inventory,
+    blocks_of,
+    copy_account,
+    file_inventory,
+    git_tracked_files,
+    load_terraform,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 LINE_MARKER_PREFIX = "__"
 OIDC_HOST = "${local.oidc_host}"
 STRING_EQUALS = "StringEquals"
@@ -66,36 +76,6 @@ EXPECTED_PLAN_ROLE: dict[str, object] = {
     "assume_role_policy": "${data.aws_iam_policy_document.plan_trust.json}",
     "max_session_duration": 3600,
 }
-
-EXPECTED_FILES = frozenset(
-    {
-        ".terraform.lock.hcl",
-        "account.example.tfvars",
-        "backend.hcl.example",
-        "budget.tf",
-        "iam_plan_role.tf",
-        "locals.tf",
-        "oidc.tf",
-        "outputs.tf",
-        "providers.tf",
-        "variables.tf",
-        "versions.tf",
-    }
-)
-
-EXPECTED_BLOCKS = frozenset(
-    {
-        "data.aws_iam_openid_connect_provider.github",
-        "data.aws_iam_policy_document.plan_permissions",
-        "data.aws_iam_policy_document.plan_trust",
-        "resource.aws_budgets_budget.monthly",
-        "resource.aws_iam_role.plan",
-        "resource.aws_iam_role_policy.plan",
-    }
-)
-
-LOCAL_ONLY_FILES = frozenset({"backend.hcl", "account.local.tfvars"})
-TERRAFORM_FILES = tuple(sorted(name for name in EXPECTED_FILES if name.endswith(".tf")))
 
 EXPECTED_LOCALS: dict[str, object] = {
     "oidc_host": "token.actions.githubusercontent.com",
@@ -180,11 +160,6 @@ EXPECTED_OIDC: dict[str, object] = {
 }
 
 
-def load_terraform(path: Path) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as handle:
-        return cast("dict[str, Any]", hcl2_api.load(handle))
-
-
 def normalise_member(member: object) -> object:
     if not isinstance(member, list):
         return member
@@ -222,10 +197,6 @@ def sort_conditions(policy: dict[str, object]) -> dict[str, object]:
     return policy
 
 
-def blocks_of(document: dict[str, Any], kind: str) -> list[dict[str, Any]]:
-    return cast("list[dict[str, Any]]", document.get(kind, []))
-
-
 def labelled_blocks(
     document: dict[str, Any], kind: str, type_name: str, name: str
 ) -> list[dict[str, object]]:
@@ -250,45 +221,6 @@ def trust_policy(directory: Path) -> object:
 def plan_role(directory: Path) -> object:
     document = load_terraform(directory / "iam_plan_role.tf")
     return only_block(labelled_blocks(document, "resource", "aws_iam_role", "plan"))
-
-
-def git_tracked_files(directory: Path) -> list[str]:
-    git = shutil.which("git")
-    if git is None:
-        message = "git is required to list the tracked files of infra/account"
-        raise RuntimeError(message)
-    prefix = f"{directory.relative_to(REPOSITORY_ROOT).as_posix()}/"
-    completed = subprocess.run(
-        [git, "-C", str(REPOSITORY_ROOT), "ls-files", "-z", "--", prefix],
-        capture_output=True,
-        check=True,
-        text=True,
-        timeout=GIT_TIMEOUT_SECONDS,
-        shell=False,
-        env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
-    )
-    return [entry.removeprefix(prefix) for entry in completed.stdout.split("\0") if entry]
-
-
-def file_inventory(directory: Path) -> object:
-    if directory == ACCOUNT_DIRECTORY:
-        return sorted(git_tracked_files(directory))
-    return sorted(
-        path.relative_to(directory).as_posix() for path in directory.rglob("*") if path.is_file()
-    )
-
-
-def block_inventory(directory: Path) -> object:
-    found: set[str] = set()
-    for path in sorted(directory.glob("*.tf")):
-        document = load_terraform(path)
-        for kind in ("resource", "data"):
-            for entry in blocks_of(document, kind):
-                for type_name, named in entry.items():
-                    found.update(f"{kind}.{type_name}.{name}" for name in named)
-        for entry in blocks_of(document, "module"):
-            found.update(f"module.{name}" for name in entry)
-    return sorted(found)
 
 
 def local_values(directory: Path) -> object:
@@ -324,13 +256,6 @@ SECTIONS = {
     "variables": (variable_blocks, EXPECTED_VARIABLES),
     "oidc_data_source": (oidc_data_source, EXPECTED_OIDC),
 }
-
-
-def copy_account(destination: Path) -> Path:
-    destination.mkdir()
-    for name in sorted(EXPECTED_FILES):
-        shutil.copy(ACCOUNT_DIRECTORY / name, destination / name)
-    return destination
 
 
 def mutate(directory: Path, file_name: str, old: str, new: str) -> None:
@@ -601,6 +526,32 @@ def test_local_only_files_are_not_tracked() -> None:
     tracked = set(git_tracked_files(ACCOUNT_DIRECTORY))
 
     assert not tracked & LOCAL_ONLY_FILES
+
+
+def test_no_auto_loaded_file_exists_on_disk() -> None:
+    assert auto_loaded_files_on_disk(ACCOUNT_DIRECTORY) == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "role.tf.json",
+        "x.auto.tfvars",
+        "x.auto.tfvars.json",
+        "terraform.tfvars",
+        "terraform.tfvars.json",
+        "override.tf",
+        "iam_plan_role_override.tf",
+    ],
+)
+def test_auto_loaded_file_on_disk_is_detected(tmp_path: Path, name: str) -> None:
+    copy = copy_account(tmp_path / "account")
+    (copy / name).write_text("{}\n", encoding="utf-8")
+    cache = copy / ".terraform" / "modules"
+    cache.mkdir(parents=True)
+    (cache / "cached.tf.json").write_text("{}\n", encoding="utf-8")
+
+    assert auto_loaded_files_on_disk(copy) == [name]
 
 
 def test_every_stack_file_is_part_of_the_inventory() -> None:

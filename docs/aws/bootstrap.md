@@ -26,7 +26,9 @@ workstation. CI never uses root or access keys; it assumes the OIDC role created
 `infra/bootstrap/bootstrap.local.sh`, substituting the account ID, region, state bucket name and repository.
 `make aws-bootstrap` renders and then runs it. The script, in order:
 
-1. Verifies `aws`, `tofu` and `gh` exist and that it runs in a terminal.
+1. Verifies `aws`, `tofu`, `gh` and `git` exist and that it runs in a terminal. It then refuses to continue when
+   `infra/account` has uncommitted changes, or holds an untracked file that OpenTofu could load. Only the
+   `backend.hcl`, `account.local.tfvars` and plan file that the script writes itself are allowed.
 2. Calls `aws sts get-caller-identity`, requires the configured region and the account to match, prints the caller ARN
    and warns loudly if the caller is the root user.
 3. Requires the typed confirmation `yes-910736812072` before any change.
@@ -42,12 +44,13 @@ workstation. CI never uses root or access keys; it assumes the OIDC role created
    - the standard tags.
 5. Writes the gitignored `infra/account/backend.hcl` from the same values as the committed
    `backend.hcl.example`.
-6. Runs `tofu -chdir=infra/account init`, then `plan -out`, shows the plan and requires the second typed confirmation
+6. Refuses an `account.local.tfvars` that sets anything other than `budget_alert_email`, exactly once.
+7. Runs `tofu -chdir=infra/account init`, then `plan -out`, shows the plan and requires the second typed confirmation
    `apply-910736812072` before `apply`. The plan file is deleted when the script exits.
-7. Sets the GitHub repository variables `AWS_REGION` and `AWS_PLAN_ROLE_ARN` on this repository, and `AWS_REGION`
+8. Sets the GitHub repository variables `AWS_REGION` and `AWS_PLAN_ROLE_ARN` on this repository, and `AWS_REGION`
    and `AWS_BUILD_ROLE_ARN` on `FreeSecDev/linux-compliance-runner`, with `gh variable set`. They are variables, not
    secrets: an ARN is an identifier, and trust is enforced by the role's trust policy.
-8. Prints the commands that verify OIDC from a workflow.
+9. Prints the commands that verify OIDC from a workflow.
 
 The script never writes access keys or secrets to disk. The state bucket is created by the script and not by OpenTofu
 because the OpenTofu backend needs it before the first `init`.
