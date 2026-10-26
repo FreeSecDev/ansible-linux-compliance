@@ -44,9 +44,28 @@
           - verified.regressions == []
           - verified.gate.fail_on_regression
           - not verified.gate.failed
-          - verified.message is search('^No regression')
+          - verified.message is search('^No regression and no new failure')
           - verified.message is search('not a claim of compliance')
+          - not verified.new_failure_detected
+          - verified.gate.fail_on_new_failures
         quiet: true
+
+    - name: Refuse to compare the same baseline a second time
+      block:
+        - name: Run the verify role again on the consumed baseline
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the baseline was compared twice
+          ansible.builtin.fail:
+            msg: VERIFY-SECOND-COMPARISON-NOT-REFUSED
+      rescue:
+        - name: Check that the consumed baseline was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Check that the baseline was recorded by baseline.yml in this run')
+              - ansible_failed_result.msg is search('already compared once')
+            quiet: true
 
 - name: Verify | A regression fails the host by default and is always reported
   hosts: web01
@@ -86,6 +105,12 @@
               - linux_compliance_verified.gate.failed
             quiet: true
 
+    - name: Record the baseline again, because a baseline is compared only once
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_regressed }}"
+
     - name: Compare them again without failing on regressions
       ansible.builtin.include_role:
         name: freesecdev.linux_compliance.verify
@@ -98,6 +123,72 @@
           - linux_compliance_verified.regression_detected
           - linux_compliance_verified.counts.regressed == 1
           - not linux_compliance_verified.gate.fail_on_regression
+          - not linux_compliance_verified.gate.failed
+        quiet: true
+
+- name: Verify | Applicability changes are reported and a new failure fails the host by default
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  tasks:
+    - name: Build a baseline and a later audit in which applicability changes three ways
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_applicability_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_applicability_post }}"
+
+    - name: Compare them with the default settings
+      block:
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the new failure did not fail the host
+          ansible.builtin.fail:
+            msg: VERIFY-NEW-FAILURE-NOT-FAILED
+      rescue:
+        - name: Check that the new failure gate failed the host and named the rules
+          vars:
+            categories: "{{ linux_compliance_verified.rules | items2dict(key_name='rule_id', value_name='category') }}"
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Stop on new failures when requested')
+              - ansible_failed_result.msg is search('^NEW FAILURE. 1 rule')
+              - ansible_failed_result.msg is not search('No regression')
+              - not linux_compliance_verified.regression_detected
+              - linux_compliance_verified.new_failure_detected
+              - categories[audit_exceptions_rule_root_login] == 'newly_not_applicable'
+              - categories[audit_exceptions_rule_login_events] == 'newly_not_applicable'
+              - categories[audit_exceptions_rule_passing] == 'newly_failing'
+              - >-
+                linux_compliance_verified.new_failures | map(attribute='rule_id') | list
+                == [audit_exceptions_rule_passing]
+              - >-
+                linux_compliance_verified.passed_now_not_applicable | map(attribute='rule_id') | list
+                == [audit_exceptions_rule_root_login]
+              - linux_compliance_verified.gate.failed
+            quiet: true
+
+    - name: Record the baseline again, because a baseline is compared only once
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_applicability_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_applicability_post }}"
+
+    - name: Compare them without the new failure gate
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+      vars:
+        linux_compliance_verify_fail_on_new_failures: false
+
+    - name: Check that the new failure is still published
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_verified.new_failure_detected
+          - linux_compliance_verified.counts.newly_failing == 1
+          - not linux_compliance_verified.gate.fail_on_new_failures
           - not linux_compliance_verified.gate.failed
         quiet: true
 
@@ -251,6 +342,13 @@
           - categories[audit_exceptions_rule_root_login] == 'unchanged'
           - categories[audit_exceptions_rule_login_events] == 'unchanged'
         quiet: true
+
+    - name: Record the same baseline and later audit again for the waived comparison
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_waivable_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_waivable_baseline }}"
+        verify_evaluate_post: true
 
     - name: Refuse the waived comparison because the baseline applied no exceptions file
       block:

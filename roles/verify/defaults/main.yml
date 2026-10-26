@@ -1,5 +1,6 @@
 ---
 linux_compliance_verify_profile: "cis_level1_server"
 linux_compliance_verify_fail_on_regression: true
+linux_compliance_verify_fail_on_new_failures: true
 linux_compliance_verify_mode: "raw"
 linux_compliance_exceptions_file: null

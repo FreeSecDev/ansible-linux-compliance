@@ -400,6 +400,8 @@ exceptions file, `source_sha256` equal), never one with the other. It classifies
 finding that is `fail` in the baseline and `waived` afterwards is `unchanged`, not an improvement: the rule still
 fails, and a waiver never counts as a fix or as a pass. This rule was recorded on FREES-136 for FREES-54.
 `playbooks/remediate.yml` runs the audit role twice through `audit.yml`; the role itself is unchanged by FREES-54.
+Both `remediate.yml` and `verify.yml` refuse `linux_compliance_audit_fail_on_noncompliant: true` before any host is
+audited, because the gate would fail hosts in the second audit before the verify role reports their regressions.
 
 ## Disabled rules (ADR 0011)
 

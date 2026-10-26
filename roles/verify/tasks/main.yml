@@ -11,6 +11,7 @@
       - linux_compliance_verify_profile is string
       - linux_compliance_verify_profile is match('^[a-z0-9][a-z0-9_]{0,127}$')
       - linux_compliance_verify_fail_on_regression is boolean
+      - linux_compliance_verify_fail_on_new_failures is boolean
       - linux_compliance_verify_mode is string
       - linux_compliance_verify_mode in ['raw', 'waived']
       - >-
@@ -39,6 +40,34 @@
       baseline with the baseline.yml entry point after the first audit and before remediation, then
       audit again; playbooks/remediate.yml does both. Nothing was compared.
     quiet: true
+  tags:
+    - always
+
+- name: Verify | Check that the baseline was recorded by baseline.yml in this run
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_marker is mapping
+      - __linux_compliance_verify_marker.run_id | default(none) == linux_compliance_baseline.run_id | default(none)
+      - >-
+        __linux_compliance_verify_marker.sha256 | default(none)
+        == linux_compliance_baseline | ansible.builtin.to_json(sort_keys=true) | ansible.builtin.hash('sha256')
+    fail_msg: >-
+      linux_compliance_baseline was not recorded by the baseline.yml entry point of the verify role in
+      this run, or it changed since, or it was already compared once. A baseline from inventory,
+      host_vars, group_vars, play or role variables is never trusted. Run baseline.yml after the first
+      audit and before remediation, as playbooks/remediate.yml does. Nothing was compared.
+    quiet: true
+  vars:
+    __linux_compliance_verify_marker: >-
+      {{ (hostvars[inventory_hostname]['ansible_facts'] | default({}))['__linux_compliance_verify_baseline_recorded']
+         | default(none) }}
+  tags:
+    - always
+
+- name: Verify | Consume the baseline marker so that the baseline is compared only once
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_baseline_recorded: null
+    cacheable: true
   tags:
     - always
 
@@ -74,10 +103,13 @@
   vars:
     __linux_compliance_verify_gate:
       fail_on_regression: "{{ linux_compliance_verify_fail_on_regression }}"
+      fail_on_new_failures: "{{ linux_compliance_verify_fail_on_new_failures }}"
       failed: >-
         {{ not __linux_compliance_verify_comparison.complete
            or (linux_compliance_verify_fail_on_regression
-               and __linux_compliance_verify_comparison.regression_detected) }}
+               and __linux_compliance_verify_comparison.regression_detected)
+           or (linux_compliance_verify_fail_on_new_failures
+               and __linux_compliance_verify_comparison.new_failure_detected) }}
   tags:
     - always
 
@@ -100,6 +132,32 @@
   when:
     - linux_compliance_verified.complete
     - linux_compliance_verified.regression_detected
+  tags:
+    - always
+
+- name: Verify | Report every newly failing rule
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['WARNING: NEW FAILURE on ' ~ inventory_hostname ~ ': '
+          ~ linux_compliance_verified.counts.newly_failing
+          ~ ' rule(s) were not applicable or missing in the baseline and fail now.']
+         + linux_compliance_verified.new_failures | map(attribute='rule_id') | list }}
+  when:
+    - linux_compliance_verified.complete
+    - linux_compliance_verified.new_failure_detected
+  tags:
+    - always
+
+- name: Verify | Report every passing rule that is no longer applicable
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['WARNING: ' ~ linux_compliance_verified.passed_now_not_applicable | length ~ ' rule(s) on '
+          ~ inventory_hostname ~ ' passed in the baseline and are not applicable now; check that the'
+          ~ ' remediation did not remove what they check.']
+         + linux_compliance_verified.passed_now_not_applicable | map(attribute='rule_id') | list }}
+  when:
+    - linux_compliance_verified.complete
+    - linux_compliance_verified.passed_now_not_applicable | length > 0
   tags:
     - always
 
@@ -135,6 +193,18 @@
       to publish regressions without failing the host.
     quiet: true
   when: linux_compliance_verify_fail_on_regression
+  tags:
+    - always
+
+- name: Verify | Stop on new failures when requested
+  ansible.builtin.assert:
+    that:
+      - not linux_compliance_verified.new_failure_detected
+    fail_msg: >-
+      {{ linux_compliance_verified.message }} Set linux_compliance_verify_fail_on_new_failures to false
+      to publish new failures without failing the host.
+    quiet: true
+  when: linux_compliance_verify_fail_on_new_failures
   tags:
     - always
 

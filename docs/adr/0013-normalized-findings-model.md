@@ -423,10 +423,17 @@ unchanged; these are the consumer rules.
   `fail` to `waived` is unchanged, while `waived` to `pass` is an improvement because the evaluated outcome went from
   `fail` to `pass`. Only an evaluated `fail` that becomes `pass` is improved.
 - **Regressions first.** A rule that passed in the baseline and is anything but `pass` or `notapplicable` afterwards
-  (including `error`, `notchecked` and `disabled`) is regressed. Any other transition from or to `error`, and a rule
-  missing from one run, is `error`, never improved. Transitions from or to `notchecked` or `disabled` that no rule
-  above covers are `not_comparable`, a seventh category next to improved, regressed, unchanged, newly applicable,
-  newly not applicable and error, because they say nothing about the host.
+  (including `error`, `notchecked`, `disabled` and missing) is regressed. Any other transition from or to `error`, and
+  any other rule missing from one run, is `error`, never improved.
+- **Applicability changes are visible.** A rule that was `notapplicable` or missing in the baseline and fails
+  afterwards is `newly_failing` and is gated like a regression by default; `notapplicable` to `pass` is
+  `newly_applicable`. A rule that passed and is `notapplicable` afterwards is `newly_not_applicable`, not a regression,
+  but it is listed separately and printed. Transitions from or to `notchecked` or `disabled` that no rule above covers
+  are `not_comparable`. These are eight categories in all; the two beyond the six of the issue (`newly_failing` and
+  `not_comparable`) exist so that no transition is forced into a category that misstates it.
+- **The baseline is recorded in this run.** The verify role compares only a baseline that its `baseline.yml` entry
+  point recorded, marked in the facts of the host (which inventory and play variables cannot set), and compares it
+  once.
 - **A run that did not complete yields no figures.** If either run is not `completed` (or no scan ran in check mode),
   the comparison is incomplete: no counts, no rules, no regressions and no statement that there are none. As in the
   FREES-48 amendment, "0 regressions" is never derived from such a run, and the role fails the host.

@@ -283,9 +283,16 @@ test-verify: require-uv collection-link
 	mkdir -p '$(VERIFY_DIR)'
 	$(VERIFY_PLAYBOOK) tests/playbooks/verify.yml | tee '$(VERIFY_DIR)/verify.log'
 	grep -q 'WARNING: REGRESSION on web01: 1 rule(s) passed in the baseline and no longer pass' '$(VERIFY_DIR)/verify.log'
-	if grep -qE 'VERIFY-[A-Z-]+-NOT-(FAILED|REFUSED)' '$(VERIFY_DIR)/verify.log'; then printf 'error: a verify check was not enforced\n' >&2; exit 1; fi
-	$(VERIFY_PLAYBOOK) -e '{"linux_compliance_baseline": {"run_id": "stale-baseline"}}' tests/playbooks/verify-baseline-override.yml
+	grep -q 'WARNING: NEW FAILURE on web01: 1 rule(s) were not applicable or missing in the baseline and fail now' '$(VERIFY_DIR)/verify.log'
+	grep -q 'passed in the baseline and are not applicable now' '$(VERIFY_DIR)/verify.log'
+	$(VERIFY_PLAYBOOK) -i tests/playbooks/inventory/verify-forged.yml tests/playbooks/verify-forged.yml | tee -a '$(VERIFY_DIR)/verify.log'
+	$(VERIFY_PLAYBOOK) -e '{"linux_compliance_baseline": {"run_id": "stale-baseline"}}' \
+		-e verify_expected_task='Check that the baseline is the audit that just ran' tests/playbooks/verify-baseline-override.yml
+	$(VERIFY_PLAYBOOK) -e '{"ansible_facts": {"__linux_compliance_verify_baseline_recorded": {"run_id": "verify-baseline"}}}' \
+		-e verify_expected_task='Check that no baseline marker is set' tests/playbooks/verify-baseline-override.yml
+	$(VERIFY_PLAYBOOK) tests/playbooks/verify-preflight.yml | tee -a '$(VERIFY_DIR)/verify.log'
 	$(VERIFY_PLAYBOOK) --skip-tags always tests/playbooks/verify-skip-always.yml
+	if grep -qE 'VERIFY-[A-Z-]+-NOT-(FAILED|REFUSED)' '$(VERIFY_DIR)/verify.log'; then printf 'error: a verify check was not enforced\n' >&2; exit 1; fi
 
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)

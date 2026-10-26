@@ -141,7 +141,7 @@ TRANSITIONS = [
     (Outcome.NOTCHECKED, Outcome.NOTCHECKED, "unchanged"),
     (Outcome.DISABLED, Outcome.DISABLED, "unchanged"),
     (Outcome.NOTAPPLICABLE, Outcome.PASS, "newly_applicable"),
-    (Outcome.NOTAPPLICABLE, Outcome.FAIL, "newly_applicable"),
+    (Outcome.NOTAPPLICABLE, Outcome.FAIL, "newly_failing"),
     (Outcome.PASS, Outcome.NOTAPPLICABLE, "newly_not_applicable"),
     (Outcome.FAIL, Outcome.NOTAPPLICABLE, "newly_not_applicable"),
     (Outcome.DISABLED, Outcome.NOTAPPLICABLE, "newly_not_applicable"),
@@ -172,6 +172,7 @@ def test_every_transition_has_its_category(before: Outcome, after: Outcome, expe
     assert counts[expected] == 1
     assert sum(counts.values()) == 1
     assert result["regression_detected"] is (expected == "regressed")
+    assert result["new_failure_detected"] is (expected == "newly_failing")
 
 
 def test_every_pair_of_scanner_outcomes_is_classified() -> None:
@@ -215,6 +216,7 @@ def test_a_complete_comparison_reports_counts_rules_and_a_message() -> None:
         "regressed": 1,
         "unchanged": 2,
         "newly_applicable": 0,
+        "newly_failing": 0,
         "newly_not_applicable": 0,
         "error": 0,
         "not_comparable": 0,
@@ -252,7 +254,10 @@ def test_no_regression_is_stated_explicitly() -> None:
     result = compare_scans.compare_scans(baseline, post)
     assert result["regression_detected"] is False
     assert result["regressions"] == []
-    assert cast("str", result["message"]).startswith("No regression:")
+    assert cast("str", result["message"]).startswith("No regression and no new failure:")
+    assert result["new_failure_detected"] is False
+    assert result["new_failures"] == []
+    assert result["passed_now_not_applicable"] == []
 
 
 def test_long_regression_lists_are_shortened_in_the_message() -> None:
@@ -263,23 +268,80 @@ def test_long_regression_lists_are_shortened_in_the_message() -> None:
     assert "and 5 more" in cast("str", result["message"])
 
 
-def test_a_rule_missing_from_either_run_is_an_error() -> None:
+def test_a_rule_missing_from_either_run_is_classified_fail_closed() -> None:
     baseline, post = pair(
-        {"kept": Outcome.PASS, "dropped": Outcome.PASS},
-        {"kept": Outcome.PASS, "added": Outcome.PASS},
+        {
+            "kept": Outcome.PASS,
+            "dropped_pass": Outcome.PASS,
+            "dropped_fail": Outcome.FAIL,
+        },
+        {"kept": Outcome.PASS, "added_pass": Outcome.PASS, "added_fail": Outcome.FAIL},
     )
     result = compare_scans.compare_scans(baseline, post)
     assert categories(result) == {
-        rule("added"): "error",
-        rule("dropped"): "error",
+        rule("added_fail"): "newly_failing",
+        rule("added_pass"): "error",
+        rule("dropped_fail"): "error",
+        rule("dropped_pass"): "regressed",
         rule("kept"): "unchanged",
     }
     records = {
         cast("str", record["rule_id"]): record
         for record in cast("list[dict[str, object]]", result["rules"])
     }
-    assert records[rule("added")]["baseline"] is None
-    assert records[rule("dropped")]["post"] is None
+    assert records[rule("added_pass")]["baseline"] is None
+    assert records[rule("dropped_pass")]["post"] is None
+    assert result["regression_detected"] is True
+    assert result["new_failure_detected"] is True
+
+
+def test_a_rule_that_passed_and_disappears_is_a_regression() -> None:
+    baseline, post = pair({"kept": Outcome.FAIL, "gone": Outcome.PASS}, {"kept": Outcome.FAIL})
+    result = compare_scans.compare_scans(baseline, post)
+    assert categories(result) == {rule("gone"): "regressed", rule("kept"): "unchanged"}
+    message = cast("str", result["message"])
+    assert message.startswith("REGRESSION: 1 rule(s)")
+    assert "No regression" not in message
+
+
+def test_applicability_changes_are_listed_and_new_failures_named() -> None:
+    baseline, post = pair(
+        {"passing": Outcome.PASS, "failing": Outcome.FAIL, "absent": Outcome.NOTAPPLICABLE},
+        {
+            "passing": Outcome.NOTAPPLICABLE,
+            "failing": Outcome.NOTAPPLICABLE,
+            "absent": Outcome.FAIL,
+        },
+    )
+    result = compare_scans.compare_scans(baseline, post)
+    assert categories(result) == {
+        rule("absent"): "newly_failing",
+        rule("failing"): "newly_not_applicable",
+        rule("passing"): "newly_not_applicable",
+    }
+    assert result["regression_detected"] is False
+    assert result["new_failure_detected"] is True
+    new_failures = cast("list[dict[str, object]]", result["new_failures"])
+    assert [record["rule_id"] for record in new_failures] == [rule("absent")]
+    lost = cast("list[dict[str, object]]", result["passed_now_not_applicable"])
+    assert [record["rule_id"] for record in lost] == [rule("passing")]
+    message = cast("str", result["message"])
+    assert message.startswith(
+        f"NEW FAILURE: 1 rule(s) were not applicable or missing in the baseline and fail now: "
+        f"{rule('absent')}."
+    )
+    assert "No regression" not in message
+    assert "1 newly_failing" in message
+
+
+def test_regressions_and_new_failures_are_both_named() -> None:
+    baseline, post = pair(
+        {"a": Outcome.PASS, "b": Outcome.NOTAPPLICABLE},
+        {"a": Outcome.FAIL, "b": Outcome.FAIL},
+    )
+    message = cast("str", compare_scans.compare_scans(baseline, post)["message"])
+    assert message.startswith("REGRESSION: 1 rule(s)")
+    assert "NEW FAILURE: 1 rule(s)" in message
 
 
 @pytest.mark.parametrize(
@@ -365,7 +427,15 @@ def test_a_scan_that_did_not_complete_makes_the_comparison_incomplete(
     assert result["incomplete_reasons"] == [
         f"the {failed_side} scan did not complete (run_status {status.value})"
     ]
-    for key in ("counts", "regressions", "rules", "regression_detected"):
+    for key in (
+        "counts",
+        "regressions",
+        "rules",
+        "regression_detected",
+        "new_failures",
+        "new_failure_detected",
+        "passed_now_not_applicable",
+    ):
         assert result[key] is None
     assert result["identity"] is not None
     message = cast("str", result["message"])

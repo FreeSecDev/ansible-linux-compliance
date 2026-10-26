@@ -7,12 +7,15 @@ argument_specs:
       - "linux_compliance_baseline is the audit before remediation, recorded by the baseline.yml entry point."
       - "Runs the freesecdev.linux_compliance.compare_scans filter on the controller and never connects to the host."
       - "Refuses audits of another host, benchmark, content version, profile or scanner, and the same run twice."
-      - "Classifies every rule as improved, regressed, unchanged, newly_applicable, newly_not_applicable,"
-      - "error or not_comparable."
+      - "Refuses a baseline that the baseline.yml entry point did not record in this run, and compares it only once."
+      - "Classifies every rule as improved, regressed, unchanged, newly_applicable, newly_failing,"
+      - "newly_not_applicable, error or not_comparable."
       - "A waived or disabled result is never an improvement, and an error is never an improvement."
-      - "Publishes the comparison as the fact linux_compliance_verified and always prints every regression."
+      - "Publishes the comparison as the fact linux_compliance_verified."
+      - "Always prints every regression, every new failure and every passing rule that is no longer applicable."
       - "Fails when the comparison is incomplete, because a scan did not complete."
       - "Fails on regressions unless linux_compliance_verify_fail_on_regression is false."
+      - "Fails on new failures unless linux_compliance_verify_fail_on_new_failures is false."
       - "A comparison is evidence about two scans of one host, never a claim of compliance."
       - "See docs/verify.md."
     author: "FreeSecDev contributors"
@@ -32,6 +35,12 @@ argument_specs:
           - "Regressions are always published and printed, whatever this value is."
           - "An incomplete comparison fails the host in both cases."
           - "Verification never changes the host."
+      linux_compliance_verify_fail_on_new_failures:
+        type: bool
+        default: true
+        description:
+          - "Fail the host when a rule that was not applicable or missing in the baseline fails afterwards."
+          - "New failures are always published and printed, whatever this value is."
       linux_compliance_verify_mode:
         type: str
         default: "raw"
@@ -57,7 +66,17 @@ argument_specs:
     description:
       - "Copies the fact linux_compliance_audited into the fact linux_compliance_baseline on each host."
       - "Run it after the audit and before the remediation, as playbooks/remediate.yml does."
-      - "Fails when linux_compliance_baseline is fixed by an extra variable and cannot be recorded."
+      - "Marks the baseline as recorded in the facts of the host, which inventory and play variables cannot set."
+      - "Fails when a marker exists already or when an extra variable fixes linux_compliance_baseline or the facts."
+      - "Changes nothing on the host."
+    author: "FreeSecDev contributors"
+    options: {}
+  preflight.yml:
+    short_description: "Refuse settings that would hide regressions before a remediation run audits any host"
+    description:
+      - "Fails when linux_compliance_audit_fail_on_noncompliant is not false."
+      - "With it, the audit after remediation fails every host with a failing rule before the verify role reports."
+      - "playbooks/remediate.yml and playbooks/verify.yml run it first."
       - "Changes nothing on the host."
     author: "FreeSecDev contributors"
     options: {}

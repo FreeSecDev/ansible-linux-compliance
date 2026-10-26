@@ -17,13 +17,16 @@ follow-up.
 ## Safety
 
 - The role never changes the managed host and never connects to it; it only reads facts and needs no `become`.
+- It compares only a baseline that its `baseline.yml` entry point recorded in this run, marked in the facts of the
+  host, and each recorded baseline only once; a `linux_compliance_baseline` from inventory or play variables is refused.
 - It refuses to compare audits of another host, benchmark, content version or digest, profile or scanner, the same run
   twice, and a later scan that started before the baseline finished.
 - Raw results are compared with raw results, waived with waived, and waived only when both audits applied the same
   exceptions file (same SHA-256). Classification uses the evaluated outcome, so a waiver, a disabled rule or a check that
   stopped erroring is never an improvement.
-- Regressions are always published and printed. An incomplete comparison (a scan that did not complete) has no figures
-  and always fails the host. `--skip-tags always` fails the role through its guard tasks
+- Regressions, new failures (rules that were not applicable or missing and fail afterwards) and passing rules that
+  are no longer applicable are always published and printed.
+- An incomplete comparison (a scan that did not complete) has no figures and always fails the host. `--skip-tags always` fails the role through its guard tasks
   (`linux_compliance_verify_guard`).
 - The result is evidence about two scans of one host, never a claim of compliance.
 
@@ -35,6 +38,7 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 |---|---|---|---|
 | `linux_compliance_verify_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. Both audits must report this profile; a profile is never substituted silently. |
 | `linux_compliance_verify_fail_on_regression` | `bool` | `true` | Fail the host when a rule that passed in the baseline no longer passes. Regressions are reported either way; an incomplete comparison always fails. |
+| `linux_compliance_verify_fail_on_new_failures` | `bool` | `true` | Fail the host when a rule that was not applicable or missing in the baseline fails afterwards. New failures are reported either way. |
 | `linux_compliance_verify_mode` | `str` | `"raw"` | `raw` compares `linux_compliance_audited.scan_run`; `waived` compares `exceptions.evaluation.scan_run` and needs `linux_compliance_exceptions_file`. |
 | `linux_compliance_exceptions_file` | `str` | `null` | Shared with the audit role. Required in waived mode; both audits must have applied this path with the same SHA-256. |
 
@@ -43,13 +47,15 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | Entry point | Use |
 |---|---|
 | `main` | Compare `linux_compliance_audited` with `linux_compliance_baseline` and publish `linux_compliance_verified` |
-| `baseline.yml` | Record `linux_compliance_audited` as `linux_compliance_baseline` before remediation |
+| `baseline.yml` | Record `linux_compliance_audited` as `linux_compliance_baseline` before remediation, and mark it as recorded |
+| `preflight.yml` | Refuse `linux_compliance_audit_fail_on_noncompliant`, which would hide regressions, before anything is audited |
 
 ## Result
 
 The fact `linux_compliance_verified` holds `status`, `complete`, `incomplete_reasons`, `mode`, `exceptions_sha256`,
 `identity`, `baseline` and `post` (run identifiers, times and summaries), `counts` per category, `regressions`,
-`rules`, `regression_detected`, `message` and `gate` (`fail_on_regression`, `failed`).
+`new_failures`, `passed_now_not_applicable`, `rules`, `regression_detected`, `new_failure_detected`, `message` and
+`gate` (`fail_on_regression`, `fail_on_new_failures`, `failed`).
 
 ## Running
 

@@ -1,0 +1,72 @@
+---
+- name: Verify | A baseline from inventory, host or group variables, or none at all, is refused
+  hosts: verify_forged
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  tasks:
+    - name: Refuse to run without the expectation of the inventory
+      ansible.builtin.assert:
+        that:
+          - verify_expected_task is defined
+        fail_msg: Run this playbook through make test-verify with tests/playbooks/inventory/verify-forged.yml.
+        quiet: true
+
+    - name: Compare a later audit that passes everything with a baseline that baseline.yml never recorded
+      block:
+        - name: Build a synthetic audit that passes every rule
+          ansible.builtin.include_tasks: tasks/verify-synthetic.yml
+          vars:
+            verify_run_id: verify-post
+            verify_outcomes: "{{ verify_outcomes_all_pass }}"
+
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the comparison used a baseline that no audit of this run recorded
+          ansible.builtin.fail:
+            msg: VERIFY-FORGED-BASELINE-NOT-REFUSED
+      rescue:
+        - name: Check that the role refused the baseline before comparing
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(verify_expected_task)
+              - linux_compliance_verified is not defined
+            quiet: true
+
+- name: Verify | A baseline and a marker from play variables are refused
+  hosts: verify_forged_play
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  vars:
+    linux_compliance_baseline: "{{ verify_forged_audited }}"
+    __linux_compliance_verify_baseline_recorded: "{{ verify_forged_marker }}"
+    ansible_facts:
+      __linux_compliance_verify_baseline_recorded: "{{ verify_forged_marker }}"
+  tasks:
+    - name: Compare a later audit that passes everything with a baseline from play variables
+      block:
+        - name: Build a synthetic audit that passes every rule
+          ansible.builtin.include_tasks: tasks/verify-synthetic.yml
+          vars:
+            verify_run_id: verify-post
+            verify_outcomes: "{{ verify_outcomes_all_pass }}"
+
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the comparison used a baseline from play variables
+          ansible.builtin.fail:
+            msg: VERIFY-PLAY-BASELINE-NOT-REFUSED
+      rescue:
+        - name: Check that the role refused the baseline before comparing
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Check that the baseline was recorded by baseline.yml in this run')
+              - linux_compliance_verified is not defined
+            quiet: true
