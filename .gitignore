@@ -45,3 +45,7 @@ manifest.local.json
 /reports/
 .molecule/
 .cache/
+*.deb
+*.rpm
+*.ckl
+*.cklb

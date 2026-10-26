@@ -91,6 +91,21 @@ endef
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' env HOME='$(ANSIBLE_TEST_HOME)' ansible-test
 
 space := $(subst ,, )
+DOCKER ?= docker
+SCC_PINS := extensions/ci/scc/scc.pins
+include $(SCC_PINS)
+SCC_IMAGE ?= localhost/freesecdev-scc:local
+SCC_CONTAINERFILE := extensions/ci/scc/Containerfile
+SCC_DOWNLOAD_DIR := build/scc/download
+SCC_CONTEXT_DIR := build/scc/context
+SCC_FETCH_ENV := SCC_VERSION='$(SCC_VERSION)' SCC_BUNDLE='$(SCC_BUNDLE)' SCC_BUNDLE_URL='$(SCC_BUNDLE_URL)' \
+	SCC_BUNDLE_SIZE='$(SCC_BUNDLE_SIZE)' SCC_BUNDLE_SHA256='$(SCC_BUNDLE_SHA256)' SCC_CHECKSUMS_URL='$(SCC_CHECKSUMS_URL)' \
+	SCC_DEB_MEMBER='$(SCC_DEB_MEMBER)' SCC_DEB_SHA256='$(SCC_DEB_SHA256)' SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)'
+HADOLINT := build/tools/hadolint
+SHELL_SCRIPTS := build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/browser/fetch-test-deps.sh \
+	tools/lint/fetch-hadolint.sh tools/scc/fetch-scc.sh tools/scc/smoke-test.sh tools/scc/check-expiry.sh \
+	tools/scc/needs-smoke.sh
+
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
 PYLINT_GUARD := tools/lint/check_repo_rules.py
 PYLINT_GUARD_MAX_LINES := 1700
@@ -117,11 +132,12 @@ Setup
 
 Formatting and linting
   format                Apply Ruff fixes and formatting
-  lint                  Run every implemented linter (lock, repo, skills, python, yaml, actions, ansible, toggles)
+  lint                  Run every implemented linter (lock, repo, skills, python, yaml, actions, ansible, toggles, Containerfile)
   lint-python           Ruff lint, Ruff format check and Pylint
   lint-pylint           Pylint in two passes: wrong-import-position on, and off for plugins/modules only
   lint-yaml             yamllint in strict mode
   lint-actions          actionlint for GitHub workflows
+  lint-containerfile    hadolint (pinned binary, fetched into build/tools) on the CI-only SCC Containerfile
   lint-repo             Repository source rules (document start, comments, banned modules)
   name-sets             Probe Python 3.9 to 3.15 and regenerate the guard name sets
   lint-skills           Validate agent skills under .agents/skills
@@ -169,6 +185,11 @@ Images and AWS
   aws-bootstrap-render  Render the gitignored bootstrap script from its template
   aws-bootstrap         Render and run the one-time interactive AWS account bootstrap
   image-build           [pending FREES-36] Build the runner image on AWS
+  scc-expiry-check      Fail from seven days before SCC_EXPIRES, so an expiring SCC is never built or run
+  scc-fetch             Download the pinned SCC bundle from DISA, verify it and stage its Debian package in build/scc
+  scc-image             Build the CI-only SCC image locally as SCC_IMAGE (a localhost/ tag); it is never pushed
+  scc-smoke             Build the SCC image and check that cscc starts and reports the pinned version
+  scc-image-clean       Remove the local SCC_IMAGE
 
 Reporting, docs and release
   report                Write the normalized report JSON and the HTML dashboard from REPORT_ARGS
@@ -188,7 +209,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards content catalogue lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
+	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -220,7 +241,7 @@ format: require-uv
 	$(RUN) ruff check --fix .
 	$(RUN) ruff format .
 
-lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible lint-toggles lint-role-guards
+lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-containerfile lint-ansible lint-toggles lint-role-guards
 
 GENERATE_TOGGLES := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_toggles
 GENERATE_CATALOGUE := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_catalogue
@@ -265,6 +286,10 @@ lint-yaml: require-uv
 lint-actions: require-uv
 	$(RUN) actionlint
 
+lint-containerfile:
+	tools/lint/fetch-hadolint.sh '$(HADOLINT)'
+	'$(HADOLINT)' --failure-threshold info $(SCC_CONTAINERFILE)
+
 lint-repo: require-uv
 	@if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$$'; then printf 'error: compiled Python files are tracked\n' >&2; exit 1; fi
 	$(TRACKED) -- '*.yml' '*.yaml' '*.py' | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py
@@ -283,7 +308,7 @@ lint-iac: require-uv
 	$(MAKE) --no-print-directory tofu-validate
 	mkdir -p build
 	sed $(BOOTSTRAP_RENDER_SED) $(BOOTSTRAP_TEMPLATE) > build/bootstrap.rendered.sh
-	$(RUN) shellcheck build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/browser/fetch-test-deps.sh
+	$(RUN) shellcheck $(SHELL_SCRIPTS)
 
 tofu-validate:
 	@for module in $(IAC_ROOT_MODULES); do \
@@ -551,6 +576,25 @@ aws-bootstrap: aws-bootstrap-render
 
 image-build:
 	$(call NOT_IMPLEMENTED,image-build,FREES-36)
+
+scc-expiry-check:
+	tools/scc/check-expiry.sh '$(SCC_EXPIRES)'
+
+scc-fetch:
+	$(SCC_FETCH_ENV) tools/scc/fetch-scc.sh '$(SCC_DOWNLOAD_DIR)' '$(SCC_CONTEXT_DIR)'
+
+scc-image: scc-expiry-check lint-containerfile scc-fetch
+	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) build --network none --file $(SCC_CONTAINERFILE) --tag '$(SCC_IMAGE)' \
+		--build-arg SCC_VERSION='$(SCC_VERSION)' --build-arg SCC_DEB_SHA256='$(SCC_DEB_SHA256)' \
+		--build-arg SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)' '$(SCC_CONTEXT_DIR)'
+
+scc-smoke: scc-image
+	tools/scc/smoke-test.sh '$(SCC_IMAGE)' '$(SCC_VERSION)'
+
+scc-image-clean:
+	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) image rm --force '$(SCC_IMAGE)'
 
 REPORT_SCOPE ?=
 REPORT_ARGS ?=

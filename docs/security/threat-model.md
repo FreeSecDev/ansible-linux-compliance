@@ -93,6 +93,57 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
   `oscap` also evaluates as root. A content update is therefore a change to code that runs as root: its review covers
   the SCE scripts that changed, not only the digest.
 
+## CI-only SCC image
+
+FREES-144 builds a CI image with the SCAP Compliance Checker (SCC) from NIWC Atlantic, which runs as root
+([ADR 0019](../adr/0019-scc-scanner-backend-and-ci-image.md)). The image is built on the GitHub-hosted runner, used
+by the `scc-smoke` job and never published.
+
+### T-SCC-1: a tampered SCC bundle runs in CI
+
+- **Asset:** the CI runner and its job token (read-only `contents`), and the integrity of later SCC results.
+- **Attacker:** whoever controls the DISA download host or the path to it, or can write the Actions cache of this
+  repository.
+- **Failure:** a modified bundle installs a backdoored `cscc`, or the image is built from something other than the
+  reviewed release.
+- **Mitigation:** `tools/scc/fetch-scc.sh` accepts only HTTPS URLs on `dl.dod.cyber.mil`, follows HTTPS redirects
+  only, caps the size and requires the pinned size and SHA-256 of the bundle. It requires that the published checksum
+  file lists the same bundle and `cscc` digests, and checks the pinned SHA-256 of the Debian package that it extracts
+  by exact member name. The build runs with `--network none`, checks the package digest again, and checks the installed
+  `/opt/scc/cscc` against the published digest. A cached bundle is used only after its SHA-256 matches the pin. A pin
+  change is a reviewed pull request. The job has `contents: read` and no secrets.
+- **Residual:** the checksum file comes from the same host as the bundle, so a compromise of that host before the pin
+  is set is detected only if the reviewer checks the release against NIWC's release record. Only `cscc` has a
+  published per-file digest; the bundled interpreter, libraries and content are trusted through the bundle and package
+  digests. The package's maintainer scripts run as root in the build container.
+
+### T-SCC-2: the SCC image or bundle is redistributed
+
+- **Asset:** compliance with the no-redistribution rule.
+- **Failure:** a workflow or recipe pushes the image, uploads the bundle as an artifact, or a bundle, package, binary
+  or checklist is committed.
+- **Mitigation:** the image carries only a `localhost/` tag. `tests/unit/tools/test_scc_image.py` fails if:
+  - an SCC identifier (the image name, the SCC paths, `cscc`, an `SCC_*` variable or an `scc-*` target) appears
+    outside the allow-list. The allow-list is:
+    - the `scc-smoke` job;
+    - the SCC variables and targets of the Makefile;
+    - `tools/scc/` and `extensions/ci/scc/`;
+    - documentation and tests.
+
+    This covers a workflow-level `env`, another job, another target, an indirect variable and a new script.
+  - a tracked file that names an SCC identifier, or any file under `tools/scc/` or `extensions/ci/scc/`,
+    contains a push, login, save or export command. Only Markdown and the guard module are exempt, so scripts,
+    Makefile fragments and test modules under `tests/` are covered;
+  - the Makefile includes any file other than `$(SCC_PINS)` that is untracked, computed, or breaks the same rules;
+  - the SCC job uses a publishing action or widens its permissions;
+  - a tracked file looks like an SCC bundle, package, binary or checklist (plain, compressed, base64 at any alignment,
+    or hexadecimal) or has a pinned SCC digest.
+
+  The release workflow (ADR 0012) may still publish the collection, because it cannot name the SCC image. `.gitignore` ignores the package
+  and checklist types, and `galaxy.yml` excludes `extensions/ci` from the collection.
+- **Residual:** the Actions cache holds the verified bundle. It is readable only by workflow runs of this repository,
+  which the licence permits (ADR 0019).
+
 ## Report inputs on the controller
 
 `tools/reporting` turns operator-supplied files into the normalized report and the dashboard

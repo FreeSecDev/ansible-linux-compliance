@@ -60,7 +60,7 @@ overriding them.
 | `bootstrap` | implemented | `install` plus tool version check |
 | `install` | implemented | `uv sync --frozen`, installs both git hook types |
 | `format` | implemented | `ruff check --fix` and `ruff format` |
-| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible`, `lint-toggles`, `lint-role-guards` |
+| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-containerfile`, `lint-ansible`, `lint-toggles`, `lint-role-guards` |
 | `lint-ansible` | implemented | `molecule-dependencies`, then `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-toggles` | implemented | `tools/roles/generate_toggles.py --check`: fails with a diff when the generated toggle defaults, argument specs or `docs/remediation-variables.md` differ from the rule catalogue ([remediation guide](remediation.md#generated-toggles)) |
 | `toggles` | implemented | Regenerates the topic toggle defaults, the topic toggle argument specs and the allow-list choices of the `remediate` and `audit` roles and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
@@ -101,6 +101,12 @@ overriding them.
 | `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with the per-checkout `ANSIBLE_HOME`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play. The `free` case runs `AUDIT_EXCEPTIONS_FREE_RUNS` times (default 10), and each time every host must have been refused or must have applied exactly the validated SHA-256 (FREES-143, [audit guide](audit.md#tests)) |
 | `test-verify` | implemented | Runs the verify role (`baseline.yml` and `main`) on the local inventory host `web01` with synthetic baseline and later audits, without `oscap`, with the per-checkout `ANSIBLE_HOME`; requires the printed regression and applicability warnings, then that baselines not recorded by `baseline.yml` (extra, play, host and inventory variables, a pre-set marker, none at all) are refused and that `--skip-tags always` fails the role ([verify guide](verify.md#tests)) |
 | `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
+| `lint-containerfile` | implemented | hadolint 2.15.1 (pinned by SHA-256, fetched into `build/tools` by `tools/lint/fetch-hadolint.sh`) on `extensions/ci/scc/Containerfile` with `--failure-threshold info`; part of `make lint` |
+| `scc-expiry-check` | implemented | Fails from seven days before `SCC_EXPIRES` (`tools/scc/check-expiry.sh`); a prerequisite of `scc-image`, so an expiring SCC is never built or run ([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md#7-version-updates-manual-pin-bump)) |
+| `scc-fetch` | implemented | Downloads the pinned SCC bundle from the DISA host into `build/scc/download` (or reuses a copy whose SHA-256 matches), cross-checks the published checksum file, extracts only the pinned Debian package and stages it in `build/scc/context` ([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md)) |
+| `scc-image` | implemented | `scc-expiry-check`, `lint-containerfile` and `scc-fetch`, then `docker build --network none` of the CI-only SCC image as `SCC_IMAGE` (default `localhost/freesecdev-scc:local`; only `localhost/` tags are accepted). The image is never pushed |
+| `scc-smoke` | implemented | `scc-image`, then runs `cscc --version` in the image with no network, no capabilities, `no-new-privileges` and a read-only root file system, and requires the pinned version. Needs Docker; not part of `make ci` |
+| `scc-image-clean` | implemented | Removes `SCC_IMAGE` from the local image store. On a shared Docker daemon, build with a unique tag (`make scc-smoke SCC_IMAGE=localhost/freesecdev-scc:<name>`) and remove it afterwards |
 | `lint-iac` | implemented | `tofu fmt -check -recursive infra/`, `tofu init -backend=false` and `tofu validate` per root module, shellcheck of the rendered bootstrap script; needs `tofu` on `PATH`, runs in the `iac` CI job and in `make ci`, not in `make lint` |
 | `aws-bootstrap-render` | implemented | Renders `infra/bootstrap/bootstrap.sh.tmpl` to the gitignored `infra/bootstrap/bootstrap.local.sh` |
 | `lint-packer` | pending FREES-64 | Packer validation |
@@ -317,9 +323,11 @@ Configuration relaxations, each with its reason:
 | `collection` | `make test-sanity test-ansible-units package-check` |
 | `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |
 | `molecule-docker` | `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` for `docker-ubuntu` and `docker-rhel-compatible`, and `make test-molecule-docker-selftest` for `docker-selftest`, one matrix entry each |
+| `scc-changes` | `tools/scc/needs-smoke.sh`: `scc=false` only for a pull request or merge group whose diff touches no SCC path; `true` for push, schedule and dispatch, and fails closed to `true` |
+| `scc-smoke` | runs unless `scc-changes` output `scc=false`; restores the verified SCC download from the Actions cache (key: SHA-256 of `extensions/ci/scc/scc.pins`), then `make scc-smoke`; `contents: read` only, the image stays on the runner |
 | `ci-gate` | none; fails unless every needed job succeeded |
 
-`ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. Job names
+`ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. It accepts a skipped `scc-smoke` only for a `pull_request` or `merge_group` whose `scc-changes` output is `scc=false`; on `push` to `main` and the daily `schedule` the smoke test always runs. Job names
 are stable, so the required check name `ci-gate` does not change. Runs for pull requests cancel superseded
 runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
 added as a job together with the documentation pipeline (FREES-80).

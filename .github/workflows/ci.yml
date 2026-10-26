@@ -7,6 +7,8 @@ on:
   push:
     branches: [main]
   merge_group:
+  schedule:
+    - cron: '17 5 * * *'
 
 permissions: {}
 
@@ -113,6 +115,51 @@ jobs:
           oscap --version
       - name: Run test-oscap-integration
         run: make test-oscap-integration
+
+  scc-changes:
+    name: scc-changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      scc: ${{ steps.filter.outputs.scc }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Decide whether the SCC smoke test must run
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: printf 'scc=%s\n' "$(tools/scc/needs-smoke.sh "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA")" >> "$GITHUB_OUTPUT"
+
+  scc-smoke:
+    name: scc-smoke
+    needs: [scc-changes]
+    if: needs.scc-changes.outputs.scc != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SCC_IMAGE: localhost/freesecdev-scc:ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Restore the verified SCC download
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/scc/download
+          key: scc-bundle-${{ hashFiles('extensions/ci/scc/scc.pins') }}
+      - name: Build the SCC image locally and run the smoke test
+        run: make scc-smoke
 
   name-sets:
     name: name-sets (${{ matrix.python }})
@@ -242,14 +289,34 @@ jobs:
   ci-gate:
     name: ci-gate
     if: always()
-    needs: [lint, typecheck, test, oscap-integration, name-sets, security, collection, iac, molecule-docker]
+    needs:
+      - lint
+      - typecheck
+      - test
+      - oscap-integration
+      - scc-changes
+      - scc-smoke
+      - name-sets
+      - security
+      - collection
+      - iac
+      - molecule-docker
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     env:
       NEEDS: ${{ toJSON(needs) }}
+      EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Require every needed job to succeed
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
-          jq -e 'all(.[]; .result == "success")' <<<"$NEEDS" >/dev/null
+          jq -e --arg event "$EVENT_NAME" '
+            (.["scc-changes"].result == "success")
+            and ([.["scc-changes"].outputs.scc] | inside(["true", "false"]))
+            and all(to_entries[] | select(.key != "scc-smoke"); .value.result == "success")
+            and (.["scc-smoke"].result == "success"
+              or (.["scc-smoke"].result == "skipped"
+                and .["scc-changes"].outputs.scc == "false"
+                and ([$event] | inside(["pull_request", "merge_group"]))))
+          ' <<<"$NEEDS" >/dev/null
