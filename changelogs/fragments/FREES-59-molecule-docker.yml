@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    Test tooling: make test-molecule-docker runs the docker-ubuntu and docker-rhel-compatible Molecule scenarios,
+    which audit a disposable unprivileged container with real oscap scans, remediate the reference rule
+    file_permissions_crontab only with the opt-in, check idempotence and the cleanup, and refuse to run against
+    anything that the scenario's create step did not start. make test-molecule-docker-selftest feeds real bypass
+    attempts to the guard and tests the label-based destroy fallback.

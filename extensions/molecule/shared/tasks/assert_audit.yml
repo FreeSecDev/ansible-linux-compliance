@@ -1,0 +1,26 @@
+---
+- name: Assert audit | Check the published audit result
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.run_status == 'completed'
+      - linux_compliance_audited.evidence_written is sameas (not assert_audit_check_mode)
+      - linux_compliance_audited.summary.run_status == 'completed'
+      - linux_compliance_audited.summary.total | int == linux_compliance_discovered.rule_ids | length
+      - linux_compliance_audited.summary.error | int == 0
+      - >-
+        linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'equalto', molecule_reference_rule)
+        | list | length == 1
+    fail_msg: >-
+      The {{ 'check-mode ' if assert_audit_check_mode else '' }}audit did not complete as expected:
+      run_status={{ linux_compliance_audited.run_status | default('missing') }}
+      evidence_written={{ linux_compliance_audited.evidence_written | default('missing') }}
+      summary={{ linux_compliance_audited.summary | default('missing') }}
+    quiet: true
+
+- name: Assert audit | Report the outcome of the reference rule
+  ansible.builtin.debug:
+    msg: >-
+      {{ molecule_reference_rule }}:
+      {{ (linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'equalto', molecule_reference_rule)
+      | first).outcome }}; summary {{ linux_compliance_audited.summary }}

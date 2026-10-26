@@ -1,0 +1,36 @@
+---
+- name: Assert that destroy left no container of the self-test scenario
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    selftest_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+  tasks:
+    - name: List the containers that carry the scenario label
+      community.docker.docker_host_info:
+        containers: true
+        containers_all: true
+        containers_filters:
+          label:
+            - "org.freesecdev.molecule.scenario={{ selftest_scenario }}"
+      register: selftest_left
+
+    - name: Check that none is left
+      ansible.builtin.assert:
+        that:
+          - selftest_left.containers | length == 0
+        fail_msg: >-
+          destroy left these containers of {{ selftest_scenario }}:
+          {{ selftest_left.containers | map(attribute='Names') | flatten }}
+        quiet: true
+
+    - name: Read the instance config after destroy
+      ansible.builtin.set_fact:
+        selftest_config_after: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml }}"
+
+    - name: Check that destroy reset the instance config
+      ansible.builtin.assert:
+        that:
+          - selftest_config_after == []
+        fail_msg: "destroy did not reset {{ molecule_instance_config }}: {{ selftest_config_after }}"
+        quiet: true

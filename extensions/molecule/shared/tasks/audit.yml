@@ -1,0 +1,36 @@
+---
+- name: Audit | Run the audit role and retry once when the scanner timed out
+  block:
+    - name: Audit | Include the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        apply:
+          check_mode: "{{ audit_check_mode | bool }}"
+  rescue:
+    - name: Audit | Fail on everything except a scanner timeout
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('The audit role failed.') }}"
+      when: (linux_compliance_audited | default({})).run_status | default('') != 'timed_out'
+
+    - name: Audit | Record the timed-out scan
+      ansible.builtin.set_fact:
+        molecule_scan_timeouts: "{{ molecule_scan_timeouts | default(0) | int + 1 }}"
+
+    - name: Audit | Report the timed-out scan
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: oscap did not finish within {{ linux_compliance_audit_scan_timeout }} seconds
+          ({{ molecule_scan_timeouts }} timeout(s) in this run); retrying the audit once. See docs/molecule.md,
+          scanner hangs.
+
+    - name: Audit | Include the audit role again
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        apply:
+          check_mode: "{{ audit_check_mode | bool }}"
+
+- name: Audit | Check the published audit result
+  ansible.builtin.include_tasks:
+    file: assert_audit.yml
+  vars:
+    assert_audit_check_mode: "{{ audit_check_mode | bool }}"

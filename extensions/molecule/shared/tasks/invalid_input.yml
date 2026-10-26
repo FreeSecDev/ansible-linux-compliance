@@ -1,0 +1,18 @@
+---
+- name: Invalid input | Run the role with the invalid input
+  ansible.builtin.include_tasks:
+    file: run_role.yml
+  vars:
+    run_role:
+      name: "{{ invalid_case.0.name }}"
+    run_role_inputs: "{{ role_default_inputs | combine(molecule_role_inputs) | combine(invalid_case.1.vars) }}"
+
+- name: Invalid input | Assert the role rejected the input with the expected message
+  ansible.builtin.assert:
+    that:
+      - run_role_outcome.failed
+      - run_role_outcome.msg is search(invalid_case.1.expect)
+    fail_msg: >-
+      {{ invalid_case.0.name }} did not reject the invalid input '{{ invalid_case.1.name }}' with a message
+      matching '{{ invalid_case.1.expect }}': failed={{ run_role_outcome.failed }} msg={{ run_role_outcome.msg }}
+    quiet: true

@@ -1,0 +1,21 @@
+---
+- name: Baseline | Collect the role defaults and the scenario inputs as the baseline for explicit inputs
+  ansible.builtin.set_fact:
+    role_default_inputs: >-
+      {{ role_default_inputs | default({}) | combine(
+      lookup('ansible.builtin.file', baseline_roles_directory ~ '/' ~ item.name ~ '/defaults/main.yml')
+      | from_yaml | dict2items | selectattr('key', 'in', contract_input_names) | items2dict) }}
+  vars:
+    baseline_roles_directory: "{{ molecule_repository }}/roles"
+  loop: "{{ contract_roles }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Baseline | Require a baseline value for every explicit input
+  ansible.builtin.assert:
+    that:
+      - contract_input_names | difference((role_default_inputs | combine(molecule_role_inputs)).keys()) | length == 0
+    fail_msg: >-
+      These inputs have no role default and no scenario value:
+      {{ contract_input_names | difference((role_default_inputs | combine(molecule_role_inputs)).keys()) }}
+    quiet: true

@@ -1,0 +1,6 @@
+---
+molecule_yml:
+  platforms:
+    - name: probe
+      image: ubuntu
+      network_mode: none

@@ -1,0 +1,50 @@
+---
+- name: Assert that create persisted one run id and labelled the container with it
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    selftest_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    selftest_instances: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml }}"
+  tasks:
+    - name: Inspect every recorded instance
+      community.docker.docker_container_info:
+        name: "{{ item.address }}"
+      register: selftest_created
+      loop: "{{ selftest_instances }}"
+      loop_control:
+        label: "{{ item.address }}"
+
+    - name: Check that the name, the labels and the instance config agree on the run id
+      ansible.builtin.assert:
+        that:
+          - selftest_instances | length == 1
+          - item.exists
+          - item.item.address == 'fsd-mol-' ~ selftest_scenario ~ '-' ~ item.item.run_id ~ '-' ~ item.item.instance
+          - item.container.Config.Labels['org.freesecdev.molecule.scenario'] == selftest_scenario
+          - item.container.Config.Labels['org.freesecdev.molecule.run'] == item.item.run_id
+        fail_msg: "{{ item.item.address }} does not carry the persisted run id {{ item.item.run_id }}."
+        quiet: true
+      loop: "{{ selftest_created.results }}"
+      loop_control:
+        label: "{{ item.item.address }}"
+
+    - name: List the containers that carry the scenario label
+      community.docker.docker_host_info:
+        containers: true
+        containers_all: true
+        containers_filters:
+          label:
+            - "org.freesecdev.molecule.scenario={{ selftest_scenario }}"
+      register: selftest_labelled
+
+    - name: Check that a repeated create reused the run and started no second container
+      ansible.builtin.assert:
+        that:
+          - >-
+            selftest_labelled.containers | map(attribute='Names') | flatten | map('regex_replace', '^/', '') | sort
+            == selftest_instances | map(attribute='address') | sort
+        fail_msg: >-
+          The scenario has containers {{ selftest_labelled.containers | map(attribute='Names') | flatten }} but the
+          instance config records {{ selftest_instances | map(attribute='address') }}.
+        quiet: true

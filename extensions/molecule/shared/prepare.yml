@@ -1,0 +1,44 @@
+---
+- name: Guard the scenario targets
+  ansible.builtin.import_playbook: guard.yml
+
+- name: Place the pinned ComplianceAsCode datastream in the instance
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - vars/versions.yml
+    - vars/target.yml
+  tasks:
+    - name: Check that the datastream was fetched on the controller
+      ansible.builtin.stat:
+        path: "{{ molecule_content_source }}"
+        get_checksum: true
+        checksum_algorithm: sha256
+      delegate_to: localhost
+      register: prepare_content_source
+
+    - name: Refuse a missing or unverified datastream
+      ansible.builtin.assert:
+        that:
+          - prepare_content_source.stat.exists
+          - prepare_content_source.stat.checksum == molecule_datastream.sha256
+        fail_msg: >-
+          {{ molecule_content_source }} is missing or does not match the SHA-256 pinned in content/manifest.yml.
+          Run make test-molecule-docker, which fetches it with tools/content/fetch_content.py.
+        quiet: true
+
+    - name: Create a root-owned content directory
+      ansible.builtin.file:
+        path: "{{ molecule_content_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy the datastream into the instance
+      ansible.builtin.copy:
+        src: "{{ molecule_content_source }}"
+        dest: "{{ molecule_content_path }}"
+        owner: root
+        group: root
+        mode: "0644"

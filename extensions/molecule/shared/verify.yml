@@ -1,0 +1,197 @@
+---
+- name: Guard the scenario targets
+  ansible.builtin.import_playbook: guard.yml
+
+- name: Verify that the guard refuses every simulated bypass
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - vars/guard_cases.yml
+  tasks:
+    - name: Refuse simulated bypass attempts and accept a disposable instance
+      ansible.builtin.include_tasks:
+        file: tasks/guard_case.yml
+      loop: "{{ guard_cases }}"
+      loop_control:
+        loop_var: guard_case
+        label: "{{ guard_case.name }}"
+
+- name: Verify the remediation, its cleanup and the audit-only guarantees
+  hosts: all
+  gather_facts: true
+  vars_files:
+    - vars/versions.yml
+    - vars/target.yml
+    - vars/contract.yml
+  vars:
+    snapshot_volatile_directories:
+      - "{{ molecule_evidence_directory }}"
+  tasks:
+    - name: Discover the pinned datastream and the profile of this platform
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+
+    - name: Inspect the reference file that converge remediated
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+        get_checksum: false
+      register: verify_reference_remediated
+
+    - name: Read the state ledger
+      freesecdev.linux_compliance.control_state:
+        action: list
+      register: verify_ledger_remediated
+
+    - name: Check that converge left the reference rule applied and recorded
+      ansible.builtin.assert:
+        that:
+          - verify_reference_remediated.stat.mode == '0600'
+          - verify_ledger_remediated.entries | length == 1
+          - verify_ledger_entry.rule_id == molecule_reference_rule
+          - verify_ledger_entry.prior_values | selectattr('name', 'equalto', 'mode') | map(attribute='value') | list
+            == ['0644']
+        fail_msg: >-
+          Expected {{ molecule_reference_path }} at 0600 with one ledger entry recording the prior mode 0644, got
+          mode {{ verify_reference_remediated.stat.mode | default('missing') }} and
+          {{ verify_ledger_remediated.entries }}
+        quiet: true
+      vars:
+        verify_ledger_entry: "{{ verify_ledger_remediated.entries | first | default({}) }}"
+
+    - name: Audit the remediated instance with a real scan
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: false
+
+    - name: Clean up the reference rule by switching its toggle off with the opt-in on
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_remediate_enabled: true
+        linux_compliance_rule_file_permissions_crontab_enabled: false
+
+    - name: Inspect the reference file after the cleanup
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+        get_checksum: false
+      register: verify_reference_cleaned
+
+    - name: Read the state ledger after the cleanup
+      freesecdev.linux_compliance.control_state:
+        action: list
+      register: verify_ledger_cleaned
+
+    - name: Check that the cleanup restored the recorded mode and forgot the rule
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.results | length == 1
+          - verify_cleanup.rule_id == molecule_reference_rule
+          - verify_cleanup.action == 'cleanup'
+          - verify_cleanup.status == 'restored'
+          - verify_cleanup.changed is true
+          - verify_reference_cleaned.stat.mode == '0644'
+          - verify_ledger_cleaned.entries == []
+        fail_msg: >-
+          The cleanup did not restore {{ molecule_reference_path }}: mode
+          {{ verify_reference_cleaned.stat.mode | default('missing') }}, results
+          {{ linux_compliance_remediated.results }}, ledger {{ verify_ledger_cleaned.entries }}
+        quiet: true
+      vars:
+        verify_cleanup: "{{ linux_compliance_remediated.results | first | default({}) }}"
+
+    - name: Take the snapshot before the runs that must not change the instance
+      ansible.builtin.include_tasks:
+        file: tasks/snapshot.yml
+
+    - name: Remember the snapshot before the runs that must not change the instance
+      ansible.builtin.set_fact:
+        verify_snapshot_before: "{{ snapshot_digest }}"
+        verify_snapshot_before_lines: "{{ snapshot_lines }}"
+        verify_snapshot_count: "{{ snapshot_count }}"
+
+    - name: Repeat the cleanup, which has nothing left to do
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_remediate_enabled: true
+        linux_compliance_rule_file_permissions_crontab_enabled: false
+
+    - name: Check that the repeated cleanup did nothing
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.results == []
+          - linux_compliance_remediated.summary.apply == 0
+          - linux_compliance_remediated.summary.cleanup == 0
+        fail_msg: "The repeated cleanup acted again: {{ linux_compliance_remediated.results }}"
+        quiet: true
+
+    - name: Remediate the reference rule with the opt-in on in check mode
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        apply:
+          check_mode: true
+      vars:
+        linux_compliance_remediate_enabled: true
+
+    - name: Check that check mode planned the reference rule
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.results | map(attribute='rule_id') | list == [molecule_reference_rule]
+          - linux_compliance_remediated.results | map(attribute='action') | list == ['apply']
+        fail_msg: "Check mode did not plan the reference rule: {{ linux_compliance_remediated.results }}"
+        quiet: true
+
+    - name: Run the remediate role with the opt-in off
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Audit the instance in check mode
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: true
+
+    - name: Collect the baseline for the explicit-input runs
+      ansible.builtin.include_tasks:
+        file: tasks/baseline.yml
+
+    - name: Reject every invalid input with the expected message
+      ansible.builtin.include_tasks:
+        file: tasks/invalid_input.yml
+      loop: "{{ contract_roles | subelements('invalid_inputs') }}"
+      loop_control:
+        loop_var: invalid_case
+        label: "{{ invalid_case.0.name }}: {{ invalid_case.1.name }}"
+
+    - name: Check the role defaults
+      ansible.builtin.include_tasks:
+        file: tasks/defaults.yml
+
+    - name: Take the snapshot after the runs that must not change the instance
+      ansible.builtin.include_tasks:
+        file: tasks/snapshot.yml
+
+    - name: Assert that check mode, the opt-in off, a finished cleanup and invalid inputs changed nothing
+      ansible.builtin.assert:
+        that:
+          - verify_snapshot_count | int > 0
+          - snapshot_digest == verify_snapshot_before
+        fail_msg: >-
+          The watched paths changed during a check-mode run, a run without the opt-in, a repeated cleanup or a
+          rejected input:
+          {{ (verify_snapshot_before_lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
+        quiet: true
+
+    - name: Inspect the reference file at the end
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+        get_checksum: false
+      register: verify_reference_final
+
+    - name: Check that the reference file kept its restored mode
+      ansible.builtin.assert:
+        that:
+          - verify_reference_final.stat.mode == '0644'
+        fail_msg: "{{ molecule_reference_path }} changed to {{ verify_reference_final.stat.mode }}."
+        quiet: true

@@ -1254,6 +1254,18 @@ wheels = [
 ]
 
 [[package]]
+name = "enrich"
+version = "1.2.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bb/77/cb9b3d6f2e2e5f8104e907ea4c4d575267238f52c51cf9f864b865a99710/enrich-1.2.7.tar.gz", hash = "sha256:0a2ab0d2931dff8947012602d1234d2a3ee002d9a355b5d70be6bf5466008893", size = 16918, upload-time = "2022-01-10T15:30:33.873Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/67/aecd1d435dbbdcea21a197d708e9ff0bcc7306c2847c6c87cc1a91e2cca4/enrich-1.2.7-py3-none-any.whl", hash = "sha256:f29b2c8c124b4dbd7c975ab5c3568f6c7a47938ea3b7d2106c8a3bd346545e4f", size = 8717, upload-time = "2022-01-10T15:30:32.723Z" },
+]
+
+[[package]]
 name = "filelock"
 version = "4.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1280,6 +1292,7 @@ dev = [
     { name = "checkov" },
     { name = "coverage" },
     { name = "jsonschema" },
+    { name = "molecule" },
     { name = "mypy" },
     { name = "playwright" },
     { name = "pre-commit" },
@@ -1288,6 +1301,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "ruff" },
     { name = "shellcheck-py" },
     { name = "types-defusedxml" },
@@ -1310,6 +1324,7 @@ dev = [
     { name = "checkov", specifier = "==3.3.29" },
     { name = "coverage", specifier = "==7.16.2" },
     { name = "jsonschema", specifier = "==4.26.0" },
+    { name = "molecule", specifier = "==26.10.0" },
     { name = "mypy", specifier = "==2.4.0" },
     { name = "playwright", specifier = "==1.64.0" },
     { name = "pre-commit", specifier = "==4.7.0" },
@@ -1318,6 +1333,7 @@ dev = [
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "requests", specifier = "==2.34.2" },
     { name = "ruff", specifier = "==0.17.1" },
     { name = "shellcheck-py", specifier = "==0.11.0.1" },
     { name = "types-defusedxml", specifier = "==0.7.0.20260504" },
@@ -1917,6 +1933,28 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "molecule"
+version = "26.10.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ansible-compat" },
+    { name = "ansible-core" },
+    { name = "click" },
+    { name = "enrich" },
+    { name = "jinja2" },
+    { name = "jsonschema" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "wcmatch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/86/6f3b9af840bea4296746db9ebfe6809f7848bb68e0dac7ac639879b72d6a/molecule-26.10.0.tar.gz", hash = "sha256:32533aaba78c29eed80bcaab5d03ff63fe48b8f43071cf77953f391e0732d439", size = 4753214, upload-time = "2026-10-12T09:11:19.381Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/da/7bef0163484b9dc1bdce6883eb4898aebaf8e559cbea0df7db065e308e9f/molecule-26.10.0-py3-none-any.whl", hash = "sha256:deb351b11f1b329ae3b3c856d5b1c1d9a9d8f8d40ba717c77e54b1778b4557d2", size = 163735, upload-time = "2026-10-12T09:11:17.85Z" },
 ]
 
 [[package]]

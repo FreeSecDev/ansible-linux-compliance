@@ -1,0 +1,143 @@
+---
+- name: Guard the scenario targets
+  ansible.builtin.import_playbook: guard.yml
+
+- name: Audit, remediate and verify the instance with the collection roles in safe modes
+  hosts: all
+  gather_facts: true
+  vars_files:
+    - vars/versions.yml
+    - vars/target.yml
+    - vars/contract.yml
+  vars:
+    snapshot_volatile_directories:
+      - "{{ molecule_evidence_directory }}"
+  tasks:
+    - name: Discover the pinned datastream and the profile of this platform
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+
+    - name: Check what the discover role verified
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_discovered.profile_id == molecule_profile_id
+          - linux_compliance_discovered.content_sha256 == molecule_datastream.sha256
+          - linux_compliance_discovered.benchmark_id == molecule_datastream.benchmark_id
+          - molecule_reference_rule in linux_compliance_discovered.rule_ids
+        fail_msg: >-
+          The discover role did not verify {{ molecule_profile_id }} of {{ molecule_datastream.name }} with the
+          reference rule {{ molecule_reference_rule }}.
+        quiet: true
+
+    - name: Audit the instance before remediation with a real scan
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: false
+
+    - name: Record the audit before remediation as the baseline
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+        tasks_from: baseline.yml
+
+    - name: Take the snapshot before the run without the opt-in
+      ansible.builtin.include_tasks:
+        file: tasks/snapshot.yml
+
+    - name: Remember the snapshot before the run without the opt-in
+      ansible.builtin.set_fact:
+        converge_snapshot_before: "{{ snapshot_digest }}"
+        converge_snapshot_before_lines: "{{ snapshot_lines }}"
+        converge_snapshot_count: "{{ snapshot_count }}"
+
+    - name: Run the remediate role with the opt-in off
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Check that the remediate role planned and did nothing without the opt-in
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.enabled is false
+          - linux_compliance_remediated.results == []
+          - linux_compliance_remediated.summary.apply == 0
+          - linux_compliance_remediated.summary.cleanup == 0
+          - linux_compliance_remediated.rules | map(attribute='action') | unique == ['skip']
+          - linux_compliance_remediated.rules | map(attribute='reason') | unique == ['remediation_disabled']
+        fail_msg: "The remediate role acted without the opt-in: {{ linux_compliance_remediated }}"
+        quiet: true
+
+    - name: Take the snapshot after the run without the opt-in
+      ansible.builtin.include_tasks:
+        file: tasks/snapshot.yml
+
+    - name: Assert that the remediate role without the opt-in changed nothing
+      ansible.builtin.assert:
+        that:
+          - converge_snapshot_count | int > 0
+          - snapshot_digest == converge_snapshot_before
+        fail_msg: >-
+          The watched paths changed during the remediate run without the opt-in:
+          {{ (converge_snapshot_before_lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
+        quiet: true
+
+    - name: Inspect the reference file before remediation
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+      register: converge_reference_before
+
+    - name: Remediate the reference rule with the opt-in on
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_remediate_enabled: true
+
+    - name: Inspect the reference file after remediation
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+      register: converge_reference_after
+
+    - name: Check that only the reference rule was applied and that it is idempotent
+      ansible.builtin.assert:
+        that:
+          - converge_reference_before.stat.exists
+          - converge_reference_before.stat.isreg
+          - linux_compliance_remediated.enabled is true
+          - linux_compliance_remediated.check_mode is false
+          - linux_compliance_remediated.allow_disruptive == []
+          - linux_compliance_remediated.results | length == 1
+          - converge_result.rule_id == molecule_reference_rule
+          - converge_result.action == 'apply'
+          - converge_result.status == ('compliant' if converge_reference_before.stat.mode == '0600' else 'applied')
+          - converge_result.changed is sameas (converge_reference_before.stat.mode != '0600')
+          - converge_reference_after.stat.mode == '0600'
+          - converge_reference_after.stat.pw_name == converge_reference_before.stat.pw_name
+          - converge_reference_after.stat.gr_name == converge_reference_before.stat.gr_name
+          - converge_reference_after.stat.checksum == converge_reference_before.stat.checksum
+        fail_msg: >-
+          The opt-in remediation of {{ molecule_reference_rule }} did not behave as expected:
+          before {{ converge_reference_before.stat.mode | default('missing') }},
+          after {{ converge_reference_after.stat.mode | default('missing') }},
+          results {{ linux_compliance_remediated.results }}
+        quiet: true
+      vars:
+        converge_result: "{{ linux_compliance_remediated.results | first | default({}) }}"
+
+    - name: Audit the instance again after remediation with a real scan
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: false
+
+    - name: Compare the audit after remediation with the baseline
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+
+    - name: Check the comparison
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_verified.complete is true
+          - linux_compliance_verified.regression_detected is false
+          - linux_compliance_verified.new_failure_detected is false
+          - linux_compliance_verified.gate.failed is false
+        fail_msg: "The verify role reported a problem: {{ linux_compliance_verified.message | default('') }}"
+        quiet: true

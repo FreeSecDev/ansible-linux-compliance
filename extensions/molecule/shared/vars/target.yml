@@ -1,0 +1,33 @@
+---
+molecule_repository: "{{ playbook_dir }}/../../.."
+molecule_image: "{{ molecule_images[molecule_target.image] }}"
+molecule_content_manifest: >-
+  {{ lookup('ansible.builtin.file', molecule_repository ~ '/content/manifest.yml') | from_yaml }}
+molecule_datastream: >-
+  {{ molecule_content_manifest.datastreams | selectattr('name', 'equalto', molecule_image.datastream) | first }}
+molecule_content_source: "{{ molecule_repository }}/build/content/{{ molecule_datastream.path | basename }}"
+molecule_content_directory: /usr/share/freesecdev-molecule/content
+molecule_content_path: "{{ molecule_content_directory }}/{{ molecule_datastream.path | basename }}"
+molecule_profile: "{{ molecule_image.profile }}"
+molecule_profile_id: "xccdf_org.ssgproject.content_profile_{{ molecule_profile }}"
+molecule_reference_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+molecule_reference_path: /etc/crontab
+molecule_reference_toggle: linux_compliance_rule_file_permissions_crontab_enabled
+molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
+
+molecule_role_inputs:
+  linux_compliance_discover_profile: "{{ molecule_profile }}"
+  linux_compliance_discover_content_path: "{{ molecule_content_path }}"
+  linux_compliance_discover_content_sha256: "{{ molecule_datastream.sha256 }}"
+  linux_compliance_audit_profile: "{{ molecule_profile }}"
+  linux_compliance_audit_scan_timeout: 180
+  linux_compliance_remediate_profile: "{{ molecule_profile }}"
+  linux_compliance_verify_profile: "{{ molecule_profile }}"
+
+linux_compliance_discover_profile: "{{ molecule_role_inputs.linux_compliance_discover_profile }}"
+linux_compliance_discover_content_path: "{{ molecule_role_inputs.linux_compliance_discover_content_path }}"
+linux_compliance_discover_content_sha256: "{{ molecule_role_inputs.linux_compliance_discover_content_sha256 }}"
+linux_compliance_audit_profile: "{{ molecule_role_inputs.linux_compliance_audit_profile }}"
+linux_compliance_audit_scan_timeout: "{{ molecule_role_inputs.linux_compliance_audit_scan_timeout }}"
+linux_compliance_remediate_profile: "{{ molecule_role_inputs.linux_compliance_remediate_profile }}"
+linux_compliance_verify_profile: "{{ molecule_role_inputs.linux_compliance_verify_profile }}"

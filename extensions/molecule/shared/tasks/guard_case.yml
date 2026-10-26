@@ -1,0 +1,52 @@
+---
+- name: Guard case | Run the guard against a simulated target
+  block:
+    - name: Guard case | Include the connection guard
+      ansible.builtin.include_tasks:
+        file: guard.yml
+      vars:
+        guard_scenario: "{{ guard_simulation.scenario }}"
+        guard_instances: "{{ guard_simulation.instances }}"
+        guard_hostname: "{{ guard_case.hostname | default('instance') }}"
+        guard_connection_vars: >-
+          {{ guard_simulation.good_connection_vars | combine(guard_case.connection_vars | default({})) }}
+        guard_allowed_connections:
+          - community.docker.docker
+        guard_environment: "{{ guard_case.environment | default({}) }}"
+
+    - name: Guard case | Include the isolation guard
+      ansible.builtin.include_tasks:
+        file: guard_isolation.yml
+      vars:
+        guard_container: >-
+          {{ guard_simulation.good_container | combine(guard_case.container | default({}), recursive=true) }}
+        guard_instance: "{{ guard_simulation.instances | first }}"
+
+    - name: Guard case | Include the guard of the real connection
+      ansible.builtin.include_tasks:
+        file: guard_connection.yml
+      vars:
+        guard_instance: "{{ guard_simulation.instances | first }}"
+        guard_marker_variable: FREESECDEV_MOLECULE_MARKER
+        guard_environ: "{{ guard_case.environ | default(guard_simulation.good_environ) }}"
+        guard_status: "{{ guard_case.status | default(guard_simulation.good_status) }}"
+
+    - name: Guard case | Record acceptance
+      ansible.builtin.set_fact:
+        guard_case_outcome:
+          failed: false
+          msg: ""
+  rescue:
+    - name: Guard case | Record refusal
+      ansible.builtin.set_fact:
+        guard_case_outcome:
+          failed: true
+          msg: "{{ ansible_failed_result.msg | default('') }}"
+
+- name: Guard case | Check the guard decision
+  ansible.builtin.assert:
+    that:
+      - guard_case_outcome.failed == guard_case.refused
+      - not guard_case.refused or guard_case_outcome.msg is match('^Refusing to run')
+    fail_msg: "{{ guard_case.name }}: expected refused={{ guard_case.refused }}, got {{ guard_case_outcome }}"
+    quiet: true

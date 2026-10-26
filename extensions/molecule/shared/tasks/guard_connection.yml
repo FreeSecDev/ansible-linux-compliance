@@ -1,0 +1,13 @@
+---
+- name: Guard connection | Refuse a connection that reaches another container or runs privileged
+  ansible.builtin.assert:
+    that:
+      - (guard_marker_variable ~ '=' ~ guard_instance.marker) in guard_environ.split('\x00')
+      - guard_instance.capabilities_add | length > 0 or guard_status is search('(?m)^CapEff:\s+0+$')
+      - guard_instance.capabilities_add | length > 0 or guard_status is search('(?m)^CapPrm:\s+0+$')
+      - guard_instance.capabilities_add | length > 0 or guard_status is search('(?m)^CapBnd:\s+0+$')
+      - guard_status is search('(?m)^NoNewPrivs:\s+1$')
+    fail_msg: >-
+      Refusing to run: the connection to {{ guard_instance.address }} does not reach the container that the create
+      step started (its marker is missing), or the connection process has capabilities or may gain privileges.
+    success_msg: The connection reaches {{ guard_instance.address }} and runs without capabilities.

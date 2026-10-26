@@ -1,0 +1,16 @@
+---
+molecule_images:
+  ubuntu:
+    reference: docker.io/library/ubuntu
+    tag: "24.04"
+    digest: sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+    dockerfile: ubuntu.Dockerfile
+    datastream: ubuntu2404
+    profile: cis_level1_server
+  rhel_compatible:
+    reference: docker.io/rockylinux/rockylinux
+    tag: "9"
+    digest: sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
+    dockerfile: rhel-compatible.Dockerfile
+    datastream: rhel9
+    profile: cis_server_l1

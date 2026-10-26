@@ -1,0 +1,67 @@
+---
+- name: Run role | Refuse a role that has no literal include below
+  ansible.builtin.assert:
+    that:
+      - run_role.name in ['discover', 'audit', 'remediate', 'verify']
+    fail_msg: "run_role.yml has no include for the role {{ run_role.name }}."
+    quiet: true
+
+- name: Run role | Run the role with explicit inputs and capture its outcome
+  block:
+    - name: Run role | Include the discover role with explicit inputs
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+        apply:
+          check_mode: "{{ run_role.check_mode | default(false) | bool }}"
+      vars: &run_role_vars
+        linux_compliance_discover_profile: "{{ run_role_inputs.linux_compliance_discover_profile }}"
+        linux_compliance_discover_content_path: "{{ run_role_inputs.linux_compliance_discover_content_path }}"
+        linux_compliance_discover_content_sha256: "{{ run_role_inputs.linux_compliance_discover_content_sha256 }}"
+        linux_compliance_audit_profile: "{{ run_role_inputs.linux_compliance_audit_profile }}"
+        linux_compliance_audit_fail_on_noncompliant: "{{ run_role_inputs.linux_compliance_audit_fail_on_noncompliant }}"
+        linux_compliance_audit_backend: "{{ run_role_inputs.linux_compliance_audit_backend }}"
+        linux_compliance_audit_output_dir: "{{ run_role_inputs.linux_compliance_audit_output_dir }}"
+        linux_compliance_audit_scan_timeout: "{{ run_role_inputs.linux_compliance_audit_scan_timeout }}"
+        linux_compliance_remediate_enabled: "{{ run_role_inputs.linux_compliance_remediate_enabled }}"
+        linux_compliance_remediate_allow_disruptive: "{{ run_role_inputs.linux_compliance_remediate_allow_disruptive }}"
+        linux_compliance_remediate_profile: "{{ run_role_inputs.linux_compliance_remediate_profile }}"
+        linux_compliance_verify_profile: "{{ run_role_inputs.linux_compliance_verify_profile }}"
+        linux_compliance_verify_fail_on_regression: "{{ run_role_inputs.linux_compliance_verify_fail_on_regression }}"
+        linux_compliance_verify_mode: "{{ run_role_inputs.linux_compliance_verify_mode }}"
+      when: run_role.name == 'discover'
+
+    - name: Run role | Include the audit role with explicit inputs
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        apply:
+          check_mode: "{{ run_role.check_mode | default(false) | bool }}"
+      vars: *run_role_vars
+      when: run_role.name == 'audit'
+
+    - name: Run role | Include the remediate role with explicit inputs
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        apply:
+          check_mode: "{{ run_role.check_mode | default(false) | bool }}"
+      vars: *run_role_vars
+      when: run_role.name == 'remediate'
+
+    - name: Run role | Include the verify role with explicit inputs
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+        apply:
+          check_mode: "{{ run_role.check_mode | default(false) | bool }}"
+      vars: *run_role_vars
+      when: run_role.name == 'verify'
+
+    - name: Run role | Record success
+      ansible.builtin.set_fact:
+        run_role_outcome:
+          failed: false
+          msg: ""
+  rescue:
+    - name: Run role | Record the failure
+      ansible.builtin.set_fact:
+        run_role_outcome:
+          failed: true
+          msg: "{{ ansible_failed_result.msg | default('') }}"
