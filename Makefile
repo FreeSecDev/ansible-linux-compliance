@@ -107,8 +107,6 @@ SHELL_SCRIPTS := build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/bro
 	tools/scc/needs-smoke.sh
 
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
-PYLINT_GUARD := tools/lint/check_repo_rules.py
-PYLINT_GUARD_MAX_LINES := 1700
 PYLINT_MODULE_DIRECTORIES := plugins/modules
 PYLINT_MODULE_IGNORES := $(subst $(space),|,$(patsubst %,^%/,$(PYLINT_MODULE_DIRECTORIES)))
 
@@ -276,9 +274,8 @@ lint-python: require-uv collection-link lint-pylint
 	$(RUN) ruff format --check .
 
 lint-pylint: require-uv collection-link
-	$(RUN) pylint --ignore-paths='$(PYLINT_BASE_IGNORES)|$(PYLINT_MODULE_IGNORES)' --ignore=$(notdir $(PYLINT_GUARD)) tools tests plugins
+	$(RUN) pylint --ignore-paths='$(PYLINT_BASE_IGNORES)|$(PYLINT_MODULE_IGNORES)' tools tests plugins
 	$(RUN) pylint --disable=wrong-import-position $(PYLINT_MODULE_DIRECTORIES)
-	$(RUN) pylint --max-module-lines=$(PYLINT_GUARD_MAX_LINES) $(PYLINT_GUARD)
 
 lint-yaml: require-uv
 	$(RUN) yamllint --strict .

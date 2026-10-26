@@ -191,7 +191,9 @@ current workflows produce no findings under it.
 
 No inline code comments are allowed in Python, YAML, Makefile, TOML or shell. Use names, docstrings,
 module documentation and `docs/` instead. `tools/lint/check_repo_rules.py` enforces the rules below on
-YAML and Python files (ADR 0005):
+YAML and Python files (ADR 0005). It is the command-line entry point of the package `tools/lint/repo_rules/`,
+which holds one module per rule group; the name sets and allow-lists live in `tools/lint/repo_rules/names.py`
+(ADR 0004, FREES-141):
 
 - Every YAML file starts with `---` followed by a newline.
 - YAML files contain no `#` comments, except a trailing version annotation of exactly `# vX.Y.Z` on a pinned line:
@@ -229,7 +231,7 @@ YAML and Python files (ADR 0005):
   when they are the never rebound first parameter of a method. Object-level private writes through `C.f(obj)` are an
   accepted residual risk (ADR 0004).
   The guard is static analysis, not a sandbox. Only
-  `plugins/module_utils/compliance/process.py` is exempt. Extend the allow-list in `tools/lint/check_repo_rules.py`
+  `plugins/module_utils/compliance/process.py` is exempt. Extend the allow-list in `tools/lint/repo_rules/names.py`
   with a justification when a new module is genuinely needed. Since FREES-129 the import allow-list holds only modules
   that plugins use: `collections` (bare), `functools` and `itertools` were removed, `collections.abc` stays. A new
   keyword-only parameter of plugin code must be classified in `tests/unit/tools/test_check_repo_rules_followups.py`

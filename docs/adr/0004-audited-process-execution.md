@@ -455,3 +455,26 @@ Non-blocking follow-ups from the review of PR #21 (FREES-128, FREES-129). Every 
   the main pass and lints it alone with `--max-module-lines=1700`, with the reason in `pyproject.toml`, because the
   guard is run by path as one stand-alone script and Pylint has no per-file limit without a comment. A unit test pins
   both limits and fails when any other module exceeds 1500 lines.
+
+## Amendment 2026-10-26: the guard is a package (FREES-141)
+
+- The repository guard is split into the package `tools/lint/repo_rules/`, one module per rule group, because the
+  single module had reached its 1700-line limit. The change is behaviour-identical: no rule, message, order or exit
+  status changed, every guard test passes unchanged, and coverage stays at 100%.
+  - `common.py`: `Violation`, `REPO_ROOT` and the file suffixes.
+  - `yaml_text.py`: the document-start marker and the YAML comment ban (ADR 0005).
+  - `ansible_tasks.py`: banned command modules, task keys, includes, role entry points and role names.
+  - `names.py`: every name set of the Python rules, including `ALLOWED_IMPORTS`, `EXTRA_IMPORTS`, `FILE_IO_HELPER`,
+    `FILE_IO_ATTRIBUTES`, `BANNED_KEYWORDS`, `SEAM_OWNERS`, `RESERVED_ATTRIBUTES` and the generated
+    `STDLIB_MODULE_NAMES` and `KNOWN_SUBMODULE_ATTRIBUTES`. Earlier amendments and ADR 0011 that name these constants
+    "in `tools/lint/check_repo_rules.py`" now refer to this file; `make name-sets` rewrites it.
+  - `python_scope.py`: the per-file facts (`Scope`) and binding helpers that the Python rules share.
+  - `imports.py`, `seams.py` and `attributes.py`: the import, test seam, and name, attribute and call rules.
+  - `isolation.py`: `check_process_isolation`, which applies the Python rules to one plugin file.
+  - `repository.py`: `check_file` and `check_paths`, which select the rules by suffix and location.
+- `tools/lint/check_repo_rules.py` stays the command-line entry point with the same arguments, output and exit
+  status, still run by path from `make lint-repo` and pre-commit. It keeps the rule summary as its module
+  documentation, re-exports the public names, and puts the repository root on `sys.path` only when it runs by path.
+- The per-file Pylint exception of the previous amendment is removed. Every guard module is below 600 lines,
+  `make lint-pylint` lints the package in its main pass with the global `max-module-lines` of 1500, and a unit test
+  fails when any module exceeds 1500 lines.
