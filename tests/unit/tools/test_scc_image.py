@@ -17,6 +17,20 @@ or export command. Only Markdown and this module are exempt, because their mutat
 strings and examples are data. The Makefile may include only ``$(SCC_PINS)``
 unchecked; every other included file is checked as Makefile text.
 
+Because Markdown is exempt, nothing may load or run a Markdown file as code
+(FREES-152). The Makefile and its includes may not use ``$(eval``, ``$(file``,
+``MAKEFILES``, ``GNUMAKEFLAGS``, ``.INCLUDE_DIRS`` or ``--eval``. No workflow, at
+any level, and no file that names an SCC identifier may name ``MAKEFILES``,
+``MAKEFLAGS``, ``GNUMAKEFLAGS``, ``.INCLUDE_DIRS`` or ``--eval``. None of them may
+run a ``.md`` file with a shell, ``.``, ``source``, ``make -f`` or a script
+interpreter, directly, through a redirect or through a pipe. That detection is a
+word-level heuristic; a command assembled from variables is left to review.
+
+The ``scc-changes`` job runs the base revision's copy of the path filter as a
+separate ``bash`` process, so a pull request that edits the filter cannot exempt
+itself, and anything but an exact ``false`` from it means the smoke test runs.
+The filter diffs with ``--no-renames``, so a rename out of an SCC path counts.
+
 The guard is an allow-list on purpose. The release workflow of ADR 0012 may publish
 the collection, but it can never name the SCC image. The SCC expiry is enforced on
 the SCC path (``make scc-expiry-check``, a prerequisite of ``scc-image``), not in
@@ -121,6 +135,39 @@ PUSH_PATTERNS = re.compile(
     r"(?i)\b(docker|podman|buildah|nerdctl)\b[^\n]*?\b(push|login|save|export)\b"
     r"|\bskopeo\b|\bcrane\b|\boras\b|--push\b|\bregctl\b"
 )
+MAKE_REFUSED = re.compile(
+    r"(?<!\$)\$[({]\s*(?:eval|file)\b|\bMAKEFILES\b|\bGNUMAKEFLAGS\b|\.INCLUDE_DIRS\b|--eval\b"
+    r"|\bMAKEFLAGS\b.*\s-[A-Za-z]*E"
+)
+WORKFLOW_REFUSED = re.compile(r"\bMAKEFILES\b|\b(?:GNU)?MAKEFLAGS\b|\.INCLUDE_DIRS\b|--eval\b")
+MAKE_VARIABLE = re.compile(r"\$[({]([A-Za-z0-9_.]+)[)}]")
+QUOTED = re.compile(r"'([^']*)'|\"([^\"]*)\"")
+LIST_SEPARATORS = re.compile(r"\|\||&&|[;&()`{}\n]|\$\(")
+ENVIRONMENT_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+UNKNOWN_VARIABLE = "%variable%"
+KNOWN_VARIABLES = {"MAKE": "make", "SHELL": "sh"}
+PREFIX_COMMANDS = frozenset(
+    {UNKNOWN_VARIABLE, "command", "env", "eval", "exec", "nice", "nohup", "shell", "sudo"}
+    | {"time", "uv", "run", "xargs"}
+)
+SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh", "ash", "mksh"})
+SOURCE_COMMANDS = frozenset({".", "source"})
+SCRIPT_INTERPRETERS = frozenset({"python", "python3", "perl", "ruby", "node"})
+MAKE_COMMANDS = frozenset({"make", "gmake"})
+CODE_FLAGS = {
+    **dict.fromkeys(SHELLS, "c"),
+    "python": "cm",
+    "python3": "cm",
+    "perl": "eE",
+    "ruby": "e",
+    "node": "ep",
+}
+OPTIONS_WITH_ARGUMENT = frozenset({"-o", "+o", "-O", "+O", "-W", "-X", "-I", "-M", "-r"})
+STDIN_MAKEFILES = frozenset({"-", "-f-", "--file=-", "--makefile=-"})
+STDIN_OPERANDS = frozenset({"-", "/dev/stdin"})
+INPUT_REDIRECTION = re.compile(r"(?<![<\d])<\s*([^\s<>|;&]+)")
+REDIRECTION = re.compile(r"\d*(?:<{1,3}|>{1,2})&?\s*[^\s<>|;&]*")
+QUOTE_CHARACTERS = re.compile(r"['\"]")
 PUBLISHING_ACTIONS = (
     "docker/login-action",
     "docker/build-push-action",
@@ -229,6 +276,99 @@ def logical_lines(text: str) -> list[tuple[int, str]]:
     return lines
 
 
+def _expand_variables(text: str) -> str:
+    def word(match: re.Match[str]) -> str:
+        return f" {KNOWN_VARIABLES.get(match.group(1), UNKNOWN_VARIABLE)} "
+
+    return MAKE_VARIABLE.sub(word, text.replace("$$", "$"))
+
+
+def _command(words: list[str]) -> tuple[str, list[str]]:
+    skip_options = False
+    for position, original in enumerate(words):
+        word = original.lstrip("@+-") if position == 0 else original
+        if not word or ENVIRONMENT_ASSIGNMENT.match(word) or (skip_options and word[0] == "-"):
+            continue
+        name = word.rsplit("/", 1)[-1]
+        if name not in PREFIX_COMMANDS:
+            return name, words[position + 1 :]
+        skip_options = True
+    return "", []
+
+
+def _is_markdown(word: str) -> bool:
+    return word.lstrip("<").endswith(".md")
+
+
+def _operand(command: str, arguments: list[str]) -> tuple[str | None, bool]:
+    flags = CODE_FLAGS.get(command, "")
+    position = 0
+    while position < len(arguments):
+        word = arguments[position]
+        if word == "-" or not word.startswith(("-", "+")):
+            return word, False
+        if not word.startswith("--") and any(flag in word[1:] for flag in flags):
+            return None, True
+        position += 2 if word in OPTIONS_WITH_ARGUMENT else 1
+    return None, False
+
+
+def _segment_runs_markdown(segment: str, after_markdown: bool) -> bool:
+    command, arguments = _command(REDIRECTION.sub(" ", segment).split())
+    from_markdown = any(_is_markdown(target) for target in INPUT_REDIRECTION.findall(segment))
+    if command in MAKE_COMMANDS:
+        reads_stdin = after_markdown and any(word in STDIN_MAKEFILES for word in arguments)
+        return from_markdown or reads_stdin or any(_is_markdown(word) for word in arguments)
+    if command in SOURCE_COMMANDS:
+        first = arguments[0] if arguments else ""
+        return _is_markdown(first) or (after_markdown and first in STDIN_OPERANDS)
+    if command not in SHELLS | SCRIPT_INTERPRETERS:
+        return False
+    operand, code = _operand(command, arguments)
+    if code:
+        return False
+    if operand is None:
+        return from_markdown or after_markdown
+    return _is_markdown(operand) or (after_markdown and operand in STDIN_OPERANDS)
+
+
+def executes_markdown(text: str) -> bool:
+    expanded = _expand_variables(text)
+    fragments = [
+        QUOTE_CHARACTERS.sub("", expanded),
+        *(single or double for single, double in QUOTED.findall(expanded)),
+    ]
+    for fragment in fragments:
+        for command_list in LIST_SEPARATORS.split(fragment):
+            after_markdown = False
+            for segment in command_list.split("|"):
+                if _segment_runs_markdown(segment, after_markdown):
+                    return True
+                after_markdown = after_markdown or any(map(_is_markdown, segment.split()))
+    return False
+
+
+def _refused_constructs(name: str, text: str, refused: re.Pattern[str]) -> list[str]:
+    found: list[str] = []
+    match = refused.search(text)
+    if match is not None:
+        found.append(f"{name}: refused make construct {match.group(0)!r}")
+    if executes_markdown(text):
+        found.append(f"{name}: executes a Markdown file")
+    return found
+
+
+def _strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        mapping = cast("dict[object, object]", value)
+        return [text for item in mapping.items() for text in _strings(list(item))]
+    if isinstance(value, list):
+        return [text for item in cast("list[object]", value) for text in _strings(item)]
+    return []
+
+
 def _makefile_line_allowed(line: str, state: _MakeState) -> bool:
     if state.in_help or line.startswith(".PHONY:") or line == "include $(SCC_PINS)":
         return True
@@ -265,6 +405,20 @@ def _include_violations(
     return found
 
 
+def _advance(state: _MakeState, line: str) -> None:
+    if line.startswith(HELP_DEFINE):
+        state.in_help = True
+    elif state.in_help and line == "endef":
+        state.in_help = False
+    elif not line.startswith("\t") and not state.in_help:
+        rule = RULE.match(line)
+        assignment = ASSIGNMENT.match(line)
+        if rule is not None and assignment is None:
+            state.recipe_target = rule.group(1)
+        elif line.strip():
+            state.recipe_target = None
+
+
 def makefile_violations(
     text: str,
     files: dict[str, str] | None = None,
@@ -276,17 +430,9 @@ def makefile_violations(
     state = _MakeState()
     for number, line in logical_lines(text):
         state.violations += _include_violations(name, number, line, known, seen)
-        if line.startswith(HELP_DEFINE):
-            state.in_help = True
-        elif state.in_help and line == "endef":
-            state.in_help = False
-        elif not line.startswith("\t") and not state.in_help:
-            rule = RULE.match(line)
-            assignment = ASSIGNMENT.match(line)
-            if rule is not None and assignment is None:
-                state.recipe_target = rule.group(1)
-            elif line.strip():
-                state.recipe_target = None
+        _advance(state, line)
+        if not state.in_help:
+            state.violations += _refused_constructs(f"{name}:{number}", line, MAKE_REFUSED)
         if not SCC_IDENTIFIER.search(line):
             continue
         if not _makefile_line_allowed(line, state):
@@ -322,7 +468,11 @@ def _job_violations(name: str, job_name: str, job: dict[str, object]) -> list[st
 def workflow_violations(name: str, text: str) -> list[str]:
     workflow = cast("dict[str, object]", yaml.safe_load(text))
     top_level = {key: value for key, value in workflow.items() if key != "jobs"}
-    violations: list[str] = []
+    violations = [
+        violation
+        for text in _strings(workflow)
+        for violation in _refused_constructs(name, text, WORKFLOW_REFUSED)
+    ]
     if SCC_IDENTIFIER.search(yaml.safe_dump(top_level)):
         violations.append(f"{name}: SCC identifier at workflow level")
     for job_name, job in cast("dict[str, dict[str, object]]", workflow.get("jobs", {})).items():
@@ -340,6 +490,7 @@ def file_violations(relative: str, text: str, files: dict[str, str] | None = Non
     exempt = relative == GUARD_MODULE or relative.endswith(".md")
     found: list[str] = []
     if (names_scc or in_scc_tree) and not exempt:
+        found += _refused_constructs(relative, text, WORKFLOW_REFUSED)
         if PUSH_PATTERNS.search(text):
             found.append(f"{relative}: publishing command next to an SCC identifier")
         elif names_scc and not relative.startswith(ALLOWED_PREFIXES):
@@ -812,3 +963,362 @@ def test_the_smoke_test_refuses_a_tag_that_names_a_registry(image: str) -> None:
     )
     assert result.returncode == 2
     assert "localhost/ tag" in result.stderr
+
+
+PAYLOAD = "docs/payload.md"
+PAYLOAD_TEXT = "release-scc:\n\tdocker push localhost/freesecdev-scc:ci\n"
+FILTER_RELATIVE = "tools/scc/needs-smoke.sh"
+FALSE_FILTER = "#!/usr/bin/env bash\nprintf 'false\\n'\n"
+
+
+def _with_payload(files: dict[str, str]) -> dict[str, str]:
+    return {**files, PAYLOAD: PAYLOAD_TEXT}
+
+
+def _workflow_with(files: dict[str, str], level: str, value: str) -> str:
+    workflow = cast("dict[str, object]", yaml.safe_load(files[".github/workflows/ci.yml"]))
+    jobs = cast("dict[str, dict[str, object]]", workflow["jobs"])
+    if level == "workflow":
+        workflow["env"] = {"MAKEFILES": value}
+    elif level == "job":
+        jobs["lint"]["env"] = {"MAKEFILES": value}
+    elif level == "scc-job":
+        cast("dict[str, str]", jobs["scc-smoke"]["env"])["MAKEFILES"] = value
+    elif level == "step":
+        cast("list[dict[str, object]]", jobs["lint"]["steps"])[-1]["env"] = {"MAKEFILES": value}
+    else:
+        cast("list[dict[str, object]]", jobs["lint"]["steps"]).append({"run": value})
+    return yaml.safe_dump(workflow)
+
+
+def test_the_markdown_payload_alone_is_accepted() -> None:
+    assert repository_violations(_with_payload(tracked_text())) == []
+
+
+@pytest.mark.parametrize(
+    "addition",
+    [
+        f"\n$(eval $(file <{PAYLOAD}))\n",
+        f"\n${{eval include {PAYLOAD}}}\n",
+        f"\nRELEASE := $(file <{PAYLOAD})\n",
+        f"\nMAKEFILES := {PAYLOAD}\nexport MAKEFILES\n",
+        "\n.INCLUDE_DIRS += docs\n",
+        f"\nMAKEFLAGS += --eval='include {PAYLOAD}'\n",
+        f"\nMAKEFLAGS += -E 'include {PAYLOAD}'\n",
+        f"\nGNUMAKEFLAGS := -f {PAYLOAD}\n",
+        f"\ndocs-run:\n\tsh {PAYLOAD}\n",
+        f"\ndocs-run:\n\t@bash -eu {PAYLOAD}\n",
+        f"\ndocs-run:\n\t. {PAYLOAD}\n",
+        f"\ndocs-run:\n\tset -e; source ./{PAYLOAD}\n",
+        f"\ndocs-run:\n\tcat {PAYLOAD} | sh\n",
+        f"\ndocs-run:\n\tsh < {PAYLOAD}\n",
+        f"\ndocs-run:\n\t$(SHELL) {PAYLOAD}\n",
+        f"\ndocs-run:\n\t$(MAKE) -f {PAYLOAD} release-scc\n",
+        f"\ndocs-run:\n\t$(MAKE) --file={PAYLOAD}\n",
+        f"\ndocs-run:\n\tbash -c '. {PAYLOAD}'\n",
+        f"\ndocs-run:\n\tbash -o pipefail {PAYLOAD}\n",
+        f"\ndocs-run:\n\techo {PAYLOAD} | xargs sh\n",
+        f"\ndocs-run:\n\t$(RUN) python {PAYLOAD}\n",
+        f"\ndocs-run:\n\tenv -i FOO=1 /bin/sh {PAYLOAD}\n",
+        f"\ndocs-run:\n\t$(info $(shell sh {PAYLOAD}))\n",
+    ],
+)
+def test_the_makefile_may_not_load_or_execute_an_exempt_markdown_file(addition: str) -> None:
+    files = _with_payload(tracked_text())
+    files["Makefile"] += addition
+    assert makefile_violations(files["Makefile"], files)
+    assert repository_violations(files)
+
+
+def test_an_included_makefile_may_not_load_an_exempt_markdown_file() -> None:
+    files = _with_payload(tracked_text())
+    files["Makefile"] += "\ninclude tests/ci/extra.mk\n"
+    files["tests/ci/extra.mk"] = f"$(eval $(file <{PAYLOAD}))\n"
+    assert repository_violations(files) == ["tests/ci/extra.mk:1: refused make construct '$(eval'"]
+
+
+@pytest.mark.parametrize(
+    ("level", "value"),
+    [
+        ("workflow", PAYLOAD),
+        ("job", PAYLOAD),
+        ("scc-job", PAYLOAD),
+        ("step", PAYLOAD),
+        ("run", f"MAKEFILES={PAYLOAD} make ci"),
+        ("run", f'printf "MAKEFILES={PAYLOAD}\\n" >> "$GITHUB_ENV"'),
+        ("run", f"MAKEFLAGS=-E'include {PAYLOAD}' make ci"),
+        ("run", f"make --eval='include {PAYLOAD}' ci"),
+        ("run", "make .INCLUDE_DIRS=docs ci"),
+        ("run", f"sh {PAYLOAD}"),
+        ("run", f"bash {PAYLOAD}"),
+        ("run", f". {PAYLOAD}"),
+        ("run", f"make -f {PAYLOAD} release-scc"),
+    ],
+)
+def test_no_workflow_may_load_or_execute_an_exempt_markdown_file(level: str, value: str) -> None:
+    files = _with_payload(tracked_text())
+    files[".github/workflows/ci.yml"] = _workflow_with(files, level, value)
+    assert workflow_violations("ci.yml", files[".github/workflows/ci.yml"])
+    assert repository_violations(files)
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        f"#!/bin/sh\nMAKEFILES={PAYLOAD} make scc-smoke\n",
+        f"#!/bin/sh\nsh {PAYLOAD}\nmake scc-smoke\n",
+    ],
+)
+def test_scc_scripts_may_not_load_or_execute_an_exempt_markdown_file(script: str) -> None:
+    files = _with_payload(tracked_text())
+    files["tests/ci/run.sh"] = script
+    assert repository_violations(files)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "\t$(TRACKED) -- '*.md' | xargs -0 -r $(RUN) python tools/docs/check_links.py",
+        "\tpython tools/docs/check_links.py README.md",
+        "\tfind . -name '*.md' -print",
+        "\tsh tools/scc/smoke-test.sh docs/x.md",
+        "\tbash -c 'echo docs/x.md'",
+        "\tpython3 -m mdformat --check docs/x.md",
+        "\tperl -ne 'print' docs/x.md",
+        "\tcat docs/x.md | grep -c SCC",
+        "\tcat docs/x.md | python3 tools/x.py",
+        "\tsh",
+        "\tbash -o",
+        "\tenv",
+        "COLLECTION_SOURCES := galaxy.yml README.md LICENSE",
+    ],
+)
+def test_reading_markdown_as_data_is_not_executing_it(line: str) -> None:
+    assert not executes_markdown(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "cat docs/x.md | bash -s",
+        "cat docs/x.md | sh -",
+        "cat docs/x.md | source /dev/stdin",
+        "cat docs/x.md | make -f -",
+        "make < docs/x.md",
+        "bash -- docs/x.md",
+    ],
+)
+def test_piping_markdown_into_an_interpreter_is_executing_it(line: str) -> None:
+    assert executes_markdown(line)
+
+
+def _isolated_git_environment(home: Path) -> dict[str, str]:
+    return {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(home),
+        "TMPDIR": str(home),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_AUTHOR_NAME": "FREES-152 test",
+        "GIT_AUTHOR_EMAIL": "frees-152@example.invalid",
+        "GIT_COMMITTER_NAME": "FREES-152 test",
+        "GIT_COMMITTER_EMAIL": "frees-152@example.invalid",
+    }
+
+
+def filter_step_script() -> str:
+    workflow = cast("dict[str, object]", yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    job = cast("dict[str, dict[str, object]]", workflow["jobs"])["scc-changes"]
+    steps = [
+        step for step in cast("list[dict[str, str]]", job["steps"]) if step.get("id") == "filter"
+    ]
+    assert len(steps) == 1
+    assert "shell" not in steps[0]
+    assert "defaults" not in workflow
+    assert "defaults" not in job
+    assert job["runs-on"] == "ubuntu-24.04"
+    return steps[0]["run"]
+
+
+@dataclass
+class _Scratch:
+    root: Path
+
+    def git(self, *arguments: str) -> str:
+        return subprocess.run(
+            [git(), "-C", str(self.root), *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+            env=_isolated_git_environment(self.root.parent),
+        ).stdout.strip()
+
+    def write(self, relative: str, text: str) -> None:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def commit(self, message: str) -> str:
+        self.git("add", "--all")
+        self.git("-c", "commit.gpgsign=false", "commit", "--quiet", "--allow-empty", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def run(self, arguments: list[str], environment: dict[str, str]) -> str:
+        bash = shutil.which("bash")
+        assert bash is not None
+        result = subprocess.run(
+            [bash, *arguments],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+            cwd=self.root,
+            env={**_isolated_git_environment(self.root.parent), **environment},
+        )
+        assert result.returncode == 0, result.stderr
+        return result.stdout.strip()
+
+    def filter_step(self, event: str, base: str, head: str = "") -> str:
+        output = self.root.parent / "github-output"
+        output.write_text("", encoding="utf-8")
+        self.run(
+            ["--noprofile", "--norc", "-e", "-c", filter_step_script()],
+            {"EVENT_NAME": event, "BASE_SHA": base, "HEAD_SHA": head, "GITHUB_OUTPUT": str(output)},
+        )
+        lines = output.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1, lines
+        assert lines[0].startswith("scc=")
+        return lines[0].removeprefix("scc=")
+
+
+@pytest.fixture
+def scratch(tmp_path: Path) -> _Scratch:
+    repository = _Scratch(tmp_path / "repository")
+    repository.root.mkdir()
+    repository.git("init", "--quiet", "--initial-branch=main")
+    repository.write(FILTER_RELATIVE, FILTER_SCRIPT.read_text(encoding="utf-8"))
+    repository.write("tools/scc/smoke-test.sh", SMOKE_SCRIPT.read_text(encoding="utf-8"))
+    repository.write("README.txt", "base\n")
+    repository.commit("base")
+    return repository
+
+
+def test_the_path_filter_sees_a_rename_out_of_an_scc_path(scratch: _Scratch) -> None:
+    base = scratch.git("rev-parse", "HEAD")
+    (scratch.root / "other").mkdir()
+    scratch.git("mv", "tools/scc/smoke-test.sh", "other/smoke.sh")
+    head = scratch.commit("rename out of the SCC path")
+    detected = scratch.git("-c", "diff.renames=true", "diff", "--name-only", base, head)
+    assert detected == "other/smoke.sh"
+    for arguments in (["pull_request", base], ["merge_group", base, head]):
+        assert scratch.run([str(FILTER_SCRIPT), *arguments], {}) == "true"
+    assert scratch.filter_step("pull_request", base) == "true"
+    assert scratch.filter_step("merge_group", base, head) == "true"
+
+
+def test_the_filter_step_skips_the_smoke_test_without_an_scc_change(scratch: _Scratch) -> None:
+    base = scratch.git("rev-parse", "HEAD")
+    scratch.write("README.txt", "changed\n")
+    head = scratch.commit("unrelated change")
+    assert scratch.filter_step("pull_request", base) == "false"
+    assert scratch.filter_step("merge_group", base, head) == "false"
+    for event in ("push", "schedule", "workflow_dispatch", "", "pull", "merge_grou"):
+        assert scratch.filter_step(event, base, head) == "true"
+
+
+def test_a_pull_request_cannot_exempt_itself_by_editing_the_filter(scratch: _Scratch) -> None:
+    base = scratch.git("rev-parse", "HEAD")
+    scratch.write(FILTER_RELATIVE, FALSE_FILTER)
+    head = scratch.commit("the filter says false")
+    assert scratch.run([FILTER_RELATIVE, "pull_request", base], {}) == "false"
+    assert scratch.filter_step("pull_request", base) == "true"
+    assert scratch.filter_step("merge_group", base, head) == "true"
+
+
+def test_the_base_revision_filter_decides_until_a_change_is_merged(scratch: _Scratch) -> None:
+    scratch.write(FILTER_RELATIVE, FALSE_FILTER)
+    base = scratch.commit("a merged filter that says false")
+    scratch.write(FILTER_RELATIVE, FILTER_SCRIPT.read_text(encoding="utf-8"))
+    scratch.write("tools/scc/smoke-test.sh", "#!/bin/sh\nexit 0\n")
+    head = scratch.commit("restore the filter and change an SCC path")
+    assert scratch.run([FILTER_RELATIVE, "pull_request", base], {}) == "true"
+    assert scratch.filter_step("pull_request", base) == "false"
+    assert scratch.filter_step("merge_group", base, head) == "false"
+
+
+@pytest.mark.parametrize(
+    "base_filter",
+    [
+        None,
+        "#!/usr/bin/env bash\nprintf 'false\\n'\nexit 3\n",
+        "#!/usr/bin/env bash\nprintf 'fals\\n'\n",
+        "#!/usr/bin/env bash\nprintf ''\n",
+        "#!/usr/bin/env bash\nprintf 'false\\nfalse\\n'\n",
+    ],
+)
+def test_the_filter_step_fails_safe_without_a_usable_base_filter(
+    scratch: _Scratch, base_filter: str | None
+) -> None:
+    if base_filter is None:
+        scratch.git("rm", "--quiet", FILTER_RELATIVE)
+    else:
+        scratch.write(FILTER_RELATIVE, base_filter)
+    base = scratch.commit("base filter")
+    scratch.write(FILTER_RELATIVE, FALSE_FILTER)
+    scratch.write("README.txt", "changed\n")
+    head = scratch.commit("the pull request")
+    assert scratch.filter_step("pull_request", base) == "true"
+    assert scratch.filter_step("merge_group", base, head) == "true"
+
+
+@pytest.mark.parametrize("base", ["", "not-a-sha", "0" * 40, "HEAD", "main", "HEAD~1"])
+def test_the_filter_step_fails_safe_without_a_valid_base_sha(scratch: _Scratch, base: str) -> None:
+    scratch.write(FILTER_RELATIVE, FALSE_FILTER)
+    head = scratch.commit("the pull request")
+    assert scratch.filter_step("pull_request", base) == "true"
+    assert scratch.filter_step("merge_group", base, head) == "true"
+
+
+def test_the_filter_step_runs_the_base_filter_as_a_separate_bash_process() -> None:
+    script = filter_step_script()
+    assert 'git show "$BASE_SHA:tools/scc/needs-smoke.sh" > "$filter"' in script
+    assert 'bash "$filter"' in script
+    assert not re.search(r"(?:^|[\s;&|(])(?:source|\.)\s", script)
+    assert "| bash" not in script
+
+
+@pytest.mark.parametrize(
+    ("event", "scc", "smoke"),
+    [
+        ("pull_request", "", "success"),
+        ("pull_request", "ru", "success"),
+        ("pull_request", "fals", "success"),
+        ("pull_request", "ru", "skipped"),
+        ("pull_request", "fals", "skipped"),
+        ("", "false", "skipped"),
+        ("pull", "false", "skipped"),
+        ("merge", "false", "skipped"),
+        ("merge_grou", "false", "skipped"),
+        ("_", "false", "skipped"),
+        ("pull_requests", "false", "skipped"),
+    ],
+)
+def test_ci_gate_matches_the_event_and_the_filter_output_exactly(
+    event: str, scc: str, smoke: str
+) -> None:
+    bash = shutil.which("bash")
+    assert bash is not None
+    result = run_script(
+        [bash, "-euo", "pipefail", "-c", gate_script()],
+        {"NEEDS": gate_needs("success", scc, smoke), "EVENT_NAME": event},
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+
+
+def test_ci_gate_uses_no_substring_matching() -> None:
+    script = gate_script()
+    assert "inside(" not in script
+    assert "contains(" not in script
+    assert 'IN("true", "false")' in script
+    assert 'IN("pull_request", "merge_group")' in script

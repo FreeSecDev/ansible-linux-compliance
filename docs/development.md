@@ -323,11 +323,11 @@ Configuration relaxations, each with its reason:
 | `collection` | `make test-sanity test-ansible-units package-check` |
 | `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |
 | `molecule-docker` | `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` for `docker-ubuntu` and `docker-rhel-compatible`, and `make test-molecule-docker-selftest` for `docker-selftest`, one matrix entry each |
-| `scc-changes` | `tools/scc/needs-smoke.sh`: `scc=false` only for a pull request or merge group whose diff touches no SCC path; `true` for push, schedule and dispatch, and fails closed to `true` |
+| `scc-changes` | the base revision's `tools/scc/needs-smoke.sh`, read with `git show` and run with `bash`: `scc=false` only for a pull request or merge group whose diff touches no SCC path (renames count as a deletion and an addition); `true` for push, schedule and dispatch, and fails closed to `true`. A change to the filter takes effect only after it merges |
 | `scc-smoke` | runs unless `scc-changes` output `scc=false`; restores the verified SCC download from the Actions cache (key: SHA-256 of `extensions/ci/scc/scc.pins`), then `make scc-smoke`; `contents: read` only, the image stays on the runner |
 | `ci-gate` | none; fails unless every needed job succeeded |
 
-`ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. It accepts a skipped `scc-smoke` only for a `pull_request` or `merge_group` whose `scc-changes` output is `scc=false`; on `push` to `main` and the daily `schedule` the smoke test always runs. Job names
+`ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. It accepts a skipped `scc-smoke` only for a `pull_request` or `merge_group` whose `scc-changes` output is exactly `scc=false`, and it compares the event name and the output exactly, not as substrings; on `push` to `main` and the daily `schedule` the smoke test always runs. Job names
 are stable, so the required check name `ci-gate` does not change. Runs for pull requests cancel superseded
 runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
 added as a job together with the documentation pipeline (FREES-80).

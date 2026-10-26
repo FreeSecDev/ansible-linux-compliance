@@ -4,7 +4,7 @@
 - **Date:** 2026-10-26
 - **Deciders:** lead architect; product owner (platform facts and the checklist export decision)
 - **Jira:** FREES-144 (this ADR and the CI image), FREES-145 (backend), FREES-146 (STIG to ComplianceAsCode
-  mapping), FREES-147 (CKL and CKLB export)
+  mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard)
 - **Pull requests:** introduced by the pull request for FREES-144. Only the CI image, its make targets, the
   `scc-smoke` job and the repository tests are implemented. The backend, the mapping and the exporter are not.
 - **Related:** [ADR 0003](0003-native-module-remediation.md), [ADR 0004](0004-audited-process-execution.md),
@@ -355,14 +355,31 @@ The expiry is enforced on the SCC path, not in every pull request:
 - **Path filter.** The `scc-changes` job decides with `tools/scc/needs-smoke.sh`.
   - For `pull_request`, it diffs the pull request's base SHA against the checked-out merge commit.
   - For `merge_group`, it diffs `github.event.merge_group.base_sha` against `head_sha`.
+  - It diffs with `git diff --no-renames`, so a file renamed out of an SCC path still lists its old path and
+    runs the smoke test (FREES-152).
   - It fails closed: any other event, a missing or malformed SHA, or a failing `git diff` means the smoke test
     runs.
+- **The base revision's filter decides (FREES-152).** For `pull_request` and `merge_group`, the job does not
+  run the filter from the checkout. It validates the base SHA, writes
+  `git show "$BASE_SHA:tools/scc/needs-smoke.sh"` to a temporary file and runs that file as a separate `bash`
+  process; it never sources it into the job shell.
+  - A pull request that edits the filter so that it prints `false` therefore cannot exempt itself, in its own
+    run or in the merge queue. **A change to the filter takes effect only after it merges.** The first pull
+    request and merge group after the change still use the old filter.
+  - It fails safe. If the event is not `pull_request` or `merge_group`, the base SHA is not 40 hexadecimal
+    digits, the base has no such file, `git show` fails, or the filter exits non-zero, the output is `scc=true`.
+    Any output other than exactly `false` also becomes `scc=true`.
+  - The step script itself lives in `ci.yml`, which the pull request controls. Editing it is a change to a
+    workflow, which is an SCC path, and has the same trust as editing `ci-gate`: it is caught by review, and the
+    push run on `main` and the daily schedule always run the smoke test.
 - **Gate.** `ci-gate` accepts a `skipped` `scc-smoke` only when all of these hold:
   - the event is `pull_request` or `merge_group`;
   - `scc-changes` succeeded and output exactly `scc=false`.
 
   A skip on `push` to `main`, `schedule` or manual dispatch, a missing or unexpected filter output, and any other
-  result fail the gate.
+  result fail the gate. The gate compares with jq `IN("true", "false")` and `IN("pull_request", "merge_group")`,
+  which are exact. It no longer uses `inside()`, which matches substrings and so accepted an output of `""`, `ru`
+  or `fals` and an event named `pull`, `merge` or `merge_grou` (FREES-152).
 - **Early warning.** A plain unit test only checks that the publication date is before the expiry date. The
   scheduled check of FREES-149 fails loudly and opens or updates an issue from 21 days before `SCC_EXPIRES`, and also
   reports a newer release in `scc_release.xml`.
@@ -465,6 +482,20 @@ atomically with mode 0600 and escaped as untrusted data.
     exempt.
   - **Includes.** The Makefile may `include $(SCC_PINS)`. Every other included file must be tracked, and it is
     checked as Makefile text under the same rules. An include through a variable or pattern is refused.
+  - **No Markdown as code (FREES-152).** Markdown is exempt from the publishing check, so nothing may load or run
+    a Markdown file:
+    - The Makefile and every included file may not use `$(eval`, `$(file`, `MAKEFILES`, `GNUMAKEFLAGS`,
+      `.INCLUDE_DIRS` or `--eval`, or a short `-E` in `MAKEFLAGS`.
+    - No workflow may name `MAKEFILES`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `.INCLUDE_DIRS` or `--eval` anywhere. This
+      covers `env` at workflow, job and step level, `run` scripts, and writes to `$GITHUB_ENV`. The same applies
+      to every file that names an SCC identifier.
+    - No Makefile line, workflow string or SCC file may run a `.md` file. The guard finds a shell, `.`,
+      `source`, `make -f` or a script interpreter whose script operand is a `.md` file, `< file.md` into such a
+      command, and a `.md` file piped into one. It sees through recipe prefixes, `env`, `xargs`, `$(shell …)`,
+      `$(MAKE)`, `$(SHELL)` and command strings in quotes.
+    - This detection is word-level. A command assembled from variables, a copy of the file under another name,
+      a glob or `find -exec` evades it. That is deliberate evasion, which review catches, as with a split image
+      name.
   - The SCC jobs must not use a publishing action, and their permissions are at most `contents: read`.
   - Splitting the image name across variables to evade the regex is deliberate evasion. Review catches it, not
     this test.

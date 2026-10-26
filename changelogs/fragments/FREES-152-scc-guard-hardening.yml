@@ -1,0 +1,7 @@
+---
+trivial:
+  - >-
+    CI: the SCC path filter counts a rename out of an SCC path, and pull requests and merge groups run the base
+    revision's filter, so a pull request cannot exempt itself by editing it. ci-gate matches the filter output and
+    the event name exactly. The repository guard refuses Makefile and workflow constructs that load or run an
+    exempt Markdown file as code.
