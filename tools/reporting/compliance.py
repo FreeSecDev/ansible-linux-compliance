@@ -12,8 +12,16 @@ Counting rules:
   reported as a separate ``not_selected`` count.
 * A run that did not complete is never summarised as compliant. The run status comes
   first and the percentage is withheld.
-* A figure covers one benchmark, one content version and, unless it is an aggregate,
-  one host. Figures of different benchmarks or versions are never pooled.
+* A figure covers one benchmark, one content version, one profile and, unless it is
+  an aggregate, one host. Figures of different benchmarks, versions or profiles are
+  never pooled: the CIS and STIG profiles of a ComplianceAsCode benchmark share its
+  identifier, so the profile is part of every key.
+* An expired waiver counts as its evaluated outcome and is counted in
+  ``expired_waivers``, also when it lapsed between the scan start and the
+  controller time, which only an exceptions evaluation records.
+* Every group built from more than one input gets a ``merged_inputs`` note with its
+  key, and every host that is counted as one host in several groups gets a
+  ``same_host_across_groups`` note. Both are structured; consumers word them.
 """
 
 from dataclasses import dataclass
@@ -29,6 +37,11 @@ ASSESSMENT_RUN_NOT_COMPLETED: Final[str] = "run_not_completed"
 ASSESSMENT_NOTHING_EVALUATED: Final[str] = "nothing_evaluated"
 ASSESSMENT_ALL_PASSED: Final[str] = "all_evaluated_passed"
 ASSESSMENT_FINDINGS_OPEN: Final[str] = "findings_open"
+KIND_SCAN_RUN: Final[str] = "scan_run"
+KIND_EVALUATION: Final[str] = "exceptions_evaluation"
+SCAN_RUN_KINDS: Final[frozenset[str]] = frozenset({KIND_SCAN_RUN, KIND_EVALUATION})
+MERGED_INPUTS_NOTE: Final[str] = "merged_inputs"
+SAME_HOST_NOTE: Final[str] = "same_host_across_groups"
 
 EXCLUDED_FROM_DENOMINATOR: Final[frozenset[model.Outcome]] = frozenset(
     {model.Outcome.NOTAPPLICABLE, model.Outcome.DISABLED}
@@ -149,14 +162,21 @@ def summarize(
     )
 
 
-def tally_findings(findings: tuple[model.Finding, ...]) -> list[Tally]:
+def is_expired_waiver(finding: model.Finding, lapsed: frozenset[str]) -> bool:
+    """Return whether the waiver of ``finding`` expired, at the scan start or after it.
+
+    ``lapsed`` holds the rules whose exception lapsed between the scan start and the
+    controller time; their findings carry no exception data (ADR 0013).
+    """
+    return finding.exception.state is model.ExceptionState.EXPIRED or finding.rule_id in lapsed
+
+
+def tally_findings(
+    findings: tuple[model.Finding, ...], lapsed: frozenset[str] = frozenset()
+) -> list[Tally]:
     """Reduce findings to tallies. An expired exception never changes the outcome."""
     return [
-        Tally(
-            finding.outcome,
-            finding.severity,
-            finding.exception.state is model.ExceptionState.EXPIRED,
-        )
+        Tally(finding.outcome, finding.severity, is_expired_waiver(finding, lapsed))
         for finding in findings
     ]
 
@@ -165,9 +185,12 @@ def tally_findings(findings: tuple[model.Finding, ...]) -> list[Tally]:
 class ComplianceData:
     """One compliance input: a scan run or XCCDF results, with its own summary.
 
-    For ``scan_run`` inputs the validated :class:`model.ScanRun` is embedded as is and
-    ``findings`` is serialized empty so that no finding appears twice. XCCDF and ARF
-    files may name a host (``reported_host``); that name is self-asserted by the file.
+    For ``scan_run`` and ``exceptions_evaluation`` inputs the validated
+    :class:`model.ScanRun` is embedded as is and ``findings`` is serialized empty so
+    that no finding appears twice. ``lapsed_waivers`` lists the rules whose exception
+    lapsed between the scan start and the controller time, which only an exceptions
+    evaluation records. XCCDF and ARF files may name a host (``reported_host``); that
+    name is self-asserted by the file.
     """
 
     kind: str
@@ -186,6 +209,7 @@ class ComplianceData:
     not_selected: int
     scan_run: model.ScanRun | None
     summary: Summary
+    lapsed_waivers: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping."""
@@ -200,6 +224,7 @@ class ComplianceData:
             "host": None if self.host is None else self.host.to_dict(),
             "input_sha256": self.input_sha256,
             "kind": self.kind,
+            "lapsed_waivers": list(self.lapsed_waivers),
             "not_selected": self.not_selected,
             "profile_id": self.profile_id,
             "reported_host": self.reported_host,
@@ -245,7 +270,7 @@ class RuleSource:
 
 @dataclass(frozen=True)
 class RuleRollup:
-    """One rule on one host and content version, however many scans evaluated it.
+    """One rule on one host, benchmark, version and profile, however many scans evaluated it.
 
     The outcome is the worst among the scans, so a pass in one scan never hides a
     failure in another. Every originating scan is listed with its own outcome.
@@ -253,7 +278,9 @@ class RuleRollup:
 
     rule_id: str
     host: HostKey
+    benchmark_id: str
     content_version: str
+    profile_id: str
     outcome: model.Outcome
     severity: model.Severity
     expired_waiver: bool
@@ -296,9 +323,17 @@ def higher(first: model.Severity, second: model.Severity) -> model.Severity:
     return second
 
 
-def _collapse(
-    rule_id: str, host: HostKey, content_version: str, evaluations: list[_Evaluation]
-) -> RuleRollup:
+class RuleKey(NamedTuple):
+    """What a rule is deduplicated over: one host, benchmark, version and profile."""
+
+    host: HostKey
+    benchmark_id: str
+    content_version: str
+    profile_id: str
+    rule_id: str
+
+
+def _collapse(key: RuleKey, evaluations: list[_Evaluation]) -> RuleRollup:
     outcome = evaluations[0].finding.outcome
     severity = evaluations[0].finding.severity
     for evaluation in evaluations[1:]:
@@ -309,9 +344,11 @@ def _collapse(
         key=lambda source: (source.artifact, source.benchmark_id, source.profile_id),
     )
     return RuleRollup(
-        rule_id=rule_id,
-        host=host,
-        content_version=content_version,
+        rule_id=key.rule_id,
+        host=key.host,
+        benchmark_id=key.benchmark_id,
+        content_version=key.content_version,
+        profile_id=key.profile_id,
         outcome=outcome,
         severity=severity,
         expired_waiver=any(
@@ -324,28 +361,29 @@ def _collapse(
 
 
 def rollup(entries: list[Entry]) -> list[RuleRollup]:
-    """Deduplicate rules by rule ID across scans of the same host and content version.
+    """Deduplicate rules by rule ID across scans of one host, benchmark, version and profile.
 
-    ``entries`` pairs each input's artifact path with its data. Different hosts and
-    different content versions stay separate, and so does any input without a host name.
+    ``entries`` pairs each input's artifact path with its data. Different hosts,
+    benchmarks, content versions and profiles stay separate, and so does any input
+    without a host name.
     """
-    groups: dict[tuple[HostKey, str, str], list[_Evaluation]] = {}
+    groups: dict[RuleKey, list[_Evaluation]] = {}
     for artifact, data in entries:
         host = host_key(data)
+        lapsed = frozenset(data.lapsed_waivers)
         for finding in data.findings:
             source = RuleSource(
                 artifact,
                 data.benchmark_id,
                 data.profile_id,
                 finding.outcome,
-                finding.exception.state is model.ExceptionState.EXPIRED,
+                is_expired_waiver(finding, lapsed),
             )
-            key = (host, data.content_version, finding.rule_id)
+            key = RuleKey(
+                host, data.benchmark_id, data.content_version, data.profile_id, finding.rule_id
+            )
             groups.setdefault(key, []).append(_Evaluation(finding, source))
-    return [
-        _collapse(rule_id, host, version, evaluations)
-        for (host, version, rule_id), evaluations in sorted(groups.items())
-    ]
+    return [_collapse(key, evaluations) for key, evaluations in sorted(groups.items())]
 
 
 def _run_status(statuses: list[str]) -> str:
@@ -356,7 +394,7 @@ def _run_status(statuses: list[str]) -> str:
 
 
 def figure(entries: list[Entry]) -> Summary:
-    """Summarise deduplicated rules of ``entries``, which must share benchmark and version.
+    """Summarise deduplicated rules of ``entries``, which must share benchmark, version and profile.
 
     The run status is ``completed`` only when every run completed; for several runs
     the status is ``not_completed`` as soon as one did not, and no percentage appears.
@@ -371,54 +409,139 @@ def figure(entries: list[Entry]) -> Summary:
 
 @dataclass(frozen=True)
 class GroupFigure:
-    """The figure of one benchmark and content version on one host."""
+    """The figure of one benchmark, content version and profile on one host."""
 
     benchmark_id: str
     content_version: str
+    profile_id: str
     host: HostKey
     summary: Summary
 
 
 @dataclass(frozen=True)
 class AggregateFigure:
-    """The pooled figure of one benchmark and content version over several hosts."""
+    """The pooled figure of one benchmark, content version and profile over several hosts."""
 
     benchmark_id: str
     content_version: str
+    profile_id: str
     host_count: int
     scope: str
     summary: Summary
 
 
-def group_figures(entries: list[Entry]) -> list[GroupFigure]:
-    """Return one figure per (benchmark, content version, host)."""
-    groups: dict[tuple[str, str, HostKey], list[Entry]] = {}
+type Figured = tuple[str, str, str]
+type GroupKey = tuple[str, str, str, HostKey]
+
+
+def _groups(entries: list[Entry]) -> dict[GroupKey, list[Entry]]:
+    groups: dict[GroupKey, list[Entry]] = {}
     for entry in entries:
-        key = (entry[1].benchmark_id, entry[1].content_version, host_key(entry[1]))
+        data = entry[1]
+        key = (data.benchmark_id, data.content_version, data.profile_id, host_key(data))
         groups.setdefault(key, []).append(entry)
+    return groups
+
+
+def group_figures(entries: list[Entry]) -> list[GroupFigure]:
+    """Return one figure per (benchmark, content version, profile, host)."""
     return [
-        GroupFigure(benchmark, version, host, figure(members))
-        for (benchmark, version, host), members in sorted(groups.items())
+        GroupFigure(benchmark, version, profile, host, figure(members))
+        for (benchmark, version, profile, host), members in sorted(_groups(entries).items())
     ]
 
 
-def pairs(entries: list[Entry]) -> dict[tuple[str, str], list[Entry]]:
-    """Group entries by (benchmark, content version)."""
-    result: dict[tuple[str, str], list[Entry]] = {}
+def _repeated(members: list[Entry]) -> bool:
+    profiles = [data.profile_id for _, data in members if data.scan_status == COMPLETED]
+    return len(profiles) != len(set(profiles))
+
+
+def input_notes(entries: list[Entry]) -> list[dict[str, object]]:
+    """Return the structured notes about inputs that were combined or counted as one host.
+
+    A ``merged_inputs`` note is written for every group (benchmark, content version,
+    profile, host) built from more than one input, whatever the input types, with the
+    group key, the SHA-256 of every input and whether two or more inputs completed
+    (``repeated_profile``: the same profile was scanned again). A
+    ``same_host_across_groups`` note is written for every host key that has inputs in
+    more than one group: those inputs are counted as one host, but their figures stay
+    separate per group. Notes never contain input text beyond validated identifiers.
+    """
+    groups = _groups(entries)
+    notes: list[dict[str, object]] = []
+    hosts: dict[HostKey, list[GroupKey]] = {}
+    for key, members in sorted(groups.items()):
+        hosts.setdefault(key[3], []).append(key)
+        if len(members) > 1:
+            notes.append(
+                {
+                    "group": {
+                        "benchmark_id": key[0],
+                        "content_version": key[1],
+                        "host": key[3].to_dict(),
+                        "profile_id": key[2],
+                    },
+                    "kind": MERGED_INPUTS_NOTE,
+                    "repeated_profile": _repeated(members),
+                    "sources": sorted(data.input_sha256 for _, data in members),
+                }
+            )
+    for host, keys in sorted(hosts.items()):
+        if len(keys) > 1:
+            sources = sorted(data.input_sha256 for key in keys for _, data in groups[key])
+            notes.append(
+                {
+                    "groups": [
+                        {
+                            "benchmark_id": benchmark,
+                            "content_version": version,
+                            "profile_id": profile,
+                        }
+                        for benchmark, version, profile, _ in keys
+                    ],
+                    "host": host.to_dict(),
+                    "kind": SAME_HOST_NOTE,
+                    "sources": sources,
+                }
+            )
+    return notes
+
+
+def repeated_scan_runs(entries: list[Entry]) -> int:
+    """Return how many groups (host, benchmark, content version, profile) have several scan runs.
+
+    Only completed ScanRun inputs (``scan_run`` and ``exceptions_evaluation``) count.
+    Two completed runs of one group would be merged rule by rule, and a machine ID is not
+    a secret, so a forged run could add passing rules to a host.
+    """
+    seen: dict[GroupKey, int] = {}
+    for _, data in entries:
+        if data.kind in SCAN_RUN_KINDS and data.scan_status == COMPLETED:
+            key = (data.benchmark_id, data.content_version, data.profile_id, host_key(data))
+            seen[key] = seen.get(key, 0) + 1
+    return sum(1 for count in seen.values() if count > 1)
+
+
+def figured(entries: list[Entry]) -> dict[Figured, list[Entry]]:
+    """Group entries by (benchmark, content version, profile): what one figure may cover."""
+    result: dict[Figured, list[Entry]] = {}
     for entry in entries:
-        result.setdefault((entry[1].benchmark_id, entry[1].content_version), []).append(entry)
+        data = entry[1]
+        key = (data.benchmark_id, data.content_version, data.profile_id)
+        result.setdefault(key, []).append(entry)
     return result
 
 
 def aggregate_figures(entries: list[Entry], scope: str) -> list[AggregateFigure]:
-    """Return one pooled figure per (benchmark, content version), labelled with ``scope``."""
+    """Return one pooled figure per (benchmark, version, profile), labelled with ``scope``."""
     return [
         AggregateFigure(
             benchmark,
             version,
+            profile,
             len({host_key(entry[1]) for entry in members}),
             scope,
             figure(members),
         )
-        for (benchmark, version), members in sorted(pairs(entries).items())
+        for (benchmark, version, profile), members in sorted(figured(entries).items())
     ]

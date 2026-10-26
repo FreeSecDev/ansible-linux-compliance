@@ -11,7 +11,9 @@ was written but a supplied input is missing or invalid (a section is ``partial``
 and 3 when the JSON report was written but the dashboard was not, because the report
 is above the dashboard size cap; a dashboard left from an earlier run at that path is
 removed. Status 3 takes precedence over 1. A section without any input is
-``unavailable`` and is not an error.
+``unavailable`` and is not an error. Several completed ScanRuns of one host,
+benchmark version and profile are refused with status 2 unless
+``--allow-repeated-scans`` is given.
 """
 
 import argparse
@@ -51,6 +53,7 @@ INPUT_OPTIONS: Final[tuple[str, ...]] = (
     "packer",
     "codebuild",
     "molecule",
+    "exceptions_evaluation",
 )
 METADATA_OPTIONS: Final[tuple[str, ...]] = (
     "commit",
@@ -66,13 +69,26 @@ def build_parser() -> argparse.ArgumentParser:
     """Return the argument parser."""
     parser = argparse.ArgumentParser(
         prog="python -m tools.reporting",
-        description="Write the normalized JSON report (schema report-v1) and, with "
+        description="Write the normalized JSON report (schema report-v2) and, with "
         "--html, the single-file HTML dashboard.",
     )
     parser.add_argument("--scope", required=True, choices=[scope.value for scope in Scope])
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--html", type=Path, default=None)
     parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
+    parser.add_argument(
+        "--exceptions-file",
+        type=Path,
+        default=None,
+        help="the exceptions file that every --exceptions-evaluation was made from; required "
+        "with --exceptions-evaluation",
+    )
+    parser.add_argument(
+        "--allow-repeated-scans",
+        action="store_true",
+        help="merge several completed scan runs of one host, benchmark version and profile "
+        "rule by rule instead of refusing them; each merge is noted in the report",
+    )
     for name in INPUT_OPTIONS:
         parser.add_argument(
             f"--{name.replace('_', '-')}", dest=name, action="append", default=[], type=Path
@@ -143,6 +159,8 @@ def main(argv: Sequence[str]) -> int:
         scope=Scope(arguments["scope"]),
         metadata=metadata,
         max_bytes=arguments["max_bytes"],
+        allow_repeated_scans=arguments["allow_repeated_scans"],
+        exceptions_file=arguments["exceptions_file"],
         **{name: tuple(arguments[name]) for name in INPUT_OPTIONS},
     )
     try:

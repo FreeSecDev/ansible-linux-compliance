@@ -83,3 +83,39 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
 - **Residual:** the pinned content and its 81 scripts are trusted as a whole, like the OVAL definitions, which
   `oscap` also evaluates as root. A content update is therefore a change to code that runs as root: its review covers
   the SCE scripts that changed, not only the digest.
+
+## Report inputs on the controller
+
+`tools/reporting` turns operator-supplied files into the normalized report and the dashboard
+([reporting data model](../reporting-data-model.md), [ADR 0016](../adr/0016-report-schema-and-summary-semantics.md)).
+This section covers the two entries that FREES-130 and FREES-132 changed; the rest of the reporting threat model is
+part of FREES-25.
+
+### T-REPORT-1: a forged scan run raises a host's figure
+
+- **Attacker:** anyone who can add a file to the report inputs, for example a ScanRun JSON with the host name and
+  machine ID of a real host (a machine ID is not a secret).
+- **Failure:** runs of one host and benchmark version were merged rule by rule; the forgery adds passing rules that
+  the real run did not evaluate (0.0 to 99.0 percent in the FREES-130 probe). With the profile outside the key, a
+  forgery that only changed `profile_id` did the same, and an honest CIS and STIG run were pooled into one number.
+- **Mitigation (FREES-130):** every figure key includes the profile, so a run of another profile is its own group
+  and cannot change the real run's figure. A second completed ScanRun in the same group (host, benchmark, content
+  version, profile) is refused unless `--allow-repeated-scans` is given, and every group built from more than one
+  input carries a `merged_inputs` note that the dashboard shows. An XCCDF target and fqdn fact that disagree are an
+  input error.
+- **Residual:** a forged run with another profile appears as an extra group for the host, and a self-asserted XCCDF
+  file of the same profile is merged with a visible note; neither is detected as forged. Signed evidence bundles
+  ([ADR 0018](../adr/0018-evidence-bundle-provenance.md), proposed) are the fix.
+
+### T-REPORT-2: an edited exceptions evaluation hides a failure
+
+- **Attacker:** anyone who can change an evaluation document between the `apply_exceptions` filter and the report.
+- **Failure:** a status, mark or count is changed so that a failure reads as waived or an expired waiver as in effect.
+- **Mitigation (FREES-132):** the report requires the exceptions file (`--exceptions-file`) and
+  `exceptions.verify_evaluation` checks every evaluation against it: same SHA-256, a valid file, and a new evaluation
+  of the scan run with that file equal to the document. Anything else, including an evaluation built consistently
+  from a made-up exceptions file, is an input error, never a waiver. Justification text is rendered with DOM text
+  APIs only.
+- **Residual:** the exceptions file is trusted because it is reviewed in Git; whoever can merge it can waive failures.
+  A waived finding inside a plain ScanRun JSON has no exceptions file to check against. ADR 0018 proposes signed
+  evidence for both.

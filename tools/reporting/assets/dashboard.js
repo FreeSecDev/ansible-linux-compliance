@@ -3,6 +3,7 @@
 
   const SECTION_ORDER = [
     "compliance",
+    "exceptions",
     "tests",
     "coverage",
     "lint",
@@ -14,6 +15,7 @@
   ];
   const SECTION_TITLES = {
     compliance: "Compliance",
+    exceptions: "Exceptions",
     tests: "Tests",
     coverage: "Coverage",
     lint: "Ansible lint",
@@ -58,6 +60,24 @@
     disabled: "no, shown separately"
   };
   const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info", "unknown"];
+  const REVIEW_ORDER = ["expired", "in_effect", "not_yet_effective", "superseded", "not_failing", "stale"];
+  const REVIEW_TEXT = {
+    expired: "expired: a failure it covered is no longer waived",
+    in_effect: "in effect: waives a failure",
+    not_yet_effective: "not yet in effect: a covered failure was scanned before the approval date",
+    superseded: "superseded: another exception was chosen for every failure it covered",
+    not_failing: "not failing: the rule did not fail where the scope matched",
+    stale: "stale: the rule or scope matched nothing"
+  };
+  const HOST_STATUS_ORDER = ["expired", "waived", "not_yet_effective", "superseded", "not_failing", "unmatched"];
+  const HOST_STATUS_TEXT = {
+    expired: "expired",
+    waived: "waived",
+    not_yet_effective: "not yet in effect",
+    superseded: "superseded",
+    not_failing: "not failing",
+    unmatched: "unmatched"
+  };
   const TONES = {
     ok: [
       "available", "pass", "completed", "all_evaluated_passed", "passed", "SUCCEEDED",
@@ -69,11 +89,12 @@
     ],
     warn: [
       "partial", "notchecked", "waived", "findings_open", "skipped", "STOPPED", "IN_PROGRESS", "medium",
-      "self_asserted", "unnamed", "truncated", "active", "notselected", "informational"
+      "self_asserted", "unnamed", "truncated", "active", "notselected", "informational", "in_effect",
+      "not_yet_effective", "stale", "removal_candidate"
     ],
     neutral: [
       "unavailable", "notapplicable", "disabled", "nothing_evaluated", "none", "low", "info", "unknown",
-      "fixed"
+      "fixed", "superseded", "not_failing", "unmatched"
     ]
   };
   const PAGE_SIZES = [25, 100, 500];
@@ -767,7 +788,8 @@
         ["Runs not completed", val(fields.runs_not_completed)],
         ["Evaluated (denominator)", val(fields.evaluated)],
         ["Not selected by the profile", [val(fields.not_selected), " (informational, never in the figures)"]],
-        ["Expired waivers", [val(fields.expired_waivers), " (counted as their evaluated outcome)"]]
+        ["Expired waivers", [val(fields.expired_waivers),
+          " (counted as their evaluated outcome, including waivers that lapsed after the scan started)"]]
       ]),
       simpleTable(caption + ": rules per outcome", ["Outcome", "Rules", "In the denominator"],
         OUTCOME_ORDER.map(function (outcome) {
@@ -784,34 +806,56 @@
     }));
   }
 
+  function groupLabel(fields) {
+    return [val(fields.benchmark_id), " version ", val(fields.content_version), " profile ", val(fields.profile_id)];
+  }
+
   function noteText(note) {
     const fields = obj(note);
-    if (fields.kind === "shared_self_asserted_host") {
+    if (fields.kind === "same_host_across_groups") {
       return [
-        "Several inputs claim the self-asserted host name ", val(fields.host),
-        " and are counted as one host. Figures stay separate for each benchmark and content version; "
-          + "a host group shows a merge only when it combines inputs itself. Inputs: ",
+        "Counted as one host: these inputs name the host ", hostCell(fields.host),
+        ". They belong to ", String(list(fields.groups).length),
+        " groups, one per benchmark, content version and profile, whose figures stay separate; "
+          + "nothing is combined across them. Groups: ",
+        el("ul", { class: "plain" }, list(fields.groups).map(function (group) {
+          return el("li", null, groupLabel(obj(group)));
+        })),
+        "Inputs: ",
         shaList(fields.sources)
       ];
     }
-    return ["Note of kind ", val(fields.kind), " for host ", val(fields.host)];
+    if (fields.kind === "merged_inputs") {
+      return mergeText(fields);
+    }
+    return ["Note of kind ", val(fields.kind)];
   }
 
-  function mergeText(merge) {
-    const note = obj(list(obj(SECTIONS.compliance).notes)[obj(merge).note]);
-    return [
-      "Merged in this group: these inputs claim the self-asserted host name ", val(note.host),
-      " and are combined into this group: ",
-      shaList(obj(merge).sources)
+  function mergeText(note) {
+    const fields = obj(note);
+    const parts = [
+      "Merged in this group: ", String(list(fields.sources).length),
+      " inputs for the same host, benchmark and content version are combined rule by rule, "
+        + "and the worst outcome of each rule is counted. Inputs: ",
+      shaList(fields.sources)
     ];
+    if (fields.repeated_profile === true) {
+      parts.push(badge("truncated", "repeated scan: two completed inputs report the same profile"));
+    }
+    return parts;
   }
 
   function groupSources(index) {
     return list(obj(list(VIEWS.groups)[index]).sources);
   }
 
-  function groupMerges(index) {
-    return list(obj(list(VIEWS.groups)[index]).merges);
+  function groupNote(index) {
+    const position = obj(list(VIEWS.groups)[index]).note;
+    if (typeof position !== "number") {
+      return null;
+    }
+    const note = obj(list(obj(SECTIONS.compliance).notes)[position]);
+    return note.kind === "merged_inputs" ? note : null;
   }
 
   function sourceList(sources) {
@@ -842,21 +886,24 @@
       + "ISO 27001, PCI DSS, NIST, NIS2 or any other framework."));
     if (isObject(section.summary)) {
       parts.push(el("h3", null, "Summary"));
-      parts.push(el("p", null, "One benchmark and content version, pooled over the " + scopeLabel() + " scope."));
+      parts.push(el("p", null, "One benchmark, content version and profile, pooled over the " + scopeLabel()
+        + " scope."));
       parts.push(complianceSummary(section.summary, "Summary"));
     } else if (section.status === "available") {
       parts.push(callout("neutral", "No single summary.",
-        el("p", null, "The report covers several benchmarks or content versions, which are never pooled. "
+        el("p", null, "The report covers several benchmarks, content versions or profiles, which are never pooled. "
           + "See the figures per benchmark and per host below.")));
     }
-    const notes = list(section.notes);
+    const notes = list(section.notes).filter(function (note) {
+      return obj(note).kind === "same_host_across_groups";
+    });
     if (notes.length > 0) {
       parts.push(el("h3", null, "Hosts counted as one"));
       parts.push(el("ul", null, notes.map(function (note) {
         return el("li", null, noteText(note));
       })));
     }
-    parts.push(el("h3", null, "Figures per benchmark and content version"));
+    parts.push(el("h3", null, "Figures per benchmark, content version and profile"));
     if (SCOPE === "single_host") {
       parts.push(el("p", null, "Not produced for the single host scope; see the per-host figures."));
     } else {
@@ -873,6 +920,9 @@
           { label: "Content version", value: function (row) {
             return row.content_version;
           } },
+          { label: "Profile", value: function (row) {
+            return row.profile_id;
+          }, filter: true },
           { label: "Scope", value: function (row) {
             return SCOPE_TEXT[row.scope] || row.scope;
           } },
@@ -898,7 +948,7 @@
       }));
     }
     parts.push(el("h3", null, "Figures per host"));
-    parts.push(el("p", null, "Each row is one benchmark and content version on one host. A host is identified "
+    parts.push(el("p", null, "Each row is one benchmark, content version and profile on one host. A host is identified "
       + "by its machine ID when a scan run supplies one; otherwise its name is self-asserted by the input file."));
     parts.push(dataTable({
       caption: "Host groups",
@@ -925,6 +975,9 @@
         { label: "Content version", value: function (row) {
           return row.group.content_version;
         } },
+        { label: "Profile", value: function (row) {
+          return row.group.profile_id;
+        }, filter: true },
         { label: "Run status", value: function (row) {
           return obj(row.group.summary).run_status;
         }, cell: function (row) {
@@ -948,20 +1001,15 @@
           return sourceList(groupSources(row.index));
         } },
         { label: "Merge notes", sortable: false, value: function (row) {
-          return groupMerges(row.index).length > 0 ? "merged" : "";
+          return groupNote(row.index) ? "merged" : "";
         }, cell: function (row) {
-          const merges = groupMerges(row.index);
-          if (merges.length === 0) {
-            return missing("none");
-          }
-          return el("ul", { class: "plain" }, merges.map(function (merge) {
-            return el("li", null, mergeText(merge));
-          }));
+          const note = groupNote(row.index);
+          return note ? el("div", null, mergeText(note)) : missing("none");
         } }
       ]
     }));
     parts.push(el("h3", null, "Rules"));
-    parts.push(el("p", null, "One row per rule, host and content version. When several scans evaluated a rule, "
+    parts.push(el("p", null, "One row per rule, host, benchmark, content version and profile. When several scans evaluated a rule, "
       + "the worst outcome is shown and every source keeps its own outcome."));
     parts.push(dataTable({
       caption: "Rules",
@@ -989,8 +1037,14 @@
         }, cell: function (row) {
           return hostCell(row.host);
         }, filter: true },
+        { label: "Benchmark", value: function (row) {
+          return row.benchmark_id;
+        }, filter: true },
         { label: "Content version", value: function (row) {
           return row.content_version;
+        }, filter: true },
+        { label: "Profile", value: function (row) {
+          return row.profile_id;
         }, filter: true },
         { label: "Outcome", value: function (row) {
           return row.outcome;
@@ -1048,6 +1102,10 @@
     return parts;
   }
 
+  function lapsedAfterStart(row) {
+    return obj(row.entry.exception).state === "none" && list(row.data.lapsed_waivers).indexOf(row.entry.rule_id) >= 0;
+  }
+
   function findingsTable(section) {
     const rows = [];
     list(section.items).forEach(function (item) {
@@ -1103,9 +1161,12 @@
           }));
         }, filter: true },
         { label: "Exception", value: function (row) {
-          return obj(row.entry.exception).state;
+          return lapsedAfterStart(row) ? "lapsed" : obj(row.entry.exception).state;
         }, cell: function (row) {
           const state = obj(row.entry.exception).state;
+          if (lapsedAfterStart(row)) {
+            return badge("expired", "waiver lapsed after the scan started");
+          }
           return state === "none" ? missing("none") : badge(state, state === "active" ? "waiver active" : "waiver " + plain(state));
         }, filter: true },
         { label: "Disabled by", value: function (row) {
@@ -1115,6 +1176,198 @@
         } }
       ]
     });
+  }
+
+  function reviewBadge(value) {
+    return badge(value, REVIEW_TEXT[value] || plain(value));
+  }
+
+  function scopeText(scope) {
+    const fields = obj(scope);
+    const parts = [];
+    [["hosts", "hosts"], ["groups", "groups"], ["profiles", "profiles"]].forEach(function (entry) {
+      const values = list(fields[entry[0]]);
+      if (values.length > 0) {
+        parts.push(entry[1] + ": " + values.join(", "));
+      }
+    });
+    if (isObject(fields.benchmark)) {
+      parts.push("benchmark: " + plain(fields.benchmark.id) + " version " + plain(fields.benchmark.version));
+    }
+    return parts.join("; ");
+  }
+
+  function scopePairs(scope) {
+    const fields = obj(scope);
+    function names(values) {
+      const entries = list(values);
+      return entries.length === 0 ? missing("any") : el("ul", { class: "plain" }, entries.map(function (name) {
+        return el("li", null, mono(name));
+      }));
+    }
+    const benchmark = obj(fields.benchmark);
+    return pairs([
+      ["Inventory hosts", names(fields.hosts)],
+      ["Inventory groups", names(fields.groups)],
+      ["Profiles", names(fields.profiles)],
+      ["Benchmark", isObject(fields.benchmark)
+        ? [mono(benchmark.id), " version ", val(benchmark.version)] : missing("any")]
+    ]);
+  }
+
+  function exceptionDetail(row, context) {
+    return [
+      pairs([
+        ["Justification", el("pre", { class: "v" }, plain(row.justification))],
+        ["Review", reviewBadge(row.status)],
+        ["Removal candidate", row.removal_candidate ? badge("removal_candidate", "yes: it waived nothing") : "no"],
+        ["Owner", mono(row.owner)],
+        ["Approver", mono(row.approver)],
+        ["Approved on", val(row.approval_date)],
+        ["Created", val(row.created)],
+        ["Expires", [val(row.expires), " (no longer applies from ", val(row.expires_at), ")"]],
+        ["Expiry passed at an evaluation", row.lapsed ? badge("expired", "yes") : "no"],
+        ["Exceptions file SHA-256", mono(row.source_sha256)]
+      ]),
+      el("h4", null, "Scope"),
+      scopePairs(row.scope),
+      countsTable("Scan runs per status of " + plain(row.id), row.host_statuses, HOST_STATUS_ORDER,
+        context + ": scan runs per status"),
+      simpleTable("Matched hosts of " + plain(row.id),
+        ["Inventory host", "Benchmark", "Content version", "Profile", "Run", "Status", "Superseded by", "Input"],
+        list(row.matched_hosts).map(function (match) {
+          const fields = obj(match);
+          return [mono(fields.host), val(fields.benchmark_id), val(fields.content_version), val(fields.profile_id),
+            mono(fields.run_id), badge(fields.status, HOST_STATUS_TEXT[fields.status]), mono(fields.superseded_by),
+            mono(fields.input_sha256)];
+        }), context + ": matched hosts")
+    ];
+  }
+
+  function exceptionsSummary(summary, file) {
+    const fields = obj(summary);
+    const source = obj(file);
+    return el("div", { class: "figure" }, [
+      pairs([
+        ["Exceptions file", [mono(source.path), " ", source.verified === true
+          ? badge("available", "every evaluation verified against this file")
+          : badge("error", "not verified")]],
+        ["SHA-256 of the file as read", mono(source.sha256)],
+        ["Exceptions in the file", val(fields.total)],
+        ["Scan runs evaluated", val(fields.evaluations)],
+        ["Removal candidates (stale, superseded or not failing everywhere)", val(fields.removal_candidates)],
+        ["Expiry passed at an evaluation", val(fields.lapsed)],
+        ["SHA-256 the evaluations record", mono(fields.source_sha256)]
+      ]),
+      simpleTable("Exceptions per review", ["Review", "Exceptions"], REVIEW_ORDER.map(function (key) {
+        return [reviewBadge(key), val(obj(fields.by_status)[key])];
+      }))
+    ]);
+  }
+
+  function exceptionsPanel() {
+    const section = obj(SECTIONS.exceptions);
+    const parts = sectionHeader("exceptions", section);
+    parts.push(el("p", null, "Exceptions record accepted risks from the exceptions file. A waived finding is "
+      + "still a finding and never counts as a pass. Nothing on this tab changes a compliance figure. "
+      + "Hosts are the controller's inventory names, not names that the scanned hosts report."));
+    if (isObject(section.summary)) {
+      parts.push(el("h3", null, "Summary"));
+      parts.push(exceptionsSummary(section.summary, section.exceptions_file));
+    }
+    parts.push(el("h3", null, "Exceptions"));
+    parts.push(dataTable({
+      caption: "Exceptions",
+      rows: list(section.exceptions).map(obj),
+      detail: exceptionDetail,
+      empty: "The report lists no exceptions.",
+      columns: [
+        { label: "ID", value: function (row) {
+          return row.id;
+        }, cell: function (row) {
+          return mono(row.id);
+        } },
+        { label: "Rule ID", value: function (row) {
+          return row.rule_id;
+        }, cell: function (row) {
+          return mono(row.rule_id);
+        } },
+        { label: "Review", value: function (row) {
+          return row.status;
+        }, cell: function (row) {
+          return reviewBadge(row.status);
+        }, filter: true, rank: rankIn(REVIEW_ORDER), filterLabel: function (row) {
+          return REVIEW_TEXT[row.status] || plain(row.status);
+        } },
+        { label: "Removal candidate", value: function (row) {
+          return row.removal_candidate ? "yes" : "no";
+        }, cell: function (row) {
+          return row.removal_candidate ? badge("removal_candidate", "removal candidate") : "no";
+        }, filter: true },
+        { label: "Expires", value: function (row) {
+          return row.expires;
+        }, cell: function (row) {
+          return el("span", null, [val(row.expires), row.lapsed ? [" ", badge("expired", "expiry passed")] : null]);
+        } },
+        { label: "Risk", value: function (row) {
+          return row.risk;
+        }, cell: function (row) {
+          return badgeCell(row.risk);
+        }, filter: true, rank: rankIn(SEVERITY_ORDER) },
+        { label: "Framework", value: function (row) {
+          return row.framework;
+        }, filter: true },
+        { label: "Scope", sortable: false, value: function (row) {
+          return scopeText(row.scope);
+        } },
+        { label: "Matched hosts", value: function (row) {
+          return list(row.matched_hosts).length;
+        }, search: function (row) {
+          return list(row.matched_hosts).map(function (match) {
+            return obj(match).host;
+          }).join(" ");
+        }, cell: function (row) {
+          const hosts = list(row.matched_hosts);
+          if (hosts.length === 0) {
+            return missing("none");
+          }
+          const names = [];
+          hosts.forEach(function (match) {
+            const host = plain(obj(match).host);
+            if (names.indexOf(host) < 0) {
+              names.push(host);
+            }
+          });
+          return el("ul", { class: "plain" }, names.slice(0, 5).map(function (name) {
+            return el("li", null, mono(name));
+          }).concat(names.length > 5 ? [el("li", null, "and " + (names.length - 5) + " more in the details")] : []));
+        } }
+      ]
+    }));
+    parts.push(itemsTable("exceptions", section, [
+      { label: "Inventory host", value: function (row) {
+        return row.entry.target_host;
+      }, cell: function (row) {
+        return mono(row.entry.target_host);
+      } },
+      { label: "Scan started", value: function (row) {
+        return row.entry.scan_started_at;
+      } },
+      { label: "Evaluated at", value: function (row) {
+        return row.entry.evaluated_at;
+      } },
+      { label: "Scan lag", value: function (row) {
+        return row.entry.scan_lag_exceeded;
+      }, cell: function (row) {
+        if (!present(row.entry.scan_lag_exceeded)) {
+          return missing("not parsed");
+        }
+        return row.entry.scan_lag_exceeded
+          ? badge("partial", "scan older than the allowed lag")
+          : el("span", null, "within the allowed lag");
+      }, filter: true }
+    ]));
+    return parts;
   }
 
   function genericPanel(name, extraItems, details) {
@@ -1178,6 +1431,7 @@
   }
 
   const PANELS = {
+    exceptions: exceptionsPanel,
     compliance: compliancePanel,
     tests: function () {
       return genericPanel("tests", [
@@ -1369,6 +1623,26 @@
             + "See the Compliance tab for the figures per benchmark and host."
           : ["The compliance section is ", badge(status, SECTION_STATUS_TEXT[status] || status), ". Reason: ",
             val(compliance.reason)])));
+    }
+    parts.push(el("h3", null, "Exceptions"));
+    if (isObject(overview.exceptions)) {
+      const waivers = obj(overview.exceptions);
+      const byStatus = obj(waivers.by_status);
+      parts.push(pairs([
+        ["Stale (matched nothing)", val(byStatus.stale)],
+        ["Expired (a covered failure is no longer waived)", val(byStatus.expired)],
+        ["Expiry passed at an evaluation", val(waivers.lapsed)],
+        ["Removal candidates", val(waivers.removal_candidates)],
+        ["In effect", val(byStatus.in_effect)],
+        ["Exceptions in the file", val(waivers.total)]
+      ]));
+      parts.push(el("p", null, "These counts do not change any figure: a waived finding is counted as waived, "
+        + "never as a pass, and an expired waiver as its evaluated outcome."));
+    } else {
+      const status = plain(obj(SECTIONS.exceptions).status);
+      parts.push(el("p", null, status === "unavailable"
+        ? "No exceptions evaluation was supplied, so the report says nothing about exceptions."
+        : ["No exception counts: the exceptions section is ", badge(status, SECTION_STATUS_TEXT[status] || status), "."]));
     }
     parts.push(el("h3", null, "Sections"));
     parts.push(simpleTable("Section status", ["Section", "Status", "Reason"], SECTION_ORDER.map(function (name) {

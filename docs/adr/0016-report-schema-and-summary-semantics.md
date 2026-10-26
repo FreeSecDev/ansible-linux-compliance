@@ -21,7 +21,9 @@ assurance ([AGENTS.md](../../AGENTS.md) rule 13).
 ### One versioned document with explicit section states
 
 The reporting package (`tools/reporting/`, controller side, Python 3.12 or newer) writes one JSON document that
-validates against `tools/reporting/schema/report-v1.json` (JSON Schema 2020-12). `schema_version` is `"1.0"`.
+validates against `tools/reporting/schema/report-v1.json` (JSON Schema 2020-12). `schema_version` is `"1.0"`
+(superseded by `report-v2.json` and `"2.0"`, see the [amendment of FREES-130 and
+FREES-132](#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132)).
 The document has `metadata`, one `scope`, nine `sections`, an `overview` and `raw_artifacts`.
 
 Every item and section has a `status`:
@@ -46,7 +48,8 @@ document. It is validated against the data: `single_host` with more than one hos
 benchmark or content version, is rejected. A figure is computed per (benchmark, content version, host) (`groups`). A
 pooled figure (`aggregates`, labelled with the scope and `host_count`) exists only per benchmark and content version,
 and the section-level `summary` exists only when there is exactly one benchmark and content version. No figure
-combines benchmarks or versions, and no percentage appears without its denominator.
+combines benchmarks or versions, and no percentage appears without its denominator. (Since 2.0 every key also
+includes the profile, and `benchmark` is refused for several profiles; see the [amendment](#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132).)
 
 ### Summary semantics
 
@@ -77,7 +80,8 @@ Rules are deduplicated by full rule ID within the same host and content version 
 once however many frameworks reference it). The worst outcome wins (`error`, `fail`, `notchecked`, `waived`,
 `pass`, `notapplicable`, `disabled`), the highest severity is kept and every originating artifact, benchmark and
 profile is listed in `sources` with the outcome each source reported. Different content versions and different hosts
-stay separate. A host key is a structured object (lower-cased host name, machine ID, or the content hash of an input that names no
+stay separate. (Since 2.0 rules are deduplicated within one host, benchmark, content version and profile; see the
+[amendment](#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132).) A host key is a structured object (lower-cased host name, machine ID, or the content hash of an input that names no
 host), never joined text, so a crafted name cannot take over another key. A ScanRun host is its host name plus machine ID; XCCDF and ARF files name their host (`target`, fqdn
 fact, ARF asset), which is self-asserted. A name must satisfy the ScanRun host rule or the file is an error. Files are grouped only when the keys are equal, a file without a name is its
 own host and is never merged, and an ARF asset that disagrees with its TestResult target is an error. Input files with the same SHA-256 count
@@ -145,3 +149,179 @@ from reports can contain markup; consumers must escape it when rendering (FREES-
 
 - [ADR 0013](0013-normalized-findings-model.md), [reporting data model](../reporting-data-model.md)
 - JSON Schema 2020-12: <https://json-schema.org/draft/2020-12>
+
+## Amendment 2026-10-26: schema 2.0, host identity and waivers (FREES-130, FREES-132)
+
+The report schema is now `tools/reporting/schema/report-v2.json` with `schema_version` `"2.0"`. The 1.0 schema file
+is removed from the tree; it stays in the Git history at the commit before this amendment.
+
+### Why a major version
+
+Version 1.0 readers cannot read 2.0 documents, so the major version is bumped and the schema file is renamed:
+
+- **Profiles are part of every figure key.** `groups`, `aggregates` and `rules` gain `profile_id` (and `rules` gains
+  `benchmark_id`), and figures that 1.0 pooled over the profiles of one benchmark are now separate (see below).
+- **Notes changed.** The meaning and shape of `sections.compliance.notes` changed. The 1.0 note
+  `shared_self_asserted_host` (one note per host name across benchmarks, with a bare `host` string) no longer exists;
+  its replacements are structured per group.
+- **New required keys.** `sections` has a tenth section, `exceptions`, and `overview` has a required key
+  `exceptions`. Both schemas reject unknown keys, so this alone breaks a strict 1.0 reader.
+- **New input kind.** Compliance items have a new format and kind, `exceptions_evaluation`; compliance data has a
+  required `lapsed_waivers` list; `raw_artifacts` has the format `exceptions_file`.
+
+### Compatibility with 1.0
+
+These keep their 1.0 meaning:
+
+- `metadata`, `scope` and the status coupling of every section;
+- items, gaps and `raw_artifacts`;
+- the summary fields and the percentage rules: only `pass` counts, and the denominator is everything except
+  `notapplicable` and `disabled`.
+
+Two counting changes are deliberate:
+
+- **One figure per profile.** A figure now covers one benchmark, content version and profile instead of one benchmark
+  and content version. A 1.0 report of a host with a CIS and a STIG run had one group figure; a 2.0 report has two. The
+  section `summary` exists only for exactly one benchmark, content version and profile. The `benchmark` scope is
+  refused for several profiles.
+- **Lapsed waivers count as expired.** A waiver that lapsed between the scan start and the controller time now counts
+  in `expired_waivers`. 1.0 could not see it and counted the finding as a plain `fail`. No outcome or percentage
+  changes: the finding stays `fail` either way.
+
+A consumer migrates by:
+
+1. accepting `schema_version` `"2.0"` and `exceptions` in the section lists of `overview`;
+2. reading `profile_id` in groups, aggregates and rules, and never combining figures of different profiles;
+3. reading `notes` by `kind` (`merged_inputs`, `same_host_across_groups`) instead of `shared_self_asserted_host`;
+4. treating `exceptions_evaluation` as a ScanRun input in the compliance section; its data embeds the scan run, as
+   for `scan_run`;
+5. ignoring `sections.exceptions` and `overview.exceptions` if it does not need waivers; they never change a figure.
+
+A 1.0 document is not converted. Reports are rebuilt from their inputs, which are unchanged with three exceptions:
+
+- an XCCDF file whose names disagree is now an error;
+- repeated scan runs are refused unless allowed;
+- an exceptions evaluation needs its exceptions file.
+
+All three are described below. The dashboard reads 2.0 only.
+
+### Profiles are never pooled (FREES-130 review)
+
+In ComplianceAsCode the CIS and STIG profiles of a distribution share one benchmark identifier (ADR 0013). A 1.0
+group keyed on benchmark, content version and host therefore pooled a CIS run and a STIG run of one host into one
+percentage that describes neither framework. It also let a forged run with another `profile_id` add passing rules to
+a real host's figure, with only a benign-looking note.
+
+The group key is now **(benchmark, content version, profile, host)**. Every place that derives a figure uses the
+same key:
+
+- `rules` deduplicates by rule ID within one host, benchmark, content version and profile. ADR 0013 counts a rule
+  once however many frameworks reference it; that holds within one scan, and is not a reason to pool two profile
+  runs.
+- `groups` has one figure per key.
+- `aggregates` has one pooled figure per (benchmark, content version, profile), over hosts.
+- The section `summary` exists only when exactly one benchmark, content version and profile is present.
+- The `benchmark` scope is refused when the inputs cover more than one benchmark, content version or profile.
+- The `single_host` scope still counts hosts, so a CIS and a STIG run of one host is a valid `single_host` report
+  with two separate figures.
+
+A host that has inputs in several groups (for example its CIS and STIG groups) gets the host-level note described
+below. That note is a list of groups, never a figure. There is no cross-profile figure.
+
+### Notes per group (FREES-130)
+
+- **Per-group note.** Every group built from more than one input gets one note
+  `{"kind": "merged_inputs", "group": {benchmark_id, content_version, profile_id, host}, "sources": [sha256, ...],
+  "repeated_profile": bool}`, whatever the input types. Two ScanRuns that share `hostname` and `machine_id` are noted
+  like two XCCDF files that claim one name. `repeated_profile` is true when two or more inputs of the group completed,
+  which means the same profile was scanned again.
+- **Host-level note.** Every host key with inputs in more than one group gets one note
+  `{"kind": "same_host_across_groups", "host": {...}, "groups": [{benchmark_id, content_version, profile_id}, ...],
+  "sources": [...]}`. Those inputs are counted as one host for scope checks and `host_count`, but their figures stay
+  separate; the note never claims that a group combines anything.
+- **Content and bounds.** Notes carry only validated identifiers and digests. There is at most one note of each kind
+  per group or host, so the 1000-entry bound of `notes` holds: each input is in at most one note of each kind, and
+  each note has at least two inputs.
+
+### Repeated scan runs are refused by default (FREES-130)
+
+More than one **completed** ScanRun (`scan_run` or `exceptions_evaluation`) in one group is refused with exit status 2
+and no report, unless the caller sets `allow_repeated_scans` (`--allow-repeated-scans`). The group key is the host
+key, benchmark, content version and profile. With the flag, the runs are merged rule by rule, worst outcome first, and
+the group's note has `repeated_profile: true`.
+
+- **Other profiles.** A run of another profile is a different group (see above), so it can neither be refused as a
+  repeat nor change the other group's figure.
+- **Completed runs only.** A failed or timed-out run cannot raise a figure: the group becomes `not_completed` and has
+  no percentage.
+- **XCCDF and ARF are not refused.** Their host names are self-asserted by construction, and several files per host
+  and profile are common (for example a scan repeated by hand). They are always noted. Signed evidence (ADR 0018) is
+  the long-term answer for every input type.
+
+Rejected alternatives:
+
+- keeping the newest run only: `started_at` is self-asserted, so a forgery would simply claim to be newer;
+- turning repeated runs into an input `error`: the merge is a contradiction between inputs, like a contradicted
+  scope, not a defect of one file.
+
+### XCCDF target and fqdn fact (FREES-130)
+
+An XCCDF or ARF TestResult is an input `error` when its `target` elements and fqdn facts
+(`urn:xccdf:fact:asset:identifier:fqdn`) do not all name the same host, compared lower-cased. In 1.0 the fact
+silently won.
+
+### The `exceptions` section (FREES-132)
+
+- **Input.** Exceptions evaluation documents (`--exceptions-evaluation`, one per scan run) are the output of the
+  `apply_exceptions` filter. They are accepted only together with the exceptions file they were made from
+  (`--exceptions-file`). The CLI refuses with exit status 2:
+  - evaluations without the file;
+  - the file without evaluations;
+  - a file that cannot be read.
+- **Verification.** Each evaluation is checked with `exceptions.verify_evaluation` (ADR 0013, amendment of
+  FREES-132):
+  - The SHA-256 of the file exactly as supplied must be the evaluation's `source_sha256`: the evaluation must have been made from the byte-exact file, as the
+    `audit` role reads it (`rstrip=false`). No normalised form is tried: that would let one file show two digests,
+    and Python's `rstrip` also removes Unicode whitespace, so a file that is invalid as written could verify through
+    its stripped form.
+  - The file must be valid.
+  - The evaluation's scan run is evaluated again with that file and with the target, controller time and lag limit
+    the document records. The result must equal the document.
+
+  An evaluation that fails is an input `error` in both the compliance and the exceptions section; this includes an
+  evaluation made from another, unreviewed exceptions file. The inventory host must satisfy the exceptions host
+  pattern.
+- **Compliance input.** The scan run of an evaluation is a compliance input like a ScanRun JSON file. A rule whose
+  chosen exception lapsed between the scan start and the controller time counts in `expired_waivers`, because the
+  finding carries no exception data (ADR 0013). The rule IDs are listed in the item's `lapsed_waivers`. The outcome
+  stays `fail`.
+- **Section content.** `sections.exceptions` follows the standard section coupling. When it is available:
+  - `exceptions_file` holds `{path, sha256, verified: true}`;
+  - `exceptions` lists every exception of the file once (at most 1000) with these fields:
+    - `id`, `rule_id`, `framework`, `risk`
+    - `owner`, `approver`, `approval_date`, `created`, `expires`, `expires_at`
+    - `justification`
+    - a structured `scope` with hosts, groups, profiles and benchmark. All of it comes from the reviewed file, and
+      each value is pattern-checked; the benchmark version is a version token.
+    - `host_statuses`: the count per evaluation status
+    - `matched_hosts`: one entry per evaluation in which the scope matched, with the inventory host, benchmark,
+      content version, profile, run, status, `superseded_by` and input SHA-256
+    - `lapsed`, `removal_candidate`, `source_sha256` and the review `status`
+- **Review status.** It is one of `in_effect`, `expired`, `not_yet_effective`, `superseded`, `not_failing` or
+  `stale`. The first evaluation status in this order decides: `expired`, `waived`, `not_yet_effective`,
+  `superseded`, `not_failing`. An exception that is `unmatched` everywhere is `stale`.
+- **Removal candidates.** `removal_candidate` is true exactly for `stale`, `superseded` and `not_failing`. Such an
+  exception, on every evaluated host, waived nothing, covered no failure that expired, and covered no failure
+  scanned before its approval. Superseded on every host is therefore a removal candidate. The schema ties
+  `removal_candidate` to the status, and `matched_hosts` to `stale`.
+- **Matched hosts.** They are the controller's inventory names, never the host names that scan runs report.
+- **One file, one digest.** Every accepted evaluation was verified against the same bytes, so they all record the
+  same `source_sha256`, which is also `exceptions_file.sha256`.
+- **Summary.** `summary` and `overview.exceptions` hold the counts per review status, `removal_candidates`, `lapsed`
+  (expiry passed at an evaluation time), `evaluations`, `total` and `source_sha256`. They are `null` unless the
+  section is available. No compliance figure reads them.
+- **Raw artifacts.** Evaluations appear once in `raw_artifacts` (format `exceptions_evaluation`), although they are
+  items of two sections. The exceptions file appears once (format `exceptions_file`). `raw_artifacts` is bounded by
+  9001.
+- **Residual.** Waived findings carried directly in a ScanRun JSON (`--scan-run`) have no exceptions file to check
+  against. They are shown as the scan run records them. This predates schema 2.0 and is covered by ADR 0018.

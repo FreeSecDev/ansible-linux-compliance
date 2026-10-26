@@ -68,14 +68,16 @@ def group_rows(view: Dashboard) -> list[str]:
     return [rows.nth(index).inner_text() for index in range(rows.count())]
 
 
-def check_group_row(row: str, extra: dict[str, Any]) -> None:
+def check_group_row(row: str, extra: dict[str, Any], notes: list[dict[str, Any]]) -> None:
     assert extra["sources"]
     for source in extra["sources"]:
         assert source["sha256"] in row
         assert source["format"] in row
-    assert ("Merged in this group" in row) is bool(extra["merges"])
-    for merge in extra["merges"]:
-        for sha in merge["sources"]:
+    assert ("Merged in this group" in row) is (extra["note"] is not None)
+    assert (len(extra["sources"]) > 1) is (extra["note"] is not None)
+    if extra["note"] is not None:
+        merged = cast("list[str]", notes[int(extra["note"])]["sources"])
+        for sha in merged:
             assert sha in row
 
 
@@ -97,7 +99,7 @@ def test_host_groups_show_identity_sources_merge_notes_and_variants(
             if (host["hostname"] or host["input_sha256"]) in text
             and (host["machine_id"] or "self-asserted") in text
         )
-        check_group_row(row, extra)
+        check_group_row(row, extra, typical["sections"]["compliance"]["notes"])
     labelled = [text for text in texts if "host.example" in text]
     assert len(labelled) == 2
     assert any("variant 1 of 2" in text for text in labelled)
@@ -118,14 +120,15 @@ def test_a_host_counted_once_across_benchmarks_is_not_shown_as_a_group_merge(
     open_dashboard: Callable[..., Dashboard],
 ) -> None:
     notes = across_benchmarks["sections"]["compliance"]["notes"]
-    assert len(notes) == 1
+    assert [note["kind"] for note in notes] == ["same_host_across_groups"]
     assert len(notes[0]["sources"]) == 2
     view = open_dashboard(render(across_benchmarks, "across"))
     view.tab("compliance")
     panel = view.page.locator("#panel-compliance").inner_text()
     assert "Merged in this group" not in panel
-    assert "combined into" not in panel
-    assert "are counted as one host" in panel
+    assert "combined rule by rule" not in panel
+    assert "Counted as one host" in panel
+    assert "nothing is combined across them" in panel
     table = view.page.locator(".data-table").filter(
         has=view.page.locator("caption", has_text="Host groups")
     )

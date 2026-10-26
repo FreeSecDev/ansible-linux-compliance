@@ -1,0 +1,102 @@
+---
+schema_version: "1.0"
+exceptions:
+  - id: EXC-ERROR
+    rule: xccdf_org.example.synthetic_rule_error_rule
+    framework: cis
+    scope:
+      hosts: [web01]
+    justification: A broken check is never waived; this exception stays not_failing.
+    owner: platform-team
+    approval:
+      approver: security-lead
+      date: "2026-10-02"
+    created: "2026-10-01"
+    expires: "2027-01-31"
+    risk: low
+  - id: EXC-LAPSED
+    rule: xccdf_org.example.synthetic_rule_lapsed_rule
+    framework: cis
+    scope:
+      hosts: [web01]
+    justification: Expires on the day of the scan, after the scan started.
+    owner: platform-team
+    approval:
+      approver: security-lead
+      date: "2026-10-02"
+    created: "2026-10-01"
+    expires: "2026-10-25"
+    risk: medium
+  - id: EXC-NOT-YET
+    rule: xccdf_org.example.synthetic_rule_later_rule
+    framework: stig
+    scope:
+      groups: [web]
+      profiles:
+        - xccdf_org.example.synthetic_profile_baseline
+    justification: Approved after the scan started, so it does not apply to this scan.
+    owner: web-team@example.com
+    approval:
+      approver: ciso@example.com
+      date: "2026-10-25"
+    created: "2026-10-20"
+    expires: "2027-04-30"
+    risk: high
+  - id: EXC-PASSING
+    rule: xccdf_org.example.synthetic_rule_passing_rule
+    framework: cis
+    scope:
+      hosts: [web01]
+    justification: The rule passes now; the exception can be removed.
+    owner: platform-team
+    approval:
+      approver: security-lead
+      date: "2026-10-02"
+    created: "2026-10-01"
+    expires: "2027-01-31"
+    risk: low
+  - id: EXC-STALE
+    rule: xccdf_org.example.synthetic_rule_waived_rule
+    framework: cis
+    scope:
+      hosts: [db01]
+    justification: Names a host that was not evaluated.
+    owner: platform-team
+    approval:
+      approver: security-lead
+      date: "2026-10-02"
+    created: "2026-10-01"
+    expires: "2027-01-31"
+    risk: low
+  - id: EXC-SUPERSEDED
+    rule: xccdf_org.example.synthetic_rule_waived_rule
+    framework: cis
+    scope:
+      hosts: [web01]
+      benchmark:
+        id: xccdf_org.example.synthetic_benchmark_demo
+        version: "1.0"
+      profiles:
+        - xccdf_org.example.synthetic_profile_baseline
+    justification: Overlaps EXC-WAIVED, which expires first and is chosen.
+    owner: platform-team
+    approval:
+      approver: security-lead
+      date: "2026-10-02"
+    created: "2026-10-01"
+    expires: "2027-03-31"
+    risk: medium
+  - id: EXC-WAIVED
+    rule: xccdf_org.example.synthetic_rule_waived_rule
+    framework: cis
+    scope:
+      hosts: [web01]
+    justification: >-
+      The legacy agent on web01 needs this setting until it is replaced.
+    owner: platform-team@example.com
+    approval:
+      approver: security-lead@example.com
+      date: "2026-10-02"
+    created: "2026-10-01"
+    expires: "2027-01-31"
+    risk: medium

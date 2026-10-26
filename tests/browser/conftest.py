@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import datetime as dt
 import hashlib
 import json
 import os
@@ -12,7 +13,10 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, Route, sync_playwright
 
-from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    exceptions,
+    model,
+)
 from tools.reporting.common import dumps
 from tools.reporting.dashboard import render_dashboard
 from tools.reporting.report import ReportInputs, RunMetadata, Scope, build_report
@@ -35,6 +39,7 @@ MACHINE_ID = "0123456789abcdef0123456789abcdef"
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 STARTED = "2026-10-25T10:00:00Z"
 FINISHED = "2026-10-25T10:00:09Z"
+NOW = dt.datetime(2026, 10, 25, 12, 0, tzinfo=dt.UTC)
 MONITOR = """
 window.__cspViolations = [];
 document.addEventListener("securitypolicyviolation", function (event) {
@@ -135,7 +140,11 @@ def write(directory: Path, name: str, content: str) -> Path:
 
 
 def typical_report(directory: Path) -> dict[str, Any]:
-    """Every section available; a machine-identified and a self-asserted ``host.example``."""
+    """Every section available; a machine-identified and a self-asserted ``host.example``.
+
+    The exceptions evaluation of ``tests/fixtures/reporting`` adds a third host and one
+    exception in every review state.
+    """
     machine = write(
         directory, "machine.json", scan_run("host.example", MACHINE_ID, detailed_findings())
     )
@@ -155,6 +164,8 @@ def typical_report(directory: Path) -> dict[str, Any]:
         packer=(REPORTING / "packer-manifest.json",),
         codebuild=(REPORTING / "codebuild.json",),
         molecule=(REPORTING / "molecule-summary.json",),
+        exceptions_evaluation=(REPORTING / "exceptions-evaluation.json",),
+        exceptions_file=REPORTING / "exceptions.yml",
     )
     return as_json(build_report(inputs))
 
@@ -342,6 +353,55 @@ def maximum_report(directory: Path, rules_per_input: int) -> dict[str, Any]:
         return as_json(build_report(inputs))
 
 
+def exceptions_text(count: int) -> str:
+    lines = ["---", "schema_version: '1.0'", "exceptions:"]
+    for index in range(count):
+        hosts = "[web01, web02]" if index % 3 else "[db01]"
+        lines.extend(
+            [
+                f"  - id: EXC-{index:04d}",
+                f"    rule: {RULE_PREFIX}r{index % 500:04d}",
+                "    framework: cis",
+                "    scope:",
+                f"      hosts: {hosts}",
+                f"    justification: Accepted risk number {index} until the replacement ships.",
+                "    owner: platform-team",
+                "    approval:",
+                "      approver: security-lead",
+                "      date: '2026-10-02'",
+                "    created: '2026-10-01'",
+                f"    expires: '2027-0{1 + index % 9}-15'",
+                "    risk: medium",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def full_exceptions_report(directory: Path) -> dict[str, Any]:
+    now = NOW
+    text = exceptions_text(exceptions.MAX_EXCEPTIONS)
+    source = write(directory, "exceptions.yml", text)
+    parsed = exceptions.parse_exceptions(text, now)
+    paths: list[Path] = []
+    for index, host in enumerate(("web01", "web02")):
+        findings = tuple(
+            finding(f"r{rule:04d}", model.Outcome.FAIL if rule % 2 else model.Outcome.PASS)
+            for rule in range(500)
+        )
+        run = model.loads(scan_run(f"{host}.example", f"{index + 1:032x}", findings))
+        evaluation = exceptions.evaluate_run(run, parsed, exceptions.Target(host, ()), now)
+        path = directory / f"{host}-evaluation.json"
+        path.write_text(json.dumps(evaluation.to_dict()), encoding="utf-8")
+        paths.append(path)
+    return as_json(
+        build_report(
+            ReportInputs(
+                scope=Scope.FLEET, exceptions_evaluation=tuple(paths), exceptions_file=source
+            )
+        )
+    )
+
+
 @dataclass
 class Dashboard:
     """A dashboard page opened offline, with every request, error and CSP violation recorded."""
@@ -518,6 +578,12 @@ def all_passed() -> dict[str, Any]:
 @pytest.fixture
 def many_rules(reports: Path) -> dict[str, Any]:
     return many_rules_report(reports, 3, 120)
+
+
+@pytest.fixture
+def exceptions_limit(reports: Path) -> dict[str, Any]:
+    """One exceptions file with the maximum number of exceptions, evaluated on two hosts."""
+    return full_exceptions_report(reports)
 
 
 @pytest.fixture(scope="session")

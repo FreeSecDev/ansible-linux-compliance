@@ -2,7 +2,8 @@
 
 The page embeds the report document unchanged, as JSON in a non-executable
 ``<script type="application/json">`` block, together with a small view that joins
-compliance host groups to their input files. Nothing in the view is a figure: every
+compliance host groups to their input files and to the report's merge note for that
+group. Nothing in the view is a figure: every
 count, percentage and assessment comes from the report as it is. The inline style and
 script are static assets whose SHA-256 hashes form the Content-Security-Policy, so the
 page runs no other code, loads nothing from the network and works from ``file://``.
@@ -24,7 +25,8 @@ from tools.reporting.common import Json
 ASSET_DIRECTORY: Final[Path] = Path(__file__).parent / "assets"
 SCRIPT_ASSET: Final[str] = "dashboard.js"
 STYLE_ASSET: Final[str] = "dashboard.css"
-SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({"1.0"})
+SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({"2.0"})
+MERGED_INPUTS_NOTE: Final[str] = "merged_inputs"
 MAX_EMBEDDED_BYTES: Final[int] = 128 * 1024 * 1024
 MACHINE_ID: Final[str] = "machine_id"
 SELF_ASSERTED: Final[str] = "self_asserted"
@@ -40,6 +42,7 @@ FORBIDDEN_ASSET_SEQUENCES: Final[tuple[str, ...]] = ("</script", "</style", "<!-
 _ESCAPE_TABLE: Final[dict[int, str]] = str.maketrans(JSON_ESCAPES)
 
 type HostTuple = tuple[str, str, str]
+type GroupTuple = tuple[str, str, str, HostTuple]
 
 
 class DashboardError(ValueError):
@@ -134,14 +137,19 @@ def item_host(data: Json) -> HostTuple:
     return ("", "", _text(fields.get("input_sha256")))
 
 
-def _group_sources(items: Sequence[Json]) -> dict[tuple[str, str, HostTuple], list[Json]]:
-    sources: dict[tuple[str, str, HostTuple], list[Json]] = {}
+def _group_sources(items: Sequence[Json]) -> dict[GroupTuple, list[Json]]:
+    sources: dict[GroupTuple, list[Json]] = {}
     for raw in items:
         item = _mapping(raw)
         data = _mapping(item.get("data"))
         if item.get("status") != "available" or not data:
             continue
-        key = (_text(data.get("benchmark_id")), _text(data.get("content_version")), item_host(data))
+        key = (
+            _text(data.get("benchmark_id")),
+            _text(data.get("content_version")),
+            _text(data.get("profile_id")),
+            item_host(data),
+        )
         artifact = _mapping(item.get("artifact"))
         sources.setdefault(key, []).append(
             {
@@ -153,23 +161,33 @@ def _group_sources(items: Sequence[Json]) -> dict[tuple[str, str, HostTuple], li
     return sources
 
 
+def group_key(fields: Mapping[str, Json]) -> GroupTuple:
+    """Return the key of a host group or of a ``merged_inputs`` note's ``group``."""
+    return (
+        _text(fields.get("benchmark_id")),
+        _text(fields.get("content_version")),
+        _text(fields.get("profile_id")),
+        key_of(fields.get("host")),
+    )
+
+
+def _merge_notes(notes: Sequence[Json]) -> dict[GroupTuple, int]:
+    indexes: dict[GroupTuple, int] = {}
+    for index, raw in enumerate(notes):
+        note = _mapping(raw)
+        if note.get("kind") == MERGED_INPUTS_NOTE:
+            indexes.setdefault(group_key(_mapping(note.get("group"))), index)
+    return indexes
+
+
 def _group_view(
     group: Json,
-    sources: Mapping[tuple[str, str, HostTuple], list[Json]],
-    notes: Sequence[Json],
+    sources: Mapping[GroupTuple, list[Json]],
+    merges: Mapping[GroupTuple, int],
 ) -> Json:
-    fields = _mapping(group)
-    host = key_of(fields.get("host"))
-    key = (_text(fields.get("benchmark_id")), _text(fields.get("content_version")), host)
+    key = group_key(_mapping(group))
     matching = sorted(sources.get(key, []), key=lambda source: json.dumps(source, sort_keys=True))
-    own = {_text(_mapping(source).get("sha256")) for source in matching}
-    merges: list[Json] = []
-    for index, note in enumerate(notes):
-        fields = _mapping(note)
-        merged = sorted(own.intersection(_text(sha) for sha in _sequence(fields.get("sources"))))
-        if host[0] and not host[1] and fields.get("host") == host[0] and len(merged) > 1:
-            merges.append({"note": index, "sources": list[Json](merged)})
-    return {"merges": merges, "sources": list[Json](matching)}
+    return {"note": merges.get(key), "sources": list[Json](matching)}
 
 
 def _label(host: HostTuple) -> tuple[bool, str]:
@@ -206,21 +224,22 @@ def dashboard_views(report: Mapping[str, Json]) -> dict[str, Json]:
     """Return the view that the page needs beside the report. It holds no figures.
 
     ``groups[i]`` lists the input files (format, path, SHA-256) of
-    ``sections.compliance.groups[i]`` and its merges. The report writes one merge note per
-    self-asserted host, across benchmarks and content versions, so a note is attached to a
-    group only when at least two of its sources are inputs of that group, and the group
-    lists only those sources. ``hosts`` lists every host key of
-    the groups and rules once, with whether a machine ID identifies it or the name is
-    self-asserted, and a variant number when several keys share one name.
+    ``sections.compliance.groups[i]`` and ``note``, the index in ``notes`` of the
+    ``merged_inputs`` note whose group key (benchmark, content version, profile and host)
+    equals the key of that group, or ``None``.
+    The report writes such a note for every group built from more than one input, so
+    nothing is inferred here. ``hosts`` lists every host key of the groups and rules
+    once, with whether a machine ID identifies it or the name is self-asserted, and a
+    variant number when several keys share one name.
     """
     compliance = _mapping(_mapping(report.get("sections")).get("compliance"))
     groups = _sequence(compliance.get("groups"))
-    notes = _sequence(compliance.get("notes"))
+    merges = _merge_notes(_sequence(compliance.get("notes")))
     sources = _group_sources(_sequence(compliance.get("items")))
     hosts = {key_of(_mapping(group).get("host")) for group in groups}
     hosts.update(key_of(_mapping(rule).get("host")) for rule in _sequence(compliance.get("rules")))
     return {
-        "groups": [_group_view(group, sources, notes) for group in groups],
+        "groups": [_group_view(group, sources, merges) for group in groups],
         "hosts": _host_table(hosts),
     }
 

@@ -18,11 +18,11 @@ if TYPE_CHECKING:
 
     from tests.browser.conftest import Dashboard
 
-RULES_PER_INPUT = 168
+RULES_PER_INPUT = 148
 LOAD_SECONDS = 60.0
 ACTION_SECONDS = 10.0
 SCHEMA = json.loads(
-    (Path(dashboard.__file__).parent / "schema" / "report-v1.json").read_text(encoding="utf-8")
+    (Path(dashboard.__file__).parent / "schema" / "report-v2.json").read_text(encoding="utf-8")
 )
 
 
@@ -64,12 +64,12 @@ def test_the_maximum_fixture_fills_the_list_limits_and_the_size_cap(
 ) -> None:
     document, path = maximum
     sections = document["sections"]
-    assert {name: len(section["items"]) for name, section in sections.items()} == dict.fromkeys(
-        sections, 1000
-    )
+    expected = dict.fromkeys(sections, 1000)
+    expected["exceptions"] = 0
+    assert {name: len(section["items"]) for name, section in sections.items()} == expected
     assert len(document["raw_artifacts"]) == 9000
     compliance = sections["compliance"]
-    assert len(compliance["rules"]) > 160_000
+    assert len(compliance["rules"]) > 140_000
     assert compliance["notes"]
     truncated = [
         name

@@ -15,6 +15,10 @@
           "minimum": 1,
           "type": "integer"
         },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
         "scope": {
           "enum": [
             "multi_host",
@@ -30,6 +34,7 @@
         "benchmark_id",
         "content_version",
         "host_count",
+        "profile_id",
         "scope",
         "summary"
       ],
@@ -666,7 +671,10 @@
           "if": {
             "properties": {
               "kind": {
-                "const": "scan_run"
+                "enum": [
+                  "scan_run",
+                  "exceptions_evaluation"
+                ]
               }
             },
             "required": [
@@ -685,6 +693,25 @@
                 "$ref": "#/$defs/scanRun"
               }
             }
+          }
+        },
+        {
+          "else": {
+            "properties": {
+              "lapsed_waivers": {
+                "maxItems": 0
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "exceptions_evaluation"
+              }
+            },
+            "required": [
+              "kind"
+            ]
           }
         }
       ],
@@ -746,8 +773,19 @@
           "enum": [
             "scan_run",
             "xccdf",
-            "arf"
+            "arf",
+            "exceptions_evaluation"
           ]
+        },
+        "lapsed_waivers": {
+          "items": {
+            "maxLength": 256,
+            "pattern": "^xccdf_[A-Za-z0-9_.-]+?_rule_[A-Za-z0-9_.+-]+$",
+            "type": "string"
+          },
+          "maxItems": 1000,
+          "type": "array",
+          "uniqueItems": true
         },
         "not_selected": {
           "minimum": 0,
@@ -794,6 +832,7 @@
         "host",
         "input_sha256",
         "kind",
+        "lapsed_waivers",
         "not_selected",
         "profile_id",
         "reported_host",
@@ -895,7 +934,8 @@
           "enum": [
             "scan_run",
             "xccdf",
-            "arf"
+            "arf",
+            "exceptions_evaluation"
           ]
         },
         "reason": {
@@ -1165,31 +1205,14 @@
         },
         "notes": {
           "items": {
-            "additionalProperties": false,
-            "properties": {
-              "host": {
-                "$ref": "#/$defs/host"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/mergedInputsNote"
               },
-              "kind": {
-                "enum": [
-                  "shared_self_asserted_host"
-                ]
-              },
-              "sources": {
-                "items": {
-                  "$ref": "#/$defs/sha256"
-                },
-                "maxItems": 1000,
-                "minItems": 2,
-                "type": "array"
+              {
+                "$ref": "#/$defs/sameHostNote"
               }
-            },
-            "required": [
-              "host",
-              "kind",
-              "sources"
-            ],
-            "type": "object"
+            ]
           },
           "maxItems": 1000,
           "type": "array"
@@ -1929,6 +1952,10 @@
       ],
       "type": "object"
     },
+    "date": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": "string"
+    },
     "evidence": {
       "additionalProperties": false,
       "properties": {
@@ -2000,6 +2027,878 @@
         "expires_at",
         "reason",
         "state"
+      ],
+      "type": "object"
+    },
+    "exceptionEntry": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "removal_candidate": {
+                "const": false
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "stale",
+                  "superseded",
+                  "not_failing"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "removal_candidate": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "else": {
+            "properties": {
+              "matched_hosts": {
+                "minItems": 1
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "stale"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "matched_hosts": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "approval_date": {
+          "$ref": "#/$defs/date"
+        },
+        "approver": {
+          "$ref": "#/$defs/person"
+        },
+        "created": {
+          "$ref": "#/$defs/date"
+        },
+        "expires": {
+          "$ref": "#/$defs/date"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "framework": {
+          "enum": [
+            "cis",
+            "stig",
+            "nist_800_53",
+            "nist_800_171",
+            "pci_dss",
+            "anssi"
+          ]
+        },
+        "host_statuses": {
+          "additionalProperties": false,
+          "properties": {
+            "expired": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "not_failing": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "not_yet_effective": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "superseded": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "unmatched": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "waived": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expired",
+            "not_failing",
+            "not_yet_effective",
+            "superseded",
+            "unmatched",
+            "waived"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "$ref": "#/$defs/exceptionId"
+        },
+        "justification": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "lapsed": {
+          "type": "boolean"
+        },
+        "matched_hosts": {
+          "items": {
+            "$ref": "#/$defs/matchedHost"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "owner": {
+          "$ref": "#/$defs/person"
+        },
+        "removal_candidate": {
+          "type": "boolean"
+        },
+        "risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "rule_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/exceptionScope"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "status": {
+          "enum": [
+            "in_effect",
+            "expired",
+            "not_yet_effective",
+            "superseded",
+            "not_failing",
+            "stale"
+          ]
+        }
+      },
+      "required": [
+        "approval_date",
+        "approver",
+        "created",
+        "expires",
+        "expires_at",
+        "framework",
+        "host_statuses",
+        "id",
+        "justification",
+        "lapsed",
+        "matched_hosts",
+        "owner",
+        "removal_candidate",
+        "risk",
+        "rule_id",
+        "scope",
+        "source_sha256",
+        "status"
+      ],
+      "type": "object"
+    },
+    "exceptionId": {
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "type": "string"
+    },
+    "exceptionScope": {
+      "additionalProperties": false,
+      "properties": {
+        "benchmark": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "maxLength": 256,
+                  "pattern": "^xccdf_[A-Za-z0-9_.-]+?_benchmark_[A-Za-z0-9_.+-]+$",
+                  "type": "string"
+                },
+                "version": {
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._+~:-]*$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "groups": {
+          "items": {
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "hosts": {
+          "items": {
+            "maxLength": 253,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "profiles": {
+          "items": {
+            "maxLength": 256,
+            "pattern": "^xccdf_[A-Za-z0-9_.-]+?_profile_[A-Za-z0-9_.+-]+$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "benchmark",
+        "groups",
+        "hosts",
+        "profiles"
+      ],
+      "type": "object"
+    },
+    "exceptionsData": {
+      "additionalProperties": false,
+      "properties": {
+        "benchmark_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "content_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "controller_time": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "max_scan_lag_seconds": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "scan_lag_exceeded": {
+          "type": "boolean"
+        },
+        "scan_lag_seconds": {
+          "minimum": -300,
+          "type": "integer"
+        },
+        "scan_started_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "statuses": {
+          "additionalProperties": false,
+          "properties": {
+            "expired": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "not_failing": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "not_yet_effective": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "superseded": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "unmatched": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "waived": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expired",
+            "not_failing",
+            "not_yet_effective",
+            "superseded",
+            "unmatched",
+            "waived"
+          ],
+          "type": "object"
+        },
+        "target_host": {
+          "$ref": "#/$defs/inventoryHost"
+        }
+      },
+      "required": [
+        "benchmark_id",
+        "content_version",
+        "controller_time",
+        "evaluated_at",
+        "max_scan_lag_seconds",
+        "profile_id",
+        "run_id",
+        "scan_lag_exceeded",
+        "scan_lag_seconds",
+        "scan_started_at",
+        "source_sha256",
+        "statuses",
+        "target_host"
+      ],
+      "type": "object"
+    },
+    "exceptionsItem": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "artifact": {
+                "properties": {
+                  "sha256": {
+                    "$ref": "#/$defs/sha256"
+                  },
+                  "size": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                }
+              },
+              "data": {
+                "$ref": "#/$defs/exceptionsData"
+              },
+              "reason": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "unavailable"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "artifact": {
+                "properties": {
+                  "sha256": {
+                    "type": "null"
+                  },
+                  "size": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/exceptionsData"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "exceptions_evaluation"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      },
+      "required": [
+        "artifact",
+        "data",
+        "format",
+        "reason",
+        "status"
+      ],
+      "type": "object"
+    },
+    "exceptionsSection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "exceptions": {
+                "maxItems": 0
+              },
+              "exceptions_file": {
+                "type": "null"
+              },
+              "gaps": {
+                "minItems": 0
+              },
+              "reason": {
+                "type": "string"
+              },
+              "source_sha256": {
+                "type": "null"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "exceptions_file": {
+                "type": "object"
+              },
+              "gaps": {
+                "maxItems": 0
+              },
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "reason": {
+                "type": "null"
+              },
+              "source_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "summary": {
+                "$ref": "#/$defs/exceptionsSummary"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "unavailable"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "unavailable"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "partial"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "gaps": {
+                "minItems": 1
+              },
+              "items": {
+                "allOf": [
+                  {
+                    "contains": {
+                      "properties": {
+                        "status": {
+                          "const": "available"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    }
+                  },
+                  {
+                    "contains": {
+                      "properties": {
+                        "status": {
+                          "const": "unavailable"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    }
+                  }
+                ],
+                "items": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "available",
+                        "unavailable"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "gaps": {
+                "minItems": 1
+              },
+              "items": {
+                "contains": {
+                  "properties": {
+                    "status": {
+                      "const": "error"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "items": {
+                "contains": {
+                  "properties": {
+                    "status": {
+                      "const": "error"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "items"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "exceptions": {
+          "items": {
+            "$ref": "#/$defs/exceptionEntry"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "exceptions_file": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "verified": {
+                  "const": true
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "verified"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "gaps": {
+          "items": {
+            "$ref": "#/$defs/gap"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/exceptionsItem"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "source_sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "available",
+            "partial",
+            "unavailable",
+            "error"
+          ]
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/exceptionsSummary"
+            }
+          ]
+        }
+      },
+      "required": [
+        "exceptions",
+        "exceptions_file",
+        "gaps",
+        "items",
+        "reason",
+        "source_sha256",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "exceptionsSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "by_status": {
+          "additionalProperties": false,
+          "properties": {
+            "expired": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "in_effect": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "not_failing": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "not_yet_effective": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "stale": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "superseded": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "expired",
+            "in_effect",
+            "not_failing",
+            "not_yet_effective",
+            "stale",
+            "superseded"
+          ],
+          "type": "object"
+        },
+        "evaluations": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "lapsed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "removal_candidates": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "total": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "by_status",
+        "evaluations",
+        "lapsed",
+        "removal_candidates",
+        "source_sha256",
+        "total"
       ],
       "type": "object"
     },
@@ -2191,6 +3090,10 @@
         "host": {
           "$ref": "#/$defs/hostKey"
         },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
         "summary": {
           "$ref": "#/$defs/complianceSummary"
         }
@@ -2199,6 +3102,7 @@
         "benchmark_id",
         "content_version",
         "host",
+        "profile_id",
         "summary"
       ],
       "type": "object"
@@ -2297,6 +3201,11 @@
           "type": "object"
         }
       ]
+    },
+    "inventoryHost": {
+      "maxLength": 253,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "type": "string"
     },
     "lintData": {
       "additionalProperties": false,
@@ -2750,6 +3659,145 @@
     "machineId": {
       "pattern": "^[0-9a-f]{32}$",
       "type": "string"
+    },
+    "matchedHost": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "superseded_by": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "superseded"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "superseded_by": {
+                "$ref": "#/$defs/exceptionId"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "benchmark_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "content_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "host": {
+          "$ref": "#/$defs/inventoryHost"
+        },
+        "input_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "waived",
+            "expired",
+            "not_yet_effective",
+            "not_failing",
+            "superseded"
+          ]
+        },
+        "superseded_by": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/exceptionId"
+            }
+          ]
+        }
+      },
+      "required": [
+        "benchmark_id",
+        "content_version",
+        "host",
+        "input_sha256",
+        "profile_id",
+        "run_id",
+        "status",
+        "superseded_by"
+      ],
+      "type": "object"
+    },
+    "mergedInputsNote": {
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "additionalProperties": false,
+          "properties": {
+            "benchmark_id": {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            "content_version": {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            "host": {
+              "$ref": "#/$defs/hostKey"
+            },
+            "profile_id": {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          },
+          "required": [
+            "benchmark_id",
+            "content_version",
+            "host",
+            "profile_id"
+          ],
+          "type": "object"
+        },
+        "kind": {
+          "const": "merged_inputs"
+        },
+        "repeated_profile": {
+          "type": "boolean"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "maxItems": 1000,
+          "minItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "group",
+        "kind",
+        "repeated_profile",
+        "sources"
+      ],
+      "type": "object"
     },
     "moleculeData": {
       "additionalProperties": false,
@@ -3748,6 +4796,11 @@
       ],
       "type": "object"
     },
+    "person": {
+      "maxLength": 254,
+      "pattern": "^(?:(?:[a-z0-9][a-z0-9._-]{0,63}|[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+))$",
+      "type": "string"
+    },
     "platformSeverityCounts": {
       "additionalProperties": false,
       "properties": {
@@ -3797,7 +4850,9 @@
             "sbom",
             "packer_manifest",
             "codebuild",
-            "molecule_summary"
+            "molecule_summary",
+            "exceptions_evaluation",
+            "exceptions_file"
           ]
         },
         "path": {
@@ -3883,6 +4938,10 @@
     "rule": {
       "additionalProperties": false,
       "properties": {
+        "benchmark_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
         "content_version": {
           "maxLength": 8192,
           "type": "string"
@@ -3903,6 +4962,10 @@
             "waived",
             "disabled"
           ]
+        },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
         },
         "rule_id": {
           "maxLength": 8192,
@@ -3963,12 +5026,69 @@
         }
       },
       "required": [
+        "benchmark_id",
         "content_version",
         "expired_waiver",
         "host",
         "outcome",
+        "profile_id",
         "rule_id",
         "severity",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "sameHostNote": {
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "benchmark_id": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "content_version": {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              "profile_id": {
+                "maxLength": 8192,
+                "type": "string"
+              }
+            },
+            "required": [
+              "benchmark_id",
+              "content_version",
+              "profile_id"
+            ],
+            "type": "object"
+          },
+          "maxItems": 1000,
+          "minItems": 2,
+          "type": "array"
+        },
+        "host": {
+          "$ref": "#/$defs/hostKey"
+        },
+        "kind": {
+          "const": "same_host_across_groups"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "maxItems": 1000,
+          "minItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "groups",
+        "host",
+        "kind",
         "sources"
       ],
       "type": "object"
@@ -5497,7 +6617,7 @@
       "type": "object"
     }
   },
-  "$id": "https://github.com/FreeSecDev/ansible-linux-compliance/tools/reporting/schema/report-v1.json",
+  "$id": "https://github.com/FreeSecDev/ansible-linux-compliance/tools/reporting/schema/report-v2.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
@@ -6213,6 +7333,246 @@
                 "not": {
                   "contains": {
                     "const": "coverage"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sections": {
+            "properties": {
+              "exceptions": {
+                "properties": {
+                  "status": {
+                    "const": "available"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "exceptions"
+            ]
+          }
+        },
+        "required": [
+          "sections"
+        ]
+      },
+      "then": {
+        "properties": {
+          "overview": {
+            "properties": {
+              "available": {
+                "contains": {
+                  "const": "exceptions"
+                }
+              },
+              "error": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "partial": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "unavailable": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sections": {
+            "properties": {
+              "exceptions": {
+                "properties": {
+                  "status": {
+                    "const": "partial"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "exceptions"
+            ]
+          }
+        },
+        "required": [
+          "sections"
+        ]
+      },
+      "then": {
+        "properties": {
+          "overview": {
+            "properties": {
+              "available": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "error": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "partial": {
+                "contains": {
+                  "const": "exceptions"
+                }
+              },
+              "unavailable": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sections": {
+            "properties": {
+              "exceptions": {
+                "properties": {
+                  "status": {
+                    "const": "unavailable"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "exceptions"
+            ]
+          }
+        },
+        "required": [
+          "sections"
+        ]
+      },
+      "then": {
+        "properties": {
+          "overview": {
+            "properties": {
+              "available": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "error": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "partial": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "unavailable": {
+                "contains": {
+                  "const": "exceptions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sections": {
+            "properties": {
+              "exceptions": {
+                "properties": {
+                  "status": {
+                    "const": "error"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "exceptions"
+            ]
+          }
+        },
+        "required": [
+          "sections"
+        ]
+      },
+      "then": {
+        "properties": {
+          "overview": {
+            "properties": {
+              "available": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "error": {
+                "contains": {
+                  "const": "exceptions"
+                }
+              },
+              "partial": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
+                  }
+                }
+              },
+              "unavailable": {
+                "not": {
+                  "contains": {
+                    "const": "exceptions"
                   }
                 }
               }
@@ -7714,6 +9074,54 @@
           }
         }
       }
+    },
+    {
+      "else": {
+        "properties": {
+          "overview": {
+            "properties": {
+              "exceptions": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "sections": {
+            "properties": {
+              "exceptions": {
+                "properties": {
+                  "status": {
+                    "const": "available"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "exceptions"
+            ]
+          }
+        },
+        "required": [
+          "sections"
+        ]
+      },
+      "then": {
+        "properties": {
+          "overview": {
+            "properties": {
+              "exceptions": {
+                "$ref": "#/$defs/exceptionsSummary"
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "description": "Normalized report built from heterogeneous inputs. Every section has an explicit status; missing or invalid input is never a pass. Timestamps are supplied by the caller and never generated.",
@@ -7783,6 +9191,7 @@
               "codebuild",
               "compliance",
               "coverage",
+              "exceptions",
               "lint",
               "molecule",
               "packer",
@@ -7791,7 +9200,7 @@
               "vulnerabilities"
             ]
           },
-          "maxItems": 9,
+          "maxItems": 10,
           "type": "array",
           "uniqueItems": true
         },
@@ -7801,6 +9210,7 @@
               "codebuild",
               "compliance",
               "coverage",
+              "exceptions",
               "lint",
               "molecule",
               "packer",
@@ -7809,9 +9219,19 @@
               "vulnerabilities"
             ]
           },
-          "maxItems": 9,
+          "maxItems": 10,
           "type": "array",
           "uniqueItems": true
+        },
+        "exceptions": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/exceptionsSummary"
+            }
+          ]
         },
         "partial": {
           "items": {
@@ -7819,6 +9239,7 @@
               "codebuild",
               "compliance",
               "coverage",
+              "exceptions",
               "lint",
               "molecule",
               "packer",
@@ -7827,7 +9248,7 @@
               "vulnerabilities"
             ]
           },
-          "maxItems": 9,
+          "maxItems": 10,
           "type": "array",
           "uniqueItems": true
         },
@@ -7837,6 +9258,7 @@
               "codebuild",
               "compliance",
               "coverage",
+              "exceptions",
               "lint",
               "molecule",
               "packer",
@@ -7845,7 +9267,7 @@
               "vulnerabilities"
             ]
           },
-          "maxItems": 9,
+          "maxItems": 10,
           "type": "array",
           "uniqueItems": true
         }
@@ -7853,6 +9275,7 @@
       "required": [
         "available",
         "error",
+        "exceptions",
         "partial",
         "unavailable"
       ],
@@ -7862,11 +9285,11 @@
       "items": {
         "$ref": "#/$defs/rawArtifact"
       },
-      "maxItems": 9000,
+      "maxItems": 9001,
       "type": "array"
     },
     "schema_version": {
-      "const": "1.0"
+      "const": "2.0"
     },
     "scope": {
       "enum": [
@@ -7887,6 +9310,9 @@
         },
         "coverage": {
           "$ref": "#/$defs/coverageSection"
+        },
+        "exceptions": {
+          "$ref": "#/$defs/exceptionsSection"
         },
         "lint": {
           "$ref": "#/$defs/lintSection"
@@ -7911,6 +9337,7 @@
         "codebuild",
         "compliance",
         "coverage",
+        "exceptions",
         "lint",
         "molecule",
         "packer",
@@ -7929,6 +9356,6 @@
     "scope",
     "sections"
   ],
-  "title": "FreeSecDev normalized report, version 1",
+  "title": "FreeSecDev normalized report, version 2",
   "type": "object"
 }

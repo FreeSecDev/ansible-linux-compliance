@@ -1,9 +1,14 @@
-"""Assemble the normalized, versioned report document (schema ``report-v1.json``).
+"""Assemble the normalized, versioned report document (schema ``report-v2.json``).
 
 Every section has an explicit status. A section with no input is ``unavailable``, a
 section with any unreadable or invalid input is ``error``, and a section is
 ``available`` only when every input parsed. Nothing is ever defaulted to a pass, and
 no timestamp is generated: metadata times are supplied by the caller.
+
+Exceptions evaluations are inputs of two sections: their scan runs feed
+``compliance`` and their exception statuses feed ``exceptions``. They are listed once
+in ``raw_artifacts``. More than one completed ScanRun for one host, benchmark, content
+version and profile is refused unless ``allow_repeated_scans`` is set.
 """
 
 import re
@@ -25,16 +30,23 @@ from tools.reporting.common import (
 from tools.reporting.compliance import (
     ComplianceData,
     Entry,
-    HostKey,
     aggregate_figures,
     figure,
+    figured,
     group_figures,
     host_key,
-    pairs,
+    input_notes,
+    repeated_scan_runs,
     rollup,
 )
 from tools.reporting.parsers.cobertura import CoverageData, parse_cobertura
 from tools.reporting.parsers.codebuild import CodeBuildData, parse_codebuild
+from tools.reporting.parsers.evaluation import (
+    EvaluationData,
+    compliance_result,
+    parse_evaluation,
+    parse_exceptions_file,
+)
 from tools.reporting.parsers.grype import VulnerabilityData, parse_grype
 from tools.reporting.parsers.junit import TestsData, parse_junit
 from tools.reporting.parsers.lint import LintData, parse_lint
@@ -44,12 +56,14 @@ from tools.reporting.parsers.pytest_json import parse_pytest_json
 from tools.reporting.parsers.sbom import SbomData, parse_sbom
 from tools.reporting.parsers.scanrun import parse_scan_run
 from tools.reporting.parsers.xccdf import parse_arf, parse_xccdf
+from tools.reporting.waivers import exception_entries
 
-SCHEMA_VERSION: Final[str] = "1.0"
+SCHEMA_VERSION: Final[str] = "2.0"
 SECTION_NAMES: Final[tuple[str, ...]] = (
     "codebuild",
     "compliance",
     "coverage",
+    "exceptions",
     "lint",
     "molecule",
     "packer",
@@ -59,8 +73,9 @@ SECTION_NAMES: Final[tuple[str, ...]] = (
 )
 SECTION_INPUTS: Final[dict[str, tuple[str, ...]]] = {
     "codebuild": ("codebuild",),
-    "compliance": ("xccdf", "arf", "scan_run"),
+    "compliance": ("xccdf", "arf", "scan_run", "exceptions_evaluation"),
     "coverage": ("cobertura",),
+    "exceptions": ("exceptions_evaluation",),
     "lint": ("lint",),
     "molecule": ("molecule",),
     "packer": ("packer",),
@@ -69,7 +84,8 @@ SECTION_INPUTS: Final[dict[str, tuple[str, ...]]] = {
     "vulnerabilities": ("grype",),
 }
 MAX_INPUTS: Final[int] = 1000
-SHARED_HOST_NOTE: Final[str] = "shared_self_asserted_host"
+SHARED_INPUT_SECTIONS: Final[frozenset[str]] = frozenset({"exceptions"})
+MAX_RAW_ARTIFACTS: Final[int] = (len(SECTION_NAMES) - len(SHARED_INPUT_SECTIONS)) * MAX_INPUTS + 1
 MAX_RULES: Final[int] = 1_000_000
 MAX_GROUPS: Final[int] = 100_000
 FAILED_BUILD_STATUSES: Final[frozenset[str]] = frozenset(
@@ -154,7 +170,10 @@ class ReportInputs:
     packer: tuple[Path, ...] = ()
     codebuild: tuple[Path, ...] = ()
     molecule: tuple[Path, ...] = ()
+    exceptions_evaluation: tuple[Path, ...] = ()
+    exceptions_file: Path | None = None
     max_bytes: int = DEFAULT_MAX_BYTES
+    allow_repeated_scans: bool = False
 
 
 def _item(result: ParseResult[object]) -> dict[str, Json]:
@@ -245,23 +264,24 @@ def check_scope(scope: Scope, entries: list[Entry]) -> None:
 
     Raises:
         ReportError: If ``single_host`` covers several hosts or ``benchmark`` covers
-            several benchmarks or content versions.
+            several benchmarks, content versions or profiles.
     """
     hosts = {host_key(entry[1]) for entry in entries}
     if scope is Scope.SINGLE_HOST and len(hosts) > 1:
         message = f"scope single_host, but the inputs describe {len(hosts)} hosts"
         raise ReportError(message)
-    versions = pairs(entries)
+    versions = figured(entries)
     if scope is Scope.BENCHMARK and len(versions) > 1:
-        message = f"scope benchmark, but the inputs cover {len(versions)} benchmark versions"
+        message = (
+            f"scope benchmark, but the inputs cover {len(versions)} benchmark, content version "
+            "and profile combinations"
+        )
         raise ReportError(message)
 
 
-def _unique_inputs(
-    results: Sequence[ParseResult[ComplianceData]],
-) -> list[tuple[str, ComplianceData, str]]:
+def _unique[T](results: Sequence[ParseResult[T]]) -> list[tuple[str, T, str]]:
     seen: set[str] = set()
-    inputs: list[tuple[str, ComplianceData, str]] = []
+    inputs: list[tuple[str, T, str]] = []
     for result in results:
         digest = result.artifact.sha256
         if result.data is not None and digest is not None and digest not in seen:
@@ -270,25 +290,28 @@ def _unique_inputs(
     return inputs
 
 
-def _host_notes(inputs: list[tuple[str, ComplianceData, str]]) -> list[dict[str, Json]]:
-    members: dict[HostKey, list[tuple[ComplianceData, str]]] = {}
-    for _, data, digest in inputs:
-        members.setdefault(host_key(data), []).append((data, digest))
-    notes: list[dict[str, Json]] = []
-    for key, group in sorted(members.items()):
-        if len(group) > 1 and any(data.host is None for data, _ in group):
-            sources = list[Json](sorted(digest for _, digest in group))
-            notes.append({"host": key.hostname, "kind": SHARED_HOST_NOTE, "sources": sources})
-    return notes
+def check_repeated_scans(entries: list[Entry], *, allowed: bool) -> None:
+    """Refuse several completed ScanRuns of one host, benchmark version and profile.
+
+    Raises:
+        ReportError: If such runs exist and ``allowed`` is false.
+    """
+    repeated = repeated_scan_runs(entries)
+    if repeated and not allowed:
+        message = (
+            f"{repeated} host, benchmark version and profile combination(s) have more than one "
+            "completed scan run; pass --allow-repeated-scans to merge them rule by rule"
+        )
+        raise ReportError(message)
 
 
 def _compliance_section(
-    results: Sequence[ParseResult[ComplianceData]], scope: Scope
+    results: Sequence[ParseResult[ComplianceData]], scope: Scope, *, allow_repeated: bool
 ) -> dict[str, Json]:
     section = _section(results)
-    inputs = _unique_inputs(results)
-    entries: list[Entry] = [(path, data) for path, data, _ in inputs]
+    entries: list[Entry] = [(path, data) for path, data, _ in _unique(results)]
     check_scope(scope, entries)
+    check_repeated_scans(entries, allowed=allow_repeated)
     section.update({"aggregates": [], "groups": [], "notes": [], "rules": []})
     if section["status"] != SectionStatus.AVAILABLE.value:
         return section
@@ -297,14 +320,65 @@ def _compliance_section(
     if len(rules) > MAX_RULES or len(groups) > MAX_GROUPS:
         message = "the compliance data exceeds the report size limits"
         raise ReportError(message)
-    versions = pairs(entries)
-    section["notes"] = list[Json](_host_notes(inputs))
+    versions = figured(entries)
+    section["notes"] = to_json(input_notes(entries))
     section["rules"] = [to_json(rule) for rule in rules]
     section["groups"] = [to_json(group) for group in groups]
     if scope is not Scope.SINGLE_HOST:
         section["aggregates"] = [to_json(a) for a in aggregate_figures(entries, scope.value)]
     if len(versions) == 1:
         section["summary"] = to_json(figure(entries))
+    return section
+
+
+def _exceptions_file(inputs: ReportInputs) -> ParseResult[str] | None:
+    """Read the exceptions file that every evaluation must be verified against.
+
+    Raises:
+        ReportError: If evaluations are supplied without the file, the file without
+            evaluations, or the file cannot be read.
+    """
+    if inputs.exceptions_file is None:
+        if inputs.exceptions_evaluation:
+            message = "--exceptions-evaluation requires --exceptions-file"
+            raise ReportError(message)
+        return None
+    if not inputs.exceptions_evaluation:
+        message = "--exceptions-file is only used with --exceptions-evaluation"
+        raise ReportError(message)
+    result = parse_exceptions_file(inputs.exceptions_file, inputs.max_bytes)
+    if result.data is None:
+        message = f"the exceptions file cannot be used: {result.reason}"
+        raise ReportError(message)
+    return result
+
+
+def _evaluations(
+    inputs: ReportInputs,
+) -> tuple[ParseResult[str] | None, list[ParseResult[EvaluationData]]]:
+    source = _exceptions_file(inputs)
+    text = "" if source is None else source.data or ""
+    paths = inputs.exceptions_evaluation
+    return source, [parse_evaluation(path, text, inputs.max_bytes) for path in paths]
+
+
+def _exceptions_section(
+    results: Sequence[ParseResult[EvaluationData]], source: ParseResult[str] | None
+) -> dict[str, Json]:
+    section = _section(results)
+    section.update({"exceptions": [], "exceptions_file": None, "source_sha256": None})
+    if section["status"] != SectionStatus.AVAILABLE.value or source is None:
+        return section
+    evaluated = [(digest, data) for _, data, digest in _unique(results)]
+    entries, summary = exception_entries(evaluated)
+    section["exceptions"] = to_json(entries)
+    section["exceptions_file"] = {
+        "path": source.artifact.path,
+        "sha256": source.artifact.sha256,
+        "verified": True,
+    }
+    section["source_sha256"] = to_json(summary["source_sha256"])
+    section["summary"] = to_json(summary)
     return section
 
 
@@ -348,10 +422,19 @@ def _check_input_counts(inputs: ReportInputs) -> None:
             raise ReportError(message)
 
 
+def _overview(sections: dict[str, dict[str, Json]]) -> dict[str, Json]:
+    overview: dict[str, Json] = {
+        status.value: [name for name in SECTION_NAMES if sections[name]["status"] == status.value]
+        for status in SectionStatus
+    }
+    overview["exceptions"] = sections["exceptions"]["summary"]
+    return overview
+
+
 def build_report(inputs: ReportInputs) -> dict[str, Json]:
     """Parse every input and assemble the report document.
 
-    The result is plain JSON data that validates against ``schema/report-v1.json``.
+    The result is plain JSON data that validates against ``schema/report-v2.json``.
     Equal inputs give equal documents.
 
     Raises:
@@ -359,10 +442,12 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
     """
     _check_input_counts(inputs)
     size = inputs.max_bytes
+    source, evaluations = _evaluations(inputs)
     compliance = (
         _parse_all(inputs.xccdf, parse_xccdf, size)
         + _parse_all(inputs.arf, parse_arf, size)
         + _parse_all(inputs.scan_run, parse_scan_run, size)
+        + [compliance_result(result) for result in evaluations]
     )
     tests = _parse_all(inputs.junit, parse_junit, size) + _parse_all(
         inputs.pytest_json, parse_pytest_json, size
@@ -378,8 +463,11 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
     molecule = _parse_all(inputs.molecule, parse_molecule, size)
     sections: dict[str, dict[str, Json]] = {
         "codebuild": _section(codebuild, _codebuild_summary),
-        "compliance": _compliance_section(compliance, inputs.scope),
+        "compliance": _compliance_section(
+            compliance, inputs.scope, allow_repeated=inputs.allow_repeated_scans
+        ),
         "coverage": _section(coverage),
+        "exceptions": _exceptions_section(evaluations, source),
         "lint": _section(lint, _severity_summary),
         "molecule": _section(molecule, _molecule_summary),
         "packer": _section(packer),
@@ -397,14 +485,11 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
         "packer": [*packer],
         "codebuild": [*codebuild],
         "molecule": [*molecule],
-    }
-    overview: dict[str, Json] = {
-        status.value: [name for name in SECTION_NAMES if sections[name]["status"] == status.value]
-        for status in SectionStatus
+        "exceptions": [] if source is None else [source],
     }
     return {
         "metadata": _metadata(inputs.metadata),
-        "overview": overview,
+        "overview": _overview(sections),
         "raw_artifacts": _raw_artifacts(every_result),
         "schema_version": SCHEMA_VERSION,
         "scope": inputs.scope.value,

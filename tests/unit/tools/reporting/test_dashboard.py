@@ -147,8 +147,9 @@ def test_hostile_report_text_cannot_escape_the_data_block(kit: Any) -> None:
 
 
 def test_unsupported_schema_versions_are_refused() -> None:
-    with pytest.raises(DashboardError, match="schema version"):
-        dashboard.render_dashboard({"schema_version": "2.0"})
+    for version in ("1.0", "2.1", "3.0"):
+        with pytest.raises(DashboardError, match="schema version"):
+            dashboard.render_dashboard({"schema_version": version})
     with pytest.raises(DashboardError, match="schema version"):
         dashboard.render_dashboard({"schema_version": 1})
     with pytest.raises(DashboardError, match="schema version"):
@@ -163,7 +164,7 @@ def test_a_report_above_the_size_cap_is_refused(kit: Any, monkeypatch: pytest.Mo
 
 
 def test_a_report_without_sections_renders_with_an_empty_view() -> None:
-    document: dict[str, Any] = {"schema_version": "1.0"}
+    document: dict[str, Any] = {"schema_version": "2.0"}
     assert dashboard.dashboard_views(document) == {"groups": [], "hosts": []}
     assert embedded(dashboard.render_dashboard(document))["views"] == {"groups": [], "hosts": []}
 
@@ -210,9 +211,12 @@ def test_views_join_each_group_to_its_inputs_notes_and_identity(
             assert dashboard.item_host(item["data"]) == dashboard.key_of(group["host"])
         merged = group["host"]["hostname"] == "web01" and group["host"]["machine_id"] is None
         own = sorted(source["sha256"] for source in view["sources"])
-        assert view["merges"] == ([{"note": 0, "sources": own}] if merged else [])
+        assert view["note"] == (0 if merged else None)
         assert len(view["sources"]) == (2 if merged else 1)
-    assert section["notes"][0]["host"] == "web01"
+        if merged:
+            assert section["notes"][0]["sources"] == own
+            assert section["notes"][0]["group"]["host"] == group["host"]
+    assert [note["kind"] for note in section["notes"]] == ["merged_inputs"]
     hosts = {(host["hostname"], host["machine_id"]): host for host in views["hosts"]}
     assert hosts["web01", MACHINE_ID]["identity"] == "machine_id"
     assert hosts["web01", None]["identity"] == "self_asserted"
@@ -274,12 +278,14 @@ def test_a_host_note_across_benchmarks_is_never_a_group_merge(
     third = write("c.xml", kit.xccdf_text("other", "pass"))
     document = build(scope=Scope.FLEET, xccdf=(first, second, third))
     section = document["sections"]["compliance"]
-    assert [note["host"] for note in section["notes"]] == ["web01"]
+    assert [note["kind"] for note in section["notes"]] == ["same_host_across_groups"]
+    assert section["notes"][0]["host"]["hostname"] == "web01"
     assert len(section["notes"][0]["sources"]) == 2
+    assert len(section["notes"][0]["groups"]) == 2
     views: Any = dashboard.dashboard_views(document)
     assert len(views["groups"]) == 3
     for view in views["groups"]:
-        assert view["merges"] == []
+        assert view["note"] is None
         assert len(view["sources"]) == 1
 
 
@@ -291,10 +297,12 @@ def test_a_group_merge_lists_only_the_inputs_of_that_group(
     third = write("c.xml", other_benchmark(kit.xccdf_text("web01", "pass"), kit))
     document = build(scope=Scope.FLEET, xccdf=(first, second, third))
     section = document["sections"]["compliance"]
-    assert len(section["notes"][0]["sources"]) == 3
+    kinds = [note["kind"] for note in section["notes"]]
+    assert kinds == ["merged_inputs", "same_host_across_groups"]
+    assert len(section["notes"][1]["sources"]) == 3
     views: Any = dashboard.dashboard_views(document)
     merges = {
-        group["benchmark_id"]: view["merges"]
+        group["benchmark_id"]: view["note"]
         for group, view in zip(section["groups"], views["groups"], strict=True)
     }
     own = sorted(
@@ -302,10 +310,31 @@ def test_a_group_merge_lists_only_the_inputs_of_that_group(
         for item in section["items"]
         if item["data"]["benchmark_id"] == kit.BENCHMARK
     )
-    assert merges == {
-        kit.BENCHMARK: [{"note": 0, "sources": own}],
-        "xccdf_org.example.synthetic_benchmark_other": [],
+    assert section["notes"][0]["sources"] == own
+    assert merges == {kit.BENCHMARK: 0, "xccdf_org.example.synthetic_benchmark_other": None}
+
+
+def test_a_merge_note_is_attached_by_its_group_key_alone(kit: Any) -> None:
+    host = {"hostname": "web01", "input_sha256": None, "machine_id": None}
+    group = {"benchmark_id": kit.BENCHMARK, "content_version": "1.0", "host": host}
+    other = {**group, "content_version": "2.0"}
+    document: dict[str, Any] = {
+        "schema_version": "2.0",
+        "sections": {
+            "compliance": {
+                "groups": [group, other],
+                "items": [],
+                "notes": [
+                    {"groups": [], "host": host, "kind": "same_host_across_groups"},
+                    {"group": other, "kind": "merged_inputs", "sources": []},
+                    {"group": other, "kind": "merged_inputs", "sources": []},
+                ],
+                "rules": [],
+            }
+        },
     }
+    views: Any = dashboard.dashboard_views(document)
+    assert [view["note"] for view in views["groups"]] == [None, 1]
 
 
 def test_cli_writes_the_json_but_not_a_dashboard_above_the_cap(
@@ -321,7 +350,7 @@ def test_cli_writes_the_json_but_not_a_dashboard_above_the_cap(
     assert "warning: the dashboard was not written" in captured.err
     assert "too large for the dashboard" in captured.err
     assert f"report written to {output}" in captured.out
-    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == "1.0"
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == "2.0"
     assert not html.exists()
 
 

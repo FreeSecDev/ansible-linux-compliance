@@ -24,8 +24,11 @@ description:
     C(unmatched) in every one of them.
   - Such an exception names a rule or scope that none of the evaluated hosts has. It suppresses
     nothing and should be reviewed and removed.
-  - All evaluations must come from the same exceptions file. The result only covers the hosts that
-    were evaluated; an exception for a host outside the play is reported as stale.
+  - All evaluations must come from the same exceptions file and use a supported evaluation
+    C(schema_version); any other version is refused. The result only covers the hosts that were
+    evaluated; an exception for a host outside the play is reported as stale.
+  - P(freesecdev.linux_compliance.exception_removal_candidates#filter) also lists exceptions
+    that are superseded or not failing on every host.
 options:
   _input:
     description:

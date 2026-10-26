@@ -2,8 +2,10 @@
 
 Scope: the policy for accepted risks, the exceptions file format and how the collection applies it. Audience:
 operators who write exceptions, the people who approve them, and role and report authors. Jira: FREES-50,
-FREES-136 (audit role). Decision:
-[ADR 0013, amendment of FREES-50](adr/0013-normalized-findings-model.md#amendment-2026-10-25-exceptions-file-and-waivers-frees-50).
+FREES-132 (report), FREES-136 (audit role). Decisions:
+[ADR 0013, amendment of FREES-50](adr/0013-normalized-findings-model.md#amendment-2026-10-25-exceptions-file-and-waivers-frees-50)
+and
+[amendment of FREES-132](adr/0013-normalized-findings-model.md#amendment-2026-10-26-exception-review-verified-evaluations-and-owner-identity-frees-132).
 
 An exception (waiver) records that a specific rule may fail on specific hosts for a limited time, why, who owns that
 decision and who approved it. Exceptions live in a YAML file in Git, next to the inventory, so every change is
@@ -14,8 +16,9 @@ provides evidence, not certification; an exception does not make a host complian
 Code: `plugins/module_utils/compliance/exceptions.py` (validation and matching),
 `plugins/module_utils/compliance/yamlsubset.py` (strict loader), and the controller filters
 `freesecdev.linux_compliance.apply_exceptions`, `freesecdev.linux_compliance.stale_exceptions`,
-`freesecdev.linux_compliance.validate_exceptions` and `freesecdev.linux_compliance.scan_summary` in `plugins/filter/`.
-The `audit` role applies the file ([below](#using-the-exceptions-file-with-the-audit-role)).
+`freesecdev.linux_compliance.exception_removal_candidates`,
+`freesecdev.linux_compliance.validate_exceptions` and `freesecdev.linux_compliance.scan_summary` in
+`plugins/filter/`. The `audit` role applies the file ([below](#using-the-exceptions-file-with-the-audit-role)).
 
 ## Policy
 
@@ -26,8 +29,9 @@ The `audit` role applies the file ([below](#using-the-exceptions-file-with-the-a
    one; Git keeps the history either way.
 3. **Separation of duties.** Owner and approver are each an email address or a handle (see
    [Owner and approver](#owner-and-approver)), and the approver must not be the owner. The names are compared after
-   NFKC normalisation, trimming and case folding, and a handle counts as the same person as an email address with
-   that local part (`alice` and `alice@example.com`). The file records the names; the authority to approve comes from
+   NFKC normalisation, trimming and case folding, and they are the same person when their identities are equal (see
+   [Same person](#same-person)): `alice`, `alice@example.com`, `alice+audit@example.com` and `alice@other.example` are
+   all one person. The file records the names; the authority to approve comes from
    the review of the pull request that changes the file, so protect the file with the same branch rules as the
    inventory.
 4. **No back-dating into the future.** `created` must not be after today, `approval.date` lies between `created` and
@@ -106,6 +110,28 @@ Only ASCII is accepted after normalisation, so a Cyrillic `а` in `аlice@exampl
 as `ａlice@example.com` normalise to `alice@example.com`. The collection stores and reports the canonical form. The
 JSON Schema accepts only the canonical lowercase form; write the names that way.
 
+### Same person
+
+The approver must not be the owner. Two canonical names denote the same person when their identities are equal. The
+identity of a handle is the handle; the identity of an email address is its local part without a plus-address suffix
+(everything from the first `+`), on any domain.
+
+| Owner | Approver | Result |
+|---|---|---|
+| `alice` | `alice@example.com` | Same person, rejected |
+| `alice+audit@example.org` | `alice@example.org` | Same person (plus-addressing), rejected |
+| `alice@a.example` | `alice@b.example` | Same person (same local part on another domain), rejected |
+| `alice.smith@example.org` | `alicesmith@example.org` | Different people, accepted |
+| `alice` | `alicia@example.com` | Different people, accepted |
+
+Decision (FREES-132): plus-addressing delivers to the same mailbox, so it never makes a second person. The same local
+part on another domain is treated as the same person as well, because a handle already matches that local part on
+every domain; treating `alice@a.example` and `alice@b.example` as different people while both equal `alice` would let a
+second address of the owner approve the owner's own exception. The rule fails closed: if two different people really
+share a local part, give one of them a distinct handle or address. Provider-specific aliases such as dots are not
+folded, because providers treat them differently. Names are still not authenticated identities; the review of the pull
+request is the authority.
+
 ### YAML subset
 
 Code on the managed side of the collection may only use the Python standard library, which has no YAML parser, so the
@@ -139,7 +165,7 @@ requires that every document the loader accepts loads to the same value with PyY
 | `hosts` | The inventory host name (`inventory_hostname`), exactly |
 | `groups` | Any of the inventory groups of the host (`group_names`), exactly; `all` and `ungrouped` are rejected because `group_names` never contains them |
 | `profiles` | The full XCCDF profile identifier of the scan run (`profile_id`), exactly |
-| `benchmark.id`, `benchmark.version` | The `benchmark_id` and the content version (`content.content_version`) of the scan run; both must be equal. Requires `profiles` |
+| `benchmark.id`, `benchmark.version` | The `benchmark_id` and the content version (`content.content_version`) of the scan run; both must be equal. The version is a token (`[A-Za-z0-9][A-Za-z0-9._+~:-]*`, at most 64 characters). Requires `profiles` |
 
 Every key that is present must match (AND); within a list one entry is enough (OR). There are no wildcards or
 patterns. Host scopes are matched against the controller's inventory name, never against the host name the scanned
@@ -190,12 +216,32 @@ Applying the current exceptions file to an old scan run therefore uses today's v
 since the scan no longer applies. Reports built from scan runs that were already marked are unaffected, because they
 read the marked findings.
 
-**Stale exceptions** are exceptions that matched no finding at all. One host cannot tell, so
-`freesecdev.linux_compliance.stale_exceptions` takes the evaluations of all hosts and returns the identifiers that are
-`unmatched` on every one. The answer covers only the hosts that were evaluated; an exception for a host outside the
-play is reported as stale. An exception that is `not_failing` everywhere is not stale but is a candidate for removal,
-because the rule now passes. `playbooks/audit.yml` computes it once in a final play, after every host and every
-`serial` batch ([audit guide](audit.md#stale-exceptions-once-for-all-hosts)).
+**Review across hosts.** One host cannot tell whether an exception is still needed, so the evaluations of all hosts
+(one per scan run) are reviewed together. Each exception gets one verdict, decided by the first of these statuses that
+any evaluation reports:
+
+| Verdict | When |
+|---|---|
+| `expired` | It is `expired` in at least one evaluation: a failure it covered is no longer waived |
+| `in_effect` | It is `waived` in at least one evaluation |
+| `not_yet_effective` | A failure it covered was scanned before its approval date |
+| `superseded` | Another exception was chosen for every failure it covered |
+| `not_failing` | Its rule did not fail wherever its scope matched |
+| `stale` | It is `unmatched` in every evaluation: its rule or scope matched nothing |
+
+`stale`, `superseded` and `not_failing` exceptions are **candidates for removal**: they waived nothing, covered no
+failure that expired and none scanned before their approval, on any evaluated host. An exception superseded on every
+host is therefore a removal candidate, just like a stale one.
+
+- `freesecdev.linux_compliance.stale_exceptions` returns the stale identifiers.
+- `freesecdev.linux_compliance.exception_removal_candidates` returns every removal candidate, stale ones included.
+- Both refuse evaluations of different exceptions files and evaluations whose `schema_version` they do not know
+  (only `"1.0"` today), so a future evaluation format is never misread.
+
+The answer covers only the hosts that were evaluated; an exception for a host outside the play is reported as stale.
+`playbooks/audit.yml` computes the stale exceptions once in a final play, after every host and every `serial`
+batch ([audit guide](audit.md#stale-exceptions-once-for-all-hosts)).
+The report shows the same verdicts (see [Reporting](#reporting)).
 
 ### Evaluation document
 
@@ -260,20 +306,53 @@ a mapping or as its JSON text. An invalid file fails the task with a message tha
 
 ## Reporting
 
-Write the `scan_run` of an evaluation document to a JSON file and pass it to `tools/reporting` (FREES-75) with
-`--scan-run`. The report then shows:
+Write each evaluation document (with the `audit` role, `linux_compliance_audited.exceptions.evaluation`) to a JSON
+file and pass them to `tools/reporting` (FREES-75, FREES-132) with `--exceptions-evaluation`, one per scan run,
+together with the exceptions file they were made from:
+
+```bash
+python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
+  --exceptions-file inventory/exceptions.yml \
+  --exceptions-evaluation web01-evaluation.json --exceptions-evaluation web02-evaluation.json
+```
+
+`--exceptions-file` is required with `--exceptions-evaluation`: it is the reviewed exceptions file that the
+evaluations were made from.
+
+An evaluation is a compliance input on its own; do not pass its scan run with `--scan-run` as well, because two
+completed scan runs of one host and profile are refused as a repeated scan. The report then shows:
 
 - waived findings as their own `waived` count, which never counts as a pass and stays in the denominator;
 - the exception identifier, state, reason and expiry of every finding, in the embedded scan run;
-- `expired_waivers`, the number of failures whose exception expired.
+- `expired_waivers`, the number of failures whose exception expired, **including** waivers that lapsed between the
+  scan start and the controller time (the finding carries no exception data in that case, so only the evaluation
+  records it; the rule is listed in `lapsed_waivers`);
+- an `exceptions` section that lists every exception of the file with its review verdict, removal candidacy, expiry,
+  structured scope, the inventory hosts where its scope matched, its status per scan run and the SHA-256 of the
+  exceptions file ([reporting data model](reporting-data-model.md#exceptions-section));
+- the stale, expired and removal-candidate counts in the overview. None of this changes a compliance percentage.
 
-`tests/unit/tools/reporting/test_exceptions_report.py` runs a scan run through `exceptions.evaluate_run` and then
-through the report, and checks all three against the report schema.
+The report does not trust the evaluation file. It checks the evaluation against the exceptions file:
 
-**Known gap:** the report does not read the evaluation document itself, so it has no view of the per-exception
-statuses and does not list stale exceptions. Until it does, use the `stale_exceptions` filter or
-`exceptions.stale_exception_ids` on the evaluation documents. Closing the gap changes the report schema, so it needs
-its own `schema_version` decision under [ADR 0016](adr/0016-report-schema-and-summary-semantics.md).
+- the SHA-256 of the exceptions file, exactly as supplied, must be the evaluation's `source_sha256`, so the evaluation must have been made from the byte-exact file.
+  The `audit` role reads the file with `rstrip=false`, so its evaluations match the file's bytes. A play of its own
+  must do the same: the `ansible.builtin.file` lookup removes trailing whitespace by default, and an evaluation made
+  from that text is refused. A file that differs only in trailing whitespace is a different file;
+- the exceptions file must pass the same validation as in the filter, at the evaluation's controller time;
+- the scan run, with its waiver marks removed, is evaluated again with that file and the inventory host, groups,
+  controller time and scan lag limit the evaluation records, and the result must be identical.
+
+An edited status, count, mark or time, or an evaluation made from another exceptions file, is an input error, and
+nothing from it is shown as waived. The report records the exceptions file path and SHA-256 in the exceptions
+section once every evaluation passed. Only the reviewed Git history makes the file itself trustworthy; signed
+evidence is proposed in [ADR 0018](adr/0018-evidence-bundle-provenance.md).
+
+Passing only the marked scan run with `--scan-run` still works, but then the report has no exceptions section and does
+not count waivers that lapsed during the scan.
+
+`tests/unit/tools/reporting/test_exceptions_report.py` runs the committed `tests/fixtures/reporting/exceptions.yml`
+through `exceptions.evaluate_run` and the report, checks every verdict and count against the report schema, and checks
+that the committed evaluation fixture is exactly what the filter writes.
 
 ## Security notes
 

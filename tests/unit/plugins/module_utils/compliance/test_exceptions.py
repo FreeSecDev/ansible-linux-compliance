@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, datetime, timedelta, timezone
-from typing import cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -11,6 +11,9 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     exceptions,
     model,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 PREFIX = "xccdf_org.ssgproject.content_rule_"
 RULE = PREFIX + "sshd_disable_root_login"
@@ -457,6 +460,11 @@ def test_approval_must_precede_expiry() -> None:
         ("alice@example.com", "alice"),
         ("alice", "ALICE@corp.example"),
         ("alice@example.com", "\uff21\uff2c\uff29\uff23\uff25@\uff45xample.com"),
+        ("alice+audit@example.org", "alice@example.org"),
+        ("alice+audit@example.org", "alice"),
+        ("alice+one@example.org", "alice+two@example.org"),
+        ("alice@a.example", "alice@b.example"),
+        ("alice+x@a.example", "ALICE@b.example"),
     ],
 )
 def test_owner_cannot_approve_their_own_exception(owner: str, approver: str) -> None:
@@ -470,8 +478,9 @@ def test_owner_cannot_approve_their_own_exception(owner: str, approver: str) -> 
 @pytest.mark.parametrize(
     ("owner", "approver"),
     [
-        ("alice@a.example", "alice@b.example"),
         ("alice", "bob"),
+        ("alice.smith@example.org", "alicesmith@example.org"),
+        ("alice-ops@example.org", "alice@example.org"),
         ("alice@example.com", "bob"),
         ("alice", "alicia@example.com"),
     ],
@@ -522,8 +531,11 @@ def test_same_person() -> None:
     assert exceptions.same_person("alice", "alice")
     assert exceptions.same_person("alice", "alice@x.example")
     assert exceptions.same_person("alice@x.example", "alice")
-    assert not exceptions.same_person("alice@x.example", "alice@y.example")
+    assert exceptions.same_person("alice@x.example", "alice@y.example")
+    assert exceptions.same_person("alice+x@example.org", "alice@example.org")
+    assert exceptions.same_person("alice+x@example.org", "alice+y@example.org")
     assert not exceptions.same_person("alice", "bob")
+    assert not exceptions.same_person("alice.x@example.org", "alice@example.org")
     assert not exceptions.same_person("bob@x.example", "alice")
 
 
@@ -972,6 +984,7 @@ def test_the_evaluation_document() -> None:
 
 def evaluation_document(**statuses_by_id: str) -> dict[str, object]:
     return {
+        "schema_version": "1.0",
         "source_sha256": "f" * 64,
         "exceptions": [{"id": key, "status": value} for key, value in statuses_by_id.items()],
     }
@@ -998,17 +1011,63 @@ STALE_INPUT_CASES: list[tuple[object, str]] = cast(
     "list[tuple[object, str]]",
     [
         ("x", "evaluations must be a list"),
+        ([{"exceptions": []}], r"evaluations\[0\] has an unsupported schema_version 'None'"),
+        ([{"schema_version": "2.0"}], "unsupported schema_version '2.0'"),
+        ([{"schema_version": 1.0}], "unsupported schema_version '1.0'"),
+        ([{"schema_version": "9" * 40}], "unsupported schema_version '9999999999999999'$"),
         ([], "at least one evaluation is required"),
         (["x"], r"evaluations\[0\] must be a mapping"),
-        ([{"exceptions": []}], "is not an exceptions evaluation"),
-        ([{"source_sha256": "f", "exceptions": "x"}], "is not an exceptions evaluation"),
-        ([{"source_sha256": "f", "exceptions": ["x"]}], "must contain mappings"),
-        ([{"source_sha256": "f", "exceptions": [{"id": "A"}]}], "need an id and a known status"),
-        ([{"source_sha256": "f", "exceptions": [{"id": 1, "status": "waived"}]}], "need an id"),
-        ([{"source_sha256": "f", "exceptions": [{"id": "A", "status": "gone"}]}], "known status"),
-        ([{"source_sha256": "f", "exceptions": [{"id": "A", "status": ["x"]}]}], "known status"),
+        ([{"schema_version": "1.0", "exceptions": []}], "is not an exceptions evaluation"),
         (
-            [{"source_sha256": "f", "exceptions": [{"id": "A", "status": "waived"}] * 2}],
+            [{"schema_version": "1.0", "source_sha256": "f", "exceptions": "x"}],
+            "is not an exceptions evaluation",
+        ),
+        (
+            [{"schema_version": "1.0", "source_sha256": "f", "exceptions": ["x"]}],
+            "must contain mappings",
+        ),
+        (
+            [{"schema_version": "1.0", "source_sha256": "f", "exceptions": [{"id": "A"}]}],
+            "need an id and a known status",
+        ),
+        (
+            [
+                {
+                    "schema_version": "1.0",
+                    "source_sha256": "f",
+                    "exceptions": [{"id": 1, "status": "waived"}],
+                }
+            ],
+            "need an id",
+        ),
+        (
+            [
+                {
+                    "schema_version": "1.0",
+                    "source_sha256": "f",
+                    "exceptions": [{"id": "A", "status": "gone"}],
+                }
+            ],
+            "known status",
+        ),
+        (
+            [
+                {
+                    "schema_version": "1.0",
+                    "source_sha256": "f",
+                    "exceptions": [{"id": "A", "status": ["x"]}],
+                }
+            ],
+            "known status",
+        ),
+        (
+            [
+                {
+                    "schema_version": "1.0",
+                    "source_sha256": "f",
+                    "exceptions": [{"id": "A", "status": "waived"}] * 2,
+                }
+            ],
             "lists 'A' twice",
         ),
         (
@@ -1077,3 +1136,299 @@ def test_make_target_validates_inventory_values(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(exceptions, "MAX_SCOPE_ITEMS", 1)
     with pytest.raises(exceptions.ExceptionsError, match=r"target\.groups has too many items"):
         exceptions.make_target("web01", [f"g{index}" for index in range(17)])
+
+
+MID_SCAN_START = "2027-03-30T23:00:00Z"
+MID_SCAN_CONTROLLER = datetime(2027, 3, 31, 1, 0, tzinfo=timezone.utc)
+
+
+def lapsed_mid_scan() -> exceptions.Evaluation:
+    return evaluate(
+        entry(),
+        run=scan_run(started=MID_SCAN_START),
+        now=MID_SCAN_CONTROLLER,
+        controller=MID_SCAN_CONTROLLER,
+    )
+
+
+def test_a_waiver_that_lapses_after_the_scan_start_is_listed_as_lapsed() -> None:
+    evaluation = lapsed_mid_scan()
+    assert statuses(evaluation) == {"EXC-001": "expired"}
+    assert by_rule(evaluation)[RULE].exception == model.ExceptionStatus.none()
+    assert by_rule(evaluation)[RULE].outcome is model.Outcome.FAIL
+    assert evaluation.lapsed_rule_ids() == (RULE,)
+    expired_at_start = evaluate(entry(), run=scan_run(started="2027-03-31T00:00:00Z"), now=NOW)
+    assert statuses(expired_at_start) == {"EXC-001": "expired"}
+    assert expired_at_start.lapsed_rule_ids() == ()
+    assert evaluate(entry()).lapsed_rule_ids() == ()
+
+
+S = exceptions.Status
+R = exceptions.Review
+
+
+@pytest.mark.parametrize(
+    ("seen", "verdict"),
+    [
+        ([S.UNMATCHED], R.STALE),
+        ([S.UNMATCHED, S.UNMATCHED], R.STALE),
+        ([S.UNMATCHED, S.NOT_FAILING], R.NOT_FAILING),
+        ([S.SUPERSEDED, S.SUPERSEDED], R.SUPERSEDED),
+        ([S.SUPERSEDED, S.UNMATCHED, S.NOT_FAILING], R.SUPERSEDED),
+        ([S.NOT_YET_EFFECTIVE, S.SUPERSEDED], R.NOT_YET_EFFECTIVE),
+        ([S.WAIVED, S.NOT_YET_EFFECTIVE, S.UNMATCHED], R.IN_EFFECT),
+        ([S.WAIVED, S.EXPIRED], R.EXPIRED),
+        ([S.EXPIRED], R.EXPIRED),
+    ],
+)
+def test_review_takes_the_most_urgent_status(
+    seen: list[exceptions.Status], verdict: exceptions.Review
+) -> None:
+    assert exceptions.review(seen) is verdict
+    assert exceptions.review(tuple(reversed(seen))) is verdict
+
+
+def test_removal_candidates_are_stale_superseded_or_not_failing_everywhere() -> None:
+    files = (
+        entry(id="EXC-A-WAIVES", expires="2026-12-31"),
+        entry(id="EXC-B-SUPERSEDED", expires="2027-03-31", scope={"hosts": ["web01", "web02"]}),
+        entry(id="EXC-C-PASSES", rule=OTHER_RULE),
+        entry(id="EXC-D-STALE", scope={"hosts": ["elsewhere"]}),
+        entry(id="EXC-E-SOMETIMES", scope={"hosts": ["web02"]}, expires="2026-11-30"),
+    )
+    first = evaluate(*files)
+    second = evaluate(*files, where=target("web02"))
+    documents = [first.to_dict(), second.to_dict()]
+    assert statuses(first)["EXC-B-SUPERSEDED"] == "superseded"
+    assert statuses(second)["EXC-B-SUPERSEDED"] == "superseded"
+    assert exceptions.review_exceptions(documents) == {
+        "EXC-A-WAIVES": R.IN_EFFECT,
+        "EXC-B-SUPERSEDED": R.SUPERSEDED,
+        "EXC-C-PASSES": R.NOT_FAILING,
+        "EXC-D-STALE": R.STALE,
+        "EXC-E-SOMETIMES": R.IN_EFFECT,
+    }
+    assert exceptions.removal_candidate_ids(documents) == [
+        "EXC-B-SUPERSEDED",
+        "EXC-C-PASSES",
+        "EXC-D-STALE",
+    ]
+    assert exceptions.stale_exception_ids(documents) == ["EXC-D-STALE"]
+
+
+def test_review_refuses_unknown_evaluation_versions() -> None:
+    document = evaluate(entry()).to_dict()
+    for version in ("2.0", "0.9", None, 1):
+        changed = {**document, "schema_version": version}
+        for check in (
+            exceptions.stale_exception_ids,
+            exceptions.removal_candidate_ids,
+            exceptions.review_exceptions,
+        ):
+            with pytest.raises(exceptions.ExceptionsError, match="unsupported schema_version"):
+                check([document, changed])
+
+
+def round_trip(evaluation: exceptions.Evaluation) -> dict[str, object]:
+    loaded: dict[str, object] = json.loads(json.dumps(evaluation.to_dict()))
+    return loaded
+
+
+Built = tuple[exceptions.Evaluation, str]
+
+
+def built(*entries: dict[str, object], **options: Any) -> Built:
+    evaluation = evaluate(*entries, **options)
+    return evaluation, document(*entries)
+
+
+def overlapping() -> Built:
+    return built(entry(id="EXC-LATE"), entry(id="EXC-SOON", expires="2026-12-31"))
+
+
+def expired_at_scan_start() -> Built:
+    return built(entry(), run=scan_run(started="2027-03-31T00:00:00Z"), now=NOW)
+
+
+def before_approval() -> Built:
+    return built(
+        entry(created="2026-10-01", approval={"approver": "ciso", "date": "2026-10-05"}),
+        run=scan_run(started="2026-10-04T23:59:59Z"),
+        controller=NOW,
+    )
+
+
+def failed_run() -> Built:
+    return built(entry(), run=scan_run({RULE: model.Outcome.ERROR}, status=FAILED))
+
+
+def two_rules() -> Built:
+    return built(entry(), entry(id="EXC-002", rule=OTHER_RULE))
+
+
+def no_exceptions() -> Built:
+    return built()
+
+
+def lapsed_built() -> Built:
+    return lapsed_mid_scan(), document(entry())
+
+
+FAILED = model.ScanStatus.FAILED
+BUILDERS = (
+    two_rules,
+    overlapping,
+    expired_at_scan_start,
+    lapsed_built,
+    before_approval,
+    failed_run,
+    no_exceptions,
+)
+
+
+@pytest.mark.parametrize("build", BUILDERS)
+def test_verify_evaluation_accepts_every_document_evaluate_run_writes(
+    build: Callable[[], Built],
+) -> None:
+    evaluation, text = build()
+    verified = exceptions.verify_evaluation(round_trip(evaluation), text)
+    assert verified == evaluation
+    assert verified.lapsed_rule_ids() == evaluation.lapsed_rule_ids()
+
+
+def edit(document: dict[str, object], path: tuple[str | int, ...], value: object) -> object:
+    copied: object = json.loads(json.dumps(document))
+    node = copied
+    for step in path[:-1]:
+        node = cast("dict[str | int, object]", node)[step]
+    cast("dict[str | int, object]", node)[path[-1]] = value
+    return copied
+
+
+TAMPERING: list[tuple[tuple[str | int, ...], object]] = [
+    (("exceptions", 0, "status"), "unmatched"),
+    (("exceptions", 0, "expired"), True),
+    (("exceptions", 0, "outcome"), "pass"),
+    (("exceptions", 0, "superseded_by"), "EXC-002"),
+    (("exceptions", 0, "expires_at"), "2027-03-30T00:00:00Z"),
+    (("exceptions", 0, "expires"), "2027-03-30"),
+    (("exceptions", 0, "justification"), "A different justification."),
+    (("exceptions", 0, "risk"), "low"),
+    (("exceptions", 0, "scope"), {"hosts": ["web02"]}),
+    (("exceptions", 0, "note"), "x"),
+    (("exceptions",), []),
+    (("summary", "waived"), 0),
+    (("summary", "unmatched"), 5),
+    (("scan_run", "findings", 1, "outcome"), "fail"),
+    (("scan_run", "findings", 1, "exception"), model.ExceptionStatus.none().to_dict()),
+    (("scan_run", "findings", 1, "exception", "reason"), "Accepted by everybody."),
+    (("scan_run", "findings", 1, "exception", "exception_id"), "EXC-002"),
+    (("scan_run", "findings", 0, "outcome"), "waived"),
+    (("scan_run", "findings", 0, "outcome"), "fail"),
+    (("evaluated_at",), "2026-10-25T09:00:00Z"),
+    (("scan_started_at",), "2026-10-25T09:00:00Z"),
+    (("scan_lag_seconds",), 7),
+    (("scan_lag_exceeded",), True),
+    (("max_validity_days",), 3650),
+    (("max_validity_days",), 365.0),
+    (("target", "host"), "web02"),
+]
+
+
+@pytest.mark.parametrize(("path", "value"), TAMPERING)
+def test_verify_evaluation_detects_every_edit(path: tuple[str | int, ...], value: object) -> None:
+    evaluation, text = two_rules()
+    with pytest.raises(exceptions.ExceptionsError):
+        exceptions.verify_evaluation(edit(round_trip(evaluation), path, value), text)
+
+
+def test_verify_evaluation_needs_the_exceptions_file_it_names() -> None:
+    evaluation, text = two_rules()
+    data = round_trip(evaluation)
+    for other in (text + "\n", document_text_without_second_entry(), document()):
+        with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
+            exceptions.verify_evaluation(data, other)
+    with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
+        exceptions.verify_evaluation(data, "not yaml")
+    invalid_digest = hashlib.sha256(b"not yaml").hexdigest()
+    with pytest.raises(exceptions.ExceptionsError, match="exceptions file: line 1"):
+        exceptions.verify_evaluation(edit(data, ("source_sha256",), invalid_digest), "not yaml")
+    with pytest.raises(exceptions.ExceptionsError, match="exceptions file must be text"):
+        exceptions.verify_evaluation(data, None)
+    forged = edit(data, ("source_sha256",), "b" * 64)
+    with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
+        exceptions.verify_evaluation(forged, text)
+
+
+def document_text_without_second_entry() -> str:
+    return document(entry())
+
+
+def test_an_evaluation_rebuilt_from_a_made_up_file_is_refused() -> None:
+    made_up = document(
+        entry(owner="mallory", approval={"approver": "trent", "date": "2026-10-02"}),
+        entry(id="EXC-002", rule=OTHER_RULE, owner="mallory"),
+    )
+    real = document(entry())
+    parsed = exceptions.parse_exceptions(made_up, NOW)
+    forged = exceptions.evaluate_run(scan_run(), parsed, target(), instant(STARTED))
+    assert exceptions.verify_evaluation(round_trip(forged), made_up) == forged
+    with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
+        exceptions.verify_evaluation(round_trip(forged), real)
+    relabelled = edit(
+        round_trip(forged), ("source_sha256",), hashlib.sha256(real.encode()).hexdigest()
+    )
+    with pytest.raises(exceptions.ExceptionsError, match="does not match a new evaluation"):
+        exceptions.verify_evaluation(relabelled, real)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        (("schema_version",), "2.0", "unsupported schema_version '2.0'"),
+        (("schema_version",), 1, "unsupported schema_version '1'"),
+        (("controller_time",), "yesterday", "controller_time is not a UTC timestamp"),
+        (("controller_time",), 5, "controller_time must be a string"),
+        (("controller_time",), "2020-01-01T00:00:00Z", "created is in the future"),
+        (("max_scan_lag_seconds",), True, "max_scan_lag_seconds must be an integer"),
+        (("max_scan_lag_seconds",), "60", "max_scan_lag_seconds must be an integer"),
+        (("max_scan_lag_seconds",), 0, "maximum scan lag must be positive"),
+        (("target",), {"host": "web01"}, "target is missing keys: groups"),
+        (("target", "host"), "", "target.host must not be empty"),
+        (("scan_run",), 5, "the scan run must be a mapping"),
+        (("extra",), "x", "evaluation has unknown keys: 'extra'"),
+        (("target",), None, "target must not be null"),
+    ],
+)
+def test_verify_evaluation_rejects_malformed_documents(
+    path: tuple[str | int, ...], value: object, message: str
+) -> None:
+    evaluation, text = built(entry())
+    with pytest.raises(exceptions.ExceptionsError, match=message):
+        exceptions.verify_evaluation(edit(round_trip(evaluation), path, value), text)
+
+
+def test_a_benchmark_scope_version_must_be_a_version_token() -> None:
+    for version in ("0.1 82", "all controls compliant", "-1", "1/2"):
+        scope = {"benchmark": {"id": BENCHMARK, "version": version}, "profiles": [PROFILE]}
+        invalid_entry(r"scope\.benchmark\.version has an invalid format", scope=scope)
+    for version in ("0.1.82", "v1.2+build~rc1", "2:1.0-3"):
+        scope = {"benchmark": {"id": BENCHMARK, "version": version}, "profiles": [PROFILE]}
+        assert parse(entry(scope=scope)).records[0].scope.benchmark is not None
+
+
+def test_verify_evaluation_rejects_values_that_are_not_json() -> None:
+    evaluation, text = built(entry())
+    with pytest.raises(exceptions.ExceptionsError, match="not JSON data"):
+        exceptions.verify_evaluation({**round_trip(evaluation), "summary": {1, 2}}, text)
+
+
+def test_verify_evaluation_needs_every_key() -> None:
+    evaluation, text = two_rules()
+    document = round_trip(evaluation)
+    for key in exceptions.EVALUATION_KEYS:
+        partial = {name: value for name, value in document.items() if name != key}
+        with pytest.raises(exceptions.ExceptionsError, match=f"missing keys: {key}"):
+            exceptions.verify_evaluation(partial, text)
+    with pytest.raises(exceptions.ExceptionsError, match="evaluation must be a mapping"):
+        exceptions.verify_evaluation([document], text)

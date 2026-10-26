@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 from jsonschema import Draft202012Validator
 
-from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    exceptions,
+    model,
+)
 from tools.reporting import common, report
 from tools.reporting.common import dumps
 from tools.reporting.report import ReportError, ReportInputs, RunMetadata, Scope
@@ -18,7 +21,7 @@ from tools.reporting.report import ReportError, ReportInputs, RunMetadata, Scope
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-SCHEMA_PATH = Path(report.__file__).parent / "schema" / "report-v1.json"
+SCHEMA_PATH = Path(report.__file__).parent / "schema" / "report-v2.json"
 SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 VALIDATOR: Any = Draft202012Validator(SCHEMA)
 SECTIONS = set(report.SECTION_NAMES)
@@ -56,6 +59,8 @@ def full_inputs(kit: Any, **changes: Any) -> ReportInputs:
         "packer": (fixtures / "packer-manifest.json",),
         "codebuild": (fixtures / "codebuild.json",),
         "molecule": (fixtures / "molecule-summary.json",),
+        "exceptions_evaluation": (kit.EVALUATION_FILE,),
+        "exceptions_file": kit.EXCEPTIONS_FILE,
     }
     base.update(changes)
     return ReportInputs(**base)
@@ -69,13 +74,16 @@ def test_the_schema_is_a_valid_2020_12_schema() -> None:
 def test_full_report_validates_against_the_schema(kit: Any) -> None:
     document = build(full_inputs(kit))
     assert errors(document) == []
-    assert document["schema_version"] == "1.0"
+    assert document["schema_version"] == "2.0"
+    exceptions_summary = document["sections"]["exceptions"]["summary"]
     assert document["overview"] == {
         "available": sorted(SECTIONS),
         "error": [],
+        "exceptions": exceptions_summary,
         "partial": [],
         "unavailable": [],
     }
+    assert exceptions_summary["by_status"]["stale"] == 1
     assert not report.has_error(document)
 
 
@@ -85,6 +93,7 @@ def test_empty_report_marks_every_section_unavailable_never_pass() -> None:
     assert document["overview"] == {
         "available": [],
         "error": [],
+        "exceptions": None,
         "partial": [],
         "unavailable": sorted(SECTIONS),
     }
@@ -122,7 +131,8 @@ def test_no_timestamp_is_generated_when_none_is_supplied(kit: Any) -> None:
 def test_raw_artifact_references_keep_path_and_checksum(kit: Any) -> None:
     document = build(full_inputs(kit))
     references: list[dict[str, Any]] = document["raw_artifacts"]
-    assert len(references) == 13
+    assert len(references) == 15
+    assert [ref["format"] for ref in references].count("exceptions_evaluation") == 1
     paths = [reference["path"] for reference in references]
     assert paths == sorted(paths)
     junit = next(ref for ref in references if ref["format"] == "junit")
@@ -148,6 +158,7 @@ def test_missing_and_corrupt_inputs_are_never_available(
     assert document["overview"] == {
         "available": ["lint"],
         "error": ["tests"],
+        "exceptions": None,
         "partial": [],
         "unavailable": sorted(SECTIONS - {"lint", "tests"}),
     }
@@ -198,10 +209,12 @@ def test_error_outweighs_unavailable(write: Callable[..., Path], tmp_path: Path)
 
 
 def test_oversized_inputs_are_errors(kit: Any) -> None:
-    document = build(full_inputs(kit, max_bytes=50))
+    document = build(full_inputs(kit, max_bytes=50, exceptions_evaluation=(), exceptions_file=None))
     assert errors(document) == []
     assert document["overview"]["available"] == []
-    assert document["overview"]["error"] == sorted(SECTIONS)
+    assert document["overview"]["error"] == sorted(SECTIONS - {"exceptions"})
+    with pytest.raises(ReportError, match="exceptions file cannot be used: input is larger"):
+        report.build_report(full_inputs(kit, max_bytes=50))
 
 
 def test_section_summaries(kit: Any) -> None:
@@ -267,10 +280,14 @@ def test_compliance_summary_with_waived_expired_and_dedup(
     assert groups["cis"]["compliance_percent"] == 20.0
     assert groups["cis"]["expired_waivers"] == 1
     assert groups["tig"]["compliance_percent"] == 0.0
-    rules = {rule["rule_id"].rsplit("_", 1)[-1]: rule for rule in section["rules"]}
-    assert len(section["rules"]) == 7
-    assert rules["a"]["outcome"] == "fail"
-    assert [source["outcome"] for source in rules["a"]["sources"]] == ["pass", "fail"]
+    rules = {
+        (rule["benchmark_id"][-3:], rule["rule_id"].rsplit("_", 1)[-1]): rule
+        for rule in section["rules"]
+    }
+    assert len(section["rules"]) == 8
+    assert rules["cis", "a"]["outcome"] == "pass"
+    assert rules["tig", "a"]["outcome"] == "fail"
+    assert [source["outcome"] for source in rules["cis", "a"]["sources"]] == ["pass"]
     assert section["items"][0]["data"]["findings"] == []
     assert section["items"][0]["data"]["scan_run"]["run_id"] == "run-1"
 
@@ -363,7 +380,8 @@ def valid_report(kit: Any) -> dict[str, Any]:
 DELETE = object()
 type PathSteps = tuple[str | int, ...]
 SCHEMA_VIOLATIONS: list[tuple[PathSteps, str, Any]] = [
-    ((), "schema_version", "2.0"),
+    ((), "schema_version", "1.0"),
+    ((), "schema_version", "3.0"),
     ((), "scope", "global"),
     ((), "extra", 1),
     ((), "sections", DELETE),
@@ -461,7 +479,7 @@ def test_scope_benchmark_rejects_several_benchmark_versions(
         kit.scan_run((kit.finding("a"),)),
         kit.scan_run((kit.finding("a"),), content_version="2.0"),
     )
-    with pytest.raises(ReportError, match="2 benchmark versions"):
+    with pytest.raises(ReportError, match="2 benchmark, content version and profile"):
         report.build_report(ReportInputs(scope=Scope.BENCHMARK, scan_run=paths))
     document = build(ReportInputs(scope=Scope.SINGLE_HOST, scan_run=paths))
     assert errors(document) == []
@@ -678,8 +696,19 @@ def test_files_claiming_the_same_host_are_merged_with_a_note(
     assert errors(document) == []
     section = document["sections"]["compliance"]
     digests = sorted(hashlib.sha256(path.read_bytes()).hexdigest() for path in paths[:2])
+    host = {"hostname": "web01", "input_sha256": None, "machine_id": None}
     assert section["notes"] == [
-        {"host": "web01", "kind": "shared_self_asserted_host", "sources": digests}
+        {
+            "group": {
+                "benchmark_id": kit.BENCHMARK,
+                "content_version": "1.0",
+                "host": host,
+                "profile_id": kit.PROFILE,
+            },
+            "kind": "merged_inputs",
+            "repeated_profile": True,
+            "sources": digests,
+        }
     ]
     single = build(ReportInputs(scope=Scope.FLEET, xccdf=paths[2:]))
     assert single["sections"]["compliance"]["notes"] == []
@@ -698,36 +727,89 @@ def anchored(pattern: re.Pattern[str]) -> str:
     return "^" + pattern.pattern + "$"
 
 
+def anchored_text(pattern: str) -> str:
+    return "^" + pattern + "$"
+
+
 LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/(then|else)/.*/maxItems$", STRUCTURAL),
+    (r"/\$defs/sameHostNote/properties/groups/maxItems$", report.MAX_INPUTS),
+    (r"/\$defs/exceptionScope/properties/\w+/maxItems$", exceptions.MAX_SCOPE_ITEMS),
     (r"/properties/findings/maxItems$", model.MAX_FINDINGS),
     (r"/properties/evidence/maxItems$", model.MAX_EVIDENCE_ITEMS),
     (r"/properties/flags/maxItems$", len(model.ResultFlag)),
     (r"/properties/rules/maxItems$", report.MAX_RULES),
     (r"/properties/(groups|aggregates)/maxItems$", report.MAX_GROUPS),
     (r"/properties/(builds|scenarios)/maxItems$", common.MAX_ENTRIES),
-    (r"/properties/(items|gaps|sources|notes)/maxItems$", report.MAX_INPUTS),
+    (r"/properties/(items|gaps|sources|notes|matched_hosts)/maxItems$", report.MAX_INPUTS),
     (
         r"/properties/(issues|vulnerabilities|components|packages|failed_cases)/maxItems$",
         common.MAX_DETAIL_ITEMS,
     ),
     (r"/properties/(files|fixed_versions)/maxItems$", common.MAX_SUBENTRIES),
-    (r"/properties/raw_artifacts/maxItems$", len(report.SECTION_NAMES) * report.MAX_INPUTS),
+    (r"/properties/raw_artifacts/maxItems$", report.MAX_RAW_ARTIFACTS),
     (r"/properties/overview/properties/\w+/maxItems$", len(report.SECTION_NAMES)),
+    (r"/properties/(exceptions|lapsed_waivers)/maxItems$", exceptions.MAX_EXCEPTIONS),
     (r"/properties/custom_data/maxProperties$", common.MAX_SUBENTRIES),
     (r"/\$defs/counts/maxProperties$", common.MAX_ENTRIES),
-    (r"/\$defs/host/maxLength$", MAX_HOST),
+    (r"/\$defs/(host|inventoryHost)/maxLength$", MAX_HOST),
     (r"/properties/(path|artifact)/maxLength$", common.MAX_PATH_LENGTH),
     (r"/properties/content/maxLength$", model.MAX_EVIDENCE_LENGTH),
     (
         r"/properties/custom_data/(propertyNames|additionalProperties)/maxLength$",
         common.MAX_TEXT_LENGTH,
     ),
+    (
+        r"/\$defs/exceptionEntry/properties/justification/maxLength$",
+        exceptions.MAX_JUSTIFICATION_LENGTH,
+    ),
+    (r"/\$defs/exceptionId/maxLength$", exceptions.MAX_ID_LENGTH),
+    (r"/\$defs/person/maxLength$", exceptions.MAX_PERSON_LENGTH),
+    (r"/\$defs/exceptionScope/properties/hosts/items/maxLength$", exceptions.MAX_HOST_LENGTH),
+    (r"/\$defs/exceptionScope/properties/groups/items/maxLength$", exceptions.MAX_GROUP_LENGTH),
+    (
+        r"/\$defs/exceptionScope/properties/benchmark/.*/version/maxLength$",
+        exceptions.MAX_VERSION_LENGTH,
+    ),
+    (
+        (
+            r"/(\$defs/exceptionScope/properties/(profiles/items|benchmark/.*/id)"
+            r"|\$defs/complianceData/properties/lapsed_waivers/items)/maxLength$"
+        ),
+        model.MAX_ID_LENGTH,
+    ),
     (r"/maxLength$", model.MAX_TEXT_LENGTH),
     (r"/\$defs/timestamp/pattern$", BEHAVIOURAL),
     (r"/\$defs/sha256/pattern$", SHA_PATTERN),
     (r"/\$defs/host/pattern$", HOST_PATTERN),
     (r"/\$defs/machineId/pattern$", MACHINE_PATTERN),
+    (
+        r"/\$defs/(inventoryHost|exceptionScope/properties/hosts/items)/pattern$",
+        anchored_text(exceptions.HOST_PATTERN),
+    ),
+    (
+        r"/\$defs/exceptionScope/properties/groups/items/pattern$",
+        anchored_text(exceptions.GROUP_PATTERN),
+    ),
+    (r"/\$defs/exceptionId/pattern$", anchored_text(exceptions.ID_PATTERN)),
+    (r"/\$defs/person/pattern$", anchored_text(f"(?:{exceptions.PERSON_PATTERN})")),
+    (r"/\$defs/date/pattern$", anchored_text(exceptions.DATE_PATTERN)),
+    (
+        r"/\$defs/exceptionScope/properties/benchmark/.*/version/pattern$",
+        anchored_text(exceptions.VERSION_PATTERN),
+    ),
+    (
+        r"/\$defs/exceptionScope/properties/benchmark/.*/id/pattern$",
+        anchored_text(model.XCCDF_ID_PATTERNS["benchmark"]),
+    ),
+    (
+        r"/\$defs/exceptionScope/properties/profiles/items/pattern$",
+        anchored_text(model.XCCDF_ID_PATTERNS["profile"]),
+    ),
+    (
+        r"/\$defs/complianceData/properties/lapsed_waivers/items/pattern$",
+        anchored_text(model.XCCDF_ID_PATTERNS["rule"]),
+    ),
     (r"/properties/commit/oneOf/\d+/pattern$", anchored(report.COMMIT_PATTERN)),
     (
         r"/properties/pull_request/oneOf/\d+/pattern$",
@@ -850,8 +932,14 @@ def test_the_schema_rejects_prose_in_host_fields_and_notes(
     document = build(ReportInputs(scope=Scope.FLEET, xccdf=paths))
     assert errors(document) == []
     section = ("sections", "compliance")
+    assert mutate_many(
+        document, (*section, "notes", 0, "group", "host"), {"hostname": HOSTILE_HOST}
+    )
+    assert mutate_many(document, (*section, "notes", 0, "group"), {"benchmark_id": 5})
     assert mutate_many(document, (*section, "notes", 0), {"host": HOSTILE_HOST})
     assert mutate_many(document, (*section, "notes", 0), {"kind": "free text"})
+    assert mutate_many(document, (*section, "notes", 0), {"kind": "same_host_across_groups"})
+    assert mutate_many(document, (*section, "notes", 0), {"repeated_profile": "yes"})
     assert mutate_many(document, (*section, "notes", 0), {"sources": ["a" * 64]})
     assert mutate_many(document, (*section, "notes", 0), {"extra": "x"})
     assert mutate_many(document, (*section, "groups", 0), {"host": HOSTILE_HOST})
@@ -965,9 +1053,9 @@ def test_host_case_does_not_split_or_merge_groups_inconsistently(
     assert errors(document) == []
     assert [group["host"]["hostname"] for group in groups_of(document)] == ["web01"]
     notes = document["sections"]["compliance"]["notes"]
-    assert [(note["kind"], note["host"], len(note["sources"])) for note in notes] == [
-        ("shared_self_asserted_host", "web01", 2)
-    ]
+    assert [
+        (note["kind"], note["group"]["host"]["hostname"], len(note["sources"])) for note in notes
+    ] == [("merged_inputs", "web01", 2)]
 
 
 def test_the_schema_rejects_mixed_host_key_shapes(kit: Any, write: Callable[..., Path]) -> None:

@@ -1,0 +1,38 @@
+---
+breaking_changes:
+  - >-
+    The normalized report schema is now ``tools/reporting/schema/report-v2.json`` (``schema_version`` ``2.0``). The
+    compliance note ``shared_self_asserted_host`` is replaced by a ``merged_inputs`` note for every group built from
+    more than one input and a ``same_host_across_groups`` note for a host counted as one across groups. The new
+    ``exceptions`` section and ``overview.exceptions`` are required keys. The dashboard reads 2.0 only. See the
+    schema version notes in ``docs/reporting-data-model.md``.
+  - >-
+    Report figures are keyed per benchmark, content version and profile: ``groups``, ``aggregates`` and ``rules`` gain
+    ``profile_id``, a CIS and a STIG run of one host are never pooled, and the ``benchmark`` scope is refused for
+    several profiles.
+  - >-
+    ``--exceptions-evaluation`` requires ``--exceptions-file``; every evaluation is verified against that file
+    (SHA-256, validation and a new evaluation) and is an input error otherwise. A benchmark scope version in an
+    exceptions file must be a version token.
+  - >-
+    ``tools/reporting`` refuses more than one completed scan run for one host, benchmark, content version and profile
+    unless ``--allow-repeated-scans`` is given, and an XCCDF or ARF result whose ``target`` and fqdn fact name different
+    hosts is an input error.
+  - >-
+    Owner and approver of an exception are the same person when their local parts match without a plus-address suffix,
+    on any domain (``alice+x@example.org`` and ``alice@other.example`` are both ``alice``), so such files are now
+    rejected.
+minor_changes:
+  - >-
+    ``tools/reporting`` reads exceptions evaluations (``--exceptions-evaluation``), verifies each against the exceptions
+    file by evaluating its scan run again, counts waivers that lapsed during the scan in ``expired_waivers`` and lists
+    every exception with its review verdict, removal candidacy, expiry, scope, matched inventory hosts and the
+    exceptions file SHA-256. The
+    dashboard has an Exceptions tab and shows the stale and expired counts on the overview.
+  - >-
+    Add the controller filter ``freesecdev.linux_compliance.exception_removal_candidates`` and the module functions
+    ``review``, ``review_exceptions``, ``removal_candidate_ids`` and ``verify_evaluation``. ``stale_exceptions`` refuses
+    evaluations with an unknown ``schema_version``.
+  - >-
+    Add the proposed ADR 0018 for signing evidence bundles with Sigstore attestations and labelling report inputs as
+    verified or self-asserted.

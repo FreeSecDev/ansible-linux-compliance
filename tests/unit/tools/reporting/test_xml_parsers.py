@@ -229,10 +229,61 @@ def test_reported_host_comes_from_target_or_fqdn_fact(kit: Any, write: Callable[
         '<target-facts><fact name="urn:xccdf:fact:asset:identifier:fqdn">fact.example</fact>'
         '<fact name="other">x</fact></target-facts>'
     )
-    document = kit.xccdf_text("target.example").replace("</TestResult>", f"{fact}</TestResult>")
+    document = kit.xccdf_text("Fact.Example").replace("</TestResult>", f"{fact}</TestResult>")
     both = xccdf.parse_xccdf(write("d.xml", document)).data
     assert both is not None
     assert both.reported_host == "fact.example"
+    only_fact = kit.xccdf_text(None).replace("</TestResult>", f"{fact}</TestResult>")
+    from_fact = xccdf.parse_xccdf(write("e.xml", only_fact)).data
+    assert from_fact is not None
+    assert from_fact.reported_host == "fact.example"
+
+
+@pytest.mark.parametrize(
+    ("target", "facts"),
+    [
+        ("target.example", ["fact.example"]),
+        ("web01", ["web01.example"]),
+        ("web01", ["web01", "web02"]),
+        (None, ["one.example", "two.example"]),
+    ],
+)
+def test_a_target_and_fqdn_fact_that_disagree_are_an_input_error(
+    kit: Any, write: Callable[..., Path], target: str | None, facts: list[str]
+) -> None:
+    listed = "".join(
+        f'<fact name="urn:xccdf:fact:asset:identifier:fqdn">{name}</fact>' for name in facts
+    )
+    document = kit.xccdf_text(target).replace(
+        "</TestResult>", f"<target-facts>{listed}</target-facts></TestResult>"
+    )
+    result = xccdf.parse_xccdf(write("mismatch.xml", document))
+    assert result.status is SectionStatus.ERROR
+    assert result.data is None
+    assert result.reason == "the target and fqdn fact of the results name different hosts"
+
+
+def test_two_targets_that_disagree_are_an_input_error(kit: Any, write: Callable[..., Path]) -> None:
+    document = kit.xccdf_text("one.example").replace(
+        "</TestResult>", "<target>two.example</target></TestResult>"
+    )
+    assert xccdf.parse_xccdf(write("t.xml", document)).status is SectionStatus.ERROR
+
+
+def test_an_arf_whose_fact_disagrees_with_its_target_is_an_input_error(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    arf = (kit.REPORTING / "arf.xml").read_text(encoding="utf-8")
+    fact = (
+        '<target-facts><fact name="urn:xccdf:fact:asset:identifier:fqdn">elsewhere.example'
+        "</fact></target-facts>"
+    )
+    changed = arf.replace("</TestResult>", f"{fact}</TestResult>", 1)
+    assert changed != arf
+    result = xccdf.parse_arf(write("arf-fact.xml", changed))
+    assert result.status is SectionStatus.ERROR
+    assert result.reason is not None
+    assert "different host" in result.reason
 
 
 def test_xccdf_rejects_what_the_plugin_parser_rejects(kit: Any) -> None:
@@ -296,12 +347,14 @@ def test_arf_asset_names_are_validated_too(kit: Any, write: Callable[..., Path])
 
 def test_arf_asset_must_match_the_target(kit: Any, write: Callable[..., Path]) -> None:
     arf = (kit.REPORTING / "arf.xml").read_text(encoding="utf-8")
-    result = xccdf.parse_arf(
-        write("a.xml", arf.replace("<target>host.example", "<target>other.example"))
-    )
+    result = xccdf.parse_arf(write("a.xml", arf.replace(">host.example<", ">other.example<")))
     assert result.status is SectionStatus.ERROR
-    assert result.reason is not None
-    assert "different host" in result.reason
+    assert result.reason == "the ARF asset names a different host than the XCCDF TestResult target"
+    target_only = xccdf.parse_arf(
+        write("b.xml", arf.replace("<target>host.example", "<target>other.example"))
+    )
+    assert target_only.status is SectionStatus.ERROR
+    assert target_only.reason == "the target and fqdn fact of the results name different hosts"
 
 
 def test_arf_asset_with_other_children_and_no_names_is_accepted(
