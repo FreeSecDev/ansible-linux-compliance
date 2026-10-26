@@ -13,9 +13,13 @@ from __future__ import annotations
 import re
 import stat
 from pathlib import Path
-from typing import Final
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Final
 
 from tools.lint.repo_rules.common import PLUGINS_DIRECTORY, Violation
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 LOAD_DIRECTORY_NAMES: Final[frozenset[str]] = frozenset(
     {
@@ -42,6 +46,8 @@ EXECUTABLE_ALLOW_LIST: Final[frozenset[tuple[str, str]]] = frozenset({("tools", 
 SYMLINK_ALLOW_LIST: Final[frozenset[Path]] = frozenset(
     {Path(".claude/skills"), Path("tests/playbooks/fixtures/remediate/link-to-target")}
 )
+GIT_EXECUTABLE_MODE: Final[str] = "100755"
+GIT_SYMLINK_MODE: Final[str] = "120000"
 PYTHON_SHEBANGS: Final[frozenset[str]] = frozenset(
     {"#!/usr/bin/python", "#!/usr/bin/python3", "#!/usr/bin/env python", "#!/usr/bin/env python3"}
 )
@@ -65,23 +71,46 @@ def repository_path(path: Path, root: Path) -> Path | None:
         return None
 
 
+def folded(path: Path) -> Path:
+    """Return ``path`` with every component case-folded.
+
+    Ansible finds a load directory with ``os.path.isdir``, which ignores case on the
+    default macOS and Windows filesystems, so ``Library`` is ``library`` there (FREES-156).
+    """
+    return Path(*(part.casefold() for part in path.parts))
+
+
 def is_load_directory_name(name: str) -> bool:
-    """Return whether Ansible loads code from a directory called ``name``."""
+    """Return whether Ansible loads code from a directory called ``name``, in any case."""
+    name = name.casefold()
     return name in LOAD_DIRECTORY_NAMES or name.endswith(PLUGIN_DIRECTORY_SUFFIX)
+
+
+def index_modes(listing: bytes) -> Mapping[Path, str]:
+    """Return the Git index mode of every path in a ``git ls-files -s -z`` listing."""
+    modes: dict[Path, str] = {}
+    for record in listing.split(b"\0"):
+        header, separator, name = record.partition(b"\t")
+        if separator:
+            mode = header.decode("ascii", errors="replace").split(" ", 1)[0]
+            modes[Path(name.decode("utf-8", errors="surrogateescape"))] = mode
+    return MappingProxyType(modes)
 
 
 def load_location(relative: Path, configured: frozenset[Path] = frozenset()) -> Path | None:
     """Return the load directory that holds the repository file ``relative``, if any.
 
-    Nothing below the repository's own ``plugins/`` and none of the
-    ``NON_LOADING_DIRECTORIES`` is a load directory by its name; ``configured`` holds the
-    directories that an ``ansible.cfg`` names, which are load directories wherever they are.
+    Names are compared case-folded. Nothing below the repository's own ``plugins/``, spelt
+    exactly so, and none of the ``NON_LOADING_DIRECTORIES``, matched exactly, is a load
+    directory by its name; ``configured`` holds the directories that an ``ansible.cfg``
+    names, which are load directories wherever they are and in any case.
     """
     parts = relative.parts
     collection_plugins = parts[:1] == (PLUGINS_DIRECTORY,)
+    configured_folded = {folded(directory) for directory in configured}
     for index in range(len(parts) - 1):
         directory = Path(*parts[: index + 1])
-        if directory in configured:
+        if folded(directory) in configured_folded:
             return directory
         if collection_plugins or directory in NON_LOADING_DIRECTORIES:
             continue
@@ -98,11 +127,23 @@ def _is_allowed_executable(relative: Path) -> bool:
 
 
 def _python_only_tree(relative: Path) -> Path | None:
-    return next((tree for tree in PYTHON_ONLY_TREES if tree in relative.parents), None)
+    parents = folded(relative).parents
+    return next((tree for tree in PYTHON_ONLY_TREES if tree in parents), None)
+
+
+def _is_link(mode: int, index_mode: str | None) -> bool:
+    return stat.S_ISLNK(mode) or index_mode == GIT_SYMLINK_MODE
+
+
+def _is_executable(mode: int, index_mode: str | None) -> bool:
+    return (stat.S_ISREG(mode) and bool(mode & 0o111)) or index_mode == GIT_EXECUTABLE_MODE
 
 
 def location_findings(
-    path: Path, relative: Path, configured: frozenset[Path] = frozenset()
+    path: Path,
+    relative: Path,
+    configured: frozenset[Path] = frozenset(),
+    index_mode: str | None = None,
 ) -> list[Violation]:
     """Apply the rules that depend on where a file is and what kind of file it is.
 
@@ -110,13 +151,15 @@ def location_findings(
     guard would follow it to a file that no rule checked at this path. A regular file with
     an executable bit is refused outside ``EXECUTABLE_ALLOW_LIST``. A file in a load
     directory is refused, a file under ``plugins/`` must be Python source, and the
-    ``PYTHON_ONLY_TREES`` may hold only Python source and stubs.
+    ``PYTHON_ONLY_TREES`` may hold only Python source and stubs. ``index_mode`` is the
+    mode of the file in the Git index, so a link or an executable bit that only the index
+    records is refused as well.
     """
     try:
         mode = path.lstat().st_mode
     except OSError:
         return []
-    if stat.S_ISLNK(mode):
+    if _is_link(mode, index_mode):
         if relative in SYMLINK_ALLOW_LIST:
             return []
         return [
@@ -128,7 +171,7 @@ def location_findings(
             )
         ]
     violations: list[Violation] = []
-    if stat.S_ISREG(mode) and mode & 0o111 and not _is_allowed_executable(relative):
+    if _is_executable(mode, index_mode) and not _is_allowed_executable(relative):
         violations.append(
             Violation(
                 path,
@@ -147,7 +190,7 @@ def location_findings(
                 "the collection's code belongs in plugins/ (ADR 0004)",
             )
         )
-    if relative.parts[:1] == (PLUGINS_DIRECTORY,) and relative.suffix != ".py":
+    if folded(relative).parts[:1] == (PLUGINS_DIRECTORY,) and relative.suffix != ".py":
         violations.append(
             Violation(
                 path,
@@ -188,7 +231,7 @@ def python_findings(path: Path, relative: Path | None, data: bytes) -> list[Viol
                 "Python interpreter",
             )
         )
-    if relative is None or MODULE_DIRECTORY not in relative.parents:
+    if relative is None or MODULE_DIRECTORY not in folded(relative).parents:
         return violations
     if data.translate(None, TEXT_BYTES):
         violations.append(

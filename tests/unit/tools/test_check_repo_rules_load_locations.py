@@ -434,7 +434,13 @@ def test_the_allowed_symlinks_are_not_followed(tmp_path: Path) -> None:
 def test_make_lint_repo_passes_every_tracked_file_to_the_guard() -> None:
     makefile = (rules.REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     lint_repo = makefile.split("\nlint-repo:", 1)[1].split("\n\n", 1)[0]
-    assert "\t$(TRACKED) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py" in lint_repo
+    guard = (
+        "\t$(TRACKED) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py "
+        "--index-modes $(INDEX_MODES)"
+    )
+    assert guard in lint_repo.splitlines()
+    assert "\tgit ls-files -s -z > $(INDEX_MODES)" in lint_repo.splitlines()
+    assert "INDEX_MODES := build/lint-repo-index-modes\n" in makefile
     assert "$(TRACKED) --" not in lint_repo
     assert "TRACKED := git ls-files -z --cached --others --exclude-standard\n" in makefile
 

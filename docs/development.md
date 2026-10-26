@@ -270,7 +270,12 @@ which holds one module per rule group; the name sets and allow-lists live in `to
     that such a setting names is refused as well. The `ANSIBLE_*` environment variables for those paths and
     `ANSIBLE_CONFIG` are refused as YAML keys, in workflow and `molecule.yml` values, in makefiles and in shell scripts,
     and so are `--module-path` and `-M`; only the `Makefile` may set `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH`,
-    which point below `build/`. `molecule.yml` may not set the `ansible.cfg` path settings either.
+    which point below `build/`. `molecule.yml` may not set the `ansible.cfg` path settings either. Environment files
+    (`.env`, `.envrc`), `.ini`, `.toml` and `.cfg` files are scanned for the same variables, and an ansible-navigator
+    settings file may point `ansible.config.path` only at a file named `ansible.cfg`.
+  - Names are compared case-folded, because a macOS or Windows controller finds `Library/` as `library/`, and a
+    symbolic link or executable bit recorded only in the Git index is refused too: `make lint-repo` passes
+    `git ls-files -s -z` to the guard with `--index-modes`.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
   including the `ansible.builtin.`, `ansible.legacy.`, `ansible.windows.` and `community.windows.` forms and the `action` / `local_action` spellings.
   The scan covers `extensions/` and `tests/` as well. Since FREES-128 the check knows where Ansible reads a module name:

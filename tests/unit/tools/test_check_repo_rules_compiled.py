@@ -68,7 +68,11 @@ def test_make_lint_repo_passes_every_compiled_suffix_to_the_guard() -> None:
     makefile = (rules.REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     assert "COMPILED_MODULE_PATHSPECS" not in makefile
     lint_repo = makefile.split("\nlint-repo:", 1)[1].split("\n\n", 1)[0]
-    assert "\t$(TRACKED) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py" in lint_repo
+    guard = (
+        "\t$(TRACKED) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py "
+        "--index-modes $(INDEX_MODES)"
+    )
+    assert guard in lint_repo.splitlines()
 
 
 def test_the_pre_commit_hook_passes_every_compiled_suffix_to_the_guard() -> None:

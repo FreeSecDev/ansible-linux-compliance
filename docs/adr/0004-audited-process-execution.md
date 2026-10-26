@@ -593,5 +593,39 @@ location, and `test_a_plugins_directory_below_the_root_is_a_load_location` shows
 **Residuals.** The guard does not interpret Python that starts Ansible itself, such as a test that runs
 `ansible-playbook` with its own environment; such code is controller-side test or tool code and is reviewed as such.
 It reads `ansible.cfg` only inside the repository; a configuration outside it, or an `ANSIBLE_CONFIG` set by the
-operator, is outside the repository's control. The executable-bit rule reads the working tree, so a checkout with
-`core.fileMode=false` sees the bit only in CI, which checks out on Linux.
+operator, is outside the repository's control. Ansible reads `ansible.cfg` only from the working directory,
+`ANSIBLE_CONFIG`, `~/.ansible.cfg` and `/etc/ansible`; the guard's search of the directories between the root and a
+checked file is a superset of the first.
+
+**Review of PR #42.** The independent review requested these changes, which are part of the same amendment:
+
+- **Case-insensitive filesystems.** `add_all_plugin_dirs` joins the loader's `subdir` to the path and calls
+  `os.path.isdir`, which ignores case on APFS, the macOS default, and on Windows. So `roles/remediate/Library/`,
+  `Filter_Plugins/` and `playbooks/LIBRARY/` are load directories on such a controller, and `roles/` ships in the
+  collection. The guard now compares case-folded names: `is_load_directory_name`, the directories that an
+  `ansible.cfg` names, the root `plugins` component for the `.py`-only rule, `plugins/modules` for the new-style rule,
+  the trees that may hold only Python (`folded` in `tools/lint/repo_rules/load_locations.py`), and the file names
+  `ansible.cfg`, `molecule.yml`, the makefiles and the navigator settings files. A case variant of the root `plugins`
+  directory (`Plugins/`) is not the collection's own and is refused as a load location. The exemptions match exactly,
+  so `tests/unit/plugins/Module_Utils/` and a case variant of a listed symbolic link or of `tools/` are not exempt.
+- **Index modes.** A file whose Git index mode is executable (`100755`) or a symbolic link (`120000`) is refused even
+  if the working tree disagrees, for example after a `--no-verify` commit or on a checkout with `core.fileMode=false`
+  or `core.symlinks=false` (`GIT_EXECUTABLE_MODE` and `GIT_SYMLINK_MODE` in `tools/lint/repo_rules/load_locations.py`).
+  `make lint-repo` writes `git ls-files -s -z` to `build/lint-repo-index-modes` and passes it to the guard with
+  `--index-modes`, because the guard itself runs no process. The pre-commit hook needs no listing, because pre-commit
+  stashes unstaged changes, so the working tree matches the index.
+- **Deny-by-default in load directories.** The claim stands and is now tested. The second copy of the check in
+  `is_process_scope` was redundant, which is why removing it failed no test. It was removed, so
+  `is_process_scope` again means plugin code only, and `check_file` applies the rules to every Python file in a load
+  location. Disabling that branch fails 256 tests, which assert the `__import__`, `getattr` and `os.system` findings
+  in every location.
+- **Search paths in other configuration files.** Environment files (`.env`, `.envrc`, `.env.*`, `*.env`) and `.ini`,
+  `.toml` and `.cfg` files, such as `tox.ini` with `setenv` or `pyproject.toml`, are scanned for the search-path
+  environment variables and `--module-path`, as makefiles and shell scripts are (`ENVIRONMENT_TEXT_SUFFIXES` in
+  `tools/lint/repo_rules/load_config.py`). An ansible-navigator settings file (`NAVIGATOR_FILE_NAMES` in
+  `tools/lint/repo_rules/load_config.py`) may set `ansible.config.path` only to a file named `ansible.cfg`, which the
+  guard parses.
+- **Ticketed separately, out of scope here:** the `ansible.builtin.expect` module and the `pipe` and `lines` lookups,
+  the interpreter and SSH argument variables, pinning of `galaxy.yml` dependencies and `requirements.yml`, and
+  configuration settings that run code without adding a search path (`jinja2_extensions`, `vault_password_file`,
+  `become_exe`, `ssh_executable`, `ssh_args`, `interpreter_python`).

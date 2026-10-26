@@ -6,5 +6,6 @@ trivial:
     ``ansible_collections`` trees and ``plugins`` directories below the root, and paths that ``ansible.cfg``, Molecule
     or the environment would add), and Python there gets the deny-by-default rules; ``plugins/`` holds only Python
     source, a module must be a new-style Python module, a Python shebang must name Python, symbolic links and
-    executable files are refused outside short allow-lists, and make lint-repo and the pre-commit hook pass every
-    file to the guard.
+    executable files are refused outside short allow-lists, also when only the Git index records them, names are
+    compared case-insensitively as on macOS and Windows controllers, and make lint-repo and the pre-commit hook pass
+    every file to the guard.

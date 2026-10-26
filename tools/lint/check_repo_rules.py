@@ -15,8 +15,10 @@ Rules:
   in ``plugins/modules`` matches Ansible's new-style Python pattern and has no control byte,
   a Python shebang names Python, a symbolic link or an executable file outside its
   allow-list is refused, and ``ansible.cfg``, ``molecule.yml``, YAML keys, workflow values,
-  makefiles and shell scripts may not set a search path for modules, plugins, roles or
-  collections.
+  makefiles, shell scripts, environment files and ``.ini``, ``.toml`` and ``.cfg`` files may not
+  set a search path for modules, plugins, roles or collections. Names are compared
+  case-folded, because macOS and Windows controllers ignore case, and ``--index-modes``
+  takes a ``git ls-files -s -z`` listing so that modes only the index records count too.
 * Every YAML file starts with ``---`` followed by a newline.
 * YAML files contain no comments, except a trailing ``# vX.Y.Z`` version
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
@@ -107,6 +109,7 @@ from tools.lint.repo_rules.common import (
     Violation,
 )
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
+from tools.lint.repo_rules.load_locations import index_modes
 from tools.lint.repo_rules.names import (
     ALLOWED_IMPORTS,
     BANNED_KEYWORDS,
@@ -171,6 +174,7 @@ __all__ = [
     "check_process_isolation",
     "check_python_comments",
     "check_yaml_comments",
+    "index_modes",
     "is_allowed_annotation",
     "is_process_scope",
     "main",
@@ -182,8 +186,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point; returns the process exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", type=Path, help="Files to check.")
+    parser.add_argument(
+        "--index-modes",
+        type=Path,
+        help="A `git ls-files -s -z` listing, so modes that only the Git index records count.",
+    )
     arguments = parser.parse_args(argv)
-    violations = check_paths(arguments.paths)
+    modes = (
+        None if arguments.index_modes is None else index_modes(arguments.index_modes.read_bytes())
+    )
+    violations = check_paths(arguments.paths, index=modes)
     for violation in violations:
         print(violation, file=sys.stderr)
     if violations:

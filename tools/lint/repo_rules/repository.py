@@ -33,7 +33,7 @@ from tools.lint.repo_rules.names import FILE_IO_IMPORTERS, SHEBANG_PREFIX
 from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_comments
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
     from pathlib import Path
 
 
@@ -54,7 +54,10 @@ def check_python_comments(path: Path, data: bytes) -> list[Violation]:
 
 
 def check_file(
-    path: Path, root: Path = REPO_ROOT, configured: frozenset[Path] | None = None
+    path: Path,
+    root: Path = REPO_ROOT,
+    configured: frozenset[Path] | None = None,
+    index: Mapping[Path, str] | None = None,
 ) -> list[Violation]:
     """Apply every rule that matches the suffix and location of ``path``.
 
@@ -63,7 +66,9 @@ def check_file(
     source of the same name, so it would run code that no rule has seen (FREES-153).
     The location rules then apply to every file, and a symbolic link is never read
     through. ``configured`` holds the load directories that an ``ansible.cfg`` names;
-    without it they are looked up for ``path`` alone (FREES-156).
+    without it they are looked up for ``path`` alone (FREES-156). ``index`` maps
+    repository paths to their Git index mode, so a link or executable bit that only the
+    index records is refused too.
     """
     suffix = path.suffix.lower()
     if suffix in COMPILED_MODULE_SUFFIXES:
@@ -78,7 +83,11 @@ def check_file(
     relative = repository_path(path, root)
     if configured is None:
         configured = configured_load_directories((path,), root)
-    violations = [] if relative is None else location_findings(path, relative, configured)
+    violations = (
+        []
+        if relative is None
+        else location_findings(path, relative, configured, (index or {}).get(relative))
+    )
     readable = suffix in YAML_SUFFIXES | PYTHON_SUFFIXES or is_configuration_text(path)
     if path.is_symlink() or not readable:
         return violations
@@ -111,10 +120,14 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
 def _python_violations(
     path: Path, root: Path, data: bytes, relative: Path | None, configured: frozenset[Path]
 ) -> list[Violation]:
-    """Apply the comment, shebang, module-style and, in scope, deny-by-default rules."""
+    """Apply the comment, shebang, module-style and, in scope, deny-by-default rules.
+
+    The deny-by-default rules apply to plugin code and to every Python file in a load
+    location, which is refused there as well (FREES-156).
+    """
     violations = [*check_python_comments(path, data), *python_findings(path, relative, data)]
-    in_configured = relative is not None and load_location(relative, configured) is not None
-    if is_process_scope(path, root) or in_configured:
+    in_load_location = relative is not None and load_location(relative, configured) is not None
+    if is_process_scope(path, root) or in_load_location:
         location = path.resolve().relative_to(root.resolve())
         violations.extend(check_process_isolation(path, data, location))
         if location not in FILE_IO_IMPORTERS:
@@ -122,11 +135,15 @@ def _python_violations(
     return violations
 
 
-def check_paths(paths: Iterable[Path], root: Path = REPO_ROOT) -> list[Violation]:
+def check_paths(
+    paths: Iterable[Path], root: Path = REPO_ROOT, index: Mapping[Path, str] | None = None
+) -> list[Violation]:
     """Check every path and return the violations in sorted order.
 
     The load directories that an ``ansible.cfg`` names are looked up once for all paths.
     """
     files = list(paths)
     configured = configured_load_directories(files, root)
-    return sorted(violation for path in files for violation in check_file(path, root, configured))
+    return sorted(
+        violation for path in files for violation in check_file(path, root, configured, index)
+    )

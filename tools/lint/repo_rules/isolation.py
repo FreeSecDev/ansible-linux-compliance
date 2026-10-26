@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 
 from tools.lint.repo_rules.attributes import node_findings
 from tools.lint.repo_rules.common import PLUGINS_DIRECTORY, Violation
-from tools.lint.repo_rules.load_locations import load_location
 from tools.lint.repo_rules.names import (
     EXTRA_IMPORTS,
     FILE_IO_ATTRIBUTES,
@@ -35,17 +34,14 @@ if TYPE_CHECKING:
 
 
 def is_process_scope(path: Path, root: Path) -> bool:
-    """Return whether ``path`` is code that may not run processes itself.
+    """Return whether ``path`` is plugin code that may not run processes itself.
 
-    That is plugin code other than the process helper, and any file in a location from
-    which Ansible loads code (FREES-156).
+    ``check_file`` also applies the rules to every Python file in a load location.
     """
     try:
         relative = path.resolve().relative_to(root.resolve())
     except ValueError:
         return False
-    if load_location(relative) is not None:
-        return True
     return relative.parts[:1] == (PLUGINS_DIRECTORY,) and relative != PROCESS_HELPER
 
 

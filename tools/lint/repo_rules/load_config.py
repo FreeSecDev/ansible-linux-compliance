@@ -65,20 +65,46 @@ PATH_ENVIRONMENT_VARIABLES: Final[frozenset[str]] = frozenset(
 MAKE_ENVIRONMENT_VARIABLES: Final[frozenset[str]] = frozenset(
     {"ANSIBLE_HOME", "ANSIBLE_COLLECTIONS_PATH"}
 )
-MAKE_FILE_NAMES: Final[frozenset[str]] = frozenset({"Makefile", "makefile", "GNUmakefile"})
+MAKE_FILE_NAMES: Final[frozenset[str]] = frozenset({"makefile", "gnumakefile"})
 SHELL_TEXT_SUFFIXES: Final[frozenset[str]] = frozenset({".mk", ".sh"})
+ENVIRONMENT_FILE_PREFIX: Final[str] = ".env"
+ENVIRONMENT_TEXT_SUFFIXES: Final[frozenset[str]] = frozenset({".cfg", ".env", ".ini", ".toml"})
 MOLECULE_FILE_NAMES: Final[frozenset[str]] = frozenset({"molecule.yml", "molecule.yaml"})
+NAVIGATOR_FILE_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "ansible-navigator.yml",
+        "ansible-navigator.yaml",
+        ".ansible-navigator.yml",
+        ".ansible-navigator.yaml",
+    }
+)
+NAVIGATOR_CONFIG_PATH: Final[tuple[str, ...]] = ("ansible-navigator", "ansible", "config", "path")
 ENVIRONMENT_NAME: Final[re.Pattern[str]] = re.compile(r"\bANSIBLE_[A-Z0-9_]+\b")
 MODULE_PATH_OPTION: Final[re.Pattern[str]] = re.compile(r"(?<![\w-])(?:--module-path\b|-M)")
 EXECUTED_YAML_DIRECTORY: Final[str] = ".github"
 
 
+def is_config_file(path: Path) -> bool:
+    """Return whether ``path`` is an ``ansible.cfg``, in any case (FREES-156)."""
+    return path.name.casefold() == CONFIG_FILE_NAME
+
+
+def _is_make_file(path: Path) -> bool:
+    return path.name.casefold() in MAKE_FILE_NAMES or path.suffix.lower() == ".mk"
+
+
 def is_configuration_text(path: Path) -> bool:
-    """Return whether ``path`` is an ``ansible.cfg``, a makefile or a shell script."""
+    """Return whether ``path`` is configuration text that could set an Ansible search path.
+
+    That is an ``ansible.cfg``, a makefile, a shell script, an environment file
+    (``.env``, ``.envrc``, ``.env.*``) or an ``.ini``, ``.toml`` or ``.cfg`` file, such as
+    ``tox.ini`` with ``setenv`` or ``pyproject.toml``; names are compared case-folded.
+    """
     return (
-        path.name == CONFIG_FILE_NAME
-        or path.name in MAKE_FILE_NAMES
-        or path.suffix.lower() in SHELL_TEXT_SUFFIXES
+        is_config_file(path)
+        or _is_make_file(path)
+        or path.suffix.lower() in SHELL_TEXT_SUFFIXES | ENVIRONMENT_TEXT_SUFFIXES
+        or path.name.casefold().startswith(ENVIRONMENT_FILE_PREFIX)
     )
 
 
@@ -139,11 +165,15 @@ def _text_findings(path: Path, text: str, allowed: frozenset[str] = frozenset())
 
 
 def configuration_text_findings(path: Path, data: bytes) -> list[Violation]:
-    """Reject settings of an ``ansible.cfg``, makefile or shell script that add a load path."""
+    """Reject settings of configuration text that add a load path.
+
+    An ``ansible.cfg`` is parsed for its search-path settings; any other configuration
+    text is scanned for the search-path environment variables and ``--module-path``.
+    """
     text = data.decode("utf-8", errors="replace")
-    if path.name == CONFIG_FILE_NAME:
+    if is_config_file(path):
         return _config_findings(path, text)
-    if path.name in MAKE_FILE_NAMES or path.suffix.lower() == ".mk":
+    if _is_make_file(path):
         return _text_findings(path, text, MAKE_ENVIRONMENT_VARIABLES)
     return _text_findings(path, text)
 
@@ -189,6 +219,43 @@ def _key_finding(path: Path, key: yaml.ScalarNode, *, molecule: bool) -> list[Vi
     return []
 
 
+def _mapping_value(node: yaml.Node, keys: Iterable[str]) -> yaml.Node | None:
+    current: yaml.Node | None = node
+    for wanted in keys:
+        if not isinstance(current, yaml.MappingNode):
+            return None
+        current = next(
+            (
+                value
+                for key, value in current.value
+                if isinstance(key, yaml.ScalarNode) and key.value == wanted
+            ),
+            None,
+        )
+    return current
+
+
+def _navigator_findings(path: Path, documents: Iterable[yaml.Node]) -> list[Violation]:
+    """Refuse an ansible-navigator ``ansible.config.path`` that is not an ``ansible.cfg``.
+
+    The guard parses only files named ``ansible.cfg``, so a configuration under any other
+    name could add a search path that no rule reads.
+    """
+    violations: list[Violation] = []
+    for document in documents:
+        value = _mapping_value(document, NAVIGATOR_CONFIG_PATH)
+        if isinstance(value, yaml.ScalarNode) and not is_config_file(Path(str(value.value))):
+            violations.append(
+                Violation(
+                    path,
+                    value.start_mark.line + 1,
+                    f"ansible-navigator configuration {value.value!r} is not allowed: only a "
+                    f"file named {CONFIG_FILE_NAME}, which the guard checks, may configure Ansible",
+                )
+            )
+    return violations
+
+
 def yaml_setting_findings(path: Path, text: str, *, executed: bool) -> list[Violation]:
     """Reject YAML that sets a load path: environment variables and Molecule settings.
 
@@ -206,8 +273,10 @@ def yaml_setting_findings(path: Path, text: str, *, executed: bool) -> list[Viol
         return []
     finally:
         loader.dispose()
-    molecule = path.name in MOLECULE_FILE_NAMES
+    molecule = path.name.casefold() in MOLECULE_FILE_NAMES
     violations: list[Violation] = []
+    if path.name.casefold() in NAVIGATOR_FILE_NAMES:
+        violations.extend(_navigator_findings(path, documents))
     for node, is_key in _scalars(documents):
         if is_key:
             violations.extend(_key_finding(path, node, molecule=molecule))
@@ -239,20 +308,28 @@ def _named_directories(config: Path, base: Path) -> Iterator[Path]:
 def configured_load_directories(paths: Iterable[Path], root: Path) -> frozenset[Path]:
     """Return the directories, relative to ``root``, that an ``ansible.cfg`` names as load paths.
 
-    The candidates are ``root/ansible.cfg``, every ``ansible.cfg`` among ``paths`` and every
-    ``ansible.cfg`` in a directory between ``root`` and a path, so a file is checked against
-    the configuration that Ansible would read when it runs from one of those directories.
+    The candidates are the ``ansible.cfg`` files, in any case, in ``root`` and in every
+    directory between ``root`` and a path, so a file is checked against the configuration
+    that Ansible would read when it runs from one of those directories.
     """
     base = root.resolve()
-    candidates = {base / CONFIG_FILE_NAME}
+    directories = {base}
     for path in paths:
         directory = path.parent.resolve()
         while directory == base or base in directory.parents:
-            candidates.add(directory / CONFIG_FILE_NAME)
+            directories.add(directory)
             directory = directory.parent
     return frozenset(
-        directory
-        for config in sorted(candidates)
-        if config.is_file()
-        for directory in _named_directories(config, base)
+        named
+        for directory in sorted(directories)
+        for config in _config_files(directory)
+        for named in _named_directories(config, base)
     )
+
+
+def _config_files(directory: Path) -> list[Path]:
+    try:
+        entries = sorted(directory.iterdir())
+    except OSError:
+        return []
+    return [entry for entry in entries if is_config_file(entry) and entry.is_file()]
