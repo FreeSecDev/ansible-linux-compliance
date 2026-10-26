@@ -79,5 +79,6 @@ def test_the_pre_commit_hook_passes_every_compiled_suffix_to_the_guard() -> None
         hook for repo in config["repos"] for hook in repo["hooks"] if hook["id"] == "repo-rules"
     )
     assert hook["types_or"] == ["file", "symlink"]
+    assert hook["types"] == []
     assert "files" not in hook
     assert "exclude" not in hook

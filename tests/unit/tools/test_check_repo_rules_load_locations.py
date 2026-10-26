@@ -447,7 +447,7 @@ def test_the_pre_commit_hook_passes_every_file_and_symlink_to_the_guard() -> Non
         hook for repo in config["repos"] for hook in repo["hooks"] if hook["id"] == "repo-rules"
     )
     assert hook["types_or"] == ["file", "symlink"]
+    assert hook["types"] == []
     assert "files" not in hook
-    assert "types" not in hook
     assert "exclude" not in hook
     assert hook["entry"] == "uv run --frozen python tools/lint/check_repo_rules.py"

@@ -581,7 +581,8 @@ rules. Nothing tracked had to live in another load location, so no file there ne
 **Wiring.** `make lint-repo` passes every tracked and new file to the guard, without a suffix pathspec, so
 extensionless files, symbolic links and executables are seen; the case-insensitive compiled-module pathspecs of
 FREES-153 are no longer needed and were removed. The pre-commit hook passes every file and symbolic link
-(`types_or: [file, symlink]`, no `files` filter). Unit tests pin both.
+(`types: []` to clear the default `[file]`, which would drop symbolic links, `types_or: [file, symlink]` and no
+`files` filter). Unit tests pin both.
 
 **Changed tests.** The generic plugin file of the existing guard tests moved from `plugins/modules/other.py` to
 `plugins/module_utils/other.py`, because a module now must import `module_utils`; the deny-by-default rules are the

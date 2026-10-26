@@ -82,6 +82,7 @@ repos:
         name: repository source rules
         entry: uv run --frozen python tools/lint/check_repo_rules.py
         language: system
+        types: []
         types_or: [file, symlink]
       - id: skill-validator
         name: agent skill validator
