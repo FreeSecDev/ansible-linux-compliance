@@ -1,0 +1,74 @@
+---
+- name: Audit exceptions | Under the free strategy no host applies an unvalidated exceptions file
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    audit_exceptions_free_hosts: "{{ query('ansible.builtin.inventory_hostnames', 'web01:db01') }}"
+    audit_exceptions_free_message: does not support the free strategy
+  tasks:
+    - name: Require the output directory from the Makefile
+      ansible.builtin.assert:
+        that:
+          - audit_exceptions_dir is defined
+          - audit_exceptions_dir is match('^/')
+          - audit_exceptions_free_hosts | length == 2
+        fail_msg: Run this playbook through make test-audit-exceptions.
+        quiet: true
+
+    - name: Take the SHA-256 of the validated exceptions file as stored
+      ansible.builtin.stat:
+        path: "{{ audit_exceptions_valid_file }}"
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: audit_exceptions_free_valid
+
+    - name: Read the outcome that every host recorded
+      ansible.builtin.set_fact:
+        audit_exceptions_free_records: >-
+          {{ audit_exceptions_free_records | default({}) | ansible.builtin.combine({item:
+               lookup('ansible.builtin.file', audit_exceptions_free_outcomes ~ '/' ~ item ~ '.json')
+               | ansible.builtin.from_json}) }}
+      loop: "{{ audit_exceptions_free_hosts }}"
+
+    - name: Check that every host was refused or applied exactly the validated file
+      ansible.builtin.assert:
+        that:
+          - audit_exceptions_free_record.failed is boolean
+          - >-
+            (audit_exceptions_free_record.failed
+             and audit_exceptions_free_record.message is search(audit_exceptions_free_message)
+             and audit_exceptions_free_record.exceptions is none)
+            or
+            (not audit_exceptions_free_record.failed
+             and audit_exceptions_free_record.exceptions.status == 'applied'
+             and audit_exceptions_free_record.exceptions.applied
+             and audit_exceptions_free_record.exceptions.file == audit_exceptions_valid_file
+             and audit_exceptions_free_record.exceptions.source_sha256 == audit_exceptions_free_sha256
+             and audit_exceptions_free_record.exceptions.evaluation.source_sha256 == audit_exceptions_free_sha256)
+        fail_msg: >-
+          {{ item }} neither failed with the free strategy refusal nor applied exactly
+          {{ audit_exceptions_valid_file }} with SHA-256 {{ audit_exceptions_free_sha256 }}:
+          {{ audit_exceptions_free_record | ansible.builtin.to_json }}
+        quiet: true
+      vars:
+        audit_exceptions_free_record: "{{ audit_exceptions_free_records[item] }}"
+        audit_exceptions_free_sha256: "{{ audit_exceptions_free_valid.stat.checksum }}"
+      loop: "{{ audit_exceptions_free_hosts }}"
+
+    - name: Check that the free strategy never lets every host through
+      ansible.builtin.assert:
+        that:
+          - audit_exceptions_free_records.values() | selectattr('failed') | list | length >= 1
+        fail_msg: Every host passed under the free strategy, so the audit role did not refuse it.
+        quiet: true
+
+    - name: Report the outcome of this run
+      ansible.builtin.debug:
+        msg: >-
+          AUDIT-EXCEPTIONS-FREE-OUTCOME
+          {% for host in audit_exceptions_free_hosts %}{{ host }}={{ 'refused'
+          if audit_exceptions_free_records[host].failed else 'applied' }} {% endfor %}

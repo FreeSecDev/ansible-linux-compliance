@@ -4,6 +4,7 @@
     __linux_compliance_audit_evaluation: __linux_compliance_unset__
     __linux_compliance_audit_exceptions: __linux_compliance_unset__
     __linux_compliance_audit_exceptions_overview: __linux_compliance_unset__
+    __linux_compliance_audit_exceptions_read_here: __linux_compliance_unset__
     __linux_compliance_audit_scan: __linux_compliance_unset__
     __linux_compliance_audit_toggle_names: __linux_compliance_unset__
     __linux_compliance_audit_toggles: __linux_compliance_unset__
@@ -16,6 +17,7 @@
       - __linux_compliance_audit_evaluation == '__linux_compliance_unset__'
       - __linux_compliance_audit_exceptions == '__linux_compliance_unset__'
       - __linux_compliance_audit_exceptions_overview == '__linux_compliance_unset__'
+      - __linux_compliance_audit_exceptions_read_here == '__linux_compliance_unset__'
       - __linux_compliance_audit_scan == '__linux_compliance_unset__'
       - __linux_compliance_audit_toggle_names == '__linux_compliance_unset__'
       - __linux_compliance_audit_toggles == '__linux_compliance_unset__'

@@ -68,3 +68,35 @@ def test_the_toggle_file_resolves_with_the_shared_filter_and_fails_closed() -> N
     assert steps.index(resolve) < steps.index(stop)
     assert all(task.get("tags") == ["always"] for task in steps)
     assert all("when" not in task for task in steps if task is not steps[-1])
+
+
+READ_MARKER = "__linux_compliance_audit_exceptions_read_here"
+
+
+def test_the_host_that_runs_the_read_is_marked_on_that_host_only() -> None:
+    steps = tasks("exceptions_file.yml")
+    read = next(
+        position
+        for position, task in enumerate(steps)
+        if "__linux_compliance_audit_exceptions"
+        in cast("dict[str, object]", task.get("ansible.builtin.set_fact", {}))
+    )
+    marker = steps[read + 1]
+    assert marker["ansible.builtin.set_fact"] == {READ_MARKER: "{{ inventory_hostname }}"}
+    assert marker["delegate_to"] == "{{ inventory_hostname }}"
+    assert marker["delegate_facts"] is True
+    assert marker["run_once"] is True
+    assert marker["tags"] == ["always"]
+
+
+def test_a_host_that_read_the_file_but_is_not_first_of_its_batch_fails() -> None:
+    steps = tasks("exceptions_file.yml")
+    check = next(task for task in steps if "read once for the batch" in str(task.get("name")))
+    assertion = cast("dict[str, object]", check["ansible.builtin.assert"])
+    conditions = [" ".join(str(item).split()) for item in cast("list[str]", assertion["that"])]
+    assert (
+        f"{READ_MARKER} != inventory_hostname or inventory_hostname == ansible_play_batch | first"
+        in conditions
+    )
+    assert "does not support the free strategy" in str(assertion["fail_msg"])
+    assert "run_once" not in check

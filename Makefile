@@ -42,7 +42,8 @@ NAME_SET_PYTHON ?=
 NAME_SET_DIRECTORY := build/name-sets
 AUDIT_EXCEPTIONS_DIR := build/test-audit-exceptions
 AUDIT_EXCEPTIONS_INVENTORY := tests/playbooks/inventory/audit-exceptions.yml
-AUDIT_EXCEPTIONS_FORBIDDEN := Apply the exceptions file to the scan run|AUDIT-EXCEPTIONS-NOT-REACHED
+AUDIT_EXCEPTIONS_FREE_RUNS ?= 10
+AUDIT_EXCEPTIONS_FORBIDDEN :=Apply the exceptions file to the scan run|AUDIT-EXCEPTIONS-NOT-REACHED
 AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
 EVIDENCE_DIR := build/test-evidence
 EVIDENCE_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -e evidence_test_dir='$(CURDIR)/$(EVIDENCE_DIR)'
@@ -342,7 +343,10 @@ test-audit-exceptions: require-uv collection-link
 	if grep -q 'review and remove' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'; then printf 'error: a limited run advised removal\n' >&2; exit 1; fi
 	$(call audit_exceptions_expect_failure,invalid,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-invalid.yml,missing keys: risk,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
-	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
+	for run in $$(seq 1 $(AUDIT_EXCEPTIONS_FREE_RUNS)); do \
+		$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e audit_exceptions_free_run=$$run tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED); \
+		$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) -e audit_exceptions_free_run=$$run tests/playbooks/audit-exceptions-free-check.yml; \
+	done
 
 test-evidence: require-uv collection-link
 	rm -rf '$(EVIDENCE_DIR)'

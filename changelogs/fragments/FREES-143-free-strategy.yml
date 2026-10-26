@@ -1,0 +1,8 @@
+---
+bugfixes:
+  - >-
+    audit role - with ``linux_compliance_exceptions_file`` set, the ``free`` strategy now fails at least one host of
+    every batch with two or more hosts, independently of timing. Every host records whether it ran the ``run_once``
+    read itself, and a host other than the first one of its batch that did fails. Before, every host could finish
+    when the hosts happened to run in step, so the play passed under an unsupported strategy. A host that finishes
+    under ``free`` has still applied exactly the validated file (FREES-143).
