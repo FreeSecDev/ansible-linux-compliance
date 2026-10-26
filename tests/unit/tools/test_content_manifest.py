@@ -77,6 +77,9 @@ def test_profiles_are_not_shared_between_unrelated_benchmarks(manifest: fetch.Ma
 
 
 def test_the_repository_holds_no_downloaded_content() -> None:
-    assert sorted(item.name for item in (REPOSITORY_ROOT / "content").iterdir()) == ["manifest.yml"]
+    assert sorted(item.name for item in (REPOSITORY_ROOT / "content").iterdir()) == [
+        "catalogue.yml",
+        "manifest.yml",
+    ]
     ignored = (REPOSITORY_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "*.zip" in ignored

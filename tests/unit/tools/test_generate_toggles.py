@@ -34,9 +34,16 @@ def load(path: Path) -> dict[str, object]:
     return cast("dict[str, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
 
 
-def write_catalogue(root: Path, families: object, rules: object) -> None:
+def write_catalogue(root: Path, families: object, rules: object, audit_only: object = None) -> None:
     (root / gen.CATALOGUE).write_text(
-        yaml.safe_dump({gen.FAMILIES_KEY: families, gen.RULES_KEY: rules}), encoding="utf-8"
+        yaml.safe_dump(
+            {
+                gen.FAMILIES_KEY: families,
+                gen.RULES_KEY: rules,
+                gen.AUDIT_ONLY_KEY: {} if audit_only is None else audit_only,
+            }
+        ),
+        encoding="utf-8",
     )
 
 
@@ -60,11 +67,34 @@ def test_every_family_and_rule_gets_a_bool_toggle_with_a_description() -> None:
         description = cast("list[str]", option["description"])
         assert any("disruptive" in line for line in description) is disruptive
         assert defaults[f"linux_compliance_{family}_enabled"] is True
+    assert len(catalogue.rules) > 1000
     for rule in catalogue.rules:
-        option = options[str(rule["toggle"])]
-        assert option["type"] == "bool"
-        assert "default" not in option
-        assert defaults[str(rule["toggle"])] == gen.rule_default(rule)
+        assert str(rule["toggle"]) not in options
+        assert str(rule["toggle"]) not in defaults
+
+
+def test_the_allow_list_choices_follow_the_registry(tmp_path: Path) -> None:
+    root = copy_repository(tmp_path)
+    write_catalogue(
+        root,
+        [
+            {"name": "sysctl", "disruptive": False},
+            {"name": "ssh", "disruptive": True},
+            {"name": "auditd", "disruptive": True},
+        ],
+        [],
+    )
+    specs = cast("dict[str, object]", yaml.safe_load(gen.outputs(root)[gen.SPECS]))
+    main = cast("dict[str, dict[str, dict[str, dict[str, dict[str, object]]]]]", specs)[
+        "argument_specs"
+    ]
+    allow_list = main["main"]["options"][gen.ALLOW_LIST]
+    assert allow_list["choices"] == ["auditd", "ssh"]
+    audit = cast("dict[str, object]", yaml.safe_load(gen.outputs(root)[gen.AUDIT_SPECS]))
+    audit_options = cast("dict[str, dict[str, dict[str, dict[str, object]]]]", audit)[
+        "argument_specs"
+    ]
+    assert gen.ALLOW_LIST not in audit_options["main"]["options"]
 
 
 def test_both_toggle_roles_carry_the_same_toggles() -> None:
@@ -154,21 +184,51 @@ def test_a_new_rule_gets_its_toggle_and_its_reference_row(tmp_path: Path) -> Non
             "parameters": {},
         }
     )
-    write_catalogue(root, data[gen.FAMILIES_KEY], rules)
+    audit_only = cast("dict[str, list[str]]", data[gen.AUDIT_ONLY_KEY])
+    audit_only["ssh"].remove("xccdf_org.ssgproject.content_rule_sshd_disable_root_login")
+    write_catalogue(root, data[gen.FAMILIES_KEY], rules, audit_only)
     generated = gen.outputs(root)
     defaults = cast("dict[str, object]", yaml.safe_load(generated[gen.DEFAULTS]))
-    assert defaults["linux_compliance_rule_sshd_disable_root_login_enabled"] == (
-        "{{ linux_compliance_ssh_enabled }}"
+    assert "linux_compliance_rule_sshd_disable_root_login_enabled" not in defaults
+    assert (
+        "| `linux_compliance_rule_sshd_disable_root_login_enabled` | `sshd_disable_root_login` | "
+        "`owned_dropin` |"
+    ) in generated[gen.REFERENCE]
+
+
+def test_an_audit_only_rule_gets_a_reference_row_with_its_strategy(tmp_path: Path) -> None:
+    root = copy_repository(tmp_path)
+    write_catalogue(
+        root,
+        [{"name": "sysctl", "disruptive": False}],
+        [],
+        {"sysctl": ["xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"]},
     )
-    assert "`linux_compliance_rule_sshd_disable_root_login_enabled`" in generated[gen.REFERENCE]
+    generated = gen.outputs(root)
+    assert (
+        "| `linux_compliance_rule_sysctl_kernel_dmesg_restrict_enabled` | "
+        "`sysctl_kernel_dmesg_restrict` | `audit_only` |"
+    ) in generated[gen.REFERENCE]
+    assert (
+        "| `linux_compliance_sysctl_enabled` | `sysctl` | no | `true` | 1 | 0 | 1 |"
+        in (generated[gen.REFERENCE])
+    )
+    specs = cast("dict[str, object]", yaml.safe_load(generated[gen.SPECS]))
+    options = cast("dict[str, dict[str, dict[str, dict[str, dict[str, object]]]]]", specs)[
+        "argument_specs"
+    ]
+    description = cast(
+        "list[str]", options["main"]["options"]["linux_compliance_sysctl_enabled"]["description"]
+    )
+    assert "Catalogued rules: 1, with a native remediation: 0." in description
 
 
 def test_a_catalogue_without_rules_says_so(tmp_path: Path) -> None:
     root = copy_repository(tmp_path)
     write_catalogue(root, [{"name": "sysctl", "disruptive": False}], [])
     reference = gen.outputs(root)[gen.REFERENCE]
-    assert "No rule is catalogued yet." in reference
-    assert "| `linux_compliance_sysctl_enabled` | `sysctl` | no | `true` | 0 |" in reference
+    assert "No rule of the pinned profiles belongs to this family." in reference
+    assert "| `linux_compliance_sysctl_enabled` | `sysctl` | no | `true` | 0 | 0 | 0 |" in reference
 
 
 @pytest.mark.parametrize(
@@ -245,6 +305,27 @@ def test_render_uses_the_canonical_style() -> None:
     assert yaml.safe_load(text) == data
 
 
+def test_mappings_in_a_sequence_start_on_the_line_of_their_dash() -> None:
+    data: dict[str, object] = {
+        "rules": [
+            {"family": "ssh", "parameters": {"path": "/etc/x"}, "items": ["a"]},
+            {"family": "two words", "empty": {}},
+        ]
+    }
+    text = gen.render_yaml(data, frozenset({"family"}))
+    assert text == (
+        "---\n"
+        "rules:\n"
+        "  - family: ssh\n"
+        "    parameters:\n"
+        '      path: "/etc/x"\n'
+        "    items:\n"
+        "      - a\n"
+        '  - family: "two words"\n'
+        "    empty: {}\n"
+    )
+
+
 def test_long_strings_are_folded_and_overlong_ones_refused() -> None:
     folded = "word " * 23 + "end"
     text = gen.render_yaml({"key": folded})
@@ -262,8 +343,8 @@ def test_long_strings_are_folded_and_overlong_ones_refused() -> None:
     ("data", "message"),
     [
         ({"key": 1.5}, "cannot render a value of type float"),
-        ({"key": [[1]]}, "cannot render a sequence of non-empty collections"),
-        ({"key": [{"a": 1}]}, "cannot render a sequence of non-empty collections"),
+        ({"key": [[1]]}, "cannot render a sequence of non-empty sequences"),
+        ({"key": [{"a": [[1]]}]}, "cannot render a sequence of non-empty sequences"),
         ({"key": {1: "a"}}, "cannot render the key 1"),
     ],
 )

@@ -4,14 +4,22 @@ linux_compliance_remediate_allow_disruptive: []
 linux_compliance_remediate_profile: "cis_level1_server"
 linux_compliance_file_permissions_enabled: true
 linux_compliance_sysctl_enabled: true
+linux_compliance_logging_enabled: true
+linux_compliance_banners_enabled: true
+linux_compliance_integrity_enabled: true
+linux_compliance_kernel_build_config_enabled: true
 linux_compliance_auditd_enabled: true
 linux_compliance_services_enabled: true
+linux_compliance_packages_enabled: true
+linux_compliance_desktop_enabled: true
 linux_compliance_network_enabled: true
+linux_compliance_kernel_modules_enabled: true
 linux_compliance_firewall_enabled: true
 linux_compliance_ssh_enabled: true
 linux_compliance_pam_enabled: true
+linux_compliance_accounts_enabled: true
 linux_compliance_sudo_enabled: true
+linux_compliance_mandatory_access_control_enabled: true
 linux_compliance_crypto_policy_enabled: true
 linux_compliance_mounts_enabled: true
 linux_compliance_bootloader_enabled: true
-linux_compliance_rule_file_permissions_crontab_enabled: "{{ linux_compliance_file_permissions_enabled }}"

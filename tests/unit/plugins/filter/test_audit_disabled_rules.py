@@ -49,6 +49,7 @@ def catalogue() -> list[dict[str, object]]:
 
 def resolve(**overrides: object) -> dict[str, object]:
     options: dict[str, object] = {
+        "audit_only": {},
         "families": FAMILIES,
         "toggles": {},
         "profile_rule_ids": [CRONTAB, PASSWD, ROOT_LOGIN, IMMUTABLE],
@@ -165,6 +166,7 @@ def test_the_audit_and_the_remediation_agree_on_every_disabled_rule(
     plan = plan_filter.remediation_plan(
         catalogue(),
         {
+            "audit_only": {},
             "families": FAMILIES,
             "enabled": True,
             "allow_disruptive": ["ssh"],
@@ -177,37 +179,36 @@ def test_the_audit_and_the_remediation_agree_on_every_disabled_rule(
     assert audit["disabled_rules"] == plan["disabled_rules"]
 
 
-def test_the_generated_defaults_give_the_same_result_as_unset_toggles() -> None:
+def test_rule_toggles_that_follow_a_disabled_family_give_the_same_result_as_unset_ones() -> None:
     data = cast("dict[str, object]", yaml.safe_load(CATALOGUE_FILE.read_text(encoding="utf-8")))
     real_rules = data["__linux_compliance_remediate_rules"]
+    real_audit_only = data["__linux_compliance_remediate_audit_only"]
     real_families = data["__linux_compliance_remediate_families"]
-    rules = cast("list[dict[str, object]]", real_rules)
-    profile = [str(item["rule_id"]) for item in rules]
+    errors = toggles.Errors()
+    loaded = toggles.load_catalogue(real_rules, real_audit_only, real_families, {}, errors)
+    assert errors.items == []
+    profile = [str(item["rule_id"]) for item in loaded.rules]
     family_off = {FAMILY: False}
-    templated = {**family_off, **{str(item["toggle"]): False for item in rules}}
-    first = audit_filter.audit_disabled_rules(
-        real_rules,
-        {
-            "families": real_families,
-            "toggles": family_off,
-            "profile_rule_ids": profile,
-            "disabled_rules": [],
-        },
-    )
-    second = audit_filter.audit_disabled_rules(
-        real_rules,
-        {
-            "families": real_families,
-            "toggles": templated,
-            "profile_rule_ids": profile,
-            "disabled_rules": [],
-        },
-    )
-    assert first["errors"] == []
-    assert first == second
-    assert {
-        item["disabled_by"] for item in cast("list[dict[str, object]]", first["disabled_rules"])
-    } == {FAMILY}
+    members = [item for item in loaded.rules if item["family"] == "file_permissions"]
+    templated = {**family_off, **{str(item["toggle"]): False for item in members}}
+    results = [
+        audit_filter.audit_disabled_rules(
+            real_rules,
+            {
+                "audit_only": real_audit_only,
+                "families": real_families,
+                "toggles": given,
+                "profile_rule_ids": profile,
+                "disabled_rules": [],
+            },
+        )
+        for given in (family_off, templated)
+    ]
+    assert results[0]["errors"] == []
+    assert results[0] == results[1]
+    disabled = cast("list[dict[str, object]]", results[0]["disabled_rules"])
+    assert len(disabled) == len(members) > 100
+    assert {item["disabled_by"] for item in disabled} == {FAMILY}
 
 
 def test_a_topic_toggle_without_catalogued_rules_warns_that_it_excludes_nothing() -> None:
@@ -216,7 +217,7 @@ def test_a_topic_toggle_without_catalogued_rules_warns_that_it_excludes_nothing(
     warnings = cast("list[str]", result["warnings"])
     assert len(warnings) == 1
     assert warnings[0].startswith("WARNING: linux_compliance_auditd_enabled is false")
-    assert "currently excludes nothing" in warnings[0]
+    assert "so it excludes nothing" in warnings[0]
 
 
 def test_a_topic_toggle_whose_rules_are_outside_the_profile_warns() -> None:

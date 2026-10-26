@@ -53,10 +53,12 @@ files ([audit guide](audit.md)). `remediate` uses `assert`, `include_vars`, `set
 | `evidence` | Never; writes on the controller only | FREES-51 (implemented, [evidence bundles](evidence.md)) | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_arf` (`false`), `linux_compliance_evidence_become` (`true`), `linux_compliance_evidence_stale_exceptions` (`{}`) |
 
 Per-rule and per-family toggles are read by the `remediate` and `audit` roles with the same resolution
-(`plugins/module_utils/compliance/toggles.py`), and both fail on unknown toggle names; their defaults and argument
-specifications in the `remediate` role are generated from the rule catalogue (FREES-55,
-[ADR 0011](adr/0011-control-toggles-and-cleanup.md), [variable reference](remediation-variables.md)). The audit
-takes rules outside the catalogue to disable as the list `linux_compliance_audit_disabled_rules`. The variables of each role are documented in its
+(`plugins/module_utils/compliance/toggles.py`), and both fail on unknown toggle names; the topic toggle defaults and
+argument specifications of both roles are generated from the rule catalogue (FREES-55,
+[ADR 0011](adr/0011-control-toggles-and-cleanup.md), [variable reference](remediation-variables.md)), and rule
+toggles follow their family toggle until they are set. The catalogue holds every rule of the 25 pinned profiles and is
+generated from the pinned content (FREES-53, [control families](control-families.md)). The audit takes rules outside
+the catalogue to disable as the list `linux_compliance_audit_disabled_rules`. The variables of each role are documented in its
 `README.md` and in `meta/argument_specs.yml`.
 `tools/roles/check_role_specs.py` (part of `make lint-ansible`) fails when a role's `defaults/main.yml` and
 `meta/argument_specs.yml` disagree in names, types or values, when an option lacks a description or default, or when
@@ -294,7 +296,10 @@ selects an undefined rule); oversized, missing-profile and tampered-digest cases
 the fetch tool build tiny synthetic zips and mock the network. A golden file, `tests/fixtures/catalog/golden-rules.yml`, records the rule count and the SHA-256 of the sorted rule list of
 every profile of the two pinned datastreams (25 profiles). `make test-content-golden` fetches the pinned content with
 `fetch_content.py` and compares the catalog with it; the CI `test` job runs it and fails when the fetch fails. Without
-fetched content the comparison is skipped locally.
+fetched content the comparison is skipped locally. The same target regenerates the rule catalogue
+`roles/remediate/vars/rules.yml` and `docs/control-families.md` from the fetched content
+(`tools/roles/generate_catalogue.py --check`) and fails on any difference, and checks that every rule of every pinned
+profile is catalogued.
 
 ## Exceptions
 

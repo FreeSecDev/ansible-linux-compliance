@@ -31,15 +31,30 @@ def registry() -> list[dict[str, object]]:
     )
 
 
-def rules() -> list[dict[str, object]]:
+def native() -> list[dict[str, object]]:
     return cast(
         "list[dict[str, object]]",
         load(ROLE / "vars" / "rules.yml")["__linux_compliance_remediate_rules"],
     )
 
 
+def audit_only() -> dict[str, list[str]]:
+    return cast(
+        "dict[str, list[str]]",
+        load(ROLE / "vars" / "rules.yml")["__linux_compliance_remediate_audit_only"],
+    )
+
+
+def rules() -> list[dict[str, object]]:
+    errors = toggles.Errors()
+    loaded = toggles.load_catalogue(native(), audit_only(), registry(), {}, errors)
+    assert errors.items == []
+    return loaded.rules
+
+
 def plan(**overrides: object) -> dict[str, object]:
     options: dict[str, object] = {
+        "audit_only": audit_only(),
         "families": registry(),
         "enabled": True,
         "allow_disruptive": [],
@@ -48,7 +63,7 @@ def plan(**overrides: object) -> dict[str, object]:
         "ledger_entries": [],
     }
     options.update(overrides)
-    return plan_filter.remediation_plan(rules(), options)
+    return plan_filter.remediation_plan(native(), options)
 
 
 def test_the_catalogue_and_the_registry_are_valid() -> None:
@@ -59,9 +74,27 @@ def test_the_catalogue_and_the_registry_are_valid() -> None:
 
 def test_the_catalogue_file_holds_only_the_catalogue_and_the_registry() -> None:
     assert set(load(ROLE / "vars" / "rules.yml")) == {
+        "__linux_compliance_remediate_audit_only",
         "__linux_compliance_remediate_families",
         "__linux_compliance_remediate_rules",
     }
+
+
+def test_the_native_rules_are_exactly_the_reference_rule() -> None:
+    assert [rule["rule_id"] for rule in native()] == [
+        "xccdf_org.ssgproject.content_rule_file_permissions_crontab"
+    ]
+    assert native()[0]["family"] == "file_permissions"
+    assert all(toggles.is_native(rule) for rule in native())
+
+
+def test_the_audit_only_rules_are_listed_per_family_in_registry_order_and_sorted() -> None:
+    names = [str(family["name"]) for family in registry()]
+    assert list(audit_only()) == names
+    for rule_ids in audit_only().values():
+        assert rule_ids == sorted(set(rule_ids))
+    assert len(rules()) > 1000
+    assert sum(not toggles.is_native(rule) for rule in rules()) == len(rules()) - len(native())
 
 
 def test_the_allow_list_choices_are_exactly_the_disruptive_families() -> None:
@@ -97,16 +130,16 @@ def test_non_disruptive_families_come_first_in_the_dispatch_order() -> None:
     assert flags == sorted(flags, key=bool)
 
 
-def test_every_family_with_rules_has_a_task_file_and_known_parameters() -> None:
-    for rule in rules():
+def test_every_family_with_native_rules_has_a_task_file_and_known_parameters() -> None:
+    for rule in native():
         family = str(rule["family"])
         assert (ROLE / "tasks" / f"{family}.yml").is_file(), family
         parameters = cast("dict[str, object]", rule["parameters"])
         assert set(parameters) == FAMILY_PARAMETERS[family], rule["rule_id"]
 
 
-def test_file_permission_rules_have_an_absolute_path_and_an_octal_maximum() -> None:
-    for rule in rules():
+def test_native_file_permission_rules_have_an_absolute_path_and_an_octal_maximum() -> None:
+    for rule in native():
         if rule["family"] != "file_permissions":
             continue
         parameters = cast("dict[str, str]", rule["parameters"])
@@ -157,17 +190,48 @@ def test_the_defaults_keep_remediation_off_and_nothing_allow_listed() -> None:
     assert all(generate_toggles.is_generated(name) for name in others)
 
 
-def test_every_family_and_every_rule_has_its_generated_toggle_default() -> None:
+def test_every_family_has_its_topic_toggle_default_and_no_rule_toggle_is_declared() -> None:
     defaults = load(ROLE / "defaults" / "main.yml")
     for family in registry():
         assert defaults[toggles.toggle_name(str(family["name"]))] is True
-    for rule in rules():
-        family_toggle = toggles.toggle_name(str(rule["family"]))
-        assert defaults[str(rule["toggle"])] == "{{ " + family_toggle + " }}"
-    expected = {toggles.toggle_name(str(family["name"])) for family in registry()} | {
-        str(rule["toggle"]) for rule in rules()
-    }
+    expected = {toggles.toggle_name(str(family["name"])) for family in registry()}
     assert {name for name in defaults if generate_toggles.is_generated(name)} == expected
+    assert not any(name.startswith("linux_compliance_rule_") for name in defaults)
+
+
+def test_every_rule_toggle_is_unique_and_a_valid_variable_name() -> None:
+    names = [str(rule["toggle"]) for rule in rules()]
+    assert len(names) == len(set(names))
+    assert all(re.fullmatch(r"linux_compliance_rule_[a-z0-9_]+_enabled", name) for name in names)
+    assert (
+        toggles.rule_toggle_name(
+            "xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled"
+        )
+        in names
+    )
+
+
+def test_a_disabled_topic_excludes_every_catalogued_rule_of_its_family() -> None:
+    result = plan(toggles={"linux_compliance_auditd_enabled": False})
+    auditd = {str(rule["rule_id"]) for rule in rules() if rule["family"] == "auditd"}
+    disabled = cast("list[dict[str, object]]", result["disabled_rules"])
+    assert len(auditd) > 100
+    assert {str(item["rule_id"]) for item in disabled} == auditd
+    assert {item["disabled_by"] for item in disabled} == {"linux_compliance_auditd_enabled"}
+
+
+def test_with_the_opt_in_only_the_reference_rule_is_applied_and_the_rest_not_implemented() -> None:
+    result = plan()
+    summary = cast("dict[str, int]", result["summary"])
+    assert summary["apply"] == 1
+    assert summary["not_implemented"] == len(rules()) - 1
+    assert [family["name"] for family in cast("list[dict[str, object]]", result["families"])] == [
+        "file_permissions"
+    ]
+    results = cast("list[dict[str, object]]", result["not_implemented"])
+    assert len(results) == summary["not_implemented"]
+    assert {item["status"] for item in results} == {"not_implemented"}
+    assert {item["changed"] for item in results} == {False}
 
 
 def test_the_audit_role_finds_the_toggles_and_the_catalogue_like_the_remediate_role() -> None:

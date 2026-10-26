@@ -92,11 +92,17 @@
     - name: Check the plan, the reported result and that the host is unchanged
       vars:
         crontab_result: "{{ linux_compliance_remediated.results | first }}"
+        applied: "{{ linux_compliance_remediated.rules | selectattr('action', 'equalto', 'apply') | list }}"
+        crontab_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
       ansible.builtin.assert:
         that:
           - linux_compliance_remediated.enabled is true
-          - linux_compliance_remediated.rules | length == 1
-          - linux_compliance_remediated.rules[0].action == 'apply'
+          - linux_compliance_remediated.rules | length > 1000
+          - applied | map(attribute='rule_id') | list == [crontab_rule]
+          - linux_compliance_remediated.summary.not_implemented == 0
+          - >-
+            linux_compliance_remediated.rules | rejectattr('action', 'equalto', 'apply')
+            | map(attribute='reason') | unique | list == ['not_in_profile']
           - linux_compliance_remediated.results | length == 1
           - crontab_result.action == 'apply'
           - crontab_result.status in ['applied', 'compliant', 'notapplicable', 'not_regular_file']
@@ -119,7 +125,7 @@
       profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
       rule_ids:
         - xccdf_org.ssgproject.content_rule_file_permissions_crontab
-        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+        - xccdf_org.ssgproject.content_rule_site_custom_check
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:
@@ -167,7 +173,7 @@
       profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
       rule_ids:
         - xccdf_org.ssgproject.content_rule_file_permissions_crontab
-        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+        - xccdf_org.ssgproject.content_rule_site_custom_check
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:
@@ -235,7 +241,7 @@
       profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
       rule_ids:
         - xccdf_org.ssgproject.content_rule_file_permissions_crontab
-        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+        - xccdf_org.ssgproject.content_rule_site_custom_check
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:
@@ -248,7 +254,7 @@
       vars:
         linux_compliance_file_permissions_enabled: false
         linux_compliance_audit_disabled_rules:
-          - rule_id: xccdf_org.ssgproject.content_rule_audit_rules_immutable
+          - rule_id: xccdf_org.ssgproject.content_rule_site_custom_check
       block:
         - name: Resolve the disabled rules with the audit role
           ansible.builtin.include_role:
@@ -260,9 +266,9 @@
             that:
               - >-
                 __linux_compliance_audit_toggles.disabled_rules == [
-                  {'rule_id': 'xccdf_org.ssgproject.content_rule_audit_rules_immutable'},
                   {'rule_id': 'xccdf_org.ssgproject.content_rule_file_permissions_crontab',
-                   'disabled_by': 'linux_compliance_file_permissions_enabled'}]
+                   'disabled_by': 'linux_compliance_file_permissions_enabled'},
+                  {'rule_id': 'xccdf_org.ssgproject.content_rule_site_custom_check'}]
             quiet: true
 
     - name: Try the likely typo linux_compliance_audit_enabled for the auditd topic
@@ -336,7 +342,7 @@
       profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
       rule_ids:
         - xccdf_org.ssgproject.content_rule_file_permissions_crontab
-        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+        - xccdf_org.ssgproject.content_rule_site_custom_check
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:
@@ -392,7 +398,7 @@
               - __linux_compliance_audit_toggles.disabled_rules == []
               - __linux_compliance_audit_toggles.warnings | length == 1
               - __linux_compliance_audit_toggles.warnings[0] is match(warning_prefix)
-              - "'currently excludes nothing' in __linux_compliance_audit_toggles.warnings[0]"
+              - "'so it excludes nothing' in __linux_compliance_audit_toggles.warnings[0]"
               - remediate_warnings | length == 1
             quiet: true
 
@@ -547,6 +553,137 @@
             that:
               - "'Run the freesecdev.linux_compliance.discover role first' in ansible_failed_result.msg"
             quiet: true
+
+- name: Full catalogue in check mode | One topic toggle switches off every rule of the topic in both roles
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_auditd_enabled: false
+    auditd_toggle: linux_compliance_auditd_enabled
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Load the generated catalogue
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/remediate/vars/rules.yml"
+        name: full_catalogue
+
+    - name: Describe a discovered profile that selects every catalogued rule, without a fact
+      ansible.builtin.set_fact:
+        auditd_rules: "{{ full_catalogue.__linux_compliance_remediate_audit_only.auditd }}"
+        full_profile:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          rule_ids: >-
+            {{ (full_catalogue.__linux_compliance_remediate_rules | map(attribute='rule_id') | list)
+               + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
+                  | map(attribute='value') | ansible.builtin.flatten) }}
+
+    - name: Run the remediate role with the auditd topic off
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_discovered: "{{ full_profile }}"
+
+    - name: Resolve the disabled rules with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: toggles.yml
+      vars:
+        linux_compliance_discovered: "{{ full_profile }}"
+
+    - name: Check that every auditd rule is off in both roles and names the topic toggle
+      vars:
+        planned_auditd: >-
+          {{ linux_compliance_remediated.rules | selectattr('family', 'equalto', 'auditd') | list }}
+        audit_disabled: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
+      ansible.builtin.assert:
+        that:
+          - auditd_rules | length > 100
+          - planned_auditd | length == auditd_rules | length
+          - planned_auditd | map(attribute='action') | unique | list == ['none']
+          - planned_auditd | map(attribute='reason') | unique | list == ['disabled_by_toggle']
+          - planned_auditd | map(attribute='disabled_by') | unique | list == [auditd_toggle]
+          - audit_disabled | map(attribute='rule_id') | sort == auditd_rules | sort
+          - audit_disabled | map(attribute='disabled_by') | unique | list == [auditd_toggle]
+          - linux_compliance_remediated.disabled_rules == audit_disabled
+          - __linux_compliance_audit_toggles.warnings == []
+          - linux_compliance_remediated.notices | select('match', 'WARNING:') | list == []
+          - >-
+            linux_compliance_remediated.results | selectattr('family', 'equalto', 'auditd') | list == []
+        quiet: true
+
+- name: Full catalogue in check mode | Rules without a native remediation are reported, never remediated
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - ssh
+    crontab_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Load the generated catalogue
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/remediate/vars/rules.yml"
+        name: full_catalogue
+
+    - name: Describe a discovered profile that selects every catalogued rule, without a fact
+      ansible.builtin.set_fact:
+        audit_only_rules: >-
+          {{ full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
+             | map(attribute='value') | ansible.builtin.flatten }}
+        full_profile:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          rule_ids: >-
+            {{ (full_catalogue.__linux_compliance_remediate_rules | map(attribute='rule_id') | list)
+               + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
+                  | map(attribute='value') | ansible.builtin.flatten) }}
+
+    - name: Run the remediate role with an allow-listed family that has only audit_only rules
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_discovered: "{{ full_profile }}"
+
+    - name: Check that every audit_only rule is not_implemented and nothing claims a remediation
+      vars:
+        not_implemented: >-
+          {{ linux_compliance_remediated.results | selectattr('status', 'equalto', 'not_implemented') | list }}
+        native_results: >-
+          {{ linux_compliance_remediated.results | rejectattr('status', 'equalto', 'not_implemented') | list }}
+      ansible.builtin.assert:
+        that:
+          - audit_only_rules | length > 1000
+          - linux_compliance_remediated.summary.not_implemented == audit_only_rules | length
+          - linux_compliance_remediated.summary.apply == 1
+          - not_implemented | map(attribute='rule_id') | sort == audit_only_rules | sort
+          - not_implemented | map(attribute='action') | unique | list == ['not_implemented']
+          - not_implemented | map(attribute='changed') | unique | list == [false]
+          - native_results | map(attribute='rule_id') | list == [crontab_rule]
+          - __linux_compliance_remediate_plan.families | map(attribute='name') | list == ['file_permissions']
+          - >-
+            linux_compliance_remediated.rules | selectattr('family', 'equalto', 'ssh')
+            | map(attribute='action') | unique | list == ['not_implemented']
+          - >-
+            linux_compliance_remediated.notices
+            | select('search', 'have no native remediation in this collection version') | list | length == 1
+        quiet: true
 
 - name: Remediate role in check mode | A catalogue that the play sets is refused before any change
   hosts: localhost

@@ -277,6 +277,9 @@ TOPIC = "linux_compliance_ssh_enabled"
 RULE_ID = "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
 RULE = "linux_compliance_rule_sshd_disable_root_login_enabled"
 INHERITED = "{{ linux_compliance_ssh_enabled }}"
+AUDIT_ONLY_ID = "xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout"
+AUDIT_ONLY_RULE = "linux_compliance_rule_sshd_set_idle_timeout_enabled"
+NEVER_DECLARED = "rule toggles are never declared in a role"
 CATALOGUE: dict[str, object] = {
     "__linux_compliance_remediate_families": [{"name": "ssh", "disruptive": True}],
     "__linux_compliance_remediate_rules": [
@@ -291,12 +294,14 @@ CATALOGUE: dict[str, object] = {
             "parameters": {},
         }
     ],
+    "__linux_compliance_remediate_audit_only": {"ssh": [AUDIT_ONLY_ID]},
 }
 
 
 def generated() -> tuple[dict[str, object], dict[str, object]]:
     catalogue = toggles.load_catalogue(
         CATALOGUE["__linux_compliance_remediate_rules"],
+        CATALOGUE["__linux_compliance_remediate_audit_only"],
         CATALOGUE["__linux_compliance_remediate_families"],
         {},
         toggles.Errors(),
@@ -388,13 +393,11 @@ TOGGLE_MUTATIONS: list[tuple[tuple[dict[str, object], dict[str, object]], str]] 
         ),
         "linux_compliance_remediatex_enabled: is not a toggle generated",
     ),
+    (mutated({RULE: INHERITED}), f"{RULE}: is not a toggle generated from the rule catalogue"),
+    (mutated({RULE: INHERITED}), NEVER_DECLARED),
     (
-        mutated({RULE: "{{ linux_compliance_remediate_enabled }}"}),
-        f"{RULE}: defaults/main.yml differs from the generated default",
-    ),
-    (
-        mutated({RULE: "{{ linux_compliance_auditd_enabled }}"}),
-        f"{RULE}: defaults/main.yml differs from the generated default",
+        mutated(options={AUDIT_ONLY_RULE: {"type": "bool", "description": "x"}}),
+        f"{AUDIT_ONLY_RULE}: is not a toggle generated from the rule catalogue: {NEVER_DECLARED}",
     ),
     (mutated({TOPIC: False}), f"{TOPIC}: defaults/main.yml differs"),
     (mutated({TOPIC: 1}), f"{TOPIC}: defaults/main.yml differs"),
@@ -402,11 +405,7 @@ TOGGLE_MUTATIONS: list[tuple[tuple[dict[str, object], dict[str, object]], str]] 
         mutated(options={TOPIC: {"type": "bool", "default": 1, "description": "x"}}),
         f"{TOPIC}: the argument spec differs",
     ),
-    (
-        mutated(options={RULE: {"type": "bool", "default": True, "description": ["x"]}}),
-        f"{RULE}: the argument spec differs",
-    ),
-    (mutated(drop=RULE), f"{RULE}: defaults/main.yml differs"),
+    (mutated(drop=TOPIC), f"{TOPIC}: defaults/main.yml differs"),
 ]
 
 

@@ -154,11 +154,14 @@ class Rule:
         rule_id: Full XCCDF rule identifier.
         severity: ``unknown``, ``info``, ``low``, ``medium`` or ``high``.
         title: Rule title, empty when the content has none.
+        groups: Full identifiers of the groups that contain the rule, outermost
+            first, in the order of the XCCDF group hierarchy.
     """
 
     rule_id: str
     severity: str
     title: str
+    groups: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -302,7 +305,7 @@ def _finish_benchmark(draft: _BenchmarkDraft) -> Benchmark:
         version=draft.version,
         title=draft.title or "",
         profiles=tuple(_finish_profile(profile, draft) for profile in draft.profiles),
-        rules=tuple(Rule(r.rule_id, r.severity, r.title or "") for r in draft.rules),
+        rules=tuple(Rule(r.rule_id, r.severity, r.title or "", r.groups) for r in draft.rules),
     )
 
 

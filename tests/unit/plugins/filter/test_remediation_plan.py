@@ -69,6 +69,7 @@ def ledger_entry(rule_id: str, family: str) -> dict[str, object]:
 
 def options(**overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
+        "audit_only": {},
         "families": FAMILIES,
         "enabled": True,
         "allow_disruptive": [],
@@ -114,7 +115,14 @@ def test_nothing_is_planned_when_remediation_is_disabled() -> None:
     assert {item["action"] for item in rules.values()} == {"skip"}
     assert {item["reason"] for item in rules.values()} == {"remediation_disabled"}
     assert result["families"] == []
-    assert result["summary"] == {"apply": 0, "cleanup": 0, "manual": 0, "none": 0, "skip": 4}
+    assert result["summary"] == {
+        "apply": 0,
+        "cleanup": 0,
+        "manual": 0,
+        "none": 0,
+        "not_implemented": 0,
+        "skip": 4,
+    }
     assert result["notices"] == [
         (
             "remediation is disabled (linux_compliance_remediate_enabled is false): 4 rule(s) "
@@ -164,7 +172,14 @@ def test_enabled_rules_are_applied_and_disruptive_families_are_skipped() -> None
             "linux_compliance_remediate_allow_disruptive"
         ),
     ]
-    assert result["summary"] == {"apply": 2, "cleanup": 0, "manual": 0, "none": 0, "skip": 2}
+    assert result["summary"] == {
+        "apply": 2,
+        "cleanup": 0,
+        "manual": 0,
+        "none": 0,
+        "not_implemented": 0,
+        "skip": 2,
+    }
 
 
 def test_an_allow_listed_disruptive_family_is_applied_in_registry_order() -> None:
@@ -245,7 +260,14 @@ def test_a_rule_outside_the_profile_without_a_ledger_entry_does_nothing() -> Non
     result, rules = run(profile_rule_ids=[PASSWD])
     assert rules[CRONTAB]["action"] == "none"
     assert rules[CRONTAB]["reason"] == "not_in_profile"
-    assert result["summary"] == {"apply": 1, "cleanup": 0, "manual": 0, "none": 1, "skip": 2}
+    assert result["summary"] == {
+        "apply": 1,
+        "cleanup": 0,
+        "manual": 0,
+        "none": 1,
+        "not_implemented": 0,
+        "skip": 2,
+    }
 
 
 def test_disabled_rules_outside_the_profile_are_not_reported_for_the_audit() -> None:
@@ -600,3 +622,97 @@ def test_without_opt_in_only_topics_without_catalogued_rules_warn() -> None:
 def test_a_topic_toggle_that_switches_rules_off_does_not_warn() -> None:
     result = run(toggles={"linux_compliance_file_permissions_enabled": False})[0]
     assert warnings_of(result) == []
+
+
+DMESG = PREFIX + "sysctl_kernel_dmesg_restrict"
+CIPHERS = PREFIX + "sshd_use_strong_ciphers"
+AUDIT_ONLY = {"sysctl": [DMESG], "ssh": [CIPHERS]}
+ALL_RULES = [CRONTAB, PASSWD, ROOT_LOGIN, PARTITION, DMESG, CIPHERS]
+
+
+def test_audit_only_rules_are_not_implemented_and_never_dispatched() -> None:
+    result, rules = run(audit_only=AUDIT_ONLY, profile_rule_ids=ALL_RULES)
+    assert result["errors"] == []
+    for rule_id in (DMESG, CIPHERS):
+        assert rules[rule_id]["action"] == "not_implemented"
+        assert rules[rule_id]["reason"] == "audit_only"
+        assert rules[rule_id]["revert_strategy"] == "audit_only"
+    families = cast("list[dict[str, object]]", result["families"])
+    assert [family["name"] for family in families] == ["file_permissions"]
+    assert result["not_implemented"] == [
+        {
+            "rule_id": rule_id,
+            "family": family,
+            "action": "not_implemented",
+            "status": "not_implemented",
+            "reason": "audit_only",
+            "changed": False,
+            "message": (
+                f"{rule_id}: no native remediation in this collection version (audit_only); "
+                "nothing was changed, and the audit still reports its outcome"
+            ),
+        }
+        for rule_id, family in ((CIPHERS, "ssh"), (DMESG, "sysctl"))
+    ]
+    summary = cast("dict[str, int]", result["summary"])
+    assert summary["not_implemented"] == 2
+    assert summary["apply"] == 2
+    assert (
+        "2 rule(s) of the profile have no native remediation in this collection version "
+        "(audit_only) and were not remediated; they are reported as not_implemented"
+    ) in cast("list[str]", result["notices"])
+    report = {
+        str(item["rule_id"]): item for item in cast("list[dict[str, object]]", result["report"])
+    }
+    assert report[CIPHERS]["action"] == "not_implemented"
+
+
+def test_audit_only_rules_that_are_off_or_outside_the_profile_do_nothing() -> None:
+    result, rules = run(
+        audit_only=AUDIT_ONLY,
+        profile_rule_ids=[CRONTAB, CIPHERS],
+        toggles={"linux_compliance_ssh_enabled": False},
+    )
+    assert rules[DMESG]["action"] == "none"
+    assert rules[DMESG]["reason"] == "not_in_profile"
+    assert rules[CIPHERS]["action"] == "none"
+    assert rules[CIPHERS]["reason"] == "disabled_by_toggle"
+    assert rules[CIPHERS]["disabled_by"] == "linux_compliance_ssh_enabled"
+    assert result["not_implemented"] == []
+    assert {"rule_id": CIPHERS, "disabled_by": "linux_compliance_ssh_enabled"} in cast(
+        "list[dict[str, object]]", result["disabled_rules"]
+    )
+    assert not any("not_implemented" in item for item in cast("list[str]", result["notices"]))
+
+
+def test_audit_only_rules_are_skipped_without_the_opt_in() -> None:
+    result, rules = run(audit_only=AUDIT_ONLY, enabled=False, profile_rule_ids=None)
+    assert rules[DMESG]["action"] == "skip"
+    assert rules[DMESG]["reason"] == "remediation_disabled"
+    assert result["not_implemented"] == []
+
+
+def test_an_audit_only_rule_recorded_in_the_ledger_is_a_manual_action() -> None:
+    result, rules = run(
+        audit_only=AUDIT_ONLY,
+        profile_rule_ids=ALL_RULES,
+        ledger_entries=[ledger_entry(DMESG, "sysctl")],
+    )
+    assert rules[DMESG]["action"] == "manual"
+    assert rules[DMESG]["reason"] == "audit_only"
+    assert result["families"] == [
+        family
+        for family in cast("list[dict[str, object]]", result["families"])
+        if family["name"] == "file_permissions"
+    ]
+    assert (
+        f"{DMESG}: recorded in the state ledger, but this collection version has no native "
+        "remediation for it (audit_only), so it is neither applied nor cleaned up; review it "
+        "manually and remove the ledger entry"
+    ) in cast("list[str]", result["notices"])
+
+
+def test_the_audit_only_option_is_validated() -> None:
+    assert errors_of(audit_only={"kernel": [DMESG]}) == [
+        "the audit_only catalogue names the unknown family 'kernel'"
+    ]

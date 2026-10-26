@@ -353,3 +353,86 @@ The toggle variables are generated from the catalogue, and the audit role resolv
   that is `false` while no catalogued rule of its family is selected by the profile produces a `WARNING:` in both roles,
   because it currently excludes nothing; full catalogue coverage is FREES-53. A structural test and an
   `oscap-integration` run of the audit role prove that the scan receives the toggle result.
+
+## Amendment 2026-10-26: the full rule catalogue (FREES-53)
+
+The catalogue now holds every rule that a pinned profile selects, so that every security rule can be switched off per
+rule and per topic, in the audit as well as in remediation, before its native remediation exists (lead decisions on
+FREES-53). The [control family reference](../control-families.md) lists the families, their rules per profile and
+how many have a native remediation. These refinements apply.
+
+- **Generated from the pinned content.** `tools/roles/generate_catalogue.py` (`make catalogue`) reads the datastreams of
+  `content/manifest.yml` through `catalog.read_benchmarks`, which verifies the pinned SHA-256 before it parses a byte,
+  and writes `roles/remediate/vars/rules.yml` and `docs/control-families.md`. All 25 pinned profiles are covered: the 5
+  Ubuntu 24.04 and the 20 RHEL 9 profiles of ComplianceAsCode 0.1.82, 1203 distinct rules. A rule that several
+  profiles or datastreams select is one entry with one toggle. The CI job `test` fetches the content
+  (`make test-content-golden`), regenerates the catalogue in memory and fails on any difference, so the catalogue cannot
+  drift from the pinned content. Only rule, group and profile identifiers of the BSD-3-Clause content are used; no
+  benchmark prose and no rule titles are written.
+- **Family assignment.** `content/catalogue.yml` maps ComplianceAsCode XCCDF groups and short rule identifier prefixes
+  to families. A rule is assigned by the first of three steps that decides it: a *topic group* that contains it at any
+  depth (`auditing` takes every auditd rule, including the audit log permissions and the `audit=1` boot argument), a
+  *rule prefix* for rules whose mechanism defines the topic (`file_permissions_`, `sysctl_`, `kernel_module_`,
+  `mount_option_`, `grub2_` and others), and otherwise the innermost listed *fallback group*. The generator fails on a
+  rule below two topic groups, on a rule that nothing decides, on a rule that two datastreams assign to different
+  families, on a group mapped twice, on overlapping prefixes, on a mapping entry that decides no rule and on a native rule
+  that no profile selects. Nothing is guessed.
+- **Families.** The registry grows from 12 to 21 families: `logging`, `banners`, `integrity`, `kernel_build_config`,
+  `packages` (packages and updates), `desktop`, `kernel_modules`, `accounts` and `mandatory_access_control` join. The
+  pinned `DISRUPTIVE_FAMILIES` grow from 10 to 15, each with a reason in the reference: `accounts` (password ageing,
+  account expiry, root login restrictions and session time-outs can lock operators out), `kernel_modules`
+  (blacklisting `overlay`, `squashfs` or `usb-storage` breaks container runtimes, snaps and devices),
+  `mandatory_access_control` (enforcing SELinux or AppArmor can stop services and needs a relabel or reboot),
+  `packages` (installing updates or changing repositories can restart or break software) and `desktop` (removing the
+  display manager or forcing screen locks ends sessions). `sysctl` stays non-disruptive with network parameters in
+  `network`; whether `user.max_user_namespaces` and `kernel.modules_disabled` need the allow-list is a decision for the
+  kernel parameter family (FREES-107) before it implements them.
+- **The strategy `audit_only`.** A rule without a native remediation has the strategy `audit_only`. Its toggles work
+  exactly like those of a native rule, and the audit excludes it and reports it as `disabled` when it is off. The
+  remediation plan never dispatches it to a family file. When it would be applied it is planned as `not_implemented`
+  with the reason `audit_only`, and the dispatcher reports one result per such rule with the status
+  `not_implemented` and `changed: false`, plus one notice with their number, so a run never reports it as remediated.
+  This check comes before the allow-list check, because nothing would be changed either way. A ledger entry for an
+  `audit_only` rule, which only an older collection version can have written, is a `manual` action with a notice; it
+  is neither applied nor cleaned up. `audit_only` is never recorded in the ledger and is not a ledger revert strategy.
+  `file_permissions_crontab` remains the only native rule.
+- **Compact catalogue.** `__linux_compliance_remediate_rules` lists only the native rules, with every key of the
+  FREES-52 amendment. `__linux_compliance_remediate_audit_only` maps every family, in registry order, to the sorted full
+  identifiers of its `audit_only` rules, because they carry nothing but their family. `toggles.expand_audit_only`
+  turns them into entries of the usual shape (the disruptive flag of the family, `reversible: true`,
+  `revert_strategy: audit_only`, the derived toggle, no runbook, no parameters) before the shared validation runs. A
+  rule listed in both, or a native entry with the strategy `audit_only`, is an error. Both filters take the mapping as
+  the new option `audit_only`.
+- **Toggle names.** ComplianceAsCode rule identifiers may hold `-` and capitals (`kernel_module_usb-storage_disabled`,
+  `installed_OS_is_vendor_supported`), which Ansible variable names cannot. The rule toggle is therefore
+  `linux_compliance_rule_<short id>_enabled` with the short identifier in lower case and every other character than a
+  letter, digit or `_` replaced by `_`, and the catalogue fails when two rules would share a toggle. The pinned content
+  has no such collision. The rule identifier pattern accepts `[A-Za-z0-9_.+-]` after the prefix, like the ledger.
+- **Rule toggles are no longer declared** (this replaces the generated rule toggle defaults and argument
+  specifications of the FREES-55 amendment). Measured on this workstation with ansible-core 2.21.5 and a check-mode
+  playbook that runs the remediate role twice (without and with the opt-in, all 1203 rules in the profile) and the
+  audit toggle resolution once with `linux_compliance_auditd_enabled: false`: the 12-family catalogue of `main` takes
+  2.1 s. With 1203 declared rule toggles (a 629 KB argument specification and a 127 KB defaults file per role, a
+  344 KB catalogue) it took 10.1 to 10.8 s: role argument validation 0.75 to 0.8 s per remediate run, catalogue loading
+  0.5 to 0.7 s per load, and plan resolution 0.8 to 1.1 s, mostly templating the 1203 defaults. Without the rule toggle
+  declarations it took 5.1 s, and with the compact catalogue as well 3.1 s, where no task of the roles exceeds 0.25 s.
+  Only the topic toggles are therefore role defaults and argument specification options. A rule toggle that is not set
+  follows its family toggle in `toggles.resolve_toggle`, exactly as its former default did, so the resolution order and
+  `disabled_by` are unchanged; a rule toggle that is set is validated by both roles before anything is scanned or
+  changed, as before. Every rule toggle stays documented in the generated
+  [variable reference](../remediation-variables.md), per family. `check_role_specs.py` reports a declared rule toggle as
+  a finding. The flat toggles of this ADR are unchanged.
+- **Generated allow-list choices.** `make toggles` also writes the `choices` of
+  `linux_compliance_remediate_allow_disruptive` from the registry, so they cannot fall behind it.
+- **Empty-topic warning.** The `WARNING:` of the FREES-55 amendment now fires only for a family that has no rule in the
+  profile at all, such as `linux_compliance_auditd_enabled: false` with the Ubuntu 24.04 `cis_level1_server` profile,
+  which selects no auditd rule. When both roles run in one play, each prints it once. When a rule toggle and its family
+  toggle are both off, `disabled_by` names the family toggle (FREES-55 review items N3 and N5).
+- **Testing.** Unit tests cover the generator against synthetic datastreams (every assignment step, mapping
+  completeness and uniqueness, cross-datastream conflicts, unused entries, the compact rendering and the reference) and
+  the repository mapping; `make test-content-golden` checks the catalogue against the pinned content and that every
+  rule of every pinned profile is catalogued. `make test-remediate-check` runs check-mode plays in which one topic toggle
+  switches off every auditd rule of the catalogue in both roles and every `audit_only` rule is reported as
+  `not_implemented`. The `oscap-integration` job audits the runner with the Ubuntu 24.04 `cis_level2_server` profile,
+  `linux_compliance_auditd_enabled: false` and the crontab rule toggle off, and checks that every auditd rule of the
+  profile and the crontab rule come back `disabled` with the counts of the catalogue. Molecule scenarios remain FREES-60.

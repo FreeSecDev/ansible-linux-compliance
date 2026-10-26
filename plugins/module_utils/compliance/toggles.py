@@ -1,11 +1,16 @@
 """Rule catalogue, family registry and toggle resolution shared by the roles (ADR 0011).
 
-The remediate role's catalogue (``roles/remediate/vars/rules.yml``) lists every implemented rule
-with its control family; the family registry lists every family. Each family has a topic toggle
-``linux_compliance_<family>_enabled`` and each rule a rule toggle
-``linux_compliance_rule_<rule_short_id>_enabled``. The role defaults of both are generated from the
-catalogue (``tools/roles/generate_toggles.py``): a family toggle defaults to ``true`` and a rule
-toggle to the value of its family toggle.
+The remediate role's catalogue (``roles/remediate/vars/rules.yml``) lists every rule that a
+supported profile of the pinned content selects, with its control family; the family registry lists
+every family. It is generated from the digest-verified datastreams
+(``tools/roles/generate_catalogue.py``, FREES-53). A rule with a native remediation has a revert
+strategy; every other rule has the strategy ``audit_only``: it can be toggled and is excluded from
+the audit when it is off, but remediation never changes anything for it. Each family has a topic
+toggle ``linux_compliance_<family>_enabled`` and each rule a rule toggle
+``linux_compliance_rule_<rule_short_id>_enabled``, where the short identifier is written in lower
+case with every character other than a letter, a digit or ``_`` replaced by ``_``. The role
+defaults of both are generated from the catalogue (``tools/roles/generate_toggles.py``): a family
+toggle defaults to ``true`` and a rule toggle to the value of its family toggle.
 
 This module is the single source of truth for the toggle names, the validation of the catalogue,
 the registry and the toggle variables, and the resolution of the toggle state of a rule. The
@@ -23,7 +28,7 @@ from dataclasses import dataclass
 from typing import Final, cast
 
 RULE_PREFIX: Final[str] = "xccdf_org.ssgproject.content_rule_"
-RULE_PATTERN: Final[str] = r"xccdf_org\.ssgproject\.content_rule_[a-z0-9][a-z0-9_]{0,127}"
+RULE_PATTERN: Final[str] = r"xccdf_org\.ssgproject\.content_rule_[A-Za-z0-9][A-Za-z0-9_.+-]{0,127}"
 FAMILY_PATTERN: Final[str] = r"[a-z][a-z0-9_]{0,63}"
 TOGGLE_PATTERN: Final[str] = r"linux_compliance_([a-z0-9_]+)_enabled"
 TOGGLE_VARIABLE_PATTERN: Final[str] = "^linux_compliance_.+_enabled$"
@@ -32,12 +37,17 @@ ROLE_NAMESPACES: Final[tuple[str, ...]] = ("audit", "discover", "evidence", "rem
 ROLE_TOGGLE_VARIABLES: Final[frozenset[str]] = frozenset({"linux_compliance_remediate_enabled"})
 DISRUPTIVE_FAMILIES: Final[frozenset[str]] = frozenset(
     {
+        "accounts",
         "auditd",
         "bootloader",
         "crypto_policy",
+        "desktop",
         "firewall",
+        "kernel_modules",
+        "mandatory_access_control",
         "mounts",
         "network",
+        "packages",
         "pam",
         "services",
         "ssh",
@@ -45,13 +55,16 @@ DISRUPTIVE_FAMILIES: Final[frozenset[str]] = frozenset(
     }
 )
 RULE_NAMESPACE: Final[str] = "rule"
+AUDIT_ONLY: Final[str] = "audit_only"
 STRATEGIES: Final[tuple[str, ...]] = (
+    AUDIT_ONLY,
     "irreversible",
     "owned_dropin",
     "recorded_state",
     "recorded_value",
 )
 IRREVERSIBLE: Final[str] = "irreversible"
+TOGGLE_UNSAFE: Final[str] = r"[^a-z0-9_]"
 RULE_KEYS: Final[frozenset[str]] = frozenset(
     {
         "disruptive",
@@ -143,8 +156,21 @@ def rule_short_id(rule_id: str) -> str:
 
 
 def rule_toggle_name(rule_id: str) -> str:
-    """Return the name of the toggle of the rule ``rule_id`` (full XCCDF identifier)."""
-    return f"linux_compliance_rule_{rule_short_id(rule_id)}_enabled"
+    """Return the name of the toggle of the rule ``rule_id`` (full XCCDF identifier).
+
+    Ansible variable names cannot hold ``-``, ``.`` or ``+``, and toggle names are lower case, so
+    the short identifier is lower-cased and every other character is replaced by ``_``:
+    ``kernel_module_usb-storage_disabled`` has the toggle
+    ``linux_compliance_rule_kernel_module_usb_storage_disabled_enabled``. The catalogue fails when
+    two rules end up with the same toggle.
+    """
+    toggle_id = re.sub(TOGGLE_UNSAFE, "_", rule_short_id(rule_id).lower())
+    return f"linux_compliance_rule_{toggle_id}_enabled"
+
+
+def is_native(rule: Mapping[str, object]) -> bool:
+    """Return whether ``rule`` has a native remediation: a strategy other than audit_only."""
+    return rule["revert_strategy"] != AUDIT_ONLY
 
 
 def _family_problem(item: Mapping[str, object], seen: set[str]) -> str | None:
@@ -208,6 +234,8 @@ def _rule_problems(rule: Rule, families: Mapping[str, bool]) -> list[str]:
         problems.append(f"unknown revert_strategy {show(strategy)}")
     elif rule["reversible"] is not (strategy != IRREVERSIBLE):
         problems.append("reversible must be false exactly for the irreversible strategy")
+    elif strategy == AUDIT_ONLY and rule["parameters"] != {}:
+        problems.append("an audit_only rule has no native remediation and takes no parameters")
     if rule["toggle"] != rule_toggle_name(rule_id):
         problems.append(f"toggle must be {rule_toggle_name(rule_id)}")
     if strategy == IRREVERSIBLE and not is_text(runbook, RUNBOOK_PATTERN):
@@ -253,6 +281,14 @@ def check_catalogue(raw: object, families: Mapping[str, bool], errors: Errors) -
     seen: set[str] = set()
     checked = [_check_rule(index, item, families, seen, errors) for index, item in enumerate(items)]
     rules = [rule for rule in checked if rule is not None]
+    owners: dict[str, str] = {}
+    for rule in rules:
+        toggle = str(rule["toggle"])
+        if toggle in owners:
+            errors.add(
+                f"{rule['rule_id']}: its toggle {toggle} is also the toggle of {owners[toggle]}"
+            )
+        owners.setdefault(toggle, str(rule["rule_id"]))
     return sorted(rules, key=lambda rule: str(rule["rule_id"]))
 
 
@@ -303,12 +339,70 @@ def check_toggles(
     return values
 
 
+def _audit_only_entry(rule_id: object, family: str, *, disruptive: bool) -> Rule:
+    toggle = rule_toggle_name(rule_id) if isinstance(rule_id, str) else None
+    return {
+        "rule_id": rule_id,
+        "family": family,
+        "disruptive": disruptive,
+        "reversible": True,
+        "revert_strategy": AUDIT_ONLY,
+        "toggle": toggle,
+        "runbook": None,
+        "parameters": {},
+    }
+
+
+def expand_audit_only(raw: object, families: Mapping[str, bool], errors: Errors) -> list[Rule]:
+    """Return the full catalogue entries of the rules that have no native remediation.
+
+    The catalogue lists these rules compactly, as a mapping of each family to the full identifiers
+    of its ``audit_only`` rules, because they carry nothing but their family. Each becomes an entry
+    of the usual shape: the disruptive flag of its family, ``reversible`` true (nothing is ever
+    applied, so nothing needs reverting), the strategy ``audit_only``, its derived toggle, no
+    runbook and no parameters. :func:`check_catalogue` validates the result together with the
+    native rules.
+    """
+    mapping = as_mapping(raw)
+    if mapping is None:
+        errors.add("the audit_only catalogue must map families to lists of rule identifiers")
+        return []
+    entries: list[Rule] = []
+    for family, value in mapping.items():
+        rule_ids = as_sequence(value)
+        if family not in families:
+            errors.add(f"the audit_only catalogue names the unknown family {show(family)}")
+        elif rule_ids is None:
+            errors.add(f"the audit_only rules of {family} must be a list of rule identifiers")
+        else:
+            entries.extend(
+                _audit_only_entry(rule_id, family, disruptive=families[family])
+                for rule_id in rule_ids
+            )
+    return entries
+
+
 def load_catalogue(
-    catalogue: object, families: object, toggles: object, errors: Errors
+    catalogue: object, audit_only: object, families: object, toggles: object, errors: Errors
 ) -> Catalogue:
-    """Validate the registry, the catalogue and the toggle variables together."""
+    """Validate the registry, the catalogue and the toggle variables together.
+
+    ``catalogue`` lists the rules with a native remediation, each with every key of
+    :data:`RULE_KEYS`, and ``audit_only`` the rules without one, per family (see
+    :func:`expand_audit_only`). A native entry with the strategy ``audit_only`` is an error, so each
+    rule has exactly one place in the catalogue.
+    """
     registry = check_families(families, errors)
-    rules = check_catalogue(catalogue, registry, errors)
+    native = as_sequence(catalogue)
+    if native is not None and any(
+        isinstance(item, Mapping)
+        and cast("Mapping[str, object]", item).get("revert_strategy") == AUDIT_ONLY
+        for item in native
+    ):
+        errors.add("list audit_only rules in the audit_only catalogue, not with the native rules")
+    expanded = expand_audit_only(audit_only, registry, errors)
+    combined = None if native is None else [*native, *expanded]
+    rules = check_catalogue(combined, registry, errors)
     rule_toggles = frozenset(str(rule["toggle"]) for rule in rules)
     values = check_toggles(toggles, rule_toggles, registry, errors)
     return Catalogue(rules=rules, families=registry, toggles=values)
@@ -349,13 +443,15 @@ def disabled_rules(
 
 
 def topic_warnings(catalogue: Catalogue, profile: frozenset[str] | None) -> list[str]:
-    """Return a warning for every topic toggle that is false but currently excludes nothing.
+    """Return a warning for every topic toggle that is false but excludes nothing.
 
-    A topic toggle covers only catalogued rules. When it is false and no catalogued rule of its
-    family is selected by ``profile`` (or, when ``profile`` is ``None``, when the family has no
-    catalogued rule at all), the toggle has no effect yet; the profile rules of that topic that the
-    catalogue does not contain are still audited. Saying so prevents the false impression that the
-    whole topic is excluded.
+    A topic toggle covers only catalogued rules. The catalogue holds every rule of the supported
+    profiles of the pinned content, so for those profiles the warning fires only for a family that
+    has no rule in the profile at all. When the toggle is false and no catalogued rule of its family
+    is selected by ``profile`` (or, when ``profile`` is ``None``, when the family has no catalogued
+    rule at all), the toggle has no effect; rules of content that the catalogue does not describe,
+    such as user-supplied content, are still audited. Saying so prevents the false impression that
+    something was excluded.
     """
     warnings: list[str] = []
     for family in catalogue.families:
@@ -370,7 +466,7 @@ def topic_warnings(catalogue: Catalogue, profile: frozenset[str] | None) -> list
         if not covered:
             warnings.append(
                 f"WARNING: {name} is false, but no catalogued rule of the {family} family is "
-                f"selected by the profile, so it currently excludes nothing; profile rules "
-                f"outside the rule catalogue are still audited (see docs/remediation-variables.md)"
+                f"selected by the profile, so it excludes nothing; rules outside the rule "
+                f"catalogue are still audited (see docs/remediation-variables.md)"
             )
     return warnings

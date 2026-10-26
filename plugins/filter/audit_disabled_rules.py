@@ -18,10 +18,10 @@ short_description: Resolve the rules that the audit excludes and reports as disa
 version_added: "0.1.0"
 description:
   - Resolves, for every rule of the remediate role's catalogue that the discovered profile
-    selects, its toggle state from its rule toggle and its family toggle, exactly as the
-    C(remediation_plan) filter does (ADR 0011). Both filters use the same module_utils code, so a
-    rule or topic switched off once is cleaned up by remediation and reported as C(disabled) by
-    the audit with the same controlling variable.
+    selects, with or without a native remediation, its toggle state from its rule toggle and its
+    family toggle, exactly as the C(remediation_plan) filter does (ADR 0011). Both filters use
+    the same module_utils code, so a rule or topic switched off once is cleaned up by remediation
+    and reported as C(disabled) by the audit with the same controlling variable.
   - Adds the explicit entries of C(linux_compliance_audit_disabled_rules), which are for rules
     that the catalogue does not contain. A catalogued rule in that list is an error, because the
     audit would then skip a rule that remediation still applies; its toggle must be used instead.
@@ -34,13 +34,18 @@ author:
 positional: _input, options
 options:
   _input:
-    description: The rule catalogue, a list of mappings as in C(roles/remediate/vars/rules.yml).
+    description:
+      - The rules with a native remediation, C(__linux_compliance_remediate_rules) of
+        C(roles/remediate/vars/rules.yml), a list of mappings.
     type: list
     elements: dict
     required: true
   options:
     description:
       - A mapping with exactly the keys below. A missing or unknown key is an error.
+      - C(audit_only) maps each family to the full identifiers of its rules without a native
+        remediation, C(__linux_compliance_remediate_audit_only) of the same file. They are
+        toggled and disabled exactly like the native rules.
       - C(families) is the family registry of C(roles/remediate/vars/rules.yml).
       - C(toggles) maps every variable whose name matches C(^linux_compliance_.+_enabled$) to its
         value, validated as for C(remediation_plan).
@@ -57,7 +62,8 @@ EXAMPLES = r"""
   ansible.builtin.set_fact:
     disabled: >-
       {{ catalogue | freesecdev.linux_compliance.audit_disabled_rules({
-           'families': registry, 'toggles': {'linux_compliance_auditd_enabled': false},
+           'audit_only': audit_only, 'families': registry,
+           'toggles': {'linux_compliance_auditd_enabled': false},
            'profile_rule_ids': discovered_rule_ids, 'disabled_rules': []}) }}
 """
 
@@ -80,13 +86,13 @@ _value:
     warnings:
       description:
         - One C(WARNING:) message per topic toggle that is false while no catalogued rule of its
-          family is selected by the profile, so that it currently excludes nothing.
+          family is selected by the profile, so that it excludes nothing.
       type: list
       elements: str
 """
 
 OPTION_KEYS: Final[frozenset[str]] = frozenset(
-    {"disabled_rules", "families", "profile_rule_ids", "toggles"}
+    {"audit_only", "disabled_rules", "families", "profile_rule_ids", "toggles"}
 )
 
 
@@ -139,7 +145,9 @@ def audit_disabled_rules(catalogue: object, options: object) -> dict[str, object
         keys = [] if given is None else sorted(given)[:10]
         errors.add(f"options must be a mapping with exactly {sorted(OPTION_KEYS)}, got {keys}")
         return _result(errors.items, [], [])
-    loaded = toggles.load_catalogue(catalogue, given["families"], given["toggles"], errors)
+    loaded = toggles.load_catalogue(
+        catalogue, given["audit_only"], given["families"], given["toggles"], errors
+    )
     profile = _profile(given["profile_rule_ids"], errors)
     explicit = _explicit(given["disabled_rules"], loaded, errors)
     switched_off = toggles.disabled_rules(loaded.rules, loaded.toggles, profile)

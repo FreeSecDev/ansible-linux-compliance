@@ -67,6 +67,18 @@ def test_results_for_unplanned_or_skipped_rules_are_reported() -> None:
     ]
 
 
+def test_not_implemented_rules_need_exactly_their_one_result() -> None:
+    work = plan((CRONTAB, "apply"), (ROOT_LOGIN, "not_implemented"))
+    complete = [result(CRONTAB, "apply"), result(ROOT_LOGIN, "not_implemented")]
+    assert unaccounted.remediation_unaccounted(complete, work) == []
+    assert unaccounted.remediation_unaccounted(complete[:1], work) == [
+        (
+            f"{ROOT_LOGIN}: planned not_implemented but no family task reported a result; "
+            "was a task skipped?"
+        )
+    ]
+
+
 def test_messages_are_bounded() -> None:
     work = plan(*[(f"{CRONTAB}_{index}", "apply") for index in range(150)])
     assert len(unaccounted.remediation_unaccounted([], work)) == unaccounted.MAX_MESSAGES

@@ -1,0 +1,221 @@
+---
+schema_version: 1
+families:
+  - name: file_permissions
+    disruptive: false
+    title: File permissions and ownership
+    why: Tightens modes and owners of system files; no service is restarted
+    topic_groups: []
+    rule_prefixes:
+      - dir_group_ownership_
+      - dir_groupownership_
+      - dir_ownership_
+      - dir_permissions_
+      - dir_perms_
+      - dir_system_commands_
+      - directory_groupowner_
+      - directory_owner_
+      - directory_permissions_
+      - file_groupowner_
+      - file_groupownership_
+      - file_groupownerships_
+      - file_owner_
+      - file_ownership_
+      - file_ownerships_
+      - file_permission_user_
+      - file_permissions_
+      - root_permissions_
+    fallback_groups:
+      - files
+  - name: sysctl
+    disruptive: false
+    title: Kernel parameters
+    why: >-
+      Kernel hardening parameters that do not change routing or forwarding (those belong to network)
+    topic_groups: []
+    rule_prefixes:
+      - sysctl_
+    fallback_groups:
+      - restrictions
+  - name: logging
+    disruptive: false
+    title: System logging (journald, rsyslog, logrotate)
+    why: Changes where and how logs are kept; no session or workload is stopped
+    topic_groups:
+      - logging
+    rule_prefixes: []
+    fallback_groups: []
+  - name: banners
+    disruptive: false
+    title: Login banners
+    why: Changes the text of login banners and messages of the day
+    topic_groups:
+      - accounts-banners
+    rule_prefixes: []
+    fallback_groups: []
+  - name: integrity
+    disruptive: false
+    title: Software integrity (AIDE, package verification, endpoint security)
+    why: Installs and schedules integrity checking; no session or workload is stopped
+    topic_groups:
+      - software-integrity
+    rule_prefixes: []
+    fallback_groups:
+      - integrity
+  - name: kernel_build_config
+    disruptive: false
+    title: Kernel build configuration
+    why: Checks the configuration the running kernel was built with; there is nothing to remediate on the host
+    topic_groups:
+      - kernel_build_config
+    rule_prefixes: []
+    fallback_groups: []
+  - name: auditd
+    disruptive: true
+    title: Audit daemon and audit rules
+    why: >-
+      Audit settings can halt the host or drop it to single-user mode when the audit log fills, and immutable rules
+      need a reboot to change
+    topic_groups:
+      - auditing
+    rule_prefixes: []
+    fallback_groups: []
+  - name: services
+    disruptive: true
+    title: Services and service packages
+    why: Disabling, masking or removing services can stop workloads the host exists for
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - services
+  - name: packages
+    disruptive: true
+    title: Packages and updates
+    why: Installing updates or changing repositories and package verification can restart or break software
+    topic_groups: []
+    rule_prefixes:
+      - apt_
+    fallback_groups:
+      - software
+      - system-tools
+      - updating
+  - name: desktop
+    disruptive: true
+    title: Graphical desktop (GNOME and the display manager)
+    why: Removing the display manager or forcing screen locks ends graphical sessions
+    topic_groups:
+      - gnome
+    rule_prefixes: []
+    fallback_groups: []
+  - name: network
+    disruptive: true
+    title: Network parameters and network services
+    why: Forwarding, redirects and IPv6 settings can cut routers, container hosts and VPN gateways off
+    topic_groups:
+      - network-ipsec
+      - network-ipv6
+      - network-kernel
+    rule_prefixes: []
+    fallback_groups:
+      - network
+  - name: kernel_modules
+    disruptive: true
+    title: Kernel modules
+    why: >-
+      Blacklisting modules such as overlay, squashfs, usb-storage or bluetooth breaks container runtimes, snaps and
+      devices that depend on them
+    topic_groups: []
+    rule_prefixes:
+      - kernel_module_
+    fallback_groups: []
+  - name: firewall
+    disruptive: true
+    title: Host firewall (firewalld, nftables, iptables, ufw)
+    why: A default-deny policy can cut every remote session
+    topic_groups:
+      - network-firewalld
+      - network-iptables
+      - network-nftables
+      - network-ufw
+    rule_prefixes: []
+    fallback_groups: []
+  - name: ssh
+    disruptive: true
+    title: SSH server and client
+    why: sshd settings can lock out every remote operator
+    topic_groups:
+      - ssh
+    rule_prefixes: []
+    fallback_groups: []
+  - name: pam
+    disruptive: true
+    title: PAM, password quality and lock-out
+    why: Lock-out, password quality and module order can lock out every user, including root
+    topic_groups:
+      - accounts-pam
+    rule_prefixes: []
+    fallback_groups: []
+  - name: accounts
+    disruptive: true
+    title: Accounts, password ageing, root access and sessions
+    why: >-
+      Password ageing, account expiry, root login restrictions and session time-outs can lock out operators or end
+      their sessions
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - accounts
+  - name: sudo
+    disruptive: true
+    title: sudo
+    why: Can remove administrative access
+    topic_groups:
+      - sudo
+    rule_prefixes: []
+    fallback_groups: []
+  - name: mandatory_access_control
+    disruptive: true
+    title: Mandatory access control (SELinux, AppArmor)
+    why: Enforcing SELinux or AppArmor policies can stop services and needs a relabel or reboot
+    topic_groups:
+      - apparmor
+      - selinux
+    rule_prefixes: []
+    fallback_groups: []
+  - name: crypto_policy
+    disruptive: true
+    title: Cryptographic policy and FIPS mode
+    why: Can break TLS and SSH with older peers
+    topic_groups:
+      - crypto
+      - fips
+    rule_prefixes: []
+    fallback_groups: []
+  - name: mounts
+    disruptive: true
+    title: File systems, partitions and mount options
+    why: Mount options can break running software; partitioning is irreversible
+    topic_groups: []
+    rule_prefixes:
+      - mount_option_
+    fallback_groups:
+      - disk_partitioning
+      - mounting
+  - name: bootloader
+    disruptive: true
+    title: Boot loader and firmware
+    why: A wrong boot configuration can leave the host unbootable
+    topic_groups:
+      - bootloader-grub2
+      - bootloader-zipl
+    rule_prefixes:
+      - bios_
+      - grub2_
+    fallback_groups: []
+native_rules:
+  - rule_id: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/crontab
+      max_mode: "0600"

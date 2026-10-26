@@ -75,12 +75,14 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | `linux_compliance_audit_disabled_rules` | `list` of `dict` | `[]` | Rules outside the rule catalogue to disable (ADR 0011): `rule_id` (full XCCDF identifier) and optional `disabled_by` (variable name, default `linux_compliance_rule_<short id>_enabled`). Reported as `disabled`, never as passing. A catalogued rule here fails the role; switch it off with its toggle. |
 
 The control toggles of ADR 0011 (`linux_compliance_<family>_enabled`, default `true`, and
-`linux_compliance_rule_<rule_short_id>_enabled`, default `"{{ linux_compliance_<family>_enabled }}"`, listed in the
-[remediation variable reference](../../docs/remediation-variables.md)) are defined in this role's defaults and argument
-specification too, generated with `make toggles` exactly as in the remediate role, and read by this role. Before the scan it
-resolves them for the catalogued rules that the profile selects, with the same code as the remediate role, and adds the
+`linux_compliance_rule_<rule_short_id>_enabled`, which follows its family toggle until it is set, listed in the
+[remediation variable reference](../../docs/remediation-variables.md)) are read by this role. The topic toggles are
+defined in its defaults and argument specification too, generated with `make toggles` exactly as in the remediate role;
+rule toggles are declared in neither role. The catalogue holds every rule of the pinned profiles, so
+`linux_compliance_auditd_enabled: false` excludes every auditd rule of the profile. Before the scan the role
+resolves the toggles for the catalogued rules that the profile selects, with the same code as the remediate role, and adds the
 rules they switch off to the disabled rules, with the controlling variable as `disabled_by`. Unknown or non-boolean
-toggles fail the role before any scan, and a topic toggle that currently excludes nothing prints a `WARNING:`. See [docs/audit.md](../../docs/audit.md#disabled-rules-adr-0011).
+toggles fail the role before any scan, and a topic toggle that excludes nothing prints a `WARNING:`. See [docs/audit.md](../../docs/audit.md#disabled-rules-adr-0011).
 
 ## Result
 

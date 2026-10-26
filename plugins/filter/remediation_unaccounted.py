@@ -16,10 +16,11 @@ version_added: "0.1.0"
 description:
   - Compares the results that the family task files of the remediate role reported with the plan
     of the filter M(freesecdev.linux_compliance.remediation_plan).
-  - Every rule whose planned action is C(apply) or C(cleanup) must have exactly one result with the
-    same rule identifier and action, and there must be no other result. Anything else means that a
-    family task was skipped, for example by C(--skip-tags), or ran twice, and the role fails instead
-    of reporting work that did not happen.
+  - Every rule whose planned action is C(apply), C(cleanup) or C(not_implemented) must have exactly
+    one result with the same rule identifier and action, and there must be no other result. The
+    dispatcher reports the C(not_implemented) results itself, from the plan. Anything else means
+    that a family task was skipped, for example by C(--skip-tags), or ran twice, and the role
+    fails instead of reporting work that did not happen.
   - Returns one message per problem; an empty list means that every planned rule is accounted for.
 author:
   - FreeSecDev (@FreeSecDev)
@@ -50,7 +51,7 @@ _value:
   elements: str
 """
 
-ACCOUNTED_ACTIONS: Final[tuple[str, ...]] = ("apply", "cleanup")
+ACCOUNTED_ACTIONS: Final[tuple[str, ...]] = ("apply", "cleanup", "not_implemented")
 MAX_MESSAGES: Final[int] = 100
 
 Key = tuple[str, str]

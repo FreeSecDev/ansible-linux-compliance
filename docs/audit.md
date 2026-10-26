@@ -478,28 +478,32 @@ before the scan (`tasks/toggles.yml`, FREES-55) from two sources:
 
 1. **The control toggles.** The role loads the rule catalogue and the family registry of the remediate role
    (`roles/remediate/vars/rules.yml`), finds every variable that matches `^linux_compliance_.+_enabled$` and resolves
-   each catalogued rule that the discovered profile selects with the filter
+   each catalogued rule that the discovered profile selects, with or without a native remediation, with the filter
    `freesecdev.linux_compliance.audit_disabled_rules`. That filter and the `remediation_plan` filter of the remediate
    role use the same code (`plugins/module_utils/compliance/toggles.py`): the rule toggle when it is set, else the
    family toggle, else on. A rule that is off is disabled with `disabled_by` set to the family toggle when the family
    toggle is off, and to the rule toggle otherwise. So `linux_compliance_auditd_enabled: false` in the inventory
-   disables every catalogued auditd rule in the audit and in remediation at once, and names that variable in both.
+   disables every auditd rule of the profile in the audit and in remediation at once, and names that variable in
+   both: the catalogue holds every rule of the pinned profiles (FREES-53, [control families](control-families.md)).
    The global remediation opt-in plays no part: the audit honours the toggles whether or not remediation runs. The
    toggles are listed in the [remediation variable reference](remediation-variables.md).
-2. **`linux_compliance_audit_disabled_rules`**, for rules that the catalogue does not contain (for example SCE checks,
-   see above). A catalogued rule in that list fails the role before any scan, because the audit would then skip a
+2. **`linux_compliance_audit_disabled_rules`**, for rules that the catalogue does not contain (for example rules of
+   user-supplied content or SCE checks, see above). A catalogued rule in that list fails the role before any scan, because the audit would then skip a
    rule that remediation still applies; the message names the toggle to use instead.
 
 The toggles are validated as in the remediate role: an unknown family or rule toggle, a name in the namespace of a
 role (for example the likely typo `linux_compliance_audit_enabled` for the auditd topic) and a value that is not a
-boolean fail the role before any host is scanned. The audit role carries the same generated toggle defaults as the
-remediate role (`make toggles` writes them into both), so a value copied from a default into the inventory, such as a
+boolean fail the role before any host is scanned. The audit role carries the same generated topic toggle defaults as
+the remediate role (`make toggles` writes them into both); rule toggles are declared in neither role and follow their
+family toggle when they are not set (ADR 0011, amendment of FREES-53). So a value copied into the inventory, such as a
 rule toggle set to `"{{ linux_compliance_<family>_enabled }}"` without the family toggle, resolves the same way in
-both roles. Only catalogued rules have toggles. A topic toggle does not disable rules of the profile that the
-catalogue does not contain, even when they concern the same topic; disable those through
+both roles. Only catalogued rules have toggles; for the pinned profiles that is every rule. A topic toggle does not
+disable rules of content that the catalogue does not describe; disable those through
 `linux_compliance_audit_disabled_rules`. When a topic toggle is `false` but no catalogued rule of its family is
-selected by the profile, the role prints a `WARNING:` that the toggle currently excludes nothing, and the remediate role
-adds the same warning to its notices. Extending the catalogue to every profile rule is FREES-53.
+selected by the profile, the role prints a `WARNING:` that the toggle excludes nothing, and the remediate role adds the
+same warning to its notices; when both roles run in one play, each prints it once. With the full catalogue this
+happens only for a family without any rule in the profile, for example `auditd` with the Ubuntu 24.04
+`cis_level1_server` profile.
 
 As ADR 0011 requires, disabled rules are excluded from the scan through a generated XCCDF 1.2 tailoring file:
 
@@ -567,15 +571,19 @@ The toggle resolution is covered by `tests/unit/plugins/module_utils/compliance/
 `tests/unit/plugins/filter/test_audit_disabled_rules.py` (a rule toggle, a topic toggle, a rule toggle that overrides
 its disabled topic, a disruptive topic, the profile restriction, explicit entries, a catalogued explicit entry, unknown,
 reserved and non-boolean toggles, and that the audit and remediation filters return the same disabled rules for the
-same toggles, also with the generated defaults templated in). `test_compliance_scan.py` checks that a rule disabled by
+same toggles, also with explicit rule toggles that follow a disabled family). `test_compliance_scan.py` checks that a rule disabled by
 a topic toggle is a `disabled` finding that names that toggle. `tests/playbooks/remediate-check-mode.yml`
 (`make test-remediate-check`) runs `tasks/toggles.yml` of the role next to the remediate role in check mode and checks
 that both resolve the same disabled rules and controlling variable for a single rule switched off, a whole topic
 switched off and a rule switched back on inside a disabled topic, and that the audit fails before any scan on
 `linux_compliance_audit_enabled`, on a string toggle and on a catalogued rule in
 `linux_compliance_audit_disabled_rules`. Further plays check that a rule toggle copied from its default without the
-family toggle resolves the same way in both roles, and that both roles warn about a topic toggle that excludes
-nothing. These playbook tests do not run a scan, because the check-mode playbook runs without `oscap` and without
+family toggle resolves the same way in both roles, that both roles warn about a topic toggle that excludes
+nothing, and, with every catalogued rule in the profile, that `linux_compliance_auditd_enabled: false` disables every
+auditd rule of the catalogue in both roles. The `oscap-integration` job runs `tests/playbooks/audit-toggles-oscap.yml`,
+which scans the runner with the Ubuntu 24.04 `cis_level2_server` profile, the auditd topic off and the crontab rule
+toggle off, and checks that every auditd rule of the profile and the crontab rule come back `disabled` with the
+expected controlling variable and counts. These playbook tests do not run a scan, because the check-mode playbook runs without `oscap` and without
 `become`. `tests/unit/roles/test_audit_tasks.py` pins the wiring that they cannot see: the `compliance_scan` task
 passes exactly `{{ __linux_compliance_audit_toggles.disabled_rules }}`, `toggles.yml` is imported after the discover
 check and before the scan, and it fails closed on errors.
