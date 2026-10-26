@@ -1,0 +1,5 @@
+---
+trivial:
+  - >-
+    CI: the SCC publishing check now covers Markdown, with a reviewed path and SHA-256 allow-list for a document
+    that must show such a command. A pull request from a fork neither restores nor saves the SCC bundle cache.

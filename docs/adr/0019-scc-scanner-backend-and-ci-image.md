@@ -4,7 +4,8 @@
 - **Date:** 2026-10-26
 - **Deciders:** lead architect; product owner (platform facts and the checklist export decision)
 - **Jira:** FREES-144 (this ADR and the CI image), FREES-145 (backend), FREES-146 (STIG to ComplianceAsCode
-  mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard)
+  mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard),
+  FREES-155 (Markdown in the publishing check, no SCC cache for pull requests from forks)
 - **Pull requests:** introduced by the pull request for FREES-144. Only the CI image, its make targets, the
   `scc-smoke` job and the repository tests are implemented. The backend, the mapping and the exporter are not.
 - **Related:** [ADR 0003](0003-native-module-remediation.md), [ADR 0004](0004-audited-process-execution.md),
@@ -324,7 +325,8 @@ version.
 SCC bundles, packages, binaries and SCC-produced files are never committed, never part of the collection tarball or a
 release, never uploaded as workflow artifacts and never pushed to any registry. The CI image exists only in the
 runner's local image store under a `localhost/` tag. The verified bundle is kept in the GitHub Actions cache of this
-repository, which the licence allows (see Context) and which hands nothing to third parties.
+repository, which the licence allows (see Context) and which hands nothing to third parties. A pull request from a
+fork neither restores nor saves that cache, because its workflow code is the fork's (FREES-155).
 
 ### 7. Version updates: manual pin bump
 
@@ -478,12 +480,20 @@ atomically with mode 0600 and escaped as untrusted data.
   - **No publishing anywhere near SCC.** Every tracked file that names an SCC identifier, and every file under
     `tools/scc/` or `extensions/ci/scc/`, must not contain a push, login, save or export command. This includes
     scripts, Makefile fragments and test modules under `tests/`, where FREES-145 will put its integration tests.
-    Only Markdown, which is not executed, and the guard's own test module, whose mutation strings are data, are
-    exempt.
+  - **Markdown is checked too (FREES-155).** A Markdown file that names an SCC identifier, or lies under
+    `tools/scc/` or `extensions/ci/scc/`, must not contain a publishing command either. A document that genuinely
+    has to show one needs a reviewed entry in `ACCEPTED_PUBLISHING_MARKDOWN` in the guard module: the path and the
+    SHA-256 of the file's exact content, as `ACCEPTED_BINARY_FINDINGS` does for binary findings. Any later change
+    to that file fails the check again until the entry is reviewed and updated. A test refuses an entry that is
+    not Markdown or no longer matches its tracked file. The list is empty: no tracked Markdown file needs one. Only
+    the guard's own test module, whose mutation strings are data, is exempt.
   - **Includes.** The Makefile may `include $(SCC_PINS)`. Every other included file must be tracked, and it is
     checked as Makefile text under the same rules. An include through a variable or pattern is refused.
-  - **No Markdown as code (FREES-152).** Markdown is exempt from the publishing check, so nothing may load or run
-    a Markdown file:
+  - **No Markdown as code (FREES-152), kept as defence in depth (FREES-155).** Nothing may load or run a Markdown
+    file. FREES-152 added this check because Markdown was then exempt from the publishing check. FREES-155 keeps
+    it after removing that exemption: an accepted Markdown file may still quote a publishing command, the check
+    costs nothing at run time, and it stops documentation from turning into a recipe by another route. It is not
+    the primary control any more; the publishing check is.
     - The Makefile and every included file may not use `$(eval`, `$(file`, `MAKEFILES`, `GNUMAKEFLAGS`,
       `.INCLUDE_DIRS` or `--eval`, or a short `-E` in `MAKEFLAGS`.
     - No workflow may name `MAKEFILES`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `.INCLUDE_DIRS` or `--eval` anywhere. This
@@ -505,7 +515,18 @@ atomically with mode 0600 and escaped as untrusted data.
   `lint-containerfile`, a pinned hadolint, first), `scc-smoke`, `scc-image-clean`.
 - **CI job `scc-smoke`.** It restores `build/scc/download` from the Actions cache, keyed by the SHA-256 of
   `scc.pins`, so a pin change starts a new entry. A restored bundle is used only after its SHA-256 matches the pin,
-  so a poisoned entry fails closed and is replaced by a fresh download. Then it runs `make scc-smoke`. It needs
+  so a poisoned entry fails closed and is replaced by a fresh download.
+  - **No cache for forks (FREES-155).** The cache step runs only when the event is not `pull_request`, or when the
+    head repository is not a fork and its full name equals `github.repository`. A pull request from a fork is a
+    run of this repository whose workflow code is the fork's. With the approval policy `first_time_contributors`,
+    a returning outside contributor's run is not held for approval. Without this condition it could read the
+    cached bundle. That adds no capability, because the bundle is a public DISA download, but the cache stays
+    for this repository's own code: a fork run downloads from DISA itself.
+  - The step uses the combined `actions/cache` action, whose save runs as the post step of the same step. A
+    skipped step has no post step, so the condition stops both the restore and the save. GitHub already scopes
+    a save from a pull request to that pull request's merge ref, so a fork could never write the entry that
+    `main` restores; the condition removes even that write. A null head repository, for example a deleted fork,
+    fails the full-name comparison, so the step is skipped. Then it runs `make scc-smoke`. It needs
   the `scc-changes` path filter and runs as described in decision 7. `ci-gate` needs both jobs. Downloads from the DISA host took under two seconds for the 139 MB bundle in local testing. The
   pull request records how the job behaved on GitHub-hosted runners. If downloads prove unreliable there, the job
   leaves `ci-gate` by an amendment, not by a silent skip.

@@ -110,8 +110,10 @@ by the `scc-smoke` job and never published.
   only, caps the size and requires the pinned size and SHA-256 of the bundle. It requires that the published checksum
   file lists the same bundle and `cscc` digests, and checks the pinned SHA-256 of the Debian package that it extracts
   by exact member name. The build runs with `--network none`, checks the package digest again, and checks the installed
-  `/opt/scc/cscc` against the published digest. A cached bundle is used only after its SHA-256 matches the pin. A pin
-  change is a reviewed pull request. The job has `contents: read` and no secrets.
+  `/opt/scc/cscc` against the published digest. A cached bundle is used only after its SHA-256 matches the pin. A pull
+  request from a fork neither restores nor saves the cache (FREES-155): the cache step runs only when the event is
+  not `pull_request` or the head repository is this repository and not a fork. A pin change is a reviewed pull
+  request. The job has `contents: read` and no secrets.
 - **Residual:** the checksum file comes from the same host as the bundle, so a compromise of that host before the pin
   is set is detected only if the reviewer checks the release against NIWC's release record. Only `cscc` has a
   published per-file digest; the bundled interpreter, libraries and content are trusted through the bundle and package
@@ -132,10 +134,12 @@ by the `scc-smoke` job and never published.
 
     This covers a workflow-level `env`, another job, another target, an indirect variable and a new script.
   - a tracked file that names an SCC identifier, or any file under `tools/scc/` or `extensions/ci/scc/`,
-    contains a push, login, save or export command. Only Markdown and the guard module are exempt, so scripts,
-    Makefile fragments and test modules under `tests/` are covered;
+    contains a push, login, save or export command. This covers scripts, Makefile fragments, test modules under
+    `tests/` and, since FREES-155, Markdown. A Markdown file that must show such a command needs a reviewed
+    `ACCEPTED_PUBLISHING_MARKDOWN` entry of its path and the SHA-256 of its exact content, so any later change
+    fails again. Only the guard module is exempt;
   - the Makefile includes any file other than `$(SCC_PINS)` that is untracked, computed, or breaks the same rules;
-  - something loads or runs an exempt Markdown file as code (FREES-152):
+  - something loads or runs a Markdown file as code (FREES-152, kept as defence in depth by FREES-155):
     - the Makefile or an included file uses `$(eval`, `$(file`, `MAKEFILES`, `GNUMAKEFLAGS`, `.INCLUDE_DIRS` or
       `--eval`;
     - a workflow, at any level, or an SCC file names `MAKEFILES`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `.INCLUDE_DIRS`
@@ -150,9 +154,14 @@ by the `scc-smoke` job and never published.
   and checklist types, and `galaxy.yml` excludes `extensions/ci` from the collection.
 - **Residual:**
   - The Actions cache holds the verified bundle. It is readable only by workflow runs of this repository, which
-    the licence permits (ADR 0019).
+    the licence permits (ADR 0019). A pull request from a fork is also a run of this repository, but its workflow
+    code is the fork's, and with the approval policy `first_time_contributors` a returning outside contributor's
+    run starts without approval. Such a run could read the cached bundle, so the cache step is skipped for fork
+    pull requests and they download from DISA themselves (FREES-155). This adds no capability either way, because
+    the bundle is a public DISA download; it keeps the cache for this repository's own code.
   - The Markdown execution check is word-level. A command assembled from variables, a renamed copy, a glob or
-    `find -exec` evades it; that is deliberate evasion, which review catches.
+    `find -exec` evades it; that is deliberate evasion, which review catches. Since FREES-155 it is a second line:
+    a Markdown file that names SCC cannot hold a publishing command unless its exact content is accepted.
 
 ### T-SCC-3: an SCC change skips the smoke test
 

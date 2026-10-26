@@ -13,13 +13,17 @@ never redistributed:
   saves or exports an image.
 
 Any tracked file that names an SCC identifier may not contain a push, login, save
-or export command. Only Markdown and this module are exempt, because their mutation
-strings and examples are data. The Makefile may include only ``$(SCC_PINS)``
-unchecked; every other included file is checked as Makefile text.
+or export command. Markdown is checked too (FREES-155). A Markdown file that must
+show such a command needs a reviewed entry in ``ACCEPTED_PUBLISHING_MARKDOWN``
+(path and SHA-256 of the exact content), so any later change fails again. Only this
+module is exempt, because its mutation strings are data. The Makefile may include
+only ``$(SCC_PINS)`` unchecked; every other included file is checked as Makefile
+text.
 
-Because Markdown is exempt, nothing may load or run a Markdown file as code
-(FREES-152). The Makefile and its includes may not use ``$(eval``, ``$(file``,
-``MAKEFILES``, ``GNUMAKEFLAGS``, ``.INCLUDE_DIRS`` or ``--eval``. No workflow, at
+As defence in depth, nothing may load or run a Markdown file as code (FREES-152),
+so even an accepted Markdown file cannot become a recipe. The Makefile and its
+includes may not use ``$(eval``, ``$(file``, ``MAKEFILES``, ``GNUMAKEFLAGS``,
+``.INCLUDE_DIRS`` or ``--eval``. No workflow, at
 any level, and no file that names an SCC identifier may name ``MAKEFILES``,
 ``MAKEFLAGS``, ``GNUMAKEFLAGS``, ``.INCLUDE_DIRS`` or ``--eval``. None of them may
 run a ``.md`` file with a shell, ``.``, ``source``, ``make -f`` or a script
@@ -120,6 +124,7 @@ SCC_TARGETS = frozenset(
 )
 GUARD_MODULE = "tests/unit/tools/test_scc_image.py"
 ACCEPTED_BINARY_FINDINGS: dict[str, str] = {}
+ACCEPTED_PUBLISHING_MARKDOWN: dict[str, str] = {}
 INCLUDE = re.compile(r"(?:-include|sinclude|include)\s+(.+)")
 PINS_INCLUDE = "include $(SCC_PINS)"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -480,6 +485,15 @@ def workflow_violations(name: str, text: str) -> list[str]:
     return violations
 
 
+def markdown_violations(relative: str, text: str) -> list[str]:
+    if not PUSH_PATTERNS.search(text):
+        return []
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if ACCEPTED_PUBLISHING_MARKDOWN.get(relative) == digest:
+        return []
+    return [f"{relative}: publishing command next to an SCC identifier"]
+
+
 def file_violations(relative: str, text: str, files: dict[str, str] | None = None) -> list[str]:
     if relative.startswith(".github/workflows/"):
         return workflow_violations(Path(relative).name, text)
@@ -487,14 +501,15 @@ def file_violations(relative: str, text: str, files: dict[str, str] | None = Non
         return makefile_violations(text, files)
     names_scc = SCC_IDENTIFIER.search(text) is not None
     in_scc_tree = relative.startswith(("tools/scc/", "extensions/ci/scc/"))
-    exempt = relative == GUARD_MODULE or relative.endswith(".md")
-    found: list[str] = []
-    if (names_scc or in_scc_tree) and not exempt:
-        found += _refused_constructs(relative, text, WORKFLOW_REFUSED)
-        if PUSH_PATTERNS.search(text):
-            found.append(f"{relative}: publishing command next to an SCC identifier")
-        elif names_scc and not relative.startswith(ALLOWED_PREFIXES):
-            found.append(f"{relative}: SCC identifier outside the allow-list")
+    if relative == GUARD_MODULE or not (names_scc or in_scc_tree):
+        return []
+    if relative.endswith(".md"):
+        return markdown_violations(relative, text)
+    found = _refused_constructs(relative, text, WORKFLOW_REFUSED)
+    if PUSH_PATTERNS.search(text):
+        found.append(f"{relative}: publishing command next to an SCC identifier")
+    elif names_scc and not relative.startswith(ALLOWED_PREFIXES):
+        found.append(f"{relative}: SCC identifier outside the allow-list")
     return found
 
 
@@ -789,10 +804,67 @@ def test_executable_code_in_allowed_trees_may_not_publish_the_image(
     assert repository_violations(files)
 
 
-def test_markdown_and_the_guard_itself_may_quote_publishing_commands() -> None:
+MARKDOWN_PUSH = "Never run `docker push localhost/freesecdev-scc:ci`.\n"
+
+
+@pytest.mark.parametrize(
+    ("relative", "text"),
+    [
+        ("docs/example.md", MARKDOWN_PUSH),
+        ("README.md", "Publish with `podman push $(SCC_IMAGE)`.\n"),
+        (".agents/skills/x/SKILL.md", "```sh\ndocker image save freesecdev-scc -o x.tar\n```\n"),
+        ("tools/scc/README.md", "skopeo copy docker-daemon:x docker://ghcr.io/x/y\n"),
+        ("extensions/ci/scc/NOTES.md", "docker buildx build --push .\n"),
+    ],
+)
+def test_markdown_may_not_quote_a_publishing_command_next_to_scc(relative: str, text: str) -> None:
     files = tracked_text()
-    files["docs/example.md"] = "Never run `docker push localhost/freesecdev-scc:ci`.\n"
+    files[relative] = text
+    assert repository_violations(files) == [
+        f"{relative}: publishing command next to an SCC identifier"
+    ]
+
+
+def test_markdown_without_an_scc_identifier_may_name_publishing_commands() -> None:
+    files = tracked_text()
+    files["docs/release.md"] = "The release runs `docker push ghcr.io/freesecdev/toolbox:1`.\n"
     assert repository_violations(files) == []
+
+
+def test_an_accepted_markdown_file_passes_only_with_its_exact_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    digest = hashlib.sha256(MARKDOWN_PUSH.encode("utf-8")).hexdigest()
+    monkeypatch.setitem(ACCEPTED_PUBLISHING_MARKDOWN, "docs/example.md", digest)
+    files = tracked_text()
+    files["docs/example.md"] = MARKDOWN_PUSH
+    assert repository_violations(files) == []
+    files["docs/example.md"] = MARKDOWN_PUSH + "Then `docker login ghcr.io`.\n"
+    assert repository_violations(files) == [
+        "docs/example.md: publishing command next to an SCC identifier"
+    ]
+    files["docs/example.md"] = MARKDOWN_PUSH
+    files["docs/copy.md"] = MARKDOWN_PUSH
+    assert repository_violations(files) == [
+        "docs/copy.md: publishing command next to an SCC identifier"
+    ]
+
+
+def test_every_accepted_markdown_entry_is_markdown_and_matches_its_tracked_file() -> None:
+    files = tracked_text()
+    stale = [
+        relative
+        for relative, digest in ACCEPTED_PUBLISHING_MARKDOWN.items()
+        if not relative.endswith(".md")
+        or hashlib.sha256(files.get(relative, "").encode("utf-8")).hexdigest() != digest
+    ]
+    assert stale == []
+
+
+def test_the_guard_itself_may_quote_publishing_commands() -> None:
+    text = tracked_text()[GUARD_MODULE]
+    assert PUSH_PATTERNS.search(text)
+    assert file_violations(GUARD_MODULE, text) == []
 
 
 def test_the_scc_job_may_not_publish_or_widen_its_permissions() -> None:
@@ -851,6 +923,27 @@ def test_the_smoke_job_builds_locally_with_read_only_permissions() -> None:
     assert len(cache) == 1
     assert cache[0]["with"]["path"] == "build/scc/download"
     assert "scc-smoke" in workflow["jobs"]["ci-gate"]["needs"]
+
+
+SCC_CACHE_CONDITION = (
+    "github.event_name != 'pull_request'"
+    " || (!github.event.pull_request.head.repo.fork"
+    " && github.event.pull_request.head.repo.full_name == github.repository)"
+)
+
+
+def test_a_fork_pull_request_neither_restores_nor_saves_the_scc_bundle_cache() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    cache = [step for step in workflow["jobs"]["scc-smoke"]["steps"] if is_cache_step(step)]
+    assert [step["if"] for step in cache] == [SCC_CACHE_CONDITION]
+    cache_actions = [
+        f"{path.name}:{name}"
+        for path in sorted(WORKFLOW_DIRECTORY.glob("*.y*ml"))
+        for name, job in yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"].items()
+        for step in job.get("steps", [])
+        if str(step.get("uses", "")).startswith("actions/cache")
+    ]
+    assert cache_actions == ["ci.yml:scc-smoke"]
 
 
 @pytest.mark.parametrize(
@@ -975,6 +1068,12 @@ def _with_payload(files: dict[str, str]) -> dict[str, str]:
     return {**files, PAYLOAD: PAYLOAD_TEXT}
 
 
+@pytest.fixture
+def accepted_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    digest = hashlib.sha256(PAYLOAD_TEXT.encode("utf-8")).hexdigest()
+    monkeypatch.setitem(ACCEPTED_PUBLISHING_MARKDOWN, PAYLOAD, digest)
+
+
 def _workflow_with(files: dict[str, str], level: str, value: str) -> str:
     workflow = cast("dict[str, object]", yaml.safe_load(files[".github/workflows/ci.yml"]))
     jobs = cast("dict[str, dict[str, object]]", workflow["jobs"])
@@ -991,8 +1090,14 @@ def _workflow_with(files: dict[str, str], level: str, value: str) -> str:
     return yaml.safe_dump(workflow)
 
 
-def test_the_markdown_payload_alone_is_accepted() -> None:
-    assert repository_violations(_with_payload(tracked_text())) == []
+def test_the_markdown_payload_fails_unless_it_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    files = _with_payload(tracked_text())
+    assert repository_violations(files) == [
+        f"{PAYLOAD}: publishing command next to an SCC identifier"
+    ]
+    digest = hashlib.sha256(PAYLOAD_TEXT.encode("utf-8")).hexdigest()
+    monkeypatch.setitem(ACCEPTED_PUBLISHING_MARKDOWN, PAYLOAD, digest)
+    assert repository_violations(files) == []
 
 
 @pytest.mark.parametrize(
@@ -1023,14 +1128,16 @@ def test_the_markdown_payload_alone_is_accepted() -> None:
         f"\ndocs-run:\n\t$(info $(shell sh {PAYLOAD}))\n",
     ],
 )
-def test_the_makefile_may_not_load_or_execute_an_exempt_markdown_file(addition: str) -> None:
+@pytest.mark.usefixtures("accepted_payload")
+def test_the_makefile_may_not_load_or_execute_an_accepted_markdown_file(addition: str) -> None:
     files = _with_payload(tracked_text())
     files["Makefile"] += addition
     assert makefile_violations(files["Makefile"], files)
     assert repository_violations(files)
 
 
-def test_an_included_makefile_may_not_load_an_exempt_markdown_file() -> None:
+@pytest.mark.usefixtures("accepted_payload")
+def test_an_included_makefile_may_not_load_an_accepted_markdown_file() -> None:
     files = _with_payload(tracked_text())
     files["Makefile"] += "\ninclude tests/ci/extra.mk\n"
     files["tests/ci/extra.mk"] = f"$(eval $(file <{PAYLOAD}))\n"
@@ -1055,7 +1162,8 @@ def test_an_included_makefile_may_not_load_an_exempt_markdown_file() -> None:
         ("run", f"make -f {PAYLOAD} release-scc"),
     ],
 )
-def test_no_workflow_may_load_or_execute_an_exempt_markdown_file(level: str, value: str) -> None:
+@pytest.mark.usefixtures("accepted_payload")
+def test_no_workflow_may_load_or_execute_an_accepted_markdown_file(level: str, value: str) -> None:
     files = _with_payload(tracked_text())
     files[".github/workflows/ci.yml"] = _workflow_with(files, level, value)
     assert workflow_violations("ci.yml", files[".github/workflows/ci.yml"])
@@ -1069,7 +1177,8 @@ def test_no_workflow_may_load_or_execute_an_exempt_markdown_file(level: str, val
         f"#!/bin/sh\nsh {PAYLOAD}\nmake scc-smoke\n",
     ],
 )
-def test_scc_scripts_may_not_load_or_execute_an_exempt_markdown_file(script: str) -> None:
+@pytest.mark.usefixtures("accepted_payload")
+def test_scc_scripts_may_not_load_or_execute_an_accepted_markdown_file(script: str) -> None:
     files = _with_payload(tracked_text())
     files["tests/ci/run.sh"] = script
     assert repository_violations(files)
