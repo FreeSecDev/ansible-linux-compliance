@@ -28,7 +28,7 @@ def base(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def directory(base: Path) -> fileio.SafeDirectory:
-    opened = fileio.open_directory(str(base / "state"), OWNER, create=True)
+    opened = fileio.open_directory(str(base / "state"), owner_uid=OWNER, create=True)
     assert opened is not None
     return opened
 
@@ -42,7 +42,7 @@ def ones(count: int) -> bytes:
 
 
 def foreign(path: Path, owner: int) -> fileio.SafeDirectory:
-    return fileio.SafeDirectory(os.open(path, os.O_RDONLY | os.O_DIRECTORY), owner)
+    return fileio.SafeDirectory(os.open(path, os.O_RDONLY | os.O_DIRECTORY), owner_uid=owner)
 
 
 def patch_os(monkeypatch: pytest.MonkeyPatch, name: str, replacement: Any) -> None:
@@ -66,7 +66,7 @@ def open_descriptors() -> int:
 
 
 def test_open_directory_creates_every_missing_component_with_mode_0700(base: Path) -> None:
-    opened = fileio.open_directory(str(base / "a" / "b"), OWNER, create=True)
+    opened = fileio.open_directory(str(base / "a" / "b"), owner_uid=OWNER, create=True)
     assert opened is not None
     opened.close()
     for part in (base / "a", base / "a" / "b"):
@@ -74,16 +74,16 @@ def test_open_directory_creates_every_missing_component_with_mode_0700(base: Pat
 
 
 def test_open_directory_reopens_an_existing_directory(base: Path) -> None:
-    first = fileio.open_directory(str(base / "a"), OWNER, create=True)
+    first = fileio.open_directory(str(base / "a"), owner_uid=OWNER, create=True)
     assert first is not None
     first.close()
-    again = fileio.open_directory(str(base / "a"), OWNER)
+    again = fileio.open_directory(str(base / "a"), owner_uid=OWNER)
     assert again is not None
     again.close()
 
 
 def test_open_directory_for_reading_does_not_create_anything(base: Path) -> None:
-    assert fileio.open_directory(str(base / "missing"), OWNER) is None
+    assert fileio.open_directory(str(base / "missing"), owner_uid=OWNER) is None
     assert not base.exists()
 
 
@@ -117,7 +117,7 @@ def test_open_directory_default_owner_accepts_root(base: Path) -> None:
     ],
 )
 def test_open_directory_rejects_unsafe_paths(path: Any) -> None:
-    assert reason_of(fileio.open_directory, path, OWNER, create=True) == "unsafe_path"
+    assert reason_of(fileio.open_directory, path, owner_uid=OWNER, create=True) == "unsafe_path"
 
 
 def test_open_directory_refuses_a_symlinked_final_directory(base: Path, tmp_path: Path) -> None:
@@ -125,16 +125,22 @@ def test_open_directory_refuses_a_symlinked_final_directory(base: Path, tmp_path
     target.mkdir(mode=0o700)
     base.mkdir()
     (base / "state").symlink_to(target)
-    assert reason_of(fileio.open_directory, str(base / "state"), OWNER, create=True) == "symlink"
-    assert reason_of(fileio.open_directory, str(base / "state"), OWNER) == "symlink"
+    assert (
+        reason_of(fileio.open_directory, str(base / "state"), owner_uid=OWNER, create=True)
+        == "symlink"
+    )
+    assert reason_of(fileio.open_directory, str(base / "state"), owner_uid=OWNER) == "symlink"
 
 
 def test_open_directory_refuses_a_symlinked_ancestor(base: Path, tmp_path: Path) -> None:
     real = tmp_path / "real"
     (real / "state").mkdir(parents=True, mode=0o700)
     base.symlink_to(real)
-    assert reason_of(fileio.open_directory, str(base / "state"), OWNER) == "symlink"
-    assert reason_of(fileio.open_directory, str(base / "state"), OWNER, create=True) == "symlink"
+    assert reason_of(fileio.open_directory, str(base / "state"), owner_uid=OWNER) == "symlink"
+    assert (
+        reason_of(fileio.open_directory, str(base / "state"), owner_uid=OWNER, create=True)
+        == "symlink"
+    )
     assert not (real / "created").exists()
 
 
@@ -143,21 +149,27 @@ def test_open_directory_refuses_a_dangling_symlink_even_when_creating(
 ) -> None:
     base.mkdir()
     (base / "state").symlink_to(tmp_path / "nowhere")
-    assert reason_of(fileio.open_directory, str(base / "state"), OWNER, create=True) == "symlink"
+    assert (
+        reason_of(fileio.open_directory, str(base / "state"), owner_uid=OWNER, create=True)
+        == "symlink"
+    )
     assert not (tmp_path / "nowhere").exists()
 
 
 def test_open_directory_refuses_a_file_in_place_of_a_directory(base: Path) -> None:
     base.mkdir()
     (base / "state").write_text("x", encoding="utf-8")
-    assert reason_of(fileio.open_directory, str(base / "state"), OWNER) == "not_directory"
-    assert reason_of(fileio.open_directory, str(base / "state" / "child"), OWNER) == "not_directory"
+    assert reason_of(fileio.open_directory, str(base / "state"), owner_uid=OWNER) == "not_directory"
+    assert (
+        reason_of(fileio.open_directory, str(base / "state" / "child"), owner_uid=OWNER)
+        == "not_directory"
+    )
 
 
 def test_open_directory_refuses_the_wrong_owner(base: Path) -> None:
     base.mkdir(mode=0o700)
     before = open_descriptors()
-    assert reason_of(fileio.open_directory, str(base), OTHER) == "wrong_owner"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OTHER) == "wrong_owner"
     assert open_descriptors() == before
 
 
@@ -166,14 +178,14 @@ def test_open_directory_refuses_group_or_world_permission_bits(base: Path, mode:
     base.mkdir()
     base.chmod(mode)
     before = open_descriptors()
-    assert reason_of(fileio.open_directory, str(base), OWNER) == "unsafe_mode"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER) == "unsafe_mode"
     assert open_descriptors() == before
 
 
 def test_open_directory_does_not_repair_an_existing_directory(base: Path) -> None:
     base.mkdir()
     base.chmod(0o755)
-    reason_of(fileio.open_directory, str(base), OWNER, create=True)
+    reason_of(fileio.open_directory, str(base), owner_uid=OWNER, create=True)
     assert stat.S_IMODE(base.stat().st_mode) == 0o755
 
 
@@ -182,7 +194,10 @@ def test_open_directory_needs_directory_relative_operations(
 ) -> None:
     no_support: set[Any] = set()
     monkeypatch.setattr(os, "supports_dir_fd", no_support)
-    assert reason_of(fileio.open_directory, str(base), OWNER, create=True) == "unsupported_platform"
+    assert (
+        reason_of(fileio.open_directory, str(base), owner_uid=OWNER, create=True)
+        == "unsupported_platform"
+    )
 
 
 def test_open_directory_reports_an_unreadable_root(
@@ -196,7 +211,7 @@ def test_open_directory_reports_an_unreadable_root(
         return real_open(path, *arguments, **keywords)
 
     patch_os(monkeypatch, "open", deny_root)
-    assert reason_of(fileio.open_directory, str(base), OWNER) == "io_error"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER) == "io_error"
 
 
 def test_creating_a_directory_survives_a_concurrent_creator(
@@ -213,7 +228,7 @@ def test_creating_a_directory_survives_a_concurrent_creator(
         return real_open(path, flags, *arguments, **keywords)
 
     patch_os(monkeypatch, "open", vanish_once)
-    opened = fileio.open_directory(str(base), OWNER, create=True)
+    opened = fileio.open_directory(str(base), owner_uid=OWNER, create=True)
     assert opened is not None
     opened.close()
 
@@ -231,11 +246,11 @@ def test_open_failures_are_reported_as_errors(base: Path, monkeypatch: pytest.Mo
         return opener
 
     patch_os(monkeypatch, "open", fail(errno.EACCES))
-    assert reason_of(fileio.open_directory, str(base), OWNER) == "io_error"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER) == "io_error"
     patch_os(monkeypatch, "open", fail(errno.ELOOP))
-    assert reason_of(fileio.open_directory, str(base), OWNER) == "symlink"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER) == "symlink"
     patch_os(monkeypatch, "open", fail(errno.EMLINK))
-    assert reason_of(fileio.open_directory, str(base), OWNER) == "symlink"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER) == "symlink"
 
 
 def test_directory_creation_failures_are_reported_as_errors(
@@ -245,7 +260,7 @@ def test_directory_creation_failures_are_reported_as_errors(
         raise PermissionError(errno.EACCES, "denied")
 
     patch_os(monkeypatch, "mkdir", deny)
-    assert reason_of(fileio.open_directory, str(base), OWNER, create=True) == "io_error"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER, create=True) == "io_error"
 
 
 def test_a_directory_that_cannot_be_reopened_after_creation_is_an_error(
@@ -262,7 +277,7 @@ def test_a_directory_that_cannot_be_reopened_after_creation_is_an_error(
         return real_open(path, *arguments, **keywords)
 
     patch_os(monkeypatch, "open", second_open_fails)
-    assert reason_of(fileio.open_directory, str(base), OWNER, create=True) == "io_error"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER, create=True) == "io_error"
 
 
 def test_a_directory_whose_mode_cannot_be_set_is_an_error(
@@ -273,7 +288,7 @@ def test_a_directory_whose_mode_cannot_be_set_is_an_error(
 
     before = open_descriptors()
     monkeypatch.setattr(os, "fchmod", deny)
-    assert reason_of(fileio.open_directory, str(base), OWNER, create=True) == "io_error"
+    assert reason_of(fileio.open_directory, str(base), owner_uid=OWNER, create=True) == "io_error"
     assert open_descriptors() == before
 
 
@@ -460,7 +475,7 @@ def test_a_file_swapped_for_a_symlink_just_before_the_open_is_refused(
 def test_a_directory_swapped_for_a_symlink_after_opening_is_not_followed(
     base: Path, tmp_path: Path
 ) -> None:
-    opened = fileio.open_directory(str(base / "state"), OWNER, create=True)
+    opened = fileio.open_directory(str(base / "state"), owner_uid=OWNER, create=True)
     assert opened is not None
     attacker = tmp_path / "attacker"
     attacker.mkdir(mode=0o700)
@@ -542,7 +557,7 @@ def test_an_interrupt_during_a_write_cleans_up_and_propagates(
 
 
 def test_new_files_must_be_owned_by_the_expected_user(base: Path) -> None:
-    opened = fileio.open_directory(str(base), OWNER, create=True)
+    opened = fileio.open_directory(str(base), owner_uid=OWNER, create=True)
     assert opened is not None
     other = foreign(base, OTHER)
     try:
@@ -562,8 +577,8 @@ def test_a_closed_directory_refuses_every_operation(directory: fileio.SafeDirect
 
 
 def test_the_lock_is_exclusive_and_times_out(base: Path) -> None:
-    first = fileio.open_directory(str(base), OWNER, create=True)
-    second = fileio.open_directory(str(base), OWNER)
+    first = fileio.open_directory(str(base), owner_uid=OWNER, create=True)
+    second = fileio.open_directory(str(base), owner_uid=OWNER)
     assert first is not None
     assert second is not None
     first.lock(1.0)
@@ -574,8 +589,8 @@ def test_the_lock_is_exclusive_and_times_out(base: Path) -> None:
 
 
 def test_the_lock_waits_for_the_holder(base: Path) -> None:
-    first = fileio.open_directory(str(base), OWNER, create=True)
-    second = fileio.open_directory(str(base), OWNER)
+    first = fileio.open_directory(str(base), owner_uid=OWNER, create=True)
+    second = fileio.open_directory(str(base), owner_uid=OWNER)
     assert first is not None
     assert second is not None
     first.lock(1.0)
@@ -602,7 +617,7 @@ def test_concurrent_locked_writers_do_not_lose_updates(base: Path) -> None:
 
     def work(index: int) -> None:
         try:
-            opened = fileio.open_directory(str(base), OWNER, create=True)
+            opened = fileio.open_directory(str(base), owner_uid=OWNER, create=True)
             assert opened is not None
             try:
                 opened.lock(30.0)
@@ -636,7 +651,7 @@ def test_a_vanishing_entry_while_classifying_a_failure_is_still_an_error(
         return real_stat(path, *arguments, **keywords)
 
     patch_os(monkeypatch, "stat", vanish)
-    assert reason_of(fileio.open_directory, str(base / "state"), OWNER) == "not_directory"
+    assert reason_of(fileio.open_directory, str(base / "state"), owner_uid=OWNER) == "not_directory"
 
 
 def temporary_name(digits: str = "0123456789abcdef") -> str:
@@ -673,7 +688,7 @@ def test_sweep_removes_only_stale_temporary_files_of_the_expected_shape(
 
 
 def test_sweep_leaves_files_of_another_owner(base: Path) -> None:
-    opened = fileio.open_directory(str(base), OWNER, create=True)
+    opened = fileio.open_directory(str(base), owner_uid=OWNER, create=True)
     assert opened is not None
     (base / temporary_name()).write_text("x", encoding="utf-8")
     other = foreign(base, OTHER)
@@ -729,7 +744,10 @@ def test_missing_open_flags_fail_closed_with_a_structured_error(
     base: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delattr(os, "O_NOFOLLOW")
-    assert reason_of(fileio.open_directory, str(base), OWNER, create=True) == "unsupported_platform"
+    assert (
+        reason_of(fileio.open_directory, str(base), owner_uid=OWNER, create=True)
+        == "unsupported_platform"
+    )
 
 
 def test_a_missing_fcntl_module_fails_closed_with_a_structured_error(
@@ -741,7 +759,7 @@ def test_a_missing_fcntl_module_fails_closed_with_a_structured_error(
     assert namespace["_flock_supported"]() is False
     error = namespace["SafeFileError"]
     with pytest.raises(error) as excinfo:
-        namespace["open_directory"](str(base), OWNER, create=True)
+        namespace["open_directory"](str(base), owner_uid=OWNER, create=True)
     assert excinfo.value.reason == "unsupported_platform"
     assert not base.exists()
     with pytest.raises(error) as excinfo:

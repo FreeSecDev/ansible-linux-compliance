@@ -216,7 +216,16 @@ YAML and Python files (ADR 0005):
   with a justification when a new module is genuinely needed. Since FREES-129 the import allow-list holds only modules
   that plugins use: `collections` (bare), `functools` and `itertools` were removed, `collections.abc` stays. A new
   keyword-only parameter of plugin code must be classified in `tests/unit/tools/test_check_repo_rules_followups.py`
-  as a test seam (and then added to `BANNED_KEYWORDS`) or as a production keyword. Files are opened through
+  as a test seam (and then added to `BANNED_KEYWORDS`) or as a production keyword. Since FREES-137 every test seam is
+  keyword-only: a parameter named like a banned keyword that a positional argument can fill (positional,
+  positional-only, `*args` or `**kwargs`) fails the guard and the classification test, so `audit.plan(job, 1000)` or
+  `process.resolve_executable("oscap", ("/tmp",), 1000)` cannot bypass the keyword ban (the latter's directories
+  parameter is now the banned `trusted_dirs`). Only the files in `SEAM_OWNERS` of the guard (`audit.py`, `catalog.py`,
+  `fileio.py`, `ledger.py`, `openscap.py`; `process.py` is exempt from the guard) may define a seam, and they may pass a seam on
+  only unchanged, as `owner_uid=owner_uid` from the keyword-only parameter of the enclosing function or as
+  `owner_uid=self._owner_uid` in a class whose `__init__` takes the keyword-only seam; `self._<seam>` may only be
+  assigned in `__init__` and never through `setattr`, `delattr` or `object.__setattr__`. Every other banned keyword
+  in a call still fails. Files are opened through
   `xmlsafe.RegularFile`; the open helper behind it is private (`_open_regular`), so no other plugin file can call it.
   The standard library name sets of the guard (`STDLIB_MODULE_NAMES`, `KNOWN_SUBMODULE_ATTRIBUTES`) are generated:
   `make name-sets` runs `tools/lint/name_set_probe.py` in a clean interpreter of every version from 3.9 to 3.15,
@@ -239,6 +248,20 @@ YAML and Python files (ADR 0005):
     `include_role` and `import_role`, must end in `.yml` or `.yaml`, because Ansible would also load a `.json` or
     suffix-less file that the check never scans. A repository test keeps every file below a `tasks` or `handlers`
     directory a YAML file, which covers the default `main` entry point of a role.
+  - Since FREES-137 these targets must also be relative paths without a `..` component and must not be templated or
+    start with `/` or `~`, because such a target could load an unscanned file from outside the repository. The one
+    templated form is `{{ role_path }}/tasks/` followed by either a literal relative path
+    (`{{ role_path }}/tasks/file_permissions_apply.yml`) or exactly one variable of `DISPATCH_VARIABLES` and `.yml`.
+    The only dispatch variable is `__linux_compliance_remediate_family.name`, the family name of the remediation plan,
+    which the `remediation_plan` filter validates against `FAMILY_PATTERN` (`[a-z][a-z0-9_]{0,63}`), so it can
+    never hold `/`, `.` or a template; the remediate role asserts that the plan has no errors before it dispatches.
+    Filters, other variables and `tasks_from: "{{ x }}.yml"` stay denied; a test playbook that chose a helper by
+    template now uses one static include per helper with `when`.
+  - Role names of `include_role` and `import_role` (mapping and free-form `name=`) and of the `roles` of a play
+    (`- name`, `- role: name` or `- name: name`) must be plain or fully qualified names: a templated name or a path
+    such as `/srv/roles/x` or `../x` is denied. A free-form role include may not be templated at all.
+  - A templated task key (`"{{ m }}": cmd`) is denied as defence in depth; `ansible-playbook --syntax-check`
+    rejects it too. Templated keys inside module parameters and `vars` are data and stay allowed.
   - A document with any other root (a mapping such as `molecule.yml`, a vars file or a workflow) can never be loaded as
     plays or tasks; it stays checked deny-by-default for banned keys and `action` values at any depth. A `redirect` to a
     banned module (`plugin_routing` in `meta/runtime.yml`) is denied there too, because it would make another name an

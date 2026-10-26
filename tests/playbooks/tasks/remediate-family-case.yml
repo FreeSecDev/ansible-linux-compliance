@@ -7,13 +7,29 @@
       families:
         - "{{ case_family }}"
 
-- name: "Family case | Run the helper with a synthetic planned rule | {{ case.name }}"
+- name: "Family case | Only the apply and cleanup helpers exist | {{ case.name }}"
+  ansible.builtin.assert:
+    that:
+      - case.helper in ['apply', 'cleanup']
+    quiet: true
+
+- name: "Family case | Run the apply helper with a synthetic planned rule | {{ case.name }}"
   ansible.builtin.include_role:
     name: freesecdev.linux_compliance.remediate
-    tasks_from: "file_permissions_{{ case.helper }}.yml"
+    tasks_from: file_permissions_apply.yml
   vars:
     __linux_compliance_remediate_rule: "{{ case_rule }}"
     __linux_compliance_remediate_family: "{{ case_family }}"
+  when: case.helper == 'apply'
+
+- name: "Family case | Run the cleanup helper with a synthetic planned rule | {{ case.name }}"
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: file_permissions_cleanup.yml
+  vars:
+    __linux_compliance_remediate_rule: "{{ case_rule }}"
+    __linux_compliance_remediate_family: "{{ case_family }}"
+  when: case.helper == 'cleanup'
 
 - name: "Family case | Check the result and which tasks ran | {{ case.name }}"
   vars:

@@ -132,7 +132,7 @@ init-hook = "import sys; sys.path.insert(0, 'build/collections')"
 
 [tool.pylint.format]
 max-line-length = 100
-max-module-lines = 1500
+max-module-lines = 1700
 
 [tool.pylint."messages control"]
 enable = ["useless-suppression"]
@@ -148,7 +148,7 @@ disable = [
 
 [tool.freesecdev.pylint-justifications]
 wrong-import-position = "Not disabled. ansible-test sanity validate-modules requires imports below the DOCUMENTATION, EXAMPLES and RETURN blocks, so make lint-pylint runs Pylint twice: over tools, tests and plugins with the rule enabled and plugins/modules ignored, and over plugins/modules alone with the rule disabled. A unit test fails if the rule enters the global disable list (FREES-56)."
-max-module-lines = "The findings model is one module by design (ADR 0013); Ruff formatting expands every call over several lines, and the entities share private validators."
+max-module-lines = "The findings model is one module by design (ADR 0013); Ruff formatting expands every call over several lines, and the entities share private validators. The repository guard tools/lint/check_repo_rules.py is one stand-alone script by design (ADR 0004): make lint-repo and pre-commit run it by path, and its rules share the AST and YAML node helpers (FREES-137)."
 duplicate-code = "Two small standalone tools share the fence-marker constant; extracting a shared module would add coupling for a three-line constant."
 too-few-public-methods = "Frozen slotted dataclasses are deliberate value objects."
 missing-function-docstring = "Applies to test functions, whose names describe them; public tools code is enforced by Ruff D rules."

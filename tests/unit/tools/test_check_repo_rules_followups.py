@@ -206,9 +206,48 @@ def test_every_keyword_only_plugin_parameter_is_classified() -> None:
     assert PRODUCTION_KEYWORDS.isdisjoint(rules.BANNED_KEYWORDS)
 
 
+def _positional_parameters(path: Path) -> set[str]:
+    tree = ast.parse(path.read_bytes(), filename=str(path))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            arguments = node.args
+            optional = (arguments.vararg, arguments.kwarg)
+            names.update(argument.arg for argument in (*arguments.posonlyargs, *arguments.args))
+            names.update(argument.arg for argument in optional if argument is not None)
+    return names
+
+
+def test_no_plugin_parameter_takes_a_seam_positionally() -> None:
+    found: dict[str, set[str]] = {}
+    for path in sorted((rules.REPO_ROOT / rules.PLUGINS_DIRECTORY).rglob("*.py")):
+        for name in _positional_parameters(path) & rules.BANNED_KEYWORDS:
+            found.setdefault(name, set()).add(path.name)
+    assert found == {}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def f(path, owner_uid=0):\n    return path\n",
+        "def f(owner_uid, /):\n    return owner_uid\n",
+        "def f(*limits):\n    return limits\n",
+        "def f(**registry):\n    return registry\n",
+        "f = lambda clock: clock\n",
+    ],
+)
+def test_the_classification_detects_a_positional_seam(tmp_path: Path, source: str) -> None:
+    path = tmp_path / "plugin.py"
+    path.write_text(source, encoding="utf-8")
+    assert len(_positional_parameters(path) & rules.BANNED_KEYWORDS) == 1
+    assert not _keyword_only_parameters(path) & rules.BANNED_KEYWORDS
+
+
 def test_the_test_seams_of_the_plugins_are_banned_keywords() -> None:
     seams = {
         "plugins/module_utils/compliance/process.py": {"policies", "trusted_dirs", "owner_uid"},
+        "plugins/module_utils/compliance/catalog.py": {"owner_uid"},
+        "plugins/module_utils/compliance/fileio.py": {"owner_uid"},
         "plugins/module_utils/compliance/ledger.py": {"state_dir", "owner_uid", "lock_timeout"},
         "plugins/module_utils/compliance/openscap.py": {"runner", "clock", "limits"},
         "plugins/module_utils/compliance/audit.py": {"owner_uid", "registry", "clock"},

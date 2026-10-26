@@ -560,7 +560,7 @@ def test_an_interrupted_write_leaves_the_old_ledger_intact(
 def test_lock_contention_times_out_without_changing_anything(state: Path) -> None:
     store = ledger.Ledger(state_dir=str(state), owner_uid=OWNER, lock_timeout=0.1)
     store.record(make_entry())
-    holder = fileio.open_directory(str(state), OWNER)
+    holder = fileio.open_directory(str(state), owner_uid=OWNER)
     assert holder is not None
     holder.lock(1.0)
     try:

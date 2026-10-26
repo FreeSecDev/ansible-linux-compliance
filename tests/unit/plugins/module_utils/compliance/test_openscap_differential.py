@@ -86,15 +86,17 @@ def observe_fixture(
     observed = {
         "text": outcome(lambda: openscap.parse_results(document)),
         "text-max-elements-5": outcome(
-            lambda: openscap.parse_results(document, openscap.XmlLimits(max_elements=5))
+            lambda: openscap.parse_results(document, limits=openscap.XmlLimits(max_elements=5))
         ),
         "text-max-depth-3": outcome(
-            lambda: openscap.parse_results(document, openscap.XmlLimits(max_depth=3))
+            lambda: openscap.parse_results(document, limits=openscap.XmlLimits(max_depth=3))
         ),
         "file": outcome(lambda: openscap.read_results(str(path), LARGE)),
         "file-one-byte-short": outcome(lambda: openscap.read_results(str(path), len(data) - 1)),
         "file-max-elements-5": outcome(
-            lambda: openscap.read_results(str(path), LARGE, openscap.XmlLimits(max_elements=5))
+            lambda: openscap.read_results(
+                str(path), LARGE, limits=openscap.XmlLimits(max_elements=5)
+            )
         ),
     }
     for size in CHUNK_SIZES:

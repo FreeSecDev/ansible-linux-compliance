@@ -278,7 +278,7 @@ class _Builder:
             frame.text.append(data)
 
 
-def _bounds(limits: XmlLimits | None) -> xmlsafe.XmlBounds:
+def _bounds(*, limits: XmlLimits | None) -> xmlsafe.XmlBounds:
     chosen = XmlLimits() if limits is None else limits
     return xmlsafe.XmlBounds(max_elements=chosen.max_elements, max_depth=chosen.max_depth)
 
@@ -358,12 +358,13 @@ def _extract(builder: _Builder) -> ParsedResults:
     )
 
 
-def parse_results(document: str, limits: XmlLimits | None = None) -> ParsedResults:
+def parse_results(document: str, *, limits: XmlLimits | None = None) -> ParsedResults:
     """Parse and map an XCCDF 1.2 results document held in memory.
 
     Args:
         document: Document text.
-        limits: Element and depth bounds; the defaults apply when omitted.
+        limits: Test-only, keyword-only element and depth bounds; the defaults
+            apply when omitted.
 
     Returns:
         The extracted benchmark, profile, times and findings. Result values go
@@ -376,13 +377,13 @@ def parse_results(document: str, limits: XmlLimits | None = None) -> ParsedResul
     """
     builder = _Builder()
     try:
-        xmlsafe.parse_text(document, builder, _bounds(limits))
+        xmlsafe.parse_text(document, builder, _bounds(limits=limits))
     except xmlsafe.XmlSafetyError as error:
         raise XccdfParseError(str(error)) from error
     return _extract(builder)
 
 
-def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> ParsedResults:
+def read_results(path: str, max_bytes: int, *, limits: XmlLimits | None = None) -> ParsedResults:
     """Stream a results file through the parser with bounds.
 
     The file must be a regular file that is not a symlink and at most
@@ -399,7 +400,7 @@ def read_results(path: str, max_bytes: int, limits: XmlLimits | None = None) -> 
         XccdfParseError: For every rejection, including unreadable files.
     """
     builder = _Builder()
-    bounds = _bounds(limits)
+    bounds = _bounds(limits=limits)
     try:
         with xmlsafe.RegularFile(path, max_bytes, subject=RESULTS_SUBJECT) as handle:
             chunks = xmlsafe.iter_handle_chunks(handle, max_bytes, subject=RESULTS_SUBJECT)
@@ -617,7 +618,9 @@ class OpenScapBackend:
             return _Failure(model.ScanStatus.FAILED, f"{message}: {detail}" if detail else message)
         try:
             parsed = read_results(
-                str(Path(output) / RESULTS_FILE_NAME), self._settings.max_result_bytes, self._limits
+                str(Path(output) / RESULTS_FILE_NAME),
+                self._settings.max_result_bytes,
+                limits=self._limits,
             )
         except XccdfParseError as error:
             return _Failure(model.ScanStatus.FAILED, _clean(f"results rejected: {error}"))
@@ -725,6 +728,11 @@ def create_backend(settings: scanner.ScanSettings) -> OpenScapBackend:
     return OpenScapBackend(settings)
 
 
-def register(registry: scanner.BackendRegistry) -> None:
-    """Register the OpenSCAP backend in ``registry`` under ``openscap``."""
-    registry.register(BACKEND_NAME, create_backend)
+def register(target: scanner.BackendRegistry) -> None:
+    """Register the OpenSCAP backend in ``target`` under ``openscap``.
+
+    ``target`` is the production registry being built, not a test seam, so it is
+    not named ``registry``: that name is reserved for the banned seam of
+    :class:`audit.Auditor`.
+    """
+    target.register(BACKEND_NAME, create_backend)

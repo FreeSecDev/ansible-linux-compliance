@@ -36,7 +36,7 @@ def shell(script: str, *args: str, timeout: float = FAST, **fields: Any) -> proc
 
 
 def resolve(name: Any, directories: Any) -> str:
-    return process.resolve_executable(name, directories, OWNER)
+    return process.resolve_executable(name, trusted_dirs=directories, owner_uid=OWNER)
 
 
 def execute(spec: process.CommandSpec, **keywords: Any) -> process.CommandResult:
@@ -247,7 +247,7 @@ class TestPolicy:
             ),
             1,
         )
-        policy = process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+        policy = process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES)
         assert policy.name == "oscap"
 
     def test_accepts_the_openscap_backend_command_line(self) -> None:
@@ -265,7 +265,7 @@ class TestPolicy:
             "/srv/content/ds.xml",
         )
         spec = process.CommandSpec("oscap", arguments, 1)
-        assert process.check_policy(spec, process.ALLOWED_EXECUTABLES).name == "oscap"
+        assert process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES).name == "oscap"
 
     @pytest.mark.parametrize(
         "extra",
@@ -274,7 +274,7 @@ class TestPolicy:
     def test_tailoring_support_does_not_open_other_options(self, extra: tuple[str, ...]) -> None:
         spec = process.CommandSpec("oscap", ("xccdf", "eval", *extra), 1)
         with pytest.raises(process.ProcessPolicyError):
-            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+            process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES)
 
     @pytest.mark.parametrize(
         "argument",
@@ -294,7 +294,7 @@ class TestPolicy:
     def test_rejects_options_that_are_not_allow_listed(self, argument: str) -> None:
         spec = process.CommandSpec("oscap", ("xccdf", "eval", argument), 1)
         with pytest.raises(process.ProcessPolicyError, match="option is"):
-            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+            process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES)
 
     def test_remote_fetching_is_forbidden_even_if_a_policy_lists_it(self) -> None:
         policies = {
@@ -304,14 +304,14 @@ class TestPolicy:
         }
         spec = process.CommandSpec("oscap", ("--fetch-remote-resources",), 1)
         with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
-            process.check_policy(spec, policies)
+            process.check_policy(spec, policies=policies)
 
     def test_option_value_that_looks_like_an_option_is_rejected(self) -> None:
         spec = process.CommandSpec(
             "oscap", ("xccdf", "eval", "--profile", "--fetch-remote-resources"), 1
         )
         with pytest.raises(process.ProcessPolicyError, match="option is forbidden"):
-            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+            process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES)
 
     def test_policy_rejection_happens_before_any_resolution(self, trusted: Path) -> None:
         spec = process.CommandSpec("oscap", ("xccdf", "eval", "--fetch-remote-resources"), 1)
@@ -848,7 +848,7 @@ class TestSubcommands:
     )
     def test_permitted_commands(self, args: tuple[str, ...]) -> None:
         spec = process.CommandSpec("oscap", args, 1)
-        assert process.check_policy(spec, process.ALLOWED_EXECUTABLES).name == "oscap"
+        assert process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES).name == "oscap"
 
     @pytest.mark.parametrize(
         "args",
@@ -878,7 +878,7 @@ class TestSubcommands:
     def test_rejected_commands(self, args: tuple[str, ...]) -> None:
         spec = process.CommandSpec("oscap", args, 1)
         with pytest.raises(process.ProcessPolicyError):
-            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+            process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES)
 
     def test_remediation_is_refused_before_resolution(self, trusted: Path) -> None:
         spec = process.CommandSpec("oscap", ("xccdf", "remediate", "a.xml"), 1)
@@ -890,12 +890,12 @@ class TestSubcommands:
         for args in (("remediate",), ("--remediate",), ("generate", "fix")):
             spec = process.CommandSpec("true", args, 1)
             with pytest.raises(process.ProcessPolicyError, match="forbidden"):
-                process.check_policy(spec, policies)
+                process.check_policy(spec, policies=policies)
 
     def test_a_policy_without_commands_permits_nothing(self) -> None:
         policies = {"true": process.ExecutablePolicy("true")}
         with pytest.raises(process.ProcessPolicyError, match="not allow-listed"):
-            process.check_policy(process.CommandSpec("true", (), 1), policies)
+            process.check_policy(process.CommandSpec("true", (), 1), policies=policies)
 
 
 class TestHardening:
@@ -909,7 +909,7 @@ class TestHardening:
     def test_rejects_a_directory_with_the_wrong_owner(self, trusted: Path) -> None:
         make_tool(trusted)
         with pytest.raises(process.ProcessPolicyError, match="directory has the wrong owner"):
-            process.resolve_executable("tool", [str(trusted)], OWNER + 1)
+            process.resolve_executable("tool", trusted_dirs=[str(trusted)], owner_uid=OWNER + 1)
 
     def test_rejects_a_file_with_the_wrong_owner(
         self, trusted: Path, monkeypatch: pytest.MonkeyPatch
@@ -1014,7 +1014,7 @@ class TestImportTimePolicy:
         with pytest.raises(process.ProcessPolicyError, match="forbidden"):
             process.check_policy(
                 remediate,
-                dict(
+                policies=dict(
                     POLICIES,
                     oscap=process.ExecutablePolicy(
                         "oscap", frozenset({"--remediate"}), command_prefixes=ANY_ARGUMENTS
@@ -1033,7 +1033,7 @@ class TestImportTimePolicy:
         }
         spec = process.CommandSpec("oscap", ("--fetch-remote-resources",), FAST)
         with pytest.raises(process.ProcessPolicyError, match="forbidden"):
-            process.check_policy(spec, policies)
+            process.check_policy(spec, policies=policies)
 
     def test_the_bound_policy_is_a_copy(self) -> None:
         policies = {"true": POLICIES["true"]}

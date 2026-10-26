@@ -82,7 +82,7 @@ def text(name: str, folder: Path = XCCDF) -> str:
 
 def parse(name: str, folder: Path = XCCDF, **limits: Any) -> openscap.ParsedResults:
     return openscap.parse_results(
-        text(name, folder), openscap.XmlLimits(**limits) if limits else None
+        text(name, folder), limits=openscap.XmlLimits(**limits) if limits else None
     )
 
 
@@ -422,9 +422,9 @@ class TestHardening:
     def test_depth_bound_is_exact(self) -> None:
         document = text("deep-nesting.xml", ADVERSARIAL)
         with pytest.raises(openscap.XccdfParseError, match="exactly one TestResult"):
-            openscap.parse_results(document, openscap.XmlLimits(max_depth=201))
+            openscap.parse_results(document, limits=openscap.XmlLimits(max_depth=201))
         with pytest.raises(openscap.XccdfParseError, match="nested deeper than 200"):
-            openscap.parse_results(document, openscap.XmlLimits(max_depth=200))
+            openscap.parse_results(document, limits=openscap.XmlLimits(max_depth=200))
 
     def test_element_count_is_bounded(self) -> None:
         with pytest.raises(openscap.XccdfParseError, match="more than 5 elements"):
@@ -434,7 +434,7 @@ class TestHardening:
     def test_wide_documents_are_bounded_too(self) -> None:
         wide = f'<Benchmark xmlns="{openscap.XCCDF_NAMESPACE}">' + "<Group/>" * 50 + "</Benchmark>"
         with pytest.raises(openscap.XccdfParseError, match="more than 10 elements"):
-            openscap.parse_results(wide, openscap.XmlLimits(max_elements=10))
+            openscap.parse_results(wide, limits=openscap.XmlLimits(max_elements=10))
 
     def test_defaults_are_documented_values(self) -> None:
         limits = openscap.XmlLimits()
@@ -579,7 +579,7 @@ class TestReadResults:
     def test_limits_are_passed_through(self) -> None:
         with pytest.raises(openscap.XccdfParseError, match="more than 3 elements"):
             openscap.read_results(
-                str(XCCDF / "all-pass.xml"), 1_000_000, openscap.XmlLimits(max_elements=3)
+                str(XCCDF / "all-pass.xml"), 1_000_000, limits=openscap.XmlLimits(max_elements=3)
             )
 
 
@@ -703,7 +703,7 @@ class TestCompletedScans:
         )
         assert evaluation.timeout_seconds == 60.0
         for spec in setup.runner.specs:
-            process.check_policy(spec, process.ALLOWED_EXECUTABLES)
+            process.check_policy(spec, policies=process.ALLOWED_EXECUTABLES)
         joined = " ".join(evaluation.args)
         assert "remediate" not in joined
         assert "--fetch-remote-resources" not in joined
@@ -717,7 +717,7 @@ class TestCompletedScans:
         position = arguments.index("--tailoring-file")
         assert arguments[position + 1] == str(tailoring)
         assert position == arguments.index(PROFILE) + 1
-        process.check_policy(setup.runner.specs[1], process.ALLOWED_EXECUTABLES)
+        process.check_policy(setup.runner.specs[1], policies=process.ALLOWED_EXECUTABLES)
 
     def test_output_directory_is_created_private_and_fresh(self, tmp_path: Path) -> None:
         setup = harness(tmp_path)

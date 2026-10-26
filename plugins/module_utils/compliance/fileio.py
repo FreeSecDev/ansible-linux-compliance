@@ -196,7 +196,7 @@ def _open_child(parent: int, name: str, *, create: bool) -> int | None:
     return descriptor
 
 
-def _check_directory(descriptor: int, owner_uid: int) -> None:
+def _check_directory(descriptor: int, *, owner_uid: int) -> None:
     info = os.fstat(descriptor)
     if info.st_uid != owner_uid:
         _fail("wrong_owner", f"the state directory is not owned by uid {owner_uid}")
@@ -218,13 +218,13 @@ def _walk(parts: tuple[str, ...], *, create: bool) -> int | None:
 
 
 def open_directory(
-    path: str, owner_uid: int = ROOT_UID, *, create: bool = False
+    path: str, *, owner_uid: int = ROOT_UID, create: bool = False
 ) -> SafeDirectory | None:
     """Open a private state directory without following any symlink.
 
     Args:
         path: Absolute path of the directory.
-        owner_uid: Required owner. Only tests change the default, root.
+        owner_uid: Required owner. Keyword-only; only tests change the default, root.
         create: Create missing components with mode ``0700``.
 
     Returns:
@@ -243,17 +243,17 @@ def open_directory(
     if descriptor is None:
         return None
     try:
-        _check_directory(descriptor, owner_uid)
+        _check_directory(descriptor, owner_uid=owner_uid)
     except BaseException:
         os.close(descriptor)
         raise
-    return SafeDirectory(descriptor, owner_uid)
+    return SafeDirectory(descriptor, owner_uid=owner_uid)
 
 
 class SafeDirectory:
     """A directory descriptor with confined, atomic file operations."""
 
-    def __init__(self, descriptor: int, owner_uid: int) -> None:
+    def __init__(self, descriptor: int, *, owner_uid: int) -> None:
         """Take ownership of an already vetted directory descriptor."""
         self._descriptor: int | None = descriptor
         self._owner_uid = owner_uid

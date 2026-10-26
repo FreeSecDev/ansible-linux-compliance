@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    Repository guard: every test seam of the plugin code is keyword-only and may be defined and forwarded unchanged
+    only by its owner file, so a positional argument can no longer pass a seam value past the keyword ban. Include and
+    import targets, tasks_from and handlers_from must be relative YAML paths without ``..`` that are not templated,
+    except ``{{ role_path }}/tasks/`` with a literal path or the validated remediation family name; role names must
+    be plain or fully qualified names, and templated task keys are denied.
