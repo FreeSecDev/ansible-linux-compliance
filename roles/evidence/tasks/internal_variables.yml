@@ -1,0 +1,141 @@
+---
+- name: Evidence | Reset the internal facts of the role
+  ansible.builtin.set_fact:
+    __linux_compliance_evidence_dir: __linux_compliance_unset__
+    __linux_compliance_evidence_directories: __linux_compliance_unset__
+    __linux_compliance_evidence_documents: __linux_compliance_unset__
+    __linux_compliance_evidence_existing: __linux_compliance_unset__
+    __linux_compliance_evidence_fetched: __linux_compliance_unset__
+    __linux_compliance_evidence_host_dir: __linux_compliance_unset__
+    __linux_compliance_evidence_manifest: __linux_compliance_unset__
+    __linux_compliance_evidence_on_host: __linux_compliance_unset__
+    __linux_compliance_evidence_plan: __linux_compliance_unset__
+    __linux_compliance_evidence_root: __linux_compliance_unset__
+    __linux_compliance_evidence_uid: __linux_compliance_unset__
+    __linux_compliance_evidence_written: __linux_compliance_unset__
+  tags:
+    - always
+
+- name: Evidence | Refuse internal variables supplied from outside the role
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_evidence_dir == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_directories == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_documents == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_existing == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_fetched == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_host_dir == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_manifest == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_on_host == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_plan == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_root == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_uid == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_written == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_collected == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_host_observed == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_no_audit == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_no_evidence == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_observed == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_preview == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_summary == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_targets == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_unsafe == '__linux_compliance_unset__'
+      - >-
+        __linux_compliance_evidence_collection_version is not defined or __linux_compliance_evidence_collection_version
+        == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_evidence_collection_version']
+    fail_msg: >-
+      An internal variable of the evidence role (__linux_compliance_evidence_*) is set from outside the role: by a role
+      parameter, an include parameter (vars of include_role or include_tasks) or an extra variable (-e), which outrank
+      every fact the role sets. The failed assertion names it. Remove it and pass only the documented linux_compliance_*
+      variables. Nothing was scanned, changed or compared.
+    quiet: true
+  vars:
+    __linux_compliance_evidence_collected: __linux_compliance_unset__
+    __linux_compliance_evidence_host_observed: __linux_compliance_unset__
+    __linux_compliance_evidence_no_audit: __linux_compliance_unset__
+    __linux_compliance_evidence_no_evidence: __linux_compliance_unset__
+    __linux_compliance_evidence_observed: __linux_compliance_unset__
+    __linux_compliance_evidence_preview: __linux_compliance_unset__
+    __linux_compliance_evidence_summary: __linux_compliance_unset__
+    __linux_compliance_evidence_targets: __linux_compliance_unset__
+    __linux_compliance_evidence_unsafe: __linux_compliance_unset__
+  tags:
+    - always
+
+- name: Evidence | Reset the internal facts of the role to the second sentinel
+  ansible.builtin.set_fact:
+    __linux_compliance_evidence_dir: __linux_compliance_unset_again__
+    __linux_compliance_evidence_directories: __linux_compliance_unset_again__
+    __linux_compliance_evidence_documents: __linux_compliance_unset_again__
+    __linux_compliance_evidence_existing: __linux_compliance_unset_again__
+    __linux_compliance_evidence_fetched: __linux_compliance_unset_again__
+    __linux_compliance_evidence_host_dir: __linux_compliance_unset_again__
+    __linux_compliance_evidence_manifest: __linux_compliance_unset_again__
+    __linux_compliance_evidence_on_host: __linux_compliance_unset_again__
+    __linux_compliance_evidence_plan: __linux_compliance_unset_again__
+    __linux_compliance_evidence_root: __linux_compliance_unset_again__
+    __linux_compliance_evidence_uid: __linux_compliance_unset_again__
+    __linux_compliance_evidence_written: __linux_compliance_unset_again__
+  tags:
+    - always
+
+- name: Evidence | Refuse internal variables supplied from outside the role as the first sentinel
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_evidence_dir == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_directories == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_documents == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_existing == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_fetched == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_host_dir == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_manifest == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_on_host == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_plan == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_root == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_uid == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_written == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_collected == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_host_observed == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_no_audit == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_no_evidence == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_observed == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_preview == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_summary == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_targets == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_unsafe == '__linux_compliance_unset_again__'
+    fail_msg: >-
+      An internal variable of the evidence role (__linux_compliance_evidence_*) is set from outside the role: by a role
+      parameter, an include parameter (vars of include_role or include_tasks) or an extra variable (-e), which outrank
+      every fact the role sets. The failed assertion names it. Remove it and pass only the documented linux_compliance_*
+      variables. Nothing was scanned, changed or compared.
+    quiet: true
+  vars:
+    __linux_compliance_evidence_collected: __linux_compliance_unset_again__
+    __linux_compliance_evidence_host_observed: __linux_compliance_unset_again__
+    __linux_compliance_evidence_no_audit: __linux_compliance_unset_again__
+    __linux_compliance_evidence_no_evidence: __linux_compliance_unset_again__
+    __linux_compliance_evidence_observed: __linux_compliance_unset_again__
+    __linux_compliance_evidence_preview: __linux_compliance_unset_again__
+    __linux_compliance_evidence_summary: __linux_compliance_unset_again__
+    __linux_compliance_evidence_targets: __linux_compliance_unset_again__
+    __linux_compliance_evidence_unsafe: __linux_compliance_unset_again__
+  tags:
+    - always
+
+- name: Evidence | Reset the internal facts of the role to the first sentinel again
+  ansible.builtin.set_fact:
+    __linux_compliance_evidence_dir: __linux_compliance_unset__
+    __linux_compliance_evidence_directories: __linux_compliance_unset__
+    __linux_compliance_evidence_documents: __linux_compliance_unset__
+    __linux_compliance_evidence_existing: __linux_compliance_unset__
+    __linux_compliance_evidence_fetched: __linux_compliance_unset__
+    __linux_compliance_evidence_host_dir: __linux_compliance_unset__
+    __linux_compliance_evidence_manifest: __linux_compliance_unset__
+    __linux_compliance_evidence_on_host: __linux_compliance_unset__
+    __linux_compliance_evidence_plan: __linux_compliance_unset__
+    __linux_compliance_evidence_root: __linux_compliance_unset__
+    __linux_compliance_evidence_uid: __linux_compliance_unset__
+    __linux_compliance_evidence_written: __linux_compliance_unset__
+  tags:
+    - always

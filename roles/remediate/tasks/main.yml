@@ -14,6 +14,19 @@
   tags:
     - linux_compliance_remediate_guard
 
+- name: Remediate | Check that the guard is armed with the boolean false
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_dispatched is boolean
+      - __linux_compliance_remediate_dispatched is false
+    fail_msg: >-
+      An internal fact of the remediate role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was changed.
+    quiet: true
+  tags:
+    - linux_compliance_remediate_guard
+
 - name: Remediate | Validate inputs
   ansible.builtin.assert:
     that:
@@ -42,6 +55,21 @@
   ansible.builtin.set_fact:
     __linux_compliance_remediate_toggle_names: >-
       {{ lookup('ansible.builtin.varnames', __linux_compliance_remediate_toggle_pattern, wantlist=True) | sort }}
+  tags:
+    - always
+
+- name: Remediate | Check that the toggle variable names are a list of names
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_toggle_names is sequence
+      - __linux_compliance_remediate_toggle_names is not string
+      - __linux_compliance_remediate_toggle_names is not mapping
+      - __linux_compliance_remediate_toggle_names | reject('string') | list | length == 0
+    fail_msg: >-
+      An internal fact of the remediate role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was changed.
+    quiet: true
   tags:
     - always
 
@@ -91,6 +119,32 @@
   tags:
     - always
 
+- name: Remediate | Check the type and shape of the remediation plan
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_plan is mapping
+      - >-
+        ['disabled_rules', 'enabled', 'errors', 'families', 'not_implemented', 'notices', 'orphaned', 'report', 'rules',
+        'summary'] is subset(__linux_compliance_remediate_plan.keys() | list)
+      - __linux_compliance_remediate_plan.enabled is boolean
+      - __linux_compliance_remediate_plan.errors is sequence
+      - __linux_compliance_remediate_plan.errors is not string
+      - __linux_compliance_remediate_plan.errors is not mapping
+      - __linux_compliance_remediate_plan.families is sequence
+      - __linux_compliance_remediate_plan.families is not string
+      - __linux_compliance_remediate_plan.families is not mapping
+      - __linux_compliance_remediate_plan.not_implemented is sequence
+      - __linux_compliance_remediate_plan.not_implemented is not string
+      - __linux_compliance_remediate_plan.not_implemented is not mapping
+      - __linux_compliance_remediate_plan.summary is mapping
+    fail_msg: >-
+      An internal fact of the remediate role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was changed.
+    quiet: true
+  tags:
+    - always
+
 - name: Remediate | Stop on unknown toggles, allow-list entries or catalogue errors
   ansible.builtin.assert:
     that:
@@ -105,6 +159,20 @@
 - name: Remediate | Start the results with the rules that have no native remediation
   ansible.builtin.set_fact:
     __linux_compliance_remediate_results: "{{ __linux_compliance_remediate_plan.not_implemented }}"
+  tags:
+    - always
+
+- name: Remediate | Check that the results are a list
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_results is sequence
+      - __linux_compliance_remediate_results is not string
+      - __linux_compliance_remediate_results is not mapping
+    fail_msg: >-
+      An internal fact of the remediate role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was changed.
+    quiet: true
   tags:
     - always
 
@@ -169,6 +237,7 @@
 - name: Remediate | Fail when the always-tagged tasks were skipped
   ansible.builtin.assert:
     that:
+      - __linux_compliance_remediate_dispatched is boolean
       - __linux_compliance_remediate_dispatched
     fail_msg: >-
       The remediate role did not validate, plan or dispatch anything because its tasks tagged always

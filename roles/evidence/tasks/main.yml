@@ -1,4 +1,9 @@
 ---
+- name: Evidence | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
 - name: Evidence | Validate inputs
   ansible.builtin.assert:
     that:
@@ -41,6 +46,7 @@
 - name: Evidence | Check that the output directory is a normalised absolute path
   ansible.builtin.assert:
     that:
+      - __linux_compliance_evidence_root is string
       - __linux_compliance_evidence_root is match('/.')
       - __linux_compliance_evidence_root is not search('//')
       - __linux_compliance_evidence_root is not search('/$')

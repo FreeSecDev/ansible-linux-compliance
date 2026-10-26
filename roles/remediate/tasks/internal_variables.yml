@@ -82,3 +82,91 @@
     __linux_compliance_remediate_unaccounted: __linux_compliance_unset__
   tags:
     - always
+
+- name: Remediate | Reset the internal facts of the role to the second sentinel
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_discover_check: __linux_compliance_unset_again__
+    __linux_compliance_remediate_dispatched: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_absent: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_apply: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_forget: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_mode: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_needed: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_prior: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_reason: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_record: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_restorable: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_restore: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_target: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ledger: __linux_compliance_unset_again__
+    __linux_compliance_remediate_plan: __linux_compliance_unset_again__
+    __linux_compliance_remediate_results: __linux_compliance_unset_again__
+    __linux_compliance_remediate_toggle_names: __linux_compliance_unset_again__
+  tags:
+    - always
+
+- name: Remediate | Refuse internal variables supplied from outside the role as the first sentinel
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_discover_check == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_dispatched == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_absent == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_apply == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_forget == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_mode == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_needed == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_prior == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_reason == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_record == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_restorable == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_restore == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_target == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_valid_prior == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ledger == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_plan == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_results == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_toggle_names == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_family == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_fp_status == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_rule == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset_again__'
+    fail_msg: >-
+      An internal variable of the remediate role (__linux_compliance_remediate_*) is set from outside the role: by a
+      role parameter, an include parameter (vars of include_role or include_tasks) or an extra variable (-e), which
+      outrank every fact the role sets. The failed assertion names it. Remove it and pass only the documented
+      linux_compliance_* variables. Nothing was scanned, changed or compared.
+    quiet: true
+  vars:
+    __linux_compliance_remediate_family: __linux_compliance_unset_again__
+    __linux_compliance_remediate_fp_status: __linux_compliance_unset_again__
+    __linux_compliance_remediate_rule: __linux_compliance_unset_again__
+    __linux_compliance_remediate_unaccounted: __linux_compliance_unset_again__
+  tags:
+    - always
+
+- name: Remediate | Reset the internal facts of the role to the first sentinel again
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_discover_check: __linux_compliance_unset__
+    __linux_compliance_remediate_dispatched: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_absent: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_apply: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_forget: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_mode: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_needed: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_prior: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_reason: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_record: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_restorable: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_restore: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_target: __linux_compliance_unset__
+    __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset__
+    __linux_compliance_remediate_ledger: __linux_compliance_unset__
+    __linux_compliance_remediate_plan: __linux_compliance_unset__
+    __linux_compliance_remediate_results: __linux_compliance_unset__
+    __linux_compliance_remediate_toggle_names: __linux_compliance_unset__
+  tags:
+    - always

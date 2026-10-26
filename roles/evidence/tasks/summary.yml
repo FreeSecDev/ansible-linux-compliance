@@ -1,4 +1,9 @@
 ---
+- name: Evidence | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
 - name: Evidence | Validate the target hosts of the summary
   ansible.builtin.assert:
     that:

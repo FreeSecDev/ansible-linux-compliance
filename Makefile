@@ -472,6 +472,8 @@ ROLE_GUARDS_DIR := build/test-role-guards
 ROLE_GUARDS_FORGED_PLAN := {"__linux_compliance_remediate_plan": {"enabled": true, "errors": [], \
 	"families": [{"name": "../../../../tmp/forged", "disruptive": false, "apply": [], "cleanup": []}]}}
 ROLE_GUARDS_FORGED_FAMILY := {"__linux_compliance_remediate_family": {"name": "../../../../tmp/forged"}}
+ROLE_GUARDS_SENTINEL_PLAN := {"__linux_compliance_remediate_plan": "__linux_compliance_unset__"}
+ROLE_GUARDS_SENTINEL_FAMILY := {"__linux_compliance_remediate_family": "__linux_compliance_unset__"}
 
 ROLE_GUARDS_REFUSALS := is set from outside the role|Validation of arguments failed
 
@@ -492,6 +494,10 @@ test-role-guards: require-uv collection-link
 	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_FORGED_PLAN)' -e internal_forged_variable=__linux_compliance_remediate_plan \
 		tests/playbooks/internal-variables-extra.yml
 	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_FORGED_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
+		tests/playbooks/internal-variables-extra.yml
+	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_SENTINEL_PLAN)' -e internal_forged_variable=__linux_compliance_remediate_plan \
+		tests/playbooks/internal-variables-extra.yml
+	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_SENTINEL_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
 		tests/playbooks/internal-variables-extra.yml
 	$(call role_guards_expect_refusal,forged_plan)
 	$(call role_guards_expect_refusal,forged_family)

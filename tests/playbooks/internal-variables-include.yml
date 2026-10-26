@@ -216,3 +216,122 @@
               - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_verify_comparison' in ansible_failed_result.assertion"
             quiet: true
+
+    - name: A plan forged as the sentinel is refused by the second read-back
+      block:
+        - name: Run the remediate role with the sentinel as the plan
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            __linux_compliance_remediate_plan: __linux_compliance_unset__
+
+        - name: Fail because the plan forged as the sentinel was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-SENTINEL-PLAN-NOT-REFUSED
+      rescue:
+        - name: Check that the second read-back refused the plan before the ledger was read
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - "'__linux_compliance_remediate_plan' in ansible_failed_result.assertion"
+              - __linux_compliance_remediate_ledger == '__linux_compliance_unset_again__'
+            quiet: true
+
+    - name: A family forged as the sentinel is refused by the second read-back
+      block:
+        - name: Run the remediate role with the sentinel as the family
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            __linux_compliance_remediate_family: __linux_compliance_unset__
+
+        - name: Fail because the family forged as the sentinel was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-SENTINEL-FAMILY-NOT-REFUSED
+      rescue:
+        - name: Check that the second read-back refused the family before the ledger was read
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - "'__linux_compliance_remediate_family' in ansible_failed_result.assertion"
+              - __linux_compliance_remediate_ledger == '__linux_compliance_unset_again__'
+            quiet: true
+
+    - name: A toggle resolution of the audit forged as the sentinel is refused
+      block:
+        - name: Run the audit role with the sentinel as the toggle resolution
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+          vars:
+            __linux_compliance_audit_toggles: __linux_compliance_unset__
+
+        - name: Fail because the toggle resolution forged as the sentinel was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-SENTINEL-AUDIT-NOT-REFUSED
+      rescue:
+        - name: Check that the second read-back of the audit role refused the toggles
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - "'__linux_compliance_audit_toggles' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A comparison of the verify role forged as the sentinel is refused
+      block:
+        - name: Run the verify role with the sentinel as the comparison
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+          vars:
+            __linux_compliance_verify_comparison: __linux_compliance_unset__
+
+        - name: Fail because the comparison forged as the sentinel was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-SENTINEL-VERIFY-NOT-REFUSED
+      rescue:
+        - name: Check that the second read-back of the verify role refused the comparison
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - "'__linux_compliance_verify_comparison' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A forged output directory of the evidence role is refused
+      block:
+        - name: Run the evidence role with a forged output directory
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+          vars:
+            __linux_compliance_evidence_root: /tmp/forged
+
+        - name: Fail because the forged output directory was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-EVIDENCE-NOT-REFUSED
+      rescue:
+        - name: Check that the guard of the evidence role refused the output directory
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_evidence_root' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A summary of the evidence role forged as the sentinel is refused
+      block:
+        - name: Run the summary entry point with the sentinel as the collected hosts
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+            tasks_from: summary.yml
+          vars:
+            linux_compliance_evidence_summary_hosts:
+              - localhost
+            __linux_compliance_evidence_collected: __linux_compliance_unset__
+
+        - name: Fail because the collected hosts forged as the sentinel were kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-SENTINEL-SUMMARY-NOT-REFUSED
+      rescue:
+        - name: Check that the second read-back of the summary entry point refused it
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - "'__linux_compliance_evidence_collected' in ansible_failed_result.assertion"
+            quiet: true

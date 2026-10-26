@@ -11,20 +11,25 @@ Two kinds of task file are derived from the repository and checked for drift in 
   completeness check of the role. Each names the literal
   file ``{{ role_path }}/tasks/<family>.yml`` and runs for the plan entry of that family
   only, so no variable chooses which file is loaded.
-* ``roles/<role>/tasks/internal_variables.yml`` for the audit, remediate and verify roles:
-  the first tasks of every entry point. A role parameter, an include parameter and an extra
-  variable outrank every fact that a role sets, so an internal ``__linux_compliance_<role>_*``
-  variable supplied from outside would replace the role's own value. The guard sets every
-  fact and registered variable of the role to a sentinel and asserts that each reads back
-  as the sentinel; it gives every task and loop variable the sentinel as a task variable of
-  the assertion and asserts the same; and it asserts that every constant of the role's
-  variable files is either undefined or equal to the file. Any other value can only come
-  from outside, and the role stops before it changes anything.
+* ``roles/<role>/tasks/internal_variables.yml`` for the audit, evidence, remediate and verify
+  roles: the first tasks of every entry point. A role parameter, an include parameter and an
+  extra variable outrank every fact that a role sets, so an internal
+  ``__linux_compliance_<role>_*`` variable supplied from outside would replace the role's own
+  value. The guard sets every fact and registered variable of the role to a sentinel and
+  asserts that each reads back as the sentinel; it gives every task and loop variable the
+  sentinel as a task variable of the assertion and asserts the same; and it asserts that every
+  constant of the role's variable files is either undefined or equal to the file. It then
+  repeats the reset and the read-back with a second sentinel and resets the facts to the first
+  one again: a value supplied from outside is fixed, so a forged value that equals the first
+  sentinel fails the second read-back (FREES-153). Any other value can only come from outside,
+  and the role stops before it changes anything.
 
 The variables are found in the role's task and variable files. A variable that the tool
-cannot classify, or that is both a fact and a task variable, is an error, so a new internal
-variable cannot be added without the guard. With ``--check`` nothing is written: the tool
-prints a unified diff of every file that differs and exits with status 1.
+cannot classify, or that is both a fact and a task variable, is an error, and so is a role
+below ``roles/`` that names an internal variable of its own but is not in ``GUARDED_ROLES``,
+so a new internal variable or role cannot be added without the guard. With ``--check``
+nothing is written: the tool prints a unified diff of every file that differs and exits with
+status 1.
 """
 
 from __future__ import annotations
@@ -48,9 +53,10 @@ GenerationError = generate_toggles.GenerationError
 ROLES: Final[Path] = Path("roles")
 DISPATCH: Final[Path] = Path("roles/remediate/tasks/dispatch.yml")
 GUARD_FILE: Final[str] = "internal_variables.yml"
-GUARDED_ROLES: Final[tuple[str, ...]] = ("audit", "remediate", "verify")
+GUARDED_ROLES: Final[tuple[str, ...]] = ("audit", "evidence", "remediate", "verify")
 ROLE_TASK_FILES: Final[frozenset[str]] = frozenset({"main", "dispatch", "internal_variables"})
 SENTINEL: Final[str] = "__linux_compliance_unset__"
+SECOND_SENTINEL: Final[str] = "__linux_compliance_unset_again__"
 NESTED: Final[tuple[str, ...]] = ("block", "rescue", "always")
 SET_FACT: Final[str] = "ansible.builtin.set_fact"
 INCLUDE_VARS: Final[str] = "ansible.builtin.include_vars"
@@ -59,6 +65,7 @@ ROLE_PATH_FILE: Final[re.Pattern[str]] = re.compile(r"\{\{ role_path \}\}(/[A-Za
 PLAIN_FILE: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.yml")
 ROLE_TITLES: Final[dict[str, str]] = {
     "audit": "Audit",
+    "evidence": "Evidence",
     "remediate": "Remediate",
     "verify": "Verify",
 }
@@ -255,27 +262,25 @@ def _that(item: str) -> list[str]:
     return ["      - >-", *_folded(item, 8)]
 
 
-def guard(role: str, found: RoleVariables) -> str:
-    """Return the internal-variable guard task file of ``role``."""
-    title = ROLE_TITLES[role]
-    facts = sorted(found.facts)
+def _reset(title: str, facts: Sequence[str], sentinel: str, purpose: str) -> list[str]:
+    """Return the task that sets every fact in ``facts`` to ``sentinel``."""
+    lines = [f"- name: {title} | {purpose}", f"  {SET_FACT}:"]
+    lines.extend(f"    {name}: {sentinel}" for name in facts)
+    lines.extend(["  tags:", "    - always"])
+    return lines
+
+
+def _read_back(
+    role: str, found: RoleVariables, sentinel: str, name: str, *, constants: bool
+) -> list[str]:
+    """Return the assertion that every fact and task variable reads back as ``sentinel``."""
     local = sorted(found.locals)
-    lines = ["---"]
-    if facts:
-        lines.extend([f"- name: {title} | Reset the internal facts of the role", f"  {SET_FACT}:"])
-        lines.extend(f"    {name}: {SENTINEL}" for name in facts)
-        lines.extend(["  tags:", "    - always", ""])
-    lines.extend(
-        [
-            f"- name: {title} | Refuse internal variables supplied from outside the role",
-            "  ansible.builtin.assert:",
-            "    that:",
-        ]
-    )
-    for name in [*facts, *local]:
-        lines.extend(_that(f"{name} == {_quote(SENTINEL)}"))
-    for name, value in sorted(found.constants.items()):
-        lines.extend(_that(f"{name} is not defined or {name} == {value}"))
+    lines = [f"- name: {name}", "  ansible.builtin.assert:", "    that:"]
+    for variable in [*sorted(found.facts), *local]:
+        lines.extend(_that(f"{variable} == {_quote(sentinel)}"))
+    if constants:
+        for variable, value in sorted(found.constants.items()):
+            lines.extend(_that(f"{variable} is not defined or {variable} == {value}"))
     message = (
         f"An internal variable of the {role} role ({prefix(role)}*) is set from outside the role: "
         "by a role parameter, an include parameter (vars of include_role or include_tasks) or an "
@@ -286,15 +291,68 @@ def guard(role: str, found: RoleVariables) -> str:
     lines.extend(["    fail_msg: >-", *_folded(message, 6), "    quiet: true"])
     if local:
         lines.append("  vars:")
-        lines.extend(f"    {name}: {SENTINEL}" for name in local)
+        lines.extend(f"    {variable}: {sentinel}" for variable in local)
     lines.extend(["  tags:", "    - always"])
+    return lines
+
+
+def guard(role: str, found: RoleVariables) -> str:
+    """Return the internal-variable guard task file of ``role``.
+
+    The facts are reset to ``SENTINEL`` and read back with the task variables and the
+    constants. When the role has facts or task variables, the reset and the read-back are
+    repeated with ``SECOND_SENTINEL``, and the facts end as ``SENTINEL``: a value supplied
+    from outside cannot equal both sentinels.
+    """
+    title = ROLE_TITLES[role]
+    facts = sorted(found.facts)
+    refuse = f"{title} | Refuse internal variables supplied from outside the role"
+    tasks: list[list[str]] = []
+    if facts:
+        tasks.append(_reset(title, facts, SENTINEL, "Reset the internal facts of the role"))
+    tasks.append(_read_back(role, found, SENTINEL, refuse, constants=True))
+    if facts or found.locals:
+        if facts:
+            purpose = "Reset the internal facts of the role to the second sentinel"
+            tasks.append(_reset(title, facts, SECOND_SENTINEL, purpose))
+        second = f"{refuse} as the first sentinel"
+        tasks.append(_read_back(role, found, SECOND_SENTINEL, second, constants=False))
+    if facts:
+        purpose = "Reset the internal facts of the role to the first sentinel again"
+        tasks.append(_reset(title, facts, SENTINEL, purpose))
+    lines = ["---"]
+    for index, task in enumerate(tasks):
+        if index:
+            lines.append("")
+        lines.extend(task)
     return "\n".join(lines) + "\n"
+
+
+def internal_variable_roles(roles_dir: Path) -> set[str]:
+    """Return every role below ``roles_dir`` whose files name an internal variable of its own."""
+    found: set[str] = set()
+    for role_dir in sorted(path for path in roles_dir.iterdir() if path.is_dir()):
+        pattern = re.compile(re.escape(prefix(role_dir.name)) + r"[a-z0-9_]")
+        if any(
+            pattern.search(path.read_text(encoding="utf-8", errors="replace"))
+            for path in sorted(role_dir.rglob("*"))
+            if path.is_file()
+        ):
+            found.add(role_dir.name)
+    return found
 
 
 def outputs(root: Path) -> dict[Path, str]:
     """Return the generated content of every output file below ``root``."""
     catalogue = generate_toggles.load_catalogue(root / generate_toggles.CATALOGUE)
     families = generate_toggles.native_families(catalogue)
+    unguarded = internal_variable_roles(root / ROLES) - set(GUARDED_ROLES)
+    if unguarded:
+        message = (
+            f"roles with internal variables but no guard: {', '.join(sorted(unguarded))}; "
+            "add them to GUARDED_ROLES and import the guard at every entry point"
+        )
+        raise GenerationError(message)
     generated: dict[Path, str] = {DISPATCH: dispatch(families, root / DISPATCH.parent)}
     for role in GUARDED_ROLES:
         role_dir = root / ROLES / role

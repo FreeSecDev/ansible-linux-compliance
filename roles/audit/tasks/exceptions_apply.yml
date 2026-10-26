@@ -14,6 +14,18 @@
   tags:
     - always
 
+- name: Audit | Check the type of the evaluation of the exceptions file
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_evaluation is none or __linux_compliance_audit_evaluation is mapping
+    fail_msg: >-
+      An internal fact of the audit role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was evaluated.
+    quiet: true
+  tags:
+    - always
+
 - name: Audit | Check that the applied text is the text that was validated
   ansible.builtin.assert:
     that:

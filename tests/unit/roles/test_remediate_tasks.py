@@ -59,12 +59,13 @@ def test_every_include_applies_exactly_always_and_stays_inside_the_role(path: Pa
             assert str(options["file"]).startswith("{{ role_path }}/tasks/"), task.get("name")
 
 
-def test_the_only_guard_tasks_are_the_two_of_main() -> None:
+def test_the_only_guard_tasks_are_the_three_of_main() -> None:
     guards = [
         task["name"] for task in load(TASKS / "main.yml") if specs.is_guard_task("remediate", task)
     ]
     assert guards == [
         "Remediate | Arm the guard against skipping the always-tagged tasks",
+        "Remediate | Check that the guard is armed with the boolean false",
         "Remediate | Fail when the always-tagged tasks were skipped",
     ]
     assert specs.check_role(TASKS.parent) == []

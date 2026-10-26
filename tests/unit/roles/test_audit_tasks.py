@@ -62,7 +62,11 @@ def test_the_toggle_file_resolves_with_the_shared_filter_and_fails_closed() -> N
     assert "freesecdev.linux_compliance.audit_disabled_rules" in expression
     assert "linux_compliance_discovered.rule_ids" in expression
     assert "linux_compliance_audit_disabled_rules" in expression
-    stop = next(task for task in steps if "ansible.builtin.assert" in task)
+    stop = next(
+        task
+        for task in steps
+        if task.get("name") == "Audit | Stop on unknown or invalid toggles before any scan"
+    )
     assertion = cast("dict[str, list[str]]", stop["ansible.builtin.assert"])
     assert assertion["that"] == ["__linux_compliance_audit_toggles.errors | length == 0"]
     assert steps.index(resolve) < steps.index(stop)
