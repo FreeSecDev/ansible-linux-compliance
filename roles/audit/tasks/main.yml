@@ -11,6 +11,7 @@
       - linux_compliance_audit_profile is match('^[a-z0-9][a-z0-9_]{0,127}$')
       - linux_compliance_audit_fail_on_noncompliant is boolean
       - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
+      - linux_compliance_audit_defer_gate is boolean
       - >-
         linux_compliance_exceptions_file is none or
         (linux_compliance_exceptions_file is string and linux_compliance_exceptions_file is match('^/'))
@@ -118,7 +119,18 @@
   tags:
     - always
 
+- name: Audit | Report that the result gates are deferred
+  ansible.builtin.debug:
+    msg: >-
+      The result gates of {{ inventory_hostname }} are deferred (linux_compliance_audit_defer_gate), so a
+      scan that did not complete or failed rules do not fail the host yet. The playbook must run the
+      gate.yml entry point of the audit role afterwards, as playbooks/evidence.yml does.
+  when: linux_compliance_audit_defer_gate
+  tags:
+    - always
+
 - name: Audit | Enforce the result gates
   ansible.builtin.import_tasks: gate.yml
+  when: not linux_compliance_audit_defer_gate
   tags:
     - always

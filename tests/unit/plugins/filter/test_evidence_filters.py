@@ -9,6 +9,7 @@ import pytest
 
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     evidence_documents,
+    evidence_host_files,
     evidence_plan,
     evidence_written,
 )
@@ -101,11 +102,20 @@ def test_the_filter_plugins_expose_their_filters() -> None:
     assert evidence_written.FilterModule().filters() == {
         "evidence_written": evidence_written.evidence_written
     }
+    assert evidence_host_files.FilterModule().filters() == {
+        "evidence_host_files": evidence_host_files.evidence_host_files
+    }
 
 
 def test_the_filters_plan_build_and_check_a_bundle() -> None:
     plan = evidence_plan.evidence_plan(audited(), HOST, DISABLED)
     assert plan["directory"] == f"{HOST}/{RUN_ID}"
+    on_host = {
+        "raw/scan-run.json": {"exists": True, "isreg": True, "islnk": False, "size": len(SCAN_RUN)}
+    }
+    assert evidence_host_files.evidence_host_files(audited(), HOST, DISABLED, on_host) == [
+        "raw/scan-run.json"
+    ]
     collected = {
         "collection_version": "0.1.0",
         "controller_uid": UID,

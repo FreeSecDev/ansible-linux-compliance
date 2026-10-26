@@ -17,8 +17,10 @@ are intentions, not tested support. Bundles are not signed;
 
 ## Safety
 
-- The role never changes the managed host. The only task that reaches it is `ansible.builtin.fetch`, which uses
-  `become: "{{ linux_compliance_evidence_become }}"`; every other task runs on the controller with `become: false`.
+- The role never changes the managed host. Only `ansible.builtin.stat` (with `follow: false`) and
+  `ansible.builtin.fetch` reach it, with `become: "{{ linux_compliance_evidence_become }}"`; every other task runs on
+  the controller with `become: false`. A symbolic link, a special file or a size other than the recorded one is
+  refused on the host, before anything is transferred.
 - Every fetched file must have the SHA-256 and size that the audit recorded; any mismatch fails the host and removes
   the incomplete bundle.
 - Only the allow-listed files directly inside the reported run directory are fetched. A recorded path outside it fails
@@ -33,7 +35,8 @@ are intentions, not tested support. Bundles are not signed;
 2. Resolve `linux_compliance_evidence_output_dir` and require a normalised absolute path.
 3. Skip the host when the audit wrote no evidence; in check mode print the planned bundle and write nothing.
 4. `tasks/collect.yml`: plan the bundle (`freesecdev.linux_compliance.evidence_plan`), refuse an existing bundle and
-   unsafe directories, create the directories, fetch, set modes, hash, check and build the documents
+   unsafe directories, create the directories, inspect the host files without following links
+   (`freesecdev.linux_compliance.evidence_host_files`), fetch, set modes, hash, check and build the documents
    (`freesecdev.linux_compliance.evidence_documents`), write them, check every file
    (`freesecdev.linux_compliance.evidence_written`), write `bundle.json` last and check it. A failure removes the
    bundle directory and fails the host.
@@ -60,8 +63,13 @@ and are never written to a bundle.
 
 ## Running
 
-Use `playbooks/evidence.yml`, which runs the audit playbook first. Select hosts with
+Use `playbooks/evidence.yml`. It runs the audit playbook with the result gates deferred
+(`linux_compliance_audit_defer_gate`), collects every audited host, including hosts with failed rules and scans that
+did not complete, runs the `summary.yml` entry point to name every target host without a bundle, and then enforces the
+gates with the audit role's `gate.yml`. The `summary.yml` entry point takes `linux_compliance_evidence_summary_hosts`
+and publishes `linux_compliance_evidence_collection` (`target_hosts`, `collected_hosts`, `missing_hosts`,
+`no_audit_result`, `no_evidence_written`, `collection_failed`, `bundles`). Select hosts with
 `-e linux_compliance_target_hosts=<group or host>`. Pass booleans as JSON, for example
 `-e '{"linux_compliance_evidence_include_arf": true}'`; `-e linux_compliance_evidence_include_arf=true` passes a string
 and the input validation fails closed. Read a bundle into the report with
-`python -m tools.reporting --evidence-bundle <bundle directory>` ([docs/evidence.md](../../docs/evidence.md#in-the-report)).
+`python -m tools.reporting --exceptions-file <reviewed file> --evidence-bundle <bundle directory>` ([docs/evidence.md](../../docs/evidence.md#in-the-report)).

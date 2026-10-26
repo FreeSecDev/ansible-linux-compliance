@@ -1,4 +1,20 @@
 ---
+- name: Audit | Check that there is an audit result to gate
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited is defined
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.run_status is defined
+      - linux_compliance_audited.exceptions is defined
+      - linux_compliance_audit_fail_on_noncompliant is boolean
+      - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
+    fail_msg: >-
+      The gate needs the fact linux_compliance_audited from the main or evaluate.yml entry point of the
+      audit role, and boolean gate variables.
+    quiet: true
+  tags:
+    - always
+
 - name: Audit | Stop when the scan did not complete
   ansible.builtin.assert:
     that:

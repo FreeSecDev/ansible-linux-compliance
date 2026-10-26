@@ -1,6 +1,8 @@
 ---
-- name: Audit hosts before collecting their evidence
+- name: Audit hosts with the result gates deferred until their evidence is collected
   ansible.builtin.import_playbook: audit.yml
+  vars:
+    linux_compliance_audit_defer_gate: true
 
 - name: Collect the evidence of every audited host into bundles on the controller
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
@@ -12,3 +14,25 @@
       vars:
         linux_compliance_evidence_stale_exceptions: >-
           {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}
+
+- name: Name the target hosts that have no evidence bundle
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Summarise the collection over every target host
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.evidence
+        tasks_from: summary.yml
+      vars:
+        linux_compliance_evidence_summary_hosts: >-
+          {{ query('ansible.builtin.inventory_hostnames',
+                   linux_compliance_target_hosts | default('linux_compliance')) }}
+
+- name: Enforce the audit result gates after the evidence was collected
+  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
+  gather_facts: false
+  tasks:
+    - name: Fail the hosts whose scan did not complete or that the failure gate counts
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: gate.yml

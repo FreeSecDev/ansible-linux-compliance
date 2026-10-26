@@ -11,7 +11,7 @@ other playbooks by FQCN. The `discover`, `audit` ([audit guide](audit.md)), `rem
 | `playbooks/audit.yml` | `discover`, `audit`; then the `audit` role's `stale` entry point in a second play on `localhost` | `audit` only |
 | `playbooks/remediate.yml` | the `verify` role's `preflight.yml` entry point; `audit.yml` (`discover`, `audit`, then the read-only stale-exceptions report on `localhost`); the `verify` role's `baseline.yml` entry point; `remediate`; then `verify.yml` | `audit`, `remediate` |
 | `playbooks/verify.yml` | the `verify` role's `preflight.yml` entry point, `audit.yml` again (`discover`, `audit`, stale-exceptions report), then `verify` | `audit` |
-| `playbooks/evidence.yml` | `audit.yml`, then `evidence` on every target host, with the stale result of the run | `audit`; the `evidence` role's fetch task only |
+| `playbooks/evidence.yml` | `audit.yml` with the result gates deferred, then `evidence` on every target host (with the stale result of the run), the `evidence` role's `summary.yml` on `localhost`, then the `audit` role's `gate.yml` | `audit`; the `evidence` role's host `stat` and fetch only |
 
 `remediate.yml` imports `audit.yml` first, by relative path so that the repository guard can scan the imported
 playbook. Every remediation therefore starts from a verified profile and a recorded baseline audit, and the

@@ -19,15 +19,26 @@ minor_changes:
     ``linux_compliance_evidence_become`` (default ``true``) and ``linux_compliance_evidence_stale_exceptions``
     (default ``{}``).
   - >-
-    Add the playbook ``freesecdev.linux_compliance.evidence``, which runs the audit playbook and then collects a
-    bundle for every audited host, including the stale result of the run.
+    Add the playbook ``freesecdev.linux_compliance.evidence``. It runs the audit playbook with the result gates
+    deferred, collects a bundle for every audited host (including hosts with failed rules and scans that did not
+    complete) with the stale result of the run, names every target host without a bundle, and then enforces the gates,
+    so the hosts that fail them still fail the play but are never missing from the evidence.
+  - >-
+    audit role - add ``linux_compliance_audit_defer_gate`` (default ``false``), which skips the result gates in the
+    ``main`` and ``evaluate.yml`` entry points, and the ``gate.yml`` entry point that enforces them later.
+  - >-
+    evidence role - inspect every recorded file on the host with ``stat`` and ``follow: false`` before fetching it, and
+    refuse symbolic links, special files and sizes other than the recorded one; add the ``summary.yml`` entry point,
+    which publishes ``linux_compliance_evidence_collection`` and names the target hosts without a bundle.
   - >-
     Add the controller filters ``freesecdev.linux_compliance.evidence_plan``,
-    ``freesecdev.linux_compliance.evidence_documents`` and ``freesecdev.linux_compliance.evidence_written``.
+    ``freesecdev.linux_compliance.evidence_documents``, ``freesecdev.linux_compliance.evidence_written`` and
+    ``freesecdev.linux_compliance.evidence_host_files``.
 trivial:
   - >-
     Reporting - ``--evidence-bundle DIR`` reads an evidence bundle directly. The bundle is read without following
     symbolic links and verified (manifest, every SHA-256 and size, ``SHA256SUMS``, the scan run against the manifest,
     the evaluation against the bundled exceptions file and the raw scan run) before its evaluation, or its raw scan
-    run, becomes a report input; a bundle that does not verify is an input error. The report schema is unchanged and
-    nothing is labelled verified, because bundles are not signed (ADR 0018 stays proposed).
+    run, becomes a report input; a bundle that does not verify is an input error. A bundle with applied exceptions
+    requires ``--exceptions-file`` and its copy must be byte-identical to it, because the bundle is not signed. The
+    report schema is unchanged and nothing is labelled verified (ADR 0018 stays proposed).

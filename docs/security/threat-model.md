@@ -147,9 +147,11 @@ bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
   matched lines of `/etc/shadow`, are excluded unless `linux_compliance_evidence_include_arf` is set. `make
   test-evidence` plants an environment variable, a `no_log` fact, a ledger with a sensitive value, an unlisted file and
   a shadow-like ARF line and checks that none reaches a bundle or the output.
-- **Residual:** the XCCDF results and the scan run are host evidence (host names, addresses, rule results), and the
-  exceptions file names owners and approvers. With the ARF opt-in a bundle can hold password hashes. Bundles are
-  `0600` in `0700` directories of the controller user; share them like the report.
+- **Residual:** `results.xml` is copied verbatim: it carries the target facts (host names, every IP and MAC
+  address) and the standard output of the SCE check scripts (firewall rule dumps, listening ports, lists of
+  world-writable, unowned or privileged files). `make test-evidence` shows that these are carried. The exceptions file
+  names owners and approvers. With the ARF opt-in a bundle can hold password hashes. Bundles are `0600` in `0700`
+  directories of the controller user; share them like the report.
 
 ### T-EVIDENCE-2: a host or a file on the way changes the evidence
 
@@ -158,7 +160,10 @@ bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
 - **Mitigation (FREES-51):** every fetched file must have the SHA-256 and size that the audit module recorded, the
   fetched `scan-run.json` must be the scan run of the fact, and the evaluation must verify against the byte-exact
   exceptions file and must have been made from the raw scan run. Any mismatch fails the host and removes the bundle.
-  The audit evidence is root-owned `0600` in a root-only `0700` run directory, so only root can change it on the host.
+  Before anything is transferred, each file is inspected on the host with `stat` and `follow: false`: a symbolic link,
+  a special file or a size other than the recorded one (bounded at 256 MiB) refuses the host, so the fetch never
+  follows a link as root and never copies an oversized file. The audit evidence is root-owned `0600` in a root-only
+  `0700` run directory, so only root can change it on the host.
 - **Residual:** the recorded digests come from the host. A compromised host can return consistent lies; the checks
   bind the bundle to what the audit module reported, not to the truth about the host. This is out of scope for any
   controller-side check (ADR 0018 states the same for signatures).
@@ -170,7 +175,23 @@ bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
 - **Mitigation (FREES-51):** the report reads the bundle without following links, refuses unlisted files, special
   files and unexpected directories, and verifies every size and SHA-256, `SHA256SUMS`, the scan run against the
   manifest and the evaluation against the bundled exceptions file and the raw scan run. A partial edit is an input
-  error. A file that looks like a signature is refused, never ignored.
-- **Residual:** the bundle is not signed. Whoever can rewrite every file and digest consistently, including the
-  exceptions file, can forge a bundle that verifies; the report labels nothing as verified. Signed bundles are
-  FREES-140 ([ADR 0018](../adr/0018-evidence-bundle-provenance.md), proposed).
+  error. A file that looks like a signature is refused, never ignored. A bundle with applied exceptions requires
+  `--exceptions-file`, and its copy must be byte-identical to it, so a bundle forged consistently from a made-up
+  exceptions file cannot turn a failure into a waiver (PR #31 review, B1).
+- **Residual:** the bundle is not signed. Whoever can rewrite every file and digest consistently can forge the scan
+  run of a bundle that verifies (with no waiver the reviewed file does not grant); the report labels nothing as
+  verified. Signed bundles are FREES-140 ([ADR 0018](../adr/0018-evidence-bundle-provenance.md), proposed).
+
+### T-EVIDENCE-4: the hosts that matter most have no bundle
+
+- **Attacker:** none; the failure is the play's own control flow.
+- **Failure:** the failure gate, or a scan that did not complete, fails a host in the audit play, Ansible drops it from
+  every later play, and a collection play never sees it. A report over the bundles then covers only compliant hosts
+  and its fleet figures are inflated, with nothing saying that hosts are missing (PR #31 review, B2).
+- **Mitigation (FREES-51):** `playbooks/evidence.yml` imports the audit playbook with
+  `linux_compliance_audit_defer_gate: true`, collects every audited host (failed rules and incomplete scans included),
+  names every target host without a bundle with the reason (no audit result, no evidence written, collection failed),
+  and only then runs the audit role's `gate.yml`, which fails the same hosts as before. `tests/playbooks/evidence-gate.yml`
+  shows a gated host and an incomplete scan collected, an unreachable and an empty host named, and the play failing.
+- **Residual:** unreachable and limited-out hosts cannot be collected; the run output names them, the report does not.
+  A playbook that sets `linux_compliance_audit_defer_gate` without running `gate.yml` would never enforce the gates.

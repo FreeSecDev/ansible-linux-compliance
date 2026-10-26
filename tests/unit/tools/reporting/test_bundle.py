@@ -135,7 +135,11 @@ def test_the_report_reads_waived_findings_and_exception_statuses_from_bundles(
 ) -> None:
     first = write_bundle(kit, tmp_path, "web01")
     second = write_bundle(kit, tmp_path, "db01")
-    document = build(scope=Scope.MULTI_HOST, evidence_bundle=(first, second))
+    document = build(
+        scope=Scope.MULTI_HOST,
+        evidence_bundle=(first, second),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
     compliance = document["sections"]["compliance"]
     assert compliance["status"] == "available"
     assert [item["format"] for item in compliance["items"]] == ["exceptions_evaluation"] * 2
@@ -148,7 +152,7 @@ def test_the_report_reads_waived_findings_and_exception_statuses_from_bundles(
     exceptions_section = document["sections"]["exceptions"]
     assert exceptions_section["status"] == "available"
     assert exceptions_section["exceptions_file"] == {
-        "path": f"{first}/exceptions/exceptions.yml",
+        "path": str(kit.EXCEPTIONS_FILE),
         "sha256": sha(kit.EXCEPTIONS_FILE.read_bytes()),
         "verified": True,
     }
@@ -283,26 +287,67 @@ def test_a_bundle_that_cannot_be_listed_is_refused(
         bundle.read_bundle(target, 1024)
 
 
+def forged_exceptions(kit: Any) -> str:
+    rule = f"{kit.RULE_PREFIX}plain_failure"
+    return (
+        "---\nschema_version: '1.0'\nexceptions:\n"
+        "  - id: EXC-FORGED\n"
+        f"    rule: {rule}\n"
+        "    framework: cis\n"
+        "    scope:\n"
+        "      hosts: [web01]\n"
+        "    justification: Nobody reviewed this.\n"
+        "    owner: mallory\n"
+        "    approval:\n"
+        "      approver: trent\n"
+        "      date: 2026-10-02\n"
+        "    created: 2026-10-01\n"
+        "    expires: 2027-01-31\n"
+        "    risk: low\n"
+    )
+
+
+def test_a_bundle_forged_from_a_made_up_exceptions_file_is_refused(
+    kit: Any, tmp_path: Path, write: Any
+) -> None:
+    forged = write_bundle(kit, tmp_path, "web01", text=forged_exceptions(kit))
+    with pytest.raises(ReportError, match="requires --exceptions-file"):
+        report.build_report(ReportInputs(scope=Scope.SINGLE_HOST, evidence_bundle=(forged,)))
+    with pytest.raises(ReportError, match="not byte-identical to --exceptions-file"):
+        report.build_report(
+            ReportInputs(
+                scope=Scope.SINGLE_HOST,
+                evidence_bundle=(forged,),
+                exceptions_file=kit.EXCEPTIONS_FILE,
+            )
+        )
+    supplied = write("forged.yml", forged_exceptions(kit))
+    accepted = build(scope=Scope.SINGLE_HOST, evidence_bundle=(forged,), exceptions_file=supplied)
+    assert accepted["sections"]["exceptions"]["exceptions_file"]["path"] == str(supplied)
+    output = tmp_path / "report.json"
+    arguments = [
+        "--scope",
+        "single_host",
+        "--output",
+        str(output),
+        "--evidence-bundle",
+        str(forged),
+    ]
+    assert cli.main(arguments) == cli.EXIT_USAGE
+    assert not output.exists()
+
+
 def test_bundles_of_different_exceptions_files_are_refused(kit: Any, tmp_path: Path) -> None:
     first = write_bundle(kit, tmp_path, "web01")
     other = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8") + "\n"
     second = write_bundle(kit, tmp_path, "db01", text=other)
-    with pytest.raises(ReportError, match="name 2 different exceptions files"):
-        report.build_report(ReportInputs(scope=Scope.FLEET, evidence_bundle=(first, second)))
-
-
-def test_the_exceptions_file_option_must_match_the_bundles(
-    kit: Any, tmp_path: Path, write: Any
-) -> None:
-    target = write_bundle(kit, tmp_path)
-    same = build(
-        scope=Scope.SINGLE_HOST, evidence_bundle=(target,), exceptions_file=kit.EXCEPTIONS_FILE
-    )
-    assert same["sections"]["exceptions"]["exceptions_file"]["path"] == str(kit.EXCEPTIONS_FILE)
-    other = write("other.yml", kit.EXCEPTIONS_FILE.read_text(encoding="utf-8") + "\n")
-    with pytest.raises(ReportError, match="different exceptions files"):
+    with pytest.raises(ReportError, match="1 evidence bundle"):
         report.build_report(
-            ReportInputs(scope=Scope.SINGLE_HOST, evidence_bundle=(target,), exceptions_file=other)
+            ReportInputs(
+                scope=Scope.FLEET,
+                evidence_bundle=(first, second),
+                exceptions_file=kit.EXCEPTIONS_FILE,
+            )
         )
 
 
@@ -320,13 +365,22 @@ def test_the_exceptions_file_option_needs_an_evaluation(kit: Any, tmp_path: Path
         )
 
 
-def test_supplied_evaluations_are_verified_against_the_exceptions_file_of_a_bundle(
+def test_supplied_evaluations_and_bundles_share_the_supplied_exceptions_file(
     kit: Any, tmp_path: Path, write: Any
 ) -> None:
     target = write_bundle(kit, tmp_path, "db01")
     evaluation = write("web01.json", kit.evaluation_json(kit.evaluate()))
+    with pytest.raises(ReportError, match="--exceptions-evaluation requires --exceptions-file"):
+        report.build_report(
+            ReportInputs(
+                scope=Scope.FLEET, evidence_bundle=(target,), exceptions_evaluation=(evaluation,)
+            )
+        )
     document = build(
-        scope=Scope.FLEET, evidence_bundle=(target,), exceptions_evaluation=(evaluation,)
+        scope=Scope.FLEET,
+        evidence_bundle=(target,),
+        exceptions_evaluation=(evaluation,),
+        exceptions_file=kit.EXCEPTIONS_FILE,
     )
     assert document["sections"]["exceptions"]["status"] == "available"
     assert document["sections"]["exceptions"]["summary"]["evaluations"] == 2
@@ -336,7 +390,16 @@ def test_the_command_line_accepts_evidence_bundles(kit: Any, tmp_path: Path) -> 
     target = write_bundle(kit, tmp_path)
     output = tmp_path / "report.json"
     status = cli.main(
-        ["--scope", "single_host", "--output", str(output), "--evidence-bundle", str(target)]
+        [
+            "--scope",
+            "single_host",
+            "--output",
+            str(output),
+            "--evidence-bundle",
+            str(target),
+            "--exceptions-file",
+            str(kit.EXCEPTIONS_FILE),
+        ]
     )
     assert status == cli.EXIT_OK
     written = json.loads(output.read_text(encoding="utf-8"))

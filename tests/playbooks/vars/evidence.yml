@@ -12,7 +12,12 @@ evidence_secrets:
   - "{{ evidence_secret_ledger }}"
   - "{{ evidence_secret_notes }}"
   - "{{ evidence_secret_arf }}"
-evidence_xccdf_fixture: "{{ playbook_dir }}/../fixtures/xccdf/oscap-like-fail.xml"
+evidence_carried_sce: "FREESECDEV-CARRIED-SCE-STDOUT: ACCEPT tcp dpt:5432 from 10.0.0.0/8"
+evidence_carried_address: 192.0.2.10
+evidence_carried_mac: "02:00:5e:10:00:10"
+evidence_fixture_failed_run:
+  status: failed
+  error_message: oscap exited with status 1 before writing all results
 evidence_expected_files:
   - SHA256SUMS
   - bundle.json

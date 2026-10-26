@@ -26,20 +26,40 @@ ansible-playbook -i inventory.yml freesecdev.linux_compliance.evidence \
   -e linux_compliance_evidence_output_dir=/srv/compliance/evidence
 ```
 
-`playbooks/evidence.yml` imports `playbooks/audit.yml` (`discover`, `audit`, then the stale-exceptions play on the
-controller) and then runs the `evidence` role on every target host, passing it the stale result of the run
-(`hostvars['localhost'].linux_compliance_audit_stale_exceptions`). The role can also run on its own, after the `audit`
-role, in any play whose hosts have the fact `linux_compliance_audited`.
+`playbooks/evidence.yml` has four stages, in this order:
 
-A host that fails the audit play (for example a scan that did not complete, or the failure gate) is removed from the
-later plays by Ansible, so the playbook does not collect its bundle. Its evidence stays in the run directory on the
-host. Collecting the evidence of failed scans in the same play is a follow-up (see [limits](#limits)).
+1. It imports `playbooks/audit.yml` (`discover`, `audit`, then the stale-exceptions play on the controller) with
+   `linux_compliance_audit_defer_gate: true`. The audit role then skips its result gates: neither a scan that did not
+   complete nor `linux_compliance_audit_fail_on_noncompliant` fails a host yet, so no audited host is dropped before
+   its evidence is collected.
+2. It runs the `evidence` role on every target host, passing it the stale result of the run
+   (`hostvars['localhost'].linux_compliance_audit_stale_exceptions`). Hosts with failed rules and hosts whose scan did
+   not complete (`failed`, `timed_out`) are collected like any other host, because the audit wrote their evidence.
+3. It runs the role's `summary.yml` entry point once on the controller over every target host. It publishes
+   `linux_compliance_evidence_collection` and prints a `WARNING` that names every target host without a bundle, split
+   into hosts without an audit result (unreachable, limited out, failed before the scan), hosts without evidence
+   (check mode or no scan) and hosts whose collection failed.
+4. It enforces the deferred gates with the audit role's `gate.yml` entry point on the target hosts. A scan that did not
+   complete, and with `linux_compliance_audit_fail_on_noncompliant` a failed or errored rule, still fails the host
+   and the playbook, exactly as `playbooks/audit.yml` would, but only after the bundle exists.
+
+Why the gates are deferred rather than collected in an `always` section of the audit play: the stale result is
+computed after every host and every `serial` batch of the audit play, so the bundles can only include it when they are
+collected in a later play, and a later play only sees the hosts that did not fail. Deferring the gates keeps both: every
+audited host reaches the collection play with the stale result available, and the gates run last.
+
+Never set `linux_compliance_audit_defer_gate` in a playbook that does not run `gate.yml` afterwards: the gates would
+then not run at all. Hosts that are unreachable or limited out cannot be collected; the summary names them, so a report
+over the collected bundles can be read with the missing hosts in view.
+
+The role can also run on its own, after the `audit` role, in any play whose hosts have the fact
+`linux_compliance_audited`.
 
 ## What the role does
 
-All tasks except one run on the controller (`delegate_to: localhost`, `become: false`). The only task that reaches the
-managed host is `ansible.builtin.fetch`, with `become: "{{ linux_compliance_evidence_become }}"`. The role never
-changes the managed host.
+All tasks except two run on the controller (`delegate_to: localhost`, `become: false`). Only `ansible.builtin.stat`
+and `ansible.builtin.fetch` reach the managed host, with `become: "{{ linux_compliance_evidence_become }}"`; neither
+changes it.
 
 1. Validate the variables and check that `linux_compliance_audited` exists.
 2. Resolve the output directory (relative paths against the playbook directory) and require a normalised absolute path.
@@ -51,17 +71,21 @@ changes the managed host.
    symbolic link, not a directory or not mode `0700`. Nothing is repaired.
 6. Create the output directory, the host directory and the bundle directory with mode `0700`, check that all three are
    owned by the controller user, and create the subdirectories of the plan.
-7. Fetch every planned file from the host with `ansible.builtin.fetch` (`flat`, `fail_on_missing`,
+7. Inspect every planned file on the host with `ansible.builtin.stat` (`follow: false`) and check it with
+   `freesecdev.linux_compliance.evidence_host_files`: it must exist, must be a regular file and not a symbolic link,
+   and must have exactly the size the audit recorded (at most 256 MiB). Nothing is transferred otherwise, so a
+   symbolic link is never followed as root and an oversized file is never copied.
+8. Fetch every planned file from the host with `ansible.builtin.fetch` (`flat`, `fail_on_missing`,
    `validate_checksum`), set it to mode `0600` and hash it on the controller with SHA-256.
-8. Build the documents with `freesecdev.linux_compliance.evidence_documents` (below). This is where every fetched file
+9. Build the documents with `freesecdev.linux_compliance.evidence_documents` (below). This is where every fetched file
    is compared with the SHA-256 and size that the audit recorded on the host.
-9. Write the documents (`ansible.builtin.copy`, mode `0600`, `force: false`), hash every file of the bundle again and
+10. Write the documents (`ansible.builtin.copy`, mode `0600`, `force: false`), hash every file of the bundle again and
    check them with `freesecdev.linux_compliance.evidence_written`.
-10. Write the manifest `bundle.json` **last** and check its SHA-256, mode and owner.
-11. Publish `linux_compliance_evidence_bundle` (`directory`, `run_id`, `manifest_sha256`, `files`, `excluded`,
+11. Write the manifest `bundle.json` **last** and check its SHA-256, mode and owner.
+12. Publish `linux_compliance_evidence_bundle` (`directory`, `run_id`, `manifest_sha256`, `files`, `excluded`,
     `exceptions_applied`).
 
-Steps 6 to 10 are one `block`. Any failure, including a checksum mismatch, removes the bundle directory that this run
+Steps 6 to 11 are one `block`. Any failure, including a checksum mismatch, removes the bundle directory that this run
 created and fails the host with the reason. No partial bundle is kept.
 
 ### Atomic writes
@@ -171,9 +195,20 @@ The report does not read it; it computes its own review verdicts from the evalua
 | Other files in or next to the run directory | Only the four allow-listed names are fetched; anything else the audit recorded is listed as excluded with its digest, never fetched. |
 | OVAL system characteristics in the ARF results | Excluded by default. ARF holds the items that OVAL collected, for example matched lines of `/etc/shadow` with password hashes, `sshd` and PAM configuration, and environment variables. Collect it only with `linux_compliance_evidence_include_arf: true` and store such bundles like credentials. |
 
-What a bundle does contain is host evidence: the XCCDF results (rule results, target facts such as host names, IP and
-MAC addresses), the scan run and, with exceptions, the exceptions file (owners, approvers, justifications). Share a
-bundle like the report itself.
+What a bundle does contain is host evidence. `raw/scan/results.xml` is the scanner's XCCDF output **copied verbatim**;
+it is never parsed or filtered. Besides the rule results it carries:
+
+- the `target`, `target-address` and `target-facts` of the scanned host: host names, every IP address and every MAC
+  address;
+- the standard output of the SCE check scripts, in `check-import import-name="stdout"`. Every SCE check of the pinned
+  datastreams imports its output, and the SCE-only rules (18 on Ubuntu 24.04, 4 on RHEL 9) print firewall rule
+  dumps, listening ports, and lists of world-writable, unowned or privileged files.
+
+That is sensitive host data, not credentials, but it maps the host's attack surface. The scan run carries rule
+results and identifiers, and with exceptions the exceptions file names owners, approvers and justifications. Share a
+bundle like the report itself, and do not attach bundles to public tickets. `make test-evidence` plants an SCE output
+line, an IP and a MAC address in the XCCDF fixture and checks that they **are** in the bundle, so this paragraph stays
+true.
 
 `make test-evidence` plants an environment variable, a `no_log` fact, a state ledger with a sensitive prior value, an
 unlisted file in the scanner output directory and an ARF file with a shadow-like line, and checks that none of them is
@@ -204,6 +239,7 @@ evidence (see the [threat model](security/threat-model.md#t-evidence-2-a-host-or
 
 ```bash
 python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
+  --exceptions-file inventory/exceptions.yml \
   --evidence-bundle /srv/compliance/evidence/web01/20261026T080000.000000Z \
   --evidence-bundle /srv/compliance/evidence/db01/20261026T080001.000000Z
 ```
@@ -222,9 +258,12 @@ python -m tools.reporting --scope fleet --output build/report/report.json --html
    input of the `exceptions` section, verified against the bundled exceptions file), otherwise its raw scan run. The
    XCCDF, ARF and tailoring files are verified but not parsed again, because they describe the same scan; passing them
    with `--xccdf` as well would add a second input for the same host.
-4. Every bundle with exceptions carries a copy of the exceptions file. All copies, and `--exceptions-file` when it is
-   given, must be the same bytes, or the report exits with status 2. Without `--exceptions-file` the copy in the first
-   bundle is the report's exceptions file.
+4. A bundle whose exceptions were applied **requires `--exceptions-file`**, the reviewed file from Git. The bundle
+   is not signed, so its own copy of the exceptions file is never the reference: a bundle built consistently from a
+   made-up exceptions file would otherwise turn failures into waivers under a `verified` label. Every bundle's copy
+   must be byte-identical to `--exceptions-file`, and the evaluation in it was verified against those bytes. A bundle
+   with applied exceptions and no `--exceptions-file`, or with a copy that differs, makes the report exit with status
+   2 and write nothing.
 
 A bundle that does not verify is an input `error` (exit status 1), and nothing from it is used. Unless its manifest is
 readable and records that no exceptions were applied, the error is an `exceptions_evaluation` input, so the
@@ -235,8 +274,9 @@ unsigned bundle.
 
 The report schema is unchanged (`report-v2.json`, `schema_version` `"2.0"`). Bundle inputs appear as
 `exceptions_evaluation` or `scan_run` items whose artifact path is the file inside the bundle; `raw_artifacts` lists
-those inputs and the exceptions file, not every file of the bundle. `exceptions_file.verified: true` keeps its 2.0
-meaning: every evaluation verified against that file. It says nothing about signatures.
+those inputs and the exceptions file, not every file of the bundle. `exceptions_file` is always the file passed with
+`--exceptions-file`, never a bundle's copy, and `exceptions_file.verified: true` keeps its 2.0 meaning: every
+evaluation verified against that file. It says nothing about signatures.
 
 ## Signing (ADR 0018)
 
@@ -256,6 +296,10 @@ label. Follow-up: FREES-140.
 | `linux_compliance_evidence_include_arf` | `bool` | `false` | Also collect `scan/results-arf.xml`, which can hold credential material. |
 | `linux_compliance_evidence_become` | `bool` | `true` | `become` on the fetch task. The audit evidence is root-owned `0600`; set `false` only when the connecting user can read it (tests). |
 | `linux_compliance_evidence_stale_exceptions` | `dict` | `{}` | The stale result to include when exceptions were applied; `playbooks/evidence.yml` passes it. |
+| `linux_compliance_evidence_summary_hosts` | `list` | required | `summary.yml` entry point only: the target hosts to account for. |
+
+The audit role's `linux_compliance_audit_defer_gate` (default `false`) skips its result gates; `playbooks/evidence.yml`
+sets it and runs the audit role's `gate.yml` entry point after the collection ([audit guide](audit.md)).
 
 ## Tests
 
@@ -267,15 +311,24 @@ label. Follow-up: FREES-140.
 - `tests/unit/tools/reporting/test_bundle.py`: the report reads waived findings and exception statuses from bundles,
   a bundle without exceptions, missing, tampered, symlinked, special-file and oversized bundles, conflicting exceptions
   files and the command line. The reporting package has 100% line and branch coverage.
-- `tests/unit/roles/test_evidence_role.py`: only the fetch task reaches the host and only it may become; modes; the
-  collection version matches `galaxy.yml`; the allow-list uses the audit module's file names.
+- `tests/unit/roles/test_evidence_role.py`: only the host `stat` and the fetch reach the host and only they may
+  become; modes; the collection version matches `galaxy.yml`; the allow-list uses the audit module's file names;
+  `playbooks/evidence.yml` defers the gates, collects, summarises and only then runs `gate.yml`; the audit role defers
+  its gates only on request.
 - `make test-evidence` (part of `make ci` and the CI `test` job) runs `tests/playbooks/evidence.yml` on two local
   inventory hosts with synthetic `linux_compliance_audited` facts and fixture files, the audit role's `evaluate.yml` and
   `stale.yml`, and the evidence role. It checks the bundle content, provenance, permissions and owner, that no planted
-  secret is in a bundle, that a second collection of the same run is refused, and that a checksum mismatch, a recorded
-  path outside the run directory and a changed exceptions file fail closed and leave no bundle. It then runs the report
-  on both bundles and checks the waived counts and the exceptions section, and checks that a bundle with one changed
-  byte is an input error.
+  secret is in a bundle, that the XCCDF target facts and SCE output are carried, that a second collection of the same
+  run is refused, and that a checksum mismatch, a recorded path outside the run directory, a symbolic link on the
+  host and a changed exceptions file fail closed and leave no bundle. It then runs the report on both bundles with
+  `--exceptions-file` and checks the waived counts and the exceptions section; checks that the same bundles without
+  `--exceptions-file`, or with another file, are refused with exit status 2; and that a bundle with one changed byte is
+  an input error.
+- `tests/playbooks/evidence-gate.yml` (also in `make test-evidence`) runs the stages of `playbooks/evidence.yml` on four
+  inventory hosts with `linux_compliance_audit_fail_on_noncompliant: true`: a host with failed rules and a host whose
+  scan did not complete both get a bundle, a host without evidence and an unreachable host are named by the summary,
+  the gates then fail the two collected hosts, the playbook exits non-zero, and the report over the two bundles shows
+  both hosts, one of them with run status `failed`.
 
 Not covered yet: a Molecule scenario that collects the bundle of a real scan from a managed host over SSH with
 `become` (FREES-60).
@@ -290,7 +343,8 @@ Not covered yet: a Molecule scenario that collects the bundle of a real scan fro
 | Size of one bundle file read by the report | `--max-bytes`, 64 MiB by default |
 | Size of `bundle.json` | 1 MiB |
 
-- Hosts that fail the audit play are not collected by `playbooks/evidence.yml`.
+- Unreachable and limited-out hosts cannot be collected; the summary of `playbooks/evidence.yml` names them, but the
+  report does not know about them.
 - A bundle is not signed; see [signing](#signing-adr-0018).
 - `ansible.builtin.fetch` with `become` reads the whole file into memory on the controller (it uses `slurp`), so very
   large ARF files cost memory.

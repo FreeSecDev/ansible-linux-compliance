@@ -338,44 +338,50 @@ def _compliance_section(
 def _exceptions_file(
     inputs: ReportInputs, bundles: Sequence[BundleInput]
 ) -> ParseResult[str] | None:
-    """Return the one exceptions file that every evaluation must be verified against.
+    """Return the reviewed exceptions file that every evaluation must be verified against.
 
-    It is ``--exceptions-file`` or, without it, the exceptions file of the evidence
-    bundles. Every bundle with exceptions carries a copy, and all copies and
-    ``--exceptions-file`` must be the same bytes.
+    It is always ``--exceptions-file``, the file the operator supplies. A bundle is not
+    signed, so its own copy of the exceptions file is never the reference: a bundle
+    built consistently from a made-up file would otherwise turn failures into waivers.
+    Every bundle whose exceptions were applied carries a copy, and each copy must be
+    byte-identical to ``--exceptions-file``.
 
     Raises:
-        ReportError: If evaluations are supplied without any exceptions file, the file
-            without any evaluation, the file cannot be read, or the bundles and the file
-            name different exceptions files.
+        ReportError: If evaluations or bundles with applied exceptions are supplied
+            without ``--exceptions-file``, the file without any evaluation, the file
+            cannot be read, or a bundle carries another exceptions file.
     """
     copies = [bundle.exceptions_file for bundle in bundles if bundle.exceptions_file is not None]
     evaluated = bool(inputs.exceptions_evaluation) or any(
         bundle.evaluation is not None for bundle in bundles
     )
     if inputs.exceptions_file is None:
-        if inputs.exceptions_evaluation and not copies:
+        if inputs.exceptions_evaluation:
             message = "--exceptions-evaluation requires --exceptions-file"
             raise ReportError(message)
-        source = copies[0] if copies else None
-    else:
-        if not evaluated:
+        if copies:
             message = (
-                "--exceptions-file is only used with --exceptions-evaluation or with evidence "
-                "bundles whose exceptions were applied"
+                "an --evidence-bundle whose exceptions were applied requires --exceptions-file: "
+                "the bundle is not signed, so its own copy of the exceptions file is not trusted"
             )
             raise ReportError(message)
-        source = parse_exceptions_file(inputs.exceptions_file, inputs.max_bytes)
-        if source.data is None:
-            message = f"the exceptions file cannot be used: {source.reason}"
-            raise ReportError(message)
-    digests = {copy.artifact.sha256 for copy in copies}
-    if source is not None:
-        digests.add(source.artifact.sha256)
-    if len(digests) > 1:
+        return None
+    if not evaluated:
         message = (
-            f"the evidence bundles and --exceptions-file name {len(digests)} different exceptions "
-            "files; report the runs of each exceptions file separately"
+            "--exceptions-file is only used with --exceptions-evaluation or with evidence "
+            "bundles whose exceptions were applied"
+        )
+        raise ReportError(message)
+    source = parse_exceptions_file(inputs.exceptions_file, inputs.max_bytes)
+    if source.data is None:
+        message = f"the exceptions file cannot be used: {source.reason}"
+        raise ReportError(message)
+    foreign = [copy for copy in copies if copy.artifact.sha256 != source.artifact.sha256]
+    if foreign:
+        message = (
+            f"{len(foreign)} evidence bundle(s) carry an exceptions file that is not "
+            "byte-identical to --exceptions-file; report the runs of each exceptions file "
+            "separately, each with its reviewed file"
         )
         raise ReportError(message)
     return source

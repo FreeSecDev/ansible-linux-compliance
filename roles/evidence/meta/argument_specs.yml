@@ -46,3 +46,18 @@ argument_specs:
           - "When exceptions were applied, it is written to the bundle as exceptions/stale.json."
           - "It must come from the same exceptions file and include this host."
           - "An empty mapping writes no stale result."
+  summary.yml:
+    short_description: "Name the target hosts that have no evidence bundle"
+    description:
+      - "Runs once on the controller after the collection play, as playbooks/evidence.yml does."
+      - "Publishes linux_compliance_evidence_collection with the target, collected and missing hosts."
+      - "Missing hosts are split into no audit result, no evidence written and collection failed."
+      - "Prints a WARNING that names every target host without a bundle."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_evidence_summary_hosts:
+        type: list
+        elements: str
+        required: true
+        description:
+          - "Inventory host names that the run targets, for example from the inventory_hostnames lookup."

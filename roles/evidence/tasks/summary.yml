@@ -1,0 +1,75 @@
+---
+- name: Evidence | Validate the target hosts of the summary
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_evidence_summary_hosts is sequence
+      - linux_compliance_evidence_summary_hosts is not string
+      - linux_compliance_evidence_summary_hosts is not mapping
+      - linux_compliance_evidence_summary_hosts | reject('string') | list | length == 0
+      - linux_compliance_evidence_summary_hosts | reject('in', hostvars) | list | length == 0
+    fail_msg: >-
+      linux_compliance_evidence_summary_hosts must be a list of inventory host names, for example
+      query('ansible.builtin.inventory_hostnames', linux_compliance_target_hosts).
+    quiet: true
+  run_once: true
+  tags:
+    - always
+
+- name: Evidence | Record which target hosts have an evidence bundle
+  ansible.builtin.set_fact:
+    linux_compliance_evidence_collection:
+      target_hosts: "{{ __linux_compliance_evidence_targets }}"
+      collected_hosts: "{{ __linux_compliance_evidence_collected }}"
+      missing_hosts: >-
+        {{ __linux_compliance_evidence_targets
+           | ansible.builtin.difference(__linux_compliance_evidence_collected) | sort }}
+      no_audit_result: "{{ __linux_compliance_evidence_no_audit }}"
+      no_evidence_written: "{{ __linux_compliance_evidence_no_evidence }}"
+      collection_failed: >-
+        {{ __linux_compliance_evidence_targets
+           | ansible.builtin.difference(__linux_compliance_evidence_collected)
+           | ansible.builtin.difference(__linux_compliance_evidence_no_audit)
+           | ansible.builtin.difference(__linux_compliance_evidence_no_evidence) | sort }}
+      bundles: >-
+        {{ __linux_compliance_evidence_collected | map('extract', hostvars)
+           | map(attribute='linux_compliance_evidence_bundle') | list }}
+  vars:
+    __linux_compliance_evidence_targets: "{{ linux_compliance_evidence_summary_hosts | unique | sort }}"
+    __linux_compliance_evidence_collected: >-
+      {{ __linux_compliance_evidence_targets | map('extract', hostvars)
+         | selectattr('linux_compliance_evidence_bundle', 'defined')
+         | map(attribute='inventory_hostname') | sort }}
+    __linux_compliance_evidence_no_audit: >-
+      {{ __linux_compliance_evidence_targets | map('extract', hostvars)
+         | rejectattr('linux_compliance_audited', 'defined')
+         | map(attribute='inventory_hostname') | sort }}
+    __linux_compliance_evidence_no_evidence: >-
+      {{ __linux_compliance_evidence_targets | map('extract', hostvars)
+         | selectattr('linux_compliance_audited', 'defined')
+         | rejectattr('linux_compliance_evidence_bundle', 'defined')
+         | rejectattr('linux_compliance_audited.evidence_written', 'equalto', true)
+         | map(attribute='inventory_hostname') | sort }}
+  run_once: true
+  tags:
+    - always
+
+- name: Evidence | Report the target hosts without an evidence bundle
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('WARNING: no evidence bundle for ' ~ (__linux_compliance_evidence_summary.missing_hosts | length)
+          ~ ' of ' ~ (__linux_compliance_evidence_summary.target_hosts | length) ~ ' target host(s): '
+          ~ (__linux_compliance_evidence_summary.missing_hosts | join(', ')) ~ '. No audit result (unreachable,'
+          ~ ' limited out or failed before the scan): '
+          ~ (__linux_compliance_evidence_summary.no_audit_result | join(', ') or 'none')
+          ~ '. No evidence written (check mode or no scan): '
+          ~ (__linux_compliance_evidence_summary.no_evidence_written | join(', ') or 'none')
+          ~ '. Collection failed: ' ~ (__linux_compliance_evidence_summary.collection_failed | join(', ') or 'none')
+          ~ '. A report over the collected bundles does not cover these hosts.')
+         if __linux_compliance_evidence_summary.missing_hosts
+         else 'Collected an evidence bundle for every one of the '
+              ~ (__linux_compliance_evidence_summary.target_hosts | length) ~ ' target host(s).' }}
+  vars:
+    __linux_compliance_evidence_summary: "{{ linux_compliance_evidence_collection }}"
+  run_once: true
+  tags:
+    - always

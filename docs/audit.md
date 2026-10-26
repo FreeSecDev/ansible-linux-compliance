@@ -421,6 +421,14 @@ gate), Ansible ends the playbook and the final play does not run.
 | `main` | Validate, scan, publish the raw result, apply the exceptions, enforce the gates |
 | `evaluate.yml` | Apply the exceptions file and the gates to an existing `linux_compliance_audited` fact, without scanning; used by the playbook test |
 | `stale.yml` | Aggregate stale exceptions over the given target hosts, after the audit play |
+| `gate.yml` | Enforce the result gates on an existing `linux_compliance_audited` fact; `playbooks/evidence.yml` runs it after the evidence was collected |
+
+`linux_compliance_audit_defer_gate` (default `false`) makes `main` and `evaluate.yml` skip the result gates: a
+scan that did not complete and the failure gate no longer fail the host there, and the role prints that the gates
+are deferred. `playbooks/evidence.yml` sets it so that every audited host reaches the evidence collection, and then
+runs `gate.yml` on the same hosts, which fails them exactly as the main entry point would have
+([evidence bundles](evidence.md#running-it)). A playbook that sets it must run `gate.yml` afterwards, or the gates
+never run.
 
 The entry points are named with their file suffix (`tasks_from: evaluate.yml`), because the repository guard
 (FREES-128) only scans role entry points that end in `.yml` or `.yaml`, and Ansible looks up the argument spec under

@@ -45,6 +45,8 @@ when the output directory does not exist, check mode does not create it and the 
 named with their suffix because `tasks_from` must end in `.yml`:
 
 - `evaluate.yml` runs steps 2, 8, 9 and 10 on an existing `linux_compliance_audited` fact without scanning.
+- `gate.yml` runs the result gates alone on an existing `linux_compliance_audited` fact; with
+  `linux_compliance_audit_defer_gate: true`, `main` and `evaluate.yml` skip them so that a later play can run it.
 - `stale.yml` aggregates stale exceptions once over the target hosts in `linux_compliance_audit_stale_hosts` (the
   final play of `playbooks/audit.yml`).
 
@@ -60,6 +62,7 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | `linux_compliance_audit_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. Must equal the profile the `discover` role verified. A profile is never substituted silently. |
 | `linux_compliance_audit_fail_on_noncompliant` | `bool` | `false` | Fail the play when at least one rule is `fail` or `error`, counted on the raw result by default, so a waiver never passes it. A scan that did not complete always fails. |
 | `linux_compliance_audit_fail_on_noncompliant_after_waivers` | `bool` | `false` | Count the waived result instead of the raw result in that gate. `error` always counts. Without applied waivers the raw result is counted. |
+| `linux_compliance_audit_defer_gate` | `bool` | `false` | Skip the result gates in `main` and `evaluate.yml`; the playbook must run the `gate.yml` entry point afterwards, as `playbooks/evidence.yml` does after collecting the evidence. |
 | `linux_compliance_exceptions_file` | `str` | `null` | Absolute path, on the controller, of the exceptions file. `null` applies no exceptions. The same for every host of the play. Shared with the `verify` role, so it has no role prefix. |
 | `linux_compliance_audit_backend` | `str` | `"openscap"` | Scanner backend; `openscap` is the only one. |
 | `linux_compliance_audit_output_dir` | `str` | `"/var/lib/freesecdev/linux_compliance/evidence"` | Root-owned directory without group or other permissions below which each run gets its own directory. Missing components are created with mode `0700`; symlinks are refused. |

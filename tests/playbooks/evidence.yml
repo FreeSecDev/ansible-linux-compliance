@@ -154,6 +154,18 @@
           - (evidence_planted.results[2].content | b64decode) is search(evidence_secret_arf | regex_escape)
         quiet: true
 
+    - name: Check that the XCCDF results are carried verbatim, with target facts and SCE output
+      ansible.builtin.assert:
+        that:
+          - evidence_results is search(evidence_carried_sce | regex_escape)
+          - evidence_results is search(evidence_carried_address | regex_escape)
+          - evidence_results is search(evidence_carried_mac | regex_escape)
+        fail_msg: docs/evidence.md says that results.xml carries these values; the test must show it.
+        quiet: true
+      vars:
+        evidence_results: >-
+          {{ lookup('ansible.builtin.file', evidence_bundle_dir ~ '/raw/scan/results.xml', rstrip=false) }}
+
     - name: Hash the exceptions file that was applied
       ansible.builtin.stat:
         path: "{{ audit_exceptions_valid_file }}"
@@ -335,6 +347,52 @@
       ansible.builtin.assert:
         that:
           - not evidence_ledger.stat.exists
+        quiet: true
+
+    - name: Build a run whose XCCDF results are a symbolic link on the host
+      ansible.builtin.include_tasks: tasks/evidence-fixture.yml
+      vars:
+        evidence_fixture_run_id: symlink-web01
+
+    - name: Move the XCCDF results out of the run directory
+      ansible.builtin.copy:
+        src: "{{ evidence_fixture_dir }}/scan/results.xml"
+        dest: "{{ evidence_fixture_root }}/outside.xml"
+        mode: "0600"
+
+    - name: Replace the XCCDF results with a symbolic link to the same bytes
+      ansible.builtin.file:
+        path: "{{ evidence_fixture_dir }}/scan/results.xml"
+        src: "{{ evidence_fixture_root }}/outside.xml"
+        state: link
+        force: true
+
+    - name: Expect the symbolic link to be refused before anything is fetched
+      block:
+        - name: Collect the run with the symbolic link
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+
+        - name: Fail because the symbolic link was followed
+          ansible.builtin.fail:
+            msg: EVIDENCE-SYMLINK-FOLLOWED
+      rescue:
+        - name: Check that the symbolic link was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('scan/results.xml is a symbolic link on the host')
+            quiet: true
+
+    - name: Inspect the bundle directory of the run with the symbolic link
+      ansible.builtin.stat:
+        path: "{{ evidence_bundles_dir }}/web01/symlink-web01"
+      delegate_to: localhost
+      register: evidence_symlink
+
+    - name: Check that nothing was kept for the run with the symbolic link
+      ansible.builtin.assert:
+        that:
+          - not evidence_symlink.stat.exists
         quiet: true
 
     - name: Copy the exceptions file to a file that will change after it was applied

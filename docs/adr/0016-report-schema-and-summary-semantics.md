@@ -334,8 +334,11 @@ existing input kinds, not a new kind:
 - A bundle ([evidence bundles](../evidence.md)) is read without following links and verified before use. It then
   contributes its evaluation as an `exceptions_evaluation` item (compliance and exceptions sections) when exceptions
   were applied, otherwise its raw scan run as a `scan_run` item. The artifact path is the file inside the bundle.
-- The bundle's copy of the exceptions file is the report's exceptions file when `--exceptions-file` is not given. All
-  copies and `--exceptions-file` must be the same bytes; otherwise the CLI exits with status 2.
+- A bundle whose exceptions were applied requires `--exceptions-file`, and its copy of the exceptions file must be
+  byte-identical to it; otherwise the CLI exits with status 2. The bundle's copy is never the reference and never
+  appears as `exceptions_file`: an unsigned bundle built consistently from a made-up exceptions file would otherwise
+  turn failures into waivers under `verified: true` (the PR #31 review, the same rule as for
+  `--exceptions-evaluation` in the amendment above).
 - A bundle that does not verify is an input `error`. Unless its manifest is readable and records that no exceptions
   were applied, it is an `exceptions_evaluation` item, so the exceptions section is in error too and cannot call an
   exception stale on the strength of the bundles that did verify.

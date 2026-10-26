@@ -41,6 +41,14 @@ argument_specs:
           - "Rules with outcome error always count, in both modes, because an error is never waived."
           - "Without an exceptions file, or when no waiver was applied, the gate counts the raw result."
           - "It has no effect unless linux_compliance_audit_fail_on_noncompliant is true."
+      linux_compliance_audit_defer_gate:
+        type: bool
+        default: false
+        description:
+          - "Skip the result gates, so neither a scan that did not complete nor failed rules fail the host here."
+          - "The playbook must then run the gate.yml entry point of the role later, on the same hosts."
+          - "playbooks/evidence.yml sets it, so the evidence of every audited host is collected before the gates."
+          - "Never set it in a playbook that does not run gate.yml afterwards; the gates would not run at all."
       linux_compliance_exceptions_file:
         type: str
         default: null
@@ -263,11 +271,38 @@ argument_specs:
         default: false
         description:
           - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_audit_defer_gate:
+        type: bool
+        default: false
+        description:
+          - "Skip the result gates, so neither a scan that did not complete nor failed rules fail the host here."
+          - "The playbook must then run the gate.yml entry point of the role later, on the same hosts."
+          - "playbooks/evidence.yml sets it, so the evidence of every audited host is collected before the gates."
+          - "Never set it in a playbook that does not run gate.yml afterwards; the gates would not run at all."
       linux_compliance_exceptions_file:
         type: str
         default: null
         description:
           - "Absolute path, on the controller, of the exceptions file; null applies no exceptions."
+  gate.yml:
+    short_description: "Enforce the result gates on an existing audit result"
+    description:
+      - "Runs the gates of the main entry point on the fact linux_compliance_audited."
+      - "Fails when the scan did not complete and records linux_compliance_audited.gate."
+      - "Fails on failed or errored rules when linux_compliance_audit_fail_on_noncompliant is true."
+      - "playbooks/evidence.yml runs it after the evidence of every host was collected."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_audit_fail_on_noncompliant:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one rule with outcome fail or error."
+      linux_compliance_audit_fail_on_noncompliant_after_waivers:
+        type: bool
+        default: false
+        description:
+          - "Count the waived result instead of the raw result in the gate; error always counts."
   stale.yml:
     short_description: "Report the exceptions that matched no finding on any audited host"
     description:

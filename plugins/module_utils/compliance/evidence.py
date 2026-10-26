@@ -1182,6 +1182,50 @@ def _manifest(
     )
 
 
+def check_host_files(
+    audited: object, host: object, include_arf: object, observed: object
+) -> list[str]:
+    """Check the host files of a bundle on the host, before anything is transferred.
+
+    The plan is computed again from ``audited``. Each planned file must exist on the
+    host as a regular file that is not a symbolic link (``stat`` with ``follow: false``)
+    and must have exactly the size that the audit recorded, which the plan bounds by
+    :data:`MAX_FILE_BYTES`. A symbolic link would otherwise be followed by the fetch,
+    as root, and an oversized file would be transferred before its digest is compared.
+
+    Args:
+        audited: The fact ``linux_compliance_audited``.
+        host: The inventory host name.
+        include_arf: Whether the ARF results are collected.
+        observed: Bundle path to the result of ``ansible.builtin.stat`` on the host.
+
+    Returns:
+        The checked bundle paths, sorted.
+
+    Raises:
+        EvidenceError: If a file is missing, a symbolic link, not a regular file or has
+            another size than the audit recorded.
+    """
+    plan = plan_bundle(audited, host, include_arf)
+    stats = _mapping(observed, "the files observed on the host")
+    for item in plan.files:
+        if item.path not in stats:
+            _fail(f"{item.source} was not inspected on the host")
+        data = _mapping(stats[item.path], f"the host stat of {item.source}")
+        if data.get("exists") is not True:
+            _fail(f"{item.source} does not exist on the host; nothing was fetched")
+        if data.get("islnk") is not False:
+            _fail(f"{item.source} is a symbolic link on the host; it is not followed or fetched")
+        if data.get("isreg") is not True:
+            _fail(f"{item.source} is not a regular file on the host; it is not fetched")
+        if data.get("size") != item.size:
+            _fail(
+                f"{item.source} has {_echo(data.get('size'))} bytes on the host, but the audit "
+                f"recorded {item.size}; it is not fetched"
+            )
+    return sorted(item.path for item in plan.files)
+
+
 def check_written(expected: object, observed: object, controller_uid: object) -> list[str]:
     """Check every written file of a bundle against the digests the manifest will record.
 

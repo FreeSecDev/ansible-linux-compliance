@@ -915,3 +915,45 @@ def test_the_machine_id_of_the_manifest_must_match_the_scan_run() -> None:
     reseal(contents, set_key("host", "machine_id", value="d" * 32))
     with pytest.raises(evidence.EvidenceError, match="machine ID of the manifest differs"):
         evidence.check_bundle(contents)
+
+
+def host_stat(data: bytes, **changes: object) -> dict[str, object]:
+    result: dict[str, object] = {"exists": True, "isreg": True, "islnk": False, "size": len(data)}
+    result.update(changes)
+    return result
+
+
+def host_observed(changes: dict[str, object] | None = None) -> dict[str, object]:
+    received = fetched(audited(), host_files(scan_run()))
+    observed: dict[str, object] = {path: host_stat(data) for path, data in received.items()}
+    observed.update(changes or {})
+    return observed
+
+
+def test_host_files_are_checked_before_they_are_fetched() -> None:
+    checked = evidence.check_host_files(audited(), HOST, DISABLED, host_observed())
+    assert checked == ["raw/scan-run.json", "raw/scan/results.xml", "raw/tailoring.xml"]
+
+
+HOST_CASES: list[tuple[dict[str, object], str]] = [
+    ({"raw/tailoring.xml": host_stat(TAILORING, exists=False)}, "does not exist on the host"),
+    ({"raw/tailoring.xml": host_stat(TAILORING, islnk=True)}, "is a symbolic link on the host"),
+    ({"raw/tailoring.xml": host_stat(TAILORING, isreg=False)}, "is not a regular file on the host"),
+    ({"raw/tailoring.xml": host_stat(TAILORING, size=10**12)}, "bytes on the host, but the audit"),
+    ({"raw/tailoring.xml": "missing"}, "must be a mapping"),
+]
+
+
+@pytest.mark.parametrize(("changes", "message"), HOST_CASES)
+def test_host_files_that_are_links_special_or_resized_are_refused(
+    changes: dict[str, object], message: str
+) -> None:
+    with pytest.raises(evidence.EvidenceError, match=message):
+        evidence.check_host_files(audited(), HOST, DISABLED, host_observed(changes))
+
+
+def test_a_host_file_that_was_not_inspected_is_refused() -> None:
+    observed = host_observed()
+    del observed["raw/tailoring.xml"]
+    with pytest.raises(evidence.EvidenceError, match="was not inspected on the host"):
+        evidence.check_host_files(audited(), HOST, DISABLED, observed)

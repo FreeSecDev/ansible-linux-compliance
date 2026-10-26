@@ -107,6 +107,33 @@
       delegate_to: localhost
       become: false
 
+    - name: Evidence | Inspect the recorded evidence files on the host without following links
+      ansible.builtin.stat:
+        path: "{{ item.source }}"
+        follow: false
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop: "{{ __linux_compliance_evidence_plan.fetch }}"
+      loop_control:
+        label: "{{ item.path }}"
+      become: "{{ linux_compliance_evidence_become }}"
+      register: __linux_compliance_evidence_on_host
+
+    - name: Evidence | Refuse symbolic links, special files and sizes that differ from the record
+      ansible.builtin.assert:
+        that:
+          - >-
+            linux_compliance_audited
+            | freesecdev.linux_compliance.evidence_host_files(inventory_hostname,
+                linux_compliance_evidence_include_arf, __linux_compliance_evidence_host_observed)
+            | length == __linux_compliance_evidence_plan.fetch | length
+        quiet: true
+      vars:
+        __linux_compliance_evidence_host_observed: >-
+          {{ dict(__linux_compliance_evidence_on_host.results | map(attribute='item.path')
+                  | zip(__linux_compliance_evidence_on_host.results | map(attribute='stat'))) }}
+
     - name: Evidence | Fetch the recorded evidence files from the host
       ansible.builtin.fetch:
         src: "{{ item.source }}"
