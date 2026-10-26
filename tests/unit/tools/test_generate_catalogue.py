@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import re
 import runpy
 import sys
 from pathlib import Path
@@ -269,11 +270,12 @@ def test_the_reference_reports_every_family_and_profile(tmp_path: Path) -> None:
     reference = gen.reference(built(tmp_path))
     assert reference.startswith("# Control families\n")
     assert (
-        "| 1 | `file_permissions` | The file_permissions topic | no | Why file_permissions | "
-        "3 | 1 | 2 |"
+        "| 1 | `file_permissions` | none | The file_permissions topic | no | "
+        "Why file_permissions | 3 | 1 | 2 |"
     ) in reference
-    assert "| 7 | `mounts` | The mounts topic | yes | Why mounts | 0 | 0 | 0 |" in reference
-    assert "|  | All |  |  |  | 11 | 1 | 10 |" in reference
+    assert "| 7 | `mounts` | none | The mounts topic | yes | Why mounts | 0 | 0 | 0 |" in reference
+    assert "|  | All |  |  |  |  | 11 | 1 | 10 |" in reference
+    assert "## Umbrellas" in reference
     assert "### `first` (content 0.1.82)" in reference
     assert "| Family | `server` | `small` |" in reference
     assert "| `ssh` | 1 | 1 |" in reference
@@ -286,13 +288,71 @@ def test_the_reference_reports_every_family_and_profile(tmp_path: Path) -> None:
     assert gen.outputs(built(tmp_path))[gen.REFERENCE] == reference
 
 
-def test_a_rule_below_two_topic_groups_maps_to_several_families() -> None:
+def test_a_rule_below_topic_groups_of_several_umbrellas_is_an_error() -> None:
     document = source_document()
     families = cast("list[dict[str, object]]", document["families"])
-    families[5]["topic_groups"] = ["services", "ssh"]
+    families[3]["topic_groups"] = ["services"]
     families[3]["fallback_groups"] = []
-    with pytest.raises(gen.GenerationError, match="which map to several families"):
+    with pytest.raises(gen.GenerationError, match="which map to families of several umbrellas"):
         gen.family_of(RULE + "sshd_x", ["services", "ssh"], source(document))
+    families[3]["umbrella"] = "remote"
+    families[5]["umbrella"] = "access"
+    with pytest.raises(gen.GenerationError, match="which map to families of several umbrellas"):
+        gen.family_of(RULE + "sshd_x", ["services", "ssh"], source(document))
+
+
+def test_the_innermost_topic_group_decides_when_the_families_share_an_umbrella() -> None:
+    document = source_document()
+    families = cast("list[dict[str, object]]", document["families"])
+    families[3]["topic_groups"] = ["services"]
+    families[3]["fallback_groups"] = []
+    families[3]["umbrella"] = "remote"
+    families[5]["umbrella"] = "remote"
+    mapping = source(document)
+    assert gen.family_of(RULE + "sshd_x", ["services", "ssh"], mapping) == (
+        "ssh",
+        ("topic_groups", "ssh"),
+    )
+    assert gen.family_of(RULE + "x", ["services"], mapping) == (
+        "services",
+        ("topic_groups", "services"),
+    )
+
+
+def test_a_family_that_heads_an_umbrella_refines_with_its_families() -> None:
+    document = source_document()
+    families = cast("list[dict[str, object]]", document["families"])
+    families[3]["topic_groups"] = ["services"]
+    families[3]["fallback_groups"] = []
+    families[5]["umbrella"] = "services"
+    mapping = source(document)
+    assert gen.registry(mapping)[5] == {"name": "ssh", "disruptive": True, "umbrella": "services"}
+    assert gen.family_of(RULE + "sshd_x", ["services", "ssh"], mapping)[0] == "ssh"
+
+
+@pytest.mark.parametrize(
+    ("umbrella", "message"),
+    [
+        ("Remote", "families[5].umbrella must be a family or umbrella name, got 'Remote'"),
+        (None, "families[5].umbrella must be a family or umbrella name, got None"),
+        ("verify_x", "families[5].umbrella must be a family or umbrella name, got 'verify_x'"),
+    ],
+)
+def test_an_invalid_umbrella_in_the_mapping_is_an_error(umbrella: object, message: str) -> None:
+    document = source_document()
+    families = cast("list[dict[str, object]]", document["families"])
+    families[5]["umbrella"] = umbrella
+    with pytest.raises(gen.GenerationError, match=re.escape(message)):
+        gen.parse_source(document)
+
+
+def test_an_umbrella_of_two_levels_in_the_mapping_is_an_error() -> None:
+    document = source_document()
+    families = cast("list[dict[str, object]]", document["families"])
+    families[3]["umbrella"] = "ssh"
+    families[5]["umbrella"] = "remote"
+    with pytest.raises(gen.GenerationError, match="family ssh heads an umbrella"):
+        gen.parse_source(document)
 
 
 def test_a_rule_that_nothing_decides_maps_to_no_family() -> None:
@@ -533,7 +593,8 @@ def test_the_repository_mapping_is_valid_and_matches_the_registry() -> None:
 
 
 def test_the_repository_mapping_covers_the_required_topics() -> None:
-    names = {item.name for item in repository_source().families}
+    families = repository_source().families
+    names = {item.name for item in families} | {item.scope for item in families}
     assert {
         "auditd",
         "sysctl",

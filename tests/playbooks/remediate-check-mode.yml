@@ -620,6 +620,118 @@
             linux_compliance_remediated.results | selectattr('family', 'equalto', 'auditd') | list == []
         quiet: true
 
+- name: Full catalogue in check mode | An umbrella toggle switches off every family it groups in both roles
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - services
+    umbrella_toggle: linux_compliance_services_enabled
+    sssd_toggle: linux_compliance_sssd_enabled
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Load the generated catalogue
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/remediate/vars/rules.yml"
+        name: full_catalogue
+
+    - name: Describe the services umbrella and a discovered profile that selects every catalogued rule
+      ansible.builtin.set_fact:
+        services_families: >-
+          {{ full_catalogue.__linux_compliance_remediate_families | selectattr('umbrella', 'defined')
+             | selectattr('umbrella', 'equalto', 'services') | map(attribute='name') | list }}
+        full_profile:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          rule_ids: >-
+            {{ (full_catalogue.__linux_compliance_remediate_rules | map(attribute='rule_id') | list)
+               + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
+                  | map(attribute='value') | ansible.builtin.flatten) }}
+
+    - name: Collect the rules of the services umbrella and of the sssd family
+      ansible.builtin.set_fact:
+        services_rules: >-
+          {{ services_families | map('extract', full_catalogue.__linux_compliance_remediate_audit_only)
+             | ansible.builtin.flatten }}
+        sssd_rules: "{{ full_catalogue.__linux_compliance_remediate_audit_only.sssd }}"
+
+    - name: Switch the umbrella off and try to switch the sssd family back on
+      vars:
+        linux_compliance_services_enabled: false
+        linux_compliance_sssd_enabled: true
+      block:
+        - name: Run the remediate role with the services umbrella off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Resolve the disabled rules with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Check that every rule of the umbrella is off in both roles and names the umbrella
+          vars:
+            planned: >-
+              {{ linux_compliance_remediated.rules | selectattr('family', 'in', services_families) | list }}
+            audit_disabled: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
+          ansible.builtin.assert:
+            that:
+              - >-
+                services_families | sort
+                == ['cron', 'fapolicyd', 'mail', 'network_services', 'nfs', 'sssd', 'time_sync', 'usbguard']
+              - services_rules | length == 119
+              - planned | length == services_rules | length
+              - planned | map(attribute='action') | unique | list == ['none']
+              - planned | map(attribute='reason') | unique | list == ['disabled_by_toggle']
+              - planned | map(attribute='disabled_by') | unique | list == [umbrella_toggle]
+              - audit_disabled | map(attribute='rule_id') | sort == services_rules | sort
+              - audit_disabled | map(attribute='disabled_by') | unique | list == [umbrella_toggle]
+              - linux_compliance_remediated.disabled_rules == audit_disabled
+              - __linux_compliance_audit_toggles.warnings == []
+              - linux_compliance_remediated.notices | select('match', 'WARNING:') | list == []
+            quiet: true
+
+    - name: Keep the umbrella on and switch only the sssd family off
+      vars:
+        linux_compliance_services_enabled: true
+        linux_compliance_sssd_enabled: false
+      block:
+        - name: Run the remediate role with only the sssd family off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Resolve the disabled rules with the audit role again
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Check that the family toggle narrows the umbrella to exactly the sssd rules
+          vars:
+            audit_disabled: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
+          ansible.builtin.assert:
+            that:
+              - sssd_rules | length > 10
+              - audit_disabled | map(attribute='rule_id') | sort == sssd_rules | sort
+              - audit_disabled | map(attribute='disabled_by') | unique | list == [sssd_toggle]
+              - linux_compliance_remediated.disabled_rules == audit_disabled
+            quiet: true
+
 - name: Full catalogue in check mode | Rules without a native remediation are reported, never remediated
   hosts: localhost
   connection: local

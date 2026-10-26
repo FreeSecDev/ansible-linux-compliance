@@ -491,9 +491,10 @@ before the scan (`tasks/toggles.yml`, FREES-55) from two sources:
    (`roles/remediate/vars/rules.yml`), finds every variable that matches `^linux_compliance_.+_enabled$` and resolves
    each catalogued rule that the discovered profile selects, with or without a native remediation, with the filter
    `freesecdev.linux_compliance.audit_disabled_rules`. That filter and the `remediation_plan` filter of the remediate
-   role use the same code (`plugins/module_utils/compliance/toggles.py`): the rule toggle when it is set, else the
-   family toggle, else on. A rule that is off is disabled with `disabled_by` set to the family toggle when the family
-   toggle is off, and to the rule toggle otherwise. So `linux_compliance_auditd_enabled: false` in the inventory
+   role use the same code (`plugins/module_utils/compliance/toggles.py`): the rule toggle when it is set, else on
+   only when the umbrella toggle of the family (if any) and the family toggle are both on. A rule that is off is
+   disabled with `disabled_by` set to the umbrella toggle when it is off, else to the family toggle when it is off,
+   and to the rule toggle otherwise ([umbrellas](remediation-variables.md#umbrellas)). So `linux_compliance_auditd_enabled: false` in the inventory
    disables every auditd rule of the profile in the audit and in remediation at once, and names that variable in
    both: the catalogue holds every rule of the pinned profiles (FREES-53, [control families](control-families.md)).
    The global remediation opt-in plays no part: the audit honours the toggles whether or not remediation runs. The
@@ -512,9 +513,9 @@ role parameter. So a value copied into the inventory, such as a
 rule toggle set to `"{{ linux_compliance_<family>_enabled }}"` without the family toggle, resolves the same way in
 both roles. Only catalogued rules have toggles; for the pinned profiles that is every rule. A topic toggle does not
 disable rules of content that the catalogue does not describe; disable those through
-`linux_compliance_audit_disabled_rules`. When a topic toggle is `false` but no catalogued rule of its family is
-selected by the profile, the role prints a `WARNING:` that the toggle excludes nothing, and the remediate role adds the
-same warning to its notices; when both roles run in one play, each prints it once. With the full catalogue this
+`linux_compliance_audit_disabled_rules`. When a topic or umbrella toggle is `false` but no catalogued rule of the
+families it governs is selected by the profile, the role prints a `WARNING:` that the toggle excludes nothing, and
+the remediate role adds the same warning to its notices; when both roles run in one play, each prints it once. With the full catalogue this
 happens only for a family without any rule in the profile, for example `auditd` with the Ubuntu 24.04
 `cis_level1_server` profile.
 

@@ -9,17 +9,20 @@ byte, and assigns every selected rule exactly one control family with the docume
 
 1. ``topic_groups``: a ComplianceAsCode group that contains the rule, at any depth. Every rule
    below it belongs to the family, whatever its identifier, so ``auditing`` takes the audit log
-   permissions and the ``audit=1`` boot argument to ``auditd``. A rule below two topic groups is
-   an error.
+   permissions and the ``audit=1`` boot argument to ``auditd``. A rule below several topic groups
+   belongs to the innermost one when the families of all of them belong to the same umbrella
+   (``journald`` inside ``logging``); otherwise it is an error.
 2. ``rule_prefixes``: the start of the short rule identifier, for rules whose mechanism defines
    the topic (file permissions, kernel parameters, kernel modules, mount options, boot
    arguments). No prefix may be the start of another, so at most one matches.
 3. ``fallback_groups``: the innermost group that contains the rule and is listed here.
 
-A rule that nothing decides, a rule that two datastreams assign to different families, a group
-listed twice, a mapping entry that decides no rule and a native rule that no profile selects are
-errors; nothing is guessed. Rules listed in ``native_rules`` keep their revert strategy and
-parameters; every other rule gets the strategy ``audit_only``. The tool writes the catalogue and
+A family may name an ``umbrella`` (ADR 0011, topic split of FREES-53), which the catalogue
+registry repeats. A rule that nothing decides, a rule that two datastreams assign to different
+families, a group listed twice, a mapping entry that decides no rule and a native rule that no
+profile selects are errors; nothing is guessed. Rules listed in ``native_rules`` keep their
+revert strategy and parameters; every other rule gets the strategy ``audit_only``. The tool
+writes the catalogue and
 ``docs/control-families.md``; ``make catalogue`` then runs ``generate_toggles`` for the toggles.
 With ``--check`` nothing is written: a unified diff of every file that differs is printed and the
 exit status is 1, which is how CI detects drift from the pinned content. Only rule identifiers,
@@ -61,6 +64,7 @@ SOURCE_KEYS: Final[frozenset[str]] = frozenset({"schema_version", "families", "n
 FAMILY_KEYS: Final[frozenset[str]] = frozenset(
     {"name", "disruptive", "title", "why", "topic_groups", "rule_prefixes", "fallback_groups"}
 )
+UMBRELLA_KEY: Final[str] = toggles.UMBRELLA_KEY
 NATIVE_KEYS: Final[frozenset[str]] = frozenset(
     {"rule_id", "revert_strategy", "runbook", "parameters"}
 )
@@ -68,7 +72,7 @@ TIERS: Final[tuple[str, ...]] = ("topic_groups", "rule_prefixes", "fallback_grou
 GROUP_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 PREFIX_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}_")
 CATALOGUE_PLAIN_KEYS: Final[frozenset[str]] = frozenset(
-    {"family", "name", "revert_strategy", "toggle"}
+    {"family", "name", "revert_strategy", "toggle", UMBRELLA_KEY}
 )
 MAX_PROBLEMS: Final[int] = 50
 
@@ -88,6 +92,12 @@ class Family:
     topic_groups: tuple[str, ...]
     rule_prefixes: tuple[str, ...]
     fallback_groups: tuple[str, ...]
+    umbrella: str | None = None
+
+    @property
+    def scope(self) -> str:
+        """Return the umbrella of the family, or its own name when it belongs to none."""
+        return self.name if self.umbrella is None else self.umbrella
 
     def entries(self, tier: str) -> tuple[str, ...]:
         """Return the mapping entries of ``tier`` (one of :data:`TIERS`)."""
@@ -165,11 +175,18 @@ def _text(table: Mapping[str, object], key: str, where: str) -> str:
 def _family(raw: object, index: int) -> Family:
     where = f"families[{index}]"
     table = toggles.as_mapping(raw)
-    if table is None or frozenset(table) != FAMILY_KEYS:
-        message = f"{where} must be a mapping with exactly {sorted(FAMILY_KEYS)}"
+    if table is None or frozenset(table) - {UMBRELLA_KEY} != FAMILY_KEYS:
+        message = (
+            f"{where} must be a mapping with exactly {sorted(FAMILY_KEYS)} and optionally "
+            f"{UMBRELLA_KEY}"
+        )
         raise _fail(message)
     if not isinstance(table["disruptive"], bool):
         message = f"{where}.disruptive must be a boolean"
+        raise _fail(message)
+    umbrella = table.get(UMBRELLA_KEY)
+    if UMBRELLA_KEY in table and not toggles.is_topic_name(umbrella):
+        message = f"{where}.umbrella must be a family or umbrella name, got {umbrella!r}"
         raise _fail(message)
     return Family(
         name=_text(table, "name", where),
@@ -179,6 +196,7 @@ def _family(raw: object, index: int) -> Family:
         topic_groups=_texts(table["topic_groups"], f"{where}.topic_groups", GROUP_NAME),
         rule_prefixes=_texts(table["rule_prefixes"], f"{where}.rule_prefixes", PREFIX_NAME),
         fallback_groups=_texts(table["fallback_groups"], f"{where}.fallback_groups", GROUP_NAME),
+        umbrella=None if umbrella is None else str(umbrella),
     )
 
 
@@ -243,9 +261,7 @@ def parse_source(document: object) -> Source:
     _check_prefixes(families)
     _check_groups(families)
     errors = toggles.Errors()
-    toggles.check_families(
-        [{"name": family.name, "disruptive": family.disruptive} for family in families], errors
-    )
+    toggles.check_registry(_registry(families), errors)
     if errors.items:
         message = f"{SOURCE}: " + "; ".join(errors.items)
         raise _fail(message)
@@ -294,11 +310,15 @@ def family_of(rule_id: str, groups: Sequence[str], source: Source) -> tuple[str,
     """
     topics = _index(source, "topic_groups")
     matched = [group for group in groups if group in topics]
-    if len(matched) > 1:
-        message = f"{rule_id} is below the topic groups {matched}, which map to several families"
+    scopes = {family.name: family.scope for family in source.families}
+    if len({scopes[topics[group]] for group in matched}) > 1:
+        message = (
+            f"{rule_id} is below the topic groups {matched}, which map to families of several "
+            f"umbrellas"
+        )
         raise _fail(message)
     if matched:
-        return topics[matched[0]], ("topic_groups", matched[0])
+        return topics[matched[-1]], ("topic_groups", matched[-1])
     short = toggles.rule_short_id(rule_id)
     for prefix, family in _index(source, "rule_prefixes").items():
         if short.startswith(prefix):
@@ -369,9 +389,19 @@ def catalogue_entry(rule_id: str, family: Family, source: Source) -> dict[str, o
     }
 
 
+def _registry(families: Sequence[Family]) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for family in families:
+        entry: dict[str, object] = {"name": family.name, "disruptive": family.disruptive}
+        if family.umbrella is not None:
+            entry[UMBRELLA_KEY] = family.umbrella
+        entries.append(entry)
+    return entries
+
+
 def registry(source: Source) -> list[dict[str, object]]:
-    """Return the family registry of the catalogue, in dispatch order."""
-    return [{"name": family.name, "disruptive": family.disruptive} for family in source.families]
+    """Return the family registry of the catalogue, in dispatch order, with the umbrellas."""
+    return _registry(source.families)
 
 
 def build(source: Source, streams: Sequence[StreamRules]) -> Catalogue:
@@ -492,7 +522,15 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "toggle, and each family a topic toggle",
     "([remediation variable reference](remediation-variables.md)), so",
     "`linux_compliance_auditd_enabled: false` removes every auditd rule of the profile from the",
-    "audit and from remediation. A rule without a native remediation has the strategy",
+    "audit and from remediation. Each family is one subsystem, such as `sssd`, `time_sync`,",
+    "`pwquality` or `firewalld`. Families that belong together are grouped by an umbrella",
+    "toggle: `linux_compliance_services_enabled: false` switches off every family whose",
+    "umbrella is `services`, whatever their own topic toggles say. An umbrella is either a name",
+    "of its own, such as `services`, or a family that heads it, such as `pam` for `pwquality`,",
+    "`pwhistory` and `faillock`. Every umbrella keeps the name of the family it was split from,",
+    "so it switches off exactly the rules that family held before the split",
+    "([ADR 0011](adr/0011-control-toggles-and-cleanup.md), amendment of the FREES-53 topic",
+    "split). A rule without a native remediation has the strategy",
     "`audit_only`: the audit scans it, or excludes it and reports it as `disabled` when it is",
     "switched off, and remediation reports it as `not_implemented` and never changes anything",
     "for it ([remediation guide](remediation.md#effective-state-of-a-rule)).",
@@ -505,8 +543,9 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "",
     "1. **Topic groups**: a group that contains the rule at any depth. Every rule below it",
     "   belongs to the family, whatever its identifier, so the `auditing` group takes the audit",
-    "   log permissions and the `audit=1` boot argument to `auditd`. A rule below two topic",
-    "   groups fails the generator.",
+    "   log permissions and the `audit=1` boot argument to `auditd`. A rule below several topic",
+    "   groups belongs to the innermost one when all of their families share an umbrella, so",
+    "   `journald` refines `logging`; otherwise it fails the generator.",
     "2. **Rule prefixes**: the start of the short rule identifier, for rules whose mechanism",
     "   defines the topic, such as `file_permissions_`, `sysctl_`, `kernel_module_`,",
     "   `mount_option_` and `grub2_`. No prefix may be the start of another, so at most one",
@@ -523,11 +562,44 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "The order is the dispatch order of the remediate role: non-disruptive families first, then",
     "the families in order of growing lock-out risk, with the boot loader last. Remediation",
     "applies and cleans up the rules of a disruptive family only when",
-    "`linux_compliance_remediate_allow_disruptive` names it.",
+    "`linux_compliance_remediate_allow_disruptive` names it or its umbrella. The why column",
+    "justifies the disruptive flag of each family. A family split from another keeps the flag of",
+    "the family it came from, so the split changes nothing that the allow-list gates.",
     "",
-    "| Order | Family | Topic | Disruptive | Why | Catalogued rules | Native | `audit_only` |",
-    "|---|---|---|---|---|---|---|---|",
+    (
+        "| Order | Family | Umbrella | Topic | Disruptive | Why | Catalogued rules | Native | "
+        "`audit_only` |"
+    ),
+    "|---|---|---|---|---|---|---|---|---|",
 )
+
+
+def _umbrella_lines(built: Catalogue) -> list[str]:
+    families = {family.name: family.disruptive for family in built.source.families}
+    umbrellas = {
+        family.name: family.umbrella
+        for family in built.source.families
+        if family.umbrella is not None
+    }
+    lines = [
+        "",
+        "## Umbrellas",
+        "",
+        "An umbrella toggle that is `false` switches off every family it groups; a family",
+        "toggle can only narrow it. A rule toggle that is set wins over both. An allow-list",
+        "entry that names an umbrella allows every disruptive family it groups.",
+        "",
+        "| Umbrella toggle | Families | Catalogued rules |",
+        "|---|---|---|",
+    ]
+    for topic in toggles.topics(families, umbrellas):
+        members = toggles.governed(topic, families, umbrellas)
+        if members == [topic]:
+            continue
+        count = sum(rule["family"] in members for rule in built.rules)
+        listed = ", ".join(f"`{member}`" for member in members)
+        lines.append(_cell([f"`{toggles.toggle_name(topic)}`", listed, count]))
+    return lines
 
 
 def reference(built: Catalogue) -> str:
@@ -541,6 +613,7 @@ def reference(built: Catalogue) -> str:
                 [
                     order,
                     f"`{family.name}`",
+                    "none" if family.umbrella is None else f"`{family.umbrella}`",
                     family.title,
                     "yes" if family.disruptive else "no",
                     family.why,
@@ -553,9 +626,20 @@ def reference(built: Catalogue) -> str:
     total_native = sum(toggles.is_native(rule) for rule in built.rules)
     lines.append(
         _cell(
-            ["", "All", "", "", "", len(built.rules), total_native, len(built.rules) - total_native]
+            [
+                "",
+                "All",
+                "",
+                "",
+                "",
+                "",
+                len(built.rules),
+                total_native,
+                len(built.rules) - total_native,
+            ]
         )
     )
+    lines.extend(_umbrella_lines(built))
     lines.extend(
         [
             "",

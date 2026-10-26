@@ -414,8 +414,8 @@ def test_toggles_must_be_a_mapping() -> None:
 @pytest.mark.parametrize(
     ("allow", "message"),
     [
-        (["sshd"], "allow-list entry 'sshd' is not a registered family"),
-        ([7], "allow-list entry 7 is not a registered family"),
+        (["sshd"], "allow-list entry 'sshd' is not a registered family or umbrella"),
+        ([7], "allow-list entry 7 is not a registered family or umbrella"),
         (["file_permissions"], "allow-list entry file_permissions is not a disruptive family"),
         ("ssh", "linux_compliance_remediate_allow_disruptive must be a list"),
     ],
@@ -472,7 +472,13 @@ def test_options_must_have_exactly_the_documented_keys(given: object) -> None:
             "the family registry must be a list of 1 to 64 families",
         ),
         (["ssh"], "family #0: must be a mapping"),
-        ([{"name": "ssh"}], "family #0: keys must be exactly ['disruptive', 'name'], got ['name']"),
+        (
+            [{"name": "ssh"}],
+            (
+                "family #0: keys must be exactly ['disruptive', 'name'] and optionally umbrella, "
+                "got ['name']"
+            ),
+        ),
         ([{"name": "SSH", "disruptive": True}], "family #0: invalid or reserved family name 'SSH'"),
         ([{"name": 5, "disruptive": True}], "family #0: invalid or reserved family name 5"),
         (
@@ -581,7 +587,7 @@ def test_errors_are_bounded() -> None:
 
 
 def test_resolve_toggle_defaults_to_on_without_a_toggle() -> None:
-    toggle = toggles.resolve_toggle(rule(CRONTAB, "file_permissions"), {})
+    toggle = toggles.resolve_toggle(rule(CRONTAB, "file_permissions"), {}, umbrellas={})
     assert toggle == toggles.Toggle(on=True, disabled_by=None)
 
 

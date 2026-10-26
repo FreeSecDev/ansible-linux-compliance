@@ -45,19 +45,25 @@ options:
       - C(audit_only) maps each family to the full identifiers of its rules without a native
         remediation, C(__linux_compliance_remediate_audit_only) of the same file. They are
         expanded to catalogue entries with the strategy C(audit_only).
-      - C(families) is the family registry in dispatch order, a list of mappings with C(name)
-        and C(disruptive).
+      - C(families) is the family registry in dispatch order, a list of mappings with C(name),
+        C(disruptive) and optionally C(umbrella), the umbrella that groups the family (ADR 0011,
+        topic split of FREES-53).
       - C(enabled) is the global opt-in C(linux_compliance_remediate_enabled).
       - C(allow_disruptive) lists the disruptive families that may be applied and cleaned up.
+        An entry that names an umbrella allows every disruptive family that the umbrella
+        groups, so an allow-list written before a family was split keeps its meaning.
       - C(toggles) maps every variable whose name matches C(^linux_compliance_.+_enabled$) to its
         value. C(linux_compliance_remediate_enabled) is ignored; any other name in the namespace
-        of a role is an error, every other name must be the toggle of a catalogued rule or of a
-        registered family, and its value must be a boolean. The generated rule toggle defaults
-        (C("{{ linux_compliance_<family>_enabled }}")) arrive templated, as booleans.
+        of a role is an error, every other name must be the toggle of a catalogued rule, of a
+        registered family or of an umbrella, and its value must be a boolean. A rule toggle
+        copied from its family (C("{{ linux_compliance_<family>_enabled }}")) arrives templated,
+        as a boolean.
       - The validation and the toggle resolution are those of
         C(plugins/module_utils/compliance/toggles.py), which the C(audit_disabled_rules) filter
-        of the audit role uses too. A rule that is off names the family toggle as C(disabled_by)
-        when the family toggle is off, and its rule toggle otherwise.
+        of the audit role uses too. An umbrella toggle that is false switches off every family
+        it groups, whatever their topic toggles say; a rule toggle that is set wins over both.
+        A rule that is off names the umbrella toggle as C(disabled_by) when the umbrella toggle is
+        off, else the family toggle when the family toggle is off, and its rule toggle otherwise.
       - C(profile_rule_ids) lists the full rule identifiers that the discovered profile selects.
         It is required when C(enabled) is true and ignored otherwise (pass C(none)).
       - C(ledger_entries) lists the entries of the state ledger, as the control_state module
@@ -179,22 +185,33 @@ class Context:
     profile: frozenset[str]
     toggle_values: Mapping[str, bool]
     ledger: Mapping[str, Rule]
+    umbrellas: Mapping[str, str]
 
 
-def check_allow_list(raw: object, families: Mapping[str, bool], errors: Errors) -> frozenset[str]:
-    """Validate the disruptive allow-list and return it as a set."""
+def check_allow_list(
+    raw: object, families: Mapping[str, bool], umbrellas: Mapping[str, str], errors: Errors
+) -> frozenset[str]:
+    """Validate the disruptive allow-list and return the disruptive families that it allows.
+
+    An entry is a disruptive family or an umbrella that groups at least one; an umbrella allows
+    every disruptive family that it groups (:func:`toggles.governed`).
+    """
     items = toggles.as_sequence(raw)
     if items is None:
         errors.add("linux_compliance_remediate_allow_disruptive must be a list")
         return frozenset()
     allowed: set[str] = set()
     for item in items:
-        if not isinstance(item, str) or item not in families:
-            errors.add(f"allow-list entry {toggles.show(item)} is not a registered family")
-        elif not families[item]:
+        members = toggles.governed(item, families, umbrellas) if isinstance(item, str) else []
+        disruptive = [family for family in members if families[family]]
+        if not members:
+            errors.add(
+                f"allow-list entry {toggles.show(item)} is not a registered family or umbrella"
+            )
+        elif not disruptive:
             errors.add(f"allow-list entry {item} is not a disruptive family")
         else:
-            allowed.add(item)
+            allowed.update(disruptive)
     return frozenset(allowed)
 
 
@@ -264,7 +281,7 @@ def decide(rule: Rule, toggle: toggles.Toggle, context: Context) -> tuple[str, s
 
 def plan_rule(rule: Rule, context: Context) -> Rule:
     """Return ``rule`` with its action, reason, controlling variable and ledger entry."""
-    toggle = toggles.resolve_toggle(rule, context.toggle_values)
+    toggle = toggles.resolve_toggle(rule, context.toggle_values, umbrellas=context.umbrellas)
     action, reason = decide(rule, toggle, context)
     rule_id = str(rule["rule_id"])
     entry = context.ledger.get(rule_id)
@@ -390,12 +407,15 @@ def _context(
     ledger, orphaned = check_ledger(options["ledger_entries"], rules, errors)
     context = Context(
         enabled=switched_on,
-        allowed=check_allow_list(options["allow_disruptive"], loaded.families, errors),
+        allowed=check_allow_list(
+            options["allow_disruptive"], loaded.families, loaded.umbrellas, errors
+        ),
         profile=(
             check_profile(options["profile_rule_ids"], errors) if switched_on else frozenset()
         ),
         toggle_values=loaded.toggles,
         ledger=ledger,
+        umbrellas=loaded.umbrellas,
     )
     return rules, loaded.families, context, orphaned
 
@@ -426,14 +446,20 @@ def remediation_plan(catalogue: object, options: object) -> dict[str, object]:
                 if rule["action"] == NOT_IMPLEMENTED
             ],
             "disabled_rules": toggles.disabled_rules(
-                rules, context.toggle_values, context.profile if context.enabled else None
+                rules,
+                context.toggle_values,
+                context.profile if context.enabled else None,
+                umbrellas=context.umbrellas,
             ),
             "orphaned": orphaned,
             "report": [{key: rule[key] for key in REPORT_KEYS} for rule in planned],
             "notices": notices(planned, orphaned, context)
             + toggles.topic_warnings(
                 toggles.Catalogue(
-                    rules=rules, families=registry, toggles=dict(context.toggle_values)
+                    rules=rules,
+                    families=registry,
+                    toggles=dict(context.toggle_values),
+                    umbrellas=dict(context.umbrellas),
                 ),
                 context.profile if context.enabled else None,
             ),
