@@ -133,8 +133,9 @@ _value:
       description:
         - Operator messages for skipped, manual and orphaned rules, one message with the number
           of C(not_implemented) rules, followed by a C(WARNING:)
-          message for every topic toggle that is false while no catalogued rule of its family is
-          in the profile (in the catalogue when remediation is disabled).
+          message for every topic or umbrella toggle that is false while no catalogued rule of
+          the families that it governs is in the profile (in the catalogue when remediation is
+          disabled).
       type: list
       elements: str
     summary:
