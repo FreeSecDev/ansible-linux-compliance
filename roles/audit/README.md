@@ -39,10 +39,15 @@ when the output directory does not exist, check mode does not create it and the 
    `linux_compliance_audit_fail_on_noncompliant` is true, counting the raw result unless
    `linux_compliance_audit_fail_on_noncompliant_after_waivers` is true. `error` always counts.
 
-`tasks/main.yml` imports `exceptions_file.yml`, `exceptions_apply.yml` and `gate.yml`. Two more entry points exist:
-`evaluate` runs steps 2, 7, 8 and 9 on an existing `linux_compliance_audited` fact without scanning, and `stale`
-aggregates stale exceptions once over the hosts in `linux_compliance_audit_stale_hosts` (the final play of
-`playbooks/audit.yml`).
+`tasks/main.yml` imports `exceptions_file.yml`, `exceptions_apply.yml` and `gate.yml`. Two more entry points exist,
+named with their suffix because `tasks_from` must end in `.yml`:
+
+- `evaluate.yml` runs steps 2, 7, 8 and 9 on an existing `linux_compliance_audited` fact without scanning.
+- `stale.yml` aggregates stale exceptions once over the target hosts in `linux_compliance_audit_stale_hosts` (the
+  final play of `playbooks/audit.yml`).
+
+With an exceptions file, only the linear strategy is supported (with or without `serial`); the `free` strategy is
+detected and fails. Every host of the play, across all `serial` batches, must resolve the variable to the same path.
 
 ## Variables
 
@@ -70,8 +75,17 @@ mode without an existing output directory), `summary` (counts per outcome), `sca
 scan run) and `summary` (the count per outcome of the waived run). `gate` holds `enabled`, `after_waivers`, `basis`
 (`raw` or `waived`), `counted` and the `fail`, `error` and `waived` counts used.
 
-The `stale` entry point publishes `linux_compliance_audit_stale_exceptions`: `computed`, `stale` (identifiers unmatched
-on every evaluated host, or null), `source_sha256`, `audited_hosts`, `evaluated_hosts` and `not_evaluated_hosts`.
+The `stale.yml` entry point publishes `linux_compliance_audit_stale_exceptions` with these keys:
+
+- `computed`;
+- `complete`, true only when every target host was evaluated;
+- `unmatched`, the identifiers unmatched on every evaluated host;
+- `stale`, equal to `unmatched` when `complete` is true and null otherwise;
+- `source_sha256`;
+- `target_hosts`, `audited_hosts` and `evaluated_hosts`;
+- `not_evaluated_hosts`: every target host without an evaluation, including hosts limited out, unreachable or failed.
+
+Only complete coverage produces the advice to remove an exception.
 
 ## Running
 

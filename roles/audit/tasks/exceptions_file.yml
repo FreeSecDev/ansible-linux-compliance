@@ -1,8 +1,31 @@
 ---
+- name: Audit | Check that every host of the play resolves the same exceptions file
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_exceptions_paths | length == 1
+    fail_msg: >-
+      linux_compliance_exceptions_file must be the same for every host of the play, also across serial
+      batches, because the file is read and validated once. The hosts of the play resolve it to
+      {{ __linux_compliance_audit_exceptions_paths | map('ansible.builtin.string') | join(', ') }}.
+      Set it in play variables or with -e, not in host_vars or group_vars.
+    quiet: true
+  vars:
+    __linux_compliance_audit_exceptions_unset: __linux_compliance_exceptions_file_not_host_specific__
+    __linux_compliance_audit_exceptions_paths: >-
+      {{ (ansible_play_hosts_all | map('extract', hostvars)
+          | map(attribute='linux_compliance_exceptions_file', default=__linux_compliance_audit_exceptions_unset)
+          | reject('equalto', __linux_compliance_audit_exceptions_unset) | list
+          + [linux_compliance_exceptions_file]) | unique }}
+  run_once: true
+  any_errors_fatal: true
+  tags:
+    - always
+
 - name: Audit | Read the exceptions file once on the controller
   ansible.builtin.set_fact:
     __linux_compliance_audit_exceptions:
       file: "{{ linux_compliance_exceptions_file }}"
+      reader: "{{ inventory_hostname }}"
       text: >-
         {{ lookup('ansible.builtin.file', linux_compliance_exceptions_file, rstrip=false)
            if linux_compliance_exceptions_file is not none else none }}
@@ -18,6 +41,19 @@
          if __linux_compliance_audit_exceptions.text is not none else none }}
   run_once: true
   any_errors_fatal: true
+  tags:
+    - always
+
+- name: Audit | Check that the file was read once for the batch
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_exceptions.reader == ansible_play_batch | first
+    fail_msg: >-
+      The exceptions file was read on {{ __linux_compliance_audit_exceptions.reader }} instead of once
+      for the batch, which happens with the free strategy. The audit role does not support the free
+      strategy when linux_compliance_exceptions_file is set; use the linear strategy.
+    quiet: true
+  when: linux_compliance_exceptions_file is not none
   tags:
     - always
 

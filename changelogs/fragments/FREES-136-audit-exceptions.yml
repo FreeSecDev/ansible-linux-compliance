@@ -14,9 +14,15 @@ minor_changes:
     audit role - warn about exceptions that set a ``framework`` but no ``profiles``, because they apply to every
     profile scanned on the hosts in their scope.
   - >-
-    audit role - add the ``evaluate`` entry point (apply the exceptions file and the gates to an existing audit result)
-    and the ``stale`` entry point. ``playbooks/audit.yml`` runs ``stale`` in a final play on the controller, once after
-    every host and every serial batch, and publishes ``linux_compliance_audit_stale_exceptions``.
+    audit role - add the ``evaluate.yml`` entry point (apply the exceptions file and the gates to an existing audit
+    result) and the ``stale.yml`` entry point. ``playbooks/audit.yml`` runs ``stale.yml`` in a final play on the
+    controller, once after every host and every serial batch, and publishes ``linux_compliance_audit_stale_exceptions``.
+    Target hosts without an evaluation (limited out, unreachable, failed) are listed, and an exception is called
+    stale only when every target host was evaluated.
+  - >-
+    audit role - with an exceptions file, every host of the play must resolve the same file, also across serial
+    batches; each host checks that the applied text has the validated SHA-256; the free strategy is detected and
+    refused.
   - >-
     Add the controller filters ``freesecdev.linux_compliance.validate_exceptions`` (validate an exceptions file and
     list the exceptions without profiles) and ``freesecdev.linux_compliance.scan_summary`` (count the findings of a

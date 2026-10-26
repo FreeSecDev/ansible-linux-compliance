@@ -30,16 +30,25 @@ NAME_SET_PYTHONS := 3.9 3.10 3.11 3.12 3.13 3.14 3.15
 NAME_SET_PYTHON ?=
 NAME_SET_DIRECTORY := build/name-sets
 AUDIT_EXCEPTIONS_DIR := build/test-audit-exceptions
+AUDIT_EXCEPTIONS_INVENTORY := tests/playbooks/inventory/audit-exceptions.yml
+AUDIT_EXCEPTIONS_FORBIDDEN := Apply the exceptions file to the scan run|AUDIT-EXCEPTIONS-NOT-REACHED
 AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_HOME='$(CURDIR)/build/ansible-home' \
 	ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' ANSIBLE_NOCOLOR=1 \
-	$(RUN) ansible-playbook -i tests/playbooks/inventory/audit-exceptions.yml \
-	-e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
+	$(RUN) ansible-playbook -e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
 
 space := $(subst ,, )
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
 PYLINT_MODULE_DIRECTORIES := plugins/modules
 PYLINT_MODULE_IGNORES := $(subst $(space),|,$(patsubst %,^%/,$(PYLINT_MODULE_DIRECTORIES)))
+
+define audit_exceptions_expect_failure
+status=0; $(AUDIT_EXCEPTIONS_PLAYBOOK) $(2) > '$(AUDIT_EXCEPTIONS_DIR)/$(1).log' 2>&1 || status=$$?; \
+	cat '$(AUDIT_EXCEPTIONS_DIR)/$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: %s did not fail the play (status %s)\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -q '$(3)' '$(AUDIT_EXCEPTIONS_DIR)/$(1).log' || { printf 'error: %s: the expected message is missing\n' '$(1)' >&2; exit 1; }; \
+	if grep -qE '$(4)' '$(AUDIT_EXCEPTIONS_DIR)/$(1).log'; then printf 'error: %s: forbidden output found\n' '$(1)' >&2; exit 1; fi
+endef
 
 NOT_IMPLEMENTED = @printf 'not implemented yet: %s (tracked in %s)\n' '$(1)' '$(2)' >&2; exit 2
 
@@ -244,14 +253,14 @@ test-name-sets: require-uv collection-link
 test-audit-exceptions: require-uv collection-link
 	rm -rf '$(AUDIT_EXCEPTIONS_DIR)'
 	mkdir -p build/ansible-home '$(AUDIT_EXCEPTIONS_DIR)'
-	$(AUDIT_EXCEPTIONS_PLAYBOOK) tests/playbooks/audit-exceptions.yml
-	status=0; $(AUDIT_EXCEPTIONS_PLAYBOOK) tests/playbooks/audit-exceptions-invalid.yml \
-		> '$(AUDIT_EXCEPTIONS_DIR)/invalid.log' 2>&1 || status=$$?; \
-		cat '$(AUDIT_EXCEPTIONS_DIR)/invalid.log'; \
-		test "$$status" -eq 2 || { printf 'error: an invalid exceptions file did not fail the play (status %s)\n' "$$status" >&2; exit 1; }; \
-		grep -q 'missing keys: risk' '$(AUDIT_EXCEPTIONS_DIR)/invalid.log' || { printf 'error: the validation error is missing\n' >&2; exit 1; }; \
-		if grep -q 'Apply the exceptions file to the scan run' '$(AUDIT_EXCEPTIONS_DIR)/invalid.log'; then printf 'error: a host was evaluated with an invalid file\n' >&2; exit 1; fi; \
-		if grep -q 'AUDIT-EXCEPTIONS-NOT-REACHED' '$(AUDIT_EXCEPTIONS_DIR)/invalid.log'; then printf 'error: the playbook continued after an invalid file\n' >&2; exit 1; fi
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions.yml
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) --limit db01,localhost tests/playbooks/audit-exceptions-limit.yml \
+		| tee '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
+	grep -q 'unmatched on 1 of 2 target hosts; not covered: web01' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
+	if grep -q 'review and remove' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'; then printf 'error: a limited run advised removal\n' >&2; exit 1; fi
+	$(call audit_exceptions_expect_failure,invalid,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-invalid.yml,missing keys: risk,$(AUDIT_EXCEPTIONS_FORBIDDEN))
+	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
+	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
 
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)

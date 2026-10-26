@@ -14,6 +14,22 @@
   tags:
     - always
 
+- name: Audit | Check that the applied text is the text that was validated
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_exceptions_overview is not none
+      - __linux_compliance_audit_evaluation.source_sha256 == __linux_compliance_audit_exceptions_overview.source_sha256
+      - __linux_compliance_audit_exceptions.file == linux_compliance_exceptions_file
+    fail_msg: >-
+      The exceptions text applied to this host (SHA-256
+      {{ __linux_compliance_audit_evaluation.source_sha256 }}) is not the text validated for the play
+      (SHA-256 {{ __linux_compliance_audit_exceptions_overview.source_sha256 | default('none') }}).
+      Nothing from it is published; run the play again with one exceptions file and the linear strategy.
+    quiet: true
+  when: __linux_compliance_audit_evaluation is not none
+  tags:
+    - always
+
 - name: Audit | Publish the waived result next to the raw result
   ansible.builtin.set_fact:
     linux_compliance_audited: >-

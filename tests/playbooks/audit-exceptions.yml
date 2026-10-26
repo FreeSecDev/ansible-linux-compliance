@@ -18,7 +18,7 @@
     - name: Apply the exceptions with the audit role
       ansible.builtin.include_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: evaluate
+        tasks_from: evaluate.yml
 
     - name: Hash the exceptions file on the controller
       ansible.builtin.stat:
@@ -107,7 +107,7 @@
     - name: Aggregate the evaluations with the audit role
       ansible.builtin.import_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: stale
+        tasks_from: stale.yml
       vars:
         linux_compliance_audit_stale_hosts: "{{ query('ansible.builtin.inventory_hostnames', 'web01:db01') }}"
 
@@ -119,6 +119,9 @@
           - linux_compliance_audit_stale_exceptions.evaluated_hosts == ['db01', 'web01']
           - linux_compliance_audit_stale_exceptions.audited_hosts == ['db01', 'web01']
           - linux_compliance_audit_stale_exceptions.not_evaluated_hosts == []
+          - linux_compliance_audit_stale_exceptions.target_hosts == ['db01', 'web01']
+          - linux_compliance_audit_stale_exceptions.complete
+          - linux_compliance_audit_stale_exceptions.unmatched == ['EXC-UNUSED']
           - >-
             linux_compliance_audit_stale_exceptions.source_sha256 ==
             hostvars['web01'].linux_compliance_audited.exceptions.source_sha256
@@ -143,7 +146,7 @@
         - name: Apply the exceptions and the gate with the audit role
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.audit
-            tasks_from: evaluate
+            tasks_from: evaluate.yml
 
         - name: Fail because the gate passed
           ansible.builtin.fail:
@@ -179,7 +182,7 @@
     - name: Apply the exceptions and the gate with the audit role
       ansible.builtin.include_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: evaluate
+        tasks_from: evaluate.yml
 
     - name: Check that the gate passed on the waived result and kept the raw one
       ansible.builtin.assert:
@@ -211,7 +214,7 @@
         - name: Apply the exceptions and the gate with the audit role
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.audit
-            tasks_from: evaluate
+            tasks_from: evaluate.yml
 
         - name: Fail because the gate passed
           ansible.builtin.fail:
@@ -242,7 +245,7 @@
     - name: Apply the exceptions with the audit role in check mode
       ansible.builtin.include_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: evaluate
+        tasks_from: evaluate.yml
         apply:
           check_mode: true
 
@@ -267,17 +270,19 @@
     - name: Aggregate the evaluations with the audit role
       ansible.builtin.import_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: stale
+        tasks_from: stale.yml
       vars:
         linux_compliance_audit_stale_hosts: [web01, db01]
 
-    - name: Check that web01, without a scan, is not counted
+    - name: Check that web01, without a scan, is not counted and nothing is called stale
       ansible.builtin.assert:
         that:
           - linux_compliance_audit_stale_exceptions.evaluated_hosts == ['db01']
           - linux_compliance_audit_stale_exceptions.not_evaluated_hosts == ['web01']
+          - not linux_compliance_audit_stale_exceptions.complete
+          - linux_compliance_audit_stale_exceptions.stale is none
           - >-
-            linux_compliance_audit_stale_exceptions.stale ==
+            linux_compliance_audit_stale_exceptions.unmatched ==
             ['EXC-UNUSED', 'EXC-WEB-LOGIN-EVENTS', 'EXC-WEB-ROOT-LOGIN']
         quiet: true
 
@@ -295,7 +300,7 @@
     - name: Run the evaluation without an exceptions file
       ansible.builtin.include_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: evaluate
+        tasks_from: evaluate.yml
 
     - name: Check that nothing was waived and the raw result is unchanged
       ansible.builtin.assert:
@@ -328,7 +333,7 @@
         - name: Apply the exceptions with the audit role
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.audit
-            tasks_from: evaluate
+            tasks_from: evaluate.yml
       rescue:
         - name: Record the failure of this host
           ansible.builtin.set_fact:

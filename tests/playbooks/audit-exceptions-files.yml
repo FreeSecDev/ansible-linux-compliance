@@ -80,6 +80,15 @@
               expires: {{ audit_exceptions_expires }}
               risk: low
 
+    - name: Write a second valid exceptions file with other content
+      ansible.builtin.copy:
+        dest: "{{ audit_exceptions_other_file }}"
+        mode: "0600"
+        content: |
+          ---
+          schema_version: "1.0"
+          exceptions: []
+
     - name: Write an exceptions file whose only entry has no risk
       ansible.builtin.copy:
         dest: "{{ audit_exceptions_invalid_file }}"

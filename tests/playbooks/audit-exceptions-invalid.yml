@@ -18,7 +18,7 @@
     - name: Apply the invalid exceptions file with the audit role
       ansible.builtin.include_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: evaluate
+        tasks_from: evaluate.yml
 
 - name: Audit exceptions | This play must never run
   hosts: localhost

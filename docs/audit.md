@@ -250,16 +250,31 @@ unprefixed role variable; `tools/roles/check_role_specs.py` allows exactly the n
    `any_errors_fatal: true`. A `run_once` task runs on the first host of the batch and Ansible copies its facts to every
    host of the batch, so the file is read and validated once and every host applies the same text. `rstrip=false`
    keeps the file byte for byte, so the recorded `source_sha256` is the SHA-256 of the file as stored in Git.
-2. **An invalid file fails the play.** When the validation fails, Ansible marks every host of the batch as failed
-   (`run_once` failures apply to all hosts) and stops the play; `any_errors_fatal` also stops later `serial` batches.
-   No host is scanned or evaluated, and the playbook ends with exit status 2. The message names the entry or line.
-3. **One file per play.** Every host must use the same value. A host whose `linux_compliance_exceptions_file` differs
-   from the validated one fails, so a per-host value in `host_vars` cannot silently use another host's file. Set the
-   variable in play variables or with `-e`.
-4. **Relative paths are refused.** `lookup('ansible.builtin.file')` searches a role's `files/` directory and the
+2. **An invalid file fails the play.** The validation task fails on the host that ran it, which is the only host the
+   recap counts as `failed`. `any_errors_fatal` then stops the play for every host, including later `serial` batches.
+   No host is scanned or evaluated, the plays after it do not run, and the playbook ends with exit status 2. The
+   message names the entry or line.
+3. **One file per play, also across `serial` batches.** Before reading, a `run_once` check resolves
+   `linux_compliance_exceptions_file` for every host in `ansible_play_hosts_all` through `hostvars`. That includes the
+   hosts of later batches, and covers inventory, `host_vars`, `group_vars`, facts and extra variables. The check fails
+   the play (`any_errors_fatal`) unless all hosts resolve to the same value. Play variables and role parameters are not
+   visible through `hostvars`; they are the same for every host unless they are templated per host. Every host also
+   checks its own value against the file that was read for its batch. Set the variable in play variables or with `-e`,
+   never per host.
+4. **The applied text is the validated text.** After applying, each host checks that the SHA-256 of the text it applied
+   (`evaluation.source_sha256`) equals the SHA-256 that was validated, and that its own path is the validated path.
+   Otherwise the host fails before anything is published.
+5. **Only the linear strategy.** The file is read and validated with `run_once`, which the `free` strategy does not
+   honour: it runs the task on every host, and one host's facts can overwrite another's in the middle of the play.
+   The `free` strategy is therefore not supported when `linux_compliance_exceptions_file` is set. Each host checks that
+   the file was read by the first host of its batch, and a host for which that is false fails with a message naming
+   the free strategy. Under `free` this has failed at least one host in every test run, so the playbook exits with
+   status 2. The host that read the file last can still finish with its own, validated file. The linear strategy, with
+   or without `serial`, is the supported mode.
+6. **Relative paths are refused.** `lookup('ansible.builtin.file')` searches a role's `files/` directory and the
    playbook directory for a relative name, so a relative path could resolve to an unexpected file. The path must be
    absolute.
-5. **Framework without profiles.** For every exception whose scope has no `profiles` the role prints a `WARNING:`
+7. **Framework without profiles.** For every exception whose scope has no `profiles` the role prints a `WARNING:`
    message once per play: `framework` is recorded but does not restrict matching, so the exception applies to every
    profile scanned on the hosts in its scope ([scope](exceptions.md#scope)). The identifiers are also published as
    `linux_compliance_audited.exceptions.framework_without_profiles`.
@@ -330,7 +345,7 @@ aggregation therefore runs **once, after every host**, in a dedicated final play
     - name: Aggregate the exceptions evaluations of every audited host once
       ansible.builtin.import_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: stale
+        tasks_from: stale.yml
       vars:
         linux_compliance_audit_stale_hosts: >-
           {{ query('ansible.builtin.inventory_hostnames',
@@ -343,29 +358,39 @@ runs on every host as soon as that host reaches it. A play after the audit play 
 audit play is done, so it sees every evaluation. Facts set with `set_fact` survive across plays, so the final play
 reads them from `hostvars`. It runs on the controller (`localhost`, no facts, no connection to a managed host).
 
-The `stale` entry point of the role takes the host names, keeps those with a `linux_compliance_audited` fact, runs
+The `stale` entry point of the role takes the target host names (`linux_compliance_audit_stale_hosts`). The playbook
+passes every host that the target pattern matches, independently of `--limit`. The entry point runs
 `freesecdev.linux_compliance.stale_exceptions` once over the evaluations of the hosts where the file was applied, and
 publishes `linux_compliance_audit_stale_exceptions` on the host that runs it:
 
 | Key | Content |
 |---|---|
 | `computed` | Whether at least one host was evaluated |
-| `stale` | The sorted identifiers that are `unmatched` on every evaluated host, or null when nothing was evaluated |
+| `complete` | Whether every target host was evaluated |
+| `unmatched` | The sorted identifiers that are `unmatched` on every evaluated host, or null when nothing was evaluated |
+| `stale` | Equal to `unmatched` when `complete` is true, otherwise null: an exception is called stale only when every target host was evaluated |
 | `source_sha256` | The file all evaluations came from; evaluations of different files fail the task |
-| `audited_hosts`, `evaluated_hosts`, `not_evaluated_hosts` | Which hosts the answer covers; audited hosts without an evaluation (check mode without a scan) are not covered |
+| `target_hosts`, `audited_hosts`, `evaluated_hosts` | The target hosts, those with an audit result and those with an evaluation |
+| `not_evaluated_hosts` | Every target host without an evaluation: limited out with `--limit`, unreachable, failed before the scan, failed by a scan-time skew, or check mode without a scan |
 
-It prints a `WARNING:` with the stale identifiers. The answer covers only the evaluated hosts: an exception for a host
-outside the play, or for a host that was not evaluated, is reported as stale. Two limits follow from Ansible: when
-every host of the audit play fails (for example all of them fail the gate), Ansible ends the playbook and the final
-play does not run, and an unreachable host has no audit result and is not listed.
+When coverage is complete, the role prints `WARNING: <ids> matched no finding on any of the M target host(s), all of
+them evaluated; review and remove them.` When it is partial, it never advises removal. It prints `WARNING: <ids>
+unmatched on N of M target hosts; not covered: <hosts>`, followed by the statement that coverage is partial and is no
+reason to remove an exception. An exception that a host outside the run still needs is therefore never reported as
+removable. One limit follows from Ansible: when every host of the audit play fails (for example all of them fail the
+gate), Ansible ends the playbook and the final play does not run.
 
 ### Entry points
 
 | Entry point | Use |
 |---|---|
 | `main` | Validate, scan, publish the raw result, apply the exceptions, enforce the gates |
-| `evaluate` | Apply the exceptions file and the gates to an existing `linux_compliance_audited` fact, without scanning; used by the playbook test |
-| `stale` | Aggregate stale exceptions over the given hosts, after the audit play |
+| `evaluate.yml` | Apply the exceptions file and the gates to an existing `linux_compliance_audited` fact, without scanning; used by the playbook test |
+| `stale.yml` | Aggregate stale exceptions over the given target hosts, after the audit play |
+
+The entry points are named with their file suffix (`tasks_from: evaluate.yml`), because the repository guard
+(FREES-128) only scans role entry points that end in `.yml` or `.yaml`, and Ansible looks up the argument spec under
+the literal `tasks_from` value.
 
 ### Verify compares like with like
 
@@ -480,6 +505,16 @@ and exceptions files written at run time with dates relative to today, so the te
   by the gate;
 - without an exceptions file nothing changes;
 - a scan start one hour ahead of the controller fails only that host.
+
+`tests/playbooks/audit-exceptions-limit.yml` runs with `--limit db01,localhost`. The stale aggregation must list
+web01 under `not_evaluated_hosts` and set `complete` false and `stale` null. The Makefile requires the message
+`unmatched on 1 of 2 target hosts; not covered: web01` and no `review and remove`. Three further playbooks must fail
+with exit status 2:
+
+- `audit-exceptions-invalid.yml`: an invalid file;
+- `audit-exceptions-serial.yml`: `serial: 1`, with `host_vars` that give web01 and db01 different valid files. It must
+  fail in the first batch with the cross-batch message before any host is evaluated;
+- `audit-exceptions-free.yml`: the `free` strategy, which must print the free-strategy message.
 
 `tests/playbooks/audit-exceptions-invalid.yml` runs without a rescue: the Makefile requires exit status 2, the
 validation message, no task that applies exceptions in the output and no output from the play after it, which

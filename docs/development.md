@@ -57,7 +57,7 @@ make help
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches and coverage output |
 | `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions security docs test-sanity test-ansible-units package-check` |
-| `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate` and `stale` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with `ANSIBLE_HOME=build/ansible-home`; then requires that an invalid exceptions file fails the play ([audit guide](audit.md#tests)) |
+| `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with `ANSIBLE_HOME=build/ansible-home`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play ([audit guide](audit.md#tests)) |
 | `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
 | `lint-iac` | implemented | `tofu fmt -check -recursive infra/`, `tofu init -backend=false` and `tofu validate` per root module, shellcheck of the rendered bootstrap script; needs `tofu` on `PATH`, runs in the `iac` CI job and in `make ci`, not in `make lint` |
 | `aws-bootstrap-render` | implemented | Renders `infra/bootstrap/bootstrap.sh.tmpl` to the gitignored `infra/bootstrap/bootstrap.local.sh` |

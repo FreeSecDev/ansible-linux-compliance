@@ -93,7 +93,7 @@ argument_specs:
             type: str
             description:
               - "Name of the controlling toggle variable, linux_compliance_<name>_enabled."
-  evaluate:
+  evaluate.yml:
     short_description: "Apply the exceptions file and the failure gate to an existing audit result"
     description:
       - "Runs the second half of the main entry point on the fact linux_compliance_audited, without scanning."
@@ -117,7 +117,7 @@ argument_specs:
         default: null
         description:
           - "Absolute path, on the controller, of the exceptions file; null applies no exceptions."
-  stale:
+  stale.yml:
     short_description: "Report the exceptions that matched no finding on any audited host"
     description:
       - "Aggregates the exceptions evaluations published on the given hosts and runs stale_exceptions once."

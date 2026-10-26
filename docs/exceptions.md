@@ -246,9 +246,11 @@ ansible-playbook -i inventory.yml freesecdev.linux_compliance.audit \
 - `linux_compliance_audit_fail_on_noncompliant` counts the **raw** result by default, so a waiver never passes the gate.
   `linux_compliance_audit_fail_on_noncompliant_after_waivers: true` counts the waived result instead. `error` always
   counts in both modes.
-- `playbooks/audit.yml` ends with a play on the controller that runs the role's `stale` entry point once over every
-  audited host and publishes `linux_compliance_audit_stale_exceptions` (stale identifiers, evaluated and not evaluated
-  hosts).
+- `playbooks/audit.yml` ends with a play on the controller. It runs the role's `stale.yml` entry point once over every
+  target host and publishes `linux_compliance_audit_stale_exceptions`. Exceptions are called stale, and removal is
+  advised, only when every target host was evaluated. With partial coverage (`--limit`, unreachable or failed
+  hosts) the report says `unmatched on N of M target hosts` and names the hosts it does not cover.
+- Only the linear strategy is supported, with or without `serial`; every host of the play must resolve the same file.
 
 The `verify` role (FREES-54) is still a skeleton. When it is implemented it must compare raw with raw or waived with
 waived, from the same exceptions file, and must never count a waived result as an improvement over a failed one.

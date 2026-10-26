@@ -14,7 +14,7 @@
     - name: Aggregate the exceptions evaluations of every audited host once
       ansible.builtin.import_role:
         name: freesecdev.linux_compliance.audit
-        tasks_from: stale
+        tasks_from: stale.yml
       vars:
         linux_compliance_audit_stale_hosts: >-
           {{ query('ansible.builtin.inventory_hostnames',
