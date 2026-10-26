@@ -58,12 +58,14 @@ def run(
         catalogue(),
         {
             "audit_only": {},
+            "tags": {},
             "families": FAMILIES,
             "enabled": True,
             "allow_disruptive": allow or [],
             "toggles": given or {},
             "profile_rule_ids": [CRONTAB, JOURNALD, SSSD, CHRONY],
             "ledger_entries": [],
+            "family_aliases": {},
         },
     )
     rules = cast("list[dict[str, object]]", result["rules"])
@@ -126,6 +128,7 @@ def test_the_audit_resolves_umbrellas_exactly_like_remediation() -> None:
         catalogue(),
         {
             "audit_only": {},
+            "tags": {},
             "families": FAMILIES,
             "toggles": given,
             "profile_rule_ids": [CRONTAB, JOURNALD, SSSD, CHRONY],
@@ -141,18 +144,21 @@ def test_an_umbrella_with_no_rule_in_the_profile_warns_in_both_filters() -> None
         catalogue(),
         {
             "audit_only": {},
+            "tags": {},
             "families": FAMILIES,
             "enabled": True,
             "allow_disruptive": [],
             "toggles": given,
             "profile_rule_ids": [CRONTAB],
             "ledger_entries": [],
+            "family_aliases": {},
         },
     )
     audit = audit_filter.audit_disabled_rules(
         catalogue(),
         {
             "audit_only": {},
+            "tags": {},
             "families": FAMILIES,
             "toggles": given,
             "profile_rule_ids": [CRONTAB],

@@ -1,0 +1,37 @@
+---
+minor_changes:
+  - >-
+    A rule can carry subsystem tags: families other than its own whose subsystem the rule is about. A rule is now off
+    when the toggle of its family, of its family's umbrella, of one of its tags or of a tag's umbrella is false, so
+    ``linux_compliance_sssd_enabled: false`` also switches off the permissions of ``/var/log/sssd``,
+    ``linux_compliance_time_sync_enabled: false`` the chrony key files, ``linux_compliance_cron_enabled: false`` the
+    cron and at file permissions including the native ``file_permissions_crontab``,
+    ``linux_compliance_smartcard_enabled: false`` ``sssd_enable_smartcards`` and the GNOME lock on smart card removal,
+    and ``linux_compliance_pwhistory_enabled: false`` both pam_unix ``remember`` rules. Tags never switch a rule on, a
+    rule toggle that is set still wins, and the disruptive allow-list stays a property of the family. Audit rules are
+    never tagged: ``linux_compliance_apparmor_enabled: false`` does not switch off the audit watches on the AppArmor
+    policy. ``disabled_by`` names the first toggle that is off in the order umbrella of the family, family, then the
+    tags in alphabetical order, each after its umbrella.
+  - >-
+    The tags are derived from the pinned content by rule patterns and group references in ``content/catalogue.yml``
+    and generated into ``roles/remediate/vars/rules.yml``. ``make catalogue`` fails when a pattern or group finds no
+    rule, when an exclusion excludes nothing, and when it finds an audit rule that no exclusion with a reason lists.
+    ``docs/control-families.md`` lists every tag, every rule it tags, every exclusion with its reason and every rule
+    that a toggle switches off through tags.
+  - >-
+    The remediation plan accepts a state ledger entry that records a former family name of its rule when
+    ``ledger_family_aliases`` in ``content/catalogue.yml`` maps that name to the current family, so a native rule can
+    move to another family without breaking the cleanup on upgraded hosts. No alias is declared yet.
+breaking_changes:
+  - >-
+    Eight toggles of the former families switch off more rules than before, through the tags of their families:
+    ``linux_compliance_services_enabled`` 36 more (the cron, at, sssd log and chrony key file permission rules),
+    ``linux_compliance_ssh_enabled`` 4 (the sshd crypto policy back-ends), ``linux_compliance_sudo_enabled`` 3,
+    ``linux_compliance_logging_enabled`` 2, ``linux_compliance_accounts_enabled`` 2,
+    ``linux_compliance_firewall_enabled`` 1, ``linux_compliance_pam_enabled`` 1 and
+    ``linux_compliance_mandatory_access_control_enabled`` 1. Every rule they switched off before is still switched
+    off; ``docs/control-families.md`` lists every added rule.
+  - >-
+    The filters ``remediation_plan`` and ``audit_disabled_rules`` take the new required option ``tags``
+    (``__linux_compliance_remediate_tags``), and ``remediation_plan`` also ``family_aliases``
+    (``__linux_compliance_remediate_family_aliases``).

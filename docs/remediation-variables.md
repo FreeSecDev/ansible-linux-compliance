@@ -53,17 +53,43 @@ Precedence, from the most specific toggle:
 
 Every umbrella keeps the name of the family that it was split from (FREES-53), so
 `linux_compliance_services_enabled: false`, `linux_compliance_pam_enabled: false` or
-`linux_compliance_firewall_enabled: false` switch off exactly the rules that the family
+`linux_compliance_firewall_enabled: false` still switch off every rule that the family
 held before the split, and an allow-list entry that names an umbrella still allows every
-disruptive family it groups. No toggle was renamed or dropped.
+disruptive family it groups. No toggle was renamed or dropped. Through subsystem tags they
+may switch off more rules, each of which is listed in the
+[control family reference](control-families.md#what-a-toggle-switches-off-through-tags).
+
+`pam` is both a topic and an umbrella. `linux_compliance_pam_enabled: false` switches off
+the rules of the `pam` family and of `pwquality`, `pwhistory` and `faillock`, and the
+allow-list entry `linux_compliance_remediate_allow_disruptive: [pam]` allows all four, as
+before the split. There is no toggle and no allow-list entry for the rules of the `pam`
+family alone: to remediate only those, allow `pam` and switch `pwquality`, `pwhistory` and
+`faillock` off with their own toggles.
+
+## Subsystem tags
+
+A rule belongs to one family, often the family of the mechanism it uses, and may carry
+subsystem tags: further families whose subsystem the rule is about (FREES-165). The
+permissions of `/var/log/sssd` are in `file_permissions` and tagged `sssd`, so
+`linux_compliance_sssd_enabled: false` switches them off too. A rule is off when the
+toggle of its family, of its family's umbrella, of one of its tags or of a tag's umbrella
+is `false`, so `linux_compliance_services_enabled: false` switches off the rules tagged
+`sssd` as well. Tags only add ways to switch a rule off: a tag toggle that is `true` never
+switches a rule on, and a rule toggle that is set still wins over every topic toggle. Tags
+do not change what is disruptive: the allow-list and the disruptive flag stay properties
+of the family. Audit rules (`auditd`) are never tagged, because auditing changes to a
+subsystem is not configuring it. The tags, how they are derived from the content, and
+every rule that a toggle switches off through them are listed in the
+[control family reference](control-families.md#subsystem-tags).
 
 ## Controlling variable
 
-When a rule is off, `disabled_by` names the most general toggle that is `false`: the
-umbrella toggle, else the family toggle, else the rule toggle. So when a rule toggle and
-its family toggle are both `false`, `disabled_by` names the family toggle. If the family
-toggle is later set back to `true`, the rule stays off and `disabled_by` changes to the
-rule toggle.
+When a rule is off, `disabled_by` names the first toggle that is `false` in this order:
+the umbrella toggle of its family, the family toggle, then for each subsystem tag in
+alphabetical order the umbrella toggle of the tag and the tag toggle, else the rule
+toggle. So when a rule toggle and its family toggle are both `false`, `disabled_by` names
+the family toggle. If the family toggle is later set back to `true`, the rule stays off and
+`disabled_by` changes to the rule toggle.
 
 ## Rule toggle names and declarations
 
@@ -94,75 +120,77 @@ role parameters too.
 ## Topic toggles
 
 An umbrella row lists the families that it groups; the disruptive flag of an umbrella is
-`yes` when it groups a disruptive family.
+`yes` when it groups a disruptive family. The catalogued rules are the rules of those
+families; the tagged rules are the rules of other families that the toggle switches off
+through subsystem tags.
 
-| Variable | Family | Umbrella | Disruptive | Default | Catalogued rules | Native | `audit_only` |
-|---|---|---|---|---|---|---|---|
-| `linux_compliance_file_permissions_enabled` | `file_permissions` | none | no | `true` | 155 | 1 | 154 |
-| `linux_compliance_sysctl_enabled` | `sysctl` | none | no | `true` | 31 | 0 | 31 |
-| `linux_compliance_logging_enabled` | `journald`, `rsyslog`, `logrotate` | umbrella | no | `true` | 41 | 0 | 41 |
-| `linux_compliance_journald_enabled` | `journald` | `logging` | no | `true` | 19 | 0 | 19 |
-| `linux_compliance_rsyslog_enabled` | `rsyslog` | `logging` | no | `true` | 19 | 0 | 19 |
-| `linux_compliance_logrotate_enabled` | `logrotate` | `logging` | no | `true` | 3 | 0 | 3 |
-| `linux_compliance_banners_enabled` | `banners` | none | no | `true` | 18 | 0 | 18 |
-| `linux_compliance_integrity_enabled` | `aide`, `software_integrity`, `endpoint_security` | umbrella | no | `true` | 21 | 0 | 21 |
-| `linux_compliance_aide_enabled` | `aide` | `integrity` | no | `true` | 13 | 0 | 13 |
-| `linux_compliance_software_integrity_enabled` | `software_integrity` | `integrity` | no | `true` | 5 | 0 | 5 |
-| `linux_compliance_endpoint_security_enabled` | `endpoint_security` | `integrity` | no | `true` | 3 | 0 | 3 |
-| `linux_compliance_kernel_build_config_enabled` | `kernel_build_config` | none | no | `true` | 67 | 0 | 67 |
-| `linux_compliance_auditd_enabled` | `auditd` | none | yes | `true` | 206 | 0 | 206 |
-| `linux_compliance_services_enabled` | `sssd`, `time_sync`, `mail`, `cron`, `nfs`, `usbguard`, `fapolicyd`, `network_services` | umbrella | yes | `true` | 119 | 0 | 119 |
-| `linux_compliance_sssd_enabled` | `sssd` | `services` | yes | `true` | 12 | 0 | 12 |
-| `linux_compliance_time_sync_enabled` | `time_sync` | `services` | yes | `true` | 19 | 0 | 19 |
-| `linux_compliance_mail_enabled` | `mail` | `services` | yes | `true` | 8 | 0 | 8 |
-| `linux_compliance_cron_enabled` | `cron` | `services` | yes | `true` | 7 | 0 | 7 |
-| `linux_compliance_nfs_enabled` | `nfs` | `services` | yes | `true` | 6 | 0 | 6 |
-| `linux_compliance_usbguard_enabled` | `usbguard` | `services` | yes | `true` | 5 | 0 | 5 |
-| `linux_compliance_fapolicyd_enabled` | `fapolicyd` | `services` | yes | `true` | 3 | 0 | 3 |
-| `linux_compliance_network_services_enabled` | `network_services` | `services` | yes | `true` | 59 | 0 | 59 |
-| `linux_compliance_packages_enabled` | `package_updates`, `package_sources`, `system_packages` | umbrella | yes | `true` | 24 | 0 | 24 |
-| `linux_compliance_package_updates_enabled` | `package_updates` | `packages` | yes | `true` | 6 | 0 | 6 |
-| `linux_compliance_package_sources_enabled` | `package_sources` | `packages` | yes | `true` | 6 | 0 | 6 |
-| `linux_compliance_system_packages_enabled` | `system_packages` | `packages` | yes | `true` | 12 | 0 | 12 |
-| `linux_compliance_desktop_enabled` | `desktop` | none | yes | `true` | 21 | 0 | 21 |
-| `linux_compliance_network_enabled` | `ipv4_parameters`, `ipv6_parameters`, `ipsec`, `wireless`, `network_settings` | umbrella | yes | `true` | 66 | 0 | 66 |
-| `linux_compliance_ipv4_parameters_enabled` | `ipv4_parameters` | `network` | yes | `true` | 26 | 0 | 26 |
-| `linux_compliance_ipv6_parameters_enabled` | `ipv6_parameters` | `network` | yes | `true` | 19 | 0 | 19 |
-| `linux_compliance_ipsec_enabled` | `ipsec` | `network` | yes | `true` | 11 | 0 | 11 |
-| `linux_compliance_wireless_enabled` | `wireless` | `network` | yes | `true` | 3 | 0 | 3 |
-| `linux_compliance_network_settings_enabled` | `network_settings` | `network` | yes | `true` | 7 | 0 | 7 |
-| `linux_compliance_kernel_modules_enabled` | `filesystem_modules`, `protocol_modules`, `wireless_modules` | umbrella | yes | `true` | 21 | 0 | 21 |
-| `linux_compliance_filesystem_modules_enabled` | `filesystem_modules` | `kernel_modules` | yes | `true` | 9 | 0 | 9 |
-| `linux_compliance_protocol_modules_enabled` | `protocol_modules` | `kernel_modules` | yes | `true` | 7 | 0 | 7 |
-| `linux_compliance_wireless_modules_enabled` | `wireless_modules` | `kernel_modules` | yes | `true` | 5 | 0 | 5 |
-| `linux_compliance_firewall_enabled` | `firewalld`, `nftables`, `iptables`, `ufw` | umbrella | yes | `true` | 42 | 0 | 42 |
-| `linux_compliance_firewalld_enabled` | `firewalld` | `firewall` | yes | `true` | 10 | 0 | 10 |
-| `linux_compliance_nftables_enabled` | `nftables` | `firewall` | yes | `true` | 11 | 0 | 11 |
-| `linux_compliance_iptables_enabled` | `iptables` | `firewall` | yes | `true` | 12 | 0 | 12 |
-| `linux_compliance_ufw_enabled` | `ufw` | `firewall` | yes | `true` | 9 | 0 | 9 |
-| `linux_compliance_ssh_enabled` | `ssh` | none | yes | `true` | 63 | 0 | 63 |
-| `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 0 | 55 |
-| `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 0 | 19 |
-| `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 0 | 7 |
-| `linux_compliance_faillock_enabled` | `faillock` | `pam` | yes | `true` | 14 | 0 | 14 |
-| `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | umbrella | yes | `true` | 88 | 0 | 88 |
-| `linux_compliance_password_aging_enabled` | `password_aging` | `accounts` | yes | `true` | 9 | 0 | 9 |
-| `linux_compliance_root_access_enabled` | `root_access` | `accounts` | yes | `true` | 19 | 0 | 19 |
-| `linux_compliance_umask_enabled` | `umask` | `accounts` | yes | `true` | 6 | 0 | 6 |
-| `linux_compliance_user_sessions_enabled` | `user_sessions` | `accounts` | yes | `true` | 14 | 0 | 14 |
-| `linux_compliance_smartcard_enabled` | `smartcard` | `accounts` | yes | `true` | 9 | 0 | 9 |
-| `linux_compliance_console_access_enabled` | `console_access` | `accounts` | yes | `true` | 7 | 0 | 7 |
-| `linux_compliance_user_accounts_enabled` | `user_accounts` | `accounts` | yes | `true` | 24 | 0 | 24 |
-| `linux_compliance_sudo_enabled` | `sudo` | none | yes | `true` | 22 | 0 | 22 |
-| `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | umbrella | yes | `true` | 33 | 0 | 33 |
-| `linux_compliance_selinux_enabled` | `selinux` | `mandatory_access_control` | yes | `true` | 27 | 0 | 27 |
-| `linux_compliance_apparmor_enabled` | `apparmor` | `mandatory_access_control` | yes | `true` | 6 | 0 | 6 |
-| `linux_compliance_crypto_policy_enabled` | `crypto_policy` | none | yes | `true` | 17 | 0 | 17 |
-| `linux_compliance_mounts_enabled` | `autofs`, `mount_options`, `partitioning` | umbrella | yes | `true` | 48 | 0 | 48 |
-| `linux_compliance_autofs_enabled` | `autofs` | `mounts` | yes | `true` | 2 | 0 | 2 |
-| `linux_compliance_mount_options_enabled` | `mount_options` | `mounts` | yes | `true` | 34 | 0 | 34 |
-| `linux_compliance_partitioning_enabled` | `partitioning` | `mounts` | yes | `true` | 12 | 0 | 12 |
-| `linux_compliance_bootloader_enabled` | `bootloader` | none | yes | `true` | 45 | 0 | 45 |
+| Variable | Family | Umbrella | Disruptive | Default | Catalogued rules | Native | `audit_only` | Tagged rules |
+|---|---|---|---|---|---|---|---|---|
+| `linux_compliance_file_permissions_enabled` | `file_permissions` | none | no | `true` | 155 | 1 | 154 | 0 |
+| `linux_compliance_sysctl_enabled` | `sysctl` | none | no | `true` | 31 | 0 | 31 | 0 |
+| `linux_compliance_logging_enabled` | `journald`, `rsyslog`, `logrotate` | umbrella | no | `true` | 41 | 0 | 41 | 2 |
+| `linux_compliance_journald_enabled` | `journald` | `logging` | no | `true` | 19 | 0 | 19 | 3 |
+| `linux_compliance_rsyslog_enabled` | `rsyslog` | `logging` | no | `true` | 19 | 0 | 19 | 0 |
+| `linux_compliance_logrotate_enabled` | `logrotate` | `logging` | no | `true` | 3 | 0 | 3 | 0 |
+| `linux_compliance_banners_enabled` | `banners` | none | no | `true` | 18 | 0 | 18 | 0 |
+| `linux_compliance_integrity_enabled` | `aide`, `software_integrity`, `endpoint_security` | umbrella | no | `true` | 21 | 0 | 21 | 0 |
+| `linux_compliance_aide_enabled` | `aide` | `integrity` | no | `true` | 13 | 0 | 13 | 0 |
+| `linux_compliance_software_integrity_enabled` | `software_integrity` | `integrity` | no | `true` | 5 | 0 | 5 | 0 |
+| `linux_compliance_endpoint_security_enabled` | `endpoint_security` | `integrity` | no | `true` | 3 | 0 | 3 | 0 |
+| `linux_compliance_kernel_build_config_enabled` | `kernel_build_config` | none | no | `true` | 67 | 0 | 67 | 0 |
+| `linux_compliance_auditd_enabled` | `auditd` | none | yes | `true` | 206 | 0 | 206 | 0 |
+| `linux_compliance_services_enabled` | `sssd`, `time_sync`, `mail`, `cron`, `nfs`, `usbguard`, `fapolicyd`, `network_services` | umbrella | yes | `true` | 119 | 0 | 119 | 36 |
+| `linux_compliance_sssd_enabled` | `sssd` | `services` | yes | `true` | 12 | 0 | 12 | 3 |
+| `linux_compliance_time_sync_enabled` | `time_sync` | `services` | yes | `true` | 19 | 0 | 19 | 3 |
+| `linux_compliance_mail_enabled` | `mail` | `services` | yes | `true` | 8 | 0 | 8 | 0 |
+| `linux_compliance_cron_enabled` | `cron` | `services` | yes | `true` | 7 | 0 | 7 | 30 |
+| `linux_compliance_nfs_enabled` | `nfs` | `services` | yes | `true` | 6 | 0 | 6 | 0 |
+| `linux_compliance_usbguard_enabled` | `usbguard` | `services` | yes | `true` | 5 | 0 | 5 | 0 |
+| `linux_compliance_fapolicyd_enabled` | `fapolicyd` | `services` | yes | `true` | 3 | 0 | 3 | 0 |
+| `linux_compliance_network_services_enabled` | `network_services` | `services` | yes | `true` | 59 | 0 | 59 | 0 |
+| `linux_compliance_packages_enabled` | `package_updates`, `package_sources`, `system_packages` | umbrella | yes | `true` | 24 | 0 | 24 | 0 |
+| `linux_compliance_package_updates_enabled` | `package_updates` | `packages` | yes | `true` | 6 | 0 | 6 | 0 |
+| `linux_compliance_package_sources_enabled` | `package_sources` | `packages` | yes | `true` | 6 | 0 | 6 | 0 |
+| `linux_compliance_system_packages_enabled` | `system_packages` | `packages` | yes | `true` | 12 | 0 | 12 | 0 |
+| `linux_compliance_desktop_enabled` | `desktop` | none | yes | `true` | 21 | 0 | 21 | 0 |
+| `linux_compliance_network_enabled` | `ipv4_parameters`, `ipv6_parameters`, `ipsec`, `wireless`, `network_settings` | umbrella | yes | `true` | 66 | 0 | 66 | 0 |
+| `linux_compliance_ipv4_parameters_enabled` | `ipv4_parameters` | `network` | yes | `true` | 26 | 0 | 26 | 0 |
+| `linux_compliance_ipv6_parameters_enabled` | `ipv6_parameters` | `network` | yes | `true` | 19 | 0 | 19 | 0 |
+| `linux_compliance_ipsec_enabled` | `ipsec` | `network` | yes | `true` | 11 | 0 | 11 | 0 |
+| `linux_compliance_wireless_enabled` | `wireless` | `network` | yes | `true` | 3 | 0 | 3 | 0 |
+| `linux_compliance_network_settings_enabled` | `network_settings` | `network` | yes | `true` | 7 | 0 | 7 | 0 |
+| `linux_compliance_kernel_modules_enabled` | `filesystem_modules`, `protocol_modules`, `wireless_modules` | umbrella | yes | `true` | 21 | 0 | 21 | 0 |
+| `linux_compliance_filesystem_modules_enabled` | `filesystem_modules` | `kernel_modules` | yes | `true` | 9 | 0 | 9 | 0 |
+| `linux_compliance_protocol_modules_enabled` | `protocol_modules` | `kernel_modules` | yes | `true` | 7 | 0 | 7 | 0 |
+| `linux_compliance_wireless_modules_enabled` | `wireless_modules` | `kernel_modules` | yes | `true` | 5 | 0 | 5 | 0 |
+| `linux_compliance_firewall_enabled` | `firewalld`, `nftables`, `iptables`, `ufw` | umbrella | yes | `true` | 42 | 0 | 42 | 1 |
+| `linux_compliance_firewalld_enabled` | `firewalld` | `firewall` | yes | `true` | 10 | 0 | 10 | 1 |
+| `linux_compliance_nftables_enabled` | `nftables` | `firewall` | yes | `true` | 11 | 0 | 11 | 0 |
+| `linux_compliance_iptables_enabled` | `iptables` | `firewall` | yes | `true` | 12 | 0 | 12 | 0 |
+| `linux_compliance_ufw_enabled` | `ufw` | `firewall` | yes | `true` | 9 | 0 | 9 | 0 |
+| `linux_compliance_ssh_enabled` | `ssh` | none | yes | `true` | 63 | 0 | 63 | 4 |
+| `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 0 | 55 | 1 |
+| `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 0 | 19 | 0 |
+| `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 0 | 7 | 2 |
+| `linux_compliance_faillock_enabled` | `faillock` | `pam` | yes | `true` | 14 | 0 | 14 | 0 |
+| `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | umbrella | yes | `true` | 88 | 0 | 88 | 2 |
+| `linux_compliance_password_aging_enabled` | `password_aging` | `accounts` | yes | `true` | 9 | 0 | 9 | 0 |
+| `linux_compliance_root_access_enabled` | `root_access` | `accounts` | yes | `true` | 19 | 0 | 19 | 0 |
+| `linux_compliance_umask_enabled` | `umask` | `accounts` | yes | `true` | 6 | 0 | 6 | 0 |
+| `linux_compliance_user_sessions_enabled` | `user_sessions` | `accounts` | yes | `true` | 14 | 0 | 14 | 0 |
+| `linux_compliance_smartcard_enabled` | `smartcard` | `accounts` | yes | `true` | 9 | 0 | 9 | 2 |
+| `linux_compliance_console_access_enabled` | `console_access` | `accounts` | yes | `true` | 7 | 0 | 7 | 0 |
+| `linux_compliance_user_accounts_enabled` | `user_accounts` | `accounts` | yes | `true` | 24 | 0 | 24 | 0 |
+| `linux_compliance_sudo_enabled` | `sudo` | none | yes | `true` | 22 | 0 | 22 | 3 |
+| `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | umbrella | yes | `true` | 33 | 0 | 33 | 1 |
+| `linux_compliance_selinux_enabled` | `selinux` | `mandatory_access_control` | yes | `true` | 27 | 0 | 27 | 1 |
+| `linux_compliance_apparmor_enabled` | `apparmor` | `mandatory_access_control` | yes | `true` | 6 | 0 | 6 | 0 |
+| `linux_compliance_crypto_policy_enabled` | `crypto_policy` | none | yes | `true` | 17 | 0 | 17 | 0 |
+| `linux_compliance_mounts_enabled` | `autofs`, `mount_options`, `partitioning` | umbrella | yes | `true` | 48 | 0 | 48 | 0 |
+| `linux_compliance_autofs_enabled` | `autofs` | `mounts` | yes | `true` | 2 | 0 | 2 | 0 |
+| `linux_compliance_mount_options_enabled` | `mount_options` | `mounts` | yes | `true` | 34 | 0 | 34 | 0 |
+| `linux_compliance_partitioning_enabled` | `partitioning` | `mounts` | yes | `true` | 12 | 0 | 12 | 0 |
+| `linux_compliance_bootloader_enabled` | `bootloader` | none | yes | `true` | 45 | 0 | 45 | 0 |
 
 ## Rule toggles
 
@@ -389,6 +417,15 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_socket_systemd_journal_remote_disabled_enabled` | `socket_systemd-journal-remote_disabled` | `audit_only` |
 | `linux_compliance_rule_systemd_journal_upload_server_tls_enabled` | `systemd_journal_upload_server_tls` | `audit_only` |
 | `linux_compliance_rule_systemd_journal_upload_url_enabled` | `systemd_journal_upload_url` | `audit_only` |
+
+`linux_compliance_journald_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_ensure_journald_and_rsyslog_not_active_together_enabled` | `ensure_journald_and_rsyslog_not_active_together` | `rsyslog` |
+| `linux_compliance_rule_file_groupowner_var_log_journal_enabled` | `file_groupowner_var_log_journal` | `file_permissions` |
+| `linux_compliance_rule_file_owner_var_log_journal_enabled` | `file_owner_var_log_journal` | `file_permissions` |
 
 ### `rsyslog`
 
@@ -781,6 +818,15 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_sssd_ldap_start_tls_enabled` | `sssd_ldap_start_tls` | `audit_only` |
 | `linux_compliance_rule_sssd_offline_cred_expiration_enabled` | `sssd_offline_cred_expiration` | `audit_only` |
 
+`linux_compliance_sssd_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_file_groupownerships_var_log_sssd_enabled` | `file_groupownerships_var_log_sssd` | `file_permissions` |
+| `linux_compliance_rule_file_ownerships_var_log_sssd_enabled` | `file_ownerships_var_log_sssd` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_var_log_sssd_enabled` | `file_permissions_var_log_sssd` | `file_permissions` |
+
 ### `time_sync`
 
 | Variable | Rule | Strategy |
@@ -804,6 +850,15 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_service_timesyncd_configured_enabled` | `service_timesyncd_configured` | `audit_only` |
 | `linux_compliance_rule_service_timesyncd_disabled_enabled` | `service_timesyncd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_timesyncd_enabled_enabled` | `service_timesyncd_enabled` | `audit_only` |
+
+`linux_compliance_time_sync_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_file_groupowner_etc_chrony_keys_enabled` | `file_groupowner_etc_chrony_keys` | `file_permissions` |
+| `linux_compliance_rule_file_owner_etc_chrony_keys_enabled` | `file_owner_etc_chrony_keys` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_etc_chrony_keys_enabled` | `file_permissions_etc_chrony_keys` | `file_permissions` |
 
 ### `mail`
 
@@ -829,6 +884,42 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_package_cron_installed_enabled` | `package_cron_installed` | `audit_only` |
 | `linux_compliance_rule_service_cron_enabled_enabled` | `service_cron_enabled` | `audit_only` |
 | `linux_compliance_rule_service_crond_enabled_enabled` | `service_crond_enabled` | `audit_only` |
+
+`linux_compliance_cron_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_file_groupowner_at_allow_enabled` | `file_groupowner_at_allow` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_at_deny_enabled` | `file_groupowner_at_deny` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_cron_allow_enabled` | `file_groupowner_cron_allow` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_cron_d_enabled` | `file_groupowner_cron_d` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_cron_daily_enabled` | `file_groupowner_cron_daily` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_cron_deny_enabled` | `file_groupowner_cron_deny` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_cron_hourly_enabled` | `file_groupowner_cron_hourly` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_cron_monthly_enabled` | `file_groupowner_cron_monthly` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_cron_weekly_enabled` | `file_groupowner_cron_weekly` | `file_permissions` |
+| `linux_compliance_rule_file_groupowner_crontab_enabled` | `file_groupowner_crontab` | `file_permissions` |
+| `linux_compliance_rule_file_owner_at_allow_enabled` | `file_owner_at_allow` | `file_permissions` |
+| `linux_compliance_rule_file_owner_at_deny_enabled` | `file_owner_at_deny` | `file_permissions` |
+| `linux_compliance_rule_file_owner_cron_allow_enabled` | `file_owner_cron_allow` | `file_permissions` |
+| `linux_compliance_rule_file_owner_cron_d_enabled` | `file_owner_cron_d` | `file_permissions` |
+| `linux_compliance_rule_file_owner_cron_daily_enabled` | `file_owner_cron_daily` | `file_permissions` |
+| `linux_compliance_rule_file_owner_cron_deny_enabled` | `file_owner_cron_deny` | `file_permissions` |
+| `linux_compliance_rule_file_owner_cron_hourly_enabled` | `file_owner_cron_hourly` | `file_permissions` |
+| `linux_compliance_rule_file_owner_cron_monthly_enabled` | `file_owner_cron_monthly` | `file_permissions` |
+| `linux_compliance_rule_file_owner_cron_weekly_enabled` | `file_owner_cron_weekly` | `file_permissions` |
+| `linux_compliance_rule_file_owner_crontab_enabled` | `file_owner_crontab` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_at_allow_enabled` | `file_permissions_at_allow` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_at_deny_enabled` | `file_permissions_at_deny` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_cron_allow_enabled` | `file_permissions_cron_allow` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_cron_d_enabled` | `file_permissions_cron_d` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_cron_daily_enabled` | `file_permissions_cron_daily` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_cron_hourly_enabled` | `file_permissions_cron_hourly` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_cron_monthly_enabled` | `file_permissions_cron_monthly` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_cron_not_modified_enabled` | `file_permissions_cron_not_modified` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_cron_weekly_enabled` | `file_permissions_cron_weekly` | `file_permissions` |
+| `linux_compliance_rule_file_permissions_crontab_enabled` | `file_permissions_crontab` | `file_permissions` |
 
 ### `nfs`
 
@@ -1130,6 +1221,13 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_set_firewalld_default_zone_enabled` | `set_firewalld_default_zone` | `audit_only` |
 | `linux_compliance_rule_unnecessary_firewalld_services_ports_disabled_enabled` | `unnecessary_firewalld_services_ports_disabled` | `audit_only` |
 
+`linux_compliance_firewalld_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_firewalld_sshd_port_enabled_enabled` | `firewalld_sshd_port_enabled` | `ssh` |
+
 ### `nftables`
 
 | Variable | Rule | Strategy |
@@ -1245,6 +1343,16 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_sshd_use_strong_macs_enabled` | `sshd_use_strong_macs` | `audit_only` |
 | `linux_compliance_rule_sshd_x11_use_localhost_enabled` | `sshd_x11_use_localhost` | `audit_only` |
 
+`linux_compliance_ssh_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_harden_sshd_ciphers_openssh_conf_crypto_policy_enabled` | `harden_sshd_ciphers_openssh_conf_crypto_policy` | `crypto_policy` |
+| `linux_compliance_rule_harden_sshd_ciphers_opensshserver_conf_crypto_policy_enabled` | `harden_sshd_ciphers_opensshserver_conf_crypto_policy` | `crypto_policy` |
+| `linux_compliance_rule_harden_sshd_macs_openssh_conf_crypto_policy_enabled` | `harden_sshd_macs_openssh_conf_crypto_policy` | `crypto_policy` |
+| `linux_compliance_rule_harden_sshd_macs_opensshserver_conf_crypto_policy_enabled` | `harden_sshd_macs_opensshserver_conf_crypto_policy` | `crypto_policy` |
+
 ### `pam`
 
 | Variable | Rule | Strategy |
@@ -1264,6 +1372,13 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_set_password_hashing_algorithm_logindefs_enabled` | `set_password_hashing_algorithm_logindefs` | `audit_only` |
 | `linux_compliance_rule_set_password_hashing_algorithm_passwordauth_enabled` | `set_password_hashing_algorithm_passwordauth` | `audit_only` |
 | `linux_compliance_rule_set_password_hashing_algorithm_systemauth_enabled` | `set_password_hashing_algorithm_systemauth` | `audit_only` |
+
+`linux_compliance_pam_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_accounts_password_pam_unix_no_remember_enabled` | `accounts_password_pam_unix_no_remember` | `user_accounts` |
 
 ### `pwquality`
 
@@ -1300,6 +1415,14 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_accounts_password_pam_pwhistory_remember_password_auth_enabled` | `accounts_password_pam_pwhistory_remember_password_auth` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_remember_system_auth_enabled` | `accounts_password_pam_pwhistory_remember_system_auth` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_use_authtok_enabled` | `accounts_password_pam_pwhistory_use_authtok` | `audit_only` |
+
+`linux_compliance_pwhistory_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_accounts_password_pam_unix_no_remember_enabled` | `accounts_password_pam_unix_no_remember` | `user_accounts` |
+| `linux_compliance_rule_accounts_password_pam_unix_remember_enabled` | `accounts_password_pam_unix_remember` | `pam` |
 
 ### `faillock`
 
@@ -1402,6 +1525,14 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_smartcard_configure_crl_enabled` | `smartcard_configure_crl` | `audit_only` |
 | `linux_compliance_rule_smartcard_pam_enabled_enabled` | `smartcard_pam_enabled` | `audit_only` |
 
+`linux_compliance_smartcard_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_dconf_gnome_lock_screen_on_smartcard_removal_enabled` | `dconf_gnome_lock_screen_on_smartcard_removal` | `desktop` |
+| `linux_compliance_rule_sssd_enable_smartcards_enabled` | `sssd_enable_smartcards` | `sssd` |
+
 ### `console_access`
 
 | Variable | Rule | Strategy |
@@ -1470,6 +1601,15 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_sudoers_no_root_target_enabled` | `sudoers_no_root_target` | `audit_only` |
 | `linux_compliance_rule_sudoers_validate_passwd_enabled` | `sudoers_validate_passwd` | `audit_only` |
 
+`linux_compliance_sudo_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_disallow_bypass_password_sudo_enabled` | `disallow_bypass_password_sudo` | `pam` |
+| `linux_compliance_rule_ensure_sudo_group_restricted_enabled` | `ensure_sudo_group_restricted` | `user_accounts` |
+| `linux_compliance_rule_selinux_context_elevation_for_sudo_enabled` | `selinux_context_elevation_for_sudo` | `selinux` |
+
 ### `selinux`
 
 | Variable | Rule | Strategy |
@@ -1501,6 +1641,13 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_selinux_not_disabled_enabled` | `selinux_not_disabled` | `audit_only` |
 | `linux_compliance_rule_selinux_policytype_enabled` | `selinux_policytype` | `audit_only` |
 | `linux_compliance_rule_selinux_state_enabled` | `selinux_state` | `audit_only` |
+
+`linux_compliance_selinux_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_account_password_selinux_faillock_dir_enabled` | `account_password_selinux_faillock_dir` | `faillock` |
 
 ### `apparmor`
 
