@@ -1,4 +1,7 @@
 ---
+- name: Refuse internal variables and role outputs that exist before the run starts
+  ansible.builtin.import_playbook: run_start.yml
+
 - name: Refuse settings that would hide regressions before the hosts are audited again
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
   gather_facts: false
@@ -10,6 +13,8 @@
 
 - name: Audit hosts after remediation
   ansible.builtin.import_playbook: audit.yml
+  vars:
+    linux_compliance_run_start_checked: true
 
 - name: Compare the audit after remediation with the baseline
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"

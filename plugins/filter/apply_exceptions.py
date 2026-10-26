@@ -60,7 +60,9 @@ options:
     required: true
   groups:
     description:
-      - The inventory groups of the scanned host, normally C(group_names).
+      - The inventory groups of the scanned host. Derive them from the C(groups) magic variable,
+        as the audit role does, not from C(group_names), which an extra variable or an include
+        parameter can replace.
     type: list
     elements: str
     required: true
@@ -79,7 +81,10 @@ EXAMPLES = r"""
       {{ linux_compliance_audited.scan_run
          | freesecdev.linux_compliance.apply_exceptions(
              lookup('ansible.builtin.file', linux_compliance_audit_exceptions_file),
-             inventory_hostname, group_names) }}
+             inventory_hostname,
+             groups | dict2items | rejectattr('key', 'equalto', 'all')
+             | selectattr('value', 'ansible.builtin.contains', inventory_hostname)
+             | map(attribute='key') | sort) }}
 """
 
 RETURN = r"""

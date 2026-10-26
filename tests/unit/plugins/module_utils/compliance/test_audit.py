@@ -562,6 +562,7 @@ def test_a_timeout_is_never_compliant(harness: Harness) -> None:
         "disabled": 0,
         "total": 2,
         "run_status": "timed_out",
+        "off_platform": None,
     }
 
 

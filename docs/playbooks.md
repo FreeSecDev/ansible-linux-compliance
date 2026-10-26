@@ -1,8 +1,8 @@
 # Playbooks
 
 Scope: the orchestration playbooks shipped in `playbooks/`. Audience: operators and playbook authors.
-Jira: FREES-41, FREES-52, FREES-54, FREES-51. The playbooks contain no component logic; they only reference roles and
-other playbooks by FQCN. The `discover`, `audit` ([audit guide](audit.md)), `remediate`
+Jira: FREES-41, FREES-52, FREES-54, FREES-51, FREES-157. The playbooks contain no component logic; they only
+reference roles and other playbooks by FQCN, apart from the generated run-start check below. The `discover`, `audit` ([audit guide](audit.md)), `remediate`
 ([remediation guide](remediation.md)), `verify` ([verify guide](verify.md)) and `evidence`
 ([evidence bundles](evidence.md)) roles are implemented.
 
@@ -12,6 +12,44 @@ other playbooks by FQCN. The `discover`, `audit` ([audit guide](audit.md)), `rem
 | `playbooks/remediate.yml` | the `verify` role's `preflight.yml` entry point; `audit.yml` (`discover`, `audit`, then the read-only stale-exceptions report on `localhost`); the `verify` role's `baseline.yml` entry point; `remediate`; then `verify.yml` | `audit`, `remediate` |
 | `playbooks/verify.yml` | the `verify` role's `preflight.yml` entry point, `audit.yml` again (`discover`, `audit`, stale-exceptions report), then `verify` | `audit` |
 | `playbooks/evidence.yml` | `discover` and the `audit` role's `deferred.yml`, after the `evidence` role's `reached.yml`; the stale-exceptions report on `localhost`; on every target host the `audit` role's `enforce.yml` with the `evidence` role in its `always` section (with the stale result of the run), failing no host; the `evidence` role's `summary.yml` on `localhost`, which writes the collection summary; then `enforce.yml` and the `evidence` role's `collected.yml` on every target host, which fail the gated hosts and the hosts whose collection failed | `audit`; the `evidence` role's host `stat` and fetch only |
+
+Every one of these playbooks first imports `playbooks/run_start.yml`, which `make role-guards` generates (ADR 0004,
+FREES-157). Its one play targets `all:localhost` and runs its one assertion once, so every `--limit` keeps it, and it
+never connects to a host. It refuses the run before anything else when an inventory host or `localhost`
+already has an internal `__linux_compliance_*` variable or a role output (`linux_compliance_audited`,
+`linux_compliance_discovered`, `linux_compliance_audit_stale_exceptions`, `linux_compliance_baseline` and every other
+`linux_compliance_*` fact that a role sets) in `hostvars`, that is from an extra variable (`-e`), the inventory,
+`group_vars`, `host_vars` or a fact cache, when `inventory_hostname` is an extra variable, or when the `group_names` of
+a host differ from the groups that the `groups` magic variable lists for it, which only an extra variable
+`group_names` can cause and which would widen the hosts that an exception scoped to a group applies to. An extra variable
+outranks every fact a role sets and a template can imitate any value a role checks, so these names are refused
+whatever their value. The cacheable baseline marker of the `verify` role is exempt; `baseline.yml` and the `verify`
+role check it where they read it. When `remediate.yml` imports `audit.yml` and `verify.yml`, and `verify.yml` imports
+`audit.yml`, they pass the play variable `linux_compliance_run_start_checked: true`, so the imported check does not
+refuse the facts of the earlier plays. The check is skipped only when the marker is defined and no inventory host and
+not `localhost` has it in `hostvars`, which leaves only a play variable of the importing playbook; the marker from `-e`,
+the inventory, `group_vars`, `host_vars` or a fact cache, on any host, is refused like any other name.
+
+Two operator options still skip the run-start check, as they skip any task: `--skip-tags always` and
+`--start-at-task <a later task>`. The check is tagged `always` already, so `--tags` alone never skips it. With
+`--skip-tags always` the roles do nothing, and `remediate` and `verify` fail: every task that scans, changes or
+compares is tagged `always`, and the dispatched guards of the `remediate` and `verify` roles then fail the host. `--start-at-task` also skips the
+internal-variable guards of the roles and does not fail closed. Both are explicit choices on the command line, the same
+trust as `-e` in a custom playbook; do not use them with the shipped playbooks.
+
+`--limit` cannot skip the run-start check: it targets `all:localhost`, so it runs once for any limit that selects a host,
+and its assertion never connects, also when the selected host is unreachable. The other plays on `localhost` (the
+stale-exceptions report, and the collection summary of `evidence.yml`) are skipped by a limit that does not name
+`localhost`, and that fails closed: no stale warning is printed and no gate depends on it, and without a summary a
+report has host coverage `unknown`, which `--require-host-coverage` refuses. Add `localhost` to a limit, for example
+`--limit web01,localhost`, to get both ([evidence bundles](evidence.md)).
+
+Run one shipped playbook per `ansible-playbook` invocation. Two of them in one invocation, for example
+`ansible-playbook playbooks/audit.yml playbooks/remediate.yml`, are refused by design: the run-start check of the
+second finds the role outputs and internal facts that the first left in `hostvars`, and it cannot tell them from
+values planted with `-e`, the inventory or a fact cache, so it fails closed before the second playbook audits or
+changes anything. Facts do not survive between invocations, so the next invocation starts clean. A playbook that needs
+another one imports it, as `remediate.yml` imports `audit.yml` and `verify.yml`.
 
 `remediate.yml` imports `audit.yml` first, by relative path so that the repository guard can scan the imported
 playbook. Every remediation therefore starts from a verified profile and a recorded baseline audit, and the

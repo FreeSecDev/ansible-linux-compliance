@@ -66,6 +66,7 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PINS_PATH = REPOSITORY_ROOT / "extensions" / "ci" / "scc" / "scc.pins"
 CONTAINERFILE = REPOSITORY_ROOT / "extensions" / "ci" / "scc" / "Containerfile"
+CONTAINERFILE_UBUNTU2604 = CONTAINERFILE.with_name("Containerfile.ubuntu2604")
 WORKFLOW_DIRECTORY = REPOSITORY_ROOT / ".github" / "workflows"
 CI_WORKFLOW = WORKFLOW_DIRECTORY / "ci.yml"
 MAKEFILE = REPOSITORY_ROOT / "Makefile"
@@ -125,6 +126,7 @@ SCC_TARGETS = frozenset(
         "scc-expiry-check",
         "scc-fetch",
         "scc-image",
+        "scc-image-ubuntu2604",
         "scc-smoke",
         "scc-image-clean",
         "scc-integration",
@@ -728,6 +730,31 @@ def test_the_containerfile_is_pinned_and_downloads_nothing() -> None:
     assert not CONTAINERFILE_FORBIDDEN.search(text)
     assert "sha256sum --check --strict" in text
     assert "COPY --chmod=0644 scc.deb /tmp/scc.deb" in text
+
+
+def test_the_ubuntu_2604_containerfile_differs_only_in_its_pinned_base_and_labels() -> None:
+    base = CONTAINERFILE.read_text(encoding="utf-8").splitlines()
+    variant = CONTAINERFILE_UBUNTU2604.read_text(encoding="utf-8").splitlines()
+    assert re.fullmatch(r"FROM docker\.io/library/ubuntu:26\.04@sha256:[0-9a-f]{64}", variant[0])
+    assert sum(line.startswith("FROM ") for line in variant) == 1
+    assert len(variant) == len(base)
+    changed = [
+        index
+        for index, (left, right) in enumerate(zip(base, variant, strict=True))
+        if left != right
+    ]
+    assert changed == [0, 6, 7]
+    assert variant[6].lstrip().startswith("LABEL org.opencontainers.image.title=")
+    assert "never published" in variant[7]
+    assert not CONTAINERFILE_FORBIDDEN.search("\n".join(variant))
+
+
+def test_the_ubuntu_2604_image_has_a_localhost_tag_and_is_removed_with_the_other() -> None:
+    makefile = MAKEFILE.read_text(encoding="utf-8")
+    assert "SCC_IMAGE_UBUNTU2604 ?= $(SCC_IMAGE)-ubuntu2604" in makefile
+    assert "--tag '$(SCC_IMAGE_UBUNTU2604)'" in makefile
+    assert "$(DOCKER) image rm --force '$(SCC_IMAGE)' '$(SCC_IMAGE_UBUNTU2604)'" in makefile
+    assert "info $(SCC_CONTAINERFILE) $(SCC_CONTAINERFILE_UBUNTU2604)" in makefile
 
 
 @pytest.mark.parametrize(

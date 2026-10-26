@@ -64,6 +64,39 @@
           ansible.builtin.fail:
             msg: VERIFY-PLAY-BASELINE-NOT-REFUSED
       rescue:
+        - name: Check that the role refused the play variable marker by its name before comparing
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('supplied from outside the role as parameters')
+              - "'__linux_compliance_verify_baseline_recorded' in ansible_failed_result.assertion"
+              - linux_compliance_verified is not defined
+            quiet: true
+
+- name: Verify | A baseline from play variables alone is refused
+  hosts: verify_forged_play
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  vars:
+    linux_compliance_baseline: "{{ verify_forged_audited }}"
+  tasks:
+    - name: Compare a later audit that passes everything with a baseline from a play variable
+      block:
+        - name: Build a synthetic audit that passes every rule
+          ansible.builtin.include_tasks: tasks/verify-synthetic.yml
+          vars:
+            verify_run_id: verify-post
+            verify_outcomes: "{{ verify_outcomes_all_pass }}"
+
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the comparison used a baseline from a play variable
+          ansible.builtin.fail:
+            msg: VERIFY-PLAY-BASELINE-ONLY-NOT-REFUSED
+      rescue:
         - name: Check that the role refused the baseline before comparing
           ansible.builtin.assert:
             that:

@@ -227,7 +227,12 @@ def test_a_content_path_that_cannot_be_resolved_is_invalid_content(harness: Harn
     assert not harness.output_root.exists()
 
 
-def test_only_the_scc_backend_accepts_stream_names_longer_than_64(harness: Harness) -> None:
+def test_only_the_scc_backend_accepts_stream_names_longer_than_64(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = harness.root / "os-release"
+    release.write_text('ID=ubuntu\nVERSION_ID="24.04"\n', encoding="utf-8")
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(release))
     long = harness.content_dir / ("U_" + "x" * 96 + "-ds.xml")
     harness.datastream.rename(long)
     with pytest.raises(audit.AuditError, match=r"\{1,64\}") as raised:

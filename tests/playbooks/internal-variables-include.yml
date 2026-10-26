@@ -10,7 +10,7 @@
       profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
       rule_ids:
         - xccdf_org.ssgproject.content_rule_file_permissions_crontab
-    refused: Refuse internal variables supplied from outside the role
+    refused: Refuse internal variables supplied from outside the role as parameters
     forged_family:
       name: ../../../../tmp/forged
       disruptive: false
@@ -46,12 +46,12 @@
           ansible.builtin.fail:
             msg: INTERNAL-VARIABLES-PLAN-NOT-REFUSED
       rescue:
-        - name: Check that the guard refused the plan before the ledger was read
+        - name: Check that the parameter check refused the plan before the ledger was read
           ansible.builtin.assert:
             that:
               - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_remediate_plan' in ansible_failed_result.assertion"
-              - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
+              - __linux_compliance_remediate_ledger is not defined
             quiet: true
 
     - name: A forged family is refused
@@ -71,7 +71,7 @@
             that:
               - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_remediate_family' in ansible_failed_result.assertion"
-              - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
+              - __linux_compliance_remediate_ledger is not defined
             quiet: true
 
     - name: A forged rule catalogue is refused
@@ -217,7 +217,7 @@
               - "'__linux_compliance_verify_comparison' in ansible_failed_result.assertion"
             quiet: true
 
-    - name: A plan forged as the sentinel is refused by the second read-back
+    - name: A plan forged as the sentinel is refused by its name
       block:
         - name: Run the remediate role with the sentinel as the plan
           ansible.builtin.include_role:
@@ -229,15 +229,15 @@
           ansible.builtin.fail:
             msg: INTERNAL-VARIABLES-SENTINEL-PLAN-NOT-REFUSED
       rescue:
-        - name: Check that the second read-back refused the plan before the ledger was read
+        - name: Check that the parameter check refused the sentinel plan before the ledger was read
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_remediate_plan' in ansible_failed_result.assertion"
-              - __linux_compliance_remediate_ledger == '__linux_compliance_unset_again__'
+              - __linux_compliance_remediate_ledger is not defined
             quiet: true
 
-    - name: A family forged as the sentinel is refused by the second read-back
+    - name: A family forged as the sentinel is refused by its name
       block:
         - name: Run the remediate role with the sentinel as the family
           ansible.builtin.include_role:
@@ -249,12 +249,12 @@
           ansible.builtin.fail:
             msg: INTERNAL-VARIABLES-SENTINEL-FAMILY-NOT-REFUSED
       rescue:
-        - name: Check that the second read-back refused the family before the ledger was read
+        - name: Check that the parameter check refused the sentinel family before the ledger was read
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_remediate_family' in ansible_failed_result.assertion"
-              - __linux_compliance_remediate_ledger == '__linux_compliance_unset_again__'
+              - __linux_compliance_remediate_ledger is not defined
             quiet: true
 
     - name: A toggle resolution of the audit forged as the sentinel is refused
@@ -269,10 +269,10 @@
           ansible.builtin.fail:
             msg: INTERNAL-VARIABLES-SENTINEL-AUDIT-NOT-REFUSED
       rescue:
-        - name: Check that the second read-back of the audit role refused the toggles
+        - name: Check that the parameter check of the audit role refused the sentinel toggles
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_audit_toggles' in ansible_failed_result.assertion"
             quiet: true
 
@@ -288,10 +288,10 @@
           ansible.builtin.fail:
             msg: INTERNAL-VARIABLES-SENTINEL-VERIFY-NOT-REFUSED
       rescue:
-        - name: Check that the second read-back of the verify role refused the comparison
+        - name: Check that the parameter check of the verify role refused the sentinel comparison
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_verify_comparison' in ansible_failed_result.assertion"
             quiet: true
 
@@ -329,9 +329,9 @@
           ansible.builtin.fail:
             msg: INTERNAL-VARIABLES-SENTINEL-SUMMARY-NOT-REFUSED
       rescue:
-        - name: Check that the second read-back of the summary entry point refused it
+        - name: Check that the parameter check of the summary entry point refused it
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name is search(refused ~ ' as the first sentinel')
+              - ansible_failed_task.name is search(refused)
               - "'__linux_compliance_evidence_collected' in ansible_failed_result.assertion"
             quiet: true

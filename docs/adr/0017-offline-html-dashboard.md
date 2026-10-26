@@ -156,3 +156,38 @@ and refuses every other version.
 - The safety properties are unchanged: host names, paths and reasons are rendered with DOM text APIs inside `bdi`
   elements. `tests/browser/test_dashboard_host_coverage.py` checks the text, a hostile summary path rendered as text,
   a 2.0 report, and axe on the Overview and Compliance tabs in both themes.
+
+## Amendment 2026-10-26: off-platform results (FREES-161)
+
+The dashboard reads report schema 2.0, 2.1 and 2.2
+([ADR 0016 amendment](0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-22-off-platform-results-frees-161))
+and refuses every other version.
+
+- **Overview.** When `sections.compliance.off_platform` lists inputs, an "Off-platform results" callout comes before
+  the compliance result. Its title is "Off-platform results: never compliance with the host's own release.", in the
+  warning tone. It says:
+  - how many inputs were scanned, by explicit opt-in, with a benchmark made for another platform;
+  - that they are never compliance with a baseline of the host's own release;
+  - that they are excluded from every figure, pooled figure and summary.
+
+  It then lists each input with its host, its benchmark, the platform the benchmark is made for, the host's platform
+  and the run status.
+- **Compliance tab.**
+  - **The table.** The same callout, then the table "Off-platform results (never in a figure)": host, benchmark,
+    benchmark platform, host platform, run status and the label "off-platform: not a figure". Its details hold the
+    input, its SHA-256, the content version, the profile and the rules per outcome, captioned "not a figure".
+  - **Inputs and findings.** The inputs table shows "off-platform: no figure" instead of a per-input figure. The
+    findings table flags each marked finding "off-platform" with both platforms, and the flag can be filtered.
+- **Host coverage.** When a target host has only an off-platform scan, the "Target hosts are missing from this
+  report." callout adds how many target hosts have only an off-platform scan, says that they are not covered, and
+  names each. The coverage pairs show "Only an off-platform scan (not covered)". The target host table shows "only an
+  off-platform scan: not covered" in the bad tone.
+- **No new figure.** The script computes nothing. Every count comes from the report. A report without off-platform
+  inputs shows neither the callout nor the table.
+- **Safety unchanged.**
+  - Every value is rendered with DOM text APIs inside `bdi` elements.
+  - `tests/browser/test_dashboard_off_platform.py` checks:
+    - the labels, and that the off-platform host is absent from the pooled figures and the host groups;
+    - hostile host, platform and benchmark values in a forged report, rendered as text with no element, request or
+      script;
+    - axe-core on the Overview and Compliance tabs in both themes.

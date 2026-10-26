@@ -70,7 +70,8 @@ EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
 	and ([.sections.compliance.items[].format] | sort) == ["exceptions_evaluation", "scan_run"] \
 	and ([.sections.compliance.groups[].summary.run_status] | sort) == ["completed", "failed"] \
 	and ([.sections.compliance.groups[].host.hostname] | sort) == ["db01", "web01"] \
-	and .sections.compliance.host_coverage.status == "unknown" and .schema_version == "2.1"
+	and .sections.compliance.host_coverage.status == "unknown" and .schema_version == "2.2" \
+	and .overview.off_platform == 0 and .sections.compliance.off_platform == []
 EVIDENCE_MISSING_CHECK := .sections.compliance.status == "partial" and .sections.compliance.summary == null \
 	and .sections.compliance.groups == [] and .sections.compliance.aggregates == [] \
 	and .sections.exceptions.status == "partial" \
@@ -169,7 +170,9 @@ DOCKER ?= docker
 SCC_PINS := extensions/ci/scc/scc.pins
 include $(SCC_PINS)
 SCC_IMAGE ?= localhost/freesecdev-scc:local
+SCC_IMAGE_UBUNTU2604 ?= $(SCC_IMAGE)-ubuntu2604
 SCC_CONTAINERFILE := extensions/ci/scc/Containerfile
+SCC_CONTAINERFILE_UBUNTU2604 := extensions/ci/scc/Containerfile.ubuntu2604
 SCC_DOWNLOAD_DIR := build/scc/download
 SCC_CONTEXT_DIR := build/scc/context
 SCC_FETCH_ENV := SCC_VERSION='$(SCC_VERSION)' SCC_BUNDLE='$(SCC_BUNDLE)' SCC_BUNDLE_URL='$(SCC_BUNDLE_URL)' \
@@ -244,7 +247,7 @@ Tests
   test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
   test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check)
-  test-role-guards      Check in check mode that forged internal role variables are refused before any change
+  test-role-guards      Check in check mode that forged internal variables and role outputs are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
@@ -264,8 +267,9 @@ Images and AWS
   scc-fetch             Download the pinned SCC bundle from DISA, verify it and stage its Debian package in build/scc
   scc-image             Build the CI-only SCC image locally as SCC_IMAGE (a localhost/ tag); it is never pushed
   scc-smoke             Build the SCC image and check that cscc starts and reports the pinned version
-  scc-integration       Run a real SCC scan through compliance_scan and the egress test in SCC_IMAGE
-  scc-image-clean       Remove the local SCC_IMAGE
+  scc-image-ubuntu2604  Build SCC_IMAGE_UBUNTU2604, the same SCC on an Ubuntu 26.04 base, locally; never pushed
+  scc-integration       Run real SCC scans through compliance_scan, the egress test and the 26.04 case
+  scc-image-clean       Remove the local SCC_IMAGE and SCC_IMAGE_UBUNTU2604
 
 Reporting, docs and release
   report                Write the normalized report JSON and the HTML dashboard from REPORT_ARGS
@@ -285,7 +289,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue lint-python lint-yaml lint-actions \
-	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
+	lint-containerfile scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -366,7 +370,7 @@ lint-actions: require-uv
 
 lint-containerfile:
 	tools/lint/fetch-hadolint.sh '$(HADOLINT)'
-	'$(HADOLINT)' --failure-threshold info $(SCC_CONTAINERFILE)
+	'$(HADOLINT)' --failure-threshold info $(SCC_CONTAINERFILE) $(SCC_CONTAINERFILE_UBUNTU2604)
 
 lint-repo: require-uv
 	@if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$$'; then printf 'error: compiled Python files are tracked\n' >&2; exit 1; fi
@@ -453,6 +457,8 @@ test-audit-exceptions: require-uv collection-link
 	rm -rf '$(AUDIT_EXCEPTIONS_DIR)'
 	mkdir -p '$(AUDIT_EXCEPTIONS_DIR)'
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions.yml
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) -e '{"group_names": ["web"]}' \
+		tests/playbooks/audit-exceptions-group-names.yml
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) --limit db01,localhost tests/playbooks/audit-exceptions-limit.yml \
 		| tee '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
 	grep -q 'unmatched on 1 of 2 target hosts; not covered: web01' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
@@ -566,15 +572,63 @@ ROLE_GUARDS_SENTINEL_PLAN := {"__linux_compliance_remediate_plan": "__linux_comp
 ROLE_GUARDS_SENTINEL_FAMILY := {"__linux_compliance_remediate_family": "__linux_compliance_unset__"}
 
 ROLE_GUARDS_REFUSALS := is set from outside the role|Validation of arguments failed
+ROLE_GUARDS_PARAMETERS := Refuse internal variables supplied from outside the role as parameters
+ROLE_GUARDS_HOSTS := forged_plan,forged_family,forged_vars,forged_template,
 
 define role_guards_expect_refusal
-status=0; ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit $(1) --check \
+status=0; ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(ROLE_GUARDS_HOSTS) --limit $(1) --check \
 		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/$(1).log' 2>&1 || status=$$?; \
 	cat '$(ROLE_GUARDS_DIR)/$(1).log'; \
 	test "$$status" -eq 2 || { printf 'error: %s did not fail the play (status %s)\n' '$(1)' "$$status" >&2; exit 1; }; \
-	grep -qE '$(ROLE_GUARDS_REFUSALS)' '$(ROLE_GUARDS_DIR)/$(1).log' || { printf 'error: %s was not refused\n' '$(1)' >&2; exit 1; }; \
-	if grep -q 'Remediate | Read the state ledger' '$(ROLE_GUARDS_DIR)/$(1).log'; then \
-		printf 'error: the role went on after %s\n' '$(1)' >&2; exit 1; fi
+	grep -qE '$(2)' '$(ROLE_GUARDS_DIR)/$(1).log' || { printf 'error: %s was not refused\n' '$(1)' >&2; exit 1; }; \
+	if grep -qE 'Remediate \| Read the state ledger|tmp/forged|FORGED-PLAN-USED|PROBE-COMPLETED' \
+		'$(ROLE_GUARDS_DIR)/$(1).log'; then printf 'error: the role went on after %s\n' '$(1)' >&2; exit 1; fi
+endef
+
+RUN_START_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i localhost, --check \
+	-e linux_compliance_target_hosts=freesecdev_no_target_host
+RUN_START_REFUSAL := Refusing to run: internal variables or role outputs of the freesecdev.linux_compliance roles
+RUN_START_AUDITED := {"linux_compliance_audited": {"run_id": "forged", "run_status": "completed", "evidence_written": true}}
+
+define run_start_expect_refusal
+status=0; $(RUN_START_PLAYBOOK) $(3) playbooks/$(2).yml > '$(ROLE_GUARDS_DIR)/run-start-$(1).log' 2>&1 || status=$$?; \
+	cat '$(ROLE_GUARDS_DIR)/run-start-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: run start %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -qF '$(RUN_START_REFUSAL) ($(4))' '$(ROLE_GUARDS_DIR)/run-start-$(1).log' || \
+		{ printf 'error: run start %s was not refused by the first play\n' '$(1)' >&2; exit 1; }; \
+	test "$$(grep -c '^PLAY \[' '$(ROLE_GUARDS_DIR)/run-start-$(1).log')" -eq 1 || \
+		{ printf 'error: run start %s went on after the first play\n' '$(1)' >&2; exit 1; }
+endef
+
+RUN_START_LIMIT := -i tests/playbooks/inventory/run-start-limit.yml --limit
+
+define run_start_limit_plain
+$(RUN_START_PLAYBOOK) $(RUN_START_LIMIT) $(2) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log' 2>&1 || \
+	{ cat '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log'; printf 'error: %s refused a plain run limited to %s\n' '$(1)' '$(2)' >&2; exit 1; }
+grep -qE '^ok: \[$(2)\]' '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log' || \
+	{ printf 'error: the run-start check of %s did not run with --limit %s\n' '$(1)' '$(2)' >&2; exit 1; }
+if grep -qE 'UNREACHABLE|unreachable=[1-9]' '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log'; then \
+	printf 'error: the run-start check of %s connected to a host with --limit %s\n' '$(1)' '$(2)' >&2; exit 1; fi
+endef
+
+RUN_START_MARKER_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook --check \
+	-e linux_compliance_target_hosts=freesecdev_no_target_host -e @tests/playbooks/vars/run-start-templated-plan.yml
+
+define run_start_marker_refusal
+status=0; $(RUN_START_MARKER_PLAYBOOK) -i tests/playbooks/inventory/run-start-marker-$(2) $(4) playbooks/$(3).yml \
+		> '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log' 2>&1 || status=$$?; \
+	cat '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: marker case %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -qF '$(RUN_START_REFUSAL) (__linux_compliance_remediate_plan, linux_compliance_run_start_checked)' \
+		'$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log' || \
+		{ printf 'error: marker case %s was not refused by the first play\n' '$(1)' >&2; exit 1; }; \
+	test "$$(grep -c '^PLAY \[' '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log')" -eq 1 || \
+		{ printf 'error: marker case %s went on after the first play\n' '$(1)' >&2; exit 1; }
+endef
+
+define run_start_expect_success
+$(RUN_START_PLAYBOOK) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log' 2>&1 || \
+	{ cat '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log'; printf 'error: %s refused a plain run\n' '$(1)' >&2; exit 1; }
 endef
 
 test-role-guards: require-uv collection-link
@@ -589,13 +643,45 @@ test-role-guards: require-uv collection-link
 		tests/playbooks/internal-variables-extra.yml
 	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_SENTINEL_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
 		tests/playbooks/internal-variables-extra.yml
-	$(call role_guards_expect_refusal,forged_plan)
-	$(call role_guards_expect_refusal,forged_family)
-	ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit forged_vars --check \
-		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/forged_vars.log' 2>&1 || \
-		{ cat '$(ROLE_GUARDS_DIR)/forged_vars.log'; exit 1; }
-	if grep -q 'tmp/forged' '$(ROLE_GUARDS_DIR)/forged_vars.log'; then \
-		printf 'error: role variables of a roles entry replaced the plan\n' >&2; exit 1; fi
+	$(REMEDIATE_CHECK) tests/playbooks/internal-variables-templated.yml
+	$(call role_guards_expect_refusal,forged_plan,$(ROLE_GUARDS_REFUSALS))
+	$(call role_guards_expect_refusal,forged_family,$(ROLE_GUARDS_REFUSALS))
+	$(call role_guards_expect_refusal,forged_vars,$(ROLE_GUARDS_PARAMETERS))
+	$(call role_guards_expect_refusal,forged_template,$(ROLE_GUARDS_REFUSALS))
+	$(call run_start_expect_success,audit)
+	$(call run_start_expect_success,remediate)
+	$(call run_start_expect_success,verify)
+	$(call run_start_expect_refusal,templated_plan,remediate,-e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,audited_audit,audit,-e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,audited_evidence,evidence,-e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,audited_inventory,evidence,-i tests/playbooks/inventory/run-start-planted.yml,linux_compliance_audited)
+	$(call run_start_expect_refusal,comparison,verify,-e '{"__linux_compliance_verify_comparison": {}}',__linux_compliance_verify_comparison)
+	$(call run_start_expect_refusal,marker,remediate,-e linux_compliance_run_start_checked=true,linux_compliance_run_start_checked)
+	$(call run_start_expect_refusal,inventory_hostname,evidence,-e inventory_hostname=freesecdev_forged,none)
+	$(call run_start_expect_refusal,group_names,audit,-e '{"group_names": ["web"]}',none)
+	$(call run_start_expect_refusal,group_names_grouped,audit,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e '{"group_names": ["web"]}',none)
+	$(REMEDIATE_CHECK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/internal-variables-hostname.yml
+	$(call run_start_expect_refusal,limit_plan,remediate,$(RUN_START_LIMIT) web01 -e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,limit_audited,audit,$(RUN_START_LIMIT) web01 -e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,limit_unreachable,remediate,$(RUN_START_LIMIT) lost01 -e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,limit_evidence,evidence,$(RUN_START_LIMIT) web01 -e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,limit_verify,verify,$(RUN_START_LIMIT) web01 -e '{"__linux_compliance_verify_comparison": {}}',__linux_compliance_verify_comparison)
+	$(call run_start_limit_plain,remediate,web01)
+	$(call run_start_limit_plain,remediate,lost01)
+	$(call run_start_limit_plain,audit,localhost)
+	$(call run_start_marker_refusal,host-remediate,host,remediate,)
+	$(call run_start_marker_refusal,host-remediate-limit,host,remediate,--limit web01)
+	$(call run_start_marker_refusal,host-audit,host,audit,)
+	$(call run_start_marker_refusal,host-audit-limit,host,audit,--limit web01)
+	$(call run_start_marker_refusal,group-remediate,group,remediate,)
+	$(call run_start_marker_refusal,group-remediate-limit,group,remediate,--limit web01)
+	$(call run_start_marker_refusal,group-audit,group,audit,)
+	$(call run_start_marker_refusal,group-audit-limit,group,audit,--limit web01)
+	status=0; $(RUN_START_PLAYBOOK) playbooks/audit.yml playbooks/audit.yml > '$(ROLE_GUARDS_DIR)/run-start-twice.log' 2>&1 \
+		|| status=$$?; cat '$(ROLE_GUARDS_DIR)/run-start-twice.log'; \
+		test "$$status" -eq 2 || { printf 'error: two shipped playbooks in one invocation gave status %s\n' "$$status" >&2; exit 1; }; \
+		grep -qF '$(RUN_START_REFUSAL) (__linux_compliance_audit_' '$(ROLE_GUARDS_DIR)/run-start-twice.log' || \
+		{ printf 'error: the second shipped playbook was not refused by its run-start check\n' >&2; exit 1; }
 
 VERIFY_DIR := build/test-verify
 VERIFY_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(AUDIT_EXCEPTIONS_INVENTORY) \
@@ -743,16 +829,24 @@ scc-image: scc-expiry-check lint-containerfile scc-fetch
 		--build-arg SCC_VERSION='$(SCC_VERSION)' --build-arg SCC_DEB_SHA256='$(SCC_DEB_SHA256)' \
 		--build-arg SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)' '$(SCC_CONTEXT_DIR)'
 
+scc-image-ubuntu2604: scc-image
+	@printf '%s' '$(SCC_IMAGE_UBUNTU2604)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE_UBUNTU2604 must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) build --network none --file $(SCC_CONTAINERFILE_UBUNTU2604) --tag '$(SCC_IMAGE_UBUNTU2604)' \
+		--build-arg SCC_VERSION='$(SCC_VERSION)' --build-arg SCC_DEB_SHA256='$(SCC_DEB_SHA256)' \
+		--build-arg SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)' '$(SCC_CONTEXT_DIR)'
+
 scc-smoke: scc-image
 	tools/scc/smoke-test.sh '$(SCC_IMAGE)' '$(SCC_VERSION)'
 
-scc-integration: scc-image require-uv collection-link
+scc-integration: scc-image scc-image-ubuntu2604 require-uv collection-link
 	uv python install
-	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_REQUIRE_SCC=1 $(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
+	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_SCC_IMAGE_UBUNTU2604='$(SCC_IMAGE_UBUNTU2604)' FREESECDEV_REQUIRE_SCC=1 \
+		$(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
 
 scc-image-clean:
 	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
-	$(DOCKER) image rm --force '$(SCC_IMAGE)'
+	@printf '%s' '$(SCC_IMAGE_UBUNTU2604)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE_UBUNTU2604 must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) image rm --force '$(SCC_IMAGE)' '$(SCC_IMAGE_UBUNTU2604)'
 
 REPORT_SCOPE ?=
 REPORT_ARGS ?=

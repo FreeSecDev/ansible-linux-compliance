@@ -21,7 +21,8 @@ author:
   - FreeSecDev contributors (@FreeSecDev)
 description:
   - Validates a scan run with the findings model and returns the number of findings per outcome,
-    the total and the run status, in the same shape as the C(summary) of
+    the total, the run status and the off-platform marker (or null), in the same shape as the
+    C(summary) of
     M(freesecdev.linux_compliance.compliance_scan).
   - The audit role uses it to summarise the waived scan run that
     P(freesecdev.linux_compliance.apply_exceptions#filter) returns, next to the raw summary.
@@ -56,7 +57,8 @@ def scan_summary(scan_run: object) -> dict[str, object]:
         scan_run: The scan run mapping or JSON text.
 
     Returns:
-        The count per outcome, the total and the run status.
+        The count per outcome, the total, the run status and the off-platform marker
+        of the run or ``None``.
 
     Raises:
         ExceptionsError: If the value is not a valid scan run.
@@ -68,6 +70,7 @@ def scan_summary(scan_run: object) -> dict[str, object]:
     counts: dict[str, object] = dict(tally)
     counts["total"] = len(run.findings)
     counts["run_status"] = run.status.value
+    counts["off_platform"] = None if run.off_platform is None else run.off_platform.to_dict()
     return counts
 
 

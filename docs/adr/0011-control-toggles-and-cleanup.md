@@ -450,7 +450,8 @@ which the internal-variable guard of FREES-137 refuses. With the FREES-53 catalo
 is `audit_only`, and the plan decides `audit_only` before the allow-list, as this ADR records, so the pinned catalogue
 alone cannot show the gate. `make test-remediate-disruptive` (run by `make test-remediate-check`) copies the
 collection into `build/test-remediate-disruptive/`, promotes the catalogued `ssh` rule `sshd_disable_root_login` to a
-native rule in the copy with `tools/roles/promote_native_rule.py` (which refuses to rewrite the repository catalogue),
+native rule in the copy with `tools/roles/promote_native_rule.py` (which refuses to rewrite the repository catalogue,
+also through a symbolic link or, since FREES-157, a hard link, recognised by its device and inode numbers),
 and runs the real remediate role against the copy in check mode. With the default toggles and allow-list the rule is
 `skip` with the reason `disruptive_not_allowed` and one notice, and no family is dispatched. With `ssh` on the
 allow-list the rule is planned for `apply`; the copy has no `ssh` task file, so the role fails closed at the

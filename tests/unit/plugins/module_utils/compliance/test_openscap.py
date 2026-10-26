@@ -1476,3 +1476,10 @@ class TestOscapShapedResults:
         run = setup.audit()
         assert run.status is model.ScanStatus.COMPLETED
         assert {f.rule_id: f.outcome for f in run.findings}[RULE_BETA] is model.Outcome.ERROR
+
+
+def test_the_openscap_backend_refuses_the_off_platform_opt_in(tmp_path: Path) -> None:
+    setup = harness(tmp_path)
+    with pytest.raises(scanner.ScanRequestError, match="applies only to the scc backend"):
+        setup.audit(allow_off_platform_benchmark=True)
+    assert not (setup.output_root / "scan-1").exists()

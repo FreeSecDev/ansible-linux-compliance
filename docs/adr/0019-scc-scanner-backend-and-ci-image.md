@@ -5,7 +5,8 @@
 - **Deciders:** lead architect; product owner (platform facts and the checklist export decision)
 - **Jira:** FREES-144 (this ADR and the CI image), FREES-145 (backend), FREES-146 (STIG to ComplianceAsCode
   mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard),
-  FREES-155 (Markdown in the publishing check, no SCC cache for pull requests from forks)
+  FREES-155 (Markdown in the publishing check, no SCC cache for pull requests from forks), FREES-161 (opt-in
+  off-platform scan of Ubuntu 26.04 with the 24.04 benchmark)
 - **Pull requests:** introduced by the pull request for FREES-144 (the CI image, its make targets, the `scc-smoke`
   job and the repository tests). The pull request for FREES-145 adds the backend, the SCC integration and egress
   tests and the amendment at the end of this ADR. The mapping and the exporter are not implemented.
@@ -289,7 +290,9 @@ magic anywhere in the decoded data) or written as long hexadecimal runs. A hit n
 reviewed false positive is accepted only by an entry of path and SHA-256 of the exact content in
 `ACCEPTED_BINARY_FINDINGS` of the test module, so a changed file is checked again. The content bundled inside the
 SCC package is not used implicitly: the per-run options file enables only the pinned stream. A target with no pinned benchmark, Ubuntu 26.04
-today, is refused with a clear error and is never scanned with 24.04 content (AGENTS.md rule 8).
+today, is refused with a clear error and is never scanned with 24.04 content (AGENTS.md rule 8), unless the
+explicit, labelled opt-in of the [FREES-161 amendment](#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161)
+is given.
 
 ### 4. Results through the existing hardened parsers
 
@@ -785,6 +788,247 @@ The tests skip without `FREESECDEV_SCC_IMAGE` and fail instead in CI (`FREESECDE
 - The audit role still offers only `openscap`.
 - Pinned DISA benchmarks in the content manifest: the backend accepts any installed stream whose SHA-256 the caller
   pins, and only the benchmark `xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG` for Ubuntu 24.04 hosts.
+
+## Amendment 2026-10-26: off-platform opt-in for Ubuntu 26.04 (FREES-161)
+
+### Context
+
+- **Approval.** The product owner approved this on 2026-10-26. From production use, the owner reports that SCC scans
+  Ubuntu 26.04 targets with the Ubuntu 24.04 STIG benchmark.
+- **No 26.04 benchmark.** SCC 5.15 ships Ubuntu 18.04 to 24.04 content only. No DISA benchmark for 26.04 was
+  published on 2026-10-26.
+- **Decision 3 refuses a 26.04 host.** AGENTS.md rule 8 forbids substituting one benchmark for another *silently*.
+- **This amendment makes the substitution explicit:**
+  - an opt-in that is off by default;
+  - exactly one allowed pair;
+  - a marker on every result;
+  - results kept out of every compliance figure.
+
+**Observed with SCC 5.15 on 2026-10-26.** These runs used `docker.io/library/ubuntu:26.04` pinned by index digest
+`sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944` (created 2026-10-06), with the pinned SCC
+DEB installed exactly as in the 24.04 image. They scanned the bundled Ubuntu 24.04 stream (`SCC_CONTENT_FILE`) with
+profile `MAC-1_Classified`, through the backend's own scan form.
+
+- **With the per-run options of decision 2:**
+  - SCC evaluated the stream's CPE-OVAL platform test (`oval:mil.disa.stig.ind:tst:10000006 [false]`).
+  - It logged "The SCAP content stream: 'CAN_Ubuntu_24-04_STIG' is not applicable to this target system ... based on
+    the Common Platform Enumeration (CPE) tests defined in the content".
+  - It ended with "SCC Scan Completed: No Applicable Content", wrote no XCCDF results and exited 0.
+  - The backend already reports such a run as `failed` ("SCC wrote 0 XCCDF results files").
+  - `filterSCAPContentPerFamily=0` changed nothing.
+- **With `saveResultsForNotApplicableContent=1`:**
+  - SCC logged "The SCAP content stream <CAN_Ubuntu_24-04_STIG> not applicable to this platform per the XCCDF
+    platform-specifications".
+  - It wrote one XCCDF results file in which **all 194** rules of the profile are `notapplicable`.
+- **The same scan in the 24.04 image** wrote 31 `pass`, 133 `fail`, 13 `notapplicable`, 16 `notchecked` and 1
+  `unknown` (6.7 % `notapplicable`).
+
+So with the default options the stream's own platform test rejects Ubuntu 26.04.
+
+**The setting that skips the platform test.** The owner then reported that production uses an SCC setting that skips
+the platform applicability check. SCC 5.15 documents two settings for it.
+
+| Setting | Where | Default | Documented meaning |
+|---|---|---|---|
+| `ignoreCPEOVALResults` | Global option in `options.xml` and `options.xsd`. GUI: Options, SCAP Processing, "Run all content regardless of applicability" | `0` (shipped `options.xml` and the FREES-145 template) | "Run SCAP content even if CPE OVAL applicability fails" (User Manual, option table, page 73). "This option will ignore the content's CPE-OVAL results and continue processing the content against the system. This option can be used to run content that is not normally applicable to the target system (e.g. Red Hat SCAP content on a Debian system). Note that this option alters the standard SCAP rules for gathering certain objects which can result in incomplete results and/or false positives." (section 4.4.1.1) |
+| `applicableToAllTargets` | Per stream, in each `content` record of `options.xml`; not declared in `options.xsd`. CLI `-aa, --applicableToAll ID [VERSION]` and `-na, --notApplicableToAll`. GUI: section 4.2.7.4 "Applicability" | `0` for every stream | "Make benchmark applicable to all targets" (section 5). "By default, SCC only performs scan using SCAP content if the content is applicable to a given target. This option forces SCC to perform a scan of a specific content stream against all targets." (4.2.7.4) |
+
+What was checked:
+
+- `cscc --help` and the CLI options of `CSCC-Readme.txt` and the User Manual (section 5). The only applicability
+  options are `-aa` and `-na`. Both change the installed `options.xml`, which decision 2 refuses.
+- The shipped `/opt/scc/options.xml`, `Resources/Schemas/options.xsd`, `ReleaseNotes.txt` and the 137-page
+  `SCC_UserManual.pdf` shipped in the DEB. No configuration profile is installed: only the GUI forms for profiles (`bin/Forms_wx/Form_ConfigProfiles.pm`) exist.
+- The settings named in the question (`applicabilityCheck`, `ignoreCPE`, `scanAllContent`, `forceApplicable`,
+  `applicableContentOnly`, `contentApplicability`) do not exist in 5.15. `filterSCAPContentPerFamily` filters by OS
+  family only, and was shown above to change nothing.
+
+Observed on 26.04 on 2026-10-26, each setting on its own in the per-run options, with everything else from the backend:
+
+- **`ignoreCPEOVALResults=1`:**
+  - SCC's scan log says "Ignoring CPE-OVAL Results and continuing scanning with the selected SCAP stream."
+  - Result: 28 `pass`, 136 `fail`, 13 `notapplicable`, 16 `notchecked` and 1 `unknown` (6.7 % `notapplicable`).
+  - SCC's options dump shows `ignoreCPEOVALResults` as `1`, once.
+  - The confirmation of decision 2 accepts the log, with the three download and update settings at `0`.
+- **`applicableToAllTargets=1` in the content record:**
+  - SCC also logs "Content has been set to be applicable to all targets".
+  - The results are the same.
+  - SCC's dump shows that element several times, so it cannot be confirmed as one value.
+
+The owner's statement is therefore reproduced with SCC's documented global setting.
+
+With `ignoreCPEOVALResults=1` and `saveResultsForNotApplicableContent=1` together, SCC still logged that the stream is
+"not applicable to this platform per the XCCDF platform-specifications" but then evaluated it, with the same results
+and without the "Ignoring CPE-OVAL Results" line. The second setting therefore adds nothing and blurs SCC's record, so
+it stays `0`.
+
+### Decision
+
+1. **Opt-in.**
+   - `compliance_scan` gains `allow_off_platform_benchmark`, a strictly typed `bool` that defaults to `false`.
+   - It is carried as `AuditJob.allow_off_platform_benchmark` and `ScanRequest.allow_off_platform_benchmark`, and a
+     non-boolean value is refused at both places.
+   - Only `backend: scc` accepts it (`audit.OFF_PLATFORM_BACKENDS`). With `openscap` the job is refused with
+     `invalid_argument`, and the OpenSCAP backend refuses such a request as well. OpenSCAP behaves exactly as
+     before.
+2. **Allowed pairs, exact.**
+   - `scc.OFF_PLATFORM_BENCHMARKS` sits next to `SUPPORTED_BENCHMARKS`. It holds exactly one tuple of benchmark ID,
+     distribution and version: `("xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG", "ubuntu", "26.04")`.
+   - The request's benchmark ID and host distribution and version must equal one tuple exactly. Nothing is
+     loosened: the gate is still an exact platform comparison.
+   - The refusals:
+
+     | Request | Result |
+     |---|---|
+     | 26.04 host without the opt-in | Refused, as before. The message says that the opt-in exists. |
+     | Opt-in, any other host (22.04, 26.10, Debian, RHEL) | Refused. The message names the allowed pairs. |
+     | Opt-in, any unpinned benchmark | Refused. |
+     | Opt-in with tailoring | Refused (FREES-146). |
+     | Opt-in, 24.04 host | An ordinary on-platform run, without a marker. |
+
+3. **Marker** ([ADR 0013 amendment](0013-normalized-findings-model.md#amendment-2026-10-26-off-platform-marker-frees-161)).
+   - An allowed off-platform run carries `off_platform`, with `benchmark_platform` (`ubuntu 24.04`) and
+     `target_platform` (`ubuntu 26.04`), each as `distribution_id` and `distribution_version`.
+   - The marker is on the ScanRun and on every finding, also when the run fails or times out.
+   - The scan run is then findings model schema 1.1.
+4. **Per-run options.**
+   - Only for a marked off-platform run, the backend writes one setting as `1` (`scc.OFF_PLATFORM_OVERRIDES`):
+     `ignoreCPEOVALResults`, so that SCC evaluates the 24.04 stream on the 26.04 host although the stream's CPE-OVAL
+     platform test does not match.
+   - Every other value of the template is unchanged, `saveResultsForNotApplicableContent` included (`0`). An unmarked
+     options document is the template byte for byte, which a unit test checks.
+   - The global setting is used, not `applicableToAllTargets`. It is documented in the option table and the schema,
+     the per-run file enables only the one pinned stream, and SCC's dump shows it exactly once, so the confirmation
+     can bind it to the run.
+   - **The confirmation covers both settings.** `confirm_options` requires SCC's dump to show each exactly once:
+     - `ignoreCPEOVALResults` as `1` for a marked run and as `0` for every other run;
+     - `saveResultsForNotApplicableContent` as `0` for every run.
+
+     A 24.04 run whose log showed the platform test ignored is therefore `failed`, like a run with a download setting
+     at `1`. The check still requires `downloadExternalFiles`, `appCheckForUpdates` and `contentCheckForUpdates` at `0`
+     for every run, as before.
+   - On-platform runs keep both settings at `0`, so their options are byte-identical to FREES-145.
+   - **Scope of the change:**
+     - **What it changes.** Ignoring the platform test changes which checks of the pinned, signed stream SCC
+       evaluates on the host: the same OVAL definitions and NIWC shell-command checks that run as root on a 24.04
+       host now run on a 26.04 host.
+     - **What it leaves alone.** It does not change what SCC may fetch: retrieval is governed by
+       `downloadExternalFiles` and the update settings, which stay confirmed at `0`. The egress test of decision 2
+       therefore still covers the setting it was built for. The off-platform integration case runs without a network.
+     - **State.** It does not change where SCC writes. The off-platform case checks that the state changes stay within
+       the accepted residual.
+     - **Accuracy.** SCC itself warns that the results may be incomplete or false positives. This is why every result
+       is marked and kept out of every figure, and why the threshold of decision 5 stays.
+     - **Threat model.** See T-SCC-4 in the [threat model](../security/threat-model.md#t-scc-4-off-platform-checks-run-on-another-release).
+5. **Mostly-notapplicable runs are failed, not flagged.**
+   - The rule: a completed off-platform run in which `notapplicable` findings exceed
+     `OFF_PLATFORM_NOTAPPLICABLE_PERCENT` (50) percent of the expected rules becomes `failed`. Every expected rule is
+     then `error`. The comparison is strict and in integer arithmetic: `notapplicable * 100 > 50 * expected`.
+   - The message names the counts and the two platforms. SCC's `results.xml` and `results-arf.xml` stay in the
+     evidence directory.
+   - The threshold never applies to an on-platform run.
+   - Why failed and not a flag:
+     - **Existing consumers already handle a failed run.** A failed run follows the ADR 0013 path that every consumer
+       already handles:
+       - the module fails the task by default (`fail_on_incomplete`);
+       - summaries and reports withhold the percentage;
+       - `compare_scans` reports an incomplete comparison with no figures;
+       - FREES-147 maps the run to Not Reviewed.
+
+       A new flag would have to be learnt by each of them. One consumer that missed it would read "0 failed" as clean.
+       A run that SCC judged entirely not applicable has 0 `fail` and 0 `error`, which is exactly what a gate counts.
+     - **Most rules not applying is not evidence.** When most rules do not apply, the benchmark's applicability checks
+       do not fit the host, and the few `pass` and `fail` results are not meaningful evidence about it.
+     - **Nothing is lost.** SCC's own results remain as evidence for the operator.
+   - Why 50 percent:
+     - "Mostly" means more than half.
+     - On the benchmark's own platform the CI image reports 6.7 %. Minimal hosts and containers report more, so a much
+       lower limit would fail legitimate off-platform runs.
+     - On 26.04 with the platform test ignored the result is also 6.7 %; with the platform test applied, 100 %.
+   - **The threshold stays as a safety net.** With `ignoreCPEOVALResults` the threshold no longer decides the observed
+     26.04 run. It still fails any run in which SCC ignored the setting, or in which the benchmark's rule-level checks
+     reject most of the host.
+   - Rejected alternatives:
+
+     | Alternative | Reason rejected |
+     |---|---|
+     | A flag on a completed run | See above |
+     | A limit of 20 % or less | Fails legitimate runs on minimal hosts |
+     | A comparison with a 24.04 reference scan of the same host | No such reference exists for a 26.04 host |
+
+6. **Never read as compliant.**
+   - An off-platform run that completes below the threshold is still never compliance with a 26.04 baseline.
+   - The module's `summary` carries `off_platform`, the marker or `null`, so a consumer that reads only the summary
+     sees the label.
+   - **Host coverage (review of PR #47, blocking).** A target host whose bundles in a report all carry the marker has
+     no on-platform evidence. `host_coverage` counts it in `off_platform`, it gets a missing input of its own, and the
+     coverage is `incomplete`, so `--require-host-coverage` fails and the compliance section has no summary or pooled
+     figure. No option lets such a fleet pass; one would need its own decision and must never be the default.
+   - The report keeps it out of every figure and lists it separately
+     ([ADR 0016 amendment](0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-22-off-platform-results-frees-161)).
+   - The dashboard labels it ([ADR 0017 amendment](0017-offline-html-dashboard.md#amendment-2026-10-26-off-platform-results-frees-161)).
+   - The `audit` role still offers only `openscap`, so the opt-in is available to direct module use only.
+7. **CKL and CKLB export (FREES-147, not yet built).**
+   - **Every finding that carries the off-platform marker maps to Not Reviewed, whatever its outcome.**
+   - So does every finding of a run that carries it.
+   - The finding details name the benchmark platform and the target platform.
+   - The status mapping table of decision 9 gains this row; it precedes every other row:
+
+     | Normalized finding | Checklist status |
+     |---|---|
+     | any finding with an `off_platform` marker, or of a run with one | Not Reviewed, with "off-platform: the ubuntu 24.04 benchmark on an ubuntu 26.04 host" in the finding details |
+
+   - An off-platform `pass` never becomes Not a Finding. An off-platform `fail` is not Open either, because the
+     checklist would otherwise record a 26.04 host against a 24.04 STIG as if it had been reviewed.
+8. **Host identity.**
+   - The gate, like the 24.04 gate, compares the `host` that the caller supplies, usually from gathered facts.
+   - **The module checks it.** For `backend: scc` the module reads `/etc/os-release` on the managed host before
+     anything is created (`audit.check_host_release`). It stops with `host_mismatch` unless `ID` and `VERSION_ID` equal
+     `host.distribution_id` and `host.distribution_version`, and also when the file cannot be read. The OpenSCAP
+     backend is unchanged: Ansible's distribution facts differ from `os-release` on several of its platforms (for
+     example `redhat` and `rhel`).
+   - **SCC is the backstop below that check.** A 26.04 host declared as 24.04 reaches SCC only if the release check
+     is bypassed. The unmarked options then keep the platform test, SCC rejects the stream, and the run fails ("SCC
+     wrote 0 XCCDF results files"). The integration case proves this through the backend itself.
+9. **Raw copies are named and refused.**
+   - The XCCDF and ARF copies of a marked run are `scan/results.off-platform.xml` and
+     `scan/results-arf.off-platform.xml`. Evidence bundles allow-list both names as `raw/scan/...`.
+   - The report's XCCDF and ARF parsers refuse, as an input `error`, any file named `*.off-platform.xml`. They also
+     refuse any file whose directory, or the directory above it, holds a `scan-run.json` that carries the marker or
+     cannot be read as a scan run.
+   - Off-platform runs are reported through `scan-run.json` or evidence bundles, which carry the marker.
+10. **Integration case.**
+    - `extensions/ci/scc/Containerfile.ubuntu2604` is the Containerfile of decision 10. Only the base, pinned by index
+      digest, and two labels differ, and a repository test enforces that.
+    - `make scc-image-ubuntu2604` builds it as `SCC_IMAGE_UBUNTU2604` (`$(SCC_IMAGE)-ubuntu2604`, a `localhost/` tag).
+      `make scc-integration` builds it and runs `tests/system/scc/test_scc_off_platform.py`. `make scc-image-clean`
+      removes both images.
+    - It runs inside the existing `scc-smoke` job, whose path filter already covers `extensions/ci/scc/`,
+      `tests/.*scc` and `scc.py`.
+    - The test asserts:
+      - without the opt-in, a 26.04 host is refused;
+      - a host that claims 24.04 is refused by the release check (`host_mismatch`);
+      - below the release check, an unmarked backend scan of the host self-asserted as 24.04 is still stopped by SCC's
+        CPE platform test: SCC logs that the stream "is not applicable to this target system", writes no results, and
+        the run is `failed` with every rule `error` and no marker;
+      - with the opt-in, SCC's scan log says that it ignored the CPE-OVAL results;
+      - the run completes with real results: honest outcomes only, both `pass` and `fail`, and at most 50 %
+        `notapplicable`, equal to SCC's own kept XCCDF results;
+      - the run and every finding are marked, and the raw copies have the off-platform names;
+      - the state changes stay within the accepted residual.
+    - The never-publish guard covers the new file and target like the others.
+
+### Consequences
+
+- A DISA benchmark for Ubuntu 26.04, once published and pinned, replaces the pair. It is added to
+  `SUPPORTED_BENCHMARKS`, and the pair is removed from `OFF_PLATFORM_BENCHMARKS` by an amendment.
+- Open item 10 is unchanged: the project still has no 26.04 content.
+- Completed off-platform runs below the threshold are now the normal case. They remain labelled, excluded from every
+  figure, and Not Reviewed in checklists.
+- If SCC stops honouring `ignoreCPEOVALResults`, its platform test rejects the stream again and writes no results, so
+  the run fails. If its dump stops showing the value, the confirmation fails the run. If it evaluates the stream but
+  most rules come back `notapplicable`, the threshold fails the run. In every case the integration test fails, and the
+  change is reviewed.
 
 ## References
 
