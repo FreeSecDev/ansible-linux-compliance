@@ -10,6 +10,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     collection,
     evidence,
     openscap,
+    scc,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -54,6 +55,8 @@ def test_the_bundle_vocabulary_uses_the_file_names_of_the_audit() -> None:
         audit.TAILORING_FILE_NAME,
         f"{audit.SCAN_DIRECTORY_NAME}/{openscap.RESULTS_FILE_NAME}",
         f"{audit.SCAN_DIRECTORY_NAME}/{openscap.ARF_FILE_NAME}",
+        f"{audit.SCAN_DIRECTORY_NAME}/{scc.OFF_PLATFORM_RESULTS_FILE_NAME}",
+        f"{audit.SCAN_DIRECTORY_NAME}/{scc.OFF_PLATFORM_ARF_FILE_NAME}",
     }
 
 

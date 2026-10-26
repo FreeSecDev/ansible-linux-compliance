@@ -183,6 +183,55 @@ this run holds one XCCDF and one ARF results file for the requested benchmark an
 on failure and is never taken as completion. Anything else is `failed` with every rule `error`. The backend refuses
 `disabled_rules` (FREES-146) and hosts for which no SCC benchmark is pinned, such as Ubuntu 26.04.
 
+### Off-platform scans of Ubuntu 26.04 (FREES-161)
+
+No DISA benchmark for Ubuntu 26.04 exists yet. `allow_off_platform_benchmark: true` is an explicit opt-in that lets
+`backend: scc` scan an Ubuntu 26.04 host with the pinned Ubuntu 24.04 STIG benchmark
+([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161)).
+
+- **Off by default and exact.** The only allowed pair is the benchmark
+  `xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG` on a host whose `distribution_id` is `ubuntu` and whose
+  `distribution_version` is `26.04`. Every other combination is refused, with or without the opt-in. Without it a 26.04
+  host is refused as before. `backend: openscap` refuses the option.
+- **Labelled.** The scan run and every finding carry `off_platform` with `benchmark_platform` and `target_platform`,
+  and the scan run has findings model schema 1.1. The results are scan evidence about the host under the 24.04
+  benchmark, never compliance with an Ubuntu 26.04 baseline. Reports keep them out of every figure and list them
+  separately ([reporting data model](reporting-data-model.md#off-platform-results)).
+- **The release is checked.** For `backend: scc` the module reads `/etc/os-release` on the managed host and stops with
+  `host_mismatch` unless its `ID` and `VERSION_ID` equal `host.distribution_id` and `host.distribution_version`.
+- **The platform test is skipped.** The 24.04 stream's own CPE-OVAL platform test does not match an Ubuntu 26.04
+  host. The per-run options of an off-platform scan therefore set SCC's documented `ignoreCPEOVALResults` ("Run all
+  content regardless of applicability"). The scan completes only when SCC's debug log shows that setting as `1`, and
+  every other scan requires it as `0`. SCC warns that such results may be incomplete or false positives.
+- **Real results, checked in CI.** `make scc-integration` scans a pinned Ubuntu 26.04 image. It got real results:
+  28 `pass`, 136 `fail`, 13 `notapplicable`, 16 `notchecked` and 1 `error` of 194 rules.
+- **Labelled raw copies.** The raw copies are `scan/results.off-platform.xml` and `scan/results-arf.off-platform.xml`.
+  The report refuses them as XCCDF or ARF inputs, and a fleet report does not count a host with only an off-platform
+  scan as covered. The module's `summary` carries `off_platform`.
+- **Mostly not applicable means failed.** As a safety net, a completed off-platform run in which more than 50 % of the
+  profile's rules are `notapplicable` becomes `failed` with every rule `error`. SCC's own results stay in the evidence
+  directory.
+
+```yaml
+- name: Scan an Ubuntu 26.04 host with the Ubuntu 24.04 STIG benchmark, labelled off-platform
+  freesecdev.linux_compliance.compliance_scan:
+    backend: scc
+    allow_off_platform_benchmark: true
+    content_path: /opt/scc/Resources/Content/SCAP12_Content/U_CAN_Ubuntu_24-04_LTS_V1R5_STIG_SCAP_1-4_Benchmark-enhancedV7-signed.xml
+    expected_sha256: eac6f7a6a1e80c52d02c508d939eb09aa09b7fe6eaeb060b8aa21e095719c940
+    profile_id: xccdf_mil.disa.stig_profile_MAC-1_Classified
+    host:
+      hostname: "{{ ansible_facts['hostname'] }}"
+      distribution_id: ubuntu
+      distribution_version: "26.04"
+      architecture: x86_64
+    fail_on_incomplete: false
+  become: true
+  register: off_platform_audit
+```
+
+Report such runs through `scan-run.json` or evidence bundles, which carry the marker.
+
 ### SCE check scripts run as root
 
 The pinned datastreams embed Script Check Engine (SCE) check scripts: the Ubuntu 24.04 datastream has 81 `sce:script`

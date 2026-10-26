@@ -17,6 +17,11 @@ run is accounted for in ``sections.compliance.host_coverage`` (schema 2.1): a bu
 the summary does not list is an input error, and a target host without a bundle in the
 report is a missing input, so the section cannot be ``available`` while a host is missing.
 Without a summary the coverage is ``unknown``.
+
+A scan run with an off-platform marker (schema 2.2, ADR 0016 amendment of FREES-161)
+is an input of the compliance section like any other, but it never enters ``rules``,
+``groups``, ``aggregates`` or ``summary``. It is listed in
+``sections.compliance.off_platform``, and ``overview.off_platform`` counts such inputs.
 """
 
 import re
@@ -46,6 +51,8 @@ from tools.reporting.compliance import (
     group_figures,
     host_key,
     input_notes,
+    is_off_platform,
+    off_platform_inputs,
     repeated_scan_runs,
     rollup,
 )
@@ -68,7 +75,7 @@ from tools.reporting.parsers.scanrun import parse_scan_run
 from tools.reporting.parsers.xccdf import parse_arf, parse_xccdf
 from tools.reporting.waivers import exception_entries
 
-SCHEMA_VERSION: Final[str] = "2.1"
+SCHEMA_VERSION: Final[str] = "2.2"
 SECTION_NAMES: Final[tuple[str, ...]] = (
     "codebuild",
     "compliance",
@@ -329,14 +336,22 @@ def _compliance_section(
     allow_repeated: bool,
 ) -> dict[str, Json]:
     section = _section(results)
-    entries: list[Entry] = [(path, data) for path, data, _ in _unique(results)]
-    check_scope(scope, entries)
-    check_repeated_scans(entries, allowed=allow_repeated)
+    every: list[Entry] = [(path, data) for path, data, _ in _unique(results)]
+    check_scope(scope, every)
+    check_repeated_scans(every, allowed=allow_repeated)
     section.update(
-        {"aggregates": [], "groups": [], "host_coverage": coverage, "notes": [], "rules": []}
+        {
+            "aggregates": [],
+            "groups": [],
+            "host_coverage": coverage,
+            "notes": [],
+            "off_platform": to_json(off_platform_inputs(every)),
+            "rules": [],
+        }
     )
     if section["status"] != SectionStatus.AVAILABLE.value:
         return section
+    entries = [entry for entry in every if not is_off_platform(entry)]
     rules = rollup(entries)
     groups = group_figures(entries)
     if len(rules) > MAX_RULES or len(groups) > MAX_GROUPS:
@@ -482,6 +497,7 @@ def _overview(sections: dict[str, dict[str, Json]]) -> dict[str, Json]:
         for status in SectionStatus
     }
     overview["exceptions"] = sections["exceptions"]["summary"]
+    overview["off_platform"] = len(cast("list[Json]", sections["compliance"]["off_platform"]))
     return overview
 
 

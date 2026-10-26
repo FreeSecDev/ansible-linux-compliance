@@ -75,12 +75,13 @@ def test_the_schema_is_a_valid_2020_12_schema() -> None:
 def test_full_report_validates_against_the_schema(kit: Any) -> None:
     document = build(full_inputs(kit))
     assert errors(document) == []
-    assert document["schema_version"] == "2.1"
+    assert document["schema_version"] == "2.2"
     exceptions_summary = document["sections"]["exceptions"]["summary"]
     assert document["overview"] == {
         "available": sorted(SECTIONS),
         "error": [],
         "exceptions": exceptions_summary,
+        "off_platform": 0,
         "partial": [],
         "unavailable": [],
     }
@@ -95,6 +96,7 @@ def test_empty_report_marks_every_section_unavailable_never_pass() -> None:
         "available": [],
         "error": [],
         "exceptions": None,
+        "off_platform": 0,
         "partial": [],
         "unavailable": sorted(SECTIONS),
     }
@@ -160,6 +162,7 @@ def test_missing_and_corrupt_inputs_are_never_available(
         "available": ["lint"],
         "error": ["tests"],
         "exceptions": None,
+        "off_platform": 0,
         "partial": [],
         "unavailable": sorted(SECTIONS - {"lint", "tests"}),
     }
@@ -740,6 +743,7 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/properties/evidence/maxItems$", model.MAX_EVIDENCE_ITEMS),
     (r"/properties/flags/maxItems$", len(model.ResultFlag)),
     (r"/properties/rules/maxItems$", report.MAX_RULES),
+    (r"/\$defs/complianceSection/properties/off_platform/maxItems$", report.MAX_INPUTS),
     (r"/properties/(groups|aggregates)/maxItems$", report.MAX_GROUPS),
     (r"/properties/(builds|scenarios)/maxItems$", common.MAX_ENTRIES),
     (

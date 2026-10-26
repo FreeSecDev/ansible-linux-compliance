@@ -99,6 +99,12 @@ HOST_SOURCES: Final[Mapping[str, HostSource]] = MappingProxyType(
         "tailoring.xml": HostSource("tailoring", "raw/tailoring.xml", KIND_TAILORING),
         "scan/results.xml": HostSource("scanner_output", "raw/scan/results.xml", KIND_XCCDF),
         "scan/results-arf.xml": HostSource("scanner_output", "raw/scan/results-arf.xml", KIND_ARF),
+        "scan/results.off-platform.xml": HostSource(
+            "scanner_output", "raw/scan/results.off-platform.xml", KIND_XCCDF
+        ),
+        "scan/results-arf.off-platform.xml": HostSource(
+            "scanner_output", "raw/scan/results-arf.off-platform.xml", KIND_ARF
+        ),
     }
 )
 DOCUMENT_PATHS: Final[Mapping[str, str]] = MappingProxyType(

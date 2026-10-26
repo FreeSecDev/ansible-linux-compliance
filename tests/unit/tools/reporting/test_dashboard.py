@@ -147,7 +147,7 @@ def test_hostile_report_text_cannot_escape_the_data_block(kit: Any) -> None:
 
 
 def test_unsupported_schema_versions_are_refused() -> None:
-    for version in ("1.0", "2.2", "3.0"):
+    for version in ("1.0", "2.3", "3.0"):
         with pytest.raises(DashboardError, match="schema version"):
             dashboard.render_dashboard({"schema_version": version})
     with pytest.raises(DashboardError, match="schema version"):
@@ -350,7 +350,7 @@ def test_cli_writes_the_json_but_not_a_dashboard_above_the_cap(
     assert "warning: the dashboard was not written" in captured.err
     assert "too large for the dashboard" in captured.err
     assert f"report written to {output}" in captured.out
-    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == "2.1"
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == "2.2"
     assert not html.exists()
 
 

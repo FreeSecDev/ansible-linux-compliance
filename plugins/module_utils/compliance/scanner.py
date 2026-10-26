@@ -132,6 +132,11 @@ def _check_run_id(value: object) -> None:
         _reject(f"run_id is invalid: {_safe(value)}")
 
 
+def _check_flag(value: object, name: str) -> None:
+    if not isinstance(value, bool):
+        _reject(f"{name} must be a boolean")
+
+
 def _check_rule_ids(value: object) -> None:
     if not isinstance(value, tuple):
         _reject("expected_rule_ids must be a tuple")
@@ -188,6 +193,11 @@ class ScanRequest:
             rule when the scanner fails, is reported as an ``error`` finding;
             a result for any other rule makes the run fail.
         tailoring_path: Optional tailoring file, confined like the content.
+        allow_off_platform_benchmark: Explicit opt-in for a backend that may
+            evaluate a benchmark made for another platform than the host, and
+            only for the exact pairs that backend allows. The run then carries
+            an off-platform marker (ADR 0019, amendment of FREES-161). A backend
+            without such pairs refuses a request that sets it.
     """
 
     run_id: str
@@ -198,6 +208,7 @@ class ScanRequest:
     output_dir: str
     expected_rule_ids: tuple[str, ...]
     tailoring_path: str | None = None
+    allow_off_platform_benchmark: bool = False
 
     def __post_init__(self) -> None:
         """Validate every field."""
@@ -210,6 +221,7 @@ class ScanRequest:
         if self.tailoring_path is not None:
             _check_path(self.tailoring_path, "tailoring_path")
         _check_rule_ids(self.expected_rule_ids)
+        _check_flag(self.allow_off_platform_benchmark, "allow_off_platform_benchmark")
 
 
 class ScanBackend(Protocol):

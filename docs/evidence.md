@@ -176,6 +176,8 @@ directory that the audit reported (`linux_compliance_audited.evidence.directory`
 | `tailoring.xml` | `tailoring` | `raw/tailoring.xml` | `tailoring` |
 | `scan/results.xml` | `scanner_output` | `raw/scan/results.xml` | `xccdf` |
 | `scan/results-arf.xml` | `scanner_output` | `raw/scan/results-arf.xml` (opt-in) | `arf` |
+| `scan/results.off-platform.xml` | `scanner_output` | `raw/scan/results.off-platform.xml` (an off-platform SCC scan, FREES-161) | `xccdf` |
+| `scan/results-arf.off-platform.xml` | `scanner_output` | `raw/scan/results-arf.off-platform.xml` (opt-in, an off-platform SCC scan) | `arf` |
 
 A recorded file with another name inside the run directory is not collected; it is listed under `excluded` with reason
 `not_allow_listed`. A recorded path outside the run directory, or one that is not normalised (`..`), fails the host: a

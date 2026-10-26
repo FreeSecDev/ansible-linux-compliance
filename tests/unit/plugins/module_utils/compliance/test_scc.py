@@ -76,6 +76,8 @@ def log_line(package: str, message: str, level: str = "DEBUG") -> str:
 
 def confirmation(options: str, **overrides: str) -> str:
     values = dict.fromkeys(scc.CONFIRMED_ZERO, "0")
+    values[scc.IGNORE_PLATFORM_TEST] = "0"
+    values[scc.NOT_APPLICABLE_RESULTS] = "0"
     values["selectedConfigProfile"] = ""
     values.update(overrides)
     lines = [
@@ -157,9 +159,14 @@ class FakeScc:
     def write(self, user: Path, options: str) -> None:
         logs = user / "ApplicationLogs"
         logs.mkdir()
+        written = Path(options).read_text(encoding="utf-8")
+        ignored = "1" if "<ignoreCPEOVALResults>1</ignoreCPEOVALResults>" in written else "0"
         for name in self.logs:
             (logs / name).write_text(
-                confirmation(options) if self.log is None else self.log, encoding="utf-8"
+                confirmation(options, ignoreCPEOVALResults=ignored)
+                if self.log is None
+                else self.log,
+                encoding="utf-8",
             )
         sessions = user / "Sessions"
         sessions.mkdir()
@@ -786,3 +793,244 @@ def test_a_crowded_log_directory_fails_the_run(setup: Setup) -> None:
                 (logs / f"other-{index:02d}.txt").write_text("x", encoding="utf-8")
 
     assert_failed(setup.audit(CrowdedLogs()), f"more than {scc.MAX_SESSION_ENTRIES} entries")
+
+
+TARGET_2604 = model.HostIdentity("target.example", "ubuntu", "26.04", "x86_64", None)
+MARKER = model.OffPlatform(model.Platform("ubuntu", "24.04"), model.Platform("ubuntu", "26.04"))
+
+
+@dataclass
+class RecordingScc(FakeScc):
+    """Runner that also keeps the per-run options file that the backend wrote."""
+
+    options_text: list[str] = field(default_factory=list[str])
+
+    def write(self, user: Path, options: str) -> None:
+        self.options_text.append(Path(options).read_text(encoding="utf-8"))
+        super().write(user, options)
+
+
+class TestOffPlatform:
+    """The opt-in for the Ubuntu 24.04 benchmark on Ubuntu 26.04 hosts (FREES-161)."""
+
+    def test_without_the_opt_in_a_2604_host_is_refused(self, setup: Setup) -> None:
+        with pytest.raises(scanner.ScanRequestError, match="unless allow_off_platform_benchmark"):
+            setup.audit(host=TARGET_2604)
+
+    def test_with_the_opt_in_every_finding_and_the_run_are_marked(self, setup: Setup) -> None:
+        runner = RecordingScc()
+        run = setup.audit(runner, host=TARGET_2604, allow_off_platform_benchmark=True)
+        assert run.status is model.ScanStatus.COMPLETED
+        assert run.off_platform == MARKER
+        assert run.schema_version == "1.1"
+        assert {finding.off_platform for finding in run.findings} == {MARKER}
+        assert "<ignoreCPEOVALResults>1</ignoreCPEOVALResults>" in runner.options_text[0]
+        assert (
+            "<saveResultsForNotApplicableContent>0</saveResultsForNotApplicableContent>"
+            in runner.options_text[0]
+        )
+        names = sorted(path.name for path in (setup.output / "scan").iterdir() if path.is_file())
+        assert names == ["results-arf.off-platform.xml", "results.off-platform.xml"]
+
+    def test_the_opt_in_changes_nothing_for_a_2404_host(self, setup: Setup) -> None:
+        runner = RecordingScc()
+        run = setup.audit(runner, allow_off_platform_benchmark=True)
+        assert run.status is model.ScanStatus.COMPLETED
+        assert run.off_platform is None
+        assert run.schema_version == "1.0"
+        for setting in ("ignoreCPEOVALResults", "saveResultsForNotApplicableContent"):
+            assert f"<{setting}>0</{setting}>" in runner.options_text[0]
+        names = sorted(path.name for path in (setup.output / "scan").iterdir() if path.is_file())
+        assert names == ["results-arf.xml", "results.xml"]
+
+    @pytest.mark.parametrize(
+        ("distribution", "version"),
+        [("ubuntu", "22.04"), ("ubuntu", "26.10"), ("debian", "26.04"), ("rhel", "10")],
+    )
+    def test_the_opt_in_allows_no_other_host(
+        self, setup: Setup, distribution: str, version: str
+    ) -> None:
+        host = model.HostIdentity("target.example", distribution, version, "x86_64", None)
+        with pytest.raises(scanner.ScanRequestError, match="permits only") as caught:
+            setup.audit(host=host, allow_off_platform_benchmark=True)
+        assert "CAN_Ubuntu_24-04_STIG on ubuntu 26.04 hosts" in str(caught.value)
+
+    def test_the_opt_in_allows_no_other_benchmark(self, setup: Setup) -> None:
+        with pytest.raises(scanner.ScanRequestError, match="no SCC benchmark is pinned"):
+            setup.audit(
+                host=TARGET_2604,
+                benchmark_id="xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_22-04_STIG",
+                allow_off_platform_benchmark=True,
+            )
+
+    def test_the_opt_in_does_not_lift_the_tailoring_refusal(self, setup: Setup) -> None:
+        with pytest.raises(scanner.ScanRequestError, match="FREES-146"):
+            setup.audit(
+                host=TARGET_2604, allow_off_platform_benchmark=True, tailoring_path="tailoring.xml"
+            )
+
+    def test_the_allowed_pairs_are_exact(self) -> None:
+        expected = {("xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG", "ubuntu", "26.04")}
+        assert expected == set(scc.OFF_PLATFORM_BENCHMARKS)
+        assert scc.OFF_PLATFORM_NOTAPPLICABLE_PERCENT == 50
+
+    def test_a_mostly_notapplicable_off_platform_run_is_failed(self, setup: Setup) -> None:
+        document = results_document(
+            outcomes=("notapplicable", "notapplicable", "notapplicable", "pass", "fail")
+        )
+        run = setup.audit(
+            FakeScc(results=document), host=TARGET_2604, allow_off_platform_benchmark=True
+        )
+        assert_failed(run, "3 of 5 expected rules as notapplicable, more than 50 %")
+        assert run.off_platform == MARKER
+        assert {finding.off_platform for finding in run.findings} == {MARKER}
+        assert run.error_message is not None
+        assert "ubuntu 24.04 benchmark do not fit this ubuntu 26.04 host" in run.error_message
+        assert (setup.output / "scan" / "results.off-platform.xml").is_file()
+
+    def test_a_run_at_the_threshold_completes(self, setup: Setup) -> None:
+        document = results_document(outcomes=("notapplicable", "notapplicable", "pass", "fail"))
+        run = setup.audit(
+            FakeScc(results=document),
+            host=TARGET_2604,
+            allow_off_platform_benchmark=True,
+            expected_rule_ids=RULES[:4],
+        )
+        assert run.status is model.ScanStatus.COMPLETED
+        assert outcomes(run) == {
+            RULES[0]: "notapplicable",
+            RULES[1]: "notapplicable",
+            RULES[2]: "pass",
+            RULES[3]: "fail",
+        }
+
+    def test_the_threshold_never_applies_on_the_benchmark_platform(self, setup: Setup) -> None:
+        document = results_document(outcomes=("notapplicable",) * 5)
+        run = setup.audit(FakeScc(results=document))
+        assert run.status is model.ScanStatus.COMPLETED
+        assert set(outcomes(run).values()) == {"notapplicable"}
+
+    def test_a_failed_off_platform_run_keeps_the_marker(self, setup: Setup) -> None:
+        run = setup.audit(
+            FakeScc(scan_status=3), host=TARGET_2604, allow_off_platform_benchmark=True
+        )
+        assert_failed(run, "exited with status 3")
+        assert run.off_platform == MARKER
+        assert {finding.off_platform for finding in run.findings} == {MARKER}
+
+    def test_an_unusable_installation_keeps_the_marker(self, setup: Setup) -> None:
+        (setup.install / "cscc").write_bytes(b"other")
+        run = setup.audit(host=TARGET_2604, allow_off_platform_benchmark=True)
+        assert_failed(run, "not a pinned SCC release")
+        assert run.off_platform == MARKER
+
+    def test_the_request_opt_in_must_be_a_boolean(self, setup: Setup) -> None:
+        with pytest.raises(scanner.ScanRequestError, match="must be a boolean"):
+            setup.request(allow_off_platform_benchmark="yes")
+
+    def test_only_off_platform_options_ignore_the_platform_test(self) -> None:
+        record = scc.InstalledContent(
+            {
+                "stream": "scap_x",
+                "family": "Linux",
+                "benchmarkID": "CAN_Ubuntu_24-04_STIG",
+                "scapVersion": "1.3",
+                "filepath": f"{scc.CONTENT_DIRECTORY}/{STREAM_NAME}",
+                "checksumSCAP12": CHECKSUM,
+                "version": "001.005",
+                "xccdf": "scap_y",
+            },
+            (("5.11", "scap_z"),),
+        )
+        plain = scc.options_document(record, PROFILE)
+        kept = scc.options_document(record, PROFILE, off_platform=True)
+        setting = "ignoreCPEOVALResults"
+        assert f"<{setting}>1</{setting}>" in kept
+        assert kept.replace(f"<{setting}>1</{setting}>", f"<{setting}>0</{setting}>") == plain
+        assert "<saveResultsForNotApplicableContent>0</saveResultsForNotApplicableContent>" in kept
+
+    def test_an_unmarked_document_carries_the_template_byte_for_byte(self) -> None:
+        record = scc.InstalledContent(
+            {
+                "stream": "scap_x",
+                "family": "Linux",
+                "benchmarkID": "CAN_Ubuntu_24-04_STIG",
+                "scapVersion": "1.3",
+                "filepath": f"{scc.CONTENT_DIRECTORY}/{STREAM_NAME}",
+                "checksumSCAP12": CHECKSUM,
+                "version": "001.005",
+                "xccdf": "scap_y",
+            },
+            (("5.11", "scap_z"),),
+        )
+        lines = scc.options_document(record, PROFILE).splitlines()
+        settings = lines[2 : 2 + len(scc.OPTIONS_TEMPLATE)]
+        assert settings == [
+            f"  <{name}>{scc.xml_escape(value)}</{name}>" for name, value in scc.OPTIONS_TEMPLATE
+        ]
+        assert dict(scc.OPTIONS_TEMPLATE)["ignoreCPEOVALResults"] == "0"
+        assert dict(scc.OPTIONS_TEMPLATE)["saveResultsForNotApplicableContent"] == "0"
+        assert dict(scc.OFF_PLATFORM_OVERRIDES) == {"ignoreCPEOVALResults": "1"}
+
+
+class TestPlatformTestConfirmation:
+    """``ignoreCPEOVALResults`` must be confirmed as written for the run (FREES-161)."""
+
+    OPTIONS_PATH = "/var/lib/run/scan/scc/options.xml"
+
+    def test_an_off_platform_run_must_show_the_platform_test_ignored(self) -> None:
+        log = confirmation(self.OPTIONS_PATH, ignoreCPEOVALResults="1")
+        scc.confirm_options(log, self.OPTIONS_PATH, off_platform=True)
+        with pytest.raises(scc.OptionsConfirmationError, match="ignoreCPEOVALResults as '0'"):
+            scc.confirm_options(
+                confirmation(self.OPTIONS_PATH), self.OPTIONS_PATH, off_platform=True
+            )
+
+    def test_an_on_platform_run_must_never_ignore_the_platform_test(self) -> None:
+        log = confirmation(self.OPTIONS_PATH, ignoreCPEOVALResults="1")
+        with pytest.raises(scc.OptionsConfirmationError, match="ignoreCPEOVALResults as '1'"):
+            scc.confirm_options(log, self.OPTIONS_PATH)
+
+    def test_the_platform_setting_must_be_dumped_exactly_once(self) -> None:
+        log = "\n".join(
+            line
+            for line in confirmation(self.OPTIONS_PATH).splitlines()
+            if "ignoreCPEOVALResults" not in line
+        )
+        with pytest.raises(scc.OptionsConfirmationError, match="ignoreCPEOVALResults 0 times"):
+            scc.confirm_options(log, self.OPTIONS_PATH)
+
+    def test_an_off_platform_scan_whose_log_shows_the_test_on_is_failed(self, setup: Setup) -> None:
+        log_text: list[str] = []
+
+        class StaleLog(FakeScc):
+            """Writes a log in which SCC did not ignore the platform test."""
+
+            def write(self, user: Path, options: str) -> None:
+                self.log = confirmation(options)
+                log_text.append(self.log)
+                super().write(user, options)
+
+        run = setup.audit(StaleLog(), host=TARGET_2604, allow_off_platform_benchmark=True)
+        assert_failed(run, "ignoreCPEOVALResults as '0'")
+        assert run.off_platform == MARKER
+        assert log_text
+
+
+class TestNotApplicableResultsConfirmation:
+    """``saveResultsForNotApplicableContent`` must be confirmed as ``0`` for every run."""
+
+    OPTIONS_PATH = "/var/lib/run/scan/scc/options.xml"
+
+    @pytest.mark.parametrize("ignored", ["0", "1"])
+    def test_the_setting_must_be_off(self, ignored: str) -> None:
+        off_platform = ignored == "1"
+        log = confirmation(
+            self.OPTIONS_PATH,
+            ignoreCPEOVALResults=ignored,
+            saveResultsForNotApplicableContent="1",
+        )
+        with pytest.raises(
+            scc.OptionsConfirmationError, match="saveResultsForNotApplicableContent as '1'"
+        ):
+            scc.confirm_options(log, self.OPTIONS_PATH, off_platform=off_platform)
