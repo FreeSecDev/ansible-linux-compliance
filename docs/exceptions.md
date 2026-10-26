@@ -306,8 +306,9 @@ a mapping or as its JSON text. An invalid file fails the task with a message tha
 
 ## Reporting
 
-Write each evaluation document to a JSON file and pass them to `tools/reporting` (FREES-75, FREES-132) with
-`--exceptions-evaluation`, one per scan run:
+Write each evaluation document (with the `audit` role, `linux_compliance_audited.exceptions.evaluation`) to a JSON
+file and pass them to `tools/reporting` (FREES-75, FREES-132) with `--exceptions-evaluation`, one per scan run,
+together with the exceptions file they were made from:
 
 ```bash
 python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
@@ -333,9 +334,10 @@ completed scan runs of one host and profile are refused as a repeated scan. The 
 
 The report does not trust the evaluation file. It checks the evaluation against the exceptions file:
 
-- the SHA-256 of the exceptions file must be the evaluation's `source_sha256`. The `ansible.builtin.file` lookup
-  removes trailing whitespace by default, so the report also accepts the digest of the file without trailing
-  whitespace;
+- the SHA-256 of the exceptions file must be the evaluation's `source_sha256`. The `audit` role reads the file with
+  `rstrip=false`, so the digests are those of the file's bytes. The `ansible.builtin.file` lookup removes trailing
+  whitespace by default, so for a play that uses the default the report also accepts the digest of the file without
+  trailing whitespace;
 - the exceptions file must pass the same validation as in the filter, at the evaluation's controller time;
 - the scan run, with its waiver marks removed, is evaluated again with that file and the inventory host, groups,
   controller time and scan lag limit the evaluation records, and the result must be identical.
