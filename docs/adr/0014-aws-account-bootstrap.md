@@ -119,6 +119,13 @@ the `oidc.tf` lookup by `arn` with its audience postcondition. Mutated copies of
 `StringLike`, a removed or extra condition, a second statement, a changed principal, a URL lookup) must make it fail.
 Any change to the trust policy must update this test in the same reviewed pull request.
 
+The same test pins the stack around the trust policy, because an override file, a second role on the OIDC provider, a
+`*.tf.json` file or an auto-loaded `*.tfvars` file would otherwise bypass it. It compares the exact set of files that
+Git tracks in `infra/account` (the gitignored `backend.hcl` and `account.local.tfvars` must stay untracked), the exact
+set of `resource` and `data` blocks across all `*.tf` files, and refuses any `module` block. It also pins every
+attribute of `aws_iam_role.plan`. Adding a file or a resource to `infra/account` therefore needs a deliberate edit of
+`EXPECTED_FILES` or `EXPECTED_BLOCKS` in that test, in the same reviewed pull request.
+
 ## Operational consequences
 
 `make aws-bootstrap` is run once by the owner; [bootstrap.md](../aws/bootstrap.md) is the procedure. Developers need
