@@ -280,3 +280,8 @@ def test_a_loader_or_path_environment_variable_is_refused_as_a_key(
 def test_a_loader_environment_variable_in_text_is_not_a_key(tmp_path: Path) -> None:
     text = "---\n- ansible.builtin.debug:\n    msg: PATH and LD_PRELOAD are refused as keys\n"
     assert found(tmp_path, "roles/r/tasks/main.yml", text) == []
+
+
+def test_an_aliased_mapping_is_checked_once(tmp_path: Path) -> None:
+    text = "---\na: &x\n  ansible_ssh_args: x\nb: *x\nc: *x\n"
+    assert found(tmp_path, "group_vars/all.yml", text) == [refused("ansible_ssh_args", "x")]

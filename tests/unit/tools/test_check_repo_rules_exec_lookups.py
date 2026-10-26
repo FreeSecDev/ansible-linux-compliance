@@ -328,3 +328,8 @@ def test_a_regular_expression_escape_in_a_template_is_not_a_lex_error(tmp_path: 
         "  when: x is match('^a\\.b$')\n"
     )
     assert found(tmp_path, "roles/r/tasks/main.yml", text) == []
+
+
+def test_an_aliased_value_is_checked_once(tmp_path: Path) -> None:
+    text = "---\na: &x\n  k: \"{{ lookup('pipe', 'id') }}\"\nb: *x\nc: *x\n"
+    assert lines_found(tmp_path, "roles/r/vars/main.yml", text) == [(3, f"lookup 'pipe' {RUNS}")]
