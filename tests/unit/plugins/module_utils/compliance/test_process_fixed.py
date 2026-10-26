@@ -108,10 +108,10 @@ class TestSccPolicy:
         with pytest.raises(process.ProcessPolicyError, match="forbidden"):
             process.check_policy(spec)
 
-    def test_a_missing_scc_installation_is_an_execution_error(self) -> None:
+    def test_a_missing_or_unsafe_scc_installation_never_runs(self) -> None:
         if Path(process.SCC_EXECUTABLE_PATH).exists():
             pytest.skip("SCC is installed on this host")
-        with pytest.raises(process.ProcessExecutionError):
+        with pytest.raises(process.ProcessError):
             process.run(process.CommandSpec("cscc", ("--version",), FAST))
 
 
