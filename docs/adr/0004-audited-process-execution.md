@@ -393,10 +393,23 @@ Non-blocking follow-ups from the review of PR #21 (FREES-128, FREES-129). Every 
   a call is accepted only in its owner and only unchanged: `name=name` where `name` is a never rebound keyword-only
   parameter of the enclosing function or lambda, or `name=self._name` where `self` is the intact first parameter of a
   method of a class whose `__init__` takes `name` keyword-only. Literals, expressions, other names, other objects and
-  `cls` are refused. In an owner file `self._<seam>` may be assigned only inside `__init__`, and `setattr`, `delattr`
-  and `object.__setattr__` may not name it. The defaults of the seams, the value stored in `__init__` and a class
-  attribute of the same name in the class body stay review items of the owner files. `process.py` stays exempt; the
-  classification test in
+  `cls` are refused.
+- Reserved seam attributes (review of PR #30): `_<name>` for every banned keyword (`_owner_uid`, `_registry`,
+  `_clock`, `_runner`, `_limits`, `_state_dir`, `_lock_timeout`, `_policies`, `_trusted_dirs`, `_use_unsafe_shell`)
+  is reserved for the files that own the seam. Before, a non-owner plugin could set the seam of an owner object with
+  `self._owner_uid = 1000` in a subclass of `audit.Auditor`, with a class attribute `_owner_uid = 1000` of such a
+  subclass, or with `C.f(audit.Auditor())` where `C.f` assigns `self._owner_uid`, because the attribute counted only
+  as its own private attribute; `Auditor` reads `self._owner_uid` at run time, so the root-owner check was undone.
+  Now every other file may not name a reserved attribute at all: no read, store or delete through any object, no
+  `getattr`, `setattr` or `delattr` literal, no `object.__setattr__` literal and no `match` class pattern keyword. No
+  file, the owners included, may bind a reserved name in a class body (an assignment, an annotation, a method or a
+  nested class of that name). An owner may read its own seam attributes and may store or delete them only on `self`
+  inside `__init__`; `setattr`, `delattr` and `object.__setattr__` may not name them. Subclassing an owner class
+  outside its module is not denied: with the reserved names a subclass cannot read or set a seam, cannot pass a seam
+  keyword and cannot reach the private helpers, so it gains nothing a plain plugin lacks, and a base-class check would
+  be unsound anyway because the base can be any expression (`base = audit.Auditor`). The defaults of the seams and the
+  value that `__init__` stores from its keyword-only parameter remain review items of the owner files; the
+  class-attribute gap is closed. `process.py` stays exempt; the classification test in
   `tests/unit/tools/test_check_repo_rules_followups.py` now also fails for any positional parameter under `plugins/`,
   `process.py` included, whose name is a banned keyword. `fileio.open_directory` is still importable only by
   `ledger.py`, which forwards `owner_uid=self._owner_uid`. The `remediation_*` filters of PR #22 and the audit code
@@ -404,13 +417,33 @@ Non-blocking follow-ups from the review of PR #21 (FREES-128, FREES-129). Every 
 - Include targets: an include or import target and `tasks_from`/`handlers_from` must be a relative YAML path without
   a `..` component that is not templated and does not start with `/` or `~`. `..` is refused even when it would stay
   inside the repository, because a role installed from the collection is resolved against paths of the consuming
-  playbook too. The one templated form is `{{ role_path }}/tasks/` followed by a literal relative path or by exactly
-  one variable of `DISPATCH_VARIABLES` and `.yml`; the only such variable is
-  `__linux_compliance_remediate_family.name`, which the `remediation_plan` filter validates against
-  `FAMILY_PATTERN` (`[a-z][a-z0-9_]{0,63}`) before the remediate role dispatches, and a unit test pins both. A test
-  playbook that chose a helper with `tasks_from: "file_permissions_{{ case.helper }}.yml"` now uses one static
-  include per helper. Symlinks are not resolved by the check; the two tracked symlinks (`.claude/skills` and a
-  remediate test fixture) point inside the repository.
+  playbook too. The one templated form is `{{ role_path }}/tasks/` followed by a literal relative path, so no variable
+  chooses an included file anywhere. The first version of this PR also allowed one pinned dispatch variable,
+  `__linux_compliance_remediate_family.name`, validated by the `remediation_plan` filter; the review showed that a
+  role parameter, an include parameter or an extra variable outranks the plan fact the role sets, so a play could
+  pass a plan with a family named `../x` and load a file outside the role. The remediate role now dispatches with one
+  static include of the literal `{{ role_path }}/tasks/<family>.yml` per catalogued family, gated on that family's
+  plan entry, in `roles/remediate/tasks/dispatch.yml`, which `tools/roles/generate_role_guards.py` generates from the
+  registry (`make role-guards`; `make lint-role-guards` fails on drift). A test playbook that chose a helper with
+  `tasks_from: "file_permissions_{{ case.helper }}.yml"` now uses one static include per helper.
+- Internal role variables (review of PR #30): the same precedence lets a role parameter, an include parameter or an
+  extra variable replace any internal `__linux_compliance_<role>_*` fact, and a play's `set_fact` replace a constant
+  that a role loads with `include_vars`. Every entry point of the audit, remediate and verify roles (remediate
+  `main`; audit `main`, `evaluate`, `stale`; verify `main`, `baseline`, `preflight`) now starts with the generated
+  `tasks/internal_variables.yml`: it sets every fact and registered variable of the role to a sentinel and asserts
+  that each reads back as the sentinel, gives every task and loop variable the sentinel as a task variable of the
+  assertion and asserts the same, and asserts that every constant from the role's variable files is undefined or
+  equal to the file. Anything else was supplied from outside, and the role stops before it scans, changes or compares
+  anything. This follows the read-back pattern with which the verify role already refuses an `-e` baseline. A role
+  parameter that is not in the argument specification is already refused by Ansible's argument validation, and the
+  `vars` of a `roles` entry rank below the facts the role sets; `make test-role-guards` covers the include
+  parameters of every entry point, the extra variables and the role parameters. Residual: a caller that includes a
+  family file directly with `tasks_from` and include parameters can still drive it, but only with
+  `linux_compliance_remediate_enabled: true` and only into the literal helper files of the role, which is no more than
+  calling the native modules itself.
+- Symlinks are not resolved by the YAML check. A repository test fails when a symlink below the repository resolves
+  outside it or is a symlinked directory other than `.claude/skills`, so a symlinked `roles/*/tasks` cannot hide
+  content from the guard; the tracked symlinks are `.claude/skills` and a remediate test fixture file.
 - Role names of role includes and of the `roles` of a play must be plain or fully qualified names; templated names
   and paths are refused, and a free-form role include may not be templated. A templated task key is refused as
   defence in depth.
@@ -418,5 +451,7 @@ Non-blocking follow-ups from the review of PR #21 (FREES-128, FREES-129). Every 
   target range of the supported ansible-core 2.20 and 2.21 (`MANAGED_NODE_PYTHONS` in the `Makefile`); 3.15 becomes a
   target only with ansible-core 2.22, which is not released. The guard name sets already include the 3.15.1 probe
   (FREES-129). Add 3.15 to the matrix and to `MANAGED_NODE_PYTHONS` when the collection adopts ansible-core 2.22.
-- The guard module grew past 1500 lines; `max-module-lines` is now 1700 with the reason recorded in
-  `pyproject.toml`, because the guard is run by path as one stand-alone script.
+- The guard module grew past 1500 lines. `max-module-lines` stays 1500; `make lint-pylint` excludes the guard from
+  the main pass and lints it alone with `--max-module-lines=1700`, with the reason in `pyproject.toml`, because the
+  guard is run by path as one stand-alone script and Pylint has no per-file limit without a comment. A unit test pins
+  both limits and fails when any other module exceeds 1500 lines.

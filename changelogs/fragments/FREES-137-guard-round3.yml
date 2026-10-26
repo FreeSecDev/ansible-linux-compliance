@@ -1,8 +1,16 @@
 ---
+security_fixes:
+  - >-
+    The audit, remediate and verify roles refuse an internal ``__linux_compliance_<role>_*`` variable supplied from
+    outside the role, by a role parameter, an include parameter, an extra variable or a play ``set_fact`` of a
+    constant the role loads, before they scan, change or compare anything. The remediate role dispatches each family
+    with a static include generated from the family registry, so a forged plan can no longer choose the included
+    file.
 trivial:
   - >-
     Repository guard: every test seam of the plugin code is keyword-only and may be defined and forwarded unchanged
-    only by its owner file, so a positional argument can no longer pass a seam value past the keyword ban. Include and
-    import targets, tasks_from and handlers_from must be relative YAML paths without ``..`` that are not templated,
-    except ``{{ role_path }}/tasks/`` with a literal path or the validated remediation family name; role names must
-    be plain or fully qualified names, and templated task keys are denied.
+    only by its owner file, so a positional argument can no longer pass a seam value past the keyword ban, and the
+    private attribute of a seam is reserved for the file that owns it. Include and import targets, tasks_from and
+    handlers_from must be relative YAML paths without ``..`` that are not templated, except
+    ``{{ role_path }}/tasks/`` with a literal path; role names must be plain or fully qualified names, and templated
+    task keys are denied.

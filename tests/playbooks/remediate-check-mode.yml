@@ -548,7 +548,7 @@
               - "'Run the freesecdev.linux_compliance.discover role first' in ansible_failed_result.msg"
             quiet: true
 
-- name: Remediate role in check mode | A disruptive family is skipped without the allow-list
+- name: Remediate role in check mode | A catalogue that the play sets is refused before any change
   hosts: localhost
   connection: local
   gather_facts: false
@@ -590,23 +590,24 @@
             runbook: null
             parameters: {}
 
-    - name: Run the remediate role without an allow-list
-      ansible.builtin.include_role:
-        name: freesecdev.linux_compliance.remediate
+    - name: Run the remediate role with the catalogue of the play
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
 
-    - name: Check that the disruptive rule was skipped and reported with its reason
-      vars:
-        ssh_rule: >-
-          {{ linux_compliance_remediated.rules
-             | selectattr('rule_id', 'equalto', 'xccdf_org.ssgproject.content_rule_sshd_disable_root_login')
-             | first }}
-      ansible.builtin.assert:
-        that:
-          - ssh_rule.action == 'skip'
-          - ssh_rule.reason == 'disruptive_not_allowed'
-          - linux_compliance_remediated.results | map(attribute='family') | unique == ['file_permissions']
-          - linux_compliance_remediated.notices | select('search', 'family ssh is disruptive') | list | length == 1
-        quiet: true
+        - name: Fail because the catalogue of the play replaced the catalogue of the role
+          ansible.builtin.fail:
+            msg: REMEDIATE-PLAY-CATALOGUE-NOT-REFUSED
+      rescue:
+        - name: Check that the guard refused the catalogue before the ledger was read
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Refuse internal variables supplied from outside the role')
+              - "'__linux_compliance_remediate_rules' in ansible_failed_result.assertion"
+              - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
+              - __linux_compliance_remediate_plan == '__linux_compliance_unset__'
+            quiet: true
 
 - name: Remediate role in check mode | The file_permissions helpers keep the ledger contract
   hosts: localhost
@@ -846,7 +847,7 @@
               - "'runs only from the remediate dispatcher' in ansible_failed_result.msg"
             quiet: true
 
-- name: Remediate role in check mode | A registered family without a task file in the role fails closed
+- name: Remediate role in check mode | A family registry that the play sets is refused before any change
   hosts: localhost
   connection: local
   gather_facts: false
@@ -856,7 +857,7 @@
     linux_compliance_discovered:
       profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
       rule_ids:
-        - xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:
@@ -865,43 +866,28 @@
         fail_msg: This test playbook only runs with --check; it must never change the host.
         quiet: true
 
-    - name: Catalogue a rule of the registered sysctl family, which has no task file yet
+    - name: Register a family whose name walks out of the role
       ansible.builtin.set_fact:
-        __linux_compliance_remediate_rules:
-          - rule_id: xccdf_org.ssgproject.content_rule_file_permissions_crontab
-            family: file_permissions
+        __linux_compliance_remediate_families:
+          - name: file_permissions
             disruptive: false
-            reversible: true
-            revert_strategy: recorded_value
-            toggle: linux_compliance_rule_file_permissions_crontab_enabled
-            runbook: null
-            parameters:
-              path: /etc/crontab
-              max_mode: "0600"
-          - rule_id: xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space
-            family: sysctl
+          - name: ../../../../tmp/forged
             disruptive: false
-            reversible: true
-            revert_strategy: owned_dropin
-            toggle: linux_compliance_rule_sysctl_kernel_randomize_va_space_enabled
-            runbook: null
-            parameters: {}
 
-    - name: Run the role for a family without a task file
+    - name: Run the role with the family registry of the play
       block:
         - name: Run the remediate role
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.remediate
 
-        - name: Fail because the role found a family file outside the role
+        - name: Fail because the family registry of the play was used
           ansible.builtin.fail:
-            msg: The dispatcher included a family file that the role does not contain.
+            msg: REMEDIATE-PLAY-REGISTRY-NOT-REFUSED
       rescue:
-        - name: Check that the run stopped at the dispatch of the family without a task file
+        - name: Check that the guard refused the family registry before the ledger was read
           ansible.builtin.assert:
             that:
-              - __linux_compliance_remediate_plan.errors == []
-              - __linux_compliance_remediate_plan.families | map(attribute='name') | list == ['sysctl']
-              - __linux_compliance_remediate_results == []
-              - __linux_compliance_remediate_dispatched is false
+              - ansible_failed_task.name is search('Refuse internal variables supplied from outside the role')
+              - "'__linux_compliance_remediate_families' in ansible_failed_result.assertion"
+              - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
             quiet: true

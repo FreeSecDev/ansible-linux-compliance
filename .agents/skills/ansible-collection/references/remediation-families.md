@@ -9,7 +9,9 @@ Each family is one file, `roles/remediate/tasks/<family>.yml`, covering a narrow
 1. Identify the stable ComplianceAsCode rule ID (short form `sshd_disable_root_login`; full XCCDF ID in findings).
 2. Add it to `roles/remediate/vars/rules.yml` with family, disruptive flag and revert strategy
    (`owned_dropin`, `recorded_value`, `recorded_state` or `irreversible`), then run `make toggles` to regenerate the
-   toggle defaults, argument specs and `docs/remediation-variables.md` (`make lint` fails on drift).
+   toggle defaults, argument specs and `docs/remediation-variables.md` (`make lint` fails on drift), and
+   `make role-guards` to regenerate the static family dispatch `tasks/dispatch.yml` and the internal-variable guard
+   `tasks/internal_variables.yml` after a new family or internal variable.
 3. Choose a native module (`ansible.posix.sysctl`, `ansible.builtin.lineinfile`, `ansible.builtin.file`,
    `ansible.builtin.service`, `community.general.*`). If none exists, stop and request a project module.
 4. Prefer a collection-owned drop-in file named `50-freesecdev-linux-compliance-<family>.<ext>` over in-place edits.
@@ -42,7 +44,8 @@ registry of `roles/remediate/vars/rules.yml`. They are applied and cleaned up on
 
 `tasks/main.yml` validates inputs, reads the ledger, resolves the plan with the filter
 `freesecdev.linux_compliance.remediation_plan` and includes each family file with `ansible.builtin.include_tasks`
-in registry order. Family files record and remove ledger entries themselves, following the family file contract in
+in registry order, through the generated `tasks/dispatch.yml`: one static include of the literal file per catalogued
+family, never a templated file name (FREES-137). Family files record and remove ledger entries themselves, following the family file contract in
 [docs/remediation.md](../../../../docs/remediation.md). The dispatcher has no rule logic of its own.
 
 ## Not allowed

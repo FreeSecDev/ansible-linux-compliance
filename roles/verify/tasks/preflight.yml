@@ -1,4 +1,9 @@
 ---
+- name: Verify | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
 - name: Verify | Refuse the audit failure gate before a remediation run audits any host
   ansible.builtin.assert:
     that:

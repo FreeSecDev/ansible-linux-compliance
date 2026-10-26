@@ -1,0 +1,218 @@
+---
+- name: Internal variables | An include parameter cannot replace an internal variable of a role
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    refused: Refuse internal variables supplied from outside the role
+    forged_family:
+      name: ../../../../tmp/forged
+      disruptive: false
+      apply: []
+      cleanup: []
+    forged_plan:
+      enabled: true
+      errors: []
+      families:
+        - "{{ forged_family }}"
+      summary: {}
+      report: []
+      disabled_rules: []
+      orphaned: []
+      notices: []
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: A forged remediation plan is refused
+      block:
+        - name: Run the remediate role with a forged plan as an include parameter
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            __linux_compliance_remediate_plan: "{{ forged_plan }}"
+
+        - name: Fail because the forged plan was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-PLAN-NOT-REFUSED
+      rescue:
+        - name: Check that the guard refused the plan before the ledger was read
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_remediate_plan' in ansible_failed_result.assertion"
+              - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
+            quiet: true
+
+    - name: A forged family is refused
+      block:
+        - name: Run the remediate role with a forged family as an include parameter
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            __linux_compliance_remediate_family: "{{ forged_family }}"
+
+        - name: Fail because the forged family was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-FAMILY-NOT-REFUSED
+      rescue:
+        - name: Check that the guard refused the family before the ledger was read
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_remediate_family' in ansible_failed_result.assertion"
+              - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
+            quiet: true
+
+    - name: A forged rule catalogue is refused
+      block:
+        - name: Run the remediate role with a forged catalogue as an include parameter
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            __linux_compliance_remediate_rules: []
+
+        - name: Fail because the forged catalogue was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-CATALOGUE-NOT-REFUSED
+      rescue:
+        - name: Check that the guard refused the catalogue
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_remediate_rules' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A forged toggle result of the audit is refused
+      block:
+        - name: Run the audit role with forged toggles as an include parameter
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+          vars:
+            __linux_compliance_audit_toggles:
+              disabled_rules: []
+
+        - name: Fail because the forged toggles were kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-AUDIT-NOT-REFUSED
+      rescue:
+        - name: Check that the guard of the audit role refused the toggles
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_audit_toggles' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A forged exceptions file of the evaluation is refused
+      block:
+        - name: Run the evaluate entry point with a forged exceptions file
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: evaluate.yml
+          vars:
+            __linux_compliance_audit_exceptions:
+              text: null
+
+        - name: Fail because the forged exceptions file was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-EVALUATE-NOT-REFUSED
+      rescue:
+        - name: Check that the guard of the evaluate entry point refused it
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_audit_exceptions' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A forged stale report is refused
+      block:
+        - name: Run the stale entry point with a forged report
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: stale.yml
+          vars:
+            linux_compliance_audit_stale_hosts:
+              - localhost
+            __linux_compliance_audit_stale_report: []
+
+        - name: Fail because the forged report was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-STALE-NOT-REFUSED
+      rescue:
+        - name: Check that the guard of the stale entry point refused it
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_audit_stale_report' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A forged baseline marker of the verify role is refused
+      block:
+        - name: Run the verify role with a forged marker
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+          vars:
+            __linux_compliance_verify_marker:
+              run_id: forged
+
+        - name: Fail because the forged marker was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-VERIFY-NOT-REFUSED
+      rescue:
+        - name: Check that the guard of the verify role refused the marker
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_verify_marker' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A forged recorded baseline is refused
+      block:
+        - name: Run the baseline entry point with a forged record
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+            tasks_from: baseline.yml
+          vars:
+            __linux_compliance_verify_baseline_recorded:
+              run_id: forged
+
+        - name: Fail because the forged record was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-BASELINE-NOT-REFUSED
+      rescue:
+        - name: Check that the guard of the baseline entry point refused it
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_verify_baseline_recorded' in ansible_failed_result.assertion"
+            quiet: true
+
+    - name: A forged comparison is refused before the preflight
+      block:
+        - name: Run the preflight entry point with a forged comparison
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+            tasks_from: preflight.yml
+          vars:
+            __linux_compliance_verify_comparison: {}
+
+        - name: Fail because the forged comparison was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-PREFLIGHT-NOT-REFUSED
+      rescue:
+        - name: Check that the guard of the preflight entry point refused it
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_verify_comparison' in ansible_failed_result.assertion"
+            quiet: true

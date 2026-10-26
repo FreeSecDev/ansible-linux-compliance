@@ -224,8 +224,10 @@ YAML and Python files (ADR 0005):
   `fileio.py`, `ledger.py`, `openscap.py`; `process.py` is exempt from the guard) may define a seam, and they may pass a seam on
   only unchanged, as `owner_uid=owner_uid` from the keyword-only parameter of the enclosing function or as
   `owner_uid=self._owner_uid` in a class whose `__init__` takes the keyword-only seam; `self._<seam>` may only be
-  assigned in `__init__` and never through `setattr`, `delattr` or `object.__setattr__`. Every other banned keyword
-  in a call still fails. Files are opened through
+  assigned to `self` in `__init__` and never through `setattr`, `delattr` or `object.__setattr__`. Every other banned
+  keyword in a call still fails. `_<seam>` for every banned keyword is reserved: any other file may not read, set,
+  delete or `getattr` it on any object (so a subclass of `audit.Auditor` or a method called on one cannot change its
+  `_owner_uid`), and no file may bind it in a class body. Files are opened through
   `xmlsafe.RegularFile`; the open helper behind it is private (`_open_regular`), so no other plugin file can call it.
   The standard library name sets of the guard (`STDLIB_MODULE_NAMES`, `KNOWN_SUBMODULE_ATTRIBUTES`) are generated:
   `make name-sets` runs `tools/lint/name_set_probe.py` in a clean interpreter of every version from 3.9 to 3.15,
@@ -250,13 +252,19 @@ YAML and Python files (ADR 0005):
     directory a YAML file, which covers the default `main` entry point of a role.
   - Since FREES-137 these targets must also be relative paths without a `..` component and must not be templated or
     start with `/` or `~`, because such a target could load an unscanned file from outside the repository. The one
-    templated form is `{{ role_path }}/tasks/` followed by either a literal relative path
-    (`{{ role_path }}/tasks/file_permissions_apply.yml`) or exactly one variable of `DISPATCH_VARIABLES` and `.yml`.
-    The only dispatch variable is `__linux_compliance_remediate_family.name`, the family name of the remediation plan,
-    which the `remediation_plan` filter validates against `FAMILY_PATTERN` (`[a-z][a-z0-9_]{0,63}`), so it can
-    never hold `/`, `.` or a template; the remediate role asserts that the plan has no errors before it dispatches.
-    Filters, other variables and `tasks_from: "{{ x }}.yml"` stay denied; a test playbook that chose a helper by
-    template now uses one static include per helper with `when`.
+    templated form is `{{ role_path }}/tasks/` followed by a literal relative path
+    (`{{ role_path }}/tasks/file_permissions_apply.yml`); no variable may choose the file, because a role parameter,
+    an include parameter or an extra variable outranks every fact a role sets. The remediate role therefore
+    dispatches with one static include per catalogued family in `roles/remediate/tasks/dispatch.yml`, which
+    `make role-guards` generates from the family registry and `make lint-role-guards` checks for drift. A test
+    playbook that chose a helper by template now uses one static include per helper with `when`.
+  - Every entry point of the audit, remediate and verify roles starts with the generated
+    `tasks/internal_variables.yml`, which refuses an internal `__linux_compliance_<role>_*` variable supplied from
+    outside the role (a role parameter, an include parameter, an extra variable, or a play `set_fact` of a constant
+    the role loads). Regenerate it with `make role-guards` after adding an internal variable; the generator fails on a
+    variable it cannot classify. `make test-role-guards` checks the refusals in check mode.
+  - A repository test fails when a symlink below the repository points outside it or is a symlinked directory other
+    than `.claude/skills`, because the guard does not scan through a symlinked directory.
   - Role names of `include_role` and `import_role` (mapping and free-form `name=`) and of the `roles` of a play
     (`- name`, `- role: name` or `- name: name`) must be plain or fully qualified names: a templated name or a path
     such as `/srv/roles/x` or `../x` is denied. A free-form role include may not be templated at all.

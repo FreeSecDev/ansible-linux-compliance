@@ -1,0 +1,85 @@
+---
+- name: Audit | Reset the internal facts of the role
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_evaluation: __linux_compliance_unset__
+    __linux_compliance_audit_exceptions: __linux_compliance_unset__
+    __linux_compliance_audit_exceptions_overview: __linux_compliance_unset__
+    __linux_compliance_audit_scan: __linux_compliance_unset__
+    __linux_compliance_audit_toggle_names: __linux_compliance_unset__
+    __linux_compliance_audit_toggles: __linux_compliance_unset__
+  tags:
+    - always
+
+- name: Audit | Refuse internal variables supplied from outside the role
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_evaluation == '__linux_compliance_unset__'
+      - __linux_compliance_audit_exceptions == '__linux_compliance_unset__'
+      - __linux_compliance_audit_exceptions_overview == '__linux_compliance_unset__'
+      - __linux_compliance_audit_scan == '__linux_compliance_unset__'
+      - __linux_compliance_audit_toggle_names == '__linux_compliance_unset__'
+      - __linux_compliance_audit_toggles == '__linux_compliance_unset__'
+      - __linux_compliance_audit_exceptions_paths == '__linux_compliance_unset__'
+      - __linux_compliance_audit_exceptions_unset == '__linux_compliance_unset__'
+      - __linux_compliance_audit_gate == '__linux_compliance_unset__'
+      - __linux_compliance_audit_gate_basis == '__linux_compliance_unset__'
+      - __linux_compliance_audit_gate_counted == '__linux_compliance_unset__'
+      - __linux_compliance_audit_gate_summary == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_audited == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_complete == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_complete_message == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_count == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_evaluated == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_evaluated_count == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_evaluations == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_ids == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_partial_message == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_report == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_targets == '__linux_compliance_unset__'
+      - __linux_compliance_audit_stale_unmatched == '__linux_compliance_unset__'
+      - __linux_compliance_audit_unprofiled == '__linux_compliance_unset__'
+      - __linux_compliance_audit_waivers == '__linux_compliance_unset__'
+      - __linux_compliance_audit_waivers_apply == '__linux_compliance_unset__'
+      - __linux_compliance_audit_waivers_messages == '__linux_compliance_unset__'
+      - __linux_compliance_audit_waivers_status == '__linux_compliance_unset__'
+      - __linux_compliance_audit_waivers_summary == '__linux_compliance_unset__'
+      - >-
+        __linux_compliance_audit_catalogue is not defined or __linux_compliance_audit_catalogue ==
+        (lookup('ansible.builtin.file', role_path ~ '/../remediate/vars/rules.yml') | ansible.builtin.from_yaml)
+      - >-
+        __linux_compliance_audit_toggle_pattern is not defined or __linux_compliance_audit_toggle_pattern ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_audit_toggle_pattern']
+    fail_msg: >-
+      An internal variable of the audit role (__linux_compliance_audit_*) is set from outside the role: by a role
+      parameter, an include parameter (vars of include_role or include_tasks) or an extra variable (-e), which outrank
+      every fact the role sets. The failed assertion names it. Remove it and pass only the documented linux_compliance_*
+      variables. Nothing was scanned, changed or compared.
+    quiet: true
+  vars:
+    __linux_compliance_audit_exceptions_paths: __linux_compliance_unset__
+    __linux_compliance_audit_exceptions_unset: __linux_compliance_unset__
+    __linux_compliance_audit_gate: __linux_compliance_unset__
+    __linux_compliance_audit_gate_basis: __linux_compliance_unset__
+    __linux_compliance_audit_gate_counted: __linux_compliance_unset__
+    __linux_compliance_audit_gate_summary: __linux_compliance_unset__
+    __linux_compliance_audit_stale_audited: __linux_compliance_unset__
+    __linux_compliance_audit_stale_complete: __linux_compliance_unset__
+    __linux_compliance_audit_stale_complete_message: __linux_compliance_unset__
+    __linux_compliance_audit_stale_count: __linux_compliance_unset__
+    __linux_compliance_audit_stale_evaluated: __linux_compliance_unset__
+    __linux_compliance_audit_stale_evaluated_count: __linux_compliance_unset__
+    __linux_compliance_audit_stale_evaluations: __linux_compliance_unset__
+    __linux_compliance_audit_stale_ids: __linux_compliance_unset__
+    __linux_compliance_audit_stale_partial_message: __linux_compliance_unset__
+    __linux_compliance_audit_stale_report: __linux_compliance_unset__
+    __linux_compliance_audit_stale_targets: __linux_compliance_unset__
+    __linux_compliance_audit_stale_unmatched: __linux_compliance_unset__
+    __linux_compliance_audit_unprofiled: __linux_compliance_unset__
+    __linux_compliance_audit_waivers: __linux_compliance_unset__
+    __linux_compliance_audit_waivers_apply: __linux_compliance_unset__
+    __linux_compliance_audit_waivers_messages: __linux_compliance_unset__
+    __linux_compliance_audit_waivers_status: __linux_compliance_unset__
+    __linux_compliance_audit_waivers_summary: __linux_compliance_unset__
+  tags:
+    - always

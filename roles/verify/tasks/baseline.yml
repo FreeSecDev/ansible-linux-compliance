@@ -1,4 +1,9 @@
 ---
+- name: Verify | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
 - name: Verify | Validate the audit result that becomes the baseline
   ansible.builtin.assert:
     that:

@@ -118,9 +118,11 @@ def test_file_permission_rules_have_an_absolute_path_and_an_octal_maximum() -> N
 
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
     families = {str(family["name"]) for family in registry()}
+    role_files = {"main", "dispatch", "internal_variables"}
+    assert not families & role_files
     for path in sorted((ROLE / "tasks").glob("*.yml")):
         stem = path.stem
-        assert stem == "main" or stem in families or stem.rsplit("_", 1)[0] in families, stem
+        assert stem in role_files or stem in families or stem.rsplit("_", 1)[0] in families, stem
 
 
 def test_the_recorded_collection_version_matches_galaxy() -> None:

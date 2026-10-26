@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import inspect
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from ansible_collections.freesecdev.linux_compliance.plugins.filter import remediation_plan
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     audit,
     catalog,
@@ -228,6 +228,12 @@ def test_anything_but_an_unchanged_forward_is_denied(
     assert any(re.fullmatch(r"keyword '\w+' is not allowed in plugins", m) for m in messages)
 
 
+LATE = "the seam attribute '{}' may only be assigned to self in __init__"
+RESERVED = "the seam attribute '{}' is reserved for the file that defines the seam"
+CLASS_BODY = "the seam attribute '{}' may not be bound in a class body"
+DYNAMIC = "the seam attribute '{}' may not be used with {}"
+OWNER_IMPORT = f"from {COMPLIANCE} import audit\n"
+
 SEAM_ATTRIBUTE_CHANGES = {
     "method-assignment": (
         (
@@ -237,27 +243,32 @@ SEAM_ATTRIBUTE_CHANGES = {
             "    def weaken(self):\n"
             "        self._owner_uid = 1000\n"
         ),
-        "the seam attribute '_owner_uid' may only be assigned in __init__",
+        LATE.format("_owner_uid"),
     ),
     "augmented": (
         "class A:\n    def weaken(self):\n        self._registry += 1\n",
-        "the seam attribute '_registry' may only be assigned in __init__",
+        LATE.format("_registry"),
     ),
     "delete": (
         "class A:\n    def weaken(self):\n        del self._clock\n",
-        "the seam attribute '_clock' may only be assigned in __init__",
+        LATE.format("_clock"),
     ),
-    "module-level": (
-        "class A:\n    pass\nA()._owner_uid = 1\n",
-        "the seam attribute '_owner_uid' may only be assigned in __init__",
+    "module-level": ("class A:\n    pass\nA()._owner_uid = 1\n", LATE.format("_owner_uid")),
+    "init-of-another-object": (
+        (
+            "class A:\n"
+            "    def __init__(self, other, *, owner_uid=0):\n"
+            "        type(self)._owner_uid = owner_uid\n"
+        ),
+        LATE.format("_owner_uid"),
     ),
     "setattr": (
         "class A:\n    def weaken(self):\n        setattr(self, '_owner_uid', 1000)\n",
-        "the seam attribute '_owner_uid' may not be changed with setattr",
+        DYNAMIC.format("_owner_uid", "setattr"),
     ),
     "delattr": (
         "class A:\n    def weaken(self):\n        delattr(self, '_owner_uid')\n",
-        "the seam attribute '_owner_uid' may not be changed with delattr",
+        DYNAMIC.format("_owner_uid", "delattr"),
     ),
     "object-setattr": (
         (
@@ -266,6 +277,18 @@ SEAM_ATTRIBUTE_CHANGES = {
             "        object.__setattr__(self, '_owner_uid', 1000)\n"
         ),
         "dunder attribute '__setattr__' is not allowed in plugins",
+    ),
+    "class-attribute": (
+        "class A:\n    _owner_uid = 1000\n",
+        CLASS_BODY.format("_owner_uid"),
+    ),
+    "annotated-class-attribute": (
+        "class A:\n    _clock: object = None\n",
+        CLASS_BODY.format("_clock"),
+    ),
+    "class-method-named-like-a-seam": (
+        "class A:\n    def _registry(self):\n        return None\n",
+        CLASS_BODY.format("_registry"),
     ),
 }
 
@@ -279,6 +302,79 @@ def test_a_seam_attribute_is_assigned_only_in_init(
     assert message in process_messages(tmp_path, source, AUDIT)
 
 
+FOREIGN_SEAM_ATTRIBUTES = {
+    "subclass-init": (
+        OWNER_IMPORT + "class Mine(audit.Auditor):\n"
+        "    def __init__(self):\n"
+        "        super().__init__()\n"
+        "        self._owner_uid = 1000\n",
+        RESERVED.format("_owner_uid"),
+    ),
+    "subclass-class-attribute": (
+        OWNER_IMPORT + "class Mine(audit.Auditor):\n    _owner_uid = 1000\n",
+        CLASS_BODY.format("_owner_uid"),
+    ),
+    "method-called-on-an-owner-object": (
+        OWNER_IMPORT + "class C:\n"
+        "    def f(self):\n"
+        "        self._owner_uid = 1000\n"
+        "C.f(audit.Auditor())\n",
+        RESERVED.format("_owner_uid"),
+    ),
+    "read": (
+        "class C:\n    def f(self):\n        return self._registry\n",
+        RESERVED.format("_registry"),
+    ),
+    "delete": ("class C:\n    def f(self):\n        del self._clock\n", RESERVED.format("_clock")),
+    "setattr": (
+        "class C:\n    def f(self):\n        setattr(self, '_owner_uid', 1000)\n",
+        DYNAMIC.format("_owner_uid", "setattr"),
+    ),
+    "getattr": (
+        "class C:\n    def f(self):\n        return getattr(self, '_limits', None)\n",
+        DYNAMIC.format("_limits", "getattr"),
+    ),
+    "delattr": (
+        "class C:\n    def f(self):\n        delattr(self, '_runner')\n",
+        DYNAMIC.format("_runner", "delattr"),
+    ),
+    "object-setattr": (
+        (
+            "class C:\n"
+            "    def __post_init__(self):\n"
+            "        object.__setattr__(self, '_state_dir', '/tmp')\n"
+        ),
+        "dunder attribute '__setattr__' is not allowed in plugins",
+    ),
+    "match-pattern": (
+        "def f(x):\n    match x:\n        case object(_lock_timeout=t):\n            return t\n",
+        RESERVED.format("_lock_timeout"),
+    ),
+    "class-attribute-of-a-local-class": (
+        "class C:\n    _policies = {}\n",
+        CLASS_BODY.format("_policies"),
+    ),
+}
+
+
+def _foreign_cases() -> list[tuple[str, str, str]]:
+    cases: list[tuple[str, str, str]] = []
+    for name in (OTHER, LEDGER, OPENSCAP):
+        owned = rules.SEAM_OWNERS.get(Path(name), frozenset())
+        for source, message in FOREIGN_SEAM_ATTRIBUTES.values():
+            attribute = re.search(r"'_(\w+)'", message)
+            if attribute is None or attribute.group(1) not in owned:
+                cases.append((name, source, message))
+    return cases
+
+
+@pytest.mark.parametrize(("name", "source", "message"), _foreign_cases())
+def test_a_seam_attribute_is_reserved_for_its_owner(
+    tmp_path: Path, name: str, source: str, message: str
+) -> None:
+    assert message in process_messages(tmp_path, source, name)
+
+
 def test_other_private_attributes_keep_their_rules(tmp_path: Path) -> None:
     source = (
         "class A:\n"
@@ -287,13 +383,15 @@ def test_other_private_attributes_keep_their_rules(tmp_path: Path) -> None:
         "    def touch(self):\n"
         "        self._count = 1\n"
         "        setattr(self, '_count', 2)\n"
-        "        return getattr(self, '_owner_uid')\n"
+        "        return getattr(self, '_owner_uid'), self._owner_uid, [x for x in ()]\n"
     )
     assert process_messages(tmp_path, source, AUDIT) == []
 
 
-def test_a_seam_attribute_of_a_non_owner_is_only_a_private_attribute(tmp_path: Path) -> None:
-    source = "class A:\n    def weaken(self):\n        self._owner_uid = 1000\n"
+def test_a_reserved_name_outside_a_class_body_is_not_an_attribute(tmp_path: Path) -> None:
+    source = (
+        "_owner_uid = 1000\ndef f(_clock):\n    return [_registry for _registry in (_clock,)]\n"
+    )
     assert process_messages(tmp_path, source, OTHER) == []
 
 
@@ -380,6 +478,17 @@ DENIED_TARGETS = {
         "include_tasks: '{{ role_path }}/tasks/../../x.yml'",
         "must not be templated",
     ),
+    "role-path-dispatch-variable": (
+        "include_tasks: '{{ role_path }}/tasks/{{ __linux_compliance_remediate_family.name }}.yml'",
+        "must not be templated",
+    ),
+    "role-path-dispatch-variable-in-file": (
+        (
+            "include_tasks:\n        file: "
+            "'{{role_path}}/tasks/{{__linux_compliance_remediate_family.name}}.yml'"
+        ),
+        "must not be templated",
+    ),
     "role-path-other-variable": (
         "include_tasks: '{{ role_path }}/tasks/{{ family }}.yml'",
         "must not be templated",
@@ -433,11 +542,6 @@ def test_unsafe_playbook_imports_are_denied(text: str, message: str) -> None:
 ALLOWED_TARGETS = (
     "include_tasks: '{{ role_path }}/tasks/file_permissions_apply.yml'",
     "include_tasks: '{{role_path}}/tasks/sub/check.yaml'",
-    (
-        "include_tasks:\n        file: "
-        "'{{ role_path }}/tasks/{{ __linux_compliance_remediate_family.name }}.yml'"
-    ),
-    "include_tasks: '{{  role_path  }}/tasks/{{__linux_compliance_remediate_family.name}}.yml'",
     "include_tasks: tasks/a..b.yml",
     "import_tasks: ./other.yml",
 )
@@ -448,22 +552,15 @@ def test_role_path_and_relative_targets_are_allowed(task: str) -> None:
     assert findings(play(task)) == []
 
 
-def test_the_dispatch_variables_hold_only_validated_family_names() -> None:
-    assert frozenset({"__linux_compliance_remediate_family.name"}) == rules.DISPATCH_VARIABLES
-    pattern = remediation_plan.FAMILY_PATTERN
-    assert re.fullmatch(pattern, "file_permissions") is not None
-    for unsafe in ("..", "a/b", "a.b", "/etc", "~", "{{ x }}", "a b", ""):
-        assert re.fullmatch(pattern, unsafe) is None
-    errors = remediation_plan.Errors()
-    assert remediation_plan.check_families([{"name": "../x", "disruptive": False}], errors) == {}
-    assert errors.items
-
-
 def test_the_remediate_dispatcher_passes_the_guard() -> None:
-    path = rules.REPO_ROOT / "roles/remediate/tasks/main.yml"
-    text = path.read_text(encoding="utf-8")
-    assert "{{ role_path }}/tasks/{{ __linux_compliance_remediate_family.name }}.yml" in text
-    assert rules.check_banned_modules(path, text) == []
+    tasks = rules.REPO_ROOT / "roles/remediate/tasks"
+    for name in ("main.yml", "dispatch.yml"):
+        text = (tasks / name).read_text(encoding="utf-8")
+        assert "__linux_compliance_remediate_family.name }}.yml" not in text
+        assert rules.check_banned_modules(tasks / name, text) == []
+    assert "{{ role_path }}/tasks/file_permissions.yml" in (tasks / "dispatch.yml").read_text(
+        encoding="utf-8"
+    )
 
 
 ROLE_NAME_TASKS = {
@@ -603,3 +700,60 @@ def test_templated_keys_in_module_parameters_and_data_are_not_task_keys() -> Non
         "  vars:\n    '{{ k }}': v\n"
     )
     assert findings(text) == []
+
+
+SKIPPED_DIRECTORIES = frozenset(
+    {".git", ".venv", "build", "dist", "node_modules", "__pycache__", ".mypy_cache", ".ruff_cache"}
+)
+SKIPPED_PATHS = frozenset({".claude/worktrees"})
+DIRECTORY_LINKS = {".claude/skills": ".agents/skills"}
+
+
+def symlink_problems(root: Path) -> list[str]:
+    """Return every symlink below ``root`` that leaves it or hides a directory from the guard."""
+    problems: list[str] = []
+    base = root.resolve()
+    for directory, directories, files in os.walk(root):
+        current = Path(directory)
+        directories[:] = [
+            name
+            for name in directories
+            if name not in SKIPPED_DIRECTORIES
+            and (current / name).relative_to(root).as_posix() not in SKIPPED_PATHS
+        ]
+        for name in [*directories, *files]:
+            link = current / name
+            if not link.is_symlink():
+                continue
+            relative = link.relative_to(root).as_posix()
+            target = link.resolve()
+            if not target.is_relative_to(base):
+                problems.append(f"{relative} points outside the repository")
+            elif (
+                target.is_dir()
+                and DIRECTORY_LINKS.get(relative) != target.relative_to(base).as_posix()
+            ):
+                problems.append(f"{relative} is a symlinked directory the guard would not scan")
+    return problems
+
+
+def test_no_symlink_leaves_the_repository_or_hides_a_scanned_directory() -> None:
+    assert symlink_problems(rules.REPO_ROOT) == []
+
+
+def test_symlinked_task_directories_and_escapes_are_found(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    root = tmp_path / "repo"
+    (root / "roles" / "r").mkdir(parents=True)
+    (root / "elsewhere").mkdir()
+    (root / "roles" / "r" / "tasks").symlink_to(root / "elsewhere")
+    (root / "roles" / "r" / "escape.yml").symlink_to(outside)
+    (root / "fine.yml").write_text("---\n", encoding="utf-8")
+    (root / "link.yml").symlink_to(root / "fine.yml")
+    (root / "build").mkdir()
+    (root / "build" / "ignored").symlink_to(outside)
+    assert sorted(symlink_problems(root)) == [
+        "roles/r/escape.yml points outside the repository",
+        "roles/r/tasks is a symlinked directory the guard would not scan",
+    ]

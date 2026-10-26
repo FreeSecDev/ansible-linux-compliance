@@ -1,4 +1,9 @@
 ---
+- name: Audit | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
 - name: Audit | Validate inputs
   ansible.builtin.assert:
     that:

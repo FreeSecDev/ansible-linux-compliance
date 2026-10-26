@@ -14,7 +14,7 @@ Rules:
   module name in an action and a templated task key are denied, and included task
   files, playbooks and role entry points must be relative ``.yml`` or ``.yaml``
   paths without ``..`` that are not templated, except ``{{ role_path }}/tasks/``
-  followed by a literal path or by one of the ``DISPATCH_VARIABLES``. Role names
+  followed by a literal relative path. Role names
   of role includes and of the ``roles`` of a play must be plain or fully qualified
   names, not templates or paths (FREES-137). Any other document is checked for
   banned keys at any depth, and a ``redirect`` to a banned module is denied
@@ -123,15 +123,9 @@ PLAY_ROLE_NAME_KEYS: Final[frozenset[str]] = frozenset({"role", "name"})
 ROLE_NAME: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_][A-Za-z0-9_-]*)*"
 )
-DISPATCH_VARIABLES: Final[frozenset[str]] = frozenset({"__linux_compliance_remediate_family.name"})
 PATH_SEGMENT: Final[str] = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
-DISPATCH_ALTERNATIVES: Final[str] = "|".join(
-    re.escape(variable) for variable in sorted(DISPATCH_VARIABLES)
-)
 ROLE_PATH_TARGET: Final[re.Pattern[str]] = re.compile(
-    rf"\{{\{{\s*role_path\s*\}}\}}/tasks/"
-    rf"(?:(?:{PATH_SEGMENT}/)*{PATH_SEGMENT}|\{{\{{\s*(?:{DISPATCH_ALTERNATIVES})\s*\}}\}})"
-    r"\.(?:yml|yaml)"
+    rf"\{{\{{\s*role_path\s*\}}\}}/tasks/(?:{PATH_SEGMENT}/)*{PATH_SEGMENT}\.(?:yml|yaml)"
 )
 MERGE_TAG: Final[str] = "tag:yaml.org,2002:merge"
 REDIRECT_KEY: Final[str] = "redirect"
@@ -332,6 +326,7 @@ SEAM_OWNERS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
         ),
     }
 )
+RESERVED_SEAM_ATTRIBUTES: Final[frozenset[str]] = frozenset(f"_{name}" for name in BANNED_KEYWORDS)
 INIT: Final[str] = "__init__"
 DUNDER: Final[re.Pattern[str]] = re.compile(r"__\w+__")
 OWN_NAMES: Final[frozenset[str]] = frozenset({"self", "cls"})
@@ -394,6 +389,16 @@ SUPER_ARGUMENTS: Final[int] = 2
 FUNCTIONS: Final[tuple[type, ...]] = (ast.FunctionDef, ast.AsyncFunctionDef)
 CALLABLES: Final = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
 DEFINITIONS: Final = (ast.FunctionDef, ast.AsyncFunctionDef)
+SCOPE_NODES: Final = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.Lambda,
+    ast.ClassDef,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+)
 ALLOWED_COMPONENTS: Final[frozenset[str]] = frozenset(
     part for name in ALLOWED_IMPORTS for part in name.split(".")
 ) - frozenset({"types"})
@@ -657,9 +662,10 @@ def _path_problem(text: str, *, allow_role_path: bool) -> str | None:
     relative ``.yml`` or ``.yaml`` path without ``..``: a templated, absolute or
     home-relative target, or one that walks up, could load tasks from a file
     outside the repository that is never scanned. The only templated form is
-    ``{{ role_path }}/tasks/`` followed by a literal relative path or by one
-    variable of ``DISPATCH_VARIABLES``, whose values a plugin validates as plain
-    names (``FAMILY_PATTERN`` of the ``remediation_plan`` filter).
+    ``{{ role_path }}/tasks/`` followed by a literal relative path: ``role_path``
+    is the directory of the running role, so the target stays inside it. No
+    variable may choose the file, because a role parameter, an include parameter
+    or an extra variable outranks every fact the role sets (FREES-137).
     """
     target = text.strip()
     if allow_role_path and ROLE_PATH_TARGET.fullmatch(target):
@@ -1218,7 +1224,33 @@ def _import_findings(
 
 def _is_seam_attribute(name: str, scope: _Scope) -> bool:
     """Return whether ``name`` is the private attribute that holds a seam of this file."""
-    return name.startswith("_") and name[1:] in scope.seams
+    return name in RESERVED_SEAM_ATTRIBUTES and name[1:] in scope.seams
+
+
+def _is_foreign_seam_attribute(name: str, scope: _Scope) -> bool:
+    """Return whether ``name`` holds a seam that another file of ``SEAM_OWNERS`` defines.
+
+    ``_<seam>`` for every banned keyword is reserved: only the owner of the seam
+    may name it, so no other plugin can read or set the seam of an owner object
+    through a subclass, a class attribute or a method called on another object.
+    """
+    return name in RESERVED_SEAM_ATTRIBUTES and name[1:] not in scope.seams
+
+
+def _class_binding_findings(node: ast.AST, scope: _Scope) -> Iterable[str]:
+    """Yield a description for each reserved seam attribute that ``node`` binds in a class body.
+
+    A class attribute named like a seam attribute would be read where the seam is
+    expected, so it is denied in every file, the owners included: an owner sets
+    the attribute only in ``__init__`` from its keyword-only parameter.
+    """
+    names = RESERVED_SEAM_ATTRIBUTES.intersection(_binding_names(node))
+    if not names:
+        return
+    owner = next((item for item in scope.ancestors(node) if isinstance(item, SCOPE_NODES)), None)
+    if isinstance(owner, ast.ClassDef):
+        for name in sorted(names):
+            yield f"the seam attribute {name!r} may not be bound in a class body"
 
 
 def _seam_definition_findings(node: ast.AST, scope: _Scope) -> Iterable[str]:
@@ -1305,12 +1337,11 @@ def _dynamic_attribute_findings(node: ast.Call, name: str, scope: _Scope) -> Ite
         yield f"underscore-prefixed attribute {attribute.value!r} of another object is not allowed"
     if name != "getattr" and node.args and scope.is_imported(node.args[0]):
         yield f"{name} on an imported module is not allowed in plugins"
-    if (
-        name != "getattr"
-        and isinstance(attribute, ast.Constant)
-        and _is_seam_attribute(str(attribute.value), scope)
+    literal = str(attribute.value) if isinstance(attribute, ast.Constant) else ""
+    if _is_foreign_seam_attribute(literal, scope) or (
+        name != "getattr" and _is_seam_attribute(literal, scope)
     ):
-        yield f"the seam attribute {attribute.value!r} may not be changed with {name}"
+        yield f"the seam attribute {literal!r} may not be used with {name}"
 
 
 def _call_findings(node: ast.Call, scope: _Scope) -> Iterable[str]:
@@ -1375,7 +1406,7 @@ def _is_guarded_store(node: ast.Attribute, scope: _Scope) -> bool:
         and isinstance(field.value, str)
         and not _is_banned_attribute(field.value)
         and DUNDER.fullmatch(field.value) is None
-        and not _is_seam_attribute(field.value, scope)
+        and field.value not in RESERVED_SEAM_ATTRIBUTES
     )
 
 
@@ -1412,13 +1443,26 @@ def _is_super_call(node: ast.Attribute, scope: _Scope) -> bool:
     )
 
 
-def _seam_store_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
-    """Yield a description when the seam attribute ``node`` is stored outside ``__init__``."""
+def _seam_attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
+    """Yield descriptions for a reserved seam attribute used outside its owner or set late.
+
+    Another file may not name the attribute at all. The owner may read it, and may
+    store or delete it only on ``self`` inside ``__init__``.
+    """
+    if _is_foreign_seam_attribute(node.attr, scope):
+        yield f"the seam attribute {node.attr!r} is reserved for the file that defines the seam"
+        return
     if isinstance(node.ctx, ast.Load) or not _is_seam_attribute(node.attr, scope):
         return
-    method = next((item for item in scope.ancestors(node) if isinstance(item, DEFINITIONS)), None)
-    if not isinstance(method, DEFINITIONS) or method.name != INIT:
-        yield f"the seam attribute {node.attr!r} may only be assigned in __init__"
+    target = node.value
+    method = scope.own_method(target)
+    if not (
+        isinstance(target, ast.Name)
+        and target.id == "self"
+        and method is not None
+        and method.name == INIT
+    ):
+        yield f"the seam attribute {node.attr!r} may only be assigned to self in __init__"
 
 
 def _attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
@@ -1439,7 +1483,7 @@ def _attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
         yield f"underscore-prefixed attribute {node.attr!r} of another object is not allowed"
     if stored and scope.is_imported(node.value):
         yield f"assigning attribute {node.attr!r} of an imported module is not allowed in plugins"
-    yield from _seam_store_findings(node, scope)
+    yield from _seam_attribute_findings(node, scope)
     if node.attr == FILE_IO_MODULE and not scope.fileio_attribute_allowed:
         yield f"attribute {FILE_IO_MODULE!r} is restricted to ledger.py"
     if node.attr in scope.reserved:
@@ -1479,12 +1523,15 @@ def _pattern_findings(node: ast.MatchClass, scope: _Scope) -> Iterable[str]:
     for name in node.kwd_attrs:
         if name in scope.reserved:
             yield f"attribute {name!r} is restricted to {scope.reserved[name]}"
+        if _is_foreign_seam_attribute(name, scope):
+            yield f"the seam attribute {name!r} is reserved for the file that defines the seam"
 
 
 def _process_findings(node: ast.AST, scope: _Scope, extra: frozenset[str]) -> Iterable[str]:
     """Yield a description for each forbidden construct on ``node`` itself."""
     yield from _binding_findings(node)
     yield from _seam_definition_findings(node, scope)
+    yield from _class_binding_findings(node, scope)
     if isinstance(node, (ast.Import, ast.ImportFrom)):
         yield from _import_findings(node, extra, frozenset(scope.restricted), scope.reserved)
     elif isinstance(node, ast.Name):
