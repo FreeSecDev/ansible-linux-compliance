@@ -90,8 +90,9 @@ defaults of the toggles from the rule catalogue.
 Every validation and stop task in the roles is tagged `always` (in the `audit` and `remediate` roles every task is,
 including the family files that `remediate` includes), so `--tags` cannot bypass them: for example, `--tags nothing`
 still validates inputs and stops with the role's tracking key. Toggles, not tags, select remediation rules
-([ADR 0011](adr/0011-control-toggles-and-cleanup.md)).
+([ADR 0011](adr/0011-control-toggles-and-cleanup.md)): `remediate` fails when a rule planned for apply or cleanup has no
+result, and it fails with `--skip-tags always` through its guard tasks (tag `linux_compliance_remediate_guard`).
 
-`--skip-tags always` is unsupported. It skips input validation, the not-implemented stop and fact gathering, so the
-play runs nothing and exits 0. That exit status must not be read as success. A role cannot prevent this, because any
+`--skip-tags always` is unsupported. Except in the `remediate` role, which fails, it skips input validation, the
+not-implemented stop and fact gathering, so the play runs nothing and exits 0. That exit status must not be read as success. A role cannot prevent this, because any
 guard it adds is itself tagged `always`.

@@ -27,6 +27,9 @@ scenario exists yet (FREES-60).
 - Unknown rule or family toggles, non-boolean toggles and allow-list entries that are not disruptive families fail the
   role before anything changes.
 - Check mode changes nothing, including the state ledger; diff mode shows file and ledger diffs.
+- Tags do not select rules: every task is tagged `always`, the role fails when a planned rule has no result, and
+  `--skip-tags always` fails the role through its guard tasks (`linux_compliance_remediate_guard`).
+- A cleanup that cannot restore the prior state keeps the ledger entry and reports `cleanup_incomplete`.
 - The state ledger (`freesecdev.linux_compliance.control_state`) needs root, so run the role with `become`.
 
 ## Variables

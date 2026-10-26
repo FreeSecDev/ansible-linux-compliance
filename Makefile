@@ -263,10 +263,14 @@ test-audit-exceptions: require-uv collection-link
 	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
 
+REMEDIATE_CHECK = ANSIBLE_HOME='$(CURDIR)/build/ansible-home' ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' \
+	$(RUN) ansible-playbook -i localhost, --check
+
 test-remediate-check: require-uv collection-link
 	mkdir -p build/ansible-home
-	ANSIBLE_HOME='$(CURDIR)/build/ansible-home' ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' \
-		$(RUN) ansible-playbook -i localhost, --check --diff tests/playbooks/remediate-check-mode.yml
+	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
+	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
+	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
 
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)

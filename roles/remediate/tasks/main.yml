@@ -1,4 +1,10 @@
 ---
+- name: Remediate | Arm the guard against skipping the always-tagged tasks
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_dispatched: false
+  tags:
+    - linux_compliance_remediate_guard
+
 - name: Remediate | Validate inputs
   ansible.builtin.assert:
     that:
@@ -46,6 +52,7 @@
       applies only rules that the verified profile selects, and it never substitutes another profile.
       No change was made to the host.
     quiet: true
+  register: __linux_compliance_remediate_discover_check
   when: linux_compliance_remediate_enabled
   tags:
     - always
@@ -130,3 +137,37 @@
   when: linux_compliance_remediated.notices | length > 0
   tags:
     - always
+
+- name: Remediate | Check that every planned rule has exactly one result
+  vars:
+    __linux_compliance_remediate_unaccounted: >-
+      {{ __linux_compliance_remediate_results
+         | freesecdev.linux_compliance.remediation_unaccounted(__linux_compliance_remediate_plan) }}
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_unaccounted | length == 0
+    fail_msg: >-
+      Planned remediation work did not run, so the host may not match linux_compliance_remediated:
+      {{ __linux_compliance_remediate_unaccounted | join('; ') }}. Tags do not select rules;
+      use the toggles instead (ADR 0011).
+    quiet: true
+  tags:
+    - always
+
+- name: Remediate | Record that the dispatch completed
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_dispatched: true
+  tags:
+    - always
+
+- name: Remediate | Fail when the always-tagged tasks were skipped
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_dispatched
+    fail_msg: >-
+      The remediate role did not validate, plan or dispatch anything because its tasks tagged always
+      were skipped (--skip-tags always). Nothing was remediated or cleaned up; run without skipping
+      always and select rules with the toggles (ADR 0011).
+    quiet: true
+  tags:
+    - linux_compliance_remediate_guard

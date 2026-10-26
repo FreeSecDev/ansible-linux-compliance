@@ -1,0 +1,37 @@
+---
+- name: Remediate role in check mode | Skipping the always-tagged tasks fails closed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+  tasks:
+    - name: Refuse to run outside check mode or without skipping always
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+          - "'always' in ansible_skip_tags"
+        fail_msg: This test playbook only runs with --check --skip-tags always; it must never change the host.
+        quiet: true
+
+    - name: Run the role with every always-tagged task skipped
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the role silently did nothing
+          ansible.builtin.fail:
+            msg: The remediate role exited without failing although --skip-tags always skipped all of its work.
+      rescue:
+        - name: Check that the guard of the role failed the run
+          ansible.builtin.assert:
+            that:
+              - "'--skip-tags always' in ansible_failed_result.msg"
+              - "'Nothing was remediated or cleaned up' in ansible_failed_result.msg"
+            quiet: true

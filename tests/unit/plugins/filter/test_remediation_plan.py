@@ -294,15 +294,51 @@ def test_the_report_holds_only_the_reporting_keys() -> None:
     assert [item["rule_id"] for item in report] == sorted([CRONTAB, PASSWD, ROOT_LOGIN, PARTITION])
 
 
-def test_role_variables_are_not_mistaken_for_toggles() -> None:
-    result = run(
-        toggles={
-            "linux_compliance_remediate_enabled": True,
-            "linux_compliance_audit_foo_enabled": "anything",
-            "linux_compliance_verify_enabled": 3,
-        }
-    )[0]
+def test_the_global_opt_in_is_not_mistaken_for_a_toggle() -> None:
+    result = run(toggles={"linux_compliance_remediate_enabled": True})[0]
     assert result["errors"] == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "linux_compliance_audit_enabled",
+        "linux_compliance_audit_foo_enabled",
+        "linux_compliance_verify_enabled",
+        "linux_compliance_remediate_ssh_enabled",
+    ],
+)
+def test_undeclared_names_in_a_role_namespace_are_errors(name: str) -> None:
+    assert errors_of(toggles={name: False}) == [
+        (
+            f"{name!r} is in the namespace of a role of the collection but is not a variable of "
+            "that role; topic toggles of a family are linux_compliance_<family>_enabled"
+        )
+    ]
+
+
+@pytest.mark.parametrize("family", sorted(plan_filter.DISRUPTIVE_FAMILIES))
+def test_a_known_disruptive_family_cannot_be_marked_non_disruptive(family: str) -> None:
+    families = [{"name": family, "disruptive": False}]
+    assert errors_of([], families=families) == [
+        f"family #0: family {family} is always disruptive and cannot be marked otherwise"
+    ]
+
+
+def test_a_disruptive_rule_outside_the_profile_with_a_ledger_entry_is_pending_cleanup() -> None:
+    result, rules = run(
+        profile_rule_ids=[CRONTAB], ledger_entries=[ledger_entry(ROOT_LOGIN, "ssh")]
+    )
+    assert rules[ROOT_LOGIN]["action"] == "skip"
+    assert rules[ROOT_LOGIN]["reason"] == "disruptive_not_allowed"
+    assert rules[ROOT_LOGIN]["pending_cleanup"] is True
+    assert result["errors"] == []
+
+
+def test_a_disruptive_rule_that_would_still_be_applied_is_not_pending_cleanup() -> None:
+    rules = run(ledger_entries=[ledger_entry(ROOT_LOGIN, "ssh")])[1]
+    assert rules[ROOT_LOGIN]["action"] == "skip"
+    assert rules[ROOT_LOGIN]["pending_cleanup"] is False
 
 
 @pytest.mark.parametrize(

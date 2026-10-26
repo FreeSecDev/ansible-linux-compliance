@@ -287,6 +287,9 @@ def test_tasks_must_be_a_list(tmp_path: Path) -> None:
         {"name": "x"},
         {"name": "x", "tags": ["other"]},
         {"name": "x", "tags": "always"},
+        {"name": "x", "tags": ["linux_compliance_demo_guard", "other"]},
+        {"name": "x", "tags": ["linux_compliance_other_guard"]},
+        {"name": "x", "tags": "linux_compliance_demo_guard"},
         "x",
     ],
 )
@@ -294,3 +297,15 @@ def test_every_task_must_be_tagged_always(tmp_path: Path, task: object) -> None:
     role = write_role(tmp_path)
     (role / "tasks" / "main.yml").write_text(yaml.safe_dump([task]))
     assert "tagged always" in specs.check_role(role)[0]
+
+
+def test_a_task_tagged_only_with_the_guard_tag_of_its_role_is_allowed(tmp_path: Path) -> None:
+    role = write_role(tmp_path)
+    guard = {
+        "name": "Guard",
+        "ansible.builtin.assert": {"that": ["x"]},
+        "tags": [specs.guard_tag("demo")],
+    }
+    (role / "tasks" / "main.yml").write_text(yaml.safe_dump([*TASKS, guard]))
+    assert specs.check_role(role) == []
+    assert specs.guard_tag("remediate") == "linux_compliance_remediate_guard"

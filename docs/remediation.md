@@ -23,10 +23,12 @@ Molecule scenario exists yet.
 | Control | Default | Effect |
 |---|---|---|
 | `linux_compliance_remediate_enabled` | `false` | Without it the role neither reads the state ledger nor changes anything. It only reports every rule as `skip` with the reason `remediation_disabled`. It gates cleanup as well, so disabling a rule while remediation is off changes nothing until the next enabled run. |
-| `linux_compliance_remediate_allow_disruptive` | `[]` | Rules of a disruptive family are applied and cleaned up only when the family is named here. Otherwise they are `skip` with the reason `disruptive_not_allowed`, and a notice names them. A rule that the ledger records as applied keeps its ledger entry (`pending_cleanup: true`) until the family is allow-listed. |
+| `linux_compliance_remediate_allow_disruptive` | `[]` | Rules of a disruptive family are applied and cleaned up only when the family is named here. Otherwise they are `skip` with the reason `disruptive_not_allowed`, and a notice names them. A rule that the ledger records as applied and that would no longer be applied (toggled off or no longer in the profile) keeps its ledger entry and is reported with `pending_cleanup: true` until the family is allow-listed. |
 | Profile check | the discovered profile | With the opt-in, the role requires `linux_compliance_discovered` from the `discover` role for the same profile and applies only rules that the verified profile selects. It never substitutes another profile. |
 | Fail closed | always | Unknown rule or family toggles, toggles that are not booleans, allow-list entries that are not disruptive families, an invalid catalogue and a ledger entry whose family contradicts the catalogue stop the role before anything changes. |
 | Check mode | `--check` | Every task runs in check mode: nothing is written, not even the ledger, and the role reports what would change. |
+| No silent skips | always | Every task runs with the tag `always`, so `--tags` and `--skip-tags <family>` cannot skip work. After the dispatch the role fails unless every rule planned for `apply` or `cleanup` has exactly one result (filter `remediation_unaccounted`). `--skip-tags always` fails the role through a guard task tagged `linux_compliance_remediate_guard`. |
+| Family files refuse direct use | always | Every family file and helper first asserts the opt-in and the dispatcher context for its family and rule, so `include_role` with `tasks_from` cannot change the host without the opt-in. |
 
 The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_remediate_enabled": true}'`.
 `-e linux_compliance_remediate_enabled=true` passes a string and fails the input validation.
@@ -67,12 +69,14 @@ selects an applied rule cleans that rule up too.
 
 ### Toggle names and reserved names
 
-The role finds every variable that matches `^linux_compliance_.+_enabled$` (`ansible.builtin.varnames`). A name in the
-namespace of a role of the collection (`linux_compliance_<role>_enabled` or `linux_compliance_<role>_*_enabled` for
-`audit`, `discover`, `evidence`, `remediate` and `verify`) is a role variable and is ignored. Every other name must be
-the toggle of a catalogued rule (`linux_compliance_rule_*`) or of a registered family, or the role fails. Family names
-must therefore not equal or start with a role name followed by `_`, and must not be `rule` or start with `rule_`.
-`auditd` is a valid family name; `audit_rules` would not be.
+The role finds every variable that matches `^linux_compliance_.+_enabled$` (`ansible.builtin.varnames`). Only the
+declared role variable `linux_compliance_remediate_enabled` is ignored. Every other name must be the toggle of a
+catalogued rule (`linux_compliance_rule_*`) or of a registered family, or the role fails. A name in the namespace of a
+role of the collection (`linux_compliance_<role>_enabled` or `linux_compliance_<role>_*_enabled` for `audit`,
+`discover`, `evidence`, `remediate` and `verify`) that is not a declared variable fails too, so the likely typo
+`linux_compliance_audit_enabled` for the auditd topic is caught. Family names must therefore not equal or start with a
+role name followed by `_`, and must not be `rule` or start with `rule_`. `auditd` is a valid family name; `audit_rules`
+would not be.
 
 ## Disruptive families
 
@@ -97,7 +101,9 @@ growing lock-out risk, with the bootloader last because it takes effect only on 
 
 Cleanup of a disruptive family is gated exactly like applying it, because reverting SSH, PAM or firewall settings can
 also lock operators out. Every rule of a disruptive family is disruptive; the catalogue rejects a rule whose flag
-differs from its family.
+differs from its family. The disruptive families of this table are also pinned in the filter
+(`DISRUPTIVE_FAMILIES`), so a registry passed in through `-e`, `set_fact` or role parameters that marks one of them
+non-disruptive fails the role instead of bypassing the allow-list.
 
 ## Rule catalogue
 
@@ -123,19 +129,28 @@ trust this list: it applies a rule only when `linux_compliance_discovered.rule_i
 
 ## Dispatch
 
-`tasks/main.yml` only dispatches; every task in it is tagged `always`.
+`tasks/main.yml` only dispatches; every task in it is tagged `always`, except the two guard tasks tagged only
+`linux_compliance_remediate_guard`.
 
-1. Validate the inputs (the argument specification runs first).
-2. Load the catalogue and the registry with `ansible.builtin.include_vars`.
-3. Find the toggle variables.
-4. With the opt-in only: check `linux_compliance_discovered` and read the ledger with `control_state` `list`.
-5. Resolve the plan with `remediation_plan` and stop on any error.
-6. Include `<family>.yml` once for every family that has work, in registry order, with the tag `always` applied to it.
-7. Publish the fact `linux_compliance_remediated` and print the notices (skipped disruptive rules, manual actions,
+1. Arm the guard (guard tag): set `__linux_compliance_remediate_dispatched` to `false`.
+2. Validate the inputs (the argument specification runs first).
+3. Load the catalogue and the registry with `ansible.builtin.include_vars`.
+4. Find the toggle variables.
+5. With the opt-in only: check `linux_compliance_discovered` (same profile, at least one rule) and read the ledger with
+   `control_state` `list`.
+6. Resolve the plan with `remediation_plan` and stop on any error.
+7. Include `<family>.yml` once for every family that has work, in registry order, with the tag `always` applied to it.
+8. Publish the fact `linux_compliance_remediated` and print the notices (skipped disruptive rules, manual actions,
    orphaned ledger entries, incomplete cleanups).
+9. Fail unless every rule planned for `apply` or `cleanup` has exactly one result, and no other result exists
+   (`remediation_unaccounted`).
+10. Mark the dispatch as complete; the final guard task (guard tag) fails the role when it was not.
 
-Toggles, not tags, select rules. `--tags` cannot skip validation or a family file, because everything runs with
-`always`; `--skip-tags always` is unsupported, as for the other roles ([playbooks](playbooks.md#tags)).
+Toggles, not tags, select rules. Every task of the role and of its family files is tagged `always` and nothing else,
+so `--tags` and `--skip-tags <family>` change nothing, and a task skipped any other way fails step 9.
+`--skip-tags always` skips every always-tagged task; the two guard tasks still run, and the role fails with a message
+that nothing was remediated or cleaned up. Combining `--tags <tag>` with `--skip-tags always` skips the guard as well,
+so the role does nothing and that run must not be read as success.
 
 ## Family file contract
 
@@ -164,11 +179,16 @@ must:
 6. **Honour diff mode.** Change files with modules that produce a diff; `control_state` shows the ledger entry before
    and after.
 7. **Be idempotent.** A second run with the same toggles reports zero changes, after apply and after cleanup.
-8. **Report one result per rule** by appending to `__linux_compliance_remediate_results` a mapping with `rule_id`,
-   `family`, `action` (`apply` or `cleanup`), `status`, `changed` and `message`.
+8. **Report exactly one result per planned rule** by appending to `__linux_compliance_remediate_results` a mapping
+   with `rule_id`, `family`, `action` (`apply` or `cleanup`), `status`, `reason` (`null` or why the cleanup is
+   incomplete), `changed` and `message`. The dispatcher fails when a planned rule has no result or more than one.
 9. **Stay narrow.** One family per file; no rule logic in `tasks/main.yml`.
-10. **Gate nothing itself.** The opt-in, the allow-list, the toggles and the profile are resolved before the file is
-    included; a family file only acts on the lists it receives.
+10. **Tag every task `always` and nothing else.** A family tag would let `--skip-tags <family>` skip planned work.
+11. **Refuse direct use.** The entry file and every helper start with one `ansible.builtin.assert` that
+    `linux_compliance_remediate_enabled` is `true`, that `__linux_compliance_remediate_family.name` is the family, and,
+    in a helper, that the rule belongs to the family and is in its `apply` or `cleanup` list. This is defence in depth
+    against `include_role` with `tasks_from`; the real decisions (opt-in, allow-list, toggles, profile) are made by the
+    dispatcher before the file is included, and a family file acts only on the lists it receives.
 
 ### Reference family: `file_permissions`
 
@@ -181,7 +201,7 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 | Inspect | `ansible.builtin.stat` with `follow: false` | A missing file is `notapplicable`; a symbolic link or other non-regular file is `not_regular_file`; neither is changed |
 | Record | `freesecdev.linux_compliance.control_state` `record` | Prior mode (for example `0644`), only when the mode must change and no entry exists |
 | Apply | `ansible.builtin.file` with `follow: false` | Sets the restricted mode; status `applied`, or `compliant` when nothing had to change |
-| Clean up | `ansible.builtin.file`, then `control_state` `remove` | Restores the recorded mode (`restored`); a missing file only removes the entry (`target_absent`); a non-regular file or an unusable record keeps the entry (`cleanup_incomplete`) |
+| Clean up | `ansible.builtin.file`, then `control_state` `remove` | Restores the recorded mode, which must be exactly four octal digits, and then removes the entry (`restored`). Otherwise nothing is changed, the entry is kept and the result is `cleanup_incomplete` with the reason `target_absent` (the file is missing), `not_regular_file` (a symbolic link or other non-regular file) or `invalid_record` (no usable recorded mode). The cleanup is retried on every run until it succeeds; a file that is removed for good leaves its entry behind until an operator removes it with `control_state` `remove` |
 
 ## Results
 
@@ -192,10 +212,20 @@ The role publishes `linux_compliance_remediated`:
 | `enabled`, `check_mode`, `profile`, `allow_disruptive` | The run settings |
 | `summary` | Number of rules per action (`apply`, `cleanup`, `manual`, `none`, `skip`) |
 | `rules` | Every rule with `rule_id`, `family`, `action`, `reason`, `disabled_by`, `pending_cleanup` and `runbook` |
-| `results` | One result per applied or cleaned-up rule, from the family files |
+| `results` | Exactly one result per rule planned for `apply` or `cleanup`, from the family files, with `rule_id`, `family`, `action`, `status`, `reason`, `changed` and `message` |
 | `disabled_rules` | Rules switched off by a toggle (`rule_id`, `disabled_by`), restricted to the profile when remediation is enabled, in the format of `linux_compliance_audit_disabled_rules`; FREES-55 will feed it to the audit |
 | `orphaned` | Ledger entries for rules that the catalogue no longer contains; nothing is done to them |
 | `notices` | Operator messages |
+
+### A lost ledger cannot be detected
+
+`control_state` `list` returns the same empty list for a ledger that never existed and for one that was deleted, and
+the role cannot tell them apart. If `/var/lib/freesecdev/linux_compliance/state.json` is lost, every applied
+`recorded_value` or `recorded_state` rule that is then disabled plans as `none`: nothing is restored and no notice is
+printed, because the prior state is unknown and the role never guesses it. The hardening stays in place, which errs
+on the side of security, but the host no longer returns to its pre-collection state for those rules. Back up the
+ledger with the host's configuration, and restore it before disabling rules after a rebuild. Owned drop-ins
+(`owned_dropin`) do not depend on the ledger for cleanup once their families exist (FREES-57).
 
 ## Running
 
@@ -234,9 +264,10 @@ already controls the host. A remediated rule is not proof that the control passe
 
 | Test | What it proves | Where it runs |
 |---|---|---|
-| `tests/unit/plugins/filter/` | Effective-state resolution, validation and `restricted_mode`, 100% line and branch coverage | `make test-coverage`, `ansible-test units` |
+| `tests/unit/plugins/filter/` | Effective-state resolution and validation (`remediation_plan`), result accounting (`remediation_unaccounted`) and `restricted_mode`, 100% line and branch coverage | `make test-coverage`, `ansible-test units` |
 | `tests/unit/roles/test_remediate_catalogue.py` | The catalogue is valid, the allow-list choices equal the disruptive families, every family with rules has a task file, the recorded collection version equals `galaxy.yml` | `make test-coverage` |
-| `tests/playbooks/remediate-check-mode.yml` | Against localhost, in check mode and without `become`: nothing happens without the opt-in, the reference rule is planned and the host is unchanged, invalid toggles and allow-list entries fail, a disruptive family is skipped without the allow-list. Every play refuses to run without `--check` | `make test-remediate-check`, CI job `test` |
+| `tests/playbooks/remediate-check-mode.yml` | Against localhost, in check mode and without `become`. Nothing happens without the opt-in: the ledger read and the profile check are skipped. The reference rule is planned and the host is unchanged. Invalid toggles, allow-list entries, a profile mismatch and an empty profile fail. A disruptive family is skipped without the allow-list. The `file_permissions` helpers, called with synthetic planned rules against `tests/playbooks/fixtures/remediate/` (a regular file and a symbolic link): the prior mode is recorded only without a ledger entry, a symbolic link or an absent target is never changed, invalid recorded modes (`abc`, `06440`, a trailing newline, no mode) and absent or non-regular targets keep the entry as `cleanup_incomplete`, and the family file and helpers refuse to run without the opt-in or for a rule the dispatcher did not plan. Every play refuses to run without `--check`. The target runs it twice, the second time with `--skip-tags file_permissions` | `make test-remediate-check`, CI job `test` |
+| `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
 `/var/lib/freesecdev/linux_compliance` already exists and is root-only it fails instead of reading it.
@@ -245,8 +276,23 @@ For FREES-52 the role was also run for real, with the opt-in, in a disposable Ub
 (`ubuntu@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac`, no network): apply (`0644` to `0600`,
 ledger entry with prior `0644`), a second run with zero changes, cleanup by rule toggle and by family toggle (back to
 `0644`, entry removed), a further run with zero changes, the rule toggle overriding a disabled family, no cleanup while
-remediation is off, a stricter `0400` kept, and `4755` restricted to `0600` and restored to `4755`. That run is
-evidence from the pull request, not a repeatable CI test.
+remediation is off, a stricter `0400` kept, and `4755` restricted to `0600` and restored to `4755`. It was repeated
+after the review of FREES-52 with these additional cases:
+
+- cleanup with `--skip-tags file_permissions` still ran;
+- disabling the rule while `/etc/crontab` was absent kept the ledger entry and reported `cleanup_incomplete`
+  (`target_absent`);
+- after the file was put back, the retried cleanup restored the recorded mode;
+- `--skip-tags always` failed the role;
+- `linux_compliance_audit_enabled` was refused.
+
+These runs are evidence from the pull request, not a repeatable CI test.
+
+The check-mode suite was checked by mutation: each of these changes to the role makes `make test-remediate-check`
+fail at the assertion meant for it. The changes were reading the ledger without the opt-in; re-recording over an
+existing ledger entry; restoring without the strict mode check, and without only its length part; accepting an empty
+discovered profile; a family tag on the apply include; removing the result accounting together with that tag; a helper
+without the opt-in check; forgetting the entry of an absent target; and disabling the `--skip-tags always` guard.
 
 The Molecule scenario (nothing changes without the opt-in, disruptive families skipped without the allow-list, the
 reference rule applied, idempotent and cleaned up on disable, check mode changing nothing) waits for the Docker Molecule

@@ -1,0 +1,37 @@
+---
+- name: "Family case | Start without results | {{ case.name }}"
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: []
+
+- name: "Family case | Run the helper with a synthetic planned rule | {{ case.name }}"
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: "file_permissions_{{ case.helper }}.yml"
+  vars:
+    __linux_compliance_remediate_rule: "{{ case_rule }}"
+    __linux_compliance_remediate_family:
+      name: file_permissions
+      disruptive: false
+      apply: "{{ [case_rule] if case.helper == 'apply' else [] }}"
+      cleanup: "{{ [case_rule] if case.helper == 'cleanup' else [] }}"
+
+- name: "Family case | Check the result and which tasks ran | {{ case.name }}"
+  vars:
+    case_result: "{{ __linux_compliance_remediate_results | last }}"
+    ledger_task: >-
+      {{ __linux_compliance_remediate_fp_record if case.helper == 'apply'
+         else __linux_compliance_remediate_fp_forget }}
+    change_task: >-
+      {{ __linux_compliance_remediate_fp_apply if case.helper == 'apply'
+         else __linux_compliance_remediate_fp_restore }}
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_results | length == 1
+      - case_result.rule_id == case_rule.rule_id
+      - case_result.action == case.helper
+      - case_result.status == case.expect.status
+      - case_result.reason == case.expect.reason | default(none)
+      - (ledger_task is skipped) == case.expect.ledger_skipped
+      - (change_task is skipped) == case.expect.change_skipped
+    fail_msg: "Family case {{ case.name }} failed: {{ case_result }}"
+    quiet: true

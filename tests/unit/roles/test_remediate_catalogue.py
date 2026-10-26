@@ -153,3 +153,17 @@ def test_without_opt_in_the_real_catalogue_only_skips() -> None:
     result = plan(enabled=False, profile_rule_ids=None)
     assert result["families"] == []
     assert {item["action"] for item in cast("list[dict[str, object]]", result["rules"])} == {"skip"}
+
+
+def test_the_pinned_disruptive_families_are_the_disruptive_families_of_the_registry() -> None:
+    disruptive = {str(family["name"]) for family in registry() if family["disruptive"] is True}
+    assert disruptive == set(plan_filter.DISRUPTIVE_FAMILIES)
+
+
+def test_the_ignored_role_variables_are_the_enabled_options_of_the_role_specs() -> None:
+    declared: set[str] = set()
+    for path in sorted((REPOSITORY_ROOT / "roles").glob("*/meta/argument_specs.yml")):
+        specs = load(path)
+        main = cast("dict[str, dict[str, dict[str, object]]]", specs["argument_specs"])["main"]
+        declared |= {name for name in main["options"] if name.endswith("_enabled")}
+    assert declared == set(plan_filter.ROLE_TOGGLE_VARIABLES)

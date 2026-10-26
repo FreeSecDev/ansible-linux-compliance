@@ -109,8 +109,17 @@ def check_role(role_dir: Path) -> list[str]:
     return findings + check_tasks(role_dir)
 
 
+def guard_tag(role: str) -> str:
+    """Return the tag of the tasks that detect a run with ``--skip-tags always``."""
+    return f"linux_compliance_{role}_guard"
+
+
 def check_tasks(role_dir: Path) -> list[str]:
-    """Return findings for tasks in ``tasks/main.yml`` that are not tagged ``always``."""
+    """Return findings for tasks in ``tasks/main.yml`` that are not tagged ``always``.
+
+    A task whose only tag is the role's guard tag (see :func:`guard_tag`) is allowed too: it must
+    run when ``always`` is skipped, so that the role can fail instead of silently doing nothing.
+    """
     path = role_dir / "tasks" / "main.yml"
     if not path.is_file():
         return [f"{role_dir.name}: tasks/main.yml is missing"]
@@ -120,8 +129,12 @@ def check_tasks(role_dir: Path) -> list[str]:
     findings: list[str] = []
     for task in cast("list[object]", loaded):
         tags = cast("dict[str, object]", task).get("tags") if isinstance(task, dict) else None
-        if not isinstance(tags, list) or "always" not in tags:
-            findings.append(f"{role_dir.name}: every task in tasks/main.yml must be tagged always")
+        guarded = tags == [guard_tag(role_dir.name)]
+        if not guarded and (not isinstance(tags, list) or "always" not in tags):
+            findings.append(
+                f"{role_dir.name}: every task in tasks/main.yml must be tagged always "
+                f"(or only {guard_tag(role_dir.name)})"
+            )
     return findings
 
 

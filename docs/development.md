@@ -54,7 +54,7 @@ make help
 | `package-check` | implemented | Builds twice from differently ordered trees and fails unless the SHA-256 values match |
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
 | `collection-link` | implemented | Links `plugins/`, `roles/` and `playbooks/` into `build/collections` for pytest, the type checkers, ansible-lint and `test-remediate-check` |
-| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and without `become` ([remediation guide](remediation.md#testing)) |
+| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become` ([remediation guide](remediation.md#testing)) |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches and coverage output |
 | `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check security docs test-sanity test-ansible-units package-check` |

@@ -252,15 +252,20 @@ refinements apply.
   substitutes a profile. Switching to a profile that does not select an applied rule cleans that rule up.
 - **Family toggles default to on.** Until FREES-55 generates the defaults, a toggle that is not set counts as on; the
   global opt-in is the gate. A rule toggle still wins over its family toggle in both directions.
-- **Unknown names are errors.** Every variable matching `^linux_compliance_.+_enabled$` is examined. Names in the
-  namespace of a role (`audit`, `discover`, `evidence`, `remediate`, `verify`) are role variables and are ignored; every
-  other `linux_compliance_rule_*_enabled` must be a catalogued rule toggle and every other name a registered family
-  toggle, and every toggle must be a boolean. Family names may therefore not equal or start with a role name followed
-  by `_`, nor be `rule` or start with `rule_`. The allow-list accepts only disruptive families of the registry.
+- **Unknown names are errors.** Every variable matching `^linux_compliance_.+_enabled$` is examined. Only the declared
+  role variable `linux_compliance_remediate_enabled` is ignored. A `linux_compliance_rule_*_enabled` name must be a
+  catalogued rule toggle, a name in the namespace of a role (`audit`, `discover`, `evidence`, `remediate`, `verify`)
+  that is not a declared variable of that role is an error (so `linux_compliance_audit_enabled`, a likely typo for
+  the auditd topic, fails), every other name must be a registered family toggle, and every toggle must be a boolean.
+  Family names may therefore not equal or start with a role name followed by `_`, nor be `rule` or start with `rule_`.
+  The allow-list accepts only disruptive families of the registry.
 - **Disruptive is a family property.** The registry in `roles/remediate/vars/rules.yml` flags each family, and every
   rule repeats the flag of its family, which the filter checks. `auditd` and `services` join the disruptive families of
   the `ansible-collection` skill (SSH, PAM, sudo, firewall, network, bootloader, mounts, crypto policy), because audit
-  settings can halt the host when the log fills and disabling services can stop workloads.
+  settings can halt the host when the log fills and disabling services can stop workloads. The filter pins these ten
+  families (`DISRUPTIVE_FAMILIES`) and fails when a registry marks one of them non-disruptive, so overriding the
+  registry with `-e`, `set_fact` or role parameters cannot bypass the allow-list. A skipped disruptive rule is
+  `pending_cleanup` when the ledger records it and it would not be applied (toggled off or no longer in the profile).
 - **Deterministic order.** Families are dispatched in registry order (non-disruptive first, bootloader last), and a
   family file cleans up before it applies; rules are sorted by identifier.
 - **Ledger writes belong to family files.** The dispatcher reads the ledger once (`control_state` `list`) and passes
@@ -268,8 +273,24 @@ refinements apply.
   exists, so repeated runs never overwrite the true prior value, and removes the entry after a successful cleanup.
 - **Orphaned ledger entries**, for rules that the catalogue of the running collection version does not contain, are
   reported and left alone rather than cleaned up by guesswork.
-- **Tags do not select rules.** Every task of the role, including the included family files, runs with the tag
-  `always`; toggles are the only selection mechanism, as decided above.
+- **Tags do not select rules.** Every task of the role and of its family files carries the tag `always` and no other
+  tag; toggles are the only selection mechanism, as decided above. After the dispatch the role fails unless every rule
+  planned for `apply` or `cleanup` has exactly one result, so a task skipped by any means cannot be reported as done.
+  `--skip-tags always` fails the role through two guard tasks tagged only `linux_compliance_remediate_guard`, which
+  `tools/roles/check_role_specs.py` permits as the one exception to "every task in `tasks/main.yml` is tagged
+  `always`". Combining `--tags <tag>` with `--skip-tags always` skips the guard too and remains unsupported.
+- **Family files refuse direct use.** Each family file and helper first asserts the opt-in and the dispatcher context
+  for its family and rule, so `include_role` with `tasks_from` cannot change a host without
+  `linux_compliance_remediate_enabled: true`.
+- **Incomplete cleanup keeps the record.** A cleanup that cannot restore the prior state (target absent, not a regular
+  file, unusable record) keeps the ledger entry and reports `cleanup_incomplete` with the reason, and is retried on the
+  next run. The record is never dropped silently.
+- **A lost ledger cannot be detected.** `control_state` `list` returns the same empty list for a ledger that never
+  existed and for one that was deleted. After a loss, a disabled `recorded_value` or `recorded_state` rule plans as
+  `none` without a notice: the hardening stays and is not reverted, because the prior state is unknown and is never
+  guessed. The `cleanup incomplete` reporting for a missing ledger that this ADR describes therefore applies only to
+  owned drop-ins, whose cleanup needs no history (FREES-57). Operators must back up the ledger with the host
+  configuration.
 - **Catalogue shape.** Each rule has exactly `rule_id`, `family`, `disruptive`, `reversible`, `revert_strategy`, `toggle`
   (`linux_compliance_rule_<short id>_enabled`), `runbook` (required exactly for irreversible rules) and `parameters`
   (family-specific); anything else fails the role.

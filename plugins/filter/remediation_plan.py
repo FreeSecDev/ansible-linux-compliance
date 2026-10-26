@@ -114,6 +114,21 @@ FAMILY_PATTERN: Final[str] = r"[a-z][a-z0-9_]{0,63}"
 TOGGLE_PATTERN: Final[str] = r"linux_compliance_([a-z0-9_]+)_enabled"
 RUNBOOK_PATTERN: Final[str] = r"(?:https://|docs/)[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]{1,512}"
 ROLE_NAMESPACES: Final[tuple[str, ...]] = ("audit", "discover", "evidence", "remediate", "verify")
+ROLE_TOGGLE_VARIABLES: Final[frozenset[str]] = frozenset({"linux_compliance_remediate_enabled"})
+DISRUPTIVE_FAMILIES: Final[frozenset[str]] = frozenset(
+    {
+        "auditd",
+        "bootloader",
+        "crypto_policy",
+        "firewall",
+        "mounts",
+        "network",
+        "pam",
+        "services",
+        "ssh",
+        "sudo",
+    }
+)
 RULE_NAMESPACE: Final[str] = "rule"
 STRATEGIES: Final[tuple[str, ...]] = (
     "irreversible",
@@ -222,6 +237,21 @@ def rule_toggle_name(rule_id: str) -> str:
     return f"linux_compliance_rule_{rule_id[len(RULE_PREFIX) :]}_enabled"
 
 
+def _family_problem(item: Mapping[str, object], seen: set[str]) -> str | None:
+    name = item["name"]
+    disruptive = item["disruptive"]
+    reserved = _in_namespace(str(name), (*ROLE_NAMESPACES, RULE_NAMESPACE))
+    if not _is_text(name, FAMILY_PATTERN) or reserved:
+        return f"invalid or reserved family name {_show(name)}"
+    if name in seen:
+        return f"family {name} is listed twice"
+    if not isinstance(disruptive, bool):
+        return "disruptive must be a boolean"
+    if name in DISRUPTIVE_FAMILIES and not disruptive:
+        return f"family {name} is always disruptive and cannot be marked otherwise"
+    return None
+
+
 def _check_family(index: int, raw: object, seen: set[str], errors: Errors) -> tuple[str, bool]:
     where = f"family #{index}"
     item = _mapping(raw)
@@ -231,20 +261,12 @@ def _check_family(index: int, raw: object, seen: set[str], errors: Errors) -> tu
     if frozenset(item) != FAMILY_KEYS:
         errors.add(f"{where}: keys must be exactly {sorted(FAMILY_KEYS)}, got {sorted(item)[:10]}")
         return "", False
-    name = item["name"]
-    reserved = _in_namespace(str(name), (*ROLE_NAMESPACES, RULE_NAMESPACE))
-    if not _is_text(name, FAMILY_PATTERN) or reserved:
-        errors.add(f"{where}: invalid or reserved family name {_show(name)}")
+    problem = _family_problem(item, seen)
+    if problem is not None:
+        errors.add(f"{where}: {problem}")
         return "", False
-    if name in seen:
-        errors.add(f"{where}: family {name} is listed twice")
-        return "", False
-    disruptive = item["disruptive"]
-    if not isinstance(disruptive, bool):
-        errors.add(f"{where}: disruptive must be a boolean")
-        return "", False
-    seen.add(str(name))
-    return str(name), disruptive
+    seen.add(str(item["name"]))
+    return str(item["name"]), item["disruptive"] is True
 
 
 def check_families(raw: object, errors: Errors) -> dict[str, bool]:
@@ -339,7 +361,14 @@ def check_toggles(
         if topic.startswith(f"{RULE_NAMESPACE}_"):
             known = name in rule_toggles
             kind = "rule"
+        elif name in ROLE_TOGGLE_VARIABLES:
+            continue
         elif match is not None and _in_namespace(topic, ROLE_NAMESPACES):
+            errors.add(
+                f"{_show(name)} is in the namespace of a role of the collection but is not a "
+                f"variable of that role; topic toggles of a family are "
+                f"linux_compliance_<family>_enabled"
+            )
             continue
         else:
             known = topic in families
@@ -438,14 +467,16 @@ def plan_rule(rule: Rule, context: Context) -> Rule:
     """Return ``rule`` with its action, reason, controlling variable and ledger entry."""
     toggle = resolve_toggle(rule, context.toggles)
     action, reason = decide(rule, toggle, context)
-    entry = context.ledger.get(str(rule["rule_id"]))
+    rule_id = str(rule["rule_id"])
+    entry = context.ledger.get(rule_id)
+    would_apply = toggle.on and (rule_id in context.profile or not context.enabled)
     planned = dict(rule)
     planned.update(
         {
             "action": action,
             "reason": reason,
             "disabled_by": None if toggle.on else toggle.source,
-            "pending_cleanup": action == "skip" and entry is not None and not toggle.on,
+            "pending_cleanup": action == "skip" and entry is not None and not would_apply,
             "ledger_entry": entry,
         }
     )
