@@ -1,0 +1,12 @@
+---
+trivial:
+  - >-
+    Repository guard: commands can no longer run without the banned modules. ``expect`` and ``cron`` are banned as
+    tasks; module parameters that run a command or an executable (``validate``, ``dpkg_options``, ``extra_opts``,
+    ``ssh_opts``, the ``reboot`` commands, ``fact_path``, ``use`` of ``package`` and ``service``) are refused; the
+    ``pipe`` and ``lines`` lookups, computed lookup names, lookups outside ansible-core and Jinja delimiter overrides
+    are refused in YAML values, conditionals and templates; interpreter, executable, argument and flag variables and
+    plugin selectors outside ansible-core are refused wherever the repository sets them, with a reviewed allow-list
+    for the test plays and the Molecule guard cases; code-running ``ansible.cfg`` and Molecule settings, their
+    environment variables and command-line options are refused; non-ASCII path components are refused; and an
+    unreadable ``--index-modes`` listing is a guard error.

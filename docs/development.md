@@ -275,7 +275,25 @@ which holds one module per rule group; the name sets and allow-lists live in `to
     settings file may point `ansible.config.path` only at a file named `ansible.cfg`.
   - Names are compared case-folded, because a macOS or Windows controller finds `Library/` as `library/`, and a
     symbolic link or executable bit recorded only in the Git index is refused too: `make lint-repo` passes
-    `git ls-files -s -z` to the guard with `--index-modes`.
+    `git ls-files -s -z` to the guard with `--index-modes`; a listing that cannot be read is a guard error with
+    exit status 2. A path component that is not ASCII is refused, because filesystems fold such names with their
+    own tables (FREES-159).
+- Since FREES-159 the guard refuses the other ways to run a command without the banned modules (ADR 0004 lists
+  each name and its source in ansible-core 2.21.5):
+  - `expect` and `cron` as tasks and actions, and the module parameters that name a command, an executable or its
+    options (`validate`, `dpkg_options`, `extra_opts`, `ssh_opts`, the `reboot` commands, `fact_path`, the `use` of
+    `package` and `service`, and others).
+  - The `pipe` and `lines` lookups in every form (`lookup`, `query`, `q`, `with_<name>`, bare, `ansible.builtin.`,
+    `ansible.legacy.`) in any templated YAML value, bare conditional and template file; a lookup with a computed or
+    indirect name; any lookup that ansible-core does not ship; and the `#jinja2:` header and delimiter options,
+    which would hide a template from the check.
+  - Variables and keywords that set an interpreter, an executable, arguments or flags (`ansible_*_interpreter`,
+    `ansible_ssh_*_args`, `ansible_become_exe`, `ansible_shell_executable` and the others), wherever the repository
+    sets them, a connection, become or shell plugin outside ansible-core, and `PATH` and the loader and interpreter
+    environment variables as YAML keys. The reviewed exceptions of the test plays and the Molecule guard cases are
+    keyed by file and exact value (`ALLOWED_SETTINGS` in `tools/lint/repo_rules/exec_variables.py`).
+  - Configuration settings, environment variables and command-line options that run code or choose what runs, in
+    `ansible.cfg`, `molecule.yml` and every place where FREES-156 refuses a search path.
 - YAML files contain no `shell`, `command`, `raw`, `script`, `win_shell` or `win_command` task keys,
   including the `ansible.builtin.`, `ansible.legacy.`, `ansible.windows.` and `community.windows.` forms and the `action` / `local_action` spellings.
   The scan covers `extensions/` and `tests/` as well. Since FREES-128 the check knows where Ansible reads a module name:

@@ -6,6 +6,8 @@ import io
 import tokenize
 from typing import TYPE_CHECKING
 
+import yaml
+
 from tools.lint.repo_rules.ansible_tasks import check_banned_modules
 from tools.lint.repo_rules.common import (
     COMPILED_MODULE_SUFFIXES,
@@ -14,12 +16,26 @@ from tools.lint.repo_rules.common import (
     YAML_SUFFIXES,
     Violation,
 )
+from tools.lint.repo_rules.exec_config import config_file_findings, molecule_config_findings
+from tools.lint.repo_rules.exec_modules import module_parameter_findings
+from tools.lint.repo_rules.exec_variables import (
+    is_inventory_text,
+    text_setting_findings,
+    yaml_variable_findings,
+)
 from tools.lint.repo_rules.imports import file_io_import_findings
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
+from tools.lint.repo_rules.jinja_calls import (
+    is_template_file,
+    template_file_findings,
+    yaml_jinja_findings,
+)
 from tools.lint.repo_rules.load_config import (
     EXECUTED_YAML_DIRECTORY,
+    MOLECULE_FILE_NAMES,
     configuration_text_findings,
     configured_load_directories,
+    is_config_file,
     is_configuration_text,
     yaml_setting_findings,
 )
@@ -88,8 +104,7 @@ def check_file(
         if relative is None
         else location_findings(path, relative, configured, (index or {}).get(relative))
     )
-    readable = suffix in YAML_SUFFIXES | PYTHON_SUFFIXES or is_configuration_text(path)
-    if path.is_symlink() or not readable:
+    if path.is_symlink() or not _is_readable(path, relative):
         return violations
     try:
         data = path.read_bytes()
@@ -97,9 +112,45 @@ def check_file(
         return [*violations, Violation(path, 1, f"cannot read file: {error}")]
     if suffix in PYTHON_SUFFIXES:
         return [*violations, *_python_violations(path, root, data, relative, configured)]
-    if suffix not in YAML_SUFFIXES:
-        return [*violations, *configuration_text_findings(path, data)]
-    return [*violations, *_yaml_violations(path, data, relative)]
+    if suffix in YAML_SUFFIXES:
+        return [*violations, *_yaml_violations(path, data, relative)]
+    return [*violations, *_text_violations(path, data, relative)]
+
+
+def _is_readable(path: Path, relative: Path | None) -> bool:
+    """Return whether a rule reads ``path``: YAML, Python, configuration, template or inventory."""
+    if path.suffix.lower() in YAML_SUFFIXES | PYTHON_SUFFIXES or is_configuration_text(path):
+        return True
+    return relative is not None and (is_template_file(relative) or is_inventory_text(relative))
+
+
+def _text_violations(path: Path, data: bytes, relative: Path | None) -> list[Violation]:
+    """Apply the rules for configuration text, template files and inventory text (FREES-159)."""
+    violations: list[Violation] = []
+    if is_configuration_text(path):
+        violations.extend(configuration_text_findings(path, data))
+        if is_config_file(path):
+            text = data.decode("utf-8", errors="replace")
+            violations.extend(config_file_findings(path, text))
+        else:
+            violations.extend(text_setting_findings(path, relative, data))
+    elif relative is not None and is_inventory_text(relative):
+        violations.extend(text_setting_findings(path, relative, data))
+    if relative is not None and is_template_file(relative):
+        violations.extend(template_file_findings(path, data))
+    return violations
+
+
+def _documents(text: str) -> list[yaml.Node]:
+    """Compose every document of ``text``; unparsable YAML is reported by the other rules."""
+    loader = yaml.SafeLoader(text)
+    try:
+        loader.check_node()
+        return list(iter(loader.get_node, None))
+    except yaml.YAMLError:
+        return []
+    finally:
+        loader.dispose()
 
 
 def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Violation]:
@@ -109,12 +160,20 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
     except UnicodeDecodeError as error:
         return [Violation(path, 1, f"file is not valid UTF-8: {error}")]
     executed = relative is not None and relative.parts[:1] == (EXECUTED_YAML_DIRECTORY,)
-    return [
+    documents = _documents(text)
+    violations = [
         *check_document_start(path, text),
         *check_yaml_comments(path, text),
         *check_banned_modules(path, text),
         *yaml_setting_findings(path, text, executed=executed),
+        *module_parameter_findings(path, documents),
+        *yaml_variable_findings(path, relative, documents),
     ]
+    if not executed:
+        violations.extend(yaml_jinja_findings(path, documents))
+    if path.name.casefold() in MOLECULE_FILE_NAMES:
+        violations.extend(molecule_config_findings(path, documents))
+    return violations
 
 
 def _python_violations(

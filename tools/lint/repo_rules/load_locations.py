@@ -139,6 +139,27 @@ def _is_executable(mode: int, index_mode: str | None) -> bool:
     return (stat.S_ISREG(mode) and bool(mode & 0o111)) or index_mode == GIT_EXECUTABLE_MODE
 
 
+def non_ascii_findings(path: Path, relative: Path) -> list[Violation]:
+    """Refuse a repository path with a non-ASCII component (FREES-159).
+
+    Python's ``casefold`` and the filesystems disagree outside ASCII: NTFS upper-cases the
+    dotless i (U+0131) to ``I``, so ``l\u0131brary`` is ``library`` there but not to
+    ``folded``. With ASCII-only names every filesystem and ``casefold`` agree, so
+    ``folded`` is exact.
+    """
+    if all(part.isascii() for part in relative.parts):
+        return []
+    return [
+        Violation(
+            path,
+            1,
+            "path with a non-ASCII component is not allowed: case-insensitive filesystems "
+            "fold such names differently (NTFS maps U+0131 to 'I'), so the guard cannot tell "
+            "whether Ansible loads code from it",
+        )
+    ]
+
+
 def location_findings(
     path: Path,
     relative: Path,
@@ -159,18 +180,19 @@ def location_findings(
         mode = path.lstat().st_mode
     except OSError:
         return []
+    violations = non_ascii_findings(path, relative)
     if _is_link(mode, index_mode):
         if relative in SYMLINK_ALLOW_LIST:
-            return []
+            return violations
         return [
+            *violations,
             Violation(
                 path,
                 1,
                 "symbolic link is not allowed: Ansible and the guard would follow it to a "
                 "file that no rule checked at this path",
-            )
+            ),
         ]
-    violations: list[Violation] = []
     if _is_executable(mode, index_mode) and not _is_allowed_executable(relative):
         violations.append(
             Violation(

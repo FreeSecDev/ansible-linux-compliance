@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 BANNED_MODULES: Final[frozenset[str]] = frozenset(
     {"shell", "command", "raw", "script", "win_shell", "win_command"}
 )
+TASK_ONLY_BANNED_MODULES: Final[frozenset[str]] = frozenset({"expect", "cron"})
+TASK_BANNED_MODULES: Final[frozenset[str]] = BANNED_MODULES | TASK_ONLY_BANNED_MODULES
 COLLECTION_PREFIXES: Final[tuple[str, ...]] = (
     "ansible.builtin.",
     "ansible.legacy.",
@@ -54,7 +56,7 @@ MERGE_TAG: Final[str] = "tag:yaml.org,2002:merge"
 REDIRECT_KEY: Final[str] = "redirect"
 
 
-def _module_name(value: str) -> str:
+def module_name(value: str) -> str:
     """Strip a known collection prefix from ``value`` and return the module name."""
     for prefix in COLLECTION_PREFIXES:
         if value.startswith(prefix):
@@ -62,9 +64,14 @@ def _module_name(value: str) -> str:
     return value
 
 
-def _is_banned(value: str) -> bool:
-    """Return whether ``value`` names a banned module, with or without prefix."""
-    return _module_name(value.strip()) in BANNED_MODULES
+def _is_banned(value: str, modules: frozenset[str] = TASK_BANNED_MODULES) -> bool:
+    """Return whether ``value`` names a module of ``modules``, with or without prefix.
+
+    ``expect`` runs a command and ``cron`` installs one (FREES-159). They are banned
+    as tasks, actions and redirect targets, but not as keys of data documents, where
+    ``expect`` and ``cron`` are ordinary words (a workflow ``schedule``).
+    """
+    return module_name(value.strip()) in modules
 
 
 def _merged_items(mapping: yaml.MappingNode) -> list[tuple[yaml.Node, yaml.Node]]:
@@ -92,7 +99,7 @@ def _merged_items(mapping: yaml.MappingNode) -> list[tuple[yaml.Node, yaml.Node]
     return items
 
 
-def _scalar_items(mapping: yaml.MappingNode) -> Iterable[tuple[str, yaml.ScalarNode, yaml.Node]]:
+def scalar_items(mapping: yaml.MappingNode) -> Iterable[tuple[str, yaml.ScalarNode, yaml.Node]]:
     """Yield ``(name, key, value)`` for every scalar key of ``mapping``, merges expanded."""
     for key, value in _merged_items(mapping):
         if isinstance(key, yaml.ScalarNode):
@@ -113,7 +120,7 @@ def _action_modules(value: yaml.Node) -> Iterable[yaml.ScalarNode]:
     if isinstance(value, yaml.ScalarNode):
         yield value
     elif isinstance(value, yaml.MappingNode):
-        for name, _, inner in _scalar_items(value):
+        for name, _, inner in scalar_items(value):
             if name == MODULE_KEY and isinstance(inner, yaml.ScalarNode):
                 yield inner
 
@@ -201,7 +208,7 @@ def _include_findings(
     a file the check scans (:func:`_path_problem`).
     """
     if isinstance(value, yaml.MappingNode):
-        targets = [inner for field, _, inner in _scalar_items(value) if field in INCLUDE_FILE_KEYS]
+        targets = [inner for field, _, inner in scalar_items(value) if field in INCLUDE_FILE_KEYS]
     else:
         targets = [value]
     if not targets:
@@ -246,7 +253,7 @@ def _role_include_findings(value: yaml.Node, name: str) -> Iterable[tuple[yaml.N
     if isinstance(value, yaml.ScalarNode):
         yield from ((value, message) for message in _free_form_role_findings(value, name))
     elif isinstance(value, yaml.MappingNode):
-        for field, _, inner in _scalar_items(value):
+        for field, _, inner in scalar_items(value):
             if field in ROLE_ENTRY_POINT_KEYS:
                 problem = _node_path_problem(inner, allow_role_path=False)
                 if problem is not None:
@@ -264,7 +271,7 @@ def _play_role_findings(value: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
     for item in value.value:
         if isinstance(item, yaml.MappingNode):
             names = [
-                inner for field, _, inner in _scalar_items(item) if field in PLAY_ROLE_NAME_KEYS
+                inner for field, _, inner in scalar_items(item) if field in PLAY_ROLE_NAME_KEYS
             ]
         else:
             names = [item]
@@ -284,11 +291,11 @@ def _task_findings(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
     the role names of role includes and of the ``roles`` of a play. A templated
     key could name any module at run time and is denied.
     """
-    for name, key, value in _scalar_items(task):
-        module = _module_name(name.strip())
+    for name, key, value in scalar_items(task):
+        module = module_name(name.strip())
         if _is_templated(name):
             yield key, f"templated task key is not allowed: {key.value!r}"
-        elif module in BANNED_MODULES:
+        elif module in TASK_BANNED_MODULES:
             yield key, f"banned module: {key.value!r}"
         elif name in ACTION_KEYS:
             yield from _action_findings(value)
@@ -300,7 +307,7 @@ def _task_findings(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
             yield from _play_role_findings(value)
 
 
-def _task_mappings(root: yaml.Node) -> Iterable[yaml.MappingNode]:
+def task_mappings(root: yaml.Node) -> Iterable[yaml.MappingNode]:
     """Yield every mapping that Ansible may load as a play or a task below ``root``.
 
     ``root`` is a task list: the top-level sequence of a playbook or task file.
@@ -322,9 +329,7 @@ def _task_mappings(root: yaml.Node) -> Iterable[yaml.MappingNode]:
             pending.extend(reversed(node.value))
         elif isinstance(node, yaml.MappingNode):
             yield node
-            pending.extend(
-                value for name, _, value in _scalar_items(node) if name in TASK_LIST_KEYS
-            )
+            pending.extend(value for name, _, value in scalar_items(node) if name in TASK_LIST_KEYS)
 
 
 def _walk_nodes(root: yaml.Node) -> Iterable[yaml.Node]:
@@ -356,7 +361,7 @@ def _anywhere_findings(root: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
         for key, value in node.value:
             if not isinstance(key, yaml.ScalarNode):
                 continue
-            if _is_banned(str(key.value)):
+            if _is_banned(str(key.value), BANNED_MODULES):
                 yield key, f"banned module: {key.value!r}"
             elif key.value in ACTION_KEYS:
                 yield from _action_findings(value)
@@ -379,7 +384,7 @@ def _banned_findings(root: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
     """
     findings: Iterable[tuple[yaml.Node, str]]
     if isinstance(root, yaml.SequenceNode):
-        findings = (finding for task in _task_mappings(root) for finding in _task_findings(task))
+        findings = (finding for task in task_mappings(root) for finding in _task_findings(task))
     else:
         findings = _anywhere_findings(root)
     reported: set[tuple[int, str]] = set()

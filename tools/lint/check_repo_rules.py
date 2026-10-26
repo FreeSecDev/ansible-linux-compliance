@@ -18,7 +18,15 @@ Rules:
   makefiles, shell scripts, environment files and ``.ini``, ``.toml`` and ``.cfg`` files may not
   set a search path for modules, plugins, roles or collections. Names are compared
   case-folded, because macOS and Windows controllers ignore case, and ``--index-modes``
-  takes a ``git ls-files -s -z`` listing so that modes only the index records count too.
+  takes a ``git ls-files -s -z`` listing so that modes only the index records count too. A path
+  component that is not ASCII is refused (FREES-159).
+* Commands may not run without the banned modules either (FREES-159): ``expect`` and ``cron``
+  are banned as tasks, module parameters that name a command or an executable are refused, the
+  ``pipe`` and ``lines`` lookups, computed lookup names, lookups outside ansible-core and Jinja
+  delimiter overrides are refused in YAML values, conditionals and template files, variables and
+  keywords that set an interpreter, executable, arguments or flags or select a plugin outside
+  ansible-core are refused wherever they are set, except the reviewed ``ALLOWED_SETTINGS``, and
+  configuration settings, environment variables and command-line options that run code are refused.
 * Every YAML file starts with ``---`` followed by a newline.
 * YAML files contain no comments, except a trailing ``# vX.Y.Z`` version
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
@@ -88,7 +96,8 @@ Rules:
   ``__init__`` takes the seam, and may assign ``self._name`` only directly in ``__init__``,
   never from a function nested in it (FREES-137, FREES-153).
 
-Violations are printed as ``path:line: message`` and the exit status is 1.
+Violations are printed as ``path:line: message`` and the exit status is 1. An
+``--index-modes`` listing that cannot be read is reported with exit status 2.
 """
 
 from __future__ import annotations
@@ -182,6 +191,9 @@ __all__ = [
 ]
 
 
+USAGE_ERROR = 2
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point; returns the process exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -192,9 +204,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="A `git ls-files -s -z` listing, so modes that only the Git index records count.",
     )
     arguments = parser.parse_args(argv)
-    modes = (
-        None if arguments.index_modes is None else index_modes(arguments.index_modes.read_bytes())
-    )
+    modes = None
+    if arguments.index_modes is not None:
+        try:
+            modes = index_modes(arguments.index_modes.read_bytes())
+        except OSError as error:
+            print(
+                f"error: cannot read the --index-modes listing {arguments.index_modes}: "
+                f"{error.strerror or error}; write it with `git ls-files -s -z`",
+                file=sys.stderr,
+            )
+            return USAGE_ERROR
     violations = check_paths(arguments.paths, index=modes)
     for violation in violations:
         print(violation, file=sys.stderr)
