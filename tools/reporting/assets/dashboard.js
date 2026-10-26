@@ -78,14 +78,31 @@
     not_failing: "not failing",
     unmatched: "unmatched"
   };
+  const COVERAGE_TEXT = {
+    complete: "complete: every target host has an evidence bundle in this report",
+    incomplete: "incomplete: target hosts have no evidence bundle in this report",
+    unknown: "unknown: no evidence collection summary was supplied"
+  };
+  const COLLECTION_ORDER = [
+    "unreachable", "limited_out", "no_audit_result", "no_evidence_written", "collection_failed", "collected"
+  ];
+  const COLLECTION_TEXT = {
+    collected: "collected",
+    unreachable: "unreachable: did not complete fact gathering",
+    limited_out: "limited out of the run",
+    no_audit_result: "no audit result: failed before the scan",
+    no_evidence_written: "no evidence written: check mode or no scan",
+    collection_failed: "collection failed"
+  };
   const TONES = {
     ok: [
       "available", "pass", "completed", "all_evaluated_passed", "passed", "SUCCEEDED",
-      "applied", "already_compliant"
+      "applied", "already_compliant", "complete", "collected", "in_report"
     ],
     bad: [
       "error", "fail", "failed", "timed_out", "not_completed", "run_not_completed", "FAILED", "FAULT",
-      "TIMED_OUT", "critical", "high", "expired"
+      "TIMED_OUT", "critical", "high", "expired", "incomplete", "unreachable", "limited_out",
+      "no_audit_result", "no_evidence_written", "collection_failed", "missing_from_report"
     ],
     warn: [
       "partial", "notchecked", "waived", "findings_open", "skipped", "STOPPED", "IN_PROGRESS", "medium",
@@ -879,11 +896,129 @@
     return missing("no figure");
   }
 
+  function coverageOf(section) {
+    if (isObject(section.host_coverage)) {
+      return section.host_coverage;
+    }
+    return {
+      status: "unknown",
+      reason: "This report has schema version " + plain(REPORT.schema_version)
+        + ", which does not record which target hosts have no input.",
+      hosts: [],
+      summary: null,
+      collection: null
+    };
+  }
+
+  function missingHosts(coverage) {
+    return list(coverage.hosts).map(obj).filter(function (host) {
+      return host.in_report !== true;
+    });
+  }
+
+  function missingHostText(host) {
+    const status = plain(host.status);
+    if (status === "collected") {
+      return ["collected as run ", mono(host.run_id), ", but that bundle is not in this report"];
+    }
+    return COLLECTION_TEXT[status] || status;
+  }
+
+  function coverageCallout(coverage) {
+    const status = plain(coverage.status);
+    const summary = obj(coverage.summary);
+    if (status === "complete") {
+      return callout("neutral", "Every target host is accounted for.", el("p", null, [
+        "All ", val(summary.target_hosts), " target hosts of the evidence collection have a bundle in this report."
+      ]));
+    }
+    if (status === "incomplete") {
+      return callout("bad", "Target hosts are missing from this report.", [
+        el("p", null, [
+          val(summary.missing), " of ", val(summary.target_hosts), " target hosts of the evidence collection "
+            + "have no evidence bundle in this report. No figure covers them, and the compliance section has no "
+            + "summary or pooled figure while a host is missing."
+        ]),
+        el("ul", null, missingHosts(coverage).map(function (host) {
+          return el("li", null, [mono(host.host), ": ", missingHostText(host)]);
+        }))
+      ]);
+    }
+    return callout("warn", "Host coverage unknown.", [
+      el("p", null, ["Reason: ", val(coverage.reason)]),
+      el("p", null, "Target hosts without an input are not visible in this report, so the figures may not cover "
+        + "every host. Build the report with --evidence-collection to name every missing host.")
+    ]);
+  }
+
+  function coveragePairs(coverage) {
+    const summary = obj(coverage.summary);
+    const byStatus = obj(summary.by_status);
+    const collection = obj(coverage.collection);
+    return pairs([
+      ["Host coverage", badge(coverage.status, COVERAGE_TEXT[coverage.status] || plain(coverage.status))],
+      ["Target hosts", val(summary.target_hosts, "not known")],
+      ["With a bundle in this report", val(summary.in_report, "not known")],
+      ["Missing from this report", val(summary.missing, "not known")],
+      ["Unreachable", val(byStatus.unreachable, "not known")],
+      ["Limited out", val(byStatus.limited_out, "not known")],
+      ["No audit result", val(byStatus.no_audit_result, "not known")],
+      ["No evidence written", val(byStatus.no_evidence_written, "not known")],
+      ["Collection failed", val(byStatus.collection_failed, "not known")],
+      ["Collection summary", mono(collection.path, "not supplied")],
+      ["Collection SHA-256", mono(collection.sha256, "not supplied")],
+      ["Collection ID", mono(collection.collection_id, "not supplied")]
+    ]);
+  }
+
+  function coverageTable(coverage) {
+    const hosts = list(coverage.hosts).map(obj);
+    if (hosts.length === 0) {
+      return null;
+    }
+    return dataTable({
+      caption: "Target hosts",
+      rows: hosts,
+      columns: [
+        { label: "Inventory host", value: function (row) {
+          return row.host;
+        }, cell: function (row) {
+          return mono(row.host);
+        } },
+        { label: "In this report", value: function (row) {
+          return row.in_report === true ? "yes" : "no";
+        }, cell: function (row) {
+          return row.in_report === true ? badge("in_report", "yes") : badge("missing_from_report", "no: missing");
+        }, filter: true },
+        { label: "Collection status", value: function (row) {
+          return row.status;
+        }, cell: function (row) {
+          return badge(row.status, COLLECTION_TEXT[row.status] || plain(row.status));
+        }, filter: true, rank: rankIn(COLLECTION_ORDER) },
+        { label: "Run", value: function (row) {
+          return row.run_id;
+        }, cell: function (row) {
+          return mono(row.run_id, "no bundle");
+        } },
+        { label: "Manifest SHA-256", value: function (row) {
+          return row.manifest_sha256;
+        }, cell: function (row) {
+          return mono(row.manifest_sha256, "no bundle");
+        } }
+      ]
+    });
+  }
+
   function compliancePanel() {
     const section = obj(SECTIONS.compliance);
     const parts = sectionHeader("compliance", section);
     parts.push(el("p", null, "Rule results are scan evidence. They are not a statement of compliance with "
       + "ISO 27001, PCI DSS, NIST, NIS2 or any other framework."));
+    const coverage = coverageOf(section);
+    parts.push(el("h3", null, "Target hosts"));
+    parts.push(coverageCallout(coverage));
+    parts.push(coveragePairs(coverage));
+    parts.push(coverageTable(coverage));
     if (isObject(section.summary)) {
       parts.push(el("h3", null, "Summary"));
       parts.push(el("p", null, "One benchmark, content version and profile, pooled over the " + scopeLabel()
@@ -1610,6 +1745,8 @@
         ["Finished", val(metadata.finished_at, "not supplied")],
         ["Generated", val(metadata.generated_at, "not supplied")]
       ]),
+      el("h3", null, "Target hosts"),
+      coverageCallout(coverageOf(compliance)),
       el("h3", null, "Compliance result")
     ];
     if (isObject(compliance.summary)) {

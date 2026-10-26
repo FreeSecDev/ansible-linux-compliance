@@ -1,0 +1,15 @@
+---
+- name: Evidence | Record the hosts of the audit play on the controller
+  ansible.builtin.set_fact:
+    linux_compliance_evidence_play_hosts: "{{ ansible_play_hosts_all | sort }}"
+  delegate_to: localhost
+  delegate_facts: true
+  run_once: true
+  tags:
+    - always
+
+- name: Evidence | Record that this host completed fact gathering
+  ansible.builtin.set_fact:
+    linux_compliance_evidence_reached: true
+  tags:
+    - always

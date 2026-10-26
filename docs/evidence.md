@@ -2,8 +2,9 @@
 
 Scope: the `freesecdev.linux_compliance.evidence` role, the evidence bundle format and how the report reads a bundle.
 Audience: operators, auditors who receive bundles, and reviewers. Jira: FREES-51 (FREES-132 asked for the waived
-evaluation and the stale result in the bundle). Decisions: [ADR 0013](adr/0013-normalized-findings-model.md) (findings
-model), [ADR 0016](adr/0016-report-schema-and-summary-semantics.md) (report schema, unchanged) and
+evaluation and the stale result in the bundle, FREES-142 for the collection summary). Decisions:
+[ADR 0013](adr/0013-normalized-findings-model.md) (findings model),
+[ADR 0016](adr/0016-report-schema-and-summary-semantics.md) (report schema; 2.1 adds the host coverage) and
 [ADR 0018](adr/0018-evidence-bundle-provenance.md) (signing, still proposed).
 
 An evidence bundle is a directory on the controller that holds the evidence of **one audit run of one host**: the raw
@@ -26,27 +27,42 @@ ansible-playbook -i inventory.yml freesecdev.linux_compliance.evidence \
   -e linux_compliance_evidence_output_dir=/srv/compliance/evidence
 ```
 
-`playbooks/evidence.yml` has four plays, in this order:
+`playbooks/evidence.yml` has five plays, in this order:
 
 1. `discover` and the audit role's `deferred.yml` entry point on the target hosts. `deferred.yml` runs every task of
    the main entry point except the result gates and records `linux_compliance_audited.gate` as
    `{deferred: true, enforced: false}`, so neither a scan that did not complete nor
-   `linux_compliance_audit_fail_on_noncompliant` drops a host before its evidence is collected.
+   `linux_compliance_audit_fail_on_noncompliant` drops a host before its evidence is collected. Its `pre_tasks` run
+   the evidence role's `reached.yml` entry point after fact gathering: it records the hosts of the play
+   (`ansible_play_hosts_all`) once on `localhost`, and `linux_compliance_evidence_reached` on every host that
+   completed fact gathering, so that the summary can tell unreachable and limited-out hosts apart. The deferral
+   message starts with `WARNING:`, so a custom playbook that never runs `enforce.yml` stands out in the output.
 2. The stale-exceptions aggregation on the controller, after every host and every `serial` batch.
-3. On every target host, a `block` that runs the audit role's `enforce.yml` entry point, with an `always` section that
-   runs the `evidence` role. `enforce.yml` records the gate decision (`deferred: true`, `enforced: true`) and then
-   fails the host exactly as the main entry point would: for a scan that did not complete, and with
-   `linux_compliance_audit_fail_on_noncompliant` for failed or errored rules. The `always` section collects the
-   evidence whatever the gate decided, with the stale result of the run, and the host stays failed.
-4. The evidence role's `summary.yml` entry point once on the controller over every target host. It publishes
-   `linux_compliance_evidence_collection` and prints a `WARNING` that names every target host without a bundle, split
-   into hosts without an audit result (unreachable, limited out, failed before the scan), hosts without evidence
-   (check mode or no scan) and hosts whose collection failed.
+3. On every target host, a `block` that runs the audit role's `enforce.yml` entry point, with a `rescue` section and
+   an `always` section that runs the `evidence` role in a `block` with its own `rescue`. `enforce.yml` records the
+   gate decision (`deferred: true`, `enforced: true`) and asserts it exactly as the main entry point would: for a
+   scan that did not complete, and with `linux_compliance_audit_fail_on_noncompliant` for failed or errored rules.
+   The `rescue` sections print a `WARNING` with the reason and keep the host in the play, and the `always` section
+   collects the evidence whatever the gate decided, with the stale result of the run. **No host fails in this
+   play.**
+4. The evidence role's `summary.yml` entry point once on the controller over every target host. It gives every target
+   host one status (see [the collection summary](#the-collection-summary)), writes the collection summary
+   `collection-<collection_id>.json` next to the bundles, publishes `linux_compliance_evidence_collection` and prints
+   a `WARNING` that names every target host without a bundle with its status, and the path of the summary.
+5. On every target host, the audit role's `enforce.yml` again, which fails every host that a gate fails, and the
+   evidence role's `collected.yml`, which fails every host whose evidence was written but not collected.
 
 Why the gates are deferred rather than collected in an `always` section of the audit play: the stale result is
 computed after every host and every `serial` batch of the audit play, so the bundles can only include it when they are
 collected in a later play, and a later play only sees the hosts that did not fail. Deferring the gates to the
 collection play keeps both.
+
+Why no host fails before the summary (FREES-142): Ansible ends the whole playbook when every host of a play has
+failed or is unreachable. In a run with one gated host and one unreachable host, a collection play that failed the
+gated host would end the run before the summary, and the unreachable host would never be named. Play 3 therefore only
+decides and collects; the summary is written; play 5 enforces the same gates again from the recorded audit result and
+fails the same hosts. `make test-evidence` runs such a run (`--limit web01,lost01,localhost`, every host of the play
+fails) and checks that the summary names the unreachable host and the limited-out hosts.
 
 The deferral is chosen only by the entry point. No variable defers or skips a gate: the main and `evaluate.yml` entry
 points always enforce it, whatever the inventory, `group_vars`, `host_vars`, `-e`, role or include parameters say.
@@ -57,8 +73,13 @@ baseline marker; no variable from the inventory, `group_vars`, `host_vars`, `-e`
 parameter can defer a gate. Such a run never produces a bundle: the evidence role refuses an audit result whose
 gate is recorded as deferred and not enforced, and the report refuses a manifest without an enforced gate.
 
-Hosts that are unreachable or limited out cannot be collected; the summary names them, so a report over the collected
-bundles can be read with the missing hosts in view.
+Hosts that are unreachable or limited out cannot be collected; the summary names them, and a report built with
+`--evidence-collection` lists them as missing inputs ([in the report](#in-the-report)).
+
+The plays on `localhost` (2 and 4) are subject to `--limit` like every play. Include `localhost` when you limit a run,
+for example `--limit web01,localhost`; otherwise no stale result and no collection summary are written, and a report
+over the bundles can only label its host coverage `unknown`. If every target host fails in the audit play (play 1),
+Ansible ends the run there and no summary is written either; the run exits non-zero.
 
 The role can also run on its own, after the `audit` role, in any play whose hosts have the fact
 `linux_compliance_audited`.
@@ -185,6 +206,49 @@ document was written from (`linux_compliance_audited.exceptions.evaluation`,
 The machine ID of the facts and the one in the scan run must agree when both are set. Both come from the host and
 are self-asserted; a machine ID is not a secret.
 
+### The collection summary
+
+`summary.yml` writes one collection summary per run, `<linux_compliance_evidence_output_dir>/collection-<collection_id>.json`,
+with mode `0600` in the output directory (`0700`). It is built by the `freesecdev.linux_compliance.evidence_collection`
+filter, written with `force: false` (an existing summary is never overwritten) and hashed again after writing. The
+output directory is the one that holds the collected bundles; when no bundle was collected it is
+`linux_compliance_evidence_output_dir` as `localhost` sees it, resolved against the playbook directory. Bundles of one
+run in several output directories fail the summary. Check mode writes nothing and prints the path it would use.
+
+JSON with sorted keys, two-space indentation, ASCII escapes and a trailing newline, format version `1.0`:
+
+| Key | Content |
+|---|---|
+| `schema_version` | `"1.0"` |
+| `kind` | `freesecdev.linux_compliance.evidence_collection` |
+| `collection` | `name` and `version` of the collection that wrote the summary |
+| `collection_id` | The run identity: the controller time at which the summary was built, `YYYYMMDDTHHMMSS.ffffffZ` |
+| `collected_at` | The same time as `YYYY-MM-DDTHH:MM:SSZ` |
+| `hosts` | Every target host, sorted by name: `inventory_hostname`, `status` and `bundle` (`run_id` and `manifest_sha256`, the SHA-256 of its `bundle.json`; `null` unless the host was collected) |
+
+The target hosts are the inventory hosts of the run's host pattern (`linux_compliance_target_hosts`, the
+`inventory_hostnames` lookup, which ignores `--limit`), so they come from the controller's inventory and never from a
+managed host. Each has exactly one status, decided in this order:
+
+| Status | Meaning |
+|---|---|
+| `collected` | The evidence role published `linux_compliance_evidence_bundle` for the host |
+| `limited_out` | The host is not a host of the audit play (`--limit`) |
+| `unreachable` | The host is a host of the audit play but did not complete fact gathering (unreachable, or failed while gathering facts) |
+| `no_audit_result` | The host has no `linux_compliance_audited` (it failed before the scan) |
+| `no_evidence_written` | The audit wrote no evidence (check mode, or no scan) |
+| `collection_failed` | The audit wrote evidence, but no bundle was collected |
+
+Without the hosts of the audit play (a custom playbook that does not run `reached.yml`), `limited_out` and
+`unreachable` cannot be told apart and both are `no_audit_result`.
+
+The summary is not signed. It names the hosts a report must account for and binds every collected bundle to the
+SHA-256 of its manifest, which lists the SHA-256 of every file. Whoever can write the evidence directory can rewrite
+it consistently, as for bundles. Facts set by the run (`linux_compliance_evidence_bundle`,
+`linux_compliance_evidence_reached`, `linux_compliance_evidence_play_hosts`) can be overridden with `-e`; that can
+change the status of a missing host, never make it present in a report: the report accepts a bundle only when its
+own manifest has the digest that the summary lists.
+
 ### The stale result
 
 `exceptions/stale.json` is `{"schema_version": "1.0", "kind": "freesecdev.linux_compliance.stale_exceptions",
@@ -276,6 +340,31 @@ python -m tools.reporting --scope fleet --output build/report/report.json --html
    with applied exceptions and no `--exceptions-file`, or with a copy that differs, makes the report exit with status
    2 and write nothing.
 
+5. With `--evidence-collection FILE` (the collection summary of the same run, not repeatable), the report accounts
+   for every target host ([report data model](reporting-data-model.md#host-coverage)):
+   - every bundle that verified must be listed in the summary as `collected` with its inventory host, run ID and the
+     SHA-256 of its `bundle.json`; a bundle that is not is an input `error`;
+   - every target host without such a bundle in the report is a missing input (`unavailable`) with its status as the
+     reason, in the compliance section and, when the report has exceptions evaluations, in the exceptions section,
+     so that no exception is called stale because a host is missing;
+   - while a host is missing, the compliance section is `partial` (or `unavailable` without any bundle), so it has no
+     summary, group or pooled figure, and the command exits with status 1;
+   - `sections.compliance.host_coverage` lists every target host with its status and whether it is in the report,
+     and counts them.
+
+   A summary that cannot be read or is not valid, or one supplied with `--scan-run`, `--xccdf`, `--arf` or
+   `--exceptions-evaluation` (scans that the summary cannot account for), refuses the report with exit status 2.
+   Without `--evidence-collection` the report is written as before and labels its host coverage `unknown`: it
+   cannot tell whether a target host is missing, and says so.
+
+```bash
+python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
+  --exceptions-file inventory/exceptions.yml \
+  --evidence-collection /srv/compliance/evidence/collection-20261026T080002.123456Z.json \
+  --evidence-bundle /srv/compliance/evidence/web01/20261026T080000.000000Z \
+  --evidence-bundle /srv/compliance/evidence/db01/20261026T080001.000000Z
+```
+
 A bundle that does not verify is an input `error` (exit status 1), and nothing from it is used. Unless its manifest is
 readable and records that no exceptions were applied, the error is an `exceptions_evaluation` input, so the
 `exceptions` section is in error too and a broken bundle cannot make an exception look stale. A missing bundle
@@ -283,7 +372,8 @@ directory is `unavailable` in the same way. A file named like a signature (`*.si
 `*.intoto.jsonl`, ...) is refused with a message that says the signature cannot be verified; it is never treated as an
 unsigned bundle.
 
-The report schema is unchanged (`report-v2.json`, `schema_version` `"2.0"`). Bundle inputs appear as
+The report schema is `report-v2.json`, `schema_version` `"2.1"`: 2.1 adds `sections.compliance.host_coverage` and
+the raw artifact format `evidence_collection` (FREES-142). Bundle inputs appear as
 `exceptions_evaluation` or `scan_run` items whose artifact path is the file inside the bundle; `raw_artifacts` lists
 those inputs and the exceptions file, not every file of the bundle. `exceptions_file` is always the file passed with
 `--exceptions-file`, never a bundle's copy, and `exceptions_file.verified: true` keeps its 2.0 meaning: every
@@ -309,6 +399,10 @@ label. Follow-up: FREES-140.
 | `linux_compliance_evidence_stale_exceptions` | `dict` | `{}` | The stale result to include when exceptions were applied; `playbooks/evidence.yml` passes it. |
 | `linux_compliance_evidence_summary_hosts` | `list` | required | `summary.yml` entry point only: the target hosts to account for. |
 
+The entry points `reached.yml` (in the audit play, after fact gathering) and `collected.yml` (in the last play) take
+no variables. `summary.yml` also reads `linux_compliance_evidence_output_dir` to place the summary when no bundle was
+collected.
+
 The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce the result gates for
 `playbooks/evidence.yml` ([audit guide](audit.md#entry-points)); there is no variable for it.
 
@@ -322,6 +416,16 @@ The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce
 - `tests/unit/tools/reporting/test_bundle.py`: the report reads waived findings and exception statuses from bundles,
   a bundle without exceptions, missing, tampered, symlinked, special-file and oversized bundles, conflicting exceptions
   files and the command line. The reporting package has 100% line and branch coverage.
+- `tests/unit/plugins/module_utils/compliance/test_collection.py`: every host status, the observation and summary
+  validation (unknown keys, duplicate and invalid hosts, bundle directories outside `<output>/<host>/<run_id>` or in
+  several output directories, an invalid collection ID or time) and the filter. `collection.py` and the filter have
+  100% line and branch coverage.
+- `tests/unit/tools/reporting/test_host_coverage.py`: coverage `unknown` without a summary, `complete` with every
+  figure kept, every missing host named with its status while the section is `partial` with no figure and the
+  exceptions section `partial`, a bundle not listed or listed with another digest refused, a bundle that does not
+  verify leaving its host missing, unusable summaries and mixed inputs refused with status 2, the bounds, the schema
+  couplings of 2.1 and 2.0, and the dashboard on both versions. `tests/browser/test_dashboard_host_coverage.py`
+  checks the dashboard text, escaping and axe in both themes.
 - `tests/unit/roles/test_evidence_role.py`: only the host `stat` and the fetch reach the host and only they may
   become; modes; the collection version matches `galaxy.yml`; the allow-list uses the audit module's file names;
   `playbooks/evidence.yml` defers the gates, collects, summarises and only then runs `gate.yml`; the audit role defers
@@ -338,9 +442,13 @@ The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce
 - `tests/playbooks/evidence-gate.yml` (also in `make test-evidence`) runs the plays of `playbooks/evidence.yml` on
   four inventory hosts with `linux_compliance_audit_fail_on_noncompliant: true`, with `evaluate_deferred.yml` in place
   of a real scan: a host with failed rules and a host whose scan did not complete are both failed by `enforce.yml`
-  and both get a bundle whose manifest records the enforced, deferred gate; a host without evidence and an
-  unreachable host are named by the summary; the playbook exits non-zero; and the report over the two bundles shows
-  both hosts, one of them with run status `failed`.
+  in the last play and both get a bundle whose manifest records the enforced, deferred gate; a host without evidence
+  and an unreachable host are named by the summary and the collection summary; the playbook exits non-zero; the
+  report over the two bundles shows both hosts, one of them with run status `failed`, and labels its coverage
+  `unknown`; with `--evidence-collection` it names the host without evidence and the unreachable host, has no
+  figure and exits 1. A second run with `--limit web01,lost01,localhost`, in which every host of the play fails,
+  still writes the summary, which names the unreachable host and the two limited-out hosts; its report names all
+  three; and the bundle of the first run is refused against the summary of the second.
 - `tests/playbooks/audit-gate-routes.yml` (also in `make test-evidence`) runs `evaluate.yml` with the gate on for a
   host with failed rules and a scan that did not complete, once without and once each with the removed
   `linux_compliance_audit_defer_gate` and a forged `__linux_compliance_audit_gate_deferred` set through `-e`,
@@ -360,8 +468,8 @@ Not covered yet: a Molecule scenario that collects the bundle of a real scan fro
 | Size of one bundle file read by the report | `--max-bytes`, 64 MiB by default |
 | Size of `bundle.json` | 1 MiB |
 
-- Unreachable and limited-out hosts cannot be collected; the summary of `playbooks/evidence.yml` names them, but the
-  report does not know about them.
+- Unreachable and limited-out hosts cannot be collected; the collection summary names them, and a report names them
+  only when it is built with `--evidence-collection`. A report covers at most 1000 target hosts.
 - A bundle is not signed; see [signing](#signing-adr-0018).
 - `ansible.builtin.fetch` with `become` reads the whole file into memory on the controller (it uses `slurp`), so very
   large ARF files cost memory.
@@ -372,4 +480,4 @@ Not covered yet: a Molecule scenario that collects the bundle of a real scan fro
   [ADR 0018](adr/0018-evidence-bundle-provenance.md)
 - [Audit guide](audit.md), [exceptions](exceptions.md), [reporting data model](reporting-data-model.md),
   [threat model](security/threat-model.md), [role README](../roles/evidence/README.md)
-- Jira: FREES-51, FREES-132, FREES-130, FREES-60, FREES-140
+- Jira: FREES-51, FREES-132, FREES-130, FREES-60, FREES-140, FREES-142

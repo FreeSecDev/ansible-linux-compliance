@@ -14,6 +14,11 @@ removed. Status 3 takes precedence over 1. A section without any input is
 ``unavailable`` and is not an error. Several completed ScanRuns of one host,
 benchmark version and profile are refused with status 2 unless
 ``--allow-repeated-scans`` is given.
+
+``--evidence-collection`` names every target host of an evidence run: a target host
+without a bundle in the report is a missing input (status 1), a bundle that the summary
+does not list is an invalid input (status 1), and a summary that cannot be read, or one
+supplied with scan inputs that are not evidence bundles, is refused with status 2.
 """
 
 import argparse
@@ -83,6 +88,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="the exceptions file that every --exceptions-evaluation was made from; required "
         "with --exceptions-evaluation unless an --evidence-bundle carries it",
+    )
+    parser.add_argument(
+        "--evidence-collection",
+        type=Path,
+        default=None,
+        help="the collection summary that playbooks/evidence.yml wrote next to the bundles; the "
+        "report then names every target host without a bundle, and refuses a bundle that the "
+        "summary does not list",
     )
     parser.add_argument(
         "--allow-repeated-scans",
@@ -162,6 +175,7 @@ def main(argv: Sequence[str]) -> int:
         max_bytes=arguments["max_bytes"],
         allow_repeated_scans=arguments["allow_repeated_scans"],
         exceptions_file=arguments["exceptions_file"],
+        evidence_collection=arguments["evidence_collection"],
         **{name: tuple(arguments[name]) for name in INPUT_OPTIONS},
     )
     try:

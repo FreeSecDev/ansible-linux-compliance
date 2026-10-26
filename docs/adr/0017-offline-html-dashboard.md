@@ -137,3 +137,22 @@ The dashboard reads report schema 2.0 only ([ADR 0016](0016-report-schema-and-su
   assets at render time; browser tests inject hostile justifications, check that nothing executes and that the layout
   does not overflow, run axe-core on the tab with all details open in both themes, and load an exceptions file at its
   1000-entry limit.
+
+## Amendment 2026-10-26: host coverage (FREES-142)
+
+The dashboard reads report schema 2.0 and 2.1 ([ADR 0016 amendment](0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-21-host-coverage-frees-142))
+and refuses every other version.
+
+- **Overview.** A "Target hosts" callout precedes the compliance result. With incomplete coverage it says how many of
+  the target hosts have no evidence bundle in the report, that no figure covers them, and lists every missing host
+  with its collection status. With unknown coverage it says that hosts without an input are not visible and how to
+  build the report with `--evidence-collection`. A 2.0 report is shown as unknown, with its schema version as the
+  reason.
+- **Compliance tab.** The same callout, the coverage counts (target hosts, in the report, missing, per status), the
+  collection summary path, SHA-256 and ID, and a sortable, filterable table of every target host with "in this
+  report", its collection status, run and manifest SHA-256.
+- **No new figure.** Every count comes from `host_coverage.summary`; the script computes none. The badges of missing
+  hosts use the "bad" tone and always carry text.
+- The safety properties are unchanged: host names, paths and reasons are rendered with DOM text APIs inside `bdi`
+  elements. `tests/browser/test_dashboard_host_coverage.py` checks the text, a hostile summary path rendered as text,
+  a 2.0 report, and axe on the Overview and Compliance tabs in both themes.

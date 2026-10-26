@@ -11,12 +11,18 @@
   vars:
     linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
     linux_compliance_audit_fail_on_noncompliant: true
+  pre_tasks:
+    - name: Record the hosts of this play and that this host completed fact gathering
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.evidence
+        tasks_from: reached.yml
   tasks:
-    - name: Require the output directory from the Makefile
+    - name: Require the output directory and the case from the Makefile
       ansible.builtin.assert:
         that:
           - evidence_test_dir is defined
           - evidence_test_dir is match('/')
+          - evidence_gate_case in ['all', 'every_host_fails']
         fail_msg: Run this playbook through make test-evidence.
         quiet: true
 
@@ -59,37 +65,51 @@
         linux_compliance_audit_stale_hosts: >-
           {{ query('ansible.builtin.inventory_hostnames', 'web01:db01:app01:lost01') }}
 
-- name: Evidence gate | Enforce the gates and collect every audited host, also when a gate fails it
+- name: Evidence gate | Decide the gates and collect every audited host; no host fails before the summary
   hosts: web01:db01:app01:lost01
   gather_facts: false
   vars_files:
     - vars/evidence.yml
   vars:
     linux_compliance_audit_fail_on_noncompliant: true
-    linux_compliance_evidence_output_dir: "{{ evidence_test_dir }}/bundles-gate"
+    linux_compliance_evidence_output_dir: "{{ evidence_test_dir }}/bundles-gate-{{ evidence_gate_case }}"
     linux_compliance_evidence_become: false
   tasks:
-    - name: Enforce the gates, then collect the evidence bundle whatever the gates decided
+    - name: Decide the gates, then collect the evidence bundle whatever the gates decided
       block:
         - name: Enforce the deferred result gates with the audit role
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.audit
             tasks_from: enforce.yml
+      rescue:
+        - name: Report that the gate failed and that the host fails after the collection summary
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: the result gate failed {{ inventory_hostname }}:
+              {{ ansible_failed_result.msg | default('unknown error') }}
+              The evidence is collected first; the last play fails the host.
       always:
-        - name: Collect the evidence bundle of this host
-          ansible.builtin.include_role:
-            name: freesecdev.linux_compliance.evidence
-          vars:
-            linux_compliance_evidence_stale_exceptions: >-
-              {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}
+        - name: Collect the evidence bundle of this host, and fail it only after the summary
+          block:
+            - name: Collect the evidence bundle of this host
+              ansible.builtin.include_role:
+                name: freesecdev.linux_compliance.evidence
+              vars:
+                linux_compliance_evidence_stale_exceptions: >-
+                  {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}
+          rescue:
+            - name: Report that the collection failed and that the host fails after the collection summary
+              ansible.builtin.debug:
+                msg: >-
+                  WARNING: the evidence bundle of {{ inventory_hostname }} was not collected:
+                  {{ ansible_failed_result.msg | default('unknown error') }}
+                  The last play fails the host.
 
-    - name: Mark the hosts that passed the gate
-      ansible.builtin.debug:
-        msg: "EVIDENCE-GATE-PASSED {{ inventory_hostname }}"
-
-- name: Evidence gate | Name the target hosts without a bundle
+- name: Evidence gate | Account for every target host and write the collection summary
   hosts: localhost
   gather_facts: false
+  vars:
+    linux_compliance_evidence_output_dir: "{{ evidence_test_dir }}/bundles-gate-{{ evidence_gate_case }}"
   tasks:
     - name: Summarise the collection with the evidence role
       ansible.builtin.import_role:
@@ -99,12 +119,14 @@
         linux_compliance_evidence_summary_hosts: >-
           {{ query('ansible.builtin.inventory_hostnames', 'web01:db01:app01:lost01') }}
 
-    - name: Check which hosts are named as missing and why
+    - name: Check which hosts are named as missing and why, with every host
       ansible.builtin.assert:
         that:
           - linux_compliance_evidence_collection.collected_hosts == ['db01', 'web01']
           - linux_compliance_evidence_collection.missing_hosts == ['app01', 'lost01']
-          - linux_compliance_evidence_collection.no_audit_result == ['lost01']
+          - linux_compliance_evidence_collection.unreachable == ['lost01']
+          - linux_compliance_evidence_collection.limited_out == []
+          - linux_compliance_evidence_collection.no_audit_result == []
           - linux_compliance_evidence_collection.no_evidence_written == ['app01']
           - linux_compliance_evidence_collection.collection_failed == []
           - linux_compliance_evidence_collection.bundles | length == 2
@@ -116,7 +138,12 @@
           - web01_manifest.gate.deferred and web01_manifest.gate.enforced
           - web01_manifest.gate.decision.enabled and web01_manifest.gate.decision.fail == 2
           - db01_manifest.gate.enforced and not db01_manifest.gate.decision.counted
+          - summary_document.hosts | map(attribute='status') | list
+            == ['no_evidence_written', 'collected', 'unreachable', 'collected']
+          - summary_document.hosts[3].bundle.manifest_sha256
+            == hostvars['web01'].linux_compliance_evidence_bundle.manifest_sha256
         quiet: true
+      when: evidence_gate_case == 'all'
       vars:
         web01_manifest: >-
           {{ lookup('ansible.builtin.file',
@@ -126,3 +153,45 @@
           {{ lookup('ansible.builtin.file',
                     hostvars['db01'].linux_compliance_evidence_bundle.directory ~ '/bundle.json')
            | ansible.builtin.from_json }}
+        summary_document: >-
+          {{ lookup('ansible.builtin.file', linux_compliance_evidence_collection.path, rstrip=false)
+           | ansible.builtin.from_json }}
+
+    - name: Check which hosts are named as missing and why, when every audited host fails
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_evidence_collection.collected_hosts == ['web01']
+          - linux_compliance_evidence_collection.missing_hosts == ['app01', 'db01', 'lost01']
+          - linux_compliance_evidence_collection.unreachable == ['lost01']
+          - linux_compliance_evidence_collection.limited_out == ['app01', 'db01']
+          - linux_compliance_evidence_collection.no_audit_result == []
+          - linux_compliance_evidence_collection.collection_failed == []
+          - linux_compliance_evidence_collection.path is file
+        quiet: true
+      when: evidence_gate_case == 'every_host_fails'
+
+    - name: Publish the path of the collection summary for the Makefile
+      ansible.builtin.copy:
+        dest: "{{ evidence_test_dir }}/collection-gate-{{ evidence_gate_case }}.path"
+        content: "{{ linux_compliance_evidence_collection.path }}"
+        mode: "0600"
+
+- name: Evidence gate | Fail the hosts whose gate or collection failed, after the summary
+  hosts: web01:db01:app01:lost01
+  gather_facts: false
+  vars:
+    linux_compliance_audit_fail_on_noncompliant: true
+  tasks:
+    - name: Enforce the result gates with the audit role again
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: enforce.yml
+
+    - name: Fail the host when its evidence was written but not collected
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.evidence
+        tasks_from: collected.yml
+
+    - name: Mark the hosts that passed the gate
+      ansible.builtin.debug:
+        msg: "EVIDENCE-GATE-PASSED {{ inventory_hostname }}"

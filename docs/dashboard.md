@@ -36,8 +36,8 @@ The tabs are:
 
 | Tab | Content |
 |---|---|
-| Overview | The scope, the run metadata, the compliance summary, the stale, expired and removal-candidate exception counts, and the status of every section, plus the report types that were not supplied |
-| Compliance | Summary, hosts counted as one, figures per benchmark, content version and profile, figures per host, rules, inputs and findings |
+| Overview | The scope, the run metadata, the target hosts (host coverage), the compliance summary, the stale, expired and removal-candidate exception counts, and the status of every section, plus the report types that were not supplied |
+| Compliance | Target hosts, summary, hosts counted as one, figures per benchmark, content version and profile, figures per host, rules, inputs and findings |
 | Exceptions | Every exception of the exceptions file with its review, removal candidacy, expiry, scope and matched inventory hosts, and the evaluation inputs |
 | Tests, Coverage, Ansible lint, Vulnerabilities, SBOM, Molecule, Packer images, AWS CodeBuild | The section status, its summary when the report has one, its inputs and the entries of each input |
 | Raw artifacts | Every input file as supplied, with its format, status, SHA-256 and size |
@@ -64,6 +64,23 @@ The dashboard shows figures only as the report gives them. It does not compute, 
   Expired waivers are counted as their evaluated outcome and marked "waiver expired".
 - A figure covers one benchmark and content version. When the report covers several, there is no single summary;
   the figures per benchmark and per host are shown instead.
+
+### Target hosts
+
+The report says whether it accounts for every target host of an evidence collection
+([host coverage](reporting-data-model.md#host-coverage)), and the dashboard shows it first, on the Overview and on
+the Compliance tab:
+
+- **Target hosts are missing from this report.** The report was built with `--evidence-collection` and at least one
+  target host has no evidence bundle in it. The callout gives the count and lists every missing host with its status
+  (unreachable, limited out, no audit result, no evidence written, collection failed, or collected but its bundle not
+  in the report). The compliance section is then partial and shows no summary or pooled figure.
+- **Every target host is accounted for.** Every target host of the collection has a bundle in the report.
+- **Host coverage unknown.** The report was built without a collection summary, so hosts without an input are not
+  visible and the figures may not cover every host. A report with schema version 2.0 is always shown this way.
+
+The Compliance tab also shows the counts per status, the path, SHA-256 and ID of the collection summary, and a table
+of every target host with whether it is in the report, its status, run and manifest SHA-256.
 
 ### Host groups
 
@@ -174,4 +191,5 @@ axe-core is injected by the tests only and is never part of the dashboard. The t
 tables, hostile report data, offline rendering with all requests blocked, Content-Security-Policy violations, both
 themes, printing, accessibility (no serious or critical axe-core violation) and a report at the size cap. The
 Exceptions tab is tested with hostile justification text, with all details open under axe-core in both themes, and
-with an exceptions file at its 1000-entry limit.
+with an exceptions file at its 1000-entry limit. The target hosts are tested with missing hosts, a hostile collection
+summary path, unknown coverage and a schema 2.0 report, under axe-core in both themes.

@@ -7,59 +7,144 @@
       - linux_compliance_evidence_summary_hosts is not mapping
       - linux_compliance_evidence_summary_hosts | reject('string') | list | length == 0
       - linux_compliance_evidence_summary_hosts | reject('in', hostvars) | list | length == 0
+      - linux_compliance_evidence_output_dir is string
+      - linux_compliance_evidence_output_dir | length > 0
     fail_msg: >-
       linux_compliance_evidence_summary_hosts must be a list of inventory host names, for example
-      query('ansible.builtin.inventory_hostnames', linux_compliance_target_hosts).
+      query('ansible.builtin.inventory_hostnames', linux_compliance_target_hosts), and
+      linux_compliance_evidence_output_dir a non-empty path.
     quiet: true
   run_once: true
   tags:
     - always
 
-- name: Evidence | Record which target hosts have an evidence bundle
+- name: Evidence | Account for every target host and build the collection summary
   ansible.builtin.set_fact:
-    linux_compliance_evidence_collection:
-      target_hosts: "{{ __linux_compliance_evidence_targets }}"
-      collected_hosts: "{{ __linux_compliance_evidence_collected }}"
-      missing_hosts: >-
-        {{ __linux_compliance_evidence_targets
-           | ansible.builtin.difference(__linux_compliance_evidence_collected) | sort }}
-      no_audit_result: "{{ __linux_compliance_evidence_no_audit }}"
-      no_evidence_written: "{{ __linux_compliance_evidence_no_evidence }}"
-      collection_failed: >-
-        {{ __linux_compliance_evidence_targets
-           | ansible.builtin.difference(__linux_compliance_evidence_collected)
-           | ansible.builtin.difference(__linux_compliance_evidence_no_audit)
-           | ansible.builtin.difference(__linux_compliance_evidence_no_evidence) | sort }}
-      bundles: >-
-        {{ __linux_compliance_evidence_collected | map('extract', hostvars)
-           | map(attribute='linux_compliance_evidence_bundle') | list }}
+    linux_compliance_evidence_collection: >-
+      {{ __linux_compliance_evidence_observed | freesecdev.linux_compliance.evidence_collection }}
   vars:
     __linux_compliance_evidence_targets: "{{ linux_compliance_evidence_summary_hosts | unique | sort }}"
+    __linux_compliance_evidence_target_vars: >-
+      {{ __linux_compliance_evidence_targets | map('extract', hostvars) | list }}
     __linux_compliance_evidence_collected: >-
-      {{ __linux_compliance_evidence_targets | map('extract', hostvars)
-         | selectattr('linux_compliance_evidence_bundle', 'defined')
-         | map(attribute='inventory_hostname') | sort }}
-    __linux_compliance_evidence_no_audit: >-
-      {{ __linux_compliance_evidence_targets | map('extract', hostvars)
-         | rejectattr('linux_compliance_audited', 'defined')
-         | map(attribute='inventory_hostname') | sort }}
-    __linux_compliance_evidence_no_evidence: >-
-      {{ __linux_compliance_evidence_targets | map('extract', hostvars)
-         | selectattr('linux_compliance_audited', 'defined')
-         | rejectattr('linux_compliance_evidence_bundle', 'defined')
-         | rejectattr('linux_compliance_audited.evidence_written', 'equalto', true)
-         | map(attribute='inventory_hostname') | sort }}
+      {{ __linux_compliance_evidence_target_vars
+         | selectattr('linux_compliance_evidence_bundle', 'defined') | list }}
+    __linux_compliance_evidence_observed:
+      targets: "{{ __linux_compliance_evidence_targets }}"
+      play_hosts: "{{ hostvars['localhost']['linux_compliance_evidence_play_hosts'] | default(none) }}"
+      reached: >-
+        {{ __linux_compliance_evidence_target_vars
+           | selectattr('linux_compliance_evidence_reached', 'defined')
+           | map(attribute='inventory_hostname') | list }}
+      audited: >-
+        {{ __linux_compliance_evidence_target_vars
+           | selectattr('linux_compliance_audited', 'defined')
+           | map(attribute='inventory_hostname') | list }}
+      evidence_written: >-
+        {{ __linux_compliance_evidence_target_vars
+           | selectattr('linux_compliance_audited', 'defined')
+           | selectattr('linux_compliance_audited.evidence_written', 'defined')
+           | selectattr('linux_compliance_audited.evidence_written', 'sameas', true)
+           | map(attribute='inventory_hostname') | list }}
+      bundles: >-
+        {{ dict(__linux_compliance_evidence_collected | map(attribute='inventory_hostname')
+                | zip(__linux_compliance_evidence_collected
+                      | map(attribute='linux_compliance_evidence_bundle') | list)) }}
+      output_dir: >-
+        {{ linux_compliance_evidence_output_dir if linux_compliance_evidence_output_dir is match('/')
+           else playbook_dir ~ '/' ~ linux_compliance_evidence_output_dir }}
+      collection_version: "{{ __linux_compliance_evidence_collection_version }}"
   run_once: true
   tags:
     - always
+
+- name: Evidence | Write the collection summary next to the bundles
+  when: not ansible_check_mode
+  run_once: true
+  tags:
+    - always
+  block:
+    - name: Evidence | Inspect the output directory and the summary path on the controller
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop:
+        - "{{ linux_compliance_evidence_collection.output_dir }}"
+        - "{{ linux_compliance_evidence_collection.path }}"
+      delegate_to: localhost
+      become: false
+      register: __linux_compliance_evidence_summary_existing
+
+    - name: Evidence | Refuse an existing summary and an unsafe output directory
+      ansible.builtin.assert:
+        that:
+          - not __linux_compliance_evidence_summary_existing.results[1].stat.exists
+          - >-
+            not __linux_compliance_evidence_summary_existing.results[0].stat.exists
+            or (__linux_compliance_evidence_summary_existing.results[0].stat.isdir
+                and not __linux_compliance_evidence_summary_existing.results[0].stat.islnk
+                and __linux_compliance_evidence_summary_existing.results[0].stat.mode == '0700')
+        fail_msg: >-
+          The collection summary {{ linux_compliance_evidence_collection.path }} was not written: it
+          already exists, or {{ linux_compliance_evidence_collection.output_dir }} is not a directory
+          with mode 0700 that is not a symbolic link. Nothing is overwritten or repaired.
+        quiet: true
+
+    - name: Evidence | Create the output directory with mode 0700
+      ansible.builtin.file:
+        path: "{{ linux_compliance_evidence_collection.output_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Evidence | Write the collection summary with mode 0600
+      ansible.builtin.copy:
+        dest: "{{ linux_compliance_evidence_collection.path }}"
+        content: "{{ linux_compliance_evidence_collection.document }}"
+        mode: "0600"
+        force: false
+      delegate_to: localhost
+      become: false
+      diff: false
+
+    - name: Evidence | Hash the collection summary on the controller
+      ansible.builtin.stat:
+        path: "{{ linux_compliance_evidence_collection.path }}"
+        follow: false
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      delegate_to: localhost
+      become: false
+      register: __linux_compliance_evidence_summary_written
+
+    - name: Evidence | Check that the collection summary was written as built
+      ansible.builtin.assert:
+        that:
+          - __linux_compliance_evidence_summary_written.stat.isreg
+          - not __linux_compliance_evidence_summary_written.stat.islnk
+          - __linux_compliance_evidence_summary_written.stat.mode == '0600'
+          - >-
+            __linux_compliance_evidence_summary_written.stat.checksum
+            == linux_compliance_evidence_collection.sha256
+        fail_msg: >-
+          The collection summary {{ linux_compliance_evidence_collection.path }} differs from the one that
+          was built.
+        quiet: true
 
 - name: Evidence | Report the target hosts without an evidence bundle
   ansible.builtin.debug:
     msg: >-
       {{ ('WARNING: no evidence bundle for ' ~ (__linux_compliance_evidence_summary.missing_hosts | length)
           ~ ' of ' ~ (__linux_compliance_evidence_summary.target_hosts | length) ~ ' target host(s): '
-          ~ (__linux_compliance_evidence_summary.missing_hosts | join(', ')) ~ '. No audit result (unreachable,'
-          ~ ' limited out or failed before the scan): '
+          ~ (__linux_compliance_evidence_summary.missing_hosts | join(', ')) ~ '. Unreachable (did not complete'
+          ~ ' fact gathering): ' ~ (__linux_compliance_evidence_summary.unreachable | join(', ') or 'none')
+          ~ '. Limited out: ' ~ (__linux_compliance_evidence_summary.limited_out | join(', ') or 'none')
+          ~ '. No audit result (failed before the scan): '
           ~ (__linux_compliance_evidence_summary.no_audit_result | join(', ') or 'none')
           ~ '. No evidence written (check mode or no scan): '
           ~ (__linux_compliance_evidence_summary.no_evidence_written | join(', ') or 'none')
@@ -68,6 +153,10 @@
          if __linux_compliance_evidence_summary.missing_hosts
          else 'Collected an evidence bundle for every one of the '
               ~ (__linux_compliance_evidence_summary.target_hosts | length) ~ ' target host(s).' }}
+      {{ ('Check mode: the collection summary would be written to ' if ansible_check_mode
+          else 'Wrote the collection summary ') ~ __linux_compliance_evidence_summary.path
+         ~ '; pass it to the report with --evidence-collection so that it names every target host'
+         ~ ' without a bundle.' }}
   vars:
     __linux_compliance_evidence_summary: "{{ linux_compliance_evidence_collection }}"
   run_once: true

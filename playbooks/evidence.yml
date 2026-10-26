@@ -2,6 +2,11 @@
 - name: Audit hosts against a compliance profile, with the result gates deferred until the evidence is collected
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
   gather_facts: true
+  pre_tasks:
+    - name: Record the hosts of this play and that this host completed fact gathering
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.evidence
+        tasks_from: reached.yml
   roles:
     - role: freesecdev.linux_compliance.discover
   tasks:
@@ -24,25 +29,41 @@
           {{ query('ansible.builtin.inventory_hostnames',
                    linux_compliance_target_hosts | default('linux_compliance')) }}
 
-- name: Enforce the result gates and collect the evidence of every audited host, also when a gate fails it
+- name: Decide the result gates and collect the evidence of every audited host; no host fails before the summary
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
   gather_facts: false
   tasks:
-    - name: Enforce the gates, then collect the evidence bundle whatever the gates decided
+    - name: Decide the gates, then collect the evidence bundle whatever the gates decided
       block:
         - name: Enforce the deferred result gates of this host
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.audit
             tasks_from: enforce.yml
+      rescue:
+        - name: Report that the gate failed and that the host fails after the collection summary
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: the result gate failed {{ inventory_hostname }}:
+              {{ ansible_failed_result.msg | default('unknown error') }}
+              The evidence is collected first; the last play fails the host.
       always:
-        - name: Collect the evidence bundle of this host
-          ansible.builtin.include_role:
-            name: freesecdev.linux_compliance.evidence
-          vars:
-            linux_compliance_evidence_stale_exceptions: >-
-              {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}
+        - name: Collect the evidence bundle of this host, and fail it only after the summary
+          block:
+            - name: Collect the evidence bundle of this host
+              ansible.builtin.include_role:
+                name: freesecdev.linux_compliance.evidence
+              vars:
+                linux_compliance_evidence_stale_exceptions: >-
+                  {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}
+          rescue:
+            - name: Report that the collection failed and that the host fails after the collection summary
+              ansible.builtin.debug:
+                msg: >-
+                  WARNING: the evidence bundle of {{ inventory_hostname }} was not collected:
+                  {{ ansible_failed_result.msg | default('unknown error') }}
+                  The last play fails the host.
 
-- name: Name the target hosts that have no evidence bundle
+- name: Account for every target host and write the collection summary
   hosts: localhost
   gather_facts: false
   tasks:
@@ -54,3 +75,17 @@
         linux_compliance_evidence_summary_hosts: >-
           {{ query('ansible.builtin.inventory_hostnames',
                    linux_compliance_target_hosts | default('linux_compliance')) }}
+
+- name: Fail the hosts whose result gate or evidence collection failed, now that the summary is written
+  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
+  gather_facts: false
+  tasks:
+    - name: Enforce the result gates of this host again
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: enforce.yml
+
+    - name: Fail the host when its evidence was written but not collected
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.evidence
+        tasks_from: collected.yml
