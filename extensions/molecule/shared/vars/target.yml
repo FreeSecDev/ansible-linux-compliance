@@ -14,6 +14,10 @@ molecule_reference_rule: xccdf_org.ssgproject.content_rule_file_permissions_cron
 molecule_reference_path: /etc/crontab
 molecule_reference_toggle: linux_compliance_rule_file_permissions_crontab_enabled
 molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
+molecule_native_results: >-
+  {{ linux_compliance_remediated.results | rejectattr('status', 'equalto', 'not_implemented') | list }}
+molecule_not_implemented_results: >-
+  {{ linux_compliance_remediated.results | selectattr('status', 'equalto', 'not_implemented') | list }}
 
 molecule_role_inputs:
   linux_compliance_discover_profile: "{{ molecule_profile }}"

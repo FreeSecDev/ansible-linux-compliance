@@ -86,7 +86,7 @@
     - name: Check that the cleanup restored the recorded mode and forgot the rule
       ansible.builtin.assert:
         that:
-          - linux_compliance_remediated.results | length == 1
+          - molecule_native_results | length == 1
           - verify_cleanup.rule_id == molecule_reference_rule
           - verify_cleanup.action == 'cleanup'
           - verify_cleanup.status == 'restored'
@@ -99,7 +99,7 @@
           {{ linux_compliance_remediated.results }}, ledger {{ verify_ledger_cleaned.entries }}
         quiet: true
       vars:
-        verify_cleanup: "{{ linux_compliance_remediated.results | first | default({}) }}"
+        verify_cleanup: "{{ molecule_native_results | first | default({}) }}"
 
     - name: Take the snapshot before the runs that must not change the instance
       ansible.builtin.include_tasks:
@@ -121,7 +121,7 @@
     - name: Check that the repeated cleanup did nothing
       ansible.builtin.assert:
         that:
-          - linux_compliance_remediated.results == []
+          - molecule_native_results == []
           - linux_compliance_remediated.summary.apply == 0
           - linux_compliance_remediated.summary.cleanup == 0
         fail_msg: "The repeated cleanup acted again: {{ linux_compliance_remediated.results }}"
@@ -138,8 +138,8 @@
     - name: Check that check mode planned the reference rule
       ansible.builtin.assert:
         that:
-          - linux_compliance_remediated.results | map(attribute='rule_id') | list == [molecule_reference_rule]
-          - linux_compliance_remediated.results | map(attribute='action') | list == ['apply']
+          - molecule_native_results | map(attribute='rule_id') | list == [molecule_reference_rule]
+          - molecule_native_results | map(attribute='action') | list == ['apply']
         fail_msg: "Check mode did not plan the reference rule: {{ linux_compliance_remediated.results }}"
         quiet: true
 
