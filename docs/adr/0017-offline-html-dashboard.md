@@ -106,3 +106,30 @@ report, including host evidence, and must be shared with the same care.
 - [Dashboard user guide](../dashboard.md), [reporting data model](../reporting-data-model.md)
 - WAI-ARIA Authoring Practices, tabs pattern: <https://www.w3.org/WAI/ARIA/apg/patterns/tabs/>
 - Content Security Policy Level 3: <https://www.w3.org/TR/CSP3/>
+
+## Amendment 2026-10-26: per-group notes and the Exceptions tab (FREES-130, FREES-132)
+
+The dashboard reads report schema 2.0 only ([ADR 0016](0016-report-schema-and-summary-semantics.md)) and refuses 1.0.
+
+- **Merge notes.** The report now writes one `merged_inputs` note per group with its group key, so the view no longer
+  infers merges. `views.groups[i].note` is the index of the note whose group key (benchmark, content version and the
+  structured host key) equals the key of `groups[i]`, or `null`; the old intersection of a per-host note's sources
+  with the group's inputs is removed. A group shows "Merged in this group" exactly when the report has such a note,
+  with the note's sources and, when two completed inputs repeat a profile, a "repeated scan" badge.
+- **Hosts counted as one.** `same_host_across_groups` notes are listed under "Hosts counted as one" on the Compliance
+  tab with the host, its identity, the groups and the inputs, and the text says that the figures stay separate and
+  nothing is combined across the groups.
+- **Exceptions tab.** A tab for `sections.exceptions` appears when evaluations were supplied. It shows the summary
+  (counts per review status, removal candidates, expiry passed, exceptions file SHA-256), a sortable and filterable
+  table of every exception (ID, rule, review, removal candidate, expiry, risk, framework, scope, matched inventory
+  hosts) with details (justification, owner, approver, dates, scope, scan runs per status, matched hosts) and the
+  evaluation inputs. It states that nothing on the tab changes a figure and that hosts are inventory names. The
+  Overview shows the stale, expired, expiry-passed, removal-candidate and in-effect counts from
+  `overview.exceptions`, or that no evaluation was supplied.
+- **Lapsed waivers.** Findings whose waiver lapsed after the scan started are marked "waiver lapsed after the scan
+  started", and the expired-waiver count says that it includes them.
+- The safety properties are unchanged: every value, including exception justifications, is rendered with DOM text APIs
+  inside `bdi` or `pre` elements; the script and style hashes in the Content-Security-Policy are computed from the
+  assets at render time; browser tests inject hostile justifications, check that nothing executes and that the layout
+  does not overflow, run axe-core on the tab with all details open in both themes, and load an exceptions file at its
+  1000-entry limit.

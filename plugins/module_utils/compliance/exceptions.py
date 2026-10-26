@@ -27,7 +27,12 @@ Rules applied here:
   and every finding of a run that did not complete, stays as it is.
 * An expired exception never suppresses a failure: the finding stays ``fail``.
 * Every exception gets a result per scan run, so unused (stale), expired and
-  superseded exceptions are reported rather than dropped.
+  superseded exceptions are reported rather than dropped. Across the scan runs
+  of several hosts each exception gets one review verdict; exceptions that
+  waived nothing anywhere are candidates for removal.
+* Owner and approver denote the same person when their identities are equal:
+  the handle, or the local part of an email address without its ``+`` suffix,
+  whatever the domain.
 """
 
 from __future__ import annotations
@@ -39,18 +44,22 @@ import unicodedata
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
-from typing import Final, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Final, NoReturn, TypeVar, cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     model,
     yamlsubset,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 E = TypeVar("E", bound=Enum)
 
 FILE_SCHEMA_VERSION: Final[str] = "1.0"
 SUPPORTED_FILE_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({FILE_SCHEMA_VERSION})
 EVALUATION_SCHEMA_VERSION: Final[str] = "1.0"
+SUPPORTED_EVALUATION_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({EVALUATION_SCHEMA_VERSION})
 MAX_VALIDITY_DAYS: Final[int] = 365
 MAX_EXCEPTIONS: Final[int] = 1000
 MAX_SCOPE_ITEMS: Final[int] = 256
@@ -94,6 +103,26 @@ ENTRY_KEYS: Final[tuple[str, ...]] = (
 SCOPE_KEYS: Final[tuple[str, ...]] = ("hosts", "groups", "benchmark", "profiles")
 APPROVAL_KEYS: Final[tuple[str, ...]] = ("approver", "date")
 BENCHMARK_KEYS: Final[tuple[str, ...]] = ("id", "version")
+EVALUATION_KEYS: Final[tuple[str, ...]] = (
+    "controller_time",
+    "evaluated_at",
+    "exceptions",
+    "max_scan_lag_seconds",
+    "max_validity_days",
+    "scan_lag_exceeded",
+    "scan_lag_seconds",
+    "scan_run",
+    "scan_started_at",
+    "schema_version",
+    "source_sha256",
+    "summary",
+    "target",
+)
+RESULT_KEYS: Final[frozenset[str]] = frozenset(
+    {"expired", "expires_at", "outcome", "status", "superseded_by"}
+)
+TARGET_KEYS: Final[tuple[str, ...]] = ("groups", "host")
+SHA256_PATTERN: Final[str] = r"[0-9a-f]{64}"
 
 _TIMESTAMP_SUFFIX: Final[str] = "T00:00:00Z"
 
@@ -121,6 +150,36 @@ class Status(Enum):
     SUPERSEDED = "superseded"
     UNMATCHED = "unmatched"
 
+
+class Review(Enum):
+    """What one exception did across the scan runs of every evaluated host.
+
+    ``expired`` means that a failure it covered is no longer waived on at least
+    one host; ``in_effect`` that it waived a failure; ``not_yet_effective`` that
+    a covered failure was scanned before the approval date; ``superseded`` that
+    another exception was chosen for every failure it covered; ``not_failing``
+    that the rule did not fail wherever the scope matched; and ``stale`` that
+    the scope or the rule matched nothing at all.
+    """
+
+    IN_EFFECT = "in_effect"
+    EXPIRED = "expired"
+    NOT_YET_EFFECTIVE = "not_yet_effective"
+    SUPERSEDED = "superseded"
+    NOT_FAILING = "not_failing"
+    STALE = "stale"
+
+
+_REVIEW_ORDER: Final[tuple[tuple[Status, Review], ...]] = (
+    (Status.EXPIRED, Review.EXPIRED),
+    (Status.WAIVED, Review.IN_EFFECT),
+    (Status.NOT_YET_EFFECTIVE, Review.NOT_YET_EFFECTIVE),
+    (Status.SUPERSEDED, Review.SUPERSEDED),
+    (Status.NOT_FAILING, Review.NOT_FAILING),
+)
+REMOVAL_CANDIDATES: Final[frozenset[Review]] = frozenset(
+    {Review.STALE, Review.SUPERSEDED, Review.NOT_FAILING}
+)
 
 _PRECEDENCE: Final[dict[Status, int]] = {
     Status.WAIVED: 0,
@@ -216,17 +275,28 @@ def normalize_person(value: object, where: str) -> str:
     return canonical
 
 
+def person_identity(name: str) -> str:
+    """Return the part of a canonical owner or approver name that identifies a person.
+
+    A handle is its own identity. For an email address it is the local part
+    without a plus-address suffix, whatever the domain: ``alice``,
+    ``alice@example.com``, ``alice+audit@example.com`` and ``alice@other.example``
+    all have the identity ``alice``.
+    """
+    local = name.split("@", 1)[0]
+    return local.split("+", 1)[0]
+
+
 def same_person(first: str, second: str) -> bool:
     """Return whether two canonical owner or approver names may denote one person.
 
-    They match when they are equal, or when one is a handle and the other an
-    email address whose local part is that handle (``alice`` and
-    ``alice@example.com``).
+    They match when their :func:`person_identity` is equal. A handle already
+    matches an email address with that local part on any domain, so two
+    addresses with the same local part on different domains match as well, and
+    a plus-address suffix never makes a second person. The check fails closed:
+    two people who share a local part must use distinct handles or addresses.
     """
-    if first == second:
-        return True
-    handle, email = (first, second) if "@" in second else (second, first)
-    return "@" not in handle and "@" in email and email.split("@", 1)[0] == handle
+    return person_identity(first) == person_identity(second)
 
 
 @dataclass(frozen=True)
@@ -454,6 +524,22 @@ class Evaluation:
         }
         document.update(self.timing.to_dict())
         return document
+
+    def lapsed_rule_ids(self) -> tuple[str, ...]:
+        """Return the rules whose chosen exception lapsed after the scan started.
+
+        Such an exception is ``expired`` in the evaluation, but the finding stays
+        ``fail`` without exception data, because the model only allows the state
+        ``expired`` for an expiry at or before the scan start.
+        """
+        started = self.timing.scan_started_at
+        return tuple(
+            sorted(
+                result.record.rule_id
+                for result in self.results
+                if result.status is Status.EXPIRED and not result.record.is_expired_at(started)
+            )
+        )
 
 
 def _midnight(day: date) -> datetime:
@@ -784,6 +870,9 @@ def _evaluation_statuses(value: object, where: str) -> tuple[str, dict[str, str]
     if not isinstance(value, dict):
         _fail(f"{where} must be a mapping")
     data = cast("dict[str, object]", value)
+    version = data.get("schema_version")
+    if not isinstance(version, str) or version not in SUPPORTED_EVALUATION_SCHEMA_VERSIONS:
+        _fail(f"{where} has an unsupported schema_version {str(version)[:16]!r}")
     digest = data.get("source_sha256")
     entries = data.get("exceptions")
     if not isinstance(digest, str) or not isinstance(entries, list):
@@ -804,6 +893,63 @@ def _evaluation_statuses(value: object, where: str) -> tuple[str, dict[str, str]
     return digest, statuses
 
 
+def review(statuses: Iterable[Status]) -> Review:
+    """Return the review verdict of one exception from its status on every host.
+
+    The first status in this order decides: ``expired``, ``waived`` (in effect),
+    ``not_yet_effective``, ``superseded``, ``not_failing``. An exception that is
+    ``unmatched`` everywhere is stale.
+
+    Args:
+        statuses: The :class:`Status` of the exception in each evaluation.
+
+    Returns:
+        The verdict.
+    """
+    seen = frozenset(statuses)
+    for status, verdict in _REVIEW_ORDER:
+        if status in seen:
+            return verdict
+    return Review.STALE
+
+
+def review_exceptions(evaluations: object) -> dict[str, Review]:
+    """Return the review verdict of every exception across several evaluations.
+
+    Args:
+        evaluations: Evaluation documents (:meth:`Evaluation.to_dict`) of the
+            same exceptions file, typically one per host of a play.
+
+    Returns:
+        The verdict per exception identifier.
+
+    Raises:
+        ExceptionsError: If there is no evaluation, if one is malformed or has an
+            unsupported ``schema_version``, or if they were produced from
+            different exceptions files.
+    """
+    if not isinstance(evaluations, (list, tuple)):
+        _fail("evaluations must be a list")
+    documents = list(cast("list[object] | tuple[object, ...]", evaluations))
+    if not documents:
+        _fail("at least one evaluation is required to review exceptions")
+    if len(documents) > MAX_EVALUATIONS:
+        _fail(f"more than {MAX_EVALUATIONS} evaluations")
+    parsed = [
+        _evaluation_statuses(document, f"evaluations[{index}]")
+        for index, document in enumerate(documents)
+    ]
+    digest, first = parsed[0]
+    for other_digest, statuses in parsed[1:]:
+        if other_digest != digest or set(statuses) != set(first):
+            _fail("evaluations come from different exceptions files")
+    tables = [statuses for _digest, statuses in parsed]
+    return {
+        identifier: review([Status(table[identifier]) for table in tables])
+        for identifier in sorted(first)
+    }
+
+
 def stale_exception_ids(evaluations: object) -> list[str]:
     """Return the exceptions that matched no finding in any evaluation.
 
@@ -815,31 +961,35 @@ def stale_exception_ids(evaluations: object) -> list[str]:
         The sorted identifiers whose status is ``unmatched`` in every evaluation.
 
     Raises:
-        ExceptionsError: If there is no evaluation, if one is malformed, or if
-            they were produced from different exceptions files.
+        ExceptionsError: If there is no evaluation, if one is malformed or has an
+            unsupported ``schema_version``, or if they were produced from
+            different exceptions files.
     """
-    if not isinstance(evaluations, (list, tuple)):
-        _fail("evaluations must be a list")
-    documents = list(cast("list[object] | tuple[object, ...]", evaluations))
-    if not documents:
-        _fail("at least one evaluation is required to report stale exceptions")
-    if len(documents) > MAX_EVALUATIONS:
-        _fail(f"more than {MAX_EVALUATIONS} evaluations")
-    parsed = [
-        _evaluation_statuses(document, f"evaluations[{index}]")
-        for index, document in enumerate(documents)
-    ]
-    digest, first = parsed[0]
-    for other_digest, statuses in parsed[1:]:
-        if other_digest != digest or set(statuses) != set(first):
-            _fail("evaluations come from different exceptions files")
-    unmatched = Status.UNMATCHED.value
-    tables = [statuses for _digest, statuses in parsed]
-    return sorted(
-        identifier
-        for identifier in first
-        if all(table[identifier] == unmatched for table in tables)
-    )
+    verdicts = review_exceptions(evaluations)
+    return [identifier for identifier, verdict in verdicts.items() if verdict is Review.STALE]
+
+
+def removal_candidate_ids(evaluations: object) -> list[str]:
+    """Return the exceptions that waived nothing and lapsed nothing on any host.
+
+    These are the stale exceptions, those that are ``superseded`` wherever a
+    covered rule failed, and those whose rule did not fail wherever the scope
+    matched. The answer only covers the hosts that were evaluated.
+
+    Args:
+        evaluations: Evaluation documents (:meth:`Evaluation.to_dict`) of the
+            same exceptions file, typically one per host of a play.
+
+    Returns:
+        The sorted identifiers.
+
+    Raises:
+        ExceptionsError: If there is no evaluation, if one is malformed or has an
+            unsupported ``schema_version``, or if they were produced from
+            different exceptions files.
+    """
+    verdicts = review_exceptions(evaluations)
+    return [identifier for identifier, verdict in verdicts.items() if verdict in REMOVAL_CANDIDATES]
 
 
 def make_target(host: object, groups: object) -> Target:
@@ -884,3 +1034,114 @@ def load_scan_run(value: object) -> model.ScanRun:
     except (TypeError, ValueError) as error:
         message = f"invalid scan run: {error}"
         raise ExceptionsError(message) from error
+
+
+def _instant(value: object, where: str) -> datetime:
+    text = _text(value, where, max_length=20)
+    try:
+        return datetime.strptime(text, model.TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+    except ValueError:
+        _fail(f"{where} is not a UTC timestamp")
+
+
+def _unmarked(run: model.ScanRun) -> model.ScanRun:
+    findings: list[model.Finding] = []
+    for finding in run.findings:
+        state = finding.exception.state
+        if state is model.ExceptionState.ACTIVE:
+            findings.append(
+                replace(
+                    finding,
+                    outcome=finding.evaluated_outcome,
+                    exception=model.ExceptionStatus.none(),
+                )
+            )
+        elif state is model.ExceptionState.EXPIRED:
+            findings.append(replace(finding, exception=model.ExceptionStatus.none()))
+        else:
+            findings.append(finding)
+    return replace(run, findings=tuple(findings))
+
+
+def _record_fields(entry: object, where: str) -> dict[str, object]:
+    if not isinstance(entry, dict):
+        _fail(f"{where} must be a mapping")
+    item = cast("dict[str, object]", entry)
+    return {key: value for key, value in item.items() if key not in RESULT_KEYS}
+
+
+def _canonical(value: object) -> str:
+    try:
+        return json.dumps(value, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError):
+        _fail("the evaluation is not JSON data")
+
+
+def _load_evaluation(document: object) -> Evaluation:
+    data = _mapping(document, "evaluation", EVALUATION_KEYS, required=True)
+    version = data["schema_version"]
+    if not isinstance(version, str) or version not in SUPPORTED_EVALUATION_SCHEMA_VERSIONS:
+        _fail(f"evaluation has an unsupported schema_version {str(version)[:16]!r}")
+    digest = _text(
+        data["source_sha256"], "evaluation.source_sha256", max_length=64, pattern=SHA256_PATTERN
+    )
+    controller = _instant(data["controller_time"], "evaluation.controller_time")
+    lag = data["max_scan_lag_seconds"]
+    if isinstance(lag, bool) or not isinstance(lag, int):
+        _fail("evaluation.max_scan_lag_seconds must be an integer")
+    where = _mapping(data["target"], "evaluation.target", TARGET_KEYS, required=True)
+    target = make_target(where["host"], where["groups"])
+    entries = data["exceptions"]
+    if not isinstance(entries, list):
+        _fail("evaluation.exceptions must be a list")
+    listed = cast("list[object]", entries)
+    if len(listed) > MAX_EXCEPTIONS:
+        _fail(f"evaluation.exceptions has more than {MAX_EXCEPTIONS} entries")
+    fields = [
+        _record_fields(entry, f"evaluation.exceptions[{index}]")
+        for index, entry in enumerate(listed)
+    ]
+    records = parse_document(
+        {"schema_version": FILE_SCHEMA_VERSION, "exceptions": fields}, controller
+    )
+    original = _unmarked(load_scan_run(data["scan_run"]))
+    evaluation = evaluate_run(
+        original,
+        ExceptionSet(records, digest),
+        target,
+        controller,
+        max_scan_lag=timedelta(seconds=lag),
+    )
+    if _canonical(evaluation.to_dict()) != _canonical(document):
+        _fail(
+            "the evaluation does not match a new evaluation of its own scan run, "
+            "exceptions, target and times"
+        )
+    return evaluation
+
+
+def load_evaluation(document: object) -> Evaluation:
+    """Verify an evaluation document and return the evaluation it records.
+
+    The document is not trusted: the exceptions it lists are validated like an
+    exceptions file (with its controller time as "today"), the waiver marks are
+    removed from its scan run, and the scan run is evaluated again with the
+    same target, times and scan lag limit. The document is accepted only when
+    the new evaluation is exactly the same, so no status, mark, count or time
+    can be edited without the change being detected. The SHA-256 of the
+    exceptions file cannot be checked without the file and is taken as given.
+
+    Args:
+        document: An evaluation document (:meth:`Evaluation.to_dict`) loaded from JSON.
+
+    Returns:
+        The verified evaluation.
+
+    Raises:
+        ExceptionsError: If the document is malformed, has an unsupported
+            ``schema_version`` or differs from the new evaluation.
+    """
+    try:
+        return _load_evaluation(document)
+    except model.ModelError as error:
+        raise ExceptionsError(str(error)) from error

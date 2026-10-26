@@ -14,6 +14,12 @@ Counting rules:
   first and the percentage is withheld.
 * A figure covers one benchmark, one content version and, unless it is an aggregate,
   one host. Figures of different benchmarks or versions are never pooled.
+* An expired waiver counts as its evaluated outcome and is counted in
+  ``expired_waivers``, also when it lapsed between the scan start and the
+  controller time, which only an exceptions evaluation records.
+* Every group built from more than one input gets a ``merged_inputs`` note with its
+  key, and every host that is counted as one host in several groups gets a
+  ``same_host_across_groups`` note. Both are structured; consumers word them.
 """
 
 from dataclasses import dataclass
@@ -29,6 +35,11 @@ ASSESSMENT_RUN_NOT_COMPLETED: Final[str] = "run_not_completed"
 ASSESSMENT_NOTHING_EVALUATED: Final[str] = "nothing_evaluated"
 ASSESSMENT_ALL_PASSED: Final[str] = "all_evaluated_passed"
 ASSESSMENT_FINDINGS_OPEN: Final[str] = "findings_open"
+KIND_SCAN_RUN: Final[str] = "scan_run"
+KIND_EVALUATION: Final[str] = "exceptions_evaluation"
+SCAN_RUN_KINDS: Final[frozenset[str]] = frozenset({KIND_SCAN_RUN, KIND_EVALUATION})
+MERGED_INPUTS_NOTE: Final[str] = "merged_inputs"
+SAME_HOST_NOTE: Final[str] = "same_host_across_groups"
 
 EXCLUDED_FROM_DENOMINATOR: Final[frozenset[model.Outcome]] = frozenset(
     {model.Outcome.NOTAPPLICABLE, model.Outcome.DISABLED}
@@ -149,14 +160,21 @@ def summarize(
     )
 
 
-def tally_findings(findings: tuple[model.Finding, ...]) -> list[Tally]:
+def is_expired_waiver(finding: model.Finding, lapsed: frozenset[str]) -> bool:
+    """Return whether the waiver of ``finding`` expired, at the scan start or after it.
+
+    ``lapsed`` holds the rules whose exception lapsed between the scan start and the
+    controller time; their findings carry no exception data (ADR 0013).
+    """
+    return finding.exception.state is model.ExceptionState.EXPIRED or finding.rule_id in lapsed
+
+
+def tally_findings(
+    findings: tuple[model.Finding, ...], lapsed: frozenset[str] = frozenset()
+) -> list[Tally]:
     """Reduce findings to tallies. An expired exception never changes the outcome."""
     return [
-        Tally(
-            finding.outcome,
-            finding.severity,
-            finding.exception.state is model.ExceptionState.EXPIRED,
-        )
+        Tally(finding.outcome, finding.severity, is_expired_waiver(finding, lapsed))
         for finding in findings
     ]
 
@@ -165,9 +183,12 @@ def tally_findings(findings: tuple[model.Finding, ...]) -> list[Tally]:
 class ComplianceData:
     """One compliance input: a scan run or XCCDF results, with its own summary.
 
-    For ``scan_run`` inputs the validated :class:`model.ScanRun` is embedded as is and
-    ``findings`` is serialized empty so that no finding appears twice. XCCDF and ARF
-    files may name a host (``reported_host``); that name is self-asserted by the file.
+    For ``scan_run`` and ``exceptions_evaluation`` inputs the validated
+    :class:`model.ScanRun` is embedded as is and ``findings`` is serialized empty so
+    that no finding appears twice. ``lapsed_waivers`` lists the rules whose exception
+    lapsed between the scan start and the controller time, which only an exceptions
+    evaluation records. XCCDF and ARF files may name a host (``reported_host``); that
+    name is self-asserted by the file.
     """
 
     kind: str
@@ -186,6 +207,7 @@ class ComplianceData:
     not_selected: int
     scan_run: model.ScanRun | None
     summary: Summary
+    lapsed_waivers: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping."""
@@ -200,6 +222,7 @@ class ComplianceData:
             "host": None if self.host is None else self.host.to_dict(),
             "input_sha256": self.input_sha256,
             "kind": self.kind,
+            "lapsed_waivers": list(self.lapsed_waivers),
             "not_selected": self.not_selected,
             "profile_id": self.profile_id,
             "reported_host": self.reported_host,
@@ -332,13 +355,14 @@ def rollup(entries: list[Entry]) -> list[RuleRollup]:
     groups: dict[tuple[HostKey, str, str], list[_Evaluation]] = {}
     for artifact, data in entries:
         host = host_key(data)
+        lapsed = frozenset(data.lapsed_waivers)
         for finding in data.findings:
             source = RuleSource(
                 artifact,
                 data.benchmark_id,
                 data.profile_id,
                 finding.outcome,
-                finding.exception.state is model.ExceptionState.EXPIRED,
+                is_expired_waiver(finding, lapsed),
             )
             key = (host, data.content_version, finding.rule_id)
             groups.setdefault(key, []).append(_Evaluation(finding, source))
@@ -390,16 +414,88 @@ class AggregateFigure:
     summary: Summary
 
 
-def group_figures(entries: list[Entry]) -> list[GroupFigure]:
-    """Return one figure per (benchmark, content version, host)."""
-    groups: dict[tuple[str, str, HostKey], list[Entry]] = {}
+type GroupKey = tuple[str, str, HostKey]
+
+
+def _groups(entries: list[Entry]) -> dict[GroupKey, list[Entry]]:
+    groups: dict[GroupKey, list[Entry]] = {}
     for entry in entries:
         key = (entry[1].benchmark_id, entry[1].content_version, host_key(entry[1]))
         groups.setdefault(key, []).append(entry)
+    return groups
+
+
+def group_figures(entries: list[Entry]) -> list[GroupFigure]:
+    """Return one figure per (benchmark, content version, host)."""
     return [
         GroupFigure(benchmark, version, host, figure(members))
-        for (benchmark, version, host), members in sorted(groups.items())
+        for (benchmark, version, host), members in sorted(_groups(entries).items())
     ]
+
+
+def _repeated(members: list[Entry]) -> bool:
+    profiles = [data.profile_id for _, data in members if data.scan_status == COMPLETED]
+    return len(profiles) != len(set(profiles))
+
+
+def input_notes(entries: list[Entry]) -> list[dict[str, object]]:
+    """Return the structured notes about inputs that were combined or counted as one host.
+
+    A ``merged_inputs`` note is written for every group (benchmark, content version,
+    host) built from more than one input, whatever the input types, with the group key,
+    the SHA-256 of every input and whether two completed inputs repeat a profile. A
+    ``same_host_across_groups`` note is written for every host key that has inputs in
+    more than one group: those inputs are counted as one host, but their figures stay
+    separate per group. Notes never contain input text beyond validated identifiers.
+    """
+    groups = _groups(entries)
+    notes: list[dict[str, object]] = []
+    hosts: dict[HostKey, list[GroupKey]] = {}
+    for key, members in sorted(groups.items()):
+        hosts.setdefault(key[2], []).append(key)
+        if len(members) > 1:
+            notes.append(
+                {
+                    "group": {
+                        "benchmark_id": key[0],
+                        "content_version": key[1],
+                        "host": key[2].to_dict(),
+                    },
+                    "kind": MERGED_INPUTS_NOTE,
+                    "repeated_profile": _repeated(members),
+                    "sources": sorted(data.input_sha256 for _, data in members),
+                }
+            )
+    for host, keys in sorted(hosts.items()):
+        if len(keys) > 1:
+            sources = sorted(data.input_sha256 for key in keys for _, data in groups[key])
+            notes.append(
+                {
+                    "groups": [
+                        {"benchmark_id": benchmark, "content_version": version}
+                        for benchmark, version, _ in keys
+                    ],
+                    "host": host.to_dict(),
+                    "kind": SAME_HOST_NOTE,
+                    "sources": sources,
+                }
+            )
+    return notes
+
+
+def repeated_scan_runs(entries: list[Entry]) -> int:
+    """Return how many (host, benchmark, content version, profile) keys have several scan runs.
+
+    Only completed ScanRun inputs (``scan_run`` and ``exceptions_evaluation``) count.
+    Two completed runs of one profile on one host would be merged rule by rule, and a
+    machine ID is not a secret, so a forged run could add passing rules to a host.
+    """
+    seen: dict[tuple[HostKey, str, str, str], int] = {}
+    for _, data in entries:
+        if data.kind in SCAN_RUN_KINDS and data.scan_status == COMPLETED:
+            key = (host_key(data), data.benchmark_id, data.content_version, data.profile_id)
+            seen[key] = seen.get(key, 0) + 1
+    return sum(1 for count in seen.values() if count > 1)
 
 
 def pairs(entries: list[Entry]) -> dict[tuple[str, str], list[Entry]]:

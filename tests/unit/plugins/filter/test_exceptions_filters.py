@@ -9,6 +9,7 @@ import pytest
 
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     apply_exceptions,
+    exception_removal_candidates,
     scan_summary,
     stale_exceptions,
     validate_exceptions,
@@ -92,6 +93,10 @@ def test_filter_plugins_expose_their_filters() -> None:
     stale = stale_exceptions.FilterModule().filters()
     assert applied == {"apply_exceptions": apply_exceptions.apply_exceptions}
     assert stale == {"stale_exceptions": stale_exceptions.stale_exceptions}
+    removal = exception_removal_candidates.FilterModule().filters()
+    assert removal == {
+        "exception_removal_candidates": exception_removal_candidates.exception_removal_candidates
+    }
 
 
 @pytest.mark.parametrize("form", ["mapping", "json"])
@@ -149,6 +154,29 @@ def test_apply_exceptions_rejects_invalid_arguments(
 def test_stale_exceptions_rejects_invalid_input() -> None:
     with pytest.raises(exceptions.ExceptionsError, match="at least one evaluation"):
         stale_exceptions.stale_exceptions([])
+
+
+def test_removal_candidates_across_hosts() -> None:
+    first = apply_exceptions.apply_exceptions(scan_run().to_dict(), exceptions_text(), "web01", [])
+    second = apply_exceptions.apply_exceptions(scan_run().to_dict(), exceptions_text(), "web02", [])
+    removal = exception_removal_candidates.exception_removal_candidates
+    assert removal([first, second]) == ["EXC-2"]
+    passing = scan_run().to_dict()
+    for item in cast("list[dict[str, object]]", passing["findings"]):
+        item["outcome"] = item["evaluated_outcome"] = "pass"
+    third = apply_exceptions.apply_exceptions(passing, exceptions_text(), "db01", [])
+    assert removal([first, third]) == ["EXC-2"]
+    assert stale_exceptions.stale_exceptions([first, third]) == []
+    newer = {**first, "schema_version": "1.1"}
+    with pytest.raises(exceptions.ExceptionsError, match=r"unsupported schema_version '1\.1'"):
+        removal([first, newer])
+    with pytest.raises(exceptions.ExceptionsError, match=r"unsupported schema_version '1\.1'"):
+        stale_exceptions.stale_exceptions([newer])
+
+
+def test_the_evaluation_of_the_filter_loads_back_unchanged() -> None:
+    result = apply_exceptions.apply_exceptions(scan_run().to_dict(), exceptions_text(), "web01", [])
+    assert exceptions.load_evaluation(result).to_dict() == result
 
 
 def test_the_filter_uses_the_controller_clock() -> None:

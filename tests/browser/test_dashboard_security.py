@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from tests.browser.conftest import Dashboard
 
 SCHEMA = json.loads(
-    (Path(dashboard.__file__).parent / "schema" / "report-v1.json").read_text(encoding="utf-8")
+    (Path(dashboard.__file__).parent / "schema" / "report-v2.json").read_text(encoding="utf-8")
 )
 VALIDATOR: Any = Draft202012Validator(SCHEMA)
 LONG = "W" * 4000
@@ -59,9 +59,12 @@ FREE_TEXT = frozenset(
         "phase",
         "scanner_version",
         "spec_version",
+        "justification",
     }
 )
 RENAMED_KEYS = frozenset({"license_counts", "custom_data"})
+VALIDATED_KEYS = frozenset({"scope"})
+CAPPED_TEXT = 480
 
 
 class Hostile:
@@ -70,26 +73,31 @@ class Hostile:
     def __init__(self) -> None:
         self.mapping: dict[str, str] = {}
 
-    def text(self, value: str) -> str:
+    def text(self, value: str, limit: int = len(LONG)) -> str:
+        """Return the payload for ``value``, cut to ``limit`` for a field with a lower cap."""
         if value not in self.mapping:
-            self.mapping[value] = (
-                f"{PAYLOADS[len(self.mapping) % len(PAYLOADS)]}#{len(self.mapping)}"
-            )
+            payload = PAYLOADS[len(self.mapping) % len(PAYLOADS)][:limit]
+            self.mapping[value] = f"{payload}#{len(self.mapping)}"
         return self.mapping[value]
 
+    def mapping_of(self, items: dict[str, object], key: str) -> dict[str, Any]:
+        if key in RENAMED_KEYS:
+            return {
+                self.text(name, CAPPED_TEXT): self.walk(item, name) for name, item in items.items()
+            }
+        return {name: self.walk(item, name) for name, item in items.items()}
+
     def walk(self, value: object, key: str = "") -> Any:
+        """Replace free text; an exception scope keeps its schema-checked identifiers."""
+        if key in VALIDATED_KEYS:
+            return value
         if isinstance(value, dict):
-            items = cast("dict[str, object]", value)
-            if key in RENAMED_KEYS:
-                return {self.text(name): self.walk(item, name) for name, item in items.items()}
-            return {name: self.walk(item, name) for name, item in items.items()}
+            return self.mapping_of(cast("dict[str, object]", value), key)
         if isinstance(value, list):
             entries = cast("list[object]", value)
             return [self.walk(item, key) for item in entries]
-        if isinstance(value, str) and key in FREE_TEXT:
-            return self.text(value)
-        if isinstance(value, str) and key == "custom_data":
-            return self.text(value)
+        if isinstance(value, str) and (key in FREE_TEXT or key == "custom_data"):
+            return self.text(value, CAPPED_TEXT if key == "custom_data" else len(LONG))
         return value
 
 

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import datetime as dt
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    exceptions,
+    model,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -103,6 +108,64 @@ def xccdf_text(
     )
 
 
+EVALUATION_HOST = model.HostIdentity("web01.example", "rhel", "9", "x86_64", "e" * 32)
+EVALUATION_STARTED = "2026-10-24T23:50:00Z"
+EVALUATION_FINISHED = "2026-10-24T23:50:09Z"
+CONTROLLER_TIME = dt.datetime(2026, 10, 25, 0, 10, tzinfo=dt.UTC)
+EXCEPTIONS_FILE = REPORTING / "exceptions.yml"
+EVALUATION_FILE = REPORTING / "exceptions-evaluation.json"
+EVALUATION_OUTCOMES: dict[str, model.Outcome] = {
+    "waived_rule": model.Outcome.FAIL,
+    "lapsed_rule": model.Outcome.FAIL,
+    "later_rule": model.Outcome.FAIL,
+    "plain_failure": model.Outcome.FAIL,
+    "passing_rule": model.Outcome.PASS,
+    "error_rule": model.Outcome.ERROR,
+}
+
+
+def evaluation_run(
+    outcomes: dict[str, model.Outcome] | None = None,
+    *,
+    host: model.HostIdentity = EVALUATION_HOST,
+    run_id: str = "run-web01",
+    profile: str = PROFILE,
+    started: str = EVALUATION_STARTED,
+) -> model.ScanRun:
+    chosen = EVALUATION_OUTCOMES if outcomes is None else outcomes
+    return model.ScanRun(
+        run_id=run_id,
+        started_at=started,
+        finished_at=EVALUATION_FINISHED if started == EVALUATION_STARTED else started,
+        host=host,
+        scanner=model.ScannerInfo("oscap", "1.3.10"),
+        content=model.Provenance("synthetic-ds.xml", "1.0", SHA),
+        benchmark_id=BENCHMARK,
+        profile_id=profile,
+        status=model.ScanStatus.COMPLETED,
+        error_message=None,
+        findings=tuple(finding(name, outcome) for name, outcome in chosen.items()),
+    )
+
+
+def evaluate(
+    run: model.ScanRun | None = None,
+    *,
+    inventory_host: str = "web01",
+    groups: tuple[str, ...] = ("web",),
+    text: str | None = None,
+    now: dt.datetime = CONTROLLER_TIME,
+) -> exceptions.Evaluation:
+    content = EXCEPTIONS_FILE.read_text(encoding="utf-8") if text is None else text
+    parsed = exceptions.parse_exceptions(content, now)
+    target = exceptions.Target(inventory_host, groups)
+    return exceptions.evaluate_run(evaluation_run() if run is None else run, parsed, target, now)
+
+
+def evaluation_json(evaluation: exceptions.Evaluation) -> str:
+    return json.dumps(evaluation.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
 class Kit:
     """Helpers and fixture paths shared by the reporting tests."""
 
@@ -111,6 +174,13 @@ class Kit:
     expired = staticmethod(expired)
     scan_run = staticmethod(scan_run)
     xccdf_text = staticmethod(xccdf_text)
+    evaluation_run = staticmethod(evaluation_run)
+    evaluate = staticmethod(evaluate)
+    evaluation_json = staticmethod(evaluation_json)
+    EVALUATION_FILE = EVALUATION_FILE
+    EXCEPTIONS_FILE = EXCEPTIONS_FILE
+    CONTROLLER_TIME = CONTROLLER_TIME
+    EVALUATION_HOST = EVALUATION_HOST
     RULE_PREFIX = RULE_PREFIX
     HOST = HOST
     REPORTING = REPORTING

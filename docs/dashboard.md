@@ -36,8 +36,9 @@ The tabs are:
 
 | Tab | Content |
 |---|---|
-| Overview | The scope, the run metadata, the compliance summary and the status of every section, plus the report types that were not supplied |
+| Overview | The scope, the run metadata, the compliance summary, the stale, expired and removal-candidate exception counts, and the status of every section, plus the report types that were not supplied |
 | Compliance | Summary, hosts counted as one, figures per benchmark and content version, figures per host, rules, inputs and findings |
+| Exceptions | Every exception of the exceptions file with its review, removal candidacy, expiry, scope and matched inventory hosts, and the evaluation inputs |
 | Tests, Coverage, Ansible lint, Vulnerabilities, SBOM, Molecule, Packer images, AWS CodeBuild | The section status, its summary when the report has one, its inputs and the entries of each input |
 | Raw artifacts | Every input file as supplied, with its format, status, SHA-256 and size |
 
@@ -73,16 +74,34 @@ Each row of "Figures per host" is one benchmark and content version on one host,
   "self-asserted", because the name comes from the input file. Neither is verified by the dashboard: the machine ID is
   also written by the scanned host, so it is shown in a neutral tone, not as a trusted identity;
 - its input sources: the format, SHA-256 and path of every input that contributed to the group;
-- its merge notes: "Merged in this group" with the SHA-256 of each combined input, only when at least two inputs
-  that claim the same self-asserted host name were combined into this group.
+- its merge notes: "Merged in this group" with the number and SHA-256 of the combined inputs, exactly when the report
+  has a `merged_inputs` note for this group, which it writes for every group built from more than one input of any
+  type (two scan runs with the same host name and machine ID included). A "repeated scan" badge appears when two
+  completed inputs report the same profile, which the report allows only with `--allow-repeated-scans`.
 
-The report writes one note per self-asserted host across all benchmarks and content versions. The Compliance tab lists
-these under "Hosts counted as one": the inputs are counted as one host, but their figures stay separate for each
-benchmark and content version, so such a note never appears inside a group that combined nothing.
+When inputs of one host fall into several groups (for example two benchmarks), the report writes one host-level note.
+The Compliance tab lists these under "Hosts counted as one": the inputs are counted as one host, but every group keeps
+its own figure and nothing is combined across them, so such a note never appears inside a group.
 
 Two hosts that share a name, for example a machine-identified `web01` and a self-asserted `web01`, are separate
 groups. They are marked "same name as another host: variant 1 of 2" and "variant 2 of 2" with a dashed outline, and
 their identity differs, so they can be told apart. The rules table uses the same marks.
+
+### Exceptions
+
+The Exceptions tab appears when exceptions evaluations were supplied (`--exceptions-evaluation`). Nothing on it changes
+a figure: a waived finding is counted as waived and never as a pass, and an expired waiver as its evaluated outcome.
+
+- The summary counts the exceptions per review (in effect, expired, not yet in effect, superseded, not failing, stale),
+  the removal candidates, the exceptions whose expiry had passed at an evaluation, and gives the SHA-256 of the
+  exceptions file.
+- The table lists every exception with its ID, rule, review, whether it is a removal candidate (stale, superseded or
+  not failing everywhere), expiry, risk, framework, scope and the inventory hosts where its scope matched. Details
+  show the justification, owner, approver, dates, the scope, the scan runs per status and every matched host with its
+  status and the exception that superseded it.
+- Hosts on this tab are the controller's inventory names, not names that the scanned hosts report.
+- Findings whose waiver lapsed after the scan started are marked on the Compliance tab, and the expired-waiver count
+  includes them.
 
 ### Sections that are partial, in error or unavailable
 
@@ -147,4 +166,6 @@ Report contents are untrusted. The dashboard is built so that no report value ca
 `tools/browser/fetch-test-deps.sh` downloads both into `build/browser-test/` and checks their SHA-256 before use.
 axe-core is injected by the tests only and is never part of the dashboard. The tests cover keyboard use of tabs and
 tables, hostile report data, offline rendering with all requests blocked, Content-Security-Policy violations, both
-themes, printing, accessibility (no serious or critical axe-core violation) and a report at the size cap.
+themes, printing, accessibility (no serious or critical axe-core violation) and a report at the size cap. The
+Exceptions tab is tested with hostile justification text, with all details open under axe-core in both themes, and
+with an exceptions file at its 1000-entry limit.

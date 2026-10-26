@@ -8,7 +8,9 @@ its single embedded ``TestResult`` is then handed to the same parser.
 ``oscap`` lists every rule of the benchmark and marks the ones the profile did not
 select as ``notselected``. Those results never enter the compliance maths (ADR 0013);
 they are only counted. The host name in the file (XCCDF ``target`` or fqdn fact, ARF
-asset) is self-asserted and is only used to group files of the same host.
+asset) is self-asserted and is only used to group files of the same host. Every
+``target`` and fqdn fact must name the same host (compared lower-cased); a file whose
+names disagree is an input error, because no name could be preferred safely.
 """
 
 from pathlib import Path
@@ -58,7 +60,11 @@ def _host_names(tree: XmlNode) -> list[str]:
     facts = [n.text for n in nodes if n.local == "fact" and n.attributes.get("name") == FQDN_FACT]
     targets = [n.text for n in nodes if n.local == "target"]
     names = (_name(text) for text in [*facts, *targets])
-    return [name for name in names if name is not None]
+    present = [name for name in names if name is not None]
+    if len(set(present)) > 1:
+        message = "the target and fqdn fact of the results name different hosts"
+        raise InvalidInputError(message)
+    return present
 
 
 def _first(names: list[str]) -> str | None:

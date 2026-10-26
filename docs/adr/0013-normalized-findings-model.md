@@ -364,3 +364,36 @@ Rejected alternatives: gating on the waived result by default (an approved waive
 gate without anyone opting in), reading the file once per host (a file changed during the play would give hosts
 different waivers; the digest check of `stale_exceptions` would only catch it at the end), and replacing
 `linux_compliance_audited.scan_run` with the waived run (consumers could no longer see what the scanner decided).
+
+## Amendment 2026-10-26: exception review, verified evaluations and owner identity (FREES-132)
+
+The model entities and `schema_version` `"1.0"` of the ScanRun and of the evaluation document are unchanged.
+
+- **Same person.** `exceptions.same_person` compares `person_identity`: a handle is its own identity, and an email
+  address is its local part without a plus-address suffix, whatever the domain. `alice+audit@example.org` and
+  `alice@example.org` are the same person, and so are `alice@a.example` and `alice@b.example`. The handle rule already
+  matched `alice` with an address of that local part on any domain, so treating two such addresses as different
+  people would make the relation intransitive and let a second address approve an owner's own exception. The check
+  fails closed: two people who share a local part on different domains must use distinct handles or addresses. Dots
+  and other provider-specific aliases are not folded, because providers differ (`alice.smith` and `alicesmith` stay
+  different). The names remain unauthenticated; the reviewed pull request is the authority.
+- **Review across hosts.** `exceptions.review` turns the statuses of one exception in several evaluations into one
+  verdict: `expired` if any is `expired`, else `in_effect` if any is `waived`, else `not_yet_effective`, `superseded`,
+  `not_failing` in that order, and `stale` when every status is `unmatched`. `review_exceptions`,
+  `stale_exception_ids` and the new `removal_candidate_ids` read evaluation documents. Removal candidates are the
+  verdicts `stale`, `superseded` and `not_failing`: the exception waived nothing, covered no failure that expired and
+  none scanned before its approval, on any evaluated host. The filter
+  `freesecdev.linux_compliance.exception_removal_candidates` wraps `removal_candidate_ids`.
+- **Evaluation versions.** Every reader of evaluation documents checks `schema_version` against
+  `SUPPORTED_EVALUATION_SCHEMA_VERSIONS` (`{"1.0"}`) and refuses any other value, including a missing one.
+- **Verified evaluations.** `exceptions.load_evaluation` reads an evaluation document for the reporting package and
+  trusts none of it: it validates the listed exceptions with the file rules (`today` is the controller time of the
+  document), removes the waiver marks from the scan run (`waived` back to its evaluated `fail`, exception data to
+  `none`), evaluates the run again with the same target, controller time and scan lag limit, and accepts the
+  document only when the new evaluation serializes identically. No status, count, mark, reason or time can be edited
+  without detection. The SHA-256 of the exceptions file cannot be checked without the file and is taken as given
+  ([ADR 0018](0018-evidence-bundle-provenance.md) proposes signing it into the evidence bundle).
+- **Lapsed waivers.** `Evaluation.lapsed_rule_ids` lists the rules whose chosen exception is `expired` in the
+  evaluation but had not expired at the scan start. Their findings stay `fail` without exception data, because the
+  model only allows the state `expired` for an expiry at or before the scan start; the report counts them in
+  `expired_waivers` (ADR 0016, amendment of FREES-130 and FREES-132).
