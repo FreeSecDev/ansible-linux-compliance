@@ -6,7 +6,12 @@
         linux_compliance_audited is not defined
         or not (linux_compliance_audited.evidence_written | default(false))
         or ansible_check_mode
-        or hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'] is defined
+        or (hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'] is defined
+            and hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'] is mapping
+            and hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'].run_id | default(none)
+                == linux_compliance_audited.run_id | default(none)
+            and hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'].manifest_sha256
+                | default('') is match('^[0-9a-f]{64}$'))
     fail_msg: >-
       The audit of {{ inventory_hostname }} wrote evidence on the host, but no evidence bundle was
       collected in this run; the collection play printed the reason and the collection summary records the host

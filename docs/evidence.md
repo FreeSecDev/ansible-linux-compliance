@@ -277,7 +277,20 @@ The marker is scoped to the run, as the `verify` role's baseline marker is:
   variable can change the condition, the same mechanism as the Molecule guard of FREES-150. It also refuses
   `inventory_hostname` set as an extra variable, which would make every host read the marker of one host.
 - `summary.yml` and `collected.yml` read the marker through `hostvars[<host>]`, so a role or include parameter of the
-  same name cannot stand in for it.
+  same name cannot stand in for it, and count it only when it is a mapping. `collected.yml` also requires its
+  `run_id` to be the run of `linux_compliance_audited` and its `manifest_sha256` to be a SHA-256, so a marker of an
+  earlier collection of the same host does not pass a later collection that failed; the summary filter validates
+  every field of the marker, as it did for the public fact.
+- The role guard of the evidence role (`internal_variables.yml`, FREES-153), which resets the role's internal facts
+  to a sentinel string at the start of `main.yml` and `summary.yml`, leaves the marker alone. It is a run output of
+  the generator (`RUN_OUTPUTS`, [development guide](development.md)): reset to the sentinel, it would be defined for
+  a host whose collection then failed. The task that sets the marker is followed by a check that it is a mapping
+  with the run ID and manifest digest of the bundle just written.
+
+The marker is not defended against the playbook itself. A `set_fact` of `__linux_compliance_evidence_run_bundle` in
+playbook code that runs after `reached.yml` is trusted playbook code, the same residual as the `verify` role's
+baseline marker: whoever writes the playbook can also skip the collection. Inventory, `group_vars`, `host_vars`,
+extra variables, role and include parameters and fact caches cannot set it.
 
 A playbook that runs `playbooks/evidence.yml`'s plays twice in one `ansible-playbook` invocation is therefore refused
 at the second audit play: the markers of the first run are still set.
@@ -531,7 +544,10 @@ The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce
   in the last play, and the report with `--require-host-coverage` exits 1. Two further runs set the collection marker
   `__linux_compliance_evidence_run_bundle` itself, once as an extra variable and once in the inventory for the
   unreachable host; `reached.yml` refuses both at the start of the audit play, and nothing is collected or written
-  (FREES-154).
+  (FREES-154). In the planted runs the role guard ran on web01 before its collection failed, and `collected.yml`
+  still fails it. `tests/playbooks/evidence.yml` also collects web01 once, then lets a second collection of another
+  run fail after the guard ran, and checks that the marker of the first collection is kept and that `collected.yml`
+  fails web01 because the marker is not of the audited run.
 - `tests/playbooks/audit-gate-routes.yml` (also in `make test-evidence`) runs `evaluate.yml` with the gate on for a
   host with failed rules and a scan that did not complete, once without and once each with the removed
   `linux_compliance_audit_defer_gate` and a forged `__linux_compliance_audit_gate_deferred` set through `-e`,

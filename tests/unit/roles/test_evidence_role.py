@@ -165,13 +165,33 @@ def test_the_summary_reads_the_run_marker_that_the_role_publishes_with_the_bundl
 
 def test_only_the_run_marker_counts_a_host_as_collected() -> None:
     summary = (ROLE / "tasks" / "summary.yml").read_text(encoding="utf-8")
-    assert f"selectattr('{MARKER}', 'defined')" in summary
+    assert f"selectattr('{MARKER}', 'defined')\n" in summary
+    assert f"selectattr('{MARKER}', 'mapping')" in summary
     assert "linux_compliance_evidence_bundle" not in summary
     collected = tasks(ROLE / "tasks" / "collected.yml")
     assert len(collected) == 1
     condition = cast("dict[str, list[str]]", collected[0]["ansible.builtin.assert"])["that"]
     assert f"hostvars[inventory_hostname]['{MARKER}'] is defined" in condition[0]
+    assert f"hostvars[inventory_hostname]['{MARKER}'] is mapping" in condition[0]
     assert "linux_compliance_evidence_bundle" not in condition[0]
+
+
+def test_the_guard_runs_where_it_cannot_erase_the_marker_of_a_target_host() -> None:
+    guard = {"ansible.builtin.import_tasks": "internal_variables.yml"}
+    for name in ("main.yml", "summary.yml"):
+        first = tasks(ROLE / "tasks" / name)[0]
+        assert {key: first[key] for key in guard} == guard, name
+    for name in ("reached.yml", "collected.yml"):
+        text = (ROLE / "tasks" / name).read_text(encoding="utf-8")
+        assert "internal_variables.yml" not in text, name
+    for task in tasks(ROLE / "tasks" / "internal_variables.yml"):
+        assert MARKER not in cast("dict[str, object]", task.get("ansible.builtin.set_fact", {}))
+    assert MARKER not in (ROLE / "tasks" / "internal_variables.yml").read_text(encoding="utf-8")
+    condition = cast(
+        "dict[str, list[str]]", tasks(ROLE / "tasks" / "collected.yml")[0]["ansible.builtin.assert"]
+    )["that"][0]
+    assert "== linux_compliance_audited.run_id" in condition
+    assert "is match('^[0-9a-f]{64}$')" in condition
 
 
 def test_reached_refuses_internal_variables_from_outside_before_anything_else() -> None:
@@ -182,9 +202,8 @@ def test_reached_refuses_internal_variables_from_outside_before_anything_else() 
     assert "select('match', '__linux_compliance_evidence_')" in condition[0]
     assert "(groups['all'] + ['localhost'])" in condition[0]
     assert "map('extract', hostvars, 'inventory_hostname')" in condition[1]
-    summary = tasks(ROLE / "tasks" / "summary.yml")
-    required = str(summary[1]["name"])
-    assert required.startswith("Evidence | Check that the audit play ran reached.yml")
+    names = [str(task["name"]) for task in tasks(ROLE / "tasks" / "summary.yml")]
+    assert names[2].startswith("Evidence | Check that the audit play ran reached.yml")
 
 
 def test_the_summary_is_written_with_mode_0600_and_never_overwritten() -> None:

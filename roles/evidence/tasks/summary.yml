@@ -47,7 +47,8 @@
       {{ __linux_compliance_evidence_targets | map('extract', hostvars) | list }}
     __linux_compliance_evidence_marked: >-
       {{ __linux_compliance_evidence_target_vars
-         | selectattr('__linux_compliance_evidence_run_bundle', 'defined') | list }}
+         | selectattr('__linux_compliance_evidence_run_bundle', 'defined')
+         | selectattr('__linux_compliance_evidence_run_bundle', 'mapping') | list }}
     __linux_compliance_evidence_observed:
       targets: "{{ __linux_compliance_evidence_targets }}"
       play_hosts: "{{ hostvars['localhost']['linux_compliance_evidence_play_hosts'] }}"

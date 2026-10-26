@@ -136,6 +136,7 @@ status=0; $(call EVIDENCE_GATE_RUN,$(1),$(2)) > '$(EVIDENCE_DIR)/gate-$(1).log' 
 	cat '$(EVIDENCE_DIR)/gate-$(1).log'; \
 	test "$$status" -ne 0 || { printf 'error: planted route %s gave exit status %s\n' '$(1)' "$$status" >&2; exit 1; }
 grep -q 'must be a directory with mode 0700 that is not a symbolic link' '$(EVIDENCE_DIR)/gate-$(1).log'
+grep -q 'Evidence | Refuse internal variables supplied from outside the role' '$(EVIDENCE_DIR)/gate-$(1).log'
 grep -q 'Collection failed: web01. A report over the collected bundles' '$(EVIDENCE_DIR)/gate-$(1).log'
 grep -q 'wrote evidence on the host, but no evidence bundle was collected in this run' '$(EVIDENCE_DIR)/gate-$(1).log'
 grep -qE '^web01 +: .*failed=1' '$(EVIDENCE_DIR)/gate-$(1).log'

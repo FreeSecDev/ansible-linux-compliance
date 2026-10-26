@@ -18,4 +18,9 @@ security_fixes:
     ``freesecdev.linux_compliance.evidence`` fails it. ``reached.yml`` now refuses the run when any
     ``__linux_compliance_evidence_*`` variable is already set for an inventory host or ``localhost``, or when
     ``inventory_hostname`` is an extra variable, and ``summary.yml`` refuses to run unless the audit play ran
-    ``reached.yml``.
+    ``reached.yml``. The marker counts only as a mapping, and in ``collected.yml`` only for the audited run.
+  - >-
+    role guards - the generator knows run outputs (``RUN_OUTPUTS``), internal facts that a role sets for a later play
+    of the same run. The guard neither resets nor reads them back, so the evidence role's guard cannot turn the
+    collection marker of a host whose collection failed into a defined sentinel string. The generator fails if a run
+    output is not a fact of the role.

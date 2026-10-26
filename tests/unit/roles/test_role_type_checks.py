@@ -27,6 +27,9 @@ KEY_FACTS: dict[str, dict[str, str]] = {
     "evidence": {
         "__linux_compliance_evidence_root": "__linux_compliance_evidence_root is string",
         "__linux_compliance_evidence_plan": "__linux_compliance_evidence_plan is mapping",
+        "__linux_compliance_evidence_run_bundle": (
+            "__linux_compliance_evidence_run_bundle is mapping"
+        ),
     },
     "remediate": {
         "__linux_compliance_remediate_dispatched": (
@@ -98,7 +101,7 @@ def test_the_key_facts_are_internal_facts_of_guarded_roles() -> None:
     assert set(KEY_FACTS) == set(gen.GUARDED_ROLES)
     for role, facts in KEY_FACTS.items():
         found = gen.role_variables(REPOSITORY_ROOT / "roles" / role, {})
-        assert set(facts) <= found.facts, role
+        assert set(facts) <= found.facts | found.outputs, role
 
 
 def test_an_update_of_a_checked_fact_needs_no_second_check() -> None:
