@@ -113,7 +113,7 @@ def test_without_tags_no_rule_is_tagged() -> None:
     ],
 )
 def test_invalid_tags_are_refused(tags: object, message: str) -> None:
-    _, errors = load(tags=tags)
+    _loaded, errors = load(tags=tags)
     assert len(errors) == 1
     assert errors[0].startswith(message)
 
@@ -208,7 +208,7 @@ def test_disabled_rules_use_the_tags_of_the_catalogue() -> None:
 
 
 def test_switches_off_names_every_controlling_topic() -> None:
-    loaded, _ = load()
+    loaded, _errors = load()
     sssd_logs = rule(SSSD_LOGS, "file_permissions")
     assert [
         topic

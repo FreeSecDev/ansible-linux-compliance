@@ -105,7 +105,7 @@ def test_a_tag_toggle_or_its_umbrella_cleans_up_a_tagged_native_rule(off: str) -
 
 
 def test_the_family_wins_the_controlling_variable_over_the_tag() -> None:
-    _, rules = run({CRON: False, FILE_PERMISSIONS: False})
+    _result, rules = run({CRON: False, FILE_PERMISSIONS: False})
     assert rules[CRONTAB]["disabled_by"] == FILE_PERMISSIONS
     assert rules[CRONTAB]["action"] == "none"
 
@@ -118,12 +118,12 @@ def test_a_tagged_rule_of_a_non_disruptive_family_needs_no_allow_list() -> None:
 
 
 def test_a_tag_toggle_that_is_true_does_not_switch_the_family_back_on() -> None:
-    _, rules = run({CRON: True, SERVICES: True, FILE_PERMISSIONS: False})
+    _result, rules = run({CRON: True, SERVICES: True, FILE_PERMISSIONS: False})
     assert rules[CRONTAB]["disabled_by"] == FILE_PERMISSIONS
 
 
 def test_without_tags_the_tag_toggle_leaves_the_rule_alone() -> None:
-    _, rules = run({CRON: False}, tags={})
+    _result, rules = run({CRON: False}, tags={})
     assert rules[CRONTAB]["action"] == "apply"
     assert audit({CRON: False}, tags={})["disabled_rules"] == [
         {"rule_id": CRON_SERVICE, "disabled_by": CRON}
@@ -131,7 +131,7 @@ def test_without_tags_the_tag_toggle_leaves_the_rule_alone() -> None:
 
 
 def test_invalid_tags_fail_both_filters() -> None:
-    result, _ = run(tags={"cron": [CRON_SERVICE]})
+    result, _rules = run(tags={"cron": [CRON_SERVICE]})
     message = f"{CRON_SERVICE} belongs to the family cron and cannot also be tagged with it"
     assert result["errors"] == [message]
     assert audit({}, tags={"cron": [CRON_SERVICE]})["errors"] == [message]
@@ -139,7 +139,7 @@ def test_invalid_tags_fail_both_filters() -> None:
 
 def test_a_ledger_entry_under_a_former_family_name_needs_its_alias() -> None:
     off: dict[str, object] = {FILE_PERMISSIONS: False}
-    refused, _ = run(off, ledger=[entry("permissions")])
+    refused, _rules = run(off, ledger=[entry("permissions")])
     assert refused["errors"] == [f"{CRONTAB}: the ledger records family 'permissions'"]
     result, rules = run(
         off, ledger=[entry("permissions")], aliases={"permissions": ["file_permissions"]}
@@ -150,17 +150,17 @@ def test_a_ledger_entry_under_a_former_family_name_needs_its_alias() -> None:
 
 
 def test_an_alias_to_another_family_does_not_accept_the_entry() -> None:
-    result, _ = run(ledger=[entry("permissions")], aliases={"permissions": ["cron"]})
+    result, _rules = run(ledger=[entry("permissions")], aliases={"permissions": ["cron"]})
     assert result["errors"] == [f"{CRONTAB}: the ledger records family 'permissions'"]
 
 
 def test_an_entry_without_a_family_string_is_still_refused_with_aliases() -> None:
-    result, _ = run(ledger=[entry(None)], aliases={"permissions": ["file_permissions"]})
+    result, _rules = run(ledger=[entry(None)], aliases={"permissions": ["file_permissions"]})
     assert result["errors"] == [f"{CRONTAB}: the ledger records family None"]
 
 
 def test_invalid_aliases_fail_the_plan() -> None:
-    result, _ = run(aliases={"permissions": ["nfs"]})
+    result, _rules = run(aliases={"permissions": ["nfs"]})
     assert result["errors"] == ["the alias permissions must list registered families"]
 
 
