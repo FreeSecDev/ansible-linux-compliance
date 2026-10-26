@@ -8,8 +8,10 @@ between the two reads is also rejected.
 
 Parsing goes through :mod:`xmlsafe` only: a bounded, streaming expat parser that
 rejects DOCTYPE and ENTITY declarations. Elements are never stored; only the
-benchmark, its profiles and the identifier, severity and title of its rules are
-kept.
+benchmark, its profiles (with their version) and the identifier, severity and title
+of its rules are kept, and the text of each rule's ``reference`` whose ``href`` is one
+of :data:`STIG_ID_REFERENCES`: the DISA STIG IDs that ComplianceAsCode records for a
+rule (FREES-146). That text is kept as written; whoever uses it validates it.
 
 Rule selection follows XCCDF. Each ``select`` of a profile is classified by what
 the benchmark defines, never by the shape of the identifier: the identifier of a
@@ -67,6 +69,10 @@ MAX_ECHO_LENGTH: Final[int] = 64
 ERROR_UNSAFE_CONTENT: Final[str] = "unsafe_content_dir"
 PROCESS_DIRECTORY: Final[str] = "/proc/self"
 SEVERITIES: Final[frozenset[str]] = frozenset({"unknown", "info", "low", "medium", "high"})
+STIG_ID_REFERENCES: Final[frozenset[str]] = frozenset(
+    {"https://www.cyber.mil/stigs/downloads/?_dl_facet_stigs=operating-systems%2Cunix-linux"}
+)
+MAX_STIG_IDS: Final[int] = 64
 
 _GROUP_ID: Final[str] = r"xccdf_[A-Za-z0-9_.+-]+"
 _MAX_ID_LENGTH: Final[int] = 256
@@ -90,6 +96,7 @@ _RULE: Final[str] = _qualified("Rule")
 _TITLE: Final[str] = _qualified("title")
 _VERSION_TAG: Final[str] = _qualified("version")
 _SELECT: Final[str] = _qualified("select")
+_REFERENCE: Final[str] = _qualified("reference")
 _COLLECTION: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}data-stream-collection"
 
 _OUTSIDE: Final[str] = "outside"
@@ -99,10 +106,14 @@ _GROUP_KIND: Final[str] = "group"
 _RULE_KIND: Final[str] = "rule"
 _TITLE_KIND: Final[str] = "title"
 _VERSION_KIND: Final[str] = "version"
+_PROFILE_VERSION_KIND: Final[str] = "profile_version"
+_STIG_ID_KIND: Final[str] = "stig_id"
 _PART: Final[str] = "part"
 _SELECT_KIND: Final[str] = "select"
 _OTHER: Final[str] = "other"
-_COLLECTING: Final[frozenset[str]] = frozenset({_TITLE_KIND, _VERSION_KIND, _PART})
+_COLLECTING: Final[frozenset[str]] = frozenset(
+    {_TITLE_KIND, _VERSION_KIND, _PROFILE_VERSION_KIND, _STIG_ID_KIND, _PART}
+)
 _TITLE_OWNERS: Final[frozenset[str]] = frozenset({_BENCH, _PROFILE_KIND, _RULE_KIND})
 
 
@@ -156,12 +167,15 @@ class Rule:
         title: Rule title, empty when the content has none.
         groups: Full identifiers of the groups that contain the rule, outermost
             first, in the order of the XCCDF group hierarchy.
+        stig_ids: The text of the rule's DISA STIG ID references, in document
+            order, cleaned but not validated.
     """
 
     rule_id: str
     severity: str
     title: str
     groups: tuple[str, ...] = ()
+    stig_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -172,11 +186,15 @@ class Profile:
         profile_id: Full XCCDF profile identifier.
         title: Profile title, empty when the content has none.
         rule_ids: Identifiers of the selected rules, sorted and unique.
+        version: The profile's own version, empty when the content has none. A
+            ComplianceAsCode STIG profile names the DISA release it implements
+            there, for example ``V1R5``.
     """
 
     profile_id: str
     title: str
     rule_ids: tuple[str, ...]
+    version: str = ""
 
 
 @dataclass(frozen=True)
@@ -230,7 +248,7 @@ class _Frame:
 
 
 class _RuleDraft:
-    __slots__ = ("default", "groups", "rule_id", "severity", "title")
+    __slots__ = ("default", "groups", "rule_id", "severity", "stig_ids", "title")
 
     def __init__(
         self, rule_id: str, severity: str, groups: tuple[str, ...], *, default: bool
@@ -240,14 +258,16 @@ class _RuleDraft:
         self.severity = severity
         self.default = default
         self.title: str | None = None
+        self.stig_ids: list[str] = []
 
 
 class _ProfileDraft:
-    __slots__ = ("profile_id", "selects", "title")
+    __slots__ = ("profile_id", "selects", "title", "version")
 
     def __init__(self, profile_id: str) -> None:
         self.profile_id = profile_id
         self.title: str | None = None
+        self.version: str | None = None
         self.selects: dict[str, bool] = {}
 
 
@@ -292,7 +312,7 @@ def _finish_profile(draft: _ProfileDraft, benchmark: _BenchmarkDraft) -> Profile
                     f"deselected group {group_id!r}; this is not resolved, so no rule list "
                     "is returned"
                 )
-    return Profile(draft.profile_id, draft.title or "", tuple(selected))
+    return Profile(draft.profile_id, draft.title or "", tuple(selected), draft.version or "")
 
 
 def _finish_benchmark(draft: _BenchmarkDraft) -> Benchmark:
@@ -305,7 +325,10 @@ def _finish_benchmark(draft: _BenchmarkDraft) -> Benchmark:
         version=draft.version,
         title=draft.title or "",
         profiles=tuple(_finish_profile(profile, draft) for profile in draft.profiles),
-        rules=tuple(Rule(r.rule_id, r.severity, r.title or "", r.groups) for r in draft.rules),
+        rules=tuple(
+            Rule(r.rule_id, r.severity, r.title or "", r.groups, tuple(r.stig_ids))
+            for r in draft.rules
+        ),
     )
 
 
@@ -333,6 +356,8 @@ class _Collector:
             (_PROFILE_KIND, _TITLE): self._open_title,
             (_RULE_KIND, _TITLE): self._open_title,
             (_PROFILE_KIND, _SELECT): self._open_select,
+            (_PROFILE_KIND, _VERSION_TAG): self._open_profile_version,
+            (_RULE_KIND, _REFERENCE): self._open_reference,
         }
 
     def start(self, name: str, attributes: dict[str, str]) -> None:
@@ -368,6 +393,18 @@ class _Collector:
     def _open_version(self, _attributes: dict[str, str]) -> _Frame:
         self.parts = []
         return _Frame(_VERSION_KIND)
+
+    def _open_profile_version(self, _attributes: dict[str, str]) -> _Frame:
+        self.parts = []
+        return _Frame(_PROFILE_VERSION_KIND)
+
+    def _open_reference(self, attributes: dict[str, str]) -> _Frame:
+        if attributes.get("href") not in STIG_ID_REFERENCES:
+            return _Frame(_OTHER)
+        if len(self.rule.stig_ids) >= MAX_STIG_IDS:
+            _fail(f"rule {self.rule.rule_id!r} has more than {MAX_STIG_IDS} STIG ID references")
+        self.parts = []
+        return _Frame(_STIG_ID_KIND)
 
     def _open_title(self, attributes: dict[str, str]) -> _Frame:
         self.parts = []
@@ -441,6 +478,10 @@ class _Collector:
             self.benchmarks.append(_finish_benchmark(self.benchmark))
         elif kind == _VERSION_KIND:
             self._store_version()
+        elif kind == _PROFILE_VERSION_KIND and self.profile.version is None:
+            self.profile.version = _clean("".join(self.parts))
+        elif kind == _STIG_ID_KIND:
+            self.rule.stig_ids.append(_clean("".join(self.parts)))
         elif kind == _TITLE_KIND and frame.accept:
             self._store_title(self.frames[-1].kind)
 

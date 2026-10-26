@@ -266,7 +266,8 @@ def test_compliance_as_code_findings_are_refused_naming_the_mapping_issue(
     run_path.write_text(model.dumps(kit.scan_run((kit.finding("a"),))), encoding="utf-8")
     error = refused(tmp_path, capsys, "--scan-run", str(run_path))
     assert "error: no checklist was written" in error
-    assert "FREES-146, which is not built yet" in error
+    assert "the STIG to ComplianceAsCode mapping of FREES-146" in error
+    assert f"has no entry for benchmark {kit.BENCHMARK} and profile {kit.PROFILE}" in error
 
 
 def test_xccdf_inputs_are_refused(
@@ -361,7 +362,8 @@ def test_checklist_content_needs_an_export(
 ) -> None:
     arguments = ["--scope", "fleet", "--output", str(tmp_path / "r.json")]
     assert cli.main([*arguments, "--checklist-content", str(tmp_path / "c.xml")]) == 2
-    assert "--checklist-content needs --export-ckl or --export-cklb" in capsys.readouterr().err
+    message = "--checklist-content needs --export-ckl, --export-cklb or --compare-stig"
+    assert message in capsys.readouterr().err
 
 
 def test_an_input_that_does_not_parse_has_no_checklist_and_status_one(

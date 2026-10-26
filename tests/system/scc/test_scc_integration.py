@@ -47,32 +47,7 @@ HONEST = {"pass", "fail", "notapplicable", "notchecked", "error"}
 
 @pytest.fixture(scope="module")
 def scan_report() -> dict[str, object]:
-    image = harness.image()
-    output = harness.run(
-        [
-            "run",
-            "--rm",
-            "--network",
-            "none",
-            *harness.hardening(),
-            *harness.python_mounts(),
-            "--entrypoint",
-            harness.interpreter(),
-            image,
-            "-s",
-            harness.DRIVER,
-            "scan",
-            "--repository",
-            harness.SOURCE_MOUNT,
-            "--site-packages",
-            harness.SITE_MOUNT,
-            "--content",
-            f"{harness.CONTENT_DIRECTORY}/{harness.pin('SCC_CONTENT_FILE')}",
-            "--sha256",
-            harness.pin("SCC_CONTENT_SHA256"),
-        ]
-    )
-    return harness.driver_report(output)
+    return harness.scc_scan_report(harness.image())
 
 
 def _check_run(result: dict[str, object]) -> list[dict[str, object]]:

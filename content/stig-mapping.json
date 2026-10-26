@@ -1,0 +1,3408 @@
+{
+  "schema_version": 1,
+  "generator": "tools/content/generate_stig_mapping.py",
+  "source": "ComplianceAsCode/content v0.1.82",
+  "join_key": "STIG ID: the DISA rule version, Rule_Ver in a checklist",
+  "datastreams": [
+    {
+      "name": "ubuntu2404",
+      "file_name": "ssg-ubuntu2404-ds.xml",
+      "sha256": "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c",
+      "benchmark_id": "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04",
+      "benchmark_version": "0.1.82",
+      "profiles": [
+        {
+          "profile_id": "xccdf_org.ssgproject.content_profile_stig",
+          "stig_release": "V1R5",
+          "stig_ids": {
+            "UBTU-24-100010": [
+              "xccdf_org.ssgproject.content_rule_package_timesyncd_removed"
+            ],
+            "UBTU-24-100020": [
+              "xccdf_org.ssgproject.content_rule_package_ntp_removed"
+            ],
+            "UBTU-24-100030": [
+              "xccdf_org.ssgproject.content_rule_package_telnetd_removed"
+            ],
+            "UBTU-24-100040": [
+              "xccdf_org.ssgproject.content_rule_package_rsh-server_removed"
+            ],
+            "UBTU-24-100050": [
+              "xccdf_org.ssgproject.content_rule_package_nfs-kernel-server_removed",
+              "xccdf_org.ssgproject.content_rule_service_nfs_disabled"
+            ],
+            "UBTU-24-100100": [
+              "xccdf_org.ssgproject.content_rule_package_aide_installed"
+            ],
+            "UBTU-24-100110": [
+              "xccdf_org.ssgproject.content_rule_aide_build_database"
+            ],
+            "UBTU-24-100120": [
+              "xccdf_org.ssgproject.content_rule_aide_periodic_checking_systemd_timer",
+              "xccdf_org.ssgproject.content_rule_aide_periodic_cron_checking"
+            ],
+            "UBTU-24-100130": [
+              "xccdf_org.ssgproject.content_rule_aide_disable_silentreports"
+            ],
+            "UBTU-24-100200": [
+              "xccdf_org.ssgproject.content_rule_service_rsyslog_enabled"
+            ],
+            "UBTU-24-100300": [
+              "xccdf_org.ssgproject.content_rule_package_ufw_installed"
+            ],
+            "UBTU-24-100310": [
+              "xccdf_org.ssgproject.content_rule_check_ufw_active"
+            ],
+            "UBTU-24-100400": [
+              "xccdf_org.ssgproject.content_rule_package_audit_installed"
+            ],
+            "UBTU-24-100410": [
+              "xccdf_org.ssgproject.content_rule_service_auditd_enabled"
+            ],
+            "UBTU-24-100450": [
+              "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_remote_server",
+              "xccdf_org.ssgproject.content_rule_package_audit-audispd-plugins_installed"
+            ],
+            "UBTU-24-100500": [
+              "xccdf_org.ssgproject.content_rule_package_apparmor_installed"
+            ],
+            "UBTU-24-100510": [
+              "xccdf_org.ssgproject.content_rule_apparmor_configured"
+            ],
+            "UBTU-24-100600": [
+              "xccdf_org.ssgproject.content_rule_package_pam_pwquality_installed"
+            ],
+            "UBTU-24-100650": [
+              "xccdf_org.ssgproject.content_rule_package_nss_sss_installed",
+              "xccdf_org.ssgproject.content_rule_package_pam_sss_installed",
+              "xccdf_org.ssgproject.content_rule_package_sssd_installed"
+            ],
+            "UBTU-24-100660": [
+              "xccdf_org.ssgproject.content_rule_service_sssd_enabled"
+            ],
+            "UBTU-24-100700": [
+              "xccdf_org.ssgproject.content_rule_package_chrony_installed"
+            ],
+            "UBTU-24-100800": [
+              "xccdf_org.ssgproject.content_rule_package_openssh-server_installed"
+            ],
+            "UBTU-24-100810": [
+              "xccdf_org.ssgproject.content_rule_service_sshd_enabled"
+            ],
+            "UBTU-24-100820": [
+              "xccdf_org.ssgproject.content_rule_sshd_use_approved_ciphers_ordered_stig"
+            ],
+            "UBTU-24-100830": [
+              "xccdf_org.ssgproject.content_rule_sshd_use_approved_macs_ordered_stig"
+            ],
+            "UBTU-24-100840": [
+              "xccdf_org.ssgproject.content_rule_sshd_use_approved_kex_ordered_stig"
+            ],
+            "UBTU-24-100850": [
+              "xccdf_org.ssgproject.content_rule_ssh_client_use_approved_ciphers_ordered_stig"
+            ],
+            "UBTU-24-100860": [
+              "xccdf_org.ssgproject.content_rule_ssh_use_approved_macs_ordered_stig"
+            ],
+            "UBTU-24-100900": [
+              "xccdf_org.ssgproject.content_rule_package_opensc_installed"
+            ],
+            "UBTU-24-100910": [
+              "xccdf_org.ssgproject.content_rule_install_smartcard_packages"
+            ],
+            "UBTU-24-101000": [
+              "xccdf_org.ssgproject.content_rule_vlock_installed"
+            ],
+            "UBTU-24-102000": [
+              "xccdf_org.ssgproject.content_rule_grub2_password",
+              "xccdf_org.ssgproject.content_rule_grub2_uefi_password"
+            ],
+            "UBTU-24-102010": [
+              "xccdf_org.ssgproject.content_rule_grub2_audit_argument"
+            ],
+            "UBTU-24-200000": [
+              "xccdf_org.ssgproject.content_rule_accounts_max_concurrent_login_sessions"
+            ],
+            "UBTU-24-200020": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_idle_delay",
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_delay",
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_enabled"
+            ],
+            "UBTU-24-200040": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_automount_open"
+            ],
+            "UBTU-24-200041": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_autorun"
+            ],
+            "UBTU-24-200042": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_lock_screen_on_smartcard_removal"
+            ],
+            "UBTU-24-200043": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_mode_blank"
+            ],
+            "UBTU-24-200060": [
+              "xccdf_org.ssgproject.content_rule_accounts_tmout"
+            ],
+            "UBTU-24-200090": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_remote_access_monitoring"
+            ],
+            "UBTU-24-200250": [
+              "xccdf_org.ssgproject.content_rule_account_temp_expire_date"
+            ],
+            "UBTU-24-200260": [
+              "xccdf_org.ssgproject.content_rule_account_disable_post_pw_expiration"
+            ],
+            "UBTU-24-200270": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_etc_cron_d",
+              "xccdf_org.ssgproject.content_rule_audit_rules_var_spool_cron"
+            ],
+            "UBTU-24-200280": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_passwd"
+            ],
+            "UBTU-24-200290": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_group"
+            ],
+            "UBTU-24-200300": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_shadow"
+            ],
+            "UBTU-24-200310": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_gshadow"
+            ],
+            "UBTU-24-200320": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_opasswd"
+            ],
+            "UBTU-24-200580": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_suid_privilege_function"
+            ],
+            "UBTU-24-200610": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_audit",
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny",
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_interval",
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_silent",
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time"
+            ],
+            "UBTU-24-200640": [
+              "xccdf_org.ssgproject.content_rule_banner_etc_issue_net",
+              "xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner_net"
+            ],
+            "UBTU-24-200650": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled"
+            ],
+            "UBTU-24-200660": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_login_banner_text"
+            ],
+            "UBTU-24-200680": [
+              "xccdf_org.ssgproject.content_rule_banner_etc_profiled_ssh_confirm"
+            ],
+            "UBTU-24-300001": [
+              "xccdf_org.ssgproject.content_rule_apt_conf_disallow_unauthenticated"
+            ],
+            "UBTU-24-300006": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_library_dirs"
+            ],
+            "UBTU-24-300007": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_library_dirs"
+            ],
+            "UBTU-24-300008": [
+              "xccdf_org.ssgproject.content_rule_dir_ownership_library_dirs"
+            ],
+            "UBTU-24-300009": [
+              "xccdf_org.ssgproject.content_rule_root_permissions_syslibrary_files"
+            ],
+            "UBTU-24-300010": [
+              "xccdf_org.ssgproject.content_rule_dir_group_ownership_library_dirs"
+            ],
+            "UBTU-24-300011": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_binary_dirs"
+            ],
+            "UBTU-24-300012": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_binary_dirs"
+            ],
+            "UBTU-24-300013": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_system_commands_dirs"
+            ],
+            "UBTU-24-300014": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck"
+            ],
+            "UBTU-24-300016": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforcing",
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_retry"
+            ],
+            "UBTU-24-300017": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faildelay_delay"
+            ],
+            "UBTU-24-300019": [
+              "xccdf_org.ssgproject.content_rule_sudo_restrict_privilege_elevation_to_authorized"
+            ],
+            "UBTU-24-300020": [
+              "xccdf_org.ssgproject.content_rule_sudo_remove_nopasswd"
+            ],
+            "UBTU-24-300021": [
+              "xccdf_org.ssgproject.content_rule_sudo_require_authentication"
+            ],
+            "UBTU-24-300022": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding"
+            ],
+            "UBTU-24-300023": [
+              "xccdf_org.ssgproject.content_rule_sshd_x11_use_localhost"
+            ],
+            "UBTU-24-300025": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_ctrlaltdel_reboot"
+            ],
+            "UBTU-24-300026": [
+              "xccdf_org.ssgproject.content_rule_disable_ctrlaltdel_reboot"
+            ],
+            "UBTU-24-300027": [
+              "xccdf_org.ssgproject.content_rule_no_empty_passwords_etc_shadow"
+            ],
+            "UBTU-24-300028": [
+              "xccdf_org.ssgproject.content_rule_no_empty_passwords"
+            ],
+            "UBTU-24-300029": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_var_log_journal"
+            ],
+            "UBTU-24-300030": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs"
+            ],
+            "UBTU-24-300031": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords",
+              "xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env"
+            ],
+            "UBTU-24-300039": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled"
+            ],
+            "UBTU-24-300041": [
+              "xccdf_org.ssgproject.content_rule_ufw_only_required_services"
+            ],
+            "UBTU-24-400000": [
+              "xccdf_org.ssgproject.content_rule_no_duplicate_uids"
+            ],
+            "UBTU-24-400020": [
+              "xccdf_org.ssgproject.content_rule_smartcard_pam_enabled"
+            ],
+            "UBTU-24-400030": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth"
+            ],
+            "UBTU-24-400060": [
+              "xccdf_org.ssgproject.content_rule_smartcard_configure_cert_checking"
+            ],
+            "UBTU-24-400110": [
+              "xccdf_org.ssgproject.content_rule_prevent_direct_root_logins"
+            ],
+            "UBTU-24-400220": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_rounds_password_auth",
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_auth_stig"
+            ],
+            "UBTU-24-400260": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_ucredit"
+            ],
+            "UBTU-24-400270": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_lcredit"
+            ],
+            "UBTU-24-400280": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit"
+            ],
+            "UBTU-24-400290": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_difok"
+            ],
+            "UBTU-24-400300": [
+              "xccdf_org.ssgproject.content_rule_accounts_minimum_age_login_defs"
+            ],
+            "UBTU-24-400310": [
+              "xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs"
+            ],
+            "UBTU-24-400320": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen"
+            ],
+            "UBTU-24-400330": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_ocredit"
+            ],
+            "UBTU-24-400340": [
+              "xccdf_org.ssgproject.content_rule_sssd_offline_cred_expiration"
+            ],
+            "UBTU-24-400360": [
+              "xccdf_org.ssgproject.content_rule_sssd_certification_path_trust_anchor",
+              "xccdf_org.ssgproject.content_rule_sssd_enable_pam_services",
+              "xccdf_org.ssgproject.content_rule_sssd_enable_smartcards"
+            ],
+            "UBTU-24-400370": [
+              "xccdf_org.ssgproject.content_rule_sssd_enable_user_cert"
+            ],
+            "UBTU-24-400375": [
+              "xccdf_org.ssgproject.content_rule_smartcard_configure_ca"
+            ],
+            "UBTU-24-400380": [
+              "xccdf_org.ssgproject.content_rule_smartcard_configure_crl"
+            ],
+            "UBTU-24-400400": [
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_logindefs"
+            ],
+            "UBTU-24-500010": [
+              "xccdf_org.ssgproject.content_rule_audit_sudo_log_events"
+            ],
+            "UBTU-24-500050": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_pam"
+            ],
+            "UBTU-24-600000": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_keepalive"
+            ],
+            "UBTU-24-600010": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout"
+            ],
+            "UBTU-24-600030": [
+              "xccdf_org.ssgproject.content_rule_is_fips_mode_enabled"
+            ],
+            "UBTU-24-600060": [
+              "xccdf_org.ssgproject.content_rule_only_allow_dod_certs"
+            ],
+            "UBTU-24-600070": [
+              "xccdf_org.ssgproject.content_rule_service_kdump_disabled"
+            ],
+            "UBTU-24-600090": [
+              "xccdf_org.ssgproject.content_rule_encrypt_partitions"
+            ],
+            "UBTU-24-600130": [
+              "xccdf_org.ssgproject.content_rule_ensure_sudo_group_restricted"
+            ],
+            "UBTU-24-600140": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
+            ],
+            "UBTU-24-600150": [
+              "xccdf_org.ssgproject.content_rule_dir_perms_world_writable_sticky_bits"
+            ],
+            "UBTU-24-600160": [
+              "xccdf_org.ssgproject.content_rule_chronyd_or_ntpd_set_maxpoll",
+              "xccdf_org.ssgproject.content_rule_chronyd_server_directive",
+              "xccdf_org.ssgproject.content_rule_chronyd_specify_remote_server"
+            ],
+            "UBTU-24-600180": [
+              "xccdf_org.ssgproject.content_rule_chronyd_sync_clock"
+            ],
+            "UBTU-24-600190": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_syncookies"
+            ],
+            "UBTU-24-600200": [
+              "xccdf_org.ssgproject.content_rule_ufw_rate_limit"
+            ],
+            "UBTU-24-600230": [
+              "xccdf_org.ssgproject.content_rule_wireless_disable_interfaces"
+            ],
+            "UBTU-24-700010": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log_stig"
+            ],
+            "UBTU-24-700020": [
+              "xccdf_org.ssgproject.content_rule_dir_permissions_system_journal",
+              "xccdf_org.ssgproject.content_rule_file_permissions_system_journal"
+            ],
+            "UBTU-24-700030": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_journalctl"
+            ],
+            "UBTU-24-700040": [
+              "xccdf_org.ssgproject.content_rule_file_owner_journalctl"
+            ],
+            "UBTU-24-700050": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_journalctl"
+            ],
+            "UBTU-24-700060": [
+              "xccdf_org.ssgproject.content_rule_dir_groupowner_system_journal"
+            ],
+            "UBTU-24-700070": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_system_journal"
+            ],
+            "UBTU-24-700080": [
+              "xccdf_org.ssgproject.content_rule_dir_owner_system_journal"
+            ],
+            "UBTU-24-700090": [
+              "xccdf_org.ssgproject.content_rule_file_owner_system_journal"
+            ],
+            "UBTU-24-700100": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_var_log"
+            ],
+            "UBTU-24-700110": [
+              "xccdf_org.ssgproject.content_rule_file_owner_var_log"
+            ],
+            "UBTU-24-700120": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log"
+            ],
+            "UBTU-24-700130": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_var_log_syslog"
+            ],
+            "UBTU-24-700140": [
+              "xccdf_org.ssgproject.content_rule_file_owner_var_log_syslog"
+            ],
+            "UBTU-24-700150": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log_syslog"
+            ],
+            "UBTU-24-700300": [
+              "xccdf_org.ssgproject.content_rule_bios_enable_execution_restrictions"
+            ],
+            "UBTU-24-700310": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space"
+            ],
+            "UBTU-24-700320": [
+              "xccdf_org.ssgproject.content_rule_clean_components_post_updating"
+            ],
+            "UBTU-24-700400": [
+              "xccdf_org.ssgproject.content_rule_installed_OS_is_vendor_supported"
+            ],
+            "UBTU-24-900040": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_audit_auditd",
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_audit_rules",
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_audit_rulesd"
+            ],
+            "UBTU-24-900050": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_audit_configuration"
+            ],
+            "UBTU-24-900060": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_audit_configuration"
+            ],
+            "UBTU-24-900070": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_su"
+            ],
+            "UBTU-24-900080": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_chfn"
+            ],
+            "UBTU-24-900090": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_mount"
+            ],
+            "UBTU-24-900100": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_umount"
+            ],
+            "UBTU-24-900110": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_ssh_agent"
+            ],
+            "UBTU-24-900120": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_ssh_keysign"
+            ],
+            "UBTU-24-900130": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fremovexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fsetxattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lremovexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lsetxattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_removexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_setxattr"
+            ],
+            "UBTU-24-900140": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_chown",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchown",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchownat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lchown"
+            ],
+            "UBTU-24-900150": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_chmod",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchmod",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchmodat"
+            ],
+            "UBTU-24-900160": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_creat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_ftruncate",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_open",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_open_by_handle_at",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_openat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_truncate"
+            ],
+            "UBTU-24-900170": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_sudo"
+            ],
+            "UBTU-24-900180": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_sudoedit"
+            ],
+            "UBTU-24-900190": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_chsh"
+            ],
+            "UBTU-24-900200": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_newgrp"
+            ],
+            "UBTU-24-900210": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_chcon"
+            ],
+            "UBTU-24-900220": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_apparmor_parser"
+            ],
+            "UBTU-24-900230": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_setfacl"
+            ],
+            "UBTU-24-900240": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_chacl"
+            ],
+            "UBTU-24-900250": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_login_events_faillog"
+            ],
+            "UBTU-24-900260": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_login_events_lastlog"
+            ],
+            "UBTU-24-900270": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_passwd"
+            ],
+            "UBTU-24-900280": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_unix_update"
+            ],
+            "UBTU-24-900290": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_gpasswd"
+            ],
+            "UBTU-24-900300": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_chage"
+            ],
+            "UBTU-24-900310": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_usermod"
+            ],
+            "UBTU-24-900320": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_crontab"
+            ],
+            "UBTU-24-900330": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_pam_timestamp_check"
+            ],
+            "UBTU-24-900340": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_finit",
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_init"
+            ],
+            "UBTU-24-900350": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_delete"
+            ],
+            "UBTU-24-900510": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_sudoers"
+            ],
+            "UBTU-24-900520": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_sudoers_d"
+            ],
+            "UBTU-24-900540": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_rename",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_renameat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_rmdir",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_unlink",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_unlinkat"
+            ],
+            "UBTU-24-900590": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_session_events_wtmp"
+            ],
+            "UBTU-24-900600": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_session_events_utmp"
+            ],
+            "UBTU-24-900610": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_session_events_btmp"
+            ],
+            "UBTU-24-900730": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_modprobe"
+            ],
+            "UBTU-24-900740": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_kmod"
+            ],
+            "UBTU-24-900750": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_fdisk"
+            ],
+            "UBTU-24-900920": [
+              "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_sufficiently_large_partition"
+            ],
+            "UBTU-24-900950": [
+              "xccdf_org.ssgproject.content_rule_auditd_offload_logs"
+            ],
+            "UBTU-24-900960": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_action",
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_percentage"
+            ],
+            "UBTU-24-900980": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_action_mail_acct"
+            ],
+            "UBTU-24-901220": [
+              "xccdf_org.ssgproject.content_rule_ensure_rtc_utc_configuration"
+            ],
+            "UBTU-24-901230": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_audit_binaries"
+            ],
+            "UBTU-24-901240": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_audit_binaries"
+            ],
+            "UBTU-24-901250": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_audit_binaries"
+            ],
+            "UBTU-24-901260": [
+              "xccdf_org.ssgproject.content_rule_dir_permissions_binary_dirs"
+            ],
+            "UBTU-24-901270": [
+              "xccdf_org.ssgproject.content_rule_dir_ownership_binary_dirs"
+            ],
+            "UBTU-24-901280": [
+              "xccdf_org.ssgproject.content_rule_dir_groupownership_binary_dirs"
+            ],
+            "UBTU-24-901300": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log_audit_stig"
+            ],
+            "UBTU-24-901310": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_var_log_audit_stig"
+            ],
+            "UBTU-24-901350": [
+              "xccdf_org.ssgproject.content_rule_file_group_ownership_var_log_audit_stig"
+            ],
+            "UBTU-24-901380": [
+              "xccdf_org.ssgproject.content_rule_directory_permissions_var_log_audit"
+            ],
+            "UBTU-24-909000": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_immutable"
+            ],
+            "UBTU-24-909890": [
+              "xccdf_org.ssgproject.content_rule_aide_check_audit_tools"
+            ]
+          },
+          "rules_without_stig_id": []
+        }
+      ]
+    },
+    {
+      "name": "rhel9",
+      "file_name": "ssg-rhel9-ds.xml",
+      "sha256": "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f",
+      "benchmark_id": "xccdf_org.ssgproject.content_benchmark_RHEL-9",
+      "benchmark_version": "0.1.82",
+      "profiles": [
+        {
+          "profile_id": "xccdf_org.ssgproject.content_profile_stig",
+          "stig_release": "V2R9",
+          "stig_ids": {
+            "RHEL-09-171011": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_login_banner_text"
+            ],
+            "RHEL-09-211010": [
+              "xccdf_org.ssgproject.content_rule_installed_OS_is_vendor_supported"
+            ],
+            "RHEL-09-211015": [
+              "xccdf_org.ssgproject.content_rule_security_patches_up_to_date"
+            ],
+            "RHEL-09-211020": [
+              "xccdf_org.ssgproject.content_rule_banner_etc_issue"
+            ],
+            "RHEL-09-211030": [
+              "xccdf_org.ssgproject.content_rule_xwindows_runlevel_target"
+            ],
+            "RHEL-09-211040": [
+              "xccdf_org.ssgproject.content_rule_service_systemd-journald_enabled"
+            ],
+            "RHEL-09-211045": [
+              "xccdf_org.ssgproject.content_rule_disable_ctrlaltdel_burstaction"
+            ],
+            "RHEL-09-211050": [
+              "xccdf_org.ssgproject.content_rule_disable_ctrlaltdel_reboot"
+            ],
+            "RHEL-09-211055": [
+              "xccdf_org.ssgproject.content_rule_service_debug-shell_disabled"
+            ],
+            "RHEL-09-212010": [
+              "xccdf_org.ssgproject.content_rule_grub2_password"
+            ],
+            "RHEL-09-212015": [
+              "xccdf_org.ssgproject.content_rule_grub2_disable_interactive_boot"
+            ],
+            "RHEL-09-212020": [
+              "xccdf_org.ssgproject.content_rule_grub2_admin_username"
+            ],
+            "RHEL-09-212025": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_grub2_cfg"
+            ],
+            "RHEL-09-212030": [
+              "xccdf_org.ssgproject.content_rule_file_owner_grub2_cfg"
+            ],
+            "RHEL-09-212035": [
+              "xccdf_org.ssgproject.content_rule_grub2_vsyscall_argument"
+            ],
+            "RHEL-09-212040": [
+              "xccdf_org.ssgproject.content_rule_grub2_page_poison_argument"
+            ],
+            "RHEL-09-212045": [
+              "xccdf_org.ssgproject.content_rule_grub2_init_on_free"
+            ],
+            "RHEL-09-212050": [
+              "xccdf_org.ssgproject.content_rule_grub2_pti_argument"
+            ],
+            "RHEL-09-212055": [
+              "xccdf_org.ssgproject.content_rule_grub2_audit_argument"
+            ],
+            "RHEL-09-213010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
+            ],
+            "RHEL-09-213015": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_event_paranoid"
+            ],
+            "RHEL-09-213020": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_kexec_load_disabled"
+            ],
+            "RHEL-09-213025": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_kptr_restrict"
+            ],
+            "RHEL-09-213030": [
+              "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_hardlinks"
+            ],
+            "RHEL-09-213035": [
+              "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_symlinks"
+            ],
+            "RHEL-09-213040": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_pattern"
+            ],
+            "RHEL-09-213045": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_atm_disabled"
+            ],
+            "RHEL-09-213050": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_can_disabled"
+            ],
+            "RHEL-09-213055": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_firewire-core_disabled"
+            ],
+            "RHEL-09-213060": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_sctp_disabled"
+            ],
+            "RHEL-09-213065": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_tipc_disabled"
+            ],
+            "RHEL-09-213070": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space"
+            ],
+            "RHEL-09-213075": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_unprivileged_bpf_disabled"
+            ],
+            "RHEL-09-213080": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_yama_ptrace_scope"
+            ],
+            "RHEL-09-213085": [
+              "xccdf_org.ssgproject.content_rule_coredump_disable_backtraces"
+            ],
+            "RHEL-09-213090": [
+              "xccdf_org.ssgproject.content_rule_coredump_disable_storage"
+            ],
+            "RHEL-09-213095": [
+              "xccdf_org.ssgproject.content_rule_disable_users_coredumps"
+            ],
+            "RHEL-09-213100": [
+              "xccdf_org.ssgproject.content_rule_service_systemd-coredump_disabled"
+            ],
+            "RHEL-09-213105": [
+              "xccdf_org.ssgproject.content_rule_sysctl_user_max_user_namespaces_no_remediation"
+            ],
+            "RHEL-09-213110": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_exec_shield"
+            ],
+            "RHEL-09-213115": [
+              "xccdf_org.ssgproject.content_rule_service_kdump_disabled"
+            ],
+            "RHEL-09-214010": [
+              "xccdf_org.ssgproject.content_rule_ensure_redhat_gpgkey_installed"
+            ],
+            "RHEL-09-214015": [
+              "xccdf_org.ssgproject.content_rule_ensure_gpgcheck_globally_activated"
+            ],
+            "RHEL-09-214020": [
+              "xccdf_org.ssgproject.content_rule_ensure_gpgcheck_local_packages"
+            ],
+            "RHEL-09-214025": [
+              "xccdf_org.ssgproject.content_rule_ensure_gpgcheck_never_disabled"
+            ],
+            "RHEL-09-214035": [
+              "xccdf_org.ssgproject.content_rule_clean_components_post_updating"
+            ],
+            "RHEL-09-215010": [
+              "xccdf_org.ssgproject.content_rule_package_subscription-manager_installed"
+            ],
+            "RHEL-09-215015": [
+              "xccdf_org.ssgproject.content_rule_package_vsftpd_removed"
+            ],
+            "RHEL-09-215020": [
+              "xccdf_org.ssgproject.content_rule_package_sendmail_removed"
+            ],
+            "RHEL-09-215025": [
+              "xccdf_org.ssgproject.content_rule_package_nfs-utils_removed"
+            ],
+            "RHEL-09-215035": [
+              "xccdf_org.ssgproject.content_rule_ensure_epel_repos_disabled"
+            ],
+            "RHEL-09-215040": [
+              "xccdf_org.ssgproject.content_rule_package_telnet-server_removed"
+            ],
+            "RHEL-09-215045": [
+              "xccdf_org.ssgproject.content_rule_package_gssproxy_removed"
+            ],
+            "RHEL-09-215050": [
+              "xccdf_org.ssgproject.content_rule_package_iprutils_removed"
+            ],
+            "RHEL-09-215055": [
+              "xccdf_org.ssgproject.content_rule_package_tuned_removed"
+            ],
+            "RHEL-09-215060": [
+              "xccdf_org.ssgproject.content_rule_package_tftp-server_removed"
+            ],
+            "RHEL-09-215070": [
+              "xccdf_org.ssgproject.content_rule_xwindows_remove_packages"
+            ],
+            "RHEL-09-215075": [
+              "xccdf_org.ssgproject.content_rule_install_smartcard_packages"
+            ],
+            "RHEL-09-215080": [
+              "xccdf_org.ssgproject.content_rule_package_gnutls-utils_installed"
+            ],
+            "RHEL-09-215085": [
+              "xccdf_org.ssgproject.content_rule_package_nss-tools_installed"
+            ],
+            "RHEL-09-215090": [
+              "xccdf_org.ssgproject.content_rule_package_rng-tools_installed"
+            ],
+            "RHEL-09-215095": [
+              "xccdf_org.ssgproject.content_rule_package_s-nail_installed"
+            ],
+            "RHEL-09-215100": [
+              "xccdf_org.ssgproject.content_rule_package_crypto-policies_installed"
+            ],
+            "RHEL-09-215101": [
+              "xccdf_org.ssgproject.content_rule_package_postfix_installed"
+            ],
+            "RHEL-09-215105": [
+              "xccdf_org.ssgproject.content_rule_configure_crypto_policy",
+              "xccdf_org.ssgproject.content_rule_fips_crypto_subpolicy",
+              "xccdf_org.ssgproject.content_rule_fips_custom_stig_sub_policy"
+            ],
+            "RHEL-09-231010": [
+              "xccdf_org.ssgproject.content_rule_partition_for_home"
+            ],
+            "RHEL-09-231015": [
+              "xccdf_org.ssgproject.content_rule_partition_for_tmp"
+            ],
+            "RHEL-09-231020": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var"
+            ],
+            "RHEL-09-231025": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var_log"
+            ],
+            "RHEL-09-231030": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var_log_audit"
+            ],
+            "RHEL-09-231035": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var_tmp"
+            ],
+            "RHEL-09-231040": [
+              "xccdf_org.ssgproject.content_rule_service_autofs_disabled"
+            ],
+            "RHEL-09-231045": [
+              "xccdf_org.ssgproject.content_rule_mount_option_home_nodev"
+            ],
+            "RHEL-09-231050": [
+              "xccdf_org.ssgproject.content_rule_mount_option_home_nosuid"
+            ],
+            "RHEL-09-231055": [
+              "xccdf_org.ssgproject.content_rule_mount_option_home_noexec"
+            ],
+            "RHEL-09-231065": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nodev_remote_filesystems"
+            ],
+            "RHEL-09-231070": [
+              "xccdf_org.ssgproject.content_rule_mount_option_noexec_remote_filesystems"
+            ],
+            "RHEL-09-231075": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nosuid_remote_filesystems"
+            ],
+            "RHEL-09-231080": [
+              "xccdf_org.ssgproject.content_rule_mount_option_noexec_removable_partitions"
+            ],
+            "RHEL-09-231085": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nodev_removable_partitions"
+            ],
+            "RHEL-09-231090": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nosuid_removable_partitions"
+            ],
+            "RHEL-09-231095": [
+              "xccdf_org.ssgproject.content_rule_mount_option_boot_nodev"
+            ],
+            "RHEL-09-231100": [
+              "xccdf_org.ssgproject.content_rule_mount_option_boot_nosuid"
+            ],
+            "RHEL-09-231105": [
+              "xccdf_org.ssgproject.content_rule_mount_option_boot_efi_nosuid"
+            ],
+            "RHEL-09-231110": [
+              "xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nodev"
+            ],
+            "RHEL-09-231115": [
+              "xccdf_org.ssgproject.content_rule_mount_option_dev_shm_noexec"
+            ],
+            "RHEL-09-231120": [
+              "xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nosuid"
+            ],
+            "RHEL-09-231125": [
+              "xccdf_org.ssgproject.content_rule_mount_option_tmp_nodev"
+            ],
+            "RHEL-09-231130": [
+              "xccdf_org.ssgproject.content_rule_mount_option_tmp_noexec"
+            ],
+            "RHEL-09-231135": [
+              "xccdf_org.ssgproject.content_rule_mount_option_tmp_nosuid"
+            ],
+            "RHEL-09-231140": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_nodev"
+            ],
+            "RHEL-09-231145": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_nodev"
+            ],
+            "RHEL-09-231150": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_noexec"
+            ],
+            "RHEL-09-231155": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_nosuid"
+            ],
+            "RHEL-09-231160": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nodev"
+            ],
+            "RHEL-09-231165": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_noexec"
+            ],
+            "RHEL-09-231170": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nosuid"
+            ],
+            "RHEL-09-231175": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nodev"
+            ],
+            "RHEL-09-231180": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_tmp_noexec"
+            ],
+            "RHEL-09-231185": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nosuid"
+            ],
+            "RHEL-09-231190": [
+              "xccdf_org.ssgproject.content_rule_encrypt_partitions"
+            ],
+            "RHEL-09-231195": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled"
+            ],
+            "RHEL-09-231200": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nodev_nonroot_local_partitions"
+            ],
+            "RHEL-09-232010": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_binary_dirs"
+            ],
+            "RHEL-09-232015": [
+              "xccdf_org.ssgproject.content_rule_dir_permissions_library_dirs"
+            ],
+            "RHEL-09-232020": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_library_dirs"
+            ],
+            "RHEL-09-232025": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log"
+            ],
+            "RHEL-09-232030": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log_messages"
+            ],
+            "RHEL-09-232035": [
+              "xccdf_org.ssgproject.content_rule_file_audit_tools_permissions"
+            ],
+            "RHEL-09-232040": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_cron_not_modified"
+            ],
+            "RHEL-09-232045": [
+              "xccdf_org.ssgproject.content_rule_file_permission_user_init_files_root",
+              "xccdf_org.ssgproject.content_rule_rootfiles_configured"
+            ],
+            "RHEL-09-232050": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_home_directories"
+            ],
+            "RHEL-09-232055": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_group"
+            ],
+            "RHEL-09-232060": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_group"
+            ],
+            "RHEL-09-232065": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_gshadow"
+            ],
+            "RHEL-09-232070": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_gshadow"
+            ],
+            "RHEL-09-232075": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd"
+            ],
+            "RHEL-09-232080": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_passwd"
+            ],
+            "RHEL-09-232085": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_shadow"
+            ],
+            "RHEL-09-232090": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_group"
+            ],
+            "RHEL-09-232095": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_group"
+            ],
+            "RHEL-09-232100": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_group"
+            ],
+            "RHEL-09-232103": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_audit_configuration"
+            ],
+            "RHEL-09-232104": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_audit_configuration"
+            ],
+            "RHEL-09-232105": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_group"
+            ],
+            "RHEL-09-232110": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_gshadow"
+            ],
+            "RHEL-09-232115": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_gshadow"
+            ],
+            "RHEL-09-232120": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_gshadow"
+            ],
+            "RHEL-09-232125": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_gshadow"
+            ],
+            "RHEL-09-232130": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_passwd"
+            ],
+            "RHEL-09-232135": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_passwd"
+            ],
+            "RHEL-09-232140": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_passwd"
+            ],
+            "RHEL-09-232145": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_passwd"
+            ],
+            "RHEL-09-232150": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_shadow"
+            ],
+            "RHEL-09-232155": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_shadow"
+            ],
+            "RHEL-09-232160": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_shadow"
+            ],
+            "RHEL-09-232165": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_shadow"
+            ],
+            "RHEL-09-232170": [
+              "xccdf_org.ssgproject.content_rule_file_owner_var_log"
+            ],
+            "RHEL-09-232175": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_var_log"
+            ],
+            "RHEL-09-232180": [
+              "xccdf_org.ssgproject.content_rule_file_owner_var_log_messages"
+            ],
+            "RHEL-09-232185": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_var_log_messages"
+            ],
+            "RHEL-09-232190": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_binary_dirs"
+            ],
+            "RHEL-09-232195": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_system_commands_dirs"
+            ],
+            "RHEL-09-232200": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_library_dirs"
+            ],
+            "RHEL-09-232205": [
+              "xccdf_org.ssgproject.content_rule_root_permissions_syslibrary_files"
+            ],
+            "RHEL-09-232210": [
+              "xccdf_org.ssgproject.content_rule_dir_ownership_library_dirs"
+            ],
+            "RHEL-09-232215": [
+              "xccdf_org.ssgproject.content_rule_dir_group_ownership_library_dirs"
+            ],
+            "RHEL-09-232220": [
+              "xccdf_org.ssgproject.content_rule_file_audit_tools_ownership"
+            ],
+            "RHEL-09-232225": [
+              "xccdf_org.ssgproject.content_rule_file_audit_tools_group_ownership"
+            ],
+            "RHEL-09-232230": [
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_d",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_daily",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_deny",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_hourly",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_monthly",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_weekly",
+              "xccdf_org.ssgproject.content_rule_file_owner_crontab"
+            ],
+            "RHEL-09-232235": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_d",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_daily",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_deny",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_hourly",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_monthly",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_weekly",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_crontab"
+            ],
+            "RHEL-09-232240": [
+              "xccdf_org.ssgproject.content_rule_dir_perms_world_writable_system_owned"
+            ],
+            "RHEL-09-232245": [
+              "xccdf_org.ssgproject.content_rule_dir_perms_world_writable_sticky_bits"
+            ],
+            "RHEL-09-232250": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_ungroupowned"
+            ],
+            "RHEL-09-232255": [
+              "xccdf_org.ssgproject.content_rule_no_files_unowned_by_user"
+            ],
+            "RHEL-09-232260": [
+              "xccdf_org.ssgproject.content_rule_selinux_all_devicefiles_labeled"
+            ],
+            "RHEL-09-232270": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_shadow"
+            ],
+            "RHEL-09-251010": [
+              "xccdf_org.ssgproject.content_rule_package_firewalld_installed"
+            ],
+            "RHEL-09-251015": [
+              "xccdf_org.ssgproject.content_rule_service_firewalld_enabled"
+            ],
+            "RHEL-09-251020": [
+              "xccdf_org.ssgproject.content_rule_configured_firewalld_default_deny"
+            ],
+            "RHEL-09-251030": [
+              "xccdf_org.ssgproject.content_rule_firewalld-backend"
+            ],
+            "RHEL-09-251035": [
+              "xccdf_org.ssgproject.content_rule_firewalld_sshd_port_enabled"
+            ],
+            "RHEL-09-251040": [
+              "xccdf_org.ssgproject.content_rule_network_sniffer_disabled"
+            ],
+            "RHEL-09-251045": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_core_bpf_jit_harden"
+            ],
+            "RHEL-09-252010": [
+              "xccdf_org.ssgproject.content_rule_package_chrony_installed"
+            ],
+            "RHEL-09-252015": [
+              "xccdf_org.ssgproject.content_rule_service_chronyd_enabled"
+            ],
+            "RHEL-09-252020": [
+              "xccdf_org.ssgproject.content_rule_chronyd_or_ntpd_set_maxpoll",
+              "xccdf_org.ssgproject.content_rule_chronyd_server_directive",
+              "xccdf_org.ssgproject.content_rule_chronyd_specify_remote_server"
+            ],
+            "RHEL-09-252025": [
+              "xccdf_org.ssgproject.content_rule_chronyd_client_only"
+            ],
+            "RHEL-09-252030": [
+              "xccdf_org.ssgproject.content_rule_chronyd_configure_local_socket",
+              "xccdf_org.ssgproject.content_rule_chronyd_no_chronyc_network"
+            ],
+            "RHEL-09-252035": [
+              "xccdf_org.ssgproject.content_rule_network_configure_name_resolution"
+            ],
+            "RHEL-09-252040": [
+              "xccdf_org.ssgproject.content_rule_networkmanager_dns_mode"
+            ],
+            "RHEL-09-252045": [
+              "xccdf_org.ssgproject.content_rule_libreswan_approved_tunnels"
+            ],
+            "RHEL-09-252050": [
+              "xccdf_org.ssgproject.content_rule_postfix_prevent_unrestricted_relay"
+            ],
+            "RHEL-09-252060": [
+              "xccdf_org.ssgproject.content_rule_postfix_client_configure_mail_alias_postmaster"
+            ],
+            "RHEL-09-252065": [
+              "xccdf_org.ssgproject.content_rule_package_libreswan_installed"
+            ],
+            "RHEL-09-252070": [
+              "xccdf_org.ssgproject.content_rule_no_host_based_files"
+            ],
+            "RHEL-09-252075": [
+              "xccdf_org.ssgproject.content_rule_no_user_host_based_files"
+            ],
+            "RHEL-09-253010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_syncookies"
+            ],
+            "RHEL-09-253015": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects"
+            ],
+            "RHEL-09-253020": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_source_route"
+            ],
+            "RHEL-09-253025": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_log_martians"
+            ],
+            "RHEL-09-253030": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_log_martians"
+            ],
+            "RHEL-09-253035": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter"
+            ],
+            "RHEL-09-253040": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_redirects"
+            ],
+            "RHEL-09-253045": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_source_route"
+            ],
+            "RHEL-09-253050": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_rp_filter"
+            ],
+            "RHEL-09-253055": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts"
+            ],
+            "RHEL-09-253060": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses"
+            ],
+            "RHEL-09-253065": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects"
+            ],
+            "RHEL-09-253070": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_send_redirects"
+            ],
+            "RHEL-09-253075": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_forwarding"
+            ],
+            "RHEL-09-254010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra"
+            ],
+            "RHEL-09-254015": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_redirects"
+            ],
+            "RHEL-09-254020": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_source_route"
+            ],
+            "RHEL-09-254025": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_forwarding"
+            ],
+            "RHEL-09-254030": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra"
+            ],
+            "RHEL-09-254035": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_redirects"
+            ],
+            "RHEL-09-254040": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_source_route"
+            ],
+            "RHEL-09-255010": [
+              "xccdf_org.ssgproject.content_rule_package_openssh-server_installed"
+            ],
+            "RHEL-09-255015": [
+              "xccdf_org.ssgproject.content_rule_service_sshd_enabled"
+            ],
+            "RHEL-09-255020": [
+              "xccdf_org.ssgproject.content_rule_package_openssh-clients_installed"
+            ],
+            "RHEL-09-255025": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner"
+            ],
+            "RHEL-09-255030": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_loglevel_verbose"
+            ],
+            "RHEL-09-255035": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth"
+            ],
+            "RHEL-09-255040": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords"
+            ],
+            "RHEL-09-255045": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+            ],
+            "RHEL-09-255050": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_pam"
+            ],
+            "RHEL-09-255064": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_ciphers_openssh_conf_crypto_policy"
+            ],
+            "RHEL-09-255065": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_ciphers_opensshserver_conf_crypto_policy",
+              "xccdf_org.ssgproject.content_rule_sshd_include_crypto_policy"
+            ],
+            "RHEL-09-255070": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_macs_openssh_conf_crypto_policy"
+            ],
+            "RHEL-09-255075": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_macs_opensshserver_conf_crypto_policy"
+            ],
+            "RHEL-09-255080": [
+              "xccdf_org.ssgproject.content_rule_disable_host_auth"
+            ],
+            "RHEL-09-255085": [
+              "xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env"
+            ],
+            "RHEL-09-255090": [
+              "xccdf_org.ssgproject.content_rule_sshd_rekey_limit"
+            ],
+            "RHEL-09-255095": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_keepalive"
+            ],
+            "RHEL-09-255100": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout"
+            ],
+            "RHEL-09-255105": [
+              "xccdf_org.ssgproject.content_rule_directory_groupowner_sshd_config_d",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_sshd_config",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_sshd_drop_in_config",
+              "xccdf_org.ssgproject.content_rule_file_sshd_50_redhat_exists"
+            ],
+            "RHEL-09-255110": [
+              "xccdf_org.ssgproject.content_rule_directory_owner_sshd_config_d",
+              "xccdf_org.ssgproject.content_rule_file_owner_sshd_config",
+              "xccdf_org.ssgproject.content_rule_file_owner_sshd_drop_in_config",
+              "xccdf_org.ssgproject.content_rule_file_sshd_50_redhat_exists"
+            ],
+            "RHEL-09-255115": [
+              "xccdf_org.ssgproject.content_rule_directory_permissions_sshd_config_d",
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_config",
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_drop_in_config"
+            ],
+            "RHEL-09-255120": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_private_key"
+            ],
+            "RHEL-09-255125": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_pub_key"
+            ],
+            "RHEL-09-255135": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_gssapi_auth"
+            ],
+            "RHEL-09-255140": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_kerb_auth"
+            ],
+            "RHEL-09-255145": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_rhosts"
+            ],
+            "RHEL-09-255150": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_user_known_hosts"
+            ],
+            "RHEL-09-255155": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding"
+            ],
+            "RHEL-09-255160": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_strictmodes"
+            ],
+            "RHEL-09-255165": [
+              "xccdf_org.ssgproject.content_rule_sshd_print_last_log"
+            ],
+            "RHEL-09-255175": [
+              "xccdf_org.ssgproject.content_rule_sshd_x11_use_localhost"
+            ],
+            "RHEL-09-271010": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled"
+            ],
+            "RHEL-09-271015": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled"
+            ],
+            "RHEL-09-271020": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_automount_open"
+            ],
+            "RHEL-09-271025": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_automount_open"
+            ],
+            "RHEL-09-271030": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_autorun"
+            ],
+            "RHEL-09-271035": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_autorun"
+            ],
+            "RHEL-09-271040": [
+              "xccdf_org.ssgproject.content_rule_gnome_gdm_disable_automatic_login"
+            ],
+            "RHEL-09-271045": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_lock_screen_on_smartcard_removal"
+            ],
+            "RHEL-09-271050": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_lock_screen_on_smartcard_removal"
+            ],
+            "RHEL-09-271055": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_enabled"
+            ],
+            "RHEL-09-271060": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_enabled"
+            ],
+            "RHEL-09-271065": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_idle_delay"
+            ],
+            "RHEL-09-271070": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_session_idle_user_locks"
+            ],
+            "RHEL-09-271075": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_delay"
+            ],
+            "RHEL-09-271080": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_user_locks"
+            ],
+            "RHEL-09-271085": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_mode_blank"
+            ],
+            "RHEL-09-271090": [
+              "xccdf_org.ssgproject.content_rule_dconf_db_up_to_date"
+            ],
+            "RHEL-09-271095": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_restart_shutdown"
+            ],
+            "RHEL-09-271100": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_restart_shutdown"
+            ],
+            "RHEL-09-271105": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_ctrlaltdel_reboot"
+            ],
+            "RHEL-09-271110": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_ctrlaltdel_reboot"
+            ],
+            "RHEL-09-271115": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_user_list"
+            ],
+            "RHEL-09-291010": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled"
+            ],
+            "RHEL-09-291015": [
+              "xccdf_org.ssgproject.content_rule_package_usbguard_installed"
+            ],
+            "RHEL-09-291020": [
+              "xccdf_org.ssgproject.content_rule_service_usbguard_enabled"
+            ],
+            "RHEL-09-291025": [
+              "xccdf_org.ssgproject.content_rule_configure_usbguard_auditbackend"
+            ],
+            "RHEL-09-291030": [
+              "xccdf_org.ssgproject.content_rule_usbguard_generate_policy"
+            ],
+            "RHEL-09-291035": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_bluetooth_disabled"
+            ],
+            "RHEL-09-291040": [
+              "xccdf_org.ssgproject.content_rule_wireless_disable_interfaces"
+            ],
+            "RHEL-09-411010": [
+              "xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs"
+            ],
+            "RHEL-09-411015": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_existing"
+            ],
+            "RHEL-09-411020": [
+              "xccdf_org.ssgproject.content_rule_accounts_have_homedir_login_defs"
+            ],
+            "RHEL-09-411025": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_interactive_users"
+            ],
+            "RHEL-09-411030": [
+              "xccdf_org.ssgproject.content_rule_account_unique_id"
+            ],
+            "RHEL-09-411035": [
+              "xccdf_org.ssgproject.content_rule_no_shelllogin_for_systemaccounts"
+            ],
+            "RHEL-09-411040": [
+              "xccdf_org.ssgproject.content_rule_account_temp_expire_date"
+            ],
+            "RHEL-09-411045": [
+              "xccdf_org.ssgproject.content_rule_gid_passwd_group_same"
+            ],
+            "RHEL-09-411050": [
+              "xccdf_org.ssgproject.content_rule_account_disable_post_pw_expiration"
+            ],
+            "RHEL-09-411055": [
+              "xccdf_org.ssgproject.content_rule_accounts_user_home_paths_only"
+            ],
+            "RHEL-09-411060": [
+              "xccdf_org.ssgproject.content_rule_accounts_user_interactive_home_directory_defined"
+            ],
+            "RHEL-09-411065": [
+              "xccdf_org.ssgproject.content_rule_accounts_user_interactive_home_directory_exists"
+            ],
+            "RHEL-09-411070": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_home_directories"
+            ],
+            "RHEL-09-411075": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny"
+            ],
+            "RHEL-09-411080": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny_root"
+            ],
+            "RHEL-09-411085": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_interval"
+            ],
+            "RHEL-09-411090": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time"
+            ],
+            "RHEL-09-411095": [
+              "xccdf_org.ssgproject.content_rule_accounts_authorized_local_users"
+            ],
+            "RHEL-09-411100": [
+              "xccdf_org.ssgproject.content_rule_accounts_no_uid_except_zero"
+            ],
+            "RHEL-09-411105": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_dir"
+            ],
+            "RHEL-09-411110": [
+              "xccdf_org.ssgproject.content_rule_group_unique_id"
+            ],
+            "RHEL-09-412035": [
+              "xccdf_org.ssgproject.content_rule_accounts_tmout"
+            ],
+            "RHEL-09-412040": [
+              "xccdf_org.ssgproject.content_rule_accounts_max_concurrent_login_sessions"
+            ],
+            "RHEL-09-412045": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_audit"
+            ],
+            "RHEL-09-412050": [
+              "xccdf_org.ssgproject.content_rule_accounts_logon_fail_delay"
+            ],
+            "RHEL-09-412055": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_bashrc"
+            ],
+            "RHEL-09-412060": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_csh_cshrc"
+            ],
+            "RHEL-09-412065": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs"
+            ],
+            "RHEL-09-412070": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_profile"
+            ],
+            "RHEL-09-412080": [
+              "xccdf_org.ssgproject.content_rule_logind_session_timeout"
+            ],
+            "RHEL-09-431010": [
+              "xccdf_org.ssgproject.content_rule_selinux_state"
+            ],
+            "RHEL-09-431015": [
+              "xccdf_org.ssgproject.content_rule_selinux_policytype"
+            ],
+            "RHEL-09-431016": [
+              "xccdf_org.ssgproject.content_rule_selinux_context_elevation_for_sudo"
+            ],
+            "RHEL-09-431020": [
+              "xccdf_org.ssgproject.content_rule_account_password_selinux_faillock_dir"
+            ],
+            "RHEL-09-431025": [
+              "xccdf_org.ssgproject.content_rule_package_policycoreutils_installed"
+            ],
+            "RHEL-09-431030": [
+              "xccdf_org.ssgproject.content_rule_package_policycoreutils-python-utils_installed"
+            ],
+            "RHEL-09-432010": [
+              "xccdf_org.ssgproject.content_rule_package_sudo_installed"
+            ],
+            "RHEL-09-432015": [
+              "xccdf_org.ssgproject.content_rule_sudo_require_reauthentication"
+            ],
+            "RHEL-09-432020": [
+              "xccdf_org.ssgproject.content_rule_sudoers_validate_passwd"
+            ],
+            "RHEL-09-432025": [
+              "xccdf_org.ssgproject.content_rule_sudo_remove_no_authenticate"
+            ],
+            "RHEL-09-432030": [
+              "xccdf_org.ssgproject.content_rule_sudo_restrict_privilege_elevation_to_authorized"
+            ],
+            "RHEL-09-432035": [
+              "xccdf_org.ssgproject.content_rule_use_pam_wheel_for_su"
+            ],
+            "RHEL-09-433010": [
+              "xccdf_org.ssgproject.content_rule_package_fapolicyd_installed"
+            ],
+            "RHEL-09-433015": [
+              "xccdf_org.ssgproject.content_rule_service_fapolicyd_enabled"
+            ],
+            "RHEL-09-433016": [
+              "xccdf_org.ssgproject.content_rule_fapolicy_default_deny"
+            ],
+            "RHEL-09-611010": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_retry"
+            ],
+            "RHEL-09-611025": [
+              "xccdf_org.ssgproject.content_rule_no_empty_passwords"
+            ],
+            "RHEL-09-611030": [
+              "xccdf_org.ssgproject.content_rule_account_password_pam_faillock_system_auth"
+            ],
+            "RHEL-09-611035": [
+              "xccdf_org.ssgproject.content_rule_account_password_pam_faillock_password_auth"
+            ],
+            "RHEL-09-611040": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_password_auth"
+            ],
+            "RHEL-09-611045": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_system_auth"
+            ],
+            "RHEL-09-611050": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_rounds_password_auth"
+            ],
+            "RHEL-09-611055": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_rounds_system_auth"
+            ],
+            "RHEL-09-611060": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforce_root"
+            ],
+            "RHEL-09-611065": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_lcredit"
+            ],
+            "RHEL-09-611070": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit"
+            ],
+            "RHEL-09-611075": [
+              "xccdf_org.ssgproject.content_rule_accounts_minimum_age_login_defs"
+            ],
+            "RHEL-09-611080": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_set_min_life_existing"
+            ],
+            "RHEL-09-611085": [
+              "xccdf_org.ssgproject.content_rule_sudo_remove_nopasswd"
+            ],
+            "RHEL-09-611090": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen"
+            ],
+            "RHEL-09-611100": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_ocredit"
+            ],
+            "RHEL-09-611105": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck"
+            ],
+            "RHEL-09-611110": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_ucredit"
+            ],
+            "RHEL-09-611115": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_difok"
+            ],
+            "RHEL-09-611120": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxclassrepeat"
+            ],
+            "RHEL-09-611125": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxrepeat"
+            ],
+            "RHEL-09-611130": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_minclass"
+            ],
+            "RHEL-09-611135": [
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_libuserconf"
+            ],
+            "RHEL-09-611140": [
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_logindefs"
+            ],
+            "RHEL-09-611145": [
+              "xccdf_org.ssgproject.content_rule_disallow_bypass_password_sudo"
+            ],
+            "RHEL-09-611155": [
+              "xccdf_org.ssgproject.content_rule_no_empty_passwords_etc_shadow"
+            ],
+            "RHEL-09-611160": [
+              "xccdf_org.ssgproject.content_rule_configure_opensc_card_drivers"
+            ],
+            "RHEL-09-611165": [
+              "xccdf_org.ssgproject.content_rule_sssd_enable_smartcards"
+            ],
+            "RHEL-09-611170": [
+              "xccdf_org.ssgproject.content_rule_sssd_certificate_verification"
+            ],
+            "RHEL-09-611175": [
+              "xccdf_org.ssgproject.content_rule_package_pcsc-lite_installed"
+            ],
+            "RHEL-09-611180": [
+              "xccdf_org.ssgproject.content_rule_service_pcscd_enabled"
+            ],
+            "RHEL-09-611185": [
+              "xccdf_org.ssgproject.content_rule_package_opensc_installed"
+            ],
+            "RHEL-09-611190": [
+              "xccdf_org.ssgproject.content_rule_ssh_keys_passphrase_protected"
+            ],
+            "RHEL-09-611195": [
+              "xccdf_org.ssgproject.content_rule_require_emergency_target_auth"
+            ],
+            "RHEL-09-611200": [
+              "xccdf_org.ssgproject.content_rule_require_singleuser_auth"
+            ],
+            "RHEL-09-631010": [
+              "xccdf_org.ssgproject.content_rule_sssd_has_trust_anchor"
+            ],
+            "RHEL-09-631015": [
+              "xccdf_org.ssgproject.content_rule_sssd_enable_certmap"
+            ],
+            "RHEL-09-631020": [
+              "xccdf_org.ssgproject.content_rule_sssd_offline_cred_expiration"
+            ],
+            "RHEL-09-651010": [
+              "xccdf_org.ssgproject.content_rule_aide_build_database",
+              "xccdf_org.ssgproject.content_rule_package_aide_installed"
+            ],
+            "RHEL-09-651015": [
+              "xccdf_org.ssgproject.content_rule_aide_scan_notification"
+            ],
+            "RHEL-09-651020": [
+              "xccdf_org.ssgproject.content_rule_aide_use_fips_hashes"
+            ],
+            "RHEL-09-651025": [
+              "xccdf_org.ssgproject.content_rule_aide_check_audit_tools"
+            ],
+            "RHEL-09-651030": [
+              "xccdf_org.ssgproject.content_rule_aide_verify_acls"
+            ],
+            "RHEL-09-651035": [
+              "xccdf_org.ssgproject.content_rule_aide_verify_ext_attributes"
+            ],
+            "RHEL-09-652010": [
+              "xccdf_org.ssgproject.content_rule_package_rsyslog_installed"
+            ],
+            "RHEL-09-652015": [
+              "xccdf_org.ssgproject.content_rule_package_rsyslog-gnutls_installed"
+            ],
+            "RHEL-09-652020": [
+              "xccdf_org.ssgproject.content_rule_service_rsyslog_enabled"
+            ],
+            "RHEL-09-652025": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_nolisten"
+            ],
+            "RHEL-09-652030": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_remote_access_monitoring"
+            ],
+            "RHEL-09-652040": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_encrypt_offload_actionsendstreamdriverauthmode"
+            ],
+            "RHEL-09-652045": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_encrypt_offload_actionsendstreamdrivermode"
+            ],
+            "RHEL-09-652050": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_encrypt_offload_defaultnetstreamdriver"
+            ],
+            "RHEL-09-652055": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_remote_loghost"
+            ],
+            "RHEL-09-652060": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_cron_logging"
+            ],
+            "RHEL-09-653010": [
+              "xccdf_org.ssgproject.content_rule_package_audit_installed"
+            ],
+            "RHEL-09-653015": [
+              "xccdf_org.ssgproject.content_rule_service_auditd_enabled"
+            ],
+            "RHEL-09-653020": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action_stig"
+            ],
+            "RHEL-09-653025": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action_stig"
+            ],
+            "RHEL-09-653030": [
+              "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_sufficiently_large_partition"
+            ],
+            "RHEL-09-653035": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_percentage"
+            ],
+            "RHEL-09-653040": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_action"
+            ],
+            "RHEL-09-653045": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_percentage"
+            ],
+            "RHEL-09-653050": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_action"
+            ],
+            "RHEL-09-653055": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action_stig"
+            ],
+            "RHEL-09-653060": [
+              "xccdf_org.ssgproject.content_rule_auditd_name_format"
+            ],
+            "RHEL-09-653065": [
+              "xccdf_org.ssgproject.content_rule_auditd_overflow_action"
+            ],
+            "RHEL-09-653070": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_action_mail_acct"
+            ],
+            "RHEL-09-653075": [
+              "xccdf_org.ssgproject.content_rule_auditd_local_events"
+            ],
+            "RHEL-09-653080": [
+              "xccdf_org.ssgproject.content_rule_directory_group_ownership_var_log_audit"
+            ],
+            "RHEL-09-653085": [
+              "xccdf_org.ssgproject.content_rule_directory_ownership_var_log_audit"
+            ],
+            "RHEL-09-653090": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log_audit"
+            ],
+            "RHEL-09-653095": [
+              "xccdf_org.ssgproject.content_rule_auditd_freq"
+            ],
+            "RHEL-09-653100": [
+              "xccdf_org.ssgproject.content_rule_auditd_log_format"
+            ],
+            "RHEL-09-653105": [
+              "xccdf_org.ssgproject.content_rule_auditd_write_logs"
+            ],
+            "RHEL-09-653110": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_audit_configuration_stig"
+            ],
+            "RHEL-09-653120": [
+              "xccdf_org.ssgproject.content_rule_grub2_audit_backlog_limit_argument"
+            ],
+            "RHEL-09-653125": [
+              "xccdf_org.ssgproject.content_rule_postfix_client_configure_mail_alias"
+            ],
+            "RHEL-09-653130": [
+              "xccdf_org.ssgproject.content_rule_package_audispd-plugins_installed"
+            ],
+            "RHEL-09-654010": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_suid_privilege_function"
+            ],
+            "RHEL-09-654015": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_chmod",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchmod",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchmodat"
+            ],
+            "RHEL-09-654020": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_chown",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchown",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchownat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lchown"
+            ],
+            "RHEL-09-654025": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fremovexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fsetxattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lremovexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lsetxattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_removexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_setxattr"
+            ],
+            "RHEL-09-654030": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_umount"
+            ],
+            "RHEL-09-654035": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_chacl"
+            ],
+            "RHEL-09-654040": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_setfacl"
+            ],
+            "RHEL-09-654045": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_chcon"
+            ],
+            "RHEL-09-654050": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_semanage"
+            ],
+            "RHEL-09-654055": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_setfiles"
+            ],
+            "RHEL-09-654060": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_setsebool"
+            ],
+            "RHEL-09-654065": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_rename",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_renameat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_rmdir",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_unlink",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_unlinkat"
+            ],
+            "RHEL-09-654070": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_creat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_ftruncate",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_open",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_open_by_handle_at",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_openat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_truncate"
+            ],
+            "RHEL-09-654075": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_delete"
+            ],
+            "RHEL-09-654080": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_finit",
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_init"
+            ],
+            "RHEL-09-654085": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_chage"
+            ],
+            "RHEL-09-654090": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_chsh"
+            ],
+            "RHEL-09-654095": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_crontab"
+            ],
+            "RHEL-09-654097": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_cron_execution"
+            ],
+            "RHEL-09-654100": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_gpasswd"
+            ],
+            "RHEL-09-654105": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_kmod"
+            ],
+            "RHEL-09-654110": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_newgrp"
+            ],
+            "RHEL-09-654115": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_pam_timestamp_check"
+            ],
+            "RHEL-09-654120": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_passwd"
+            ],
+            "RHEL-09-654125": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_postdrop"
+            ],
+            "RHEL-09-654130": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_postqueue"
+            ],
+            "RHEL-09-654135": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_ssh_agent"
+            ],
+            "RHEL-09-654140": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_ssh_keysign"
+            ],
+            "RHEL-09-654145": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_su"
+            ],
+            "RHEL-09-654150": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_sudo"
+            ],
+            "RHEL-09-654155": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_sudoedit"
+            ],
+            "RHEL-09-654160": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_unix_chkpwd"
+            ],
+            "RHEL-09-654165": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_unix_update"
+            ],
+            "RHEL-09-654170": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_userhelper"
+            ],
+            "RHEL-09-654175": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_usermod"
+            ],
+            "RHEL-09-654180": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_mount"
+            ],
+            "RHEL-09-654185": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_init"
+            ],
+            "RHEL-09-654190": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_poweroff"
+            ],
+            "RHEL-09-654195": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_reboot"
+            ],
+            "RHEL-09-654200": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_shutdown"
+            ],
+            "RHEL-09-654205": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_umount"
+            ],
+            "RHEL-09-654210": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_umount2"
+            ],
+            "RHEL-09-654215": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_sudoers"
+            ],
+            "RHEL-09-654220": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_sudoers_d"
+            ],
+            "RHEL-09-654225": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_group"
+            ],
+            "RHEL-09-654230": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_gshadow"
+            ],
+            "RHEL-09-654235": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_opasswd"
+            ],
+            "RHEL-09-654240": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_passwd"
+            ],
+            "RHEL-09-654245": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_shadow"
+            ],
+            "RHEL-09-654250": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_login_events_faillock"
+            ],
+            "RHEL-09-654255": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_login_events_lastlog"
+            ],
+            "RHEL-09-654265": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_system_shutdown"
+            ],
+            "RHEL-09-654275": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_immutable"
+            ],
+            "RHEL-09-671010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_crypto_fips_enabled"
+            ],
+            "RHEL-09-671015": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_all_shadowed_sha512"
+            ],
+            "RHEL-09-671020": [
+              "xccdf_org.ssgproject.content_rule_configure_libreswan_crypto_policy"
+            ],
+            "RHEL-09-671025": [
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_passwordauth"
+            ],
+            "RHEL-09-672020": [
+              "xccdf_org.ssgproject.content_rule_crypto_policy_not_overridden"
+            ],
+            "RHEL-09-672030": [
+              "xccdf_org.ssgproject.content_rule_configure_crypto_policy"
+            ],
+            "RHEL-09-672050": [
+              "xccdf_org.ssgproject.content_rule_configure_bind_crypto_policy"
+            ]
+          },
+          "rules_without_stig_id": [
+            "xccdf_org.ssgproject.content_rule_enable_authselect"
+          ]
+        },
+        {
+          "profile_id": "xccdf_org.ssgproject.content_profile_stig_gui",
+          "stig_release": "V2R9",
+          "stig_ids": {
+            "RHEL-09-171011": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_login_banner_text"
+            ],
+            "RHEL-09-211010": [
+              "xccdf_org.ssgproject.content_rule_installed_OS_is_vendor_supported"
+            ],
+            "RHEL-09-211015": [
+              "xccdf_org.ssgproject.content_rule_security_patches_up_to_date"
+            ],
+            "RHEL-09-211020": [
+              "xccdf_org.ssgproject.content_rule_banner_etc_issue"
+            ],
+            "RHEL-09-211040": [
+              "xccdf_org.ssgproject.content_rule_service_systemd-journald_enabled"
+            ],
+            "RHEL-09-211045": [
+              "xccdf_org.ssgproject.content_rule_disable_ctrlaltdel_burstaction"
+            ],
+            "RHEL-09-211050": [
+              "xccdf_org.ssgproject.content_rule_disable_ctrlaltdel_reboot"
+            ],
+            "RHEL-09-211055": [
+              "xccdf_org.ssgproject.content_rule_service_debug-shell_disabled"
+            ],
+            "RHEL-09-212010": [
+              "xccdf_org.ssgproject.content_rule_grub2_password"
+            ],
+            "RHEL-09-212015": [
+              "xccdf_org.ssgproject.content_rule_grub2_disable_interactive_boot"
+            ],
+            "RHEL-09-212020": [
+              "xccdf_org.ssgproject.content_rule_grub2_admin_username"
+            ],
+            "RHEL-09-212025": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_grub2_cfg"
+            ],
+            "RHEL-09-212030": [
+              "xccdf_org.ssgproject.content_rule_file_owner_grub2_cfg"
+            ],
+            "RHEL-09-212035": [
+              "xccdf_org.ssgproject.content_rule_grub2_vsyscall_argument"
+            ],
+            "RHEL-09-212040": [
+              "xccdf_org.ssgproject.content_rule_grub2_page_poison_argument"
+            ],
+            "RHEL-09-212045": [
+              "xccdf_org.ssgproject.content_rule_grub2_init_on_free"
+            ],
+            "RHEL-09-212050": [
+              "xccdf_org.ssgproject.content_rule_grub2_pti_argument"
+            ],
+            "RHEL-09-212055": [
+              "xccdf_org.ssgproject.content_rule_grub2_audit_argument"
+            ],
+            "RHEL-09-213010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
+            ],
+            "RHEL-09-213015": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_perf_event_paranoid"
+            ],
+            "RHEL-09-213020": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_kexec_load_disabled"
+            ],
+            "RHEL-09-213025": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_kptr_restrict"
+            ],
+            "RHEL-09-213030": [
+              "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_hardlinks"
+            ],
+            "RHEL-09-213035": [
+              "xccdf_org.ssgproject.content_rule_sysctl_fs_protected_symlinks"
+            ],
+            "RHEL-09-213040": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_core_pattern"
+            ],
+            "RHEL-09-213045": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_atm_disabled"
+            ],
+            "RHEL-09-213050": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_can_disabled"
+            ],
+            "RHEL-09-213055": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_firewire-core_disabled"
+            ],
+            "RHEL-09-213060": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_sctp_disabled"
+            ],
+            "RHEL-09-213065": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_tipc_disabled"
+            ],
+            "RHEL-09-213070": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space"
+            ],
+            "RHEL-09-213075": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_unprivileged_bpf_disabled"
+            ],
+            "RHEL-09-213080": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_yama_ptrace_scope"
+            ],
+            "RHEL-09-213085": [
+              "xccdf_org.ssgproject.content_rule_coredump_disable_backtraces"
+            ],
+            "RHEL-09-213090": [
+              "xccdf_org.ssgproject.content_rule_coredump_disable_storage"
+            ],
+            "RHEL-09-213095": [
+              "xccdf_org.ssgproject.content_rule_disable_users_coredumps"
+            ],
+            "RHEL-09-213100": [
+              "xccdf_org.ssgproject.content_rule_service_systemd-coredump_disabled"
+            ],
+            "RHEL-09-213105": [
+              "xccdf_org.ssgproject.content_rule_sysctl_user_max_user_namespaces_no_remediation"
+            ],
+            "RHEL-09-213110": [
+              "xccdf_org.ssgproject.content_rule_sysctl_kernel_exec_shield"
+            ],
+            "RHEL-09-213115": [
+              "xccdf_org.ssgproject.content_rule_service_kdump_disabled"
+            ],
+            "RHEL-09-214010": [
+              "xccdf_org.ssgproject.content_rule_ensure_redhat_gpgkey_installed"
+            ],
+            "RHEL-09-214015": [
+              "xccdf_org.ssgproject.content_rule_ensure_gpgcheck_globally_activated"
+            ],
+            "RHEL-09-214020": [
+              "xccdf_org.ssgproject.content_rule_ensure_gpgcheck_local_packages"
+            ],
+            "RHEL-09-214025": [
+              "xccdf_org.ssgproject.content_rule_ensure_gpgcheck_never_disabled"
+            ],
+            "RHEL-09-214035": [
+              "xccdf_org.ssgproject.content_rule_clean_components_post_updating"
+            ],
+            "RHEL-09-215010": [
+              "xccdf_org.ssgproject.content_rule_package_subscription-manager_installed"
+            ],
+            "RHEL-09-215015": [
+              "xccdf_org.ssgproject.content_rule_package_vsftpd_removed"
+            ],
+            "RHEL-09-215020": [
+              "xccdf_org.ssgproject.content_rule_package_sendmail_removed"
+            ],
+            "RHEL-09-215035": [
+              "xccdf_org.ssgproject.content_rule_ensure_epel_repos_disabled"
+            ],
+            "RHEL-09-215040": [
+              "xccdf_org.ssgproject.content_rule_package_telnet-server_removed"
+            ],
+            "RHEL-09-215045": [
+              "xccdf_org.ssgproject.content_rule_package_gssproxy_removed"
+            ],
+            "RHEL-09-215050": [
+              "xccdf_org.ssgproject.content_rule_package_iprutils_removed"
+            ],
+            "RHEL-09-215055": [
+              "xccdf_org.ssgproject.content_rule_package_tuned_removed"
+            ],
+            "RHEL-09-215060": [
+              "xccdf_org.ssgproject.content_rule_package_tftp-server_removed"
+            ],
+            "RHEL-09-215075": [
+              "xccdf_org.ssgproject.content_rule_install_smartcard_packages"
+            ],
+            "RHEL-09-215080": [
+              "xccdf_org.ssgproject.content_rule_package_gnutls-utils_installed"
+            ],
+            "RHEL-09-215085": [
+              "xccdf_org.ssgproject.content_rule_package_nss-tools_installed"
+            ],
+            "RHEL-09-215090": [
+              "xccdf_org.ssgproject.content_rule_package_rng-tools_installed"
+            ],
+            "RHEL-09-215095": [
+              "xccdf_org.ssgproject.content_rule_package_s-nail_installed"
+            ],
+            "RHEL-09-215100": [
+              "xccdf_org.ssgproject.content_rule_package_crypto-policies_installed"
+            ],
+            "RHEL-09-215101": [
+              "xccdf_org.ssgproject.content_rule_package_postfix_installed"
+            ],
+            "RHEL-09-215105": [
+              "xccdf_org.ssgproject.content_rule_configure_crypto_policy",
+              "xccdf_org.ssgproject.content_rule_fips_crypto_subpolicy",
+              "xccdf_org.ssgproject.content_rule_fips_custom_stig_sub_policy"
+            ],
+            "RHEL-09-231010": [
+              "xccdf_org.ssgproject.content_rule_partition_for_home"
+            ],
+            "RHEL-09-231015": [
+              "xccdf_org.ssgproject.content_rule_partition_for_tmp"
+            ],
+            "RHEL-09-231020": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var"
+            ],
+            "RHEL-09-231025": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var_log"
+            ],
+            "RHEL-09-231030": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var_log_audit"
+            ],
+            "RHEL-09-231035": [
+              "xccdf_org.ssgproject.content_rule_partition_for_var_tmp"
+            ],
+            "RHEL-09-231040": [
+              "xccdf_org.ssgproject.content_rule_service_autofs_disabled"
+            ],
+            "RHEL-09-231045": [
+              "xccdf_org.ssgproject.content_rule_mount_option_home_nodev"
+            ],
+            "RHEL-09-231050": [
+              "xccdf_org.ssgproject.content_rule_mount_option_home_nosuid"
+            ],
+            "RHEL-09-231055": [
+              "xccdf_org.ssgproject.content_rule_mount_option_home_noexec"
+            ],
+            "RHEL-09-231065": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nodev_remote_filesystems"
+            ],
+            "RHEL-09-231070": [
+              "xccdf_org.ssgproject.content_rule_mount_option_noexec_remote_filesystems"
+            ],
+            "RHEL-09-231075": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nosuid_remote_filesystems"
+            ],
+            "RHEL-09-231080": [
+              "xccdf_org.ssgproject.content_rule_mount_option_noexec_removable_partitions"
+            ],
+            "RHEL-09-231085": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nodev_removable_partitions"
+            ],
+            "RHEL-09-231090": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nosuid_removable_partitions"
+            ],
+            "RHEL-09-231095": [
+              "xccdf_org.ssgproject.content_rule_mount_option_boot_nodev"
+            ],
+            "RHEL-09-231100": [
+              "xccdf_org.ssgproject.content_rule_mount_option_boot_nosuid"
+            ],
+            "RHEL-09-231105": [
+              "xccdf_org.ssgproject.content_rule_mount_option_boot_efi_nosuid"
+            ],
+            "RHEL-09-231110": [
+              "xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nodev"
+            ],
+            "RHEL-09-231115": [
+              "xccdf_org.ssgproject.content_rule_mount_option_dev_shm_noexec"
+            ],
+            "RHEL-09-231120": [
+              "xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nosuid"
+            ],
+            "RHEL-09-231125": [
+              "xccdf_org.ssgproject.content_rule_mount_option_tmp_nodev"
+            ],
+            "RHEL-09-231130": [
+              "xccdf_org.ssgproject.content_rule_mount_option_tmp_noexec"
+            ],
+            "RHEL-09-231135": [
+              "xccdf_org.ssgproject.content_rule_mount_option_tmp_nosuid"
+            ],
+            "RHEL-09-231140": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_nodev"
+            ],
+            "RHEL-09-231145": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_nodev"
+            ],
+            "RHEL-09-231150": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_noexec"
+            ],
+            "RHEL-09-231155": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_nosuid"
+            ],
+            "RHEL-09-231160": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nodev"
+            ],
+            "RHEL-09-231165": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_noexec"
+            ],
+            "RHEL-09-231170": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nosuid"
+            ],
+            "RHEL-09-231175": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nodev"
+            ],
+            "RHEL-09-231180": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_tmp_noexec"
+            ],
+            "RHEL-09-231185": [
+              "xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nosuid"
+            ],
+            "RHEL-09-231190": [
+              "xccdf_org.ssgproject.content_rule_encrypt_partitions"
+            ],
+            "RHEL-09-231195": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled"
+            ],
+            "RHEL-09-231200": [
+              "xccdf_org.ssgproject.content_rule_mount_option_nodev_nonroot_local_partitions"
+            ],
+            "RHEL-09-232010": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_binary_dirs"
+            ],
+            "RHEL-09-232015": [
+              "xccdf_org.ssgproject.content_rule_dir_permissions_library_dirs"
+            ],
+            "RHEL-09-232020": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_library_dirs"
+            ],
+            "RHEL-09-232025": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log"
+            ],
+            "RHEL-09-232030": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log_messages"
+            ],
+            "RHEL-09-232035": [
+              "xccdf_org.ssgproject.content_rule_file_audit_tools_permissions"
+            ],
+            "RHEL-09-232040": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_cron_not_modified"
+            ],
+            "RHEL-09-232045": [
+              "xccdf_org.ssgproject.content_rule_file_permission_user_init_files_root",
+              "xccdf_org.ssgproject.content_rule_rootfiles_configured"
+            ],
+            "RHEL-09-232050": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_home_directories"
+            ],
+            "RHEL-09-232055": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_group"
+            ],
+            "RHEL-09-232060": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_group"
+            ],
+            "RHEL-09-232065": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_gshadow"
+            ],
+            "RHEL-09-232070": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_gshadow"
+            ],
+            "RHEL-09-232075": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd"
+            ],
+            "RHEL-09-232080": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_passwd"
+            ],
+            "RHEL-09-232085": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_shadow"
+            ],
+            "RHEL-09-232090": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_group"
+            ],
+            "RHEL-09-232095": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_group"
+            ],
+            "RHEL-09-232100": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_group"
+            ],
+            "RHEL-09-232103": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_audit_configuration"
+            ],
+            "RHEL-09-232104": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_audit_configuration"
+            ],
+            "RHEL-09-232105": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_group"
+            ],
+            "RHEL-09-232110": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_gshadow"
+            ],
+            "RHEL-09-232115": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_gshadow"
+            ],
+            "RHEL-09-232120": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_gshadow"
+            ],
+            "RHEL-09-232125": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_gshadow"
+            ],
+            "RHEL-09-232130": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_passwd"
+            ],
+            "RHEL-09-232135": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_passwd"
+            ],
+            "RHEL-09-232140": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_passwd"
+            ],
+            "RHEL-09-232145": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_passwd"
+            ],
+            "RHEL-09-232150": [
+              "xccdf_org.ssgproject.content_rule_file_owner_etc_shadow"
+            ],
+            "RHEL-09-232155": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_etc_shadow"
+            ],
+            "RHEL-09-232160": [
+              "xccdf_org.ssgproject.content_rule_file_owner_backup_etc_shadow"
+            ],
+            "RHEL-09-232165": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_shadow"
+            ],
+            "RHEL-09-232170": [
+              "xccdf_org.ssgproject.content_rule_file_owner_var_log"
+            ],
+            "RHEL-09-232175": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_var_log"
+            ],
+            "RHEL-09-232180": [
+              "xccdf_org.ssgproject.content_rule_file_owner_var_log_messages"
+            ],
+            "RHEL-09-232185": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_var_log_messages"
+            ],
+            "RHEL-09-232190": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_binary_dirs"
+            ],
+            "RHEL-09-232195": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_system_commands_dirs"
+            ],
+            "RHEL-09-232200": [
+              "xccdf_org.ssgproject.content_rule_file_ownership_library_dirs"
+            ],
+            "RHEL-09-232205": [
+              "xccdf_org.ssgproject.content_rule_root_permissions_syslibrary_files"
+            ],
+            "RHEL-09-232210": [
+              "xccdf_org.ssgproject.content_rule_dir_ownership_library_dirs"
+            ],
+            "RHEL-09-232215": [
+              "xccdf_org.ssgproject.content_rule_dir_group_ownership_library_dirs"
+            ],
+            "RHEL-09-232220": [
+              "xccdf_org.ssgproject.content_rule_file_audit_tools_ownership"
+            ],
+            "RHEL-09-232225": [
+              "xccdf_org.ssgproject.content_rule_file_audit_tools_group_ownership"
+            ],
+            "RHEL-09-232230": [
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_d",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_daily",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_deny",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_hourly",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_monthly",
+              "xccdf_org.ssgproject.content_rule_file_owner_cron_weekly",
+              "xccdf_org.ssgproject.content_rule_file_owner_crontab"
+            ],
+            "RHEL-09-232235": [
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_d",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_daily",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_deny",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_hourly",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_monthly",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_cron_weekly",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_crontab"
+            ],
+            "RHEL-09-232240": [
+              "xccdf_org.ssgproject.content_rule_dir_perms_world_writable_system_owned"
+            ],
+            "RHEL-09-232245": [
+              "xccdf_org.ssgproject.content_rule_dir_perms_world_writable_sticky_bits"
+            ],
+            "RHEL-09-232250": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_ungroupowned"
+            ],
+            "RHEL-09-232255": [
+              "xccdf_org.ssgproject.content_rule_no_files_unowned_by_user"
+            ],
+            "RHEL-09-232260": [
+              "xccdf_org.ssgproject.content_rule_selinux_all_devicefiles_labeled"
+            ],
+            "RHEL-09-232270": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_etc_shadow"
+            ],
+            "RHEL-09-251010": [
+              "xccdf_org.ssgproject.content_rule_package_firewalld_installed"
+            ],
+            "RHEL-09-251015": [
+              "xccdf_org.ssgproject.content_rule_service_firewalld_enabled"
+            ],
+            "RHEL-09-251020": [
+              "xccdf_org.ssgproject.content_rule_configured_firewalld_default_deny"
+            ],
+            "RHEL-09-251030": [
+              "xccdf_org.ssgproject.content_rule_firewalld-backend"
+            ],
+            "RHEL-09-251035": [
+              "xccdf_org.ssgproject.content_rule_firewalld_sshd_port_enabled"
+            ],
+            "RHEL-09-251040": [
+              "xccdf_org.ssgproject.content_rule_network_sniffer_disabled"
+            ],
+            "RHEL-09-251045": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_core_bpf_jit_harden"
+            ],
+            "RHEL-09-252010": [
+              "xccdf_org.ssgproject.content_rule_package_chrony_installed"
+            ],
+            "RHEL-09-252015": [
+              "xccdf_org.ssgproject.content_rule_service_chronyd_enabled"
+            ],
+            "RHEL-09-252020": [
+              "xccdf_org.ssgproject.content_rule_chronyd_or_ntpd_set_maxpoll",
+              "xccdf_org.ssgproject.content_rule_chronyd_server_directive",
+              "xccdf_org.ssgproject.content_rule_chronyd_specify_remote_server"
+            ],
+            "RHEL-09-252025": [
+              "xccdf_org.ssgproject.content_rule_chronyd_client_only"
+            ],
+            "RHEL-09-252030": [
+              "xccdf_org.ssgproject.content_rule_chronyd_configure_local_socket",
+              "xccdf_org.ssgproject.content_rule_chronyd_no_chronyc_network"
+            ],
+            "RHEL-09-252035": [
+              "xccdf_org.ssgproject.content_rule_network_configure_name_resolution"
+            ],
+            "RHEL-09-252040": [
+              "xccdf_org.ssgproject.content_rule_networkmanager_dns_mode"
+            ],
+            "RHEL-09-252045": [
+              "xccdf_org.ssgproject.content_rule_libreswan_approved_tunnels"
+            ],
+            "RHEL-09-252050": [
+              "xccdf_org.ssgproject.content_rule_postfix_prevent_unrestricted_relay"
+            ],
+            "RHEL-09-252060": [
+              "xccdf_org.ssgproject.content_rule_postfix_client_configure_mail_alias_postmaster"
+            ],
+            "RHEL-09-252065": [
+              "xccdf_org.ssgproject.content_rule_package_libreswan_installed"
+            ],
+            "RHEL-09-252070": [
+              "xccdf_org.ssgproject.content_rule_no_host_based_files"
+            ],
+            "RHEL-09-252075": [
+              "xccdf_org.ssgproject.content_rule_no_user_host_based_files"
+            ],
+            "RHEL-09-253010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_syncookies"
+            ],
+            "RHEL-09-253015": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects"
+            ],
+            "RHEL-09-253020": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_source_route"
+            ],
+            "RHEL-09-253025": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_log_martians"
+            ],
+            "RHEL-09-253030": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_log_martians"
+            ],
+            "RHEL-09-253035": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter"
+            ],
+            "RHEL-09-253040": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_redirects"
+            ],
+            "RHEL-09-253045": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_source_route"
+            ],
+            "RHEL-09-253050": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_rp_filter"
+            ],
+            "RHEL-09-253055": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts"
+            ],
+            "RHEL-09-253060": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses"
+            ],
+            "RHEL-09-253065": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects"
+            ],
+            "RHEL-09-253070": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_send_redirects"
+            ],
+            "RHEL-09-253075": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_forwarding"
+            ],
+            "RHEL-09-254010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra"
+            ],
+            "RHEL-09-254015": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_redirects"
+            ],
+            "RHEL-09-254020": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_source_route"
+            ],
+            "RHEL-09-254025": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_forwarding"
+            ],
+            "RHEL-09-254030": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra"
+            ],
+            "RHEL-09-254035": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_redirects"
+            ],
+            "RHEL-09-254040": [
+              "xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_source_route"
+            ],
+            "RHEL-09-255010": [
+              "xccdf_org.ssgproject.content_rule_package_openssh-server_installed"
+            ],
+            "RHEL-09-255015": [
+              "xccdf_org.ssgproject.content_rule_service_sshd_enabled"
+            ],
+            "RHEL-09-255020": [
+              "xccdf_org.ssgproject.content_rule_package_openssh-clients_installed"
+            ],
+            "RHEL-09-255025": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner"
+            ],
+            "RHEL-09-255030": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_loglevel_verbose"
+            ],
+            "RHEL-09-255035": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth"
+            ],
+            "RHEL-09-255040": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords"
+            ],
+            "RHEL-09-255045": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+            ],
+            "RHEL-09-255050": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_pam"
+            ],
+            "RHEL-09-255064": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_ciphers_openssh_conf_crypto_policy"
+            ],
+            "RHEL-09-255065": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_ciphers_opensshserver_conf_crypto_policy",
+              "xccdf_org.ssgproject.content_rule_sshd_include_crypto_policy"
+            ],
+            "RHEL-09-255070": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_macs_openssh_conf_crypto_policy"
+            ],
+            "RHEL-09-255075": [
+              "xccdf_org.ssgproject.content_rule_harden_sshd_macs_opensshserver_conf_crypto_policy"
+            ],
+            "RHEL-09-255080": [
+              "xccdf_org.ssgproject.content_rule_disable_host_auth"
+            ],
+            "RHEL-09-255085": [
+              "xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env"
+            ],
+            "RHEL-09-255090": [
+              "xccdf_org.ssgproject.content_rule_sshd_rekey_limit"
+            ],
+            "RHEL-09-255095": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_keepalive"
+            ],
+            "RHEL-09-255100": [
+              "xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout"
+            ],
+            "RHEL-09-255105": [
+              "xccdf_org.ssgproject.content_rule_directory_groupowner_sshd_config_d",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_sshd_config",
+              "xccdf_org.ssgproject.content_rule_file_groupowner_sshd_drop_in_config",
+              "xccdf_org.ssgproject.content_rule_file_sshd_50_redhat_exists"
+            ],
+            "RHEL-09-255110": [
+              "xccdf_org.ssgproject.content_rule_directory_owner_sshd_config_d",
+              "xccdf_org.ssgproject.content_rule_file_owner_sshd_config",
+              "xccdf_org.ssgproject.content_rule_file_owner_sshd_drop_in_config",
+              "xccdf_org.ssgproject.content_rule_file_sshd_50_redhat_exists"
+            ],
+            "RHEL-09-255115": [
+              "xccdf_org.ssgproject.content_rule_directory_permissions_sshd_config_d",
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_config",
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_drop_in_config"
+            ],
+            "RHEL-09-255120": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_private_key"
+            ],
+            "RHEL-09-255125": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_sshd_pub_key"
+            ],
+            "RHEL-09-255135": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_gssapi_auth"
+            ],
+            "RHEL-09-255140": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_kerb_auth"
+            ],
+            "RHEL-09-255145": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_rhosts"
+            ],
+            "RHEL-09-255150": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_user_known_hosts"
+            ],
+            "RHEL-09-255155": [
+              "xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding"
+            ],
+            "RHEL-09-255160": [
+              "xccdf_org.ssgproject.content_rule_sshd_enable_strictmodes"
+            ],
+            "RHEL-09-255165": [
+              "xccdf_org.ssgproject.content_rule_sshd_print_last_log"
+            ],
+            "RHEL-09-255175": [
+              "xccdf_org.ssgproject.content_rule_sshd_x11_use_localhost"
+            ],
+            "RHEL-09-271010": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled"
+            ],
+            "RHEL-09-271015": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled"
+            ],
+            "RHEL-09-271020": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_automount_open"
+            ],
+            "RHEL-09-271025": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_automount_open"
+            ],
+            "RHEL-09-271030": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_autorun"
+            ],
+            "RHEL-09-271035": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_autorun"
+            ],
+            "RHEL-09-271040": [
+              "xccdf_org.ssgproject.content_rule_gnome_gdm_disable_automatic_login"
+            ],
+            "RHEL-09-271045": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_lock_screen_on_smartcard_removal"
+            ],
+            "RHEL-09-271050": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_lock_screen_on_smartcard_removal"
+            ],
+            "RHEL-09-271055": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_enabled"
+            ],
+            "RHEL-09-271060": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_enabled"
+            ],
+            "RHEL-09-271065": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_idle_delay"
+            ],
+            "RHEL-09-271070": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_session_idle_user_locks"
+            ],
+            "RHEL-09-271075": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_delay"
+            ],
+            "RHEL-09-271080": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_user_locks"
+            ],
+            "RHEL-09-271085": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_mode_blank"
+            ],
+            "RHEL-09-271090": [
+              "xccdf_org.ssgproject.content_rule_dconf_db_up_to_date"
+            ],
+            "RHEL-09-271095": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_restart_shutdown"
+            ],
+            "RHEL-09-271100": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_restart_shutdown"
+            ],
+            "RHEL-09-271105": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_ctrlaltdel_reboot"
+            ],
+            "RHEL-09-271110": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_ctrlaltdel_reboot"
+            ],
+            "RHEL-09-271115": [
+              "xccdf_org.ssgproject.content_rule_dconf_gnome_disable_user_list"
+            ],
+            "RHEL-09-291010": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled"
+            ],
+            "RHEL-09-291015": [
+              "xccdf_org.ssgproject.content_rule_package_usbguard_installed"
+            ],
+            "RHEL-09-291020": [
+              "xccdf_org.ssgproject.content_rule_service_usbguard_enabled"
+            ],
+            "RHEL-09-291025": [
+              "xccdf_org.ssgproject.content_rule_configure_usbguard_auditbackend"
+            ],
+            "RHEL-09-291030": [
+              "xccdf_org.ssgproject.content_rule_usbguard_generate_policy"
+            ],
+            "RHEL-09-291035": [
+              "xccdf_org.ssgproject.content_rule_kernel_module_bluetooth_disabled"
+            ],
+            "RHEL-09-291040": [
+              "xccdf_org.ssgproject.content_rule_wireless_disable_interfaces"
+            ],
+            "RHEL-09-411010": [
+              "xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs"
+            ],
+            "RHEL-09-411015": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_existing"
+            ],
+            "RHEL-09-411020": [
+              "xccdf_org.ssgproject.content_rule_accounts_have_homedir_login_defs"
+            ],
+            "RHEL-09-411025": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_interactive_users"
+            ],
+            "RHEL-09-411030": [
+              "xccdf_org.ssgproject.content_rule_account_unique_id"
+            ],
+            "RHEL-09-411035": [
+              "xccdf_org.ssgproject.content_rule_no_shelllogin_for_systemaccounts"
+            ],
+            "RHEL-09-411040": [
+              "xccdf_org.ssgproject.content_rule_account_temp_expire_date"
+            ],
+            "RHEL-09-411045": [
+              "xccdf_org.ssgproject.content_rule_gid_passwd_group_same"
+            ],
+            "RHEL-09-411050": [
+              "xccdf_org.ssgproject.content_rule_account_disable_post_pw_expiration"
+            ],
+            "RHEL-09-411055": [
+              "xccdf_org.ssgproject.content_rule_accounts_user_home_paths_only"
+            ],
+            "RHEL-09-411060": [
+              "xccdf_org.ssgproject.content_rule_accounts_user_interactive_home_directory_defined"
+            ],
+            "RHEL-09-411065": [
+              "xccdf_org.ssgproject.content_rule_accounts_user_interactive_home_directory_exists"
+            ],
+            "RHEL-09-411070": [
+              "xccdf_org.ssgproject.content_rule_file_groupownership_home_directories"
+            ],
+            "RHEL-09-411075": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny"
+            ],
+            "RHEL-09-411080": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny_root"
+            ],
+            "RHEL-09-411085": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_interval"
+            ],
+            "RHEL-09-411090": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time"
+            ],
+            "RHEL-09-411095": [
+              "xccdf_org.ssgproject.content_rule_accounts_authorized_local_users"
+            ],
+            "RHEL-09-411100": [
+              "xccdf_org.ssgproject.content_rule_accounts_no_uid_except_zero"
+            ],
+            "RHEL-09-411105": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_dir"
+            ],
+            "RHEL-09-411110": [
+              "xccdf_org.ssgproject.content_rule_group_unique_id"
+            ],
+            "RHEL-09-412035": [
+              "xccdf_org.ssgproject.content_rule_accounts_tmout"
+            ],
+            "RHEL-09-412040": [
+              "xccdf_org.ssgproject.content_rule_accounts_max_concurrent_login_sessions"
+            ],
+            "RHEL-09-412045": [
+              "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_audit"
+            ],
+            "RHEL-09-412050": [
+              "xccdf_org.ssgproject.content_rule_accounts_logon_fail_delay"
+            ],
+            "RHEL-09-412055": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_bashrc"
+            ],
+            "RHEL-09-412060": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_csh_cshrc"
+            ],
+            "RHEL-09-412065": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs"
+            ],
+            "RHEL-09-412070": [
+              "xccdf_org.ssgproject.content_rule_accounts_umask_etc_profile"
+            ],
+            "RHEL-09-431010": [
+              "xccdf_org.ssgproject.content_rule_selinux_state"
+            ],
+            "RHEL-09-431015": [
+              "xccdf_org.ssgproject.content_rule_selinux_policytype"
+            ],
+            "RHEL-09-431016": [
+              "xccdf_org.ssgproject.content_rule_selinux_context_elevation_for_sudo"
+            ],
+            "RHEL-09-431020": [
+              "xccdf_org.ssgproject.content_rule_account_password_selinux_faillock_dir"
+            ],
+            "RHEL-09-431025": [
+              "xccdf_org.ssgproject.content_rule_package_policycoreutils_installed"
+            ],
+            "RHEL-09-431030": [
+              "xccdf_org.ssgproject.content_rule_package_policycoreutils-python-utils_installed"
+            ],
+            "RHEL-09-432010": [
+              "xccdf_org.ssgproject.content_rule_package_sudo_installed"
+            ],
+            "RHEL-09-432015": [
+              "xccdf_org.ssgproject.content_rule_sudo_require_reauthentication"
+            ],
+            "RHEL-09-432020": [
+              "xccdf_org.ssgproject.content_rule_sudoers_validate_passwd"
+            ],
+            "RHEL-09-432025": [
+              "xccdf_org.ssgproject.content_rule_sudo_remove_no_authenticate"
+            ],
+            "RHEL-09-432030": [
+              "xccdf_org.ssgproject.content_rule_sudo_restrict_privilege_elevation_to_authorized"
+            ],
+            "RHEL-09-432035": [
+              "xccdf_org.ssgproject.content_rule_use_pam_wheel_for_su"
+            ],
+            "RHEL-09-433010": [
+              "xccdf_org.ssgproject.content_rule_package_fapolicyd_installed"
+            ],
+            "RHEL-09-433015": [
+              "xccdf_org.ssgproject.content_rule_service_fapolicyd_enabled"
+            ],
+            "RHEL-09-433016": [
+              "xccdf_org.ssgproject.content_rule_fapolicy_default_deny"
+            ],
+            "RHEL-09-611010": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_retry"
+            ],
+            "RHEL-09-611025": [
+              "xccdf_org.ssgproject.content_rule_no_empty_passwords"
+            ],
+            "RHEL-09-611030": [
+              "xccdf_org.ssgproject.content_rule_account_password_pam_faillock_system_auth"
+            ],
+            "RHEL-09-611035": [
+              "xccdf_org.ssgproject.content_rule_account_password_pam_faillock_password_auth"
+            ],
+            "RHEL-09-611040": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_password_auth"
+            ],
+            "RHEL-09-611045": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_system_auth"
+            ],
+            "RHEL-09-611050": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_rounds_password_auth"
+            ],
+            "RHEL-09-611055": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_rounds_system_auth"
+            ],
+            "RHEL-09-611060": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforce_root"
+            ],
+            "RHEL-09-611065": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_lcredit"
+            ],
+            "RHEL-09-611070": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit"
+            ],
+            "RHEL-09-611075": [
+              "xccdf_org.ssgproject.content_rule_accounts_minimum_age_login_defs"
+            ],
+            "RHEL-09-611080": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_set_min_life_existing"
+            ],
+            "RHEL-09-611085": [
+              "xccdf_org.ssgproject.content_rule_sudo_remove_nopasswd"
+            ],
+            "RHEL-09-611090": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen"
+            ],
+            "RHEL-09-611100": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_ocredit"
+            ],
+            "RHEL-09-611105": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck"
+            ],
+            "RHEL-09-611110": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_ucredit"
+            ],
+            "RHEL-09-611115": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_difok"
+            ],
+            "RHEL-09-611120": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxclassrepeat"
+            ],
+            "RHEL-09-611125": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxrepeat"
+            ],
+            "RHEL-09-611130": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_pam_minclass"
+            ],
+            "RHEL-09-611135": [
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_libuserconf"
+            ],
+            "RHEL-09-611140": [
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_logindefs"
+            ],
+            "RHEL-09-611145": [
+              "xccdf_org.ssgproject.content_rule_disallow_bypass_password_sudo"
+            ],
+            "RHEL-09-611155": [
+              "xccdf_org.ssgproject.content_rule_no_empty_passwords_etc_shadow"
+            ],
+            "RHEL-09-611160": [
+              "xccdf_org.ssgproject.content_rule_configure_opensc_card_drivers"
+            ],
+            "RHEL-09-611165": [
+              "xccdf_org.ssgproject.content_rule_sssd_enable_smartcards"
+            ],
+            "RHEL-09-611170": [
+              "xccdf_org.ssgproject.content_rule_sssd_certificate_verification"
+            ],
+            "RHEL-09-611175": [
+              "xccdf_org.ssgproject.content_rule_package_pcsc-lite_installed"
+            ],
+            "RHEL-09-611180": [
+              "xccdf_org.ssgproject.content_rule_service_pcscd_enabled"
+            ],
+            "RHEL-09-611185": [
+              "xccdf_org.ssgproject.content_rule_package_opensc_installed"
+            ],
+            "RHEL-09-611190": [
+              "xccdf_org.ssgproject.content_rule_ssh_keys_passphrase_protected"
+            ],
+            "RHEL-09-611195": [
+              "xccdf_org.ssgproject.content_rule_require_emergency_target_auth"
+            ],
+            "RHEL-09-611200": [
+              "xccdf_org.ssgproject.content_rule_require_singleuser_auth"
+            ],
+            "RHEL-09-631010": [
+              "xccdf_org.ssgproject.content_rule_sssd_has_trust_anchor"
+            ],
+            "RHEL-09-631015": [
+              "xccdf_org.ssgproject.content_rule_sssd_enable_certmap"
+            ],
+            "RHEL-09-631020": [
+              "xccdf_org.ssgproject.content_rule_sssd_offline_cred_expiration"
+            ],
+            "RHEL-09-651010": [
+              "xccdf_org.ssgproject.content_rule_aide_build_database",
+              "xccdf_org.ssgproject.content_rule_package_aide_installed"
+            ],
+            "RHEL-09-651015": [
+              "xccdf_org.ssgproject.content_rule_aide_scan_notification"
+            ],
+            "RHEL-09-651020": [
+              "xccdf_org.ssgproject.content_rule_aide_use_fips_hashes"
+            ],
+            "RHEL-09-651025": [
+              "xccdf_org.ssgproject.content_rule_aide_check_audit_tools"
+            ],
+            "RHEL-09-651030": [
+              "xccdf_org.ssgproject.content_rule_aide_verify_acls"
+            ],
+            "RHEL-09-651035": [
+              "xccdf_org.ssgproject.content_rule_aide_verify_ext_attributes"
+            ],
+            "RHEL-09-652010": [
+              "xccdf_org.ssgproject.content_rule_package_rsyslog_installed"
+            ],
+            "RHEL-09-652015": [
+              "xccdf_org.ssgproject.content_rule_package_rsyslog-gnutls_installed"
+            ],
+            "RHEL-09-652020": [
+              "xccdf_org.ssgproject.content_rule_service_rsyslog_enabled"
+            ],
+            "RHEL-09-652025": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_nolisten"
+            ],
+            "RHEL-09-652030": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_remote_access_monitoring"
+            ],
+            "RHEL-09-652040": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_encrypt_offload_actionsendstreamdriverauthmode"
+            ],
+            "RHEL-09-652045": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_encrypt_offload_actionsendstreamdrivermode"
+            ],
+            "RHEL-09-652050": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_encrypt_offload_defaultnetstreamdriver"
+            ],
+            "RHEL-09-652055": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_remote_loghost"
+            ],
+            "RHEL-09-652060": [
+              "xccdf_org.ssgproject.content_rule_rsyslog_cron_logging"
+            ],
+            "RHEL-09-653010": [
+              "xccdf_org.ssgproject.content_rule_package_audit_installed"
+            ],
+            "RHEL-09-653015": [
+              "xccdf_org.ssgproject.content_rule_service_auditd_enabled"
+            ],
+            "RHEL-09-653020": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action_stig"
+            ],
+            "RHEL-09-653025": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action_stig"
+            ],
+            "RHEL-09-653030": [
+              "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_sufficiently_large_partition"
+            ],
+            "RHEL-09-653035": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_percentage"
+            ],
+            "RHEL-09-653040": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_action"
+            ],
+            "RHEL-09-653045": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_percentage"
+            ],
+            "RHEL-09-653050": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_action"
+            ],
+            "RHEL-09-653055": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action_stig"
+            ],
+            "RHEL-09-653060": [
+              "xccdf_org.ssgproject.content_rule_auditd_name_format"
+            ],
+            "RHEL-09-653065": [
+              "xccdf_org.ssgproject.content_rule_auditd_overflow_action"
+            ],
+            "RHEL-09-653070": [
+              "xccdf_org.ssgproject.content_rule_auditd_data_retention_action_mail_acct"
+            ],
+            "RHEL-09-653075": [
+              "xccdf_org.ssgproject.content_rule_auditd_local_events"
+            ],
+            "RHEL-09-653080": [
+              "xccdf_org.ssgproject.content_rule_directory_group_ownership_var_log_audit"
+            ],
+            "RHEL-09-653085": [
+              "xccdf_org.ssgproject.content_rule_directory_ownership_var_log_audit"
+            ],
+            "RHEL-09-653090": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_var_log_audit"
+            ],
+            "RHEL-09-653095": [
+              "xccdf_org.ssgproject.content_rule_auditd_freq"
+            ],
+            "RHEL-09-653100": [
+              "xccdf_org.ssgproject.content_rule_auditd_log_format"
+            ],
+            "RHEL-09-653105": [
+              "xccdf_org.ssgproject.content_rule_auditd_write_logs"
+            ],
+            "RHEL-09-653110": [
+              "xccdf_org.ssgproject.content_rule_file_permissions_audit_configuration_stig"
+            ],
+            "RHEL-09-653120": [
+              "xccdf_org.ssgproject.content_rule_grub2_audit_backlog_limit_argument"
+            ],
+            "RHEL-09-653125": [
+              "xccdf_org.ssgproject.content_rule_postfix_client_configure_mail_alias"
+            ],
+            "RHEL-09-653130": [
+              "xccdf_org.ssgproject.content_rule_package_audispd-plugins_installed"
+            ],
+            "RHEL-09-654010": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_suid_privilege_function"
+            ],
+            "RHEL-09-654015": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_chmod",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchmod",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchmodat"
+            ],
+            "RHEL-09-654020": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_chown",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchown",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fchownat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lchown"
+            ],
+            "RHEL-09-654025": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fremovexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_fsetxattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lremovexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_lsetxattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_removexattr",
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_setxattr"
+            ],
+            "RHEL-09-654030": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_umount"
+            ],
+            "RHEL-09-654035": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_chacl"
+            ],
+            "RHEL-09-654040": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_setfacl"
+            ],
+            "RHEL-09-654045": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_chcon"
+            ],
+            "RHEL-09-654050": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_semanage"
+            ],
+            "RHEL-09-654055": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_setfiles"
+            ],
+            "RHEL-09-654060": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_execution_setsebool"
+            ],
+            "RHEL-09-654065": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_rename",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_renameat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_rmdir",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_unlink",
+              "xccdf_org.ssgproject.content_rule_audit_rules_file_deletion_events_unlinkat"
+            ],
+            "RHEL-09-654070": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_creat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_ftruncate",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_open",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_open_by_handle_at",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_openat",
+              "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_truncate"
+            ],
+            "RHEL-09-654075": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_delete"
+            ],
+            "RHEL-09-654080": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_finit",
+              "xccdf_org.ssgproject.content_rule_audit_rules_kernel_module_loading_init"
+            ],
+            "RHEL-09-654085": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_chage"
+            ],
+            "RHEL-09-654090": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_chsh"
+            ],
+            "RHEL-09-654095": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_crontab"
+            ],
+            "RHEL-09-654097": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_cron_execution"
+            ],
+            "RHEL-09-654100": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_gpasswd"
+            ],
+            "RHEL-09-654105": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_kmod"
+            ],
+            "RHEL-09-654110": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_newgrp"
+            ],
+            "RHEL-09-654115": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_pam_timestamp_check"
+            ],
+            "RHEL-09-654120": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_passwd"
+            ],
+            "RHEL-09-654125": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_postdrop"
+            ],
+            "RHEL-09-654130": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_postqueue"
+            ],
+            "RHEL-09-654135": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_ssh_agent"
+            ],
+            "RHEL-09-654140": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_ssh_keysign"
+            ],
+            "RHEL-09-654145": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_su"
+            ],
+            "RHEL-09-654150": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_sudo"
+            ],
+            "RHEL-09-654155": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_sudoedit"
+            ],
+            "RHEL-09-654160": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_unix_chkpwd"
+            ],
+            "RHEL-09-654165": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_unix_update"
+            ],
+            "RHEL-09-654170": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_userhelper"
+            ],
+            "RHEL-09-654175": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_usermod"
+            ],
+            "RHEL-09-654180": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_privileged_commands_mount"
+            ],
+            "RHEL-09-654185": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_init"
+            ],
+            "RHEL-09-654190": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_poweroff"
+            ],
+            "RHEL-09-654195": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_reboot"
+            ],
+            "RHEL-09-654200": [
+              "xccdf_org.ssgproject.content_rule_audit_privileged_commands_shutdown"
+            ],
+            "RHEL-09-654205": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_umount"
+            ],
+            "RHEL-09-654210": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_umount2"
+            ],
+            "RHEL-09-654215": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_sudoers"
+            ],
+            "RHEL-09-654220": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_sudoers_d"
+            ],
+            "RHEL-09-654225": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_group"
+            ],
+            "RHEL-09-654230": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_gshadow"
+            ],
+            "RHEL-09-654235": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_opasswd"
+            ],
+            "RHEL-09-654240": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_passwd"
+            ],
+            "RHEL-09-654245": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_usergroup_modification_shadow"
+            ],
+            "RHEL-09-654250": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_login_events_faillock"
+            ],
+            "RHEL-09-654255": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_login_events_lastlog"
+            ],
+            "RHEL-09-654265": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_system_shutdown"
+            ],
+            "RHEL-09-654275": [
+              "xccdf_org.ssgproject.content_rule_audit_rules_immutable"
+            ],
+            "RHEL-09-671010": [
+              "xccdf_org.ssgproject.content_rule_sysctl_crypto_fips_enabled"
+            ],
+            "RHEL-09-671015": [
+              "xccdf_org.ssgproject.content_rule_accounts_password_all_shadowed_sha512"
+            ],
+            "RHEL-09-671020": [
+              "xccdf_org.ssgproject.content_rule_configure_libreswan_crypto_policy"
+            ],
+            "RHEL-09-671025": [
+              "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_passwordauth"
+            ],
+            "RHEL-09-672020": [
+              "xccdf_org.ssgproject.content_rule_crypto_policy_not_overridden"
+            ],
+            "RHEL-09-672030": [
+              "xccdf_org.ssgproject.content_rule_configure_crypto_policy"
+            ],
+            "RHEL-09-672050": [
+              "xccdf_org.ssgproject.content_rule_configure_bind_crypto_policy"
+            ]
+          },
+          "rules_without_stig_id": [
+            "xccdf_org.ssgproject.content_rule_enable_authselect"
+          ]
+        }
+      ]
+    }
+  ]
+}

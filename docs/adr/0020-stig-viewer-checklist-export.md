@@ -3,8 +3,9 @@
 - **Status:** proposed
 - **Date:** 2026-10-26
 - **Deciders:** lead architect; product owner (scope, decided 2026-10-26)
-- **Jira:** FREES-147 (this ADR and the exporter), FREES-146 (STIG to ComplianceAsCode mapping, not built)
-- **Pull requests:** introduced by the pull request for FREES-147
+- **Jira:** FREES-147 (this ADR and the exporter), FREES-146 (STIG to ComplianceAsCode mapping, see the
+  [amendment](#amendment-2026-10-27-complianceascode-findings-through-the-stig-mapping-frees-146))
+- **Pull requests:** introduced by the pull request for FREES-147; amended by the pull request for FREES-146
 - **Related:** [ADR 0013](0013-normalized-findings-model.md), [ADR 0016](0016-report-schema-and-summary-semantics.md),
   [ADR 0018](0018-evidence-bundle-provenance.md), [ADR 0019](0019-scc-scanner-backend-and-ci-image.md) (decision 9 and
   the FREES-161 amendment, decision 7)
@@ -219,7 +220,110 @@ container.
    (FREES-147 acceptance criterion). Until then the format claims rest on the sources above.
 2. `cklb_version` is `"1.0"` after MITRE hdf-libs; STIG Manager writes none and one community example writes `"1"`.
    Change it only on the owner's evidence from STIG Viewer 3.
-3. OpenSCAP and ComplianceAsCode findings: FREES-146.
+3. OpenSCAP and ComplianceAsCode findings: FREES-146, closed by the amendment below for mapped STIG profiles.
+
+## Amendment 2026-10-27: ComplianceAsCode findings through the STIG mapping (FREES-146)
+
+This amendment replaces the refusal of section 4 for OpenSCAP and ComplianceAsCode findings of a ComplianceAsCode
+STIG profile. Every other rule of this ADR stands.
+
+### What the pinned ComplianceAsCode streams carry
+
+Read from the pinned, digest-verified streams of `content/manifest.yml` (ComplianceAsCode 0.1.82) on 2026-10-27:
+
+| Stream | STIG profile and its `version` | STIG IDs | V- and SV- IDs |
+|---|---|---|---|
+| `ssg-ubuntu2404-ds.xml` | `xccdf_org.ssgproject.content_profile_stig`, `V1R5` | 194 distinct `UBTU-24-*` on 239 rules, one per rule | none |
+| `ssg-rhel9-ds.xml` | `..._stig` and `..._stig_gui`, both `V2R9` | 441 and 437 distinct `RHEL-09-*` on 480 and 476 rules | 488 `V-*` and 488 `SV-*r*_rule` references in the stream |
+
+- The STIG IDs are `reference` elements of the rules whose `href` is
+  `https://www.cyber.mil/stigs/downloads/?_dl_facet_stigs=operating-systems%2Cunix-linux`. The SRG IDs use another
+  `href` and are not read.
+- A rule that other STIG rules need, but that checks no requirement itself, carries the text `needed_rules` there
+  (`enable_authselect` in RHEL 9). It is listed as a rule without a STIG ID.
+- The STIG profile states the DISA release it implements as its own `version`; no other pinned profile has a
+  `V<n>R<n>` version.
+- The Ubuntu stream carries neither group IDs nor rule IDs, so they must come from DISA content in any case. The RHEL 9
+  `SV-` IDs carry a revision that need not be the one of the DISA content the operator has. Neither is used as a join
+  key.
+- Mappings are many-to-many. In Ubuntu, 23 STIG IDs have several rules, up to 6. In RHEL 9, 17 have several rules,
+  up to 7, and 9 rules have several STIG IDs.
+
+### Decision
+
+1. **A pinned derived table from the ComplianceAsCode streams alone.** `tools/content/generate_stig_mapping.py`
+   (`make stig-mapping`) reads every pinned stream through `catalog.read_benchmarks`. That function verifies the
+   pinned SHA-256 before it parses a byte, and now keeps each rule's STIG ID references and each profile's `version`.
+   The tool writes `content/stig-mapping.json`. For every pinned profile whose version is a DISA release, the file
+   holds the release, the sorted ComplianceAsCode rules of each STIG ID, and the selected rules without one. It also
+   holds the stream's file name, SHA-256, benchmark ID and version.
+   - The file holds identifiers of BSD-licensed content only; no DISA content is read to make it.
+   - A malformed STIG ID, or a release profile that maps none, is an error.
+   - `make test-content-golden` (CI job `lint`) regenerates it with `--check` and fails on drift.
+2. **Joined to DISA content at export time on the STIG ID.** The DISA group ID (`Vuln_Num`), rule ID (`Rule_ID`)
+   and all benchmark text of an entry come from the `--checklist-content` file, which the operator supplies. They are
+   joined on the DISA rule `version` (`Rule_Ver`). Nothing of DISA's is committed. The entries are the DISA rules of
+   that content, in its order.
+3. **Which runs.** A scan run whose benchmark and profile are in the mapping is exported through it. Otherwise a run
+   whose findings are not DISA rules is still refused, now with a message that names the mapping file, the benchmark
+   and the profile. The export is refused with status 2, and nothing is written, when:
+   - **another ComplianceAsCode version:** the run's content SHA-256 is not the mapping's, so a scan of other content
+     is never read through this mapping;
+   - **no DISA benchmark, or more than one:** the content files do not hold exactly one DISA benchmark with a rule of a
+     mapped STIG ID;
+   - **another DISA release:** that benchmark states another release than the profile implements, or none. The
+     release is `V<a>R<b>` from a version `<a>.<b>[.<n>]` (SCAP benchmarks; SCC's `001.005.007` is V1R5), or from a
+     version `<a>` with `Release: <b>` in `release-info` (XCCDF STIG benchmarks).
+
+   A mapped run's own ComplianceAsCode results are never its content. Its asset IP and FQDN therefore stay empty.
+4. **Aggregation.** Each mapped ComplianceAsCode check first gets its status from the table of section 2, in the same
+   order: off-platform, incomplete run, `fixed`, `waived` and the rest. A check without a finding is Not Reviewed. The
+   entry then takes:
+
+   | Mapped checks | Entry |
+   |---|---|
+   | any check Open (`fail`, `waived`) | Open |
+   | every check with the same status | that status, so Not a Finding only when every mapped check passed |
+   | checks that disagree otherwise, for example `pass` and `notapplicable` | Not Reviewed, with the counts as the reason |
+   | no ComplianceAsCode rule for the STIG ID | Not Reviewed: "no ComplianceAsCode check" |
+
+   - A ComplianceAsCode finding whose rule checks no DISA rule of the content is not exported. The asset comment
+     counts such findings.
+   - The finding details start with the reason of every Not Reviewed entry and name the STIG ID and every mapped check
+     with its result.
+   - The comments carry each check's waiver, expiry or lapse, prefixed with the check when there are several. A waiver
+     therefore still never changes a status, and off-platform and incomplete runs are Not Reviewed whatever their
+     outcomes.
+5. **Comparison.** `--compare-stig FILE` builds the checklist of every exported run, then pairs, per host and DISA
+   benchmark, the SCC run with the mapped run. It writes the status counts of both sides and every DISA rule whose
+   statuses differ, as JSON with mode 0600 that holds identifiers and statuses only. A host without exactly one run of
+   each kind is refused.
+
+### Alternatives evaluated
+
+| Alternative | Reason rejected |
+|---|---|
+| Generate the whole mapping at export time from both files | The ComplianceAsCode side would be re-derived from whichever stream the operator has, unpinned and unreviewed; the pinned table is reviewable in pull requests and checked against the digest-verified streams in CI |
+| Commit a table with the DISA `V-` and `SV-` IDs | The Ubuntu stream has none, so they would come from DISA content, which is not committed; the revision of a committed `SV-` ID would go stale against the operator's content |
+| Join RHEL 9 on the `SV-` IDs it carries | The revision may differ from the operator's DISA content, and a join that works for one stream only is two code paths for one rule |
+| Not Applicable when some checks pass and the rest do not apply | Not a review of the whole requirement; Not Reviewed with the reason lets the assessor decide |
+| Use a mapped run's own results as its content | They hold ComplianceAsCode text, not the DISA rules a checklist needs |
+
+### Consequences
+
+- OpenSCAP results of a ComplianceAsCode STIG profile export as CKL and CKLB. Results of other profiles (CIS) are still
+  refused.
+- A ComplianceAsCode bump regenerates the mapping in the same pull request, or `make test-content-golden` fails. A run
+  of the previous content is then refused by its SHA-256.
+- `make scc-integration` scans the CI-only OpenSCAP image, which has the SCC image's pinned base, with the STIG
+  profile. It then exports that run inside the SCC image with the DISA stream that SCC ships. The files are read back
+  against an independent re-implementation of the aggregation, and the run is compared with the real SCC run of the
+  same host name. The checklists and the comparison stay in the container.
+- Not done here, and still open in FREES-146:
+  - SCC findings that honour topic and rule toggles through SCC's tailoring (ADR 0019 decision 8);
+  - SCC findings grouped by control family.
+
+  The mapping file is the input both need.
 
 ## References
 

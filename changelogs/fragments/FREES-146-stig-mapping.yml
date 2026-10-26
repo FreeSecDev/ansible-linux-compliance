@@ -1,0 +1,17 @@
+---
+minor_changes:
+  - >-
+    reporting - OpenSCAP results of a ComplianceAsCode STIG profile now export as STIG Viewer checklists (CKL and
+    CKLB) through ``content/stig-mapping.json``, a STIG ID to ComplianceAsCode rule mapping generated from the pinned,
+    digest-verified ComplianceAsCode streams alone (``make stig-mapping``) and checked against them in CI. The DISA
+    group and rule IDs and all benchmark text come at export time from the DISA content given with
+    ``--checklist-content``, joined on the STIG ID; nothing of DISA's is committed. One STIG rule may map to several
+    ComplianceAsCode rules and one rule to several STIG rules. An entry is Open when any mapped check is Open, has the
+    status that every mapped check shares (so Not a Finding only when every mapped check passed), and is otherwise Not
+    Reviewed with the reason; a STIG rule without a mapped check is Not Reviewed ("no ComplianceAsCode check").
+    Off-platform runs, runs that did not complete, ``fixed`` and waivers behave as for SCC. A run of other
+    ComplianceAsCode content, DISA content of another release and a profile without a mapping are refused. The new
+    option ``--compare-stig FILE`` writes a JSON comparison of an SCC run and an OpenSCAP run of each host by DISA STIG
+    rule, and ``--stig-mapping FILE`` names another mapping file (FREES-146).
+  - >-
+    catalog - the datastream catalog keeps each rule's DISA STIG ID references and each profile's version (FREES-146).

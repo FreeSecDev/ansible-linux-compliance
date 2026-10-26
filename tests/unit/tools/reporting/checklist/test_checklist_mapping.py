@@ -166,9 +166,9 @@ def test_compliance_as_code_findings_are_refused_with_the_mapping_issue(stig: An
         stig.finding(1, model.Outcome.PASS), rule_id="xccdf_org.ssgproject.content_rule_x"
     )
     run = stig.scan_run((foreign,))
-    with pytest.raises(ChecklistError, match="FREES-146, which is not built yet"):
-        checklist.refuse_unmapped(run, "scan-run.json")
-    checklist.refuse_unmapped(stig.scan_run(), "scan-run.json")
+    with pytest.raises(ChecklistError, match=r"mapping of FREES-146 \(map.json\) has no entry"):
+        checklist.refuse_unmapped(run, "scan-run.json", "map.json")
+    checklist.refuse_unmapped(stig.scan_run(), "scan-run.json", "map.json")
 
 
 def test_asset_fields_come_from_the_runs_own_results_only(stig: Any) -> None:
