@@ -1,7 +1,7 @@
 """Generate the standard library name sets of the repository guard.
 
 ``STDLIB_MODULE_NAMES`` and ``KNOWN_SUBMODULE_ATTRIBUTES`` in
-``tools/lint/check_repo_rules.py`` are checked-in constants: the union over every
+``tools/lint/repo_rules/names.py`` are checked-in constants: the union over every
 Python version in ``SNAPSHOT_VERSIONS``, because plugins run on Python 3.9 to 3.14
 while the guard itself runs on the controller interpreter (ADR 0004). The data per
 version is kept in ``tools/lint/name_sets.json``.
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 LINT_DIRECTORY: Final[Path] = Path(__file__).resolve().parent
 PROBE_SCRIPT: Final[Path] = LINT_DIRECTORY / "name_set_probe.py"
 SNAPSHOT_FILE: Final[Path] = LINT_DIRECTORY / "name_sets.json"
-GUARD_FILE: Final[Path] = LINT_DIRECTORY / "check_repo_rules.py"
+GUARD_FILE: Final[Path] = LINT_DIRECTORY / "repo_rules" / "names.py"
 SNAPSHOT_VERSIONS: Final[tuple[str, ...]] = ("3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15")
 STDLIB_CONSTANT: Final[str] = "STDLIB_MODULE_NAMES"
 ATTRIBUTE_CONSTANT: Final[str] = "KNOWN_SUBMODULE_ATTRIBUTES"
