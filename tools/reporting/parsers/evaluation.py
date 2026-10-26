@@ -9,10 +9,11 @@ against the exceptions file (``--exceptions-file``) by
 file must give exactly the document. No status, mark or record can be edited, and an
 evaluation made from another exceptions file is refused.
 
-The Ansible ``file`` lookup removes trailing whitespace by default, so the filter may
-have hashed the file without its final newline. The digest is therefore compared with
-the file as read and with the file without trailing whitespace; the matching text is
-the one that is parsed.
+Only the exact SHA-256 of the file as supplied is accepted, so the evaluation must
+have been made from the byte-exact file. The ``audit`` role reads it that way
+(``lookup('ansible.builtin.file', path, rstrip=false)``); a play that uses the
+lookup's default ``rstrip=true`` hashes a different text and its evaluations are
+refused.
 
 The scan run feeds the compliance section like a ScanRun JSON file, with one
 addition: rules whose exception lapsed between the scan start and the controller
@@ -21,7 +22,6 @@ time are counted in ``expired_waivers``. The exception statuses feed the
 """
 
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -35,7 +35,6 @@ from tools.reporting.common import (
     ParseResult,
     clean_text,
     decode_text,
-    dig,
     load_json,
     run_parser,
     sha256_hex,
@@ -76,28 +75,9 @@ class EvaluationData:
         return document
 
 
-def exceptions_texts(text: str) -> tuple[str, ...]:
-    """Return the forms of an exceptions file that an evaluation may have been made from."""
-    stripped = text.rstrip()
-    return (text,) if stripped == text else (text, stripped)
-
-
-def _matching_text(document: object, texts: Sequence[str]) -> str:
-    digest = dig(document, "source_sha256")
-    for text in texts:
-        if sha256_hex(text.encode("utf-8")) == digest:
-            return text
-    message = (
-        "exceptions evaluation rejected: it was not made from the supplied exceptions file "
-        "(source_sha256 differs)"
-    )
-    raise InvalidInputError(message)
-
-
-def _build(data: bytes, texts: Sequence[str]) -> EvaluationData:
-    document = load_json(data)
+def _build(data: bytes, text: str) -> EvaluationData:
     try:
-        evaluation = exceptions.verify_evaluation(document, _matching_text(document, texts))
+        evaluation = exceptions.verify_evaluation(load_json(data), text)
     except exceptions.ExceptionsError as error:
         message = f"exceptions evaluation rejected: {clean_text(str(error), 200)}"
         raise InvalidInputError(message) from None
@@ -131,10 +111,10 @@ def _build(data: bytes, texts: Sequence[str]) -> EvaluationData:
 
 
 def parse_evaluation(
-    path: Path, texts: Sequence[str], max_bytes: int = DEFAULT_MAX_BYTES
+    path: Path, text: str, max_bytes: int = DEFAULT_MAX_BYTES
 ) -> ParseResult[EvaluationData]:
-    """Parse an exceptions evaluation and verify it against the exceptions file ``texts``."""
-    return run_parser(path, FORMAT, max_bytes, lambda data: _build(data, texts))
+    """Parse an exceptions evaluation and verify it against the exceptions file ``text``."""
+    return run_parser(path, FORMAT, max_bytes, lambda data: _build(data, text))
 
 
 def parse_exceptions_file(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[str]:

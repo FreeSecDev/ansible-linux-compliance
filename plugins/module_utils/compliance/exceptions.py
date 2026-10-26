@@ -1078,9 +1078,9 @@ def _verify_evaluation(document: object, exceptions_text: str) -> Evaluation:
         _fail("evaluation.max_scan_lag_seconds must be an integer")
     where = _mapping(data["target"], "evaluation.target", TARGET_KEYS, required=True)
     target = make_target(where["host"], where["groups"])
-    parsed = parse_exceptions(exceptions_text, controller)
-    if data["source_sha256"] != parsed.source_sha256:
+    if data["source_sha256"] != hashlib.sha256(exceptions_text.encode("utf-8")).hexdigest():
         _fail("the evaluation was not made from this exceptions file (source_sha256 differs)")
+    parsed = parse_exceptions(exceptions_text, controller)
     original = _unmarked(load_scan_run(data["scan_run"]))
     evaluation = evaluate_run(
         original, parsed, target, controller, max_scan_lag=timedelta(seconds=lag)

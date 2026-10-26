@@ -26,10 +26,6 @@ MAX_EXCEPTIONS: Final[int] = exceptions.MAX_EXCEPTIONS
 type Evaluated = tuple[str, EvaluationData]
 
 
-class InconsistentEvaluationsError(ValueError):
-    """Raised when evaluations were produced from different exceptions files."""
-
-
 def scope_summary(scope: exceptions.Scope) -> dict[str, object]:
     """Return the scope with every dimension present; an unset dimension is empty or null."""
     return {
@@ -112,21 +108,12 @@ def exception_entries(
     candidates (stale, superseded or not failing everywhere) and the exceptions whose
     expiry had passed at the evaluation time on at least one host (``lapsed``).
 
-    Raises:
-        InconsistentEvaluationsError: If the evaluations list different exception
-            records or name different exceptions files.
+    Every evaluation was verified against the same exceptions file, so they all list
+    the same records and the same ``source_sha256``.
     """
     ordered = sorted(evaluated, key=_order)
     first = ordered[0][1].evaluation
     records = [result.record for result in first.results]
-    for _, data in ordered[1:]:
-        other = data.evaluation
-        if (
-            other.source_sha256 != first.source_sha256
-            or [result.record for result in other.results] != records
-        ):
-            message = "the exceptions evaluations come from different exceptions files"
-            raise InconsistentEvaluationsError(message)
     entries = [
         _entry(
             record,

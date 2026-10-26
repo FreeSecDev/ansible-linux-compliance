@@ -280,8 +280,10 @@ silently won.
   - a file that cannot be read.
 - **Verification.** Each evaluation is checked with `exceptions.verify_evaluation` (ADR 0013, amendment of
   FREES-132):
-  - The SHA-256 of the file must be the evaluation's `source_sha256`. The Ansible file lookup strips trailing
-    whitespace, so the file as read and the file without trailing whitespace are both tried.
+  - The SHA-256 of the file exactly as supplied must be the evaluation's `source_sha256`: the evaluation must have been made from the byte-exact file, as the
+    `audit` role reads it (`rstrip=false`). No normalised form is tried: that would let one file show two digests,
+    and Python's `rstrip` also removes Unicode whitespace, so a file that is invalid as written could verify through
+    its stripped form.
   - The file must be valid.
   - The evaluation's scan run is evaluated again with that file and with the target, controller time and lag limit
     the document records. The result must equal the document.
@@ -313,8 +315,8 @@ silently won.
   scanned before its approval. Superseded on every host is therefore a removal candidate. The schema ties
   `removal_candidate` to the status, and `matched_hosts` to `stale`.
 - **Matched hosts.** They are the controller's inventory names, never the host names that scan runs report.
-- **Several evaluations.** Two evaluations that both verify against the file but record different digests (one made
-  with the trailing whitespace, one without) are a contradiction and are refused with exit status 2.
+- **One file, one digest.** Every accepted evaluation was verified against the same bytes, so they all record the
+  same `source_sha256`, which is also `exceptions_file.sha256`.
 - **Summary.** `summary` and `overview.exceptions` hold the counts per review status, `removal_candidates`, `lapsed`
   (expiry passed at an evaluation time), `evaluations`, `total` and `source_sha256`. They are `null` unless the
   section is available. No compliance figure reads them.

@@ -46,8 +46,8 @@ Exit status:
 - 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`).
 - 2: invalid arguments or metadata, `--html` naming the same file as `--output`, a scope that the data contradicts
   (below), repeated scan runs without `--allow-repeated-scans`, `--exceptions-evaluation` without
-  `--exceptions-file` (or the reverse), an exceptions file that cannot be read, evaluations that record different
-  exceptions file digests, or an output that cannot be written. No report is written in these cases.
+  `--exceptions-file` (or the reverse), an exceptions file that cannot be read, or an output that cannot be
+  written. No report is written in these cases.
 - 3: the JSON report was written, but the dashboard was not, because the report is above the dashboard size cap
   (128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)). A dashboard left at that path by an earlier
   run is removed. Status 3 takes precedence over 1; the sections of the JSON still show any missing or invalid input.
@@ -208,8 +208,9 @@ they were made from (`--exceptions-file`, required with evaluations; a file with
 be read, is refused with exit status 2). Every evaluation is verified against the file
 (`exceptions.verify_evaluation`, see [exceptions](exceptions.md#reporting)):
 
-- the SHA-256 of the file must be the evaluation's `source_sha256`. The Ansible file lookup strips trailing
-  whitespace by default, so the file as read and the file without trailing whitespace are both tried;
+- the SHA-256 of the file, exactly as supplied, must be the evaluation's `source_sha256`: the evaluation must have been made from the byte-exact file. The
+  `audit` role reads it that way (`rstrip=false`); a play that uses the `ansible.builtin.file` lookup's default
+  `rstrip=true` hashes a different text, and its evaluations are refused;
 - the file must be a valid exceptions file, checked with the controller time of the evaluation as "today";
 - the evaluation's scan run, with the waiver marks removed, is evaluated again with that file and the target,
   controller time and scan lag limit the evaluation records, and the result must be exactly the evaluation.
@@ -243,7 +244,8 @@ longer waived), `waived` (`in_effect`), `not_yet_effective`, `superseded`, `not_
 every evaluation is `stale`. Matched hosts are the controller's inventory names, never the host names that scan runs
 report. `summary` (and `overview.exceptions`) has `by_status` (exceptions per review status), `removal_candidates`,
 `lapsed`, `evaluations` (unique evaluation files), `total` and `source_sha256`. They are `null` and `exceptions` is
-empty when the section is not available. Evaluations of different exceptions files are refused with exit status 2.
+empty when the section is not available. An evaluation of any other exceptions file, even one that differs only in
+trailing whitespace, is an input error.
 
 The answer covers only the evaluations supplied: an exception for a host that was not evaluated is stale.
 

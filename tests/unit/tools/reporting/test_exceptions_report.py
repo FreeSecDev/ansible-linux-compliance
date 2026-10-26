@@ -388,7 +388,7 @@ def test_an_evaluation_of_another_exceptions_file_is_refused(
     assert section["status"] == "error"
     assert section["exceptions"] == []
     assert section["exceptions_file"] is None
-    assert "not made from the supplied exceptions file" in section["gaps"][0]["reason"]
+    assert "not made from this exceptions file" in section["gaps"][0]["reason"]
     assert document["sections"]["compliance"]["status"] == "error"
     output = tmp_path / "report.json"
     argv = [
@@ -491,27 +491,32 @@ def test_an_invalid_exceptions_file_is_refused_for_every_evaluation(
     assert reason.startswith("exceptions evaluation rejected: exceptions file: line 3")
 
 
-def test_an_evaluation_of_the_file_without_its_final_newline_is_accepted(
-    kit: Any, write: Callable[..., Path]
+@pytest.mark.parametrize("suffix", ["", "\n", " ", "\n\n", "\u3000", "\u00a0\n"])
+def test_only_the_byte_exact_exceptions_file_verifies_an_evaluation(
+    kit: Any, write: Callable[..., Path], suffix: str
 ) -> None:
     text = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8")
-    lookup = kit.evaluate(web02_run(kit), inventory_host="web02", text=text.rstrip())
-    path = write_evaluation(write, "lookup.json", lookup)
+    stripped = kit.evaluate(web02_run(kit), inventory_host="web02", text=text.rstrip())
+    stripped_path = write_evaluation(write, "stripped.json", stripped)
+    supplied = write("supplied.yml", text.rstrip() + suffix)
     document = build(
-        scope=Scope.FLEET, exceptions_evaluation=(path,), exceptions_file=kit.EXCEPTIONS_FILE
+        scope=Scope.FLEET, exceptions_evaluation=(stripped_path,), exceptions_file=supplied
     )
     section = document["sections"]["exceptions"]
-    assert section["status"] == "available"
-    assert section["source_sha256"] == hashlib.sha256(text.rstrip().encode()).hexdigest()
-    assert section["exceptions_file"]["sha256"] == hashlib.sha256(text.encode()).hexdigest()
-    with pytest.raises(ReportError, match="different exceptions files"):
-        report.build_report(
-            ReportInputs(
-                scope=Scope.FLEET,
-                exceptions_evaluation=(kit.EVALUATION_FILE, path),
-                exceptions_file=kit.EXCEPTIONS_FILE,
-            )
-        )
+    if suffix:
+        assert section["status"] == "error"
+        assert "not made from this exceptions file" in section["gaps"][0]["reason"]
+        assert section["exceptions_file"] is None
+    else:
+        assert section["status"] == "available"
+        digest = hashlib.sha256(supplied.read_bytes()).hexdigest()
+        assert section["source_sha256"] == section["exceptions_file"]["sha256"] == digest
+    exact = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,),
+        exceptions_file=write("exact.yml", text + suffix),
+    )
+    assert exact["sections"]["exceptions"]["status"] == ("error" if suffix else "available")
 
 
 def test_the_evaluation_is_listed_once_in_the_raw_artifacts(kit: Any) -> None:

@@ -141,7 +141,10 @@ the theme button. Each table prints its current page.
 ## Limits
 
 - The embedded report (as escaped JSON) may be at most 128 MiB. For a larger report only the JSON is written, and the
-  exit status is 3. Split such a report by benchmark or host.
+  exit status is 3. Split such a report by benchmark and profile, or by host.
+- Capacity estimate: the scale fixture works out to about 900 bytes per rule entry (with its findings and sources), so
+  one dashboard holds roughly 350 to 400 hosts at 300 to 400 rules each under the cap. Larger fleets need one report
+  per benchmark and profile, or per group of hosts.
 - This cap is below some schema maxima: a report with the schema's maximum of 1,000,000 rules, each with its findings,
   is several hundred megabytes and above the string size a browser can parse. The browser tests use a report at the
   cap, with 1000 inputs in every section except Exceptions (whose evaluations share the compliance inputs), 9000 raw artifacts, detail lists past their 1000-entry cap and about

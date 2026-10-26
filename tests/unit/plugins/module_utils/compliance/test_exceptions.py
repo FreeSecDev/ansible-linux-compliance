@@ -1348,8 +1348,11 @@ def test_verify_evaluation_needs_the_exceptions_file_it_names() -> None:
     for other in (text + "\n", document_text_without_second_entry(), document()):
         with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
             exceptions.verify_evaluation(data, other)
-    with pytest.raises(exceptions.ExceptionsError, match="exceptions file: line 1"):
+    with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
         exceptions.verify_evaluation(data, "not yaml")
+    invalid_digest = hashlib.sha256(b"not yaml").hexdigest()
+    with pytest.raises(exceptions.ExceptionsError, match="exceptions file: line 1"):
+        exceptions.verify_evaluation(edit(data, ("source_sha256",), invalid_digest), "not yaml")
     with pytest.raises(exceptions.ExceptionsError, match="exceptions file must be text"):
         exceptions.verify_evaluation(data, None)
     forged = edit(data, ("source_sha256",), "b" * 64)

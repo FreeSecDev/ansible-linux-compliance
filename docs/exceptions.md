@@ -334,10 +334,10 @@ completed scan runs of one host and profile are refused as a repeated scan. The 
 
 The report does not trust the evaluation file. It checks the evaluation against the exceptions file:
 
-- the SHA-256 of the exceptions file must be the evaluation's `source_sha256`. The `audit` role reads the file with
-  `rstrip=false`, so the digests are those of the file's bytes. The `ansible.builtin.file` lookup removes trailing
-  whitespace by default, so for a play that uses the default the report also accepts the digest of the file without
-  trailing whitespace;
+- the SHA-256 of the exceptions file, exactly as supplied, must be the evaluation's `source_sha256`, so the evaluation must have been made from the byte-exact file.
+  The `audit` role reads the file with `rstrip=false`, so its evaluations match the file's bytes. A play of its own
+  must do the same: the `ansible.builtin.file` lookup removes trailing whitespace by default, and an evaluation made
+  from that text is refused. A file that differs only in trailing whitespace is a different file;
 - the exceptions file must pass the same validation as in the filter, at the evaluation's controller time;
 - the scan run, with its waiver marks removed, is evaluated again with that file and the inventory host, groups,
   controller time and scan lag limit the evaluation records, and the result must be identical.

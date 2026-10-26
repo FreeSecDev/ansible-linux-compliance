@@ -44,7 +44,6 @@ from tools.reporting.parsers.codebuild import CodeBuildData, parse_codebuild
 from tools.reporting.parsers.evaluation import (
     EvaluationData,
     compliance_result,
-    exceptions_texts,
     parse_evaluation,
     parse_exceptions_file,
 )
@@ -57,7 +56,7 @@ from tools.reporting.parsers.pytest_json import parse_pytest_json
 from tools.reporting.parsers.sbom import SbomData, parse_sbom
 from tools.reporting.parsers.scanrun import parse_scan_run
 from tools.reporting.parsers.xccdf import parse_arf, parse_xccdf
-from tools.reporting.waivers import InconsistentEvaluationsError, exception_entries
+from tools.reporting.waivers import exception_entries
 
 SCHEMA_VERSION: Final[str] = "2.0"
 SECTION_NAMES: Final[tuple[str, ...]] = (
@@ -358,9 +357,9 @@ def _evaluations(
     inputs: ReportInputs,
 ) -> tuple[ParseResult[str] | None, list[ParseResult[EvaluationData]]]:
     source = _exceptions_file(inputs)
-    texts = () if source is None else exceptions_texts(source.data or "")
+    text = "" if source is None else source.data or ""
     paths = inputs.exceptions_evaluation
-    return source, [parse_evaluation(path, texts, inputs.max_bytes) for path in paths]
+    return source, [parse_evaluation(path, text, inputs.max_bytes) for path in paths]
 
 
 def _exceptions_section(
@@ -371,10 +370,7 @@ def _exceptions_section(
     if section["status"] != SectionStatus.AVAILABLE.value or source is None:
         return section
     evaluated = [(digest, data) for _, data, digest in _unique(results)]
-    try:
-        entries, summary = exception_entries(evaluated)
-    except InconsistentEvaluationsError as error:
-        raise ReportError(str(error)) from None
+    entries, summary = exception_entries(evaluated)
     section["exceptions"] = to_json(entries)
     section["exceptions_file"] = {
         "path": source.artifact.path,
