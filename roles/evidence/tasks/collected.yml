@@ -1,16 +1,17 @@
 ---
-- name: Evidence | Fail the host when its evidence was written but no bundle was collected
+- name: Evidence | Fail the host when its evidence was written but no bundle was collected in this run
   ansible.builtin.assert:
     that:
       - >-
         linux_compliance_audited is not defined
         or not (linux_compliance_audited.evidence_written | default(false))
         or ansible_check_mode
-        or linux_compliance_evidence_bundle is defined
+        or hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'] is defined
     fail_msg: >-
       The audit of {{ inventory_hostname }} wrote evidence on the host, but no evidence bundle was
-      collected; the collection play printed the reason and the collection summary records the host
-      as collection_failed.
+      collected in this run; the collection play printed the reason and the collection summary records the host
+      as collection_failed. A linux_compliance_evidence_bundle from the inventory or an extra variable does not
+      count.
     quiet: true
   tags:
     - always

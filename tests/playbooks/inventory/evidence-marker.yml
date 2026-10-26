@@ -1,0 +1,11 @@
+---
+all:
+  hosts:
+    lost01:
+      __linux_compliance_evidence_run_bundle:
+        directory: "{{ evidence_test_dir }}/bundles-gate-marker_inventory/lost01/gate-lost01"
+        run_id: gate-lost01
+        manifest_sha256: "{{ '0' * 64 }}"
+        files: []
+        excluded: []
+        exceptions_applied: true

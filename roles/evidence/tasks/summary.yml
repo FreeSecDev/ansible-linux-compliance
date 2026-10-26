@@ -23,6 +23,20 @@
   tags:
     - always
 
+- name: Evidence | Check that the audit play ran reached.yml, which refuses a collection marker from outside the run
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost']['linux_compliance_evidence_play_hosts'] is defined
+    fail_msg: >-
+      The collection summary was not written: the audit play did not run the reached.yml entry point of the evidence
+      role. reached.yml records the hosts of the audit play and refuses a collection marker supplied from outside the
+      run; without it the summary could count a host as collected on the strength of a planted value. Run it in the
+      pre_tasks of the audit play, as playbooks/evidence.yml does.
+    quiet: true
+  run_once: true
+  tags:
+    - always
+
 - name: Evidence | Account for every target host and build the collection summary
   ansible.builtin.set_fact:
     linux_compliance_evidence_collection: >-
@@ -31,12 +45,12 @@
     __linux_compliance_evidence_targets: "{{ linux_compliance_evidence_summary_hosts | unique | sort }}"
     __linux_compliance_evidence_target_vars: >-
       {{ __linux_compliance_evidence_targets | map('extract', hostvars) | list }}
-    __linux_compliance_evidence_collected: >-
+    __linux_compliance_evidence_marked: >-
       {{ __linux_compliance_evidence_target_vars
-         | selectattr('linux_compliance_evidence_bundle', 'defined') | list }}
+         | selectattr('__linux_compliance_evidence_run_bundle', 'defined') | list }}
     __linux_compliance_evidence_observed:
       targets: "{{ __linux_compliance_evidence_targets }}"
-      play_hosts: "{{ hostvars['localhost']['linux_compliance_evidence_play_hosts'] | default(none) }}"
+      play_hosts: "{{ hostvars['localhost']['linux_compliance_evidence_play_hosts'] }}"
       reached: >-
         {{ __linux_compliance_evidence_target_vars
            | selectattr('linux_compliance_evidence_reached', 'defined')
@@ -52,9 +66,9 @@
            | selectattr('linux_compliance_audited.evidence_written', 'sameas', true)
            | map(attribute='inventory_hostname') | list }}
       bundles: >-
-        {{ dict(__linux_compliance_evidence_collected | map(attribute='inventory_hostname')
-                | zip(__linux_compliance_evidence_collected
-                      | map(attribute='linux_compliance_evidence_bundle') | list)) }}
+        {{ dict(__linux_compliance_evidence_marked | map(attribute='inventory_hostname')
+                | zip(__linux_compliance_evidence_marked
+                      | map(attribute='__linux_compliance_evidence_run_bundle') | list)) }}
       output_dir: >-
         {{ linux_compliance_evidence_output_dir if linux_compliance_evidence_output_dir is match('/')
            else playbook_dir ~ '/' ~ linux_compliance_evidence_output_dir }}

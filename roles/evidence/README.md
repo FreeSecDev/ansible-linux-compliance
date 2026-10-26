@@ -42,7 +42,9 @@ are intentions, not tested support. Bundles are not signed;
    (`freesecdev.linux_compliance.evidence_documents`), write them, check every file
    (`freesecdev.linux_compliance.evidence_written`), write `bundle.json` last and check it. A failure removes the
    bundle directory and fails the host.
-5. Publish `linux_compliance_evidence_bundle`.
+5. Publish `linux_compliance_evidence_bundle` and, with the same content, the internal run marker
+   `__linux_compliance_evidence_run_bundle` (not cacheable). Only the marker counts a host as collected in the
+   summary and in `collected.yml`; a `linux_compliance_evidence_bundle` from the inventory or `-e` does not.
 
 ## Variables
 
@@ -66,7 +68,8 @@ and are never written to a bundle.
 ## Running
 
 Use `playbooks/evidence.yml`. It audits with the audit role's `deferred.yml` entry point (with the `reached.yml`
-entry point of this role in its `pre_tasks`), then, in one play per host, decides the gates with `enforce.yml` and
+entry point of this role in its `pre_tasks`, which refuses the run when a `__linux_compliance_evidence_*` variable
+is already set for any inventory host or `localhost`, and which `summary.yml` requires), then, in one play per host, decides the gates with `enforce.yml` and
 collects the evidence in an `always` section; no host fails in that play. It then runs the `summary.yml` entry point,
 which names every target host without a bundle and writes the collection summary `collection-<collection_id>.json`
 next to the bundles, and finally fails the hosts that a gate fails (`enforce.yml` again) and the hosts whose

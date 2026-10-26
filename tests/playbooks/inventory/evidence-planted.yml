@@ -1,0 +1,11 @@
+---
+all:
+  hosts:
+    web01:
+      linux_compliance_evidence_bundle:
+        directory: "{{ evidence_test_dir }}/bundles-gate-{{ evidence_gate_case }}/web01/gate-web01"
+        run_id: gate-web01
+        manifest_sha256: "{{ '0' * 64 }}"
+        files: []
+        excluded: []
+        exceptions_applied: true

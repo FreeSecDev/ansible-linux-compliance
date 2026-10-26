@@ -148,15 +148,43 @@ def test_the_playbook_writes_the_summary_before_any_gate_or_collection_fails_a_h
             assert "when" not in task
 
 
-def test_the_summary_reads_the_bundle_fact_that_the_role_publishes() -> None:
-    published = next(
-        task
-        for task in tasks(ROLE / "tasks" / "collect.yml")
-        if task["name"] == "Evidence | Publish the collected bundle"
-    )
+MARKER = "__linux_compliance_evidence_run_bundle"
+
+
+def test_the_summary_reads_the_run_marker_that_the_role_publishes_with_the_bundle_fact() -> None:
+    name = "Evidence | Publish the collected bundle and mark it as collected in this run"
+    published = next(task for task in tasks(ROLE / "tasks" / "collect.yml") if task["name"] == name)
     fact = cast("dict[str, object]", published["ansible.builtin.set_fact"])
-    bundle = cast("dict[str, object]", fact["linux_compliance_evidence_bundle"])
+    source = "{{ __linux_compliance_evidence_published }}"
+    assert fact == {"linux_compliance_evidence_bundle": source, MARKER: source}
+    assert "cacheable" not in fact
+    task_vars = cast("dict[str, object]", published["vars"])
+    bundle = cast("dict[str, object]", task_vars["__linux_compliance_evidence_published"])
     assert tuple(sorted(bundle)) == collection.BUNDLE_FACT_KEYS
+
+
+def test_only_the_run_marker_counts_a_host_as_collected() -> None:
+    summary = (ROLE / "tasks" / "summary.yml").read_text(encoding="utf-8")
+    assert f"selectattr('{MARKER}', 'defined')" in summary
+    assert "linux_compliance_evidence_bundle" not in summary
+    collected = tasks(ROLE / "tasks" / "collected.yml")
+    assert len(collected) == 1
+    condition = cast("dict[str, list[str]]", collected[0]["ansible.builtin.assert"])["that"]
+    assert f"hostvars[inventory_hostname]['{MARKER}'] is defined" in condition[0]
+    assert "linux_compliance_evidence_bundle" not in condition[0]
+
+
+def test_reached_refuses_internal_variables_from_outside_before_anything_else() -> None:
+    first = tasks(ROLE / "tasks" / "reached.yml")[0]
+    assert first["run_once"] is True
+    assert "vars" not in first
+    condition = cast("dict[str, list[str]]", first["ansible.builtin.assert"])["that"]
+    assert "select('match', '__linux_compliance_evidence_')" in condition[0]
+    assert "(groups['all'] + ['localhost'])" in condition[0]
+    assert "map('extract', hostvars, 'inventory_hostname')" in condition[1]
+    summary = tasks(ROLE / "tasks" / "summary.yml")
+    required = str(summary[1]["name"])
+    assert required.startswith("Evidence | Check that the audit play ran reached.yml")
 
 
 def test_the_summary_is_written_with_mode_0600_and_never_overwritten() -> None:
