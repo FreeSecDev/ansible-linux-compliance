@@ -135,14 +135,45 @@ by the `scc-smoke` job and never published.
     contains a push, login, save or export command. Only Markdown and the guard module are exempt, so scripts,
     Makefile fragments and test modules under `tests/` are covered;
   - the Makefile includes any file other than `$(SCC_PINS)` that is untracked, computed, or breaks the same rules;
+  - something loads or runs an exempt Markdown file as code (FREES-152):
+    - the Makefile or an included file uses `$(eval`, `$(file`, `MAKEFILES`, `GNUMAKEFLAGS`, `.INCLUDE_DIRS` or
+      `--eval`;
+    - a workflow, at any level, or an SCC file names `MAKEFILES`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `.INCLUDE_DIRS`
+      or `--eval`;
+    - a Makefile line, workflow string or SCC file runs a `.md` file with a shell, `.`, `source`, `make -f` or a
+      script interpreter, directly, by redirect or through a pipe;
   - the SCC job uses a publishing action or widens its permissions;
   - a tracked file looks like an SCC bundle, package, binary or checklist (plain, compressed, base64 at any alignment,
     or hexadecimal) or has a pinned SCC digest.
 
   The release workflow (ADR 0012) may still publish the collection, because it cannot name the SCC image. `.gitignore` ignores the package
   and checklist types, and `galaxy.yml` excludes `extensions/ci` from the collection.
-- **Residual:** the Actions cache holds the verified bundle. It is readable only by workflow runs of this repository,
-  which the licence permits (ADR 0019).
+- **Residual:**
+  - The Actions cache holds the verified bundle. It is readable only by workflow runs of this repository, which
+    the licence permits (ADR 0019).
+  - The Markdown execution check is word-level. A command assembled from variables, a renamed copy, a glob or
+    `find -exec` evades it; that is deliberate evasion, which review catches.
+
+### T-SCC-3: an SCC change skips the smoke test
+
+- **Asset:** the guarantee that every change to an SCC input is built and run before it merges.
+- **Attacker:** the author of a pull request that changes an SCC path.
+- **Failure:** the `scc-changes` filter reports `scc=false` for an SCC change, so `scc-smoke` is skipped and
+  `ci-gate` accepts the skip. Examples are a rename out of an SCC path, a pull request that edits the filter to
+  print `false`, or a filter output or event name that only partly matches.
+- **Mitigation (FREES-152):**
+  - The filter diffs with `git diff --no-renames`, so a rename lists the old path.
+  - For `pull_request` and `merge_group`, the job runs the base revision's copy of the filter (`git show` of the
+    validated base SHA into a temporary file, run with `bash`, never sourced). A filter change takes effect only
+    after it merges.
+  - A missing base file, a failing `git show` or filter, and any output other than exactly `false` give
+    `scc=true`.
+  - `ci-gate` matches the filter output and the event name exactly with jq `IN`, not with the substring-based
+    `inside()`.
+  - The push run on `main` and the daily schedule always run the smoke test.
+- **Residual:** the step script that fetches the base filter, and `ci-gate` itself, are in `ci.yml`, which the
+  pull request controls. Editing them is a change to a workflow, which is an SCC path, and is caught by review.
+  The first push run on `main` after the merge runs the smoke test regardless.
 
 ## Report inputs on the controller
 

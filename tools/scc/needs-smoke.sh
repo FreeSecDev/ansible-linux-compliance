@@ -30,7 +30,7 @@ case "${event}" in
 esac
 [[ "${base}" =~ ${SHA} ]] || run_smoke
 
-if ! changed="$(git diff --name-only "${base}" "${head}" -- 2>/dev/null)"; then
+if ! changed="$(git diff --no-renames --name-only "${base}" "${head}" -- 2>/dev/null)"; then
   run_smoke
 fi
 if grep -qE "${SCC_PATHS}" <<<"${changed}"; then
