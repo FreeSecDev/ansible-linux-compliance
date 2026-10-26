@@ -70,7 +70,8 @@ EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
 	and ([.sections.compliance.items[].format] | sort) == ["exceptions_evaluation", "scan_run"] \
 	and ([.sections.compliance.groups[].summary.run_status] | sort) == ["completed", "failed"] \
 	and ([.sections.compliance.groups[].host.hostname] | sort) == ["db01", "web01"] \
-	and .sections.compliance.host_coverage.status == "unknown" and .schema_version == "2.1"
+	and .sections.compliance.host_coverage.status == "unknown" and .schema_version == "2.2" \
+	and .overview.off_platform == 0 and .sections.compliance.off_platform == []
 EVIDENCE_MISSING_CHECK := .sections.compliance.status == "partial" and .sections.compliance.summary == null \
 	and .sections.compliance.groups == [] and .sections.compliance.aggregates == [] \
 	and .sections.exceptions.status == "partial" \

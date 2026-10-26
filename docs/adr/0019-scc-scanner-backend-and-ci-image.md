@@ -875,7 +875,7 @@ here. The decision below never relies on it: if SCC's applicability checks rejec
        already handles:
        - the module fails the task by default (`fail_on_incomplete`);
        - summaries and reports withhold the percentage;
-       - `compare_scans` refuses an incomplete comparison;
+       - `compare_scans` reports an incomplete comparison with no figures;
        - FREES-147 maps the run to Not Reviewed.
 
        A new flag would have to be learnt by each of them. One consumer that missed it would read "0 failed" as clean.
