@@ -112,6 +112,56 @@ status=0; $(2) > '$(EVIDENCE_DIR)/$(1).log' 2>&1 || status=$$?; cat '$(EVIDENCE_
 	grep -q -- '$(4)' '$(EVIDENCE_DIR)/$(1).log' || { printf 'error: %s: the expected message is missing\n' '$(1)' >&2; exit 1; }
 endef
 
+EVIDENCE_GATE_RUN = $(EVIDENCE_PLAYBOOK) -i tests/playbooks/inventory/evidence-gate.yml -e evidence_gate_case=$(1) \
+	-e audit_exceptions_dir='$(CURDIR)/$(EVIDENCE_DIR)/exceptions-gate-$(1)' $(2) tests/playbooks/evidence-gate.yml
+EVIDENCE_ZERO_SHA256 := 0000000000000000000000000000000000000000000000000000000000000000
+EVIDENCE_PLANTED_FACT = {"directory": "$(CURDIR)/$(EVIDENCE_DIR)/bundles-gate-$(1)/web01/gate-web01", \
+	"run_id": "gate-web01", "manifest_sha256": "$(EVIDENCE_ZERO_SHA256)", "files": [], "excluded": [], \
+	"exceptions_applied": true}
+EVIDENCE_PLANTED_EXTRA := {"linux_compliance_evidence_bundle": $(call EVIDENCE_PLANTED_FACT,planted_extra)}
+EVIDENCE_FORGED_MARKER := {"__linux_compliance_evidence_run_bundle": $(call EVIDENCE_PLANTED_FACT,marker_extra)}
+EVIDENCE_COMPLETE_CHECK := .sections.compliance.status == "available" and .sections.compliance.summary != null \
+	and .sections.compliance.host_coverage.status == "complete" \
+	and .sections.compliance.host_coverage.summary.in_report == 2 and .sections.compliance.host_coverage.summary.missing == 0
+EVIDENCE_PLANTED_CHECK := .sections.compliance.status == "partial" and .sections.compliance.summary == null \
+	and .sections.compliance.host_coverage.status == "incomplete" \
+	and ([.sections.compliance.host_coverage.hosts[] | [.host, .status, .in_report]]) == [ \
+		["app01", "no_evidence_written", false], ["db01", "collected", true], \
+		["lost01", "unreachable", false], ["web01", "collection_failed", false]]
+
+define evidence_planted_route
+mkdir -m 0700 '$(EVIDENCE_DIR)/bundles-gate-$(1)'
+mkdir -m 0755 '$(EVIDENCE_DIR)/bundles-gate-$(1)/web01'
+status=0; $(call EVIDENCE_GATE_RUN,$(1),$(2)) > '$(EVIDENCE_DIR)/gate-$(1).log' 2>&1 || status=$$?; \
+	cat '$(EVIDENCE_DIR)/gate-$(1).log'; \
+	test "$$status" -ne 0 || { printf 'error: planted route %s gave exit status %s\n' '$(1)' "$$status" >&2; exit 1; }
+grep -q 'must be a directory with mode 0700 that is not a symbolic link' '$(EVIDENCE_DIR)/gate-$(1).log'
+grep -q 'Evidence | Refuse internal variables supplied from outside the role' '$(EVIDENCE_DIR)/gate-$(1).log'
+grep -q 'Collection failed: web01. A report over the collected bundles' '$(EVIDENCE_DIR)/gate-$(1).log'
+grep -q 'wrote evidence on the host, but no evidence bundle was collected in this run' '$(EVIDENCE_DIR)/gate-$(1).log'
+grep -qE '^web01 +: .*failed=1' '$(EVIDENCE_DIR)/gate-$(1).log'
+grep -qE '^db01 +: .*failed=1' '$(EVIDENCE_DIR)/gate-$(1).log'
+grep -q 'EVIDENCE-GATE-PASSED app01' '$(EVIDENCE_DIR)/gate-$(1).log'
+if grep -qE 'EVIDENCE-GATE-PASSED (web01|db01)' '$(EVIDENCE_DIR)/gate-$(1).log'; then \
+	printf 'error: planted route %s let a host pass\n' '$(1)' >&2; exit 1; fi
+test ! -e '$(EVIDENCE_DIR)/bundles-gate-$(1)/web01/gate-web01'
+$(call evidence_expect_status,report-$(1),$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/$(1).json' \
+	--evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-$(1)/db01/gate-db01' $(call EVIDENCE_GATE_COLLECTION,$(1)) --require-host-coverage,1,the host coverage is incomplete)
+jq -e '$(EVIDENCE_PLANTED_CHECK)' '$(EVIDENCE_DIR)/$(1).json' > /dev/null
+endef
+
+define evidence_marker_route
+status=0; $(call EVIDENCE_GATE_RUN,$(1),$(2)) > '$(EVIDENCE_DIR)/gate-$(1).log' 2>&1 || status=$$?; \
+	cat '$(EVIDENCE_DIR)/gate-$(1).log'; \
+	test "$$status" -ne 0 || { printf 'error: marker route %s gave exit status %s\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -q 'Refusing to run: internal variables of the evidence role' '$(EVIDENCE_DIR)/gate-$(1).log' || \
+	{ printf 'error: marker route %s was not refused at the start of the audit play\n' '$(1)' >&2; exit 1; }; \
+	if grep -q 'Evidence | Collect the bundle on the controller' '$(EVIDENCE_DIR)/gate-$(1).log'; then \
+		printf 'error: marker route %s went on to collect\n' '$(1)' >&2; exit 1; fi; \
+	test ! -e '$(EVIDENCE_DIR)/bundles-gate-$(1)' && test ! -e '$(EVIDENCE_DIR)/collection-gate-$(1).path' || \
+	{ printf 'error: marker route %s wrote a bundle or a summary\n' '$(1)' >&2; exit 1; }
+endef
+
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' env HOME='$(ANSIBLE_TEST_HOME)' ansible-test
 
 space := $(subst ,, )
@@ -437,7 +487,9 @@ test-evidence: require-uv collection-link
 	grep -qE '^db01 +: .*failed=1' '$(EVIDENCE_DIR)/gate.log'
 	grep -qE '^lost01 +: .*unreachable=1' '$(EVIDENCE_DIR)/gate.log'
 	$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/gate.json' $(EVIDENCE_GATE_BUNDLES)
-	$(call evidence_expect_status,missing,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/missing.json' --html '$(EVIDENCE_DIR)/missing.html' $(EVIDENCE_GATE_BUNDLES) $(call EVIDENCE_GATE_COLLECTION,all),1,report written)
+	$(call evidence_expect_status,unknown-required,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/unknown-required.json' $(EVIDENCE_GATE_BUNDLES) --require-host-coverage,1,the host coverage is unknown)
+	jq -e '.sections.compliance.status == "available" and .sections.compliance.host_coverage.status == "unknown"' '$(EVIDENCE_DIR)/unknown-required.json' > /dev/null
+	$(call evidence_expect_status,missing,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/missing.json' --html '$(EVIDENCE_DIR)/missing.html' $(EVIDENCE_GATE_BUNDLES) $(call EVIDENCE_GATE_COLLECTION,all) --require-host-coverage,1,the host coverage is incomplete)
 	jq -e '$(EVIDENCE_MISSING_CHECK)' '$(EVIDENCE_DIR)/missing.json' > /dev/null
 	grep -q 'lost01' '$(EVIDENCE_DIR)/missing.html'
 	status=0; $(EVIDENCE_PLAYBOOK) -i tests/playbooks/inventory/evidence-gate.yml -e evidence_gate_case=every_host_fails \
@@ -450,10 +502,24 @@ test-evidence: require-uv collection-link
 	grep -qE '^web01 +: .*failed=1' '$(EVIDENCE_DIR)/gate-limited.log'
 	grep -qE '^lost01 +: .*unreachable=1' '$(EVIDENCE_DIR)/gate-limited.log'
 	if grep -q 'EVIDENCE-GATE-PASSED' '$(EVIDENCE_DIR)/gate-limited.log'; then printf 'error: a gated host passed\n' >&2; exit 1; fi
-	$(call evidence_expect_status,limited,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/limited.json' $(EVIDENCE_LIMITED_BUNDLES) $(call EVIDENCE_GATE_COLLECTION,every_host_fails),1,report written)
+	$(call evidence_expect_status,limited,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/limited.json' $(EVIDENCE_LIMITED_BUNDLES) $(call EVIDENCE_GATE_COLLECTION,every_host_fails) --require-host-coverage,1,the host coverage is incomplete)
 	jq -e '$(EVIDENCE_LIMITED_CHECK)' '$(EVIDENCE_DIR)/limited.json' > /dev/null
-	$(call evidence_expect_status,unlisted,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/unlisted.json' --evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-all/web01/gate-web01' --exceptions-file '$(EVIDENCE_DIR)/exceptions-gate/exceptions-valid.yml' $(call EVIDENCE_GATE_COLLECTION,every_host_fails),1,report written)
+	$(call evidence_expect_status,unlisted,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/unlisted.json' --evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-all/web01/gate-web01' --exceptions-file '$(EVIDENCE_DIR)/exceptions-gate/exceptions-valid.yml' $(call EVIDENCE_GATE_COLLECTION,every_host_fails) --require-host-coverage,1,report written)
 	jq -e '$(EVIDENCE_UNLISTED_CHECK)' '$(EVIDENCE_DIR)/unlisted.json' > /dev/null
+	status=0; $(call EVIDENCE_GATE_RUN,complete,-e evidence_gate_hosts=web01:db01) > '$(EVIDENCE_DIR)/gate-complete.log' 2>&1 || status=$$?; \
+		cat '$(EVIDENCE_DIR)/gate-complete.log'; \
+		test "$$status" -ne 0 || { printf 'error: the gated play of the complete run did not fail\n' >&2; exit 1; }
+	grep -q 'Collected an evidence bundle for every one of the 2 target host(s).' '$(EVIDENCE_DIR)/gate-complete.log'
+	$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/complete.json' --html '$(EVIDENCE_DIR)/complete.html' \
+		--evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-complete/web01/gate-web01' \
+		--evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-complete/db01/gate-db01' \
+		--exceptions-file '$(EVIDENCE_DIR)/exceptions-gate-complete/exceptions-valid.yml' \
+		$(call EVIDENCE_GATE_COLLECTION,complete) --require-host-coverage
+	jq -e '$(EVIDENCE_COMPLETE_CHECK)' '$(EVIDENCE_DIR)/complete.json' > /dev/null
+	$(call evidence_planted_route,planted_inventory,-i tests/playbooks/inventory/evidence-planted.yml)
+	$(call evidence_planted_route,planted_extra,-e '$(EVIDENCE_PLANTED_EXTRA)')
+	$(call evidence_marker_route,marker_extra,-e '$(EVIDENCE_FORGED_MARKER)')
+	$(call evidence_marker_route,marker_inventory,-i tests/playbooks/inventory/evidence-marker.yml)
 	$(call evidence_gate_route,baseline,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline)
 	$(call evidence_gate_route,extra,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline -e '$(EVIDENCE_FORGED_DEFERRAL)')
 	$(call evidence_gate_route,group_vars,-i tests/playbooks/inventory/gate-routes-group -e gate_route=baseline)

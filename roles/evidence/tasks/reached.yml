@@ -1,4 +1,24 @@
 ---
+- name: Evidence | Refuse internal variables of the evidence role that were supplied from outside this run
+  ansible.builtin.assert:
+    that:
+      - >-
+        (groups['all'] + ['localhost']) | unique | map('extract', hostvars) | map('list') | flatten
+        | select('match', '__linux_compliance_evidence_') | list | length == 0
+      - groups['all'] | map('extract', hostvars, 'inventory_hostname') | list == groups['all']
+    fail_msg: >-
+      Refusing to run: internal variables of the evidence role
+      ({{ (groups['all'] + ['localhost']) | unique | map('extract', hostvars) | map('list') | flatten
+          | select('match', '__linux_compliance_evidence_') | unique | sort | join(', ') }})
+      are set before any evidence was collected. Only the evidence role sets them, and
+      __linux_compliance_evidence_run_bundle marks a bundle that it wrote and re-hashed in this run; a value from an
+      extra variable (-e), the inventory, group_vars, host_vars or a fact cache could count a host as collected.
+      Remove it, and do not set inventory_hostname as an extra variable. Nothing was audited or collected.
+    quiet: true
+  run_once: true
+  tags:
+    - always
+
 - name: Evidence | Record the hosts of the audit play on the controller
   ansible.builtin.set_fact:
     linux_compliance_evidence_play_hosts: "{{ ansible_play_hosts_all | sort }}"

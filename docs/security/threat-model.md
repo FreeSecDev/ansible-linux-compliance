@@ -298,8 +298,31 @@ bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
   names the unreachable one. The report built with `--evidence-collection` refuses a bundle that the summary does not
   list, lists every target host without a bundle as a missing input, has no figure while a host is missing and exits
   1. Without the summary the report labels its host coverage `unknown`.
+- **Mitigation (FREES-154):** `--require-host-coverage` makes the report exit 1 unless its host coverage is
+  `complete`, so a pipeline that gates on the exit status also fails when the summary was not supplied (`unknown`);
+  the fleet workflow and `make test-evidence` use it. A host is `collected` only on the strength of an internal marker
+  that the evidence role sets after it wrote and re-hashed the bundle in this run; a `linux_compliance_evidence_bundle`
+  planted through the inventory, `group_vars`, `host_vars` or `-e` for a host whose collection failed leaves it
+  `collection_failed`, and the last play fails it. `reached.yml` refuses the run at the start of the audit play when
+  any `__linux_compliance_evidence_*` variable is already in `hostvars` of an inventory host or `localhost`, which is
+  where an extra variable, an inventory value or a fact cache would put a forged marker; the condition uses only
+  `groups`, `hostvars` and literals, as the FREES-150 Molecule guard does. `make test-evidence` plants the public
+  fact in the inventory and with `-e`, and the marker itself with `-e` and in the inventory of an unreachable host.
+- **Residual: the collection summary is unsigned until ADR 0018 (FREES-140).** The summary is what tells the report
+  which hosts to account for, and nothing proves who wrote it. Whoever can write the evidence directory can rewrite
+  the summary consistently so that it lists fewer target hosts, and remove or keep the bundles to match: every
+  report built from it then has `complete` coverage, figures over the remaining hosts and exit status 0, also with
+  `--require-host-coverage`, and the dropped hosts are not named anywhere in it. The report cannot detect this; it is
+  the same trust boundary as the unsigned bundles (T-EVIDENCE-2). The mitigation is signing: ADR 0018 (proposed) signs
+  the run's evidence, with the summary as a subject of the run's statement, and the report verifies it. Until then the interim
+  control is the operator's: **protect the evidence directory** (`linux_compliance_evidence_output_dir` and the
+  directories the report reads from) so that only the account that runs the playbook can write it, for example by
+  keeping it on the controller with the role's `0700` directories and `0600` files, not on a share that other
+  accounts or hosts can write, and by copying the summary and the bundles to write-once or access-controlled storage
+  right after the run; compare the number of target hosts in the summary with the inventory when the fleet size is
+  known.
 - **Residual:** unreachable and limited-out hosts cannot be collected; a report names them only when it is built with
-  `--evidence-collection`, and the summary is not signed (ADR 0018). A run whose plays on `localhost` are limited out,
+  `--evidence-collection`. A run whose plays on `localhost` are limited out,
   or in which every host fails in the audit play, writes no summary. A custom playbook that deliberately calls `deferred.yml` or `evaluate_deferred.yml` and never runs `enforce.yml`,
   or that writes `linux_compliance_audited.gate` with its own `set_fact`, can still end without the gates. That is a
   deliberate act by whoever writes the playbook, the same class as the documented residual of the `verify` role's

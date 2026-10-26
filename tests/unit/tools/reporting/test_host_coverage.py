@@ -302,6 +302,10 @@ def test_a_bundle_that_does_not_verify_leaves_its_host_missing(kit: Any, tmp_pat
         (None, "input file does not exist"),
         (b"{", "evidence collection summary rejected: the collection summary is not valid JSON"),
         (b"[]", "evidence collection summary rejected: collection summary must be a mapping"),
+        (
+            b'{"kind": 1, "kind": 2}',
+            "evidence collection summary rejected: the collection summary contains a duplicate key",
+        ),
     ],
 )
 def test_a_summary_that_cannot_be_used_refuses_the_report(
@@ -398,3 +402,68 @@ def test_the_dashboard_reads_2_0_and_2_1_reports(kit: Any, tmp_path: Path) -> No
     del older["sections"]["compliance"]["host_coverage"]
     assert VALIDATOR.is_valid(older)
     assert dashboard.render_dashboard(older).startswith("<!DOCTYPE html>")
+
+
+REQUIRED_COVERAGE: dict[str, tuple[int, int, str | None]] = {
+    "complete": (cli.EXIT_OK, cli.EXIT_OK, None),
+    "incomplete": (
+        cli.EXIT_SECTION_ERROR,
+        cli.EXIT_SECTION_ERROR,
+        (
+            "the host coverage is incomplete, not complete: 1 of 2 target host(s) have no "
+            "evidence bundle in this report"
+        ),
+    ),
+    "unknown": (
+        cli.EXIT_OK,
+        cli.EXIT_SECTION_ERROR,
+        "the host coverage is unknown, not complete: no --evidence-collection was supplied",
+    ),
+}
+
+
+@pytest.mark.parametrize("coverage", sorted(REQUIRED_COVERAGE))
+def test_require_host_coverage_fails_every_coverage_but_complete(
+    kit: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str], coverage: str
+) -> None:
+    without, required, message = REQUIRED_COVERAGE[coverage]
+    web, db = two_bundles(kit, tmp_path)
+    hosts: dict[str, tuple[str, str | None]] = {
+        "web01": ("collected", manifest_sha(web)),
+        "db01": ("collected", manifest_sha(db)),
+    }
+    if coverage == "incomplete":
+        hosts["db01"] = ("unreachable", None)
+    output = tmp_path / "report.json"
+    arguments = ["--scope", "fleet", "--output", str(output), "--evidence-bundle", str(web)]
+    arguments += ["--exceptions-file", str(kit.EXCEPTIONS_FILE)]
+    if coverage != "incomplete":
+        arguments += ["--evidence-bundle", str(db)]
+    if coverage != "unknown":
+        arguments += ["--evidence-collection", str(write_collection(tmp_path, hosts))]
+    assert cli.main(arguments) == without
+    assert "--require-host-coverage" not in capsys.readouterr().err
+    output.unlink()
+    assert cli.main([*arguments, "--require-host-coverage"]) == required
+    document = json.loads(output.read_text(encoding="utf-8"))
+    assert document["sections"]["compliance"]["host_coverage"]["status"] == coverage
+    error = capsys.readouterr().err
+    if message is None:
+        assert error == ""
+    else:
+        assert f"error: --require-host-coverage: {message}" in error
+        assert "the report was written, but it does not account for every target host" in error
+
+
+def test_a_skipped_dashboard_keeps_precedence_over_require_host_coverage(
+    kit: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    web, _ = two_bundles(kit, tmp_path, applied=False)
+    monkeypatch.setattr(dashboard, "MAX_EMBEDDED_BYTES", 10)
+    output, html = tmp_path / "report.json", tmp_path / "report.html"
+    arguments = ["--scope", "fleet", "--output", str(output), "--html", str(html)]
+    arguments += ["--evidence-bundle", str(web), "--require-host-coverage"]
+    assert cli.main(arguments) == cli.EXIT_DASHBOARD_SKIPPED
+    assert output.exists()
+    assert not html.exists()
+    assert "the host coverage is unknown, not complete" in capsys.readouterr().err

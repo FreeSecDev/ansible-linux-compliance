@@ -225,8 +225,14 @@ def test_host_entries_are_validated() -> None:
 def test_the_summary_is_strict_json() -> None:
     with pytest.raises(collection.CollectionError, match="not valid JSON"):
         collection.parse_collection(b"{")
-    with pytest.raises(collection.CollectionError, match="duplicate key"):
+    with pytest.raises(
+        collection.CollectionError, match=r"^the collection summary contains a duplicate key$"
+    ):
         collection.parse_collection(b'{"kind": 1, "kind": 2}')
+    with pytest.raises(
+        collection.CollectionError, match=r"^the collection summary contains a non-finite number$"
+    ):
+        collection.parse_collection(b'{"kind": NaN}')
     with pytest.raises(collection.CollectionError, match="must be a mapping"):
         collection.parse_collection(b"[]")
 

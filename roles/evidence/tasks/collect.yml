@@ -297,9 +297,12 @@
           directory {{ __linux_compliance_evidence_dir }} was removed:
           {{ ansible_failed_result.msg | default('unknown error') }}
 
-- name: Evidence | Publish the collected bundle
+- name: Evidence | Publish the collected bundle and mark it as collected in this run
   ansible.builtin.set_fact:
-    linux_compliance_evidence_bundle:
+    linux_compliance_evidence_bundle: "{{ __linux_compliance_evidence_published }}"
+    __linux_compliance_evidence_run_bundle: "{{ __linux_compliance_evidence_published }}"
+  vars:
+    __linux_compliance_evidence_published:
       directory: "{{ __linux_compliance_evidence_dir }}"
       run_id: "{{ __linux_compliance_evidence_plan.run_id }}"
       manifest_sha256: "{{ __linux_compliance_evidence_documents.manifest_sha256 }}"
@@ -307,12 +310,30 @@
       excluded: "{{ __linux_compliance_evidence_plan.excluded | map(attribute='source') | list }}"
       exceptions_applied: "{{ __linux_compliance_evidence_plan.applied }}"
 
+- name: Evidence | Check the type and content of the run marker
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_evidence_run_bundle is mapping
+      - hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'] is mapping
+      - >-
+        hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'].run_id
+        == __linux_compliance_evidence_plan.run_id
+      - >-
+        hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'].manifest_sha256
+        == __linux_compliance_evidence_documents.manifest_sha256
+    fail_msg: >-
+      The run marker of the evidence role is not the bundle that the role just wrote, so a role parameter, an
+      include parameter or an extra variable replaced it. Nothing counts this host as collected.
+    quiet: true
+
 - name: Evidence | Report the collected bundle
   ansible.builtin.debug:
     msg: >-
-      Wrote the evidence bundle {{ linux_compliance_evidence_bundle.directory }}
-      ({{ linux_compliance_evidence_bundle.files | length }} files, manifest SHA-256
-      {{ linux_compliance_evidence_bundle.manifest_sha256 }}).
-      {{ (linux_compliance_evidence_bundle.excluded | length) ~ ' recorded file(s) were excluded: '
-         ~ (linux_compliance_evidence_bundle.excluded | join(', '))
-         if linux_compliance_evidence_bundle.excluded else '' }}
+      Wrote the evidence bundle {{ __linux_compliance_evidence_marker.directory }}
+      ({{ __linux_compliance_evidence_marker.files | length }} files, manifest SHA-256
+      {{ __linux_compliance_evidence_marker.manifest_sha256 }}).
+      {{ (__linux_compliance_evidence_marker.excluded | length) ~ ' recorded file(s) were excluded: '
+         ~ (__linux_compliance_evidence_marker.excluded | join(', '))
+         if __linux_compliance_evidence_marker.excluded else '' }}
+  vars:
+    __linux_compliance_evidence_marker: "{{ hostvars[inventory_hostname]['__linux_compliance_evidence_run_bundle'] }}"

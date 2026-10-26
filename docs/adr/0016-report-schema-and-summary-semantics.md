@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
-- **Jira:** FREES-75, FREES-76 (amended by FREES-130, FREES-132 and FREES-142)
+- **Jira:** FREES-75, FREES-76 (amended by FREES-130, FREES-132, FREES-142 and FREES-154)
 - **Pull requests:** introduced by the pull request that adds `tools/reporting/`
 - **Related:** [ADR 0013](0013-normalized-findings-model.md), [reporting data model](../reporting-data-model.md)
 
@@ -421,3 +421,56 @@ this ADR: `schema_version` `"2.1"` in the same `report-v2.json`.
 - The dashboard shows the coverage on the Overview and the Compliance tab ([ADR 0017 amendment](0017-offline-html-dashboard.md#amendment-2026-10-26-host-coverage-frees-142)).
 - The summary is not signed ([ADR 0018](0018-evidence-bundle-provenance.md)). It binds bundles to digests and names
   the hosts a report must account for; whoever can write the evidence directory can rewrite both consistently.
+
+## Amendment 2026-10-26: require host coverage (FREES-154)
+
+### Context
+
+The PR #37 review (N1) found that a pipeline gating only on the exit status cannot tell "every target host covered"
+from "coverage unknown": without `--evidence-collection` a bundle report labels its coverage `unknown` and exits 0
+when every input parsed. The FREES-142 amendment chose that label over a refusal, so that existing pipelines and
+single-bundle reports keep working, and left the gate to the caller without giving the caller a way to ask for it.
+
+### Decision
+
+- **Option.** `--require-host-coverage` makes the command exit with status 1 unless
+  `sections.compliance.host_coverage.status` is `complete`. That covers `unknown` (no summary) and `incomplete` (at
+  least one target host has no accepted bundle; it already exits 1 on its own). The document does not change: no
+  field, status or schema version is added, and the report and the dashboard are still written, so the operator
+  can see which hosts are missing.
+- **Exit status 1, not a new code.** Status 1 already means "the report was written, but a supplied input is missing
+  or invalid", which is exactly the case: with the option, the collection summary is a required input, and a missing
+  summary or a missing host is a missing input. Status 2 means that nothing was written because the arguments or the
+  inputs were refused, which is not the case here, and a new status would make every pipeline map one more code for
+  a condition that it already treats as status 1. Status 3 (the dashboard was not written) keeps its precedence over
+  1, as before; the message is printed in that case too.
+- **Message.** The command prints
+  `error: --require-host-coverage: the host coverage is <status>, not complete: <reason>; the report was written, but
+  it does not account for every target host` on standard error, with the reason from `host_coverage.reason`.
+- **Use.** `make test-evidence` passes it to every report it builds from a collection summary and to a report without
+  one, and the documented fleet workflow ([evidence bundles](../evidence.md#in-the-report)) uses it.
+
+### Should it become the default for bundle reports?
+
+| Option | Assessment |
+|---|---|
+| A. Keep it opt-in; recipes and the documented fleet workflow pass it | No existing caller breaks; the gate is one flag away and is in every recipe that builds a fleet report from bundles |
+| B. Default for `--scope fleet` (or `multi_host`) when every compliance input is an `--evidence-bundle`, with an opt-out flag | Fails closed for the common case, but the exit status then depends on scope and input kinds, and every current fleet report without a summary (including the ones in `make test-evidence` built to show the `unknown` label) starts exiting 1 |
+| C. Default for every report with an `--evidence-bundle` | Also breaks every single-bundle and ad-hoc report, which the FREES-142 amendment kept working on purpose |
+
+**Recommendation: A, for now.** Reasons:
+
+1. The FREES-142 decision to label rather than refuse still holds: reports of one bundle, of a run whose `localhost`
+   plays were limited out (which writes no summary), and existing pipelines are legitimate and must keep working.
+2. The option closes the gap that the review found for the callers who need it, and those are exactly the recipes
+   and the documented workflow, which now pass it.
+3. A default that depends on the scope and on the kind of inputs makes the exit status harder to predict than one
+   explicit flag.
+4. `complete` is only as strong as the summary, which is unsigned until [ADR 0018](0018-evidence-bundle-provenance.md)
+   (FREES-140): a consistent rewrite of the evidence directory that lists fewer hosts still reads as `complete`.
+   Making the gate the default before the summary is signed would suggest an assurance that it cannot give yet.
+
+Revisit when ADR 0018 is implemented: with a signed summary, option B (with an explicit opt-out such as
+`--allow-unknown-host-coverage`) becomes the better default. That change alters the exit status of existing
+callers, so it is a breaking change and needs a `breaking_changes` changelog fragment and a new amendment here. This
+amendment changes no default, so its changelog fragment is a `minor_changes` entry.

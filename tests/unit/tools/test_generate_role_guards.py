@@ -238,6 +238,54 @@ def test_unclassifiable_variables_are_errors(tmp_path: Path, task: str, message:
         gen.role_variables(role, {})
 
 
+def test_a_run_output_is_classified_but_never_reset_or_read_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(gen.RUN_OUTPUTS, "demo", frozenset({"__linux_compliance_demo_marker"}))
+    role = make_role(
+        tmp_path,
+        {
+            "main.yml": (
+                "---\n- ansible.builtin.set_fact:\n"
+                "    __linux_compliance_demo_marker: 1\n"
+                "    __linux_compliance_demo_fact: 2\n"
+                "- ansible.builtin.debug: {msg: '{{ __linux_compliance_demo_marker }}'}\n"
+            )
+        },
+    )
+    found = gen.role_variables(role, {})
+    assert found.facts == {"__linux_compliance_demo_fact"}
+    assert found.outputs == {"__linux_compliance_demo_marker"}
+    assert "__linux_compliance_demo_marker" not in gen.guard("evidence", found)
+
+
+def test_a_run_output_that_the_role_never_sets_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(gen.RUN_OUTPUTS, "demo", frozenset({"__linux_compliance_demo_marker"}))
+    role = make_role(tmp_path, {"main.yml": "---\n[]\n"})
+    with pytest.raises(gen.GenerationError, match="a run output that the role never sets"):
+        gen.role_variables(role, {})
+
+
+def test_the_evidence_marker_is_a_run_output_outside_the_guard() -> None:
+    marker = "__linux_compliance_evidence_run_bundle"
+    assert dict(gen.RUN_OUTPUTS) == {"evidence": frozenset({marker})}
+    found = gen.role_variables(REPOSITORY_ROOT / "roles" / "evidence", {})
+    assert found.outputs == {marker}
+    assert marker not in found.facts
+    guard = (REPOSITORY_ROOT / "roles/evidence/tasks" / gen.GUARD_FILE).read_text(encoding="utf-8")
+    assert marker not in guard
+    for name in (
+        "__linux_compliance_evidence_published",
+        "__linux_compliance_evidence_marker",
+        "__linux_compliance_evidence_marked",
+    ):
+        assert name in found.locals
+        assert f"{name} == '{SENTINEL}'" in guard
+        assert f"{name} == '{SECOND_SENTINEL}'" in guard
+
+
 def test_a_variables_file_must_hold_a_mapping(tmp_path: Path) -> None:
     role = make_role(tmp_path, {"main.yml": "---\n[]\n"}, {"main.yml": "---\n- x\n"})
     with pytest.raises(gen.GenerationError, match="must exist and hold a mapping"):

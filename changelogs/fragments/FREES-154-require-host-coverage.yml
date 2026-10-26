@@ -1,0 +1,26 @@
+---
+minor_changes:
+  - >-
+    reporting - new option ``--require-host-coverage``. The command exits with status 1 unless
+    ``sections.compliance.host_coverage.status`` is ``complete``, so a report without ``--evidence-collection``
+    (coverage ``unknown``) fails as one with missing hosts (``incomplete``) already does, and prints the coverage and
+    its reason on standard error. The report and the dashboard are still written and status 3 keeps its precedence.
+    The option is opt-in; ADR 0016 records why it is not the default yet.
+  - >-
+    evidence role - the error for a duplicate key or a non-finite number in a JSON document now names the document,
+    for example ``the collection summary contains a duplicate key`` instead of ``a JSON document of the bundle``.
+security_fixes:
+  - >-
+    evidence role - a host is ``collected`` in the collection summary, and passes ``collected.yml``, only on the
+    strength of an internal marker that the role sets after it wrote and re-hashed the bundle in this run. A
+    ``linux_compliance_evidence_bundle`` from the inventory, ``group_vars``, ``host_vars`` or ``-e`` for a host whose
+    collection failed no longer counts; the host is ``collection_failed`` and the last play of
+    ``freesecdev.linux_compliance.evidence`` fails it. ``reached.yml`` now refuses the run when any
+    ``__linux_compliance_evidence_*`` variable is already set for an inventory host or ``localhost``, or when
+    ``inventory_hostname`` is an extra variable, and ``summary.yml`` refuses to run unless the audit play ran
+    ``reached.yml``. The marker counts only as a mapping, and in ``collected.yml`` only for the audited run.
+  - >-
+    role guards - the generator knows run outputs (``RUN_OUTPUTS``), internal facts that a role sets for a later play
+    of the same run. The guard neither resets nor reads them back, so the evidence role's guard cannot turn the
+    collection marker of a host whose collection failed into a defined sentinel string. The generator fails if a run
+    output is not a fact of the role.

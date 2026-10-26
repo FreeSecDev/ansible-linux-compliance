@@ -24,6 +24,13 @@ Two kinds of task file are derived from the repository and checked for drift in 
   sentinel fails the second read-back (FREES-153). Any other value can only come from outside,
   and the role stops before it changes anything.
 
+A run output (``RUN_OUTPUTS``) is an internal fact that the role sets for a later play of the
+same run to read, such as the collection marker of the evidence role (FREES-154). Resetting it
+to a sentinel at the start of an entry point would make a host whose collection failed look
+like a host with a marker, so it is neither reset nor read back; it is checked where it is set
+and read, and the play that starts the run refuses it when it is already set. Every run output
+must be a fact that the role sets.
+
 The variables are found in the role's task and variable files. A variable that the tool
 cannot classify, or that is both a fact and a task variable, is an error, and so is a role
 below ``roles/`` that names an internal variable of its own but is not in ``GUARDED_ROLES``,
@@ -54,6 +61,9 @@ ROLES: Final[Path] = Path("roles")
 DISPATCH: Final[Path] = Path("roles/remediate/tasks/dispatch.yml")
 GUARD_FILE: Final[str] = "internal_variables.yml"
 GUARDED_ROLES: Final[tuple[str, ...]] = ("audit", "evidence", "remediate", "verify")
+RUN_OUTPUTS: Final[dict[str, frozenset[str]]] = {
+    "evidence": frozenset({"__linux_compliance_evidence_run_bundle"}),
+}
 ROLE_TASK_FILES: Final[frozenset[str]] = frozenset({"main", "dispatch", "internal_variables"})
 SENTINEL: Final[str] = "__linux_compliance_unset__"
 SECOND_SENTINEL: Final[str] = "__linux_compliance_unset_again__"
@@ -78,6 +88,7 @@ class RoleVariables:
     facts: set[str] = field(default_factory=set[str])
     locals: set[str] = field(default_factory=set[str])
     constants: dict[str, str] = field(default_factory=dict[str, str])
+    outputs: set[str] = field(default_factory=set[str])
 
 
 def prefix(role: str) -> str:
@@ -243,9 +254,15 @@ def _checked(role: str, found: RoleVariables, referenced: set[str]) -> RoleVaria
     unclassified = referenced - owned.facts - owned.locals - set(owned.constants)
     if unclassified:
         problems.append(f"used but never defined: {', '.join(sorted(unclassified))}")
+    declared = RUN_OUTPUTS.get(role, frozenset())
+    unset = declared - owned.facts
+    if unset:
+        problems.append(f"a run output that the role never sets: {', '.join(sorted(unset))}")
     if problems:
         message = f"{role}: internal variables " + "; ".join(problems)
         raise GenerationError(message)
+    owned.outputs = owned.facts & declared
+    owned.facts -= declared
     return owned
 
 

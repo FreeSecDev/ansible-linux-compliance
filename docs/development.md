@@ -286,6 +286,16 @@ which holds one module per rule group; the name sets and allow-lists live in `to
     (FREES-153). Regenerate it with `make role-guards` after adding an internal variable; the generator fails on a
     variable it cannot classify and on a role with internal variables that is not in `GUARDED_ROLES`.
     `make test-role-guards` checks the refusals in check mode.
+  - A run output (`RUN_OUTPUTS` in `tools/roles/generate_role_guards.py`) is an internal fact that a role sets for a
+    later play of the same run. Today that is only the evidence role's collection marker
+    `__linux_compliance_evidence_run_bundle` (FREES-154). The guard neither resets nor reads it back: a reset to the
+    sentinel string at the start of the evidence role would leave a host whose collection then failed with a
+    defined marker. The marker is type-checked where it is set, read only as a mapping of the audited run, and refused
+    at the start of the run by `reached.yml` ([evidence bundles](evidence.md#the-collection-marker)). The generator
+    fails if a run output is not a fact that the role sets. The evidence entry points `reached.yml` and
+    `collected.yml` do not import the guard: `collected.yml` uses no internal variable but the run output, which it
+    reads through `hostvars`, so no parameter can stand in for it, and `reached.yml` runs before the role sets
+    anything and refuses every `__linux_compliance_evidence_*` variable of every host itself.
   - Seam owners store their seam attributes directly in `__init__`, never from a function nested in it, and no
     compiled module file (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`) may be tracked (FREES-153).
   - A repository test fails when a symlink below the repository points outside it or is a symlinked directory other

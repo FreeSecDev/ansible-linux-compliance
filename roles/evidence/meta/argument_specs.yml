@@ -50,6 +50,8 @@ argument_specs:
     short_description: "Record the hosts of the audit play and that this host completed fact gathering"
     description:
       - "Runs in the audit play after fact gathering, as the pre_tasks of playbooks/evidence.yml do."
+      - "First refuses the run if a __linux_compliance_evidence_* variable is set for any inventory host or localhost."
+      - "Such a value can only come from outside the role, for example -e, the inventory or a fact cache."
       - "Records the hosts of the play (ansible_play_hosts_all) once, on localhost."
       - "Records linux_compliance_evidence_reached on every host that completed fact gathering."
       - "summary.yml uses both to tell unreachable and limited-out hosts apart."
@@ -67,6 +69,8 @@ argument_specs:
       - "The report reads it with --evidence-collection; the format is documented in docs/evidence.md."
       - "An existing summary is never overwritten. Check mode writes nothing."
       - "Prints a WARNING that names every target host without a bundle."
+      - "A host counts as collected only with the run marker that the main entry point sets in this run."
+      - "Refuses to run unless the audit play ran reached.yml, which refuses a marker supplied from outside."
     author: "FreeSecDev contributors"
     options:
       linux_compliance_evidence_summary_hosts:
@@ -87,5 +91,6 @@ argument_specs:
       - "Runs on every target host after summary.yml, as the last play of playbooks/evidence.yml does."
       - "The collection play does not fail a host whose collection failed, so that the summary runs."
       - "This entry point fails it once the collection summary is written."
+      - "Only the run marker counts; a linux_compliance_evidence_bundle from the inventory or -e does not."
     author: "FreeSecDev contributors"
     options: {}

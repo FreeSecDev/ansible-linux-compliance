@@ -671,8 +671,8 @@ def test_an_evaluation_that_does_not_verify_or_belongs_to_another_run_is_refused
 def test_load_json_is_strict() -> None:
     assert evidence.load_json(b'{"a": 1}', "x") == {"a": 1}
     for data, message in (
-        (b'{"a": 1, "a": 2}', "duplicate key"),
-        (b'{"a": NaN}', "non-finite number"),
+        (b'{"a": 1, "a": 2}', "^x contains a duplicate key$"),
+        (b'{"a": NaN}', "^x contains a non-finite number$"),
         (b"\xff", "is not valid JSON"),
         (b"{", "is not valid JSON"),
         (b"[" * 100000, "is not valid JSON"),

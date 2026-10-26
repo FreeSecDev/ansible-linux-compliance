@@ -308,6 +308,31 @@
           - not evidence_tampered.stat.exists
         quiet: true
 
+    - name: Check that the guard kept the run marker of the earlier collection, which is of another run
+      ansible.builtin.assert:
+        that:
+          - hostvars['web01']['__linux_compliance_evidence_run_bundle'] is mapping
+          - hostvars['web01']['__linux_compliance_evidence_run_bundle'].run_id != linux_compliance_audited.run_id
+          - linux_compliance_audited.run_id == 'tampered-web01'
+        quiet: true
+
+    - name: Expect collected.yml to fail the host whose collection failed after the guard ran
+      block:
+        - name: Check the collection of the tampered run with collected.yml
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+            tasks_from: collected.yml
+
+        - name: Fail because collected.yml passed a host whose collection failed
+          ansible.builtin.fail:
+            msg: EVIDENCE-FAILED-COLLECTION-PASSED
+      rescue:
+        - name: Check that collected.yml refused the host
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('no evidence bundle was collected in this run')
+            quiet: true
+
     - name: Build a run whose evidence list names the state ledger
       ansible.builtin.include_tasks: tasks/evidence-fixture.yml
       vars:

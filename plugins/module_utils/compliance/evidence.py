@@ -305,24 +305,27 @@ def canonical_json(document: object) -> str:
     return json.dumps(document, sort_keys=True, indent=2, ensure_ascii=True, allow_nan=False) + "\n"
 
 
-def _no_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            _fail("a JSON document of the bundle contains a duplicate key")
-        result[key] = value
-    return result
-
-
-def _no_constant(_constant: str) -> NoReturn:
-    _fail("a JSON document of the bundle contains a non-finite number")
-
-
 def load_json(data: bytes, where: str) -> object:
-    """Parse strict JSON: UTF-8, no duplicate keys, no ``NaN`` or ``Infinity``."""
+    """Parse strict JSON: UTF-8, no duplicate keys, no ``NaN`` or ``Infinity``.
+
+    ``where`` names the document in every error, for example ``bundle.json`` or
+    ``the collection summary``.
+    """
+
+    def no_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                _fail(f"{where} contains a duplicate key")
+            result[key] = value
+        return result
+
+    def no_constant(_constant: str) -> NoReturn:
+        _fail(f"{where} contains a non-finite number")
+
     try:
         text = data.decode("utf-8")
-        return json.loads(text, object_pairs_hook=_no_duplicates, parse_constant=_no_constant)
+        return json.loads(text, object_pairs_hook=no_duplicates, parse_constant=no_constant)
     except EvidenceError:
         raise
     except (UnicodeDecodeError, ValueError, RecursionError):
