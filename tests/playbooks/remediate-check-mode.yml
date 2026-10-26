@@ -106,6 +106,312 @@
           - crontab_after.stat.ctime | default(0) == crontab_before.stat.ctime | default(0)
         quiet: true
 
+- name: Toggles in check mode | One rule switched off is not applied and the audit disables it
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_rule_file_permissions_crontab_enabled: false
+    crontab_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role with the rule toggle off
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Resolve the disabled rules with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: toggles.yml
+
+    - name: Check that the rule toggle controls both roles
+      vars:
+        planned: "{{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', crontab_rule) | first }}"
+        expected:
+          - rule_id: "{{ crontab_rule }}"
+            disabled_by: linux_compliance_rule_file_permissions_crontab_enabled
+      ansible.builtin.assert:
+        that:
+          - planned.action in ['none', 'cleanup']
+          - planned.reason == 'disabled_by_toggle'
+          - planned.disabled_by == 'linux_compliance_rule_file_permissions_crontab_enabled'
+          - linux_compliance_remediated.results | selectattr('action', 'equalto', 'apply') | list == []
+          - linux_compliance_remediated.disabled_rules == expected
+          - __linux_compliance_audit_toggles.errors == []
+          - __linux_compliance_audit_toggles.disabled_rules == expected
+        quiet: true
+
+- name: Toggles in check mode | A whole topic switched off turns off its rules in both roles
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_file_permissions_enabled: false
+    crontab_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role with the topic toggle off and the generated rule default
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Resolve the disabled rules with the audit role, which has no toggle defaults
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: toggles.yml
+
+    - name: Check that the topic toggle controls both roles and is named as the cause
+      vars:
+        planned: "{{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', crontab_rule) | first }}"
+        expected:
+          - rule_id: "{{ crontab_rule }}"
+            disabled_by: linux_compliance_file_permissions_enabled
+      ansible.builtin.assert:
+        that:
+          - planned.action in ['none', 'cleanup']
+          - planned.reason == 'disabled_by_toggle'
+          - planned.disabled_by == 'linux_compliance_file_permissions_enabled'
+          - linux_compliance_remediated.results | selectattr('action', 'equalto', 'apply') | list == []
+          - linux_compliance_remediated.disabled_rules == expected
+          - __linux_compliance_audit_toggles.disabled_rules == expected
+        quiet: true
+
+    - name: Switch the rule back on inside the disabled topic
+      vars:
+        linux_compliance_rule_file_permissions_crontab_enabled: true
+      block:
+        - name: Run the remediate role with the rule toggle on
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Resolve the disabled rules with the audit role again
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Check that the rule toggle wins over the topic toggle in both roles
+          vars:
+            planned: "{{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', crontab_rule) | first }}"
+          ansible.builtin.assert:
+            that:
+              - planned.action == 'apply'
+              - planned.disabled_by is none
+              - linux_compliance_remediated.disabled_rules == []
+              - __linux_compliance_audit_toggles.disabled_rules == []
+            quiet: true
+
+- name: Toggles in check mode | The audit fails closed on invalid toggles and keeps explicit entries
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Combine an explicit entry for an uncatalogued rule with a topic toggle
+      vars:
+        linux_compliance_file_permissions_enabled: false
+        linux_compliance_audit_disabled_rules:
+          - rule_id: xccdf_org.ssgproject.content_rule_audit_rules_immutable
+      block:
+        - name: Resolve the disabled rules with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Check that both rules are disabled, the explicit one as given
+          ansible.builtin.assert:
+            that:
+              - >-
+                __linux_compliance_audit_toggles.disabled_rules == [
+                  {'rule_id': 'xccdf_org.ssgproject.content_rule_audit_rules_immutable'},
+                  {'rule_id': 'xccdf_org.ssgproject.content_rule_file_permissions_crontab',
+                   'disabled_by': 'linux_compliance_file_permissions_enabled'}]
+            quiet: true
+
+    - name: Try the likely typo linux_compliance_audit_enabled for the auditd topic
+      vars:
+        linux_compliance_audit_enabled: false
+      block:
+        - name: Resolve the disabled rules with the typo
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Fail because the typo was accepted
+          ansible.builtin.fail:
+            msg: The audit role accepted linux_compliance_audit_enabled.
+      rescue:
+        - name: Check that the typo was refused before any scan
+          ansible.builtin.assert:
+            that:
+              - "'linux_compliance_audit_enabled' in ansible_failed_result.msg"
+              - "'nothing was scanned' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try a toggle that is a string instead of a boolean
+      vars:
+        linux_compliance_file_permissions_enabled: "false"
+      block:
+        - name: Resolve the disabled rules with a string toggle
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Fail because the string toggle was accepted
+          ansible.builtin.fail:
+            msg: The audit role accepted a string toggle.
+      rescue:
+        - name: Check that the string toggle was refused
+          ansible.builtin.assert:
+            that:
+              - "'linux_compliance_file_permissions_enabled must be a boolean' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try to disable a catalogued rule through the explicit audit list
+      vars:
+        linux_compliance_audit_disabled_rules:
+          - rule_id: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+      block:
+        - name: Resolve the disabled rules with a catalogued explicit entry
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Fail because the catalogued explicit entry was accepted
+          ansible.builtin.fail:
+            msg: The audit role skipped a catalogued rule that remediation would still apply.
+      rescue:
+        - name: Check that the toggle was named instead
+          ansible.builtin.assert:
+            that:
+              - "'linux_compliance_rule_file_permissions_crontab_enabled' in ansible_failed_result.msg"
+            quiet: true
+
+- name: Toggles in check mode | Both roles agree on copied defaults and warn about empty topics
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    crontab_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Copy the generated rule default into the inventory without the family toggle
+      vars:
+        linux_compliance_rule_file_permissions_crontab_enabled: "{{ linux_compliance_file_permissions_enabled }}"
+      block:
+        - name: Resolve the disabled rules with the audit role, which carries the same defaults
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Run the remediate role with the copied default
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Check that both roles resolve the copied default from the family default
+          vars:
+            planned: "{{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', crontab_rule) | first }}"
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_audit_toggles.errors == []
+              - __linux_compliance_audit_toggles.disabled_rules == []
+              - planned.action == 'apply'
+              - linux_compliance_remediated.disabled_rules == []
+            quiet: true
+
+    - name: Switch off a topic that has no catalogued rule in the profile
+      vars:
+        linux_compliance_auditd_enabled: false
+      block:
+        - name: Resolve the disabled rules with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Run the remediate role with the empty topic switched off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Check that both roles warn that the topic toggle excludes nothing
+          vars:
+            warning_prefix: "WARNING: linux_compliance_auditd_enabled is false"
+            remediate_warnings: >-
+              {{ linux_compliance_remediated.notices | select('match', warning_prefix) | list }}
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_audit_toggles.disabled_rules == []
+              - __linux_compliance_audit_toggles.warnings | length == 1
+              - __linux_compliance_audit_toggles.warnings[0] is match(warning_prefix)
+              - "'currently excludes nothing' in __linux_compliance_audit_toggles.warnings[0]"
+              - remediate_warnings | length == 1
+            quiet: true
+
+    - name: Switch off a topic that does exclude a rule
+      vars:
+        linux_compliance_file_permissions_enabled: false
+      block:
+        - name: Resolve the disabled rules with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Check that no warning is printed for an effective topic toggle
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_audit_toggles.warnings == []
+              - __linux_compliance_audit_toggles.disabled_rules | length == 1
+            quiet: true
+
 - name: Remediate role in check mode | Invalid toggles and allow-list entries fail closed
   hosts: localhost
   connection: local
@@ -562,6 +868,16 @@
     - name: Catalogue a rule of the registered sysctl family, which has no task file yet
       ansible.builtin.set_fact:
         __linux_compliance_remediate_rules:
+          - rule_id: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+            family: file_permissions
+            disruptive: false
+            reversible: true
+            revert_strategy: recorded_value
+            toggle: linux_compliance_rule_file_permissions_crontab_enabled
+            runbook: null
+            parameters:
+              path: /etc/crontab
+              max_mode: "0600"
           - rule_id: xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space
             family: sysctl
             disruptive: false

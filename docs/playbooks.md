@@ -79,7 +79,8 @@ Role variables are documented in each role `README.md` and in `meta/argument_spe
 | `linux_compliance_audit_disabled_rules` | `[]` | `audit` |
 | `linux_compliance_remediate_enabled` | `false` | `remediate` |
 | `linux_compliance_remediate_allow_disruptive` | `[]` | `remediate` |
-| `linux_compliance_<family>_enabled`, `linux_compliance_rule_<rule_short_id>_enabled` | not set (on) | `remediate` |
+| `linux_compliance_<family>_enabled` | `true` | `remediate`, `audit` |
+| `linux_compliance_rule_<rule_short_id>_enabled` | the family toggle | `remediate`, `audit` |
 | `linux_compliance_verify_fail_on_regression` | `true` | `verify` |
 | `linux_compliance_verify_fail_on_new_failures` | `true` | `verify` |
 | `linux_compliance_verify_mode` | `raw` | `verify` |
@@ -102,9 +103,10 @@ without JSON passes a string and fails the input validation; this is intentional
 
 Every rule can also be switched off on its own or per topic, with flat booleans such as
 `linux_compliance_file_permissions_enabled` or `linux_compliance_rule_file_permissions_crontab_enabled`. Switching off
-a rule that was applied before cleans it up on the next run with the opt-in. Unknown toggle names fail the role. See the
-[remediation guide](remediation.md) for the effective-state rules and the disruptive families. FREES-55 generates the
-defaults of the toggles from the rule catalogue.
+a rule that was applied before cleans it up on the next run with the opt-in, and the audit reports it as `disabled`,
+naming the controlling variable. Unknown toggle names fail both roles. See the
+[remediation guide](remediation.md) for the effective-state rules and the disruptive families, and the
+[variable reference](remediation-variables.md), generated from the rule catalogue, for every toggle.
 
 ## Tags
 

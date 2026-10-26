@@ -13,9 +13,9 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 |---|---|
 | `galaxy.yml` | Namespace `freesecdev`, name `linux_compliance`, Apache-2.0, repository links, tags and `build_ignore` |
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
-| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root), `audit.py` (audit orchestration behind `compliance_scan`), `exceptions.py` (exceptions file and waivers), `yamlsubset.py` (strict YAML subset loader) |
+| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root), `audit.py` (audit orchestration behind `compliance_scan`), `exceptions.py` (exceptions file and waivers), `yamlsubset.py` (strict YAML subset loader), `toggles.py` (rule catalogue validation and toggle resolution shared by the audit and remediate roles, [ADR 0011](adr/0011-control-toggles-and-cleanup.md)) |
 | `plugins/modules/` | `control_state.py` (ledger), the read-only discovery modules `benchmark_info.py` and `profile_info.py`, and the audit module `compliance_scan.py` |
-| `plugins/filter/` | Controller filters `apply_exceptions`, `stale_exceptions`, `exception_removal_candidates`, `validate_exceptions` and `scan_summary` ([exceptions](exceptions.md)), and `remediation_plan` (effective state of every catalogued rule), `remediation_unaccounted` (planned work without exactly one result) and `restricted_mode` (file mode restriction) of the remediate role ([remediation guide](remediation.md)) |
+| `plugins/filter/` | Controller filters `apply_exceptions`, `stale_exceptions`, `exception_removal_candidates`, `validate_exceptions` and `scan_summary` ([exceptions](exceptions.md)), and `remediation_plan` (effective state of every catalogued rule), `remediation_unaccounted` (planned work without exactly one result) and `restricted_mode` (file mode restriction) of the remediate role ([remediation guide](remediation.md)), and `audit_disabled_rules` (rules the toggles switch off, for the audit role) |
 | `docs/schemas/`, `docs/examples/` | JSON Schema and example of the exceptions file |
 | `content/manifest.yml` | Pinned ComplianceAsCode release, archive SHA-512, datastream SHA-256 and profiles ([ADR 0015](adr/0015-content-acquisition-and-pinning.md)); the only file in `content/` |
 | `tools/content/fetch_content.py` | Controller-side tool that downloads or reads the pinned archive and extracts only the listed datastreams |
@@ -52,10 +52,11 @@ files ([audit guide](audit.md)). `remediate` uses `assert`, `include_vars`, `set
 | `verify` | Never | FREES-54 (implemented) | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`), `linux_compliance_verify_fail_on_new_failures` (`true`), `linux_compliance_verify_mode` (`raw`), `linux_compliance_exceptions_file` (`null`) |
 | `evidence` | Never; writes on the controller only | FREES-51 | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_host_facts` (`false`) |
 
-Per-rule and per-family toggles are read by the `remediate` role, which fails on unknown toggle names; their defaults
-and argument specifications are generated from the rule catalogue by FREES-55
-([ADR 0011](adr/0011-control-toggles-and-cleanup.md)). Until then a toggle that is not set counts as on, and the
-audit takes the disabled rules as the list `linux_compliance_audit_disabled_rules`. The variables of each role are documented in its
+Per-rule and per-family toggles are read by the `remediate` and `audit` roles with the same resolution
+(`plugins/module_utils/compliance/toggles.py`), and both fail on unknown toggle names; their defaults and argument
+specifications in the `remediate` role are generated from the rule catalogue (FREES-55,
+[ADR 0011](adr/0011-control-toggles-and-cleanup.md), [variable reference](remediation-variables.md)). The audit
+takes rules outside the catalogue to disable as the list `linux_compliance_audit_disabled_rules`. The variables of each role are documented in its
 `README.md` and in `meta/argument_specs.yml`.
 `tools/roles/check_role_specs.py` (part of `make lint-ansible`) fails when a role's `defaults/main.yml` and
 `meta/argument_specs.yml` disagree in names, types or values, when an option lacks a description or default, or when

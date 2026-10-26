@@ -1,0 +1,26 @@
+---
+minor_changes:
+  - >-
+    The ``remediate`` role now defines a topic toggle ``linux_compliance_<family>_enabled`` (default ``true``) for every
+    registered control family and a rule toggle ``linux_compliance_rule_<rule_short_id>_enabled`` (default
+    ``"{{ linux_compliance_<family>_enabled }}"``) for every catalogued rule. The defaults, their argument
+    specifications and the reference ``docs/remediation-variables.md`` are generated from
+    ``roles/remediate/vars/rules.yml`` with ``make toggles``, and ``make lint-toggles`` (part of ``make lint``) fails
+    when they drift from the catalogue.
+  - >-
+    The ``audit`` role resolves the same toggles before the scan, with the same code as the ``remediate`` role and the
+    new filter ``freesecdev.linux_compliance.audit_disabled_rules``. A rule or topic switched off once is cleaned up by
+    remediation and excluded from the audit through the generated XCCDF tailoring file, and is reported as
+    ``disabled`` with the controlling variable. Unknown or non-boolean toggles fail the audit before any scan. The
+    ``audit`` role carries the same generated toggle defaults and argument specifications as the ``remediate`` role.
+    Both roles print a ``WARNING:`` when a topic toggle is false while no catalogued rule of its family is selected by
+    the profile, because the toggle then excludes nothing.
+breaking_changes:
+  - >-
+    ``linux_compliance_audit_disabled_rules`` is now only for rules outside the rule catalogue of the ``remediate``
+    role. Listing a catalogued rule there fails the ``audit`` role; switch the rule off with its toggle instead, so
+    that the audit and remediation agree.
+  - >-
+    When a rule is switched off and its family toggle is off too, ``disabled_by`` now names the family toggle, also
+    when the rule toggle was set to ``false`` explicitly. The family toggle is named whenever it is off; the rule toggle
+    is named when it alone switches the rule off.

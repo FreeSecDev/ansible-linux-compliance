@@ -58,8 +58,10 @@ overriding them.
 | `bootstrap` | implemented | `install` plus tool version check |
 | `install` | implemented | `uv sync --frozen`, installs both git hook types |
 | `format` | implemented | `ruff check --fix` and `ruff format` |
-| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible` |
+| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible`, `lint-toggles` |
 | `lint-ansible` | implemented | `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
+| `lint-toggles` | implemented | `tools/roles/generate_toggles.py --check`: fails with a diff when the generated toggle defaults, argument specs or `docs/remediation-variables.md` differ from the rule catalogue ([remediation guide](remediation.md#generated-toggles)) |
+| `toggles` | implemented | Regenerates the toggle defaults and argument specs of the `remediate` role and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |
@@ -80,7 +82,7 @@ overriding them.
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
 | `collection-link` | implemented | Links `plugins/` and `roles/` into `build/collections` for pytest, the type checkers, ansible-lint and `test-remediate-check` |
 | `ansible-home` | implemented | Creates `ANSIBLE_HOME` and `ANSIBLE_TEST_HOME` ([per-checkout Ansible home](#per-checkout-ansible-home)); a prerequisite of `collection-link` and `collection-tree` |
-| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become` ([remediation guide](remediation.md#testing)) |
+| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become`; the toggle plays also run the audit role's toggle resolution ([remediation guide](remediation.md#testing)) |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches, coverage output and `build/`, including the per-checkout Ansible home |
 | `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-verify security docs test-sanity test-ansible-units package-check` |

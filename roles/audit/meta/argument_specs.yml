@@ -5,6 +5,8 @@ argument_specs:
     description:
       - "Scans the host against the profile that the discover role verified and produces normalized findings."
       - "Runs the freesecdev.linux_compliance.compliance_scan module."
+      - "Before the scan it resolves the control toggles of ADR 0011 with the catalogue of the remediate role."
+      - "Rules that a toggle switches off are excluded and reported as disabled, naming the controlling variable."
       - "Publishes the result as the fact linux_compliance_audited."
       - "The role never changes the configuration of the managed host."
       - "It writes evidence files below linux_compliance_audit_output_dir."
@@ -53,7 +55,7 @@ argument_specs:
         type: str
         default: "openscap"
         choices:
-          - "openscap"
+          - openscap
         description:
           - "Scanner backend. OpenSCAP is the only backend."
       linux_compliance_audit_output_dir:
@@ -76,13 +78,14 @@ argument_specs:
         elements: dict
         default: []
         description:
-          - "Rules of the profile that operator toggles disable (ADR 0011)."
+          - "Rules of the profile outside the remediate rule catalogue to disable (ADR 0011)."
+          - "Catalogued rules are disabled with their toggles instead; naming one here fails the role."
+          - "The role adds the catalogued rules that the toggles switch off; see docs/remediation-variables.md."
           - "Each item is a mapping with rule_id and an optional disabled_by."
           - "rule_id is the full XCCDF rule identifier and must be selected by the profile."
           - "disabled_by names the controlling variable; it defaults to linux_compliance_rule_<short id>_enabled."
           - "Disabled rules are excluded through a generated tailoring file and reported as disabled."
           - "They are never counted as passing."
-          - "The generated toggles of FREES-55 will fill this list; until then it is set directly."
         options:
           rule_id:
             type: str
@@ -93,6 +96,154 @@ argument_specs:
             type: str
             description:
               - "Name of the controlling toggle variable, linux_compliance_<name>_enabled."
+      linux_compliance_file_permissions_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the file_permissions control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "Catalogued rules: 1."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_sysctl_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the sysctl control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_auditd_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the auditd control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_services_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the services control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_network_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the network control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_firewall_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the firewall control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_ssh_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the ssh control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_pam_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the pam control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_sudo_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the sudo control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_crypto_policy_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the crypto_policy control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_mounts_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the mounts control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_bootloader_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the bootloader control family (ADR 0011)."
+          - "When false, every rule of the family whose rule toggle keeps its default is off."
+          - "Remediation cleans such a rule up when the state ledger records it as applied."
+          - "The audit excludes it and reports it as disabled, naming this variable."
+          - "The family is disruptive: remediation applies and cleans up its rules only"
+          - "when linux_compliance_remediate_allow_disruptive names it."
+          - "Catalogued rules: 0."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+      linux_compliance_rule_file_permissions_crontab_enabled:
+        type: bool
+        description:
+          - "Toggle of the rule file_permissions_crontab."
+          - "Family file_permissions; defaults to the value of linux_compliance_file_permissions_enabled."
+          - "A value set here wins over the family toggle in both directions."
+          - "Revert strategy after it was applied: recorded_value."
+          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
   evaluate.yml:
     short_description: "Apply the exceptions file and the failure gate to an existing audit result"
     description:

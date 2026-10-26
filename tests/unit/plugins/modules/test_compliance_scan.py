@@ -174,6 +174,23 @@ def test_disabled_rules_are_reported_with_their_toggle(
     ]
 
 
+def test_a_rule_disabled_by_its_topic_toggle_names_the_topic_toggle(
+    capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
+) -> None:
+    runner.results = {ALPHA: "notselected", BETA: "pass"}
+    runner.returncode = 0
+    disabled = [{"rule_id": ALPHA, "disabled_by": "linux_compliance_auditd_enabled"}]
+    code, result = run(capsys, arguments(content, disabled_rules=disabled))
+    assert code == 0
+    findings = {item["rule_id"]: item for item in result["scan_run"]["findings"]}
+    assert findings[ALPHA]["outcome"] == "disabled"
+    assert findings[ALPHA]["disabled_by"] == "linux_compliance_auditd_enabled"
+    assert "linux_compliance_auditd_enabled" in findings[ALPHA]["message"]
+    assert result["summary"]["disabled"] == 1
+    assert result["summary"]["pass"] == 1
+    assert result["disabled_rules"] == disabled
+
+
 def test_an_incomplete_scan_fails_the_task_but_returns_the_evidence(
     capsys: pytest.CaptureFixture[str], runner: FakeRunner, content: Path
 ) -> None:

@@ -8,7 +8,11 @@ from typing import cast
 import pytest
 import yaml
 
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    toggles,
+)
 from tools.roles import check_role_specs as specs
+from tools.roles import generate_toggles
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ROLES = ("discover", "audit", "remediate", "verify", "evidence")
@@ -267,6 +271,179 @@ def test_module_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as raised:
         runpy.run_path(specs.__file__, run_name="__main__")
     assert raised.value.code == 0
+
+
+TOPIC = "linux_compliance_ssh_enabled"
+RULE_ID = "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+RULE = "linux_compliance_rule_sshd_disable_root_login_enabled"
+INHERITED = "{{ linux_compliance_ssh_enabled }}"
+CATALOGUE: dict[str, object] = {
+    "__linux_compliance_remediate_families": [{"name": "ssh", "disruptive": True}],
+    "__linux_compliance_remediate_rules": [
+        {
+            "rule_id": RULE_ID,
+            "family": "ssh",
+            "disruptive": True,
+            "reversible": True,
+            "revert_strategy": "owned_dropin",
+            "toggle": RULE,
+            "runbook": None,
+            "parameters": {},
+        }
+    ],
+}
+
+
+def generated() -> tuple[dict[str, object], dict[str, object]]:
+    catalogue = toggles.load_catalogue(
+        CATALOGUE["__linux_compliance_remediate_rules"],
+        CATALOGUE["__linux_compliance_remediate_families"],
+        {},
+        toggles.Errors(),
+    )
+    return (
+        dict(generate_toggles.toggle_defaults(catalogue)),
+        dict(generate_toggles.toggle_specs(catalogue)),
+    )
+
+
+def toggle_role(
+    root: Path,
+    name: str = "remediate",
+    options: dict[str, object] | None = None,
+    defaults: dict[str, object] | None = None,
+    *,
+    catalogue: object = None,
+) -> Path:
+    role = write_role(root).rename(root / name)
+    expected_defaults, expected_specs = generated()
+    (role / "meta" / "argument_specs.yml").write_text(
+        yaml.safe_dump(
+            {
+                "argument_specs": {
+                    "main": {"options": expected_specs if options is None else options}
+                }
+            }
+        )
+    )
+    (role / "defaults" / "main.yml").write_text(
+        yaml.safe_dump(expected_defaults if defaults is None else defaults)
+    )
+    rules = root / "remediate" / "vars" / "rules.yml"
+    rules.parent.mkdir(parents=True, exist_ok=True)
+    rules.write_text(yaml.safe_dump(CATALOGUE if catalogue is None else catalogue))
+    return role
+
+
+@pytest.mark.parametrize("name", ["remediate", "audit"])
+def test_generated_toggles_are_accepted_in_the_toggle_roles(tmp_path: Path, name: str) -> None:
+    assert specs.check_role(toggle_role(tmp_path, name)) == []
+
+
+def test_toggles_are_refused_in_other_roles(tmp_path: Path) -> None:
+    option = generated()[1][TOPIC]
+    role = write_role(tmp_path, options={TOPIC: option}, defaults={TOPIC: True})
+    assert "must be prefixed linux_compliance_demo_" in specs.check_role(role)[0]
+
+
+def mutated(
+    defaults: dict[str, object] | None = None,
+    options: dict[str, object] | None = None,
+    drop: str | None = None,
+) -> tuple[dict[str, object], dict[str, object]]:
+    expected_defaults, expected_specs = generated()
+    expected_defaults.update(defaults or {})
+    expected_specs.update(options or {})
+    if drop is not None:
+        expected_defaults.pop(drop)
+        expected_specs.pop(drop)
+    return expected_defaults, expected_specs
+
+
+TOGGLE_MUTATIONS: list[tuple[tuple[dict[str, object], dict[str, object]], str]] = [
+    (
+        mutated(
+            {"linux_compliance_foo_enabled": True},
+            {"linux_compliance_foo_enabled": {"type": "bool", "default": True, "description": "x"}},
+        ),
+        "linux_compliance_foo_enabled: is not a toggle generated from the rule catalogue",
+    ),
+    (
+        mutated(
+            {"linux_compliance_rule_other_enabled": INHERITED},
+            {"linux_compliance_rule_other_enabled": {"type": "bool", "description": "x"}},
+        ),
+        "linux_compliance_rule_other_enabled: is not a toggle generated",
+    ),
+    (
+        mutated(
+            {"linux_compliance_remediatex_enabled": True},
+            {
+                "linux_compliance_remediatex_enabled": {
+                    "type": "bool",
+                    "default": True,
+                    "description": "x",
+                }
+            },
+        ),
+        "linux_compliance_remediatex_enabled: is not a toggle generated",
+    ),
+    (
+        mutated({RULE: "{{ linux_compliance_remediate_enabled }}"}),
+        f"{RULE}: defaults/main.yml differs from the generated default",
+    ),
+    (
+        mutated({RULE: "{{ linux_compliance_auditd_enabled }}"}),
+        f"{RULE}: defaults/main.yml differs from the generated default",
+    ),
+    (mutated({TOPIC: False}), f"{TOPIC}: defaults/main.yml differs"),
+    (mutated({TOPIC: 1}), f"{TOPIC}: defaults/main.yml differs"),
+    (
+        mutated(options={TOPIC: {"type": "bool", "default": 1, "description": "x"}}),
+        f"{TOPIC}: the argument spec differs",
+    ),
+    (
+        mutated(options={RULE: {"type": "bool", "default": True, "description": ["x"]}}),
+        f"{RULE}: the argument spec differs",
+    ),
+    (mutated(drop=RULE), f"{RULE}: defaults/main.yml differs"),
+]
+
+
+@pytest.mark.parametrize(("files", "message"), TOGGLE_MUTATIONS)
+def test_toggles_that_differ_from_the_generated_ones_are_findings(
+    tmp_path: Path, files: tuple[dict[str, object], dict[str, object]], message: str
+) -> None:
+    findings = specs.check_role(toggle_role(tmp_path, options=files[1], defaults=files[0]))
+    assert any(message in item for item in findings), findings
+
+
+def test_a_toggle_role_without_a_valid_catalogue_is_a_finding(tmp_path: Path) -> None:
+    role = toggle_role(tmp_path, catalogue={"__linux_compliance_remediate_families": []})
+    assert "the toggles cannot be checked" in specs.check_role(role)[0]
+
+
+def test_the_repository_toggle_roles_carry_exactly_the_generated_toggles() -> None:
+    for name in generate_toggles.TOGGLE_ROLES:
+        assert (
+            specs.check_toggles(
+                REPOSITORY_ROOT / "roles" / name,
+                cast(
+                    "dict[str, object]",
+                    cast(
+                        "dict[str, dict[str, dict[str, object]]]",
+                        specs.load_mapping(
+                            REPOSITORY_ROOT / "roles" / name / "meta/argument_specs.yml"
+                        ),
+                    )["argument_specs"]["main"]["options"],
+                ),
+                cast(
+                    "dict[str, object]",
+                    specs.load_mapping(REPOSITORY_ROOT / "roles" / name / "defaults/main.yml"),
+                ),
+            )
+            == []
+        )
 
 
 def test_tasks_file_is_required(tmp_path: Path) -> None:

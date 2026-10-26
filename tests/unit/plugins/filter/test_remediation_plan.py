@@ -7,6 +7,9 @@ import pytest
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     remediation_plan as plan_filter,
 )
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    toggles,
+)
 
 PREFIX = "xccdf_org.ssgproject.content_rule_"
 CRONTAB = PREFIX + "file_permissions_crontab"
@@ -30,7 +33,7 @@ def rule(rule_id: str, family_name: str, **overrides: object) -> dict[str, objec
         "disruptive": disruptive,
         "reversible": True,
         "revert_strategy": "recorded_value",
-        "toggle": plan_filter.rule_toggle_name(rule_id),
+        "toggle": toggles.rule_toggle_name(rule_id),
         "runbook": None,
         "parameters": {},
     }
@@ -192,7 +195,7 @@ def test_the_rule_toggle_wins_over_the_family_toggle() -> None:
     rules = run(
         toggles={
             "linux_compliance_file_permissions_enabled": False,
-            plan_filter.rule_toggle_name(CRONTAB): True,
+            toggles.rule_toggle_name(CRONTAB): True,
         }
     )[1]
     assert rules[CRONTAB]["action"] == "apply"
@@ -206,21 +209,19 @@ def test_a_rule_toggle_can_switch_off_one_rule_of_an_enabled_family() -> None:
     result, rules = run(
         toggles={
             "linux_compliance_file_permissions_enabled": True,
-            plan_filter.rule_toggle_name(CRONTAB): False,
+            toggles.rule_toggle_name(CRONTAB): False,
         }
     )
-    assert rules[CRONTAB]["disabled_by"] == plan_filter.rule_toggle_name(CRONTAB)
+    assert rules[CRONTAB]["disabled_by"] == toggles.rule_toggle_name(CRONTAB)
     assert rules[PASSWD]["action"] == "apply"
     assert result["disabled_rules"] == [
-        {"rule_id": CRONTAB, "disabled_by": plan_filter.rule_toggle_name(CRONTAB)}
+        {"rule_id": CRONTAB, "disabled_by": toggles.rule_toggle_name(CRONTAB)}
     ]
 
 
 def test_a_disabled_rule_recorded_in_the_ledger_is_cleaned_up() -> None:
     entry = ledger_entry(CRONTAB, "file_permissions")
-    result, rules = run(
-        toggles={plan_filter.rule_toggle_name(CRONTAB): False}, ledger_entries=[entry]
-    )
+    result, rules = run(toggles={toggles.rule_toggle_name(CRONTAB): False}, ledger_entries=[entry])
     assert rules[CRONTAB]["action"] == "cleanup"
     assert rules[CRONTAB]["reason"] == "disabled_by_toggle"
     assert rules[CRONTAB]["ledger_entry"] == entry
@@ -317,7 +318,7 @@ def test_undeclared_names_in_a_role_namespace_are_errors(name: str) -> None:
     ]
 
 
-@pytest.mark.parametrize("family", sorted(plan_filter.DISRUPTIVE_FAMILIES))
+@pytest.mark.parametrize("family", sorted(toggles.DISRUPTIVE_FAMILIES))
 def test_a_known_disruptive_family_cannot_be_marked_non_disruptive(family: str) -> None:
     families = [{"name": family, "disruptive": False}]
     assert errors_of([], families=families) == [
@@ -342,7 +343,7 @@ def test_a_disruptive_rule_that_would_still_be_applied_is_not_pending_cleanup() 
 
 
 @pytest.mark.parametrize(
-    ("toggles", "message"),
+    ("given", "message"),
     [
         (
             {"linux_compliance_rule_typo_enabled": False},
@@ -368,16 +369,16 @@ def test_a_disruptive_rule_that_would_still_be_applied_is_not_pending_cleanup() 
             ),
         ),
         (
-            {plan_filter.rule_toggle_name(CRONTAB): None},
+            {toggles.rule_toggle_name(CRONTAB): None},
             (
-                f"{plan_filter.rule_toggle_name(CRONTAB)} must be a boolean; pass it as JSON, for "
-                f"example -e '{{\"{plan_filter.rule_toggle_name(CRONTAB)}\": false}}'"
+                f"{toggles.rule_toggle_name(CRONTAB)} must be a boolean; pass it as JSON, for "
+                f"example -e '{{\"{toggles.rule_toggle_name(CRONTAB)}\": false}}'"
             ),
         ),
     ],
 )
-def test_unknown_or_invalid_toggles_are_errors(toggles: dict[str, object], message: str) -> None:
-    assert errors_of(toggles=toggles) == [message]
+def test_unknown_or_invalid_toggles_are_errors(given: dict[str, object], message: str) -> None:
+    assert errors_of(toggles=given) == [message]
 
 
 def test_toggles_must_be_a_mapping() -> None:
@@ -551,18 +552,51 @@ def test_an_https_runbook_is_accepted_for_an_irreversible_rule() -> None:
 
 
 def test_errors_are_bounded() -> None:
-    toggles = {f"linux_compliance_rule_unknown_{index}_enabled": True for index in range(150)}
-    assert len(errors_of(toggles=toggles)) == plan_filter.MAX_ERRORS
+    unknown = {f"linux_compliance_rule_unknown_{index}_enabled": True for index in range(150)}
+    assert len(errors_of(toggles=unknown)) == toggles.MAX_ERRORS
 
 
 def test_resolve_toggle_defaults_to_on_without_a_toggle() -> None:
-    toggle = plan_filter.resolve_toggle(rule(CRONTAB, "file_permissions"), {})
-    assert toggle == plan_filter.Toggle(on=True, source=None)
+    toggle = toggles.resolve_toggle(rule(CRONTAB, "file_permissions"), {})
+    assert toggle == toggles.Toggle(on=True, disabled_by=None)
 
 
 def test_toggle_names_follow_adr_0011() -> None:
-    assert plan_filter.toggle_name("auditd") == "linux_compliance_auditd_enabled"
+    assert toggles.toggle_name("auditd") == "linux_compliance_auditd_enabled"
     assert (
-        plan_filter.rule_toggle_name(CRONTAB)
+        toggles.rule_toggle_name(CRONTAB)
         == "linux_compliance_rule_file_permissions_crontab_enabled"
     )
+
+
+def warnings_of(result: dict[str, object]) -> list[str]:
+    return [item for item in cast("list[str]", result["notices"]) if item.startswith("WARNING:")]
+
+
+def test_a_topic_toggle_without_rules_in_the_profile_warns() -> None:
+    result = run(toggles={"linux_compliance_sysctl_enabled": False})[0]
+    assert len(warnings_of(result)) == 1
+    assert "linux_compliance_sysctl_enabled is false" in warnings_of(result)[0]
+    result = run(
+        toggles={"linux_compliance_file_permissions_enabled": False},
+        profile_rule_ids=[ROOT_LOGIN],
+    )[0]
+    assert len(warnings_of(result)) == 1
+
+
+def test_without_opt_in_only_topics_without_catalogued_rules_warn() -> None:
+    result = run(
+        enabled=False,
+        profile_rule_ids=None,
+        toggles={
+            "linux_compliance_sysctl_enabled": False,
+            "linux_compliance_file_permissions_enabled": False,
+        },
+    )[0]
+    assert len(warnings_of(result)) == 1
+    assert "linux_compliance_sysctl_enabled" in warnings_of(result)[0]
+
+
+def test_a_topic_toggle_that_switches_rules_off_does_not_warn() -> None:
+    result = run(toggles={"linux_compliance_file_permissions_enabled": False})[0]
+    assert warnings_of(result) == []
