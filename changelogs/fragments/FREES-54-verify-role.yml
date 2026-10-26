@@ -1,0 +1,28 @@
+---
+minor_changes:
+  - >-
+    verify role - implement the role (it was a skeleton). It compares ``linux_compliance_audited`` after remediation
+    with ``linux_compliance_baseline``, publishes ``linux_compliance_verified`` and classifies every rule as improved,
+    regressed, unchanged, newly applicable, newly failing, newly not applicable, error or not comparable. Regressions,
+    new failures and passing rules that are no longer applicable are always printed; the host fails on regressions
+    unless ``linux_compliance_verify_fail_on_regression`` is ``false``, on new failures unless
+    ``linux_compliance_verify_fail_on_new_failures`` is ``false``, and always when a scan did not complete. A waived
+    or disabled result and an error that becomes a pass are never counted as improvements.
+  - >-
+    verify role - add ``linux_compliance_verify_mode`` (``raw`` by default, or ``waived``) and accept the shared
+    ``linux_compliance_exceptions_file``. Waived mode compares the waived results only when both audits applied the same
+    exceptions file (same SHA-256). Audits of another host, benchmark, content, profile or scanner are refused.
+  - >-
+    verify role - add the ``baseline.yml`` entry point, which records ``linux_compliance_audited`` as
+    ``linux_compliance_baseline``, marks it in the facts of the host and refuses a baseline or marker fixed by an extra
+    variable. The role compares only a baseline recorded this way, once; a baseline from inventory or play variables is
+    refused.
+  - >-
+    playbooks - ``remediate.yml`` now refuses ``linux_compliance_audit_fail_on_noncompliant`` up front (the new
+    ``preflight.yml`` entry point of the verify role), audits, records the baseline, remediates, audits again through
+    ``verify.yml`` and verifies, and exits 0 when both scans completed, no rule regressed and no rule started to
+    fail. ``verify.yml`` runs the same preflight, audits again before it compares and no longer uses ``become`` for
+    the verify role.
+  - >-
+    Add the controller filter ``freesecdev.linux_compliance.compare_scans``, which compares two audit results of the
+    same host.

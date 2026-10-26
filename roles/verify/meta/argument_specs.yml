@@ -1,10 +1,23 @@
 ---
 argument_specs:
   main:
-    short_description: "Verify a host after remediation (read-only)"
+    short_description: "Compare the audit after remediation with the baseline audit (read-only)"
     description:
-      - "Compares a post-remediation audit with the baseline audit."
-      - "Skeleton only: the role validates its inputs and then fails until FREES-54 is implemented."
+      - "Compares the fact linux_compliance_audited, the audit after remediation, with linux_compliance_baseline."
+      - "linux_compliance_baseline is the audit before remediation, recorded by the baseline.yml entry point."
+      - "Runs the freesecdev.linux_compliance.compare_scans filter on the controller and never connects to the host."
+      - "Refuses audits of another host, benchmark, content version, profile or scanner, and the same run twice."
+      - "Refuses a baseline that the baseline.yml entry point did not record in this run, and compares it only once."
+      - "Classifies every rule as improved, regressed, unchanged, newly_applicable, newly_failing,"
+      - "newly_not_applicable, error or not_comparable."
+      - "A waived or disabled result is never an improvement, and an error is never an improvement."
+      - "Publishes the comparison as the fact linux_compliance_verified."
+      - "Always prints every regression, every new failure and every passing rule that is no longer applicable."
+      - "Fails when the comparison is incomplete, because a scan did not complete."
+      - "Fails on regressions unless linux_compliance_verify_fail_on_regression is false."
+      - "Fails on new failures unless linux_compliance_verify_fail_on_new_failures is false."
+      - "A comparison is evidence about two scans of one host, never a claim of compliance."
+      - "See docs/verify.md."
     author: "FreeSecDev contributors"
     options:
       linux_compliance_verify_profile:
@@ -12,11 +25,58 @@ argument_specs:
         default: "cis_level1_server"
         description:
           - "ComplianceAsCode profile short identifier, without the XCCDF prefix."
+          - "Both audits must report this profile; a profile is never substituted silently."
           - "The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010)."
-          - "A profile is never substituted silently for another benchmark."
       linux_compliance_verify_fail_on_regression:
         type: bool
         default: true
         description:
-          - "Fail the play when a rule that passed in the baseline no longer passes."
+          - "Fail the host when a rule that passed in the baseline no longer passes."
+          - "Regressions are always published and printed, whatever this value is."
+          - "An incomplete comparison fails the host in both cases."
           - "Verification never changes the host."
+      linux_compliance_verify_fail_on_new_failures:
+        type: bool
+        default: true
+        description:
+          - "Fail the host when a rule that was not applicable or missing in the baseline fails afterwards."
+          - "New failures are always published and printed, whatever this value is."
+      linux_compliance_verify_mode:
+        type: str
+        default: "raw"
+        choices:
+          - "raw"
+          - "waived"
+        description:
+          - "raw compares the raw scan runs, linux_compliance_audited.scan_run, of both audits."
+          - "waived compares the waived scan runs, linux_compliance_audited.exceptions.evaluation.scan_run."
+          - "waived needs linux_compliance_exceptions_file."
+          - "Both audits must have applied that file, with the same SHA-256."
+          - "Rules are classified on the evaluated outcome in both modes, so a waiver is never an improvement."
+      linux_compliance_exceptions_file:
+        type: str
+        default: null
+        description:
+          - "Absolute path, on the controller, of the exceptions file that the audit role applied (docs/exceptions.md)."
+          - "Required with linux_compliance_verify_mode waived; both audits must have applied this path."
+          - "The verify role does not read the file; it compares the SHA-256 that both audits recorded."
+          - "The variable is shared by the audit and verify roles, so it has no role prefix."
+  baseline.yml:
+    short_description: "Record the current audit result as the baseline before remediation"
+    description:
+      - "Copies the fact linux_compliance_audited into the fact linux_compliance_baseline on each host."
+      - "Run it after the audit and before the remediation, as playbooks/remediate.yml does."
+      - "Marks the baseline as recorded in the facts of the host, which inventory and play variables cannot set."
+      - "Fails when a marker exists already or when an extra variable fixes linux_compliance_baseline or the facts."
+      - "Changes nothing on the host."
+    author: "FreeSecDev contributors"
+    options: {}
+  preflight.yml:
+    short_description: "Refuse settings that would hide regressions before a remediation run audits any host"
+    description:
+      - "Fails when linux_compliance_audit_fail_on_noncompliant is not false."
+      - "With it, the audit after remediation fails every host with a failing rule before the verify role reports."
+      - "playbooks/remediate.yml and playbooks/verify.yml run it first."
+      - "Changes nothing on the host."
+    author: "FreeSecDev contributors"
+    options: {}

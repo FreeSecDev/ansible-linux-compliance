@@ -1,21 +1,226 @@
 ---
+- name: Verify | Arm the guard against skipping the always-tagged tasks
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_dispatched: false
+  tags:
+    - linux_compliance_verify_guard
+
 - name: Verify | Validate inputs
   ansible.builtin.assert:
     that:
       - linux_compliance_verify_profile is string
-      - linux_compliance_verify_profile | length > 0
+      - linux_compliance_verify_profile is match('^[a-z0-9][a-z0-9_]{0,127}$')
       - linux_compliance_verify_fail_on_regression is boolean
+      - linux_compliance_verify_fail_on_new_failures is boolean
+      - linux_compliance_verify_mode is string
+      - linux_compliance_verify_mode in ['raw', 'waived']
+      - >-
+        linux_compliance_exceptions_file is none or
+        (linux_compliance_exceptions_file is string and linux_compliance_exceptions_file is match('^/'))
+      - linux_compliance_verify_mode == 'raw' or linux_compliance_exceptions_file is not none
     fail_msg: >-
       The verify role received an invalid input; see meta/argument_specs.yml.
+      linux_compliance_verify_mode waived needs linux_compliance_exceptions_file.
       Boolean variables must be real booleans on the command line, for example
-      -e '{"linux_compliance_verify_fail_on_regression": true}';
-      -e linux_compliance_verify_fail_on_regression=true passes a string.
+      -e '{"linux_compliance_verify_fail_on_regression": false}';
+      -e linux_compliance_verify_fail_on_regression=false passes a string.
     quiet: true
   tags:
     - always
 
-- name: Verify | Stop because the role is not implemented yet
-  ansible.builtin.fail:
-    msg: The verify role is not implemented yet (tracked in FREES-54). No change was made to the host.
+- name: Verify | Check that a baseline and a later audit exist
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_baseline is defined
+      - linux_compliance_baseline is mapping
+      - linux_compliance_audited is defined
+      - linux_compliance_audited is mapping
+    fail_msg: >-
+      The verify role compares linux_compliance_audited with linux_compliance_baseline. Record the
+      baseline with the baseline.yml entry point after the first audit and before remediation, then
+      audit again; playbooks/remediate.yml does both. Nothing was compared.
+    quiet: true
   tags:
     - always
+
+- name: Verify | Check that the baseline was recorded by baseline.yml in this run
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_marker is mapping
+      - __linux_compliance_verify_marker.run_id | default(none) == linux_compliance_baseline.run_id | default(none)
+      - >-
+        __linux_compliance_verify_marker.sha256 | default(none)
+        == linux_compliance_baseline | ansible.builtin.to_json(sort_keys=true) | ansible.builtin.hash('sha256')
+    fail_msg: >-
+      linux_compliance_baseline was not recorded by the baseline.yml entry point of the verify role in
+      this run, or it changed since, or it was already compared once. A baseline from inventory,
+      host_vars, group_vars, play or role variables is never trusted. Run baseline.yml after the first
+      audit and before remediation, as playbooks/remediate.yml does. Nothing was compared.
+    quiet: true
+  vars:
+    __linux_compliance_verify_marker: >-
+      {{ (hostvars[inventory_hostname]['ansible_facts'] | default({}))['__linux_compliance_verify_baseline_recorded']
+         | default(none) }}
+  tags:
+    - always
+
+- name: Verify | Consume the baseline marker so that the baseline is compared only once
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_baseline_recorded: null
+    cacheable: true
+  tags:
+    - always
+
+- name: Verify | Check that both audits applied the exceptions file of this play
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_baseline.exceptions.file | default(none) == linux_compliance_exceptions_file
+      - linux_compliance_audited.exceptions.file | default(none) == linux_compliance_exceptions_file
+    fail_msg: >-
+      linux_compliance_verify_mode waived compares the waived results of two audits that applied
+      {{ linux_compliance_exceptions_file }}. The baseline applied
+      {{ linux_compliance_baseline.exceptions.file | default('no file') }} and the later audit
+      {{ linux_compliance_audited.exceptions.file | default('no file') }}. Nothing was compared.
+    quiet: true
+  when: linux_compliance_verify_mode == 'waived'
+  tags:
+    - always
+
+- name: Verify | Compare the audit after remediation with the baseline
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_comparison: >-
+      {{ linux_compliance_baseline
+         | freesecdev.linux_compliance.compare_scans(
+             linux_compliance_audited, linux_compliance_verify_mode,
+             'xccdf_org.ssgproject.content_profile_' ~ linux_compliance_verify_profile) }}
+  tags:
+    - always
+
+- name: Verify | Publish the comparison
+  ansible.builtin.set_fact:
+    linux_compliance_verified: >-
+      {{ __linux_compliance_verify_comparison | ansible.builtin.combine({'gate': __linux_compliance_verify_gate}) }}
+  vars:
+    __linux_compliance_verify_gate:
+      fail_on_regression: "{{ linux_compliance_verify_fail_on_regression }}"
+      fail_on_new_failures: "{{ linux_compliance_verify_fail_on_new_failures }}"
+      failed: >-
+        {{ not __linux_compliance_verify_comparison.complete
+           or (linux_compliance_verify_fail_on_regression
+               and __linux_compliance_verify_comparison.regression_detected)
+           or (linux_compliance_verify_fail_on_new_failures
+               and __linux_compliance_verify_comparison.new_failure_detected) }}
+  tags:
+    - always
+
+- name: Verify | Report the comparison
+  ansible.builtin.debug:
+    msg: "{{ linux_compliance_verified.message }}"
+  tags:
+    - always
+
+- name: Verify | Report every regressed rule
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['WARNING: REGRESSION on ' ~ inventory_hostname ~ ': '
+          ~ linux_compliance_verified.counts.regressed ~ ' rule(s) passed in the baseline and no longer pass.']
+         + linux_compliance_verified.regressions
+           | map(attribute='rule_id')
+           | ansible.builtin.zip(linux_compliance_verified.regressions | map(attribute='post.outcome'))
+           | map('join', ' is now ')
+           | list }}
+  when:
+    - linux_compliance_verified.complete
+    - linux_compliance_verified.regression_detected
+  tags:
+    - always
+
+- name: Verify | Report every newly failing rule
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['WARNING: NEW FAILURE on ' ~ inventory_hostname ~ ': '
+          ~ linux_compliance_verified.counts.newly_failing
+          ~ ' rule(s) were not applicable or missing in the baseline and fail now.']
+         + linux_compliance_verified.new_failures | map(attribute='rule_id') | list }}
+  when:
+    - linux_compliance_verified.complete
+    - linux_compliance_verified.new_failure_detected
+  tags:
+    - always
+
+- name: Verify | Report every passing rule that is no longer applicable
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['WARNING: ' ~ linux_compliance_verified.passed_now_not_applicable | length ~ ' rule(s) on '
+          ~ inventory_hostname ~ ' passed in the baseline and are not applicable now; check that the'
+          ~ ' remediation did not remove what they check.']
+         + linux_compliance_verified.passed_now_not_applicable | map(attribute='rule_id') | list }}
+  when:
+    - linux_compliance_verified.complete
+    - linux_compliance_verified.passed_now_not_applicable | length > 0
+  tags:
+    - always
+
+- name: Verify | Report rules whose check errored in either audit
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ linux_compliance_verified.counts.error }} rule(s) on {{ inventory_hostname }} errored
+      or are missing in at least one of the audits; an error is never counted as an improvement:
+      {{ linux_compliance_verified.rules | selectattr('category', 'equalto', 'error')
+         | map(attribute='rule_id') | join(', ') }}
+  when:
+    - linux_compliance_verified.complete
+    - linux_compliance_verified.counts.error > 0
+  tags:
+    - always
+
+- name: Verify | Stop when the comparison is incomplete
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_verified.complete
+    fail_msg: >-
+      {{ linux_compliance_verified.message }} Audit the host again with a scan that completes.
+    quiet: true
+  tags:
+    - always
+
+- name: Verify | Stop on regressions when requested
+  ansible.builtin.assert:
+    that:
+      - not linux_compliance_verified.regression_detected
+    fail_msg: >-
+      {{ linux_compliance_verified.message }} Set linux_compliance_verify_fail_on_regression to false
+      to publish regressions without failing the host.
+    quiet: true
+  when: linux_compliance_verify_fail_on_regression
+  tags:
+    - always
+
+- name: Verify | Stop on new failures when requested
+  ansible.builtin.assert:
+    that:
+      - not linux_compliance_verified.new_failure_detected
+    fail_msg: >-
+      {{ linux_compliance_verified.message }} Set linux_compliance_verify_fail_on_new_failures to false
+      to publish new failures without failing the host.
+    quiet: true
+  when: linux_compliance_verify_fail_on_new_failures
+  tags:
+    - always
+
+- name: Verify | Record that the comparison ran
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_dispatched: true
+  tags:
+    - always
+
+- name: Verify | Fail when the always-tagged tasks were skipped
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_dispatched
+    fail_msg: >-
+      The verify role did not compare anything because its tasks tagged always were skipped
+      (--skip-tags always). No regression check ran; run without skipping always.
+    quiet: true
+  tags:
+    - linux_compliance_verify_guard

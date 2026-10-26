@@ -1,0 +1,20 @@
+---
+- name: Run the preflight with the audit gate {{ verify_audit_gate }}
+  block:
+    - name: Run the preflight
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+        tasks_from: preflight.yml
+      vars:
+        linux_compliance_audit_fail_on_noncompliant: "{{ verify_audit_gate }}"
+
+    - name: Fail because the audit gate was accepted
+      ansible.builtin.fail:
+        msg: VERIFY-PREFLIGHT-NOT-REFUSED
+  rescue:
+    - name: Check that the preflight refused the audit gate
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse the audit failure gate')
+          - ansible_failed_result.msg is search('Nothing was audited or remediated')
+        quiet: true

@@ -1,7 +1,18 @@
 ---
-- name: Verify hosts after remediation
+- name: Refuse settings that would hide regressions before the hosts are audited again
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
-  gather_facts: true
+  gather_facts: false
+  tasks:
+    - name: Check the settings of the verification run
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.verify
+        tasks_from: preflight.yml
+
+- name: Audit hosts after remediation
+  ansible.builtin.import_playbook: audit.yml
+
+- name: Compare the audit after remediation with the baseline
+  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
+  gather_facts: false
   roles:
     - role: freesecdev.linux_compliance.verify
-      become: true

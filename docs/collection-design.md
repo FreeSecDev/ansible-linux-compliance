@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role), FREES-50 (exceptions), FREES-52 (remediation dispatcher).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role), FREES-50 (exceptions), FREES-52 (remediation dispatcher), FREES-54 (verify role).
 
 ## Layout
 
@@ -24,7 +24,7 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
 | `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; inert data, shipped with the tests in the tarball |
-| `roles/` | The `discover`, `audit` and `remediate` roles and the `verify` and `evidence` role skeletons (FREES-40) |
+| `roles/` | The `discover`, `audit`, `remediate` and `verify` roles and the `evidence` role skeleton (FREES-40) |
 | `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
 
@@ -33,14 +33,15 @@ development and is listed in `build_ignore`, so it is not part of the tarball.
 
 ## Roles and playbooks
 
-The `discover` (FREES-43), `audit` (FREES-49) and `remediate` (FREES-52, [remediation guide](remediation.md)) roles
-are implemented. The other roles are skeletons: each validates
+The `discover` (FREES-43), `audit` (FREES-49), `remediate` (FREES-52, [remediation guide](remediation.md)) and
+`verify` (FREES-54, [verify guide](verify.md)) roles are implemented. The `evidence` role is a skeleton: it validates
 its inputs and then fails with a message that names the issue that tracks its implementation, so a playbook can never
-report success for work that does not exist yet. The skeletons use only `ansible.builtin.assert` and
+report success for work that does not exist yet. The skeleton uses only `ansible.builtin.assert` and
 `ansible.builtin.fail`; `discover` uses `assert`, `benchmark_info`, `profile_info` and `set_fact`, and `audit` uses
 `assert`, `compliance_scan` and `set_fact`. None of them changes the configuration of the host; `audit` writes evidence
 files ([audit guide](audit.md)). `remediate` uses `assert`, `include_vars`, `set_fact`, `include_tasks`, `debug`,
-`control_state`, `stat` and `file`, and changes the host only after the explicit opt-in. The platforms in each `meta/main.yml` are intended targets
+`control_state`, `stat` and `file`, and changes the host only after the explicit opt-in. `verify` uses `assert`,
+`set_fact`, `debug` and the `compare_scans` filter on facts only. The platforms in each `meta/main.yml` are intended targets
 ([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)); none is tested.
 
 | Role | Changes the host | Tracked in | Variables (default) |
@@ -48,7 +49,7 @@ files ([audit guide](audit.md)). `remediate` uses `assert`, `include_vars`, `set
 | `discover` | Never | FREES-43 (implemented) | `linux_compliance_discover_profile` (`cis_level1_server`), `linux_compliance_discover_content_path` (empty, required), `linux_compliance_discover_content_sha256` (empty, required) |
 | `audit` | Never; writes evidence files | FREES-49 (implemented) | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`), `linux_compliance_audit_backend` (`openscap`), `linux_compliance_audit_output_dir` (`/var/lib/freesecdev/linux_compliance/evidence`), `linux_compliance_audit_scan_timeout` (`1800`), `linux_compliance_audit_disabled_rules` (`[]`), `linux_compliance_audit_fail_on_noncompliant_after_waivers` (`false`), `linux_compliance_exceptions_file` (`null`) |
 | `remediate` | Only with explicit opt-in | FREES-52 (implemented) | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
-| `verify` | Never | FREES-54 | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`) |
+| `verify` | Never | FREES-54 (implemented) | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`), `linux_compliance_verify_fail_on_new_failures` (`true`), `linux_compliance_verify_mode` (`raw`), `linux_compliance_exceptions_file` (`null`) |
 | `evidence` | Never; writes on the controller only | FREES-51 | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_host_facts` (`false`) |
 
 Per-rule and per-family toggles are read by the `remediate` role, which fails on unknown toggle names; their defaults
@@ -304,8 +305,8 @@ profiles, and expiry is judged at the later of the scan start and the controller
 identifier nor a host clock that runs behind widens a waiver. The filters
 `freesecdev.linux_compliance.apply_exceptions` and `freesecdev.linux_compliance.stale_exceptions` wrap it for roles;
 the `audit` role applies them when `linux_compliance_exceptions_file` is set (FREES-136, see
-[exceptions](exceptions.md#using-the-exceptions-file-with-the-audit-role)), and the `verify` skeleton (FREES-54) does
-not yet. Both filter files pass the deny-by-default
+[exceptions](exceptions.md#using-the-exceptions-file-with-the-audit-role)), and the `verify` role (FREES-54) compares the
+waived results of two audits only when both applied the same file ([verify guide](verify.md)). Both filter files pass the deny-by-default
 plugin guard without an exemption. Unit tests cover the loader, every required field, the expiry boundaries, scope
 matching and the filters; `tests/unit/tools/test_exceptions_schema.py` compares the JSON Schema with the
 validator's constants and validates the example with `jsonschema`, so the two cannot drift, and

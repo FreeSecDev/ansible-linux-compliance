@@ -1,0 +1,78 @@
+---
+- name: Verify | Validate the audit result that becomes the baseline
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited is defined
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.run_id is defined
+      - linux_compliance_audited.run_id is string
+      - linux_compliance_audited.run_status | default(none) in ['completed', 'failed', 'timed_out', 'not_run']
+    fail_msg: >-
+      The baseline.yml entry point of the verify role records linux_compliance_audited, the result of
+      the freesecdev.linux_compliance.audit role, as linux_compliance_baseline. Run the audit role
+      first.
+    quiet: true
+  tags:
+    - always
+
+- name: Verify | Check that no baseline marker is set before the baseline is recorded
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_marker is none
+    fail_msg: >-
+      A baseline marker already exists for {{ inventory_hostname }} before this baseline was
+      recorded: an earlier baseline.yml in this run was never compared by the verify role, a
+      persistent fact cache kept one from an earlier run, or an extra variable (-e ansible_facts=...)
+      sets it. Compare or discard the earlier baseline (clear the fact cache) and remove the extra
+      variable. Nothing was remediated yet.
+    quiet: true
+  vars:
+    __linux_compliance_verify_marker: >-
+      {{ (hostvars[inventory_hostname]['ansible_facts'] | default({}))['__linux_compliance_verify_baseline_recorded']
+         | default(none) }}
+  tags:
+    - always
+
+- name: Verify | Record the audit result as the baseline before remediation
+  ansible.builtin.set_fact:
+    linux_compliance_baseline: "{{ linux_compliance_audited }}"
+  tags:
+    - always
+
+- name: Verify | Check that the baseline is the audit that just ran
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_baseline.run_id | default(none) == linux_compliance_audited.run_id
+    fail_msg: >-
+      linux_compliance_baseline is not the audit {{ linux_compliance_audited.run_id }} that just ran.
+      An extra variable (-e) or a role parameter named linux_compliance_baseline wins over the
+      recorded fact; remove it. Nothing was remediated yet.
+    quiet: true
+  tags:
+    - always
+
+- name: Verify | Mark the baseline as recorded in this run, in the facts of the host
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_baseline_recorded:
+      run_id: "{{ linux_compliance_audited.run_id }}"
+      sha256: >-
+        {{ linux_compliance_baseline | ansible.builtin.to_json(sort_keys=true) | ansible.builtin.hash('sha256') }}
+    cacheable: true
+  tags:
+    - always
+
+- name: Verify | Check that the marker in the facts of the host is the one just recorded
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_marker is mapping
+      - __linux_compliance_verify_marker.run_id | default(none) == linux_compliance_audited.run_id
+    fail_msg: >-
+      The baseline marker of {{ inventory_hostname }} is not the one just recorded; an extra variable
+      (-e ansible_facts=...) overrides the facts of the host. Remove it. Nothing was remediated yet.
+    quiet: true
+  vars:
+    __linux_compliance_verify_marker: >-
+      {{ (hostvars[inventory_hostname]['ansible_facts'] | default({}))['__linux_compliance_verify_baseline_recorded']
+         | default(none) }}
+  tags:
+    - always

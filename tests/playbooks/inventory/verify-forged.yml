@@ -1,0 +1,29 @@
+---
+all:
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  children:
+    verify_forged:
+      hosts:
+        forged_host:
+          linux_compliance_baseline: "{{ verify_forged_audited }}"
+          verify_expected_task: Check that the baseline was recorded by baseline.yml in this run
+        no_baseline:
+          verify_expected_task: Check that a baseline and a later audit exist
+        preset_marker:
+          linux_compliance_baseline: "{{ verify_forged_audited }}"
+          __linux_compliance_verify_baseline_recorded: "{{ verify_forged_marker }}"
+          ansible_facts:
+            __linux_compliance_verify_baseline_recorded: "{{ verify_forged_marker }}"
+          verify_expected_task: Check that the baseline was recorded by baseline.yml in this run
+      children:
+        verify_forged_group:
+          hosts:
+            forged_group:
+          vars:
+            linux_compliance_baseline: "{{ verify_forged_audited }}"
+            verify_expected_task: Check that the baseline was recorded by baseline.yml in this run
+    verify_forged_play:
+      hosts:
+        forged_play:

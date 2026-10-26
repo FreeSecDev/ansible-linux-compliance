@@ -1,0 +1,29 @@
+---
+- name: Verify | Skipping the always-tagged tasks fails closed
+  hosts: web01
+  gather_facts: false
+  tasks:
+    - name: Refuse to run without skipping always
+      ansible.builtin.assert:
+        that:
+          - "'always' in ansible_skip_tags"
+        fail_msg: This test playbook only runs with --skip-tags always.
+        quiet: true
+
+    - name: Run the role with every always-tagged task skipped
+      block:
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the role silently did nothing
+          ansible.builtin.fail:
+            msg: The verify role exited without failing although --skip-tags always skipped all of its work.
+      rescue:
+        - name: Check that the guard of the role failed the run
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Fail when the always-tagged tasks were skipped')
+              - "'--skip-tags always' in ansible_failed_result.msg"
+              - "'No regression check ran' in ansible_failed_result.msg"
+            quiet: true

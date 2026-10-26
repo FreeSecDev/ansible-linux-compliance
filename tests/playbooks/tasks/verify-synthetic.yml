@@ -1,0 +1,33 @@
+---
+- name: Take the synthetic scan start
+  ansible.builtin.set_fact:
+    verify_started_at: >-
+      {{ '%Y-%m-%dT%H:%M:%SZ'
+         | ansible.builtin.strftime(now().timestamp() + (verify_start_offset | default(0) | int), utc=true) }}
+
+- name: Build the synthetic scan run
+  ansible.builtin.set_fact:
+    verify_scan_run: >-
+      {{ audit_exceptions_run_base | ansible.builtin.combine({
+           'run_id': verify_run_id,
+           'started_at': verify_started_at,
+           'finished_at': verify_started_at,
+           'status': verify_run_status | default('completed'),
+           'error_message': none if (verify_run_status | default('completed')) == 'completed'
+                            else 'synthetic scanner failure',
+           'findings': verify_outcomes | map('ansible.builtin.combine', audit_exceptions_finding_base) | list},
+           verify_run_overrides | default({})) }}
+
+- name: Publish the synthetic audit result in the shape of the audit role
+  ansible.builtin.set_fact:
+    linux_compliance_audited:
+      run_id: "{{ verify_scan_run.run_id }}"
+      run_status: "{{ verify_scan_run.status }}"
+      summary: "{{ verify_scan_run | freesecdev.linux_compliance.scan_summary }}"
+      scan_run: "{{ verify_scan_run }}"
+      evidence:
+        directory: null
+        files: []
+      evidence_written: false
+      disabled_rules: []
+      planned: {}

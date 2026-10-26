@@ -1,0 +1,28 @@
+---
+- name: Verify | The preflight refuses the audit failure gate
+  hosts: web01
+  gather_facts: false
+  tasks:
+    - name: Run the preflight with the gate on and as a string
+      ansible.builtin.include_tasks: tasks/verify-preflight-refused.yml
+      loop:
+        - true
+        - "false"
+      loop_control:
+        loop_var: verify_audit_gate
+
+- name: Verify | The preflight accepts the gate off or unset
+  hosts: web01
+  gather_facts: false
+  tasks:
+    - name: Run the preflight without the gate
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+        tasks_from: preflight.yml
+
+    - name: Run the preflight with the gate off
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+        tasks_from: preflight.yml
+      vars:
+        linux_compliance_audit_fail_on_noncompliant: false

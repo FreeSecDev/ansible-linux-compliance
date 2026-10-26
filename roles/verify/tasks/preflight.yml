@@ -1,0 +1,16 @@
+---
+- name: Verify | Refuse the audit failure gate before a remediation run audits any host
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audit_fail_on_noncompliant | default(false) is boolean
+      - not (linux_compliance_audit_fail_on_noncompliant | default(false))
+    fail_msg: >-
+      linux_compliance_audit_fail_on_noncompliant is
+      {{ linux_compliance_audit_fail_on_noncompliant | default('unset') }} for {{ inventory_hostname }}.
+      With playbooks/remediate.yml and playbooks/verify.yml it would fail every host with a failing
+      rule in the audit after remediation, before the verify role can report its regressions and new
+      failures. Leave it unset or pass -e '{"linux_compliance_audit_fail_on_noncompliant": false}';
+      the verify role gates the run. Nothing was audited or remediated.
+    quiet: true
+  tags:
+    - always
