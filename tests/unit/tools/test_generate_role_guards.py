@@ -72,6 +72,47 @@ def test_the_dispatch_keeps_registry_order(tmp_path: Path) -> None:
     assert all(task["tags"] == ["always"] for task in tasks)
 
 
+def test_a_family_with_only_audit_only_rules_gets_no_include_and_no_error(tmp_path: Path) -> None:
+    root = copy_roles(tmp_path)
+    catalogue_file = root / generate_toggles.CATALOGUE
+    data = cast("dict[str, object]", yaml.safe_load(catalogue_file.read_text(encoding="utf-8")))
+    audit_only = cast("dict[str, list[str]]", data[generate_toggles.AUDIT_ONLY_KEY])
+    audit_only["sysctl"].append("xccdf_org.ssgproject.content_rule_sysctl_synthetic_only")
+    catalogue_file.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert not (root / "roles" / "remediate" / "tasks" / "sysctl.yml").exists()
+    tasks = load(gen.outputs(root)[gen.DISPATCH])
+    assert [task["when"] for task in tasks] == [
+        "__linux_compliance_remediate_family.name == 'file_permissions'"
+    ]
+    catalogue = generate_toggles.load_catalogue(catalogue_file)
+    assert "sysctl" in {str(rule["family"]) for rule in catalogue.rules}
+    assert generate_toggles.native_families(catalogue) == ["file_permissions"]
+
+
+def test_a_family_with_a_native_rule_but_no_task_file_is_an_error(tmp_path: Path) -> None:
+    root = copy_roles(tmp_path)
+    catalogue_file = root / generate_toggles.CATALOGUE
+    data = cast("dict[str, object]", yaml.safe_load(catalogue_file.read_text(encoding="utf-8")))
+    rule_id = "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
+    audit_only = cast("dict[str, list[str]]", data[generate_toggles.AUDIT_ONLY_KEY])
+    audit_only["sysctl"].remove(rule_id)
+    cast("list[dict[str, object]]", data[generate_toggles.RULES_KEY]).append(
+        {
+            "rule_id": rule_id,
+            "family": "sysctl",
+            "disruptive": False,
+            "reversible": True,
+            "revert_strategy": "owned_dropin",
+            "toggle": "linux_compliance_rule_sysctl_kernel_dmesg_restrict_enabled",
+            "runbook": None,
+            "parameters": {},
+        }
+    )
+    catalogue_file.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(gen.GenerationError, match="the family sysctl has no task file"):
+        gen.outputs(root)
+
+
 def test_a_family_without_a_task_file_is_an_error(tmp_path: Path) -> None:
     with pytest.raises(gen.GenerationError, match="has no task file"):
         gen.dispatch(["sysctl"], tmp_path)

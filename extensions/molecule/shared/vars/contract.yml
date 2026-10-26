@@ -79,11 +79,11 @@ contract_roles:
           linux_compliance_remediate_allow_disruptive:
             - unknown_family
       - name: unknown disruptive family next to a known one
-        expect: "(?s)Validation of arguments failed.*kernel_modules"
+        expect: "(?s)Validation of arguments failed.*kernel_tuning"
         vars:
           linux_compliance_remediate_allow_disruptive:
             - ssh
-            - kernel_modules
+            - kernel_tuning
       - name: disruptive families as a string
         expect: "(?s)(Validation of arguments failed|The remediate role received an invalid input)"
         vars:

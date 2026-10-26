@@ -18,6 +18,7 @@
     __linux_compliance_audit_toggles: >-
       {{ __linux_compliance_audit_catalogue.__linux_compliance_remediate_rules
          | freesecdev.linux_compliance.audit_disabled_rules({
+           'audit_only': __linux_compliance_audit_catalogue.__linux_compliance_remediate_audit_only,
            'families': __linux_compliance_audit_catalogue.__linux_compliance_remediate_families,
            'toggles': dict(__linux_compliance_audit_toggle_names | zip(
              lookup('ansible.builtin.vars', *__linux_compliance_audit_toggle_names, wantlist=True))),

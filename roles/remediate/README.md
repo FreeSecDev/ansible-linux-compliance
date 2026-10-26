@@ -8,9 +8,13 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 
 ## Status
 
-Dispatcher and safety model implemented (FREES-52), with one reference rule:
-`xccdf_org.ssgproject.content_rule_file_permissions_crontab` in the `file_permissions` family, and toggles generated
-from the catalogue for every family and rule (FREES-55). The control families of FREES-53 follow. The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL
+Dispatcher and safety model implemented (FREES-52), with one reference rule with a native remediation:
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` in the `file_permissions` family. The catalogue
+`vars/rules.yml` holds every rule of the 25 pinned profiles, 1203 rules in 21 families, generated from the pinned
+content (FREES-53, [control families](../../docs/control-families.md)); every rule without a native remediation has
+the strategy `audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated
+from the catalogue (FREES-55). The native remediations of the other families follow. The intended platforms in
+`meta/main.yml` (Ubuntu 24.04 and RHEL
 9 compatible, per [ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested
 support: the reference rule was run in a disposable Ubuntu 24.04 container for the pull request, and no Molecule
 scenario exists yet (FREES-60).
@@ -19,9 +23,12 @@ scenario exists yet (FREES-60).
 
 - Nothing is read or changed unless `linux_compliance_remediate_enabled` is `true`; every rule is then reported as
   skipped.
-- Disruptive families (auditd, services, network, firewall, ssh, pam, sudo, crypto_policy, mounts, bootloader) are
-  applied and cleaned up only when they are named in `linux_compliance_remediate_allow_disruptive`; otherwise their
-  rules are skipped with the reason `disruptive_not_allowed`.
+- Disruptive families (auditd, services, packages, desktop, network, kernel_modules, firewall, ssh, pam, accounts,
+  sudo, mandatory_access_control, crypto_policy, mounts, bootloader) are applied and cleaned up only when they are
+  named in `linux_compliance_remediate_allow_disruptive`; otherwise their native rules are skipped with the reason
+  `disruptive_not_allowed`.
+- Rules without a native remediation (`audit_only`) are never dispatched; each one the profile selects gets a result
+  with the status `not_implemented` and `changed: false`.
 - With the opt-in the role needs `linux_compliance_discovered` from the `discover` role for the same profile and applies
   only rules that this profile selects.
 - Unknown rule or family toggles, non-boolean toggles and allow-list entries that are not disruptive families fail the
@@ -34,8 +41,9 @@ scenario exists yet (FREES-60).
 
 ## Variables
 
-Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree. The toggles in both files are generated
-from `vars/rules.yml` with `make toggles`; `make lint-toggles` fails on drift.
+Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree. The topic toggles and the allow-list
+choices in both files are generated from `vars/rules.yml` with `make toggles`; `make lint-toggles` fails on drift.
+`vars/rules.yml` itself is generated from the pinned content with `make catalogue`.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
@@ -45,8 +53,8 @@ from `vars/rules.yml` with `make toggles`; `make lint-toggles` fails on drift.
 
 Toggles ([ADR 0011](../../docs/adr/0011-control-toggles-and-cleanup.md)) are flat booleans:
 `linux_compliance_<family>_enabled` for a whole topic, default `true`, and `linux_compliance_rule_<rule_short_id>_enabled`
-for one rule, default `"{{ linux_compliance_<family>_enabled }}"`, which wins over its family toggle when it is set.
-Every toggle is listed in the [remediation variable reference](../../docs/remediation-variables.md). The `audit` role
+for one rule, which is not declared and follows its family toggle until it is set; then it wins over its family
+toggle. Every toggle is listed in the [remediation variable reference](../../docs/remediation-variables.md). The `audit` role
 reads the same toggles with the same resolution, so a rule or topic switched off once is cleaned up here and reported as
 `disabled` by the audit, naming the controlling variable.
 
@@ -54,7 +62,8 @@ reads the same toggles with the same resolution, so a rule or topic switched off
 
 The fact `linux_compliance_remediated` holds `enabled`, `check_mode`, `profile`, `allow_disruptive`, `summary` (rules
 per action), `rules` (action, reason and controlling variable per rule), `results` (one per applied or cleaned-up
-rule), `disabled_rules`, `orphaned` and `notices`.
+rule and one with the status `not_implemented` per `audit_only` rule that would be applied), `disabled_rules`,
+`orphaned` and `notices`.
 
 ## Running
 

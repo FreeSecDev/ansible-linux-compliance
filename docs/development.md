@@ -63,9 +63,11 @@ overriding them.
 | `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible`, `lint-toggles`, `lint-role-guards` |
 | `lint-ansible` | implemented | `molecule-dependencies`, then `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-toggles` | implemented | `tools/roles/generate_toggles.py --check`: fails with a diff when the generated toggle defaults, argument specs or `docs/remediation-variables.md` differ from the rule catalogue ([remediation guide](remediation.md#generated-toggles)) |
-| `toggles` | implemented | Regenerates the toggle defaults and argument specs of the `remediate` role and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
+| `toggles` | implemented | Regenerates the topic toggle defaults, the topic toggle argument specs and the allow-list choices of the `remediate` and `audit` roles and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
 | `lint-role-guards` | implemented | `tools/roles/generate_role_guards.py --check`: fails with a diff when `roles/remediate/tasks/dispatch.yml` or a `tasks/internal_variables.yml` of the audit, remediate or verify role differs from what the family registry and the role files give (FREES-137) |
-| `role-guards` | implemented | Regenerates the static family dispatch of the remediate role and the internal-variable guards of the audit, remediate and verify roles |
+| `role-guards` | implemented | Regenerates the static family dispatch of the remediate role, with one include per family that has a native rule, and the internal-variable guards of the audit, remediate and verify roles |
+| `content` | implemented | `tools/content/fetch_content.py --output-dir build/content`: fetches the pinned release archive and extracts the verified datastreams |
+| `catalogue` | implemented | `tools/roles/generate_catalogue.py`, then `toggles` and `role-guards`: regenerates `roles/remediate/vars/rules.yml` and `docs/control-families.md` from the datastreams in `build/content` and the family mapping `content/catalogue.yml` (run `make content` first) |
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |

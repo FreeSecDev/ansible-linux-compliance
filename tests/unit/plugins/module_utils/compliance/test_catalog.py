@@ -108,6 +108,17 @@ class TestSyntheticDatastream:
             (RULE + "epsilon", "low", ""),
         ]
 
+    def test_rules_record_their_group_hierarchy(self, synthetic: catalog.Benchmark) -> None:
+        one = "xccdf_org.example.synthetic_group_one"
+        two = "xccdf_org.example.synthetic_group_two"
+        assert {r.rule_id: r.groups for r in synthetic.rules} == {
+            RULE + "alpha": (one,),
+            RULE + "beta": (one,),
+            RULE + "gamma": (one, two),
+            RULE + "delta": (one, two),
+            RULE + "epsilon": (one, two),
+        }
+
     def test_profile_rules_are_sorted_definitions(self, synthetic: catalog.Benchmark) -> None:
         strict = catalog.find_profile(synthetic, STRICT)
         rules = catalog.profile_rules(synthetic, strict)

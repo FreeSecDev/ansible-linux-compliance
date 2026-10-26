@@ -1,12 +1,17 @@
 ---
-- name: Audit role with oscap | A topic toggle reaches the real scan and is reported as disabled
+- name: Audit role with oscap | A whole topic and one rule are switched off in the real scan
   hosts: localhost
   connection: local
   gather_facts: true
   vars:
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    audit_toggles_profile: cis_level2_server
     audit_toggles_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
-    audit_toggles_family_toggle: linux_compliance_file_permissions_enabled
+    audit_toggles_rule_toggle: linux_compliance_rule_file_permissions_crontab_enabled
+    audit_toggles_topic_toggle: linux_compliance_auditd_enabled
+    audit_toggles_catalogue: >-
+      {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/remediate/vars/rules.yml')
+         | ansible.builtin.from_yaml }}
     audit_toggles_require: "{{ lookup('ansible.builtin.env', 'FREESECDEV_REQUIRE_OSCAP') == '1' }}"
     audit_toggles_manifest: >-
       {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | ansible.builtin.from_yaml }}
@@ -14,7 +19,8 @@
       {{ audit_toggles_manifest.datastreams | selectattr('name', 'equalto', 'ubuntu2404') | first }}
     audit_toggles_file_name: "{{ audit_toggles_stream.path | basename }}"
     audit_toggles_source: "{{ playbook_dir }}/../../build/content/{{ audit_toggles_file_name }}"
-    linux_compliance_file_permissions_enabled: false
+    linux_compliance_auditd_enabled: false
+    linux_compliance_rule_file_permissions_crontab_enabled: false
   tasks:
     - name: Look for the pinned oscap binary
       ansible.builtin.stat:
@@ -85,38 +91,66 @@
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.discover
           vars:
-            linux_compliance_discover_profile: cis_level1_server
+            linux_compliance_discover_profile: "{{ audit_toggles_profile }}"
             linux_compliance_discover_content_path: "{{ audit_toggles_dir.path }}/content/{{ audit_toggles_file_name }}"
             linux_compliance_discover_content_sha256: "{{ audit_toggles_stream.sha256 }}"
 
-        - name: Run the audit role with the topic toggle off
+        - name: Run the audit role with the auditd topic and the crontab rule off
           ansible.builtin.include_role:
             name: freesecdev.linux_compliance.audit
           vars:
-            linux_compliance_audit_profile: cis_level1_server
+            linux_compliance_audit_profile: "{{ audit_toggles_profile }}"
             linux_compliance_audit_output_dir: "{{ audit_toggles_dir.path }}/evidence"
 
-        - name: Check that the scan of the audit role reported the rule as disabled by the topic toggle
+        - name: Check that every auditd rule of the profile and the crontab rule came back disabled
           vars:
-            audit_toggles_findings: >-
+            audit_toggles_auditd: >-
+              {{ audit_toggles_catalogue.__linux_compliance_remediate_audit_only.auditd
+                 | select('in', linux_compliance_discovered.rule_ids) | sort }}
+            audit_toggles_auditd_findings: >-
+              {{ linux_compliance_audited.scan_run.findings
+                 | selectattr('rule_id', 'in', audit_toggles_auditd) | list }}
+            audit_toggles_rule_findings: >-
               {{ linux_compliance_audited.scan_run.findings
                  | selectattr('rule_id', 'equalto', audit_toggles_rule) | list }}
+            audit_toggles_by_topic: >-
+              {{ linux_compliance_audited.disabled_rules
+                 | selectattr('disabled_by', 'equalto', audit_toggles_topic_toggle) | list }}
           ansible.builtin.assert:
             that:
               - audit_toggles_rule in linux_compliance_discovered.rule_ids
               - linux_compliance_audited.run_status == 'completed'
-              - audit_toggles_findings | length == 1
-              - audit_toggles_findings[0].outcome == 'disabled'
-              - audit_toggles_findings[0].disabled_by == audit_toggles_family_toggle
-              - audit_toggles_family_toggle in audit_toggles_findings[0].message
+              - audit_toggles_auditd | length > 0
+              - audit_toggles_auditd_findings | length == audit_toggles_auditd | length
+              - audit_toggles_auditd_findings | map(attribute='outcome') | unique | list == ['disabled']
+              - >-
+                audit_toggles_auditd_findings | map(attribute='disabled_by') | unique | list
+                == [audit_toggles_topic_toggle]
+              - audit_toggles_topic_toggle in audit_toggles_auditd_findings[0].message
+              - audit_toggles_rule_findings | length == 1
+              - audit_toggles_rule_findings[0].outcome == 'disabled'
+              - audit_toggles_rule_findings[0].disabled_by == audit_toggles_rule_toggle
+              - >-
+                linux_compliance_audited.disabled_rules | map(attribute='rule_id') | sort
+                == (audit_toggles_auditd + [audit_toggles_rule]) | sort
+              - audit_toggles_by_topic | map(attribute='rule_id') | sort == audit_toggles_auditd
               - >-
                 linux_compliance_audited.disabled_rules
-                == [{'rule_id': audit_toggles_rule, 'disabled_by': audit_toggles_family_toggle}]
-              - linux_compliance_audited.summary.disabled == 1
+                | selectattr('rule_id', 'equalto', audit_toggles_rule) | map(attribute='disabled_by') | list
+                == [audit_toggles_rule_toggle]
+              - linux_compliance_audited.summary.disabled == audit_toggles_auditd | length + 1
               - >-
                 linux_compliance_audited.scan_run.findings
-                | selectattr('outcome', 'equalto', 'disabled') | list | length == 1
+                | selectattr('outcome', 'equalto', 'disabled') | list | length
+                == audit_toggles_auditd | length + 1
             quiet: true
+
+        - name: Report the number of auditd rules that the topic toggle disabled
+          ansible.builtin.debug:
+            msg: >-
+              {{ linux_compliance_audited.scan_run.findings
+                 | selectattr('disabled_by', 'equalto', audit_toggles_topic_toggle) | list | length }}
+              auditd rule(s) of {{ audit_toggles_profile }} disabled by {{ audit_toggles_topic_toggle }}
 
         - name: Report the finding of the disabled rule
           ansible.builtin.debug:

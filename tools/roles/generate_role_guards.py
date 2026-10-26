@@ -4,9 +4,11 @@ Two kinds of task file are derived from the repository and checked for drift in 
 (FREES-137):
 
 * ``roles/remediate/tasks/dispatch.yml``: one static ``include_tasks`` per family of the
-  registry in ``roles/remediate/vars/rules.yml`` that has a catalogued rule, in registry
-  order; only such a family can have work in the plan, and planned work of a family without
-  an include fails the completeness check of the role. Each names the literal
+  registry in ``roles/remediate/vars/rules.yml`` that has a rule with a native remediation
+  (``generate_toggles.native_families``), in registry order; only such a family can have
+  apply or cleanup work in the plan, a family whose rules are all ``audit_only`` is never
+  included and needs no task file, and planned work of a family without an include fails the
+  completeness check of the role. Each names the literal
   file ``{{ role_path }}/tasks/<family>.yml`` and runs for the plan entry of that family
   only, so no variable chooses which file is loaded.
 * ``roles/<role>/tasks/internal_variables.yml`` for the audit, remediate and verify roles:
@@ -292,8 +294,7 @@ def guard(role: str, found: RoleVariables) -> str:
 def outputs(root: Path) -> dict[Path, str]:
     """Return the generated content of every output file below ``root``."""
     catalogue = generate_toggles.load_catalogue(root / generate_toggles.CATALOGUE)
-    catalogued = {str(rule["family"]) for rule in catalogue.rules}
-    families = [family for family in catalogue.families if family in catalogued]
+    families = generate_toggles.native_families(catalogue)
     generated: dict[Path, str] = {DISPATCH: dispatch(families, root / DISPATCH.parent)}
     for role in GUARDED_ROLES:
         role_dir = root / ROLES / role

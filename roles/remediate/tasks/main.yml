@@ -78,6 +78,7 @@
   ansible.builtin.set_fact:
     __linux_compliance_remediate_plan: >-
       {{ __linux_compliance_remediate_rules | freesecdev.linux_compliance.remediation_plan({
+           'audit_only': __linux_compliance_remediate_audit_only,
            'families': __linux_compliance_remediate_families,
            'enabled': linux_compliance_remediate_enabled,
            'allow_disruptive': linux_compliance_remediate_allow_disruptive,
@@ -101,9 +102,9 @@
   tags:
     - always
 
-- name: Remediate | Start without results
+- name: Remediate | Start the results with the rules that have no native remediation
   ansible.builtin.set_fact:
-    __linux_compliance_remediate_results: []
+    __linux_compliance_remediate_results: "{{ __linux_compliance_remediate_plan.not_implemented }}"
   tags:
     - always
 

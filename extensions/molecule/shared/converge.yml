@@ -104,7 +104,9 @@
           - linux_compliance_remediated.enabled is true
           - linux_compliance_remediated.check_mode is false
           - linux_compliance_remediated.allow_disruptive == []
-          - linux_compliance_remediated.results | length == 1
+          - molecule_native_results | length == 1
+          - molecule_not_implemented_results | length == linux_compliance_remediated.summary.not_implemented
+          - molecule_not_implemented_results | map(attribute='changed') | select | list == []
           - converge_result.rule_id == molecule_reference_rule
           - converge_result.action == 'apply'
           - converge_result.status == ('compliant' if converge_reference_before.stat.mode == '0600' else 'applied')
@@ -120,7 +122,7 @@
           results {{ linux_compliance_remediated.results }}
         quiet: true
       vars:
-        converge_result: "{{ linux_compliance_remediated.results | first | default({}) }}"
+        converge_result: "{{ molecule_native_results | first | default({}) }}"
 
     - name: Audit the instance again after remediation with a real scan
       ansible.builtin.include_tasks:

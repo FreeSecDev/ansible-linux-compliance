@@ -1,0 +1,36 @@
+---
+minor_changes:
+  - >-
+    The rule catalogue ``roles/remediate/vars/rules.yml`` now holds every rule that the 25 pinned ComplianceAsCode
+    profiles select (1203 rules), generated from the digest-verified datastreams with ``make catalogue``, and every
+    rule belongs to one of 21 control families. A rule without a native remediation has the strategy ``audit_only``:
+    its rule toggle and topic toggle work in the ``audit`` role, which excludes it from the scan and reports it as
+    ``disabled``, and the ``remediate`` role reports it as ``not_implemented`` and never changes anything for it. So
+    ``linux_compliance_auditd_enabled: false`` now excludes every auditd rule of the profile. The family reference
+    ``docs/control-families.md`` lists the families, their disruptive flag and their rules per profile.
+  - >-
+    New control families ``logging``, ``banners``, ``integrity``, ``kernel_build_config``, ``packages``, ``desktop``,
+    ``kernel_modules``, ``accounts`` and ``mandatory_access_control``, each with a topic toggle. ``accounts``,
+    ``kernel_modules``, ``mandatory_access_control``, ``packages`` and ``desktop`` are disruptive and need
+    ``linux_compliance_remediate_allow_disruptive``, whose choices are now generated from the registry.
+  - >-
+    The ``remediate`` role reports one result with the status ``not_implemented`` for every ``audit_only`` rule that it
+    would apply, counts them in ``summary.not_implemented`` and prints one notice with their number.
+  - >-
+    The CI job ``test`` regenerates the catalogue from the pinned content and fails on any difference
+    (``make test-content-golden``).
+breaking_changes:
+  - >-
+    Rule toggles ``linux_compliance_rule_<rule_short_id>_enabled`` are no longer declared as role defaults or argument
+    specification options of the ``remediate`` and ``audit`` roles, because more than a thousand declarations made
+    every role run several seconds slower per host. A rule toggle that is not set follows its family toggle exactly as
+    before, and a rule toggle that is set is still validated before anything is scanned or changed. Rule toggles of
+    rule identifiers with ``-`` or capitals use ``_`` and lower case, for example
+    ``linux_compliance_rule_kernel_module_usb_storage_disabled_enabled``.
+  - >-
+    ``roles/remediate/vars/rules.yml`` lists the rules without a native remediation under the new key
+    ``__linux_compliance_remediate_audit_only``, and the filters ``remediation_plan`` and ``audit_disabled_rules`` take
+    it as the new required option ``audit_only``.
+  - >-
+    Profile rules that the catalogue now contains can no longer be listed in ``linux_compliance_audit_disabled_rules``;
+    switch them off with their rule toggle or topic toggle instead.

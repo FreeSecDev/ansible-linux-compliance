@@ -2,15 +2,14 @@
 
 Role variables are prefixed ``linux_compliance_<role>_``. The exceptions are the
 collection-wide variables in :data:`SHARED_VARIABLES`, which several roles read with one
-meaning, and the control toggles of ADR 0011 in the roles of
-``generate_toggles.TOGGLE_ROLES``. Those toggles are checked exactly against the output of
-``tools/roles/generate_toggles.py`` for the rule catalogue ``roles/remediate/vars/rules.yml``:
-the set of toggle names, each default in ``defaults/main.yml`` (value and type) and each
-argument spec must equal the generated ones, so an uncatalogued or misnamed toggle or a wrong
-default template is a finding without relying on ``make lint-toggles``. A rule toggle has no
-default in its argument spec, because the validation of a role would check the template string
-against the type. Toggles in any other role fail the prefix rule. An option that is not
-required may default to null, which means "not set".
+meaning, and the topic toggles of ADR 0011 in the roles of ``generate_toggles.TOGGLE_ROLES``.
+Those toggles are checked exactly against the output of ``tools/roles/generate_toggles.py`` for
+the rule catalogue ``roles/remediate/vars/rules.yml``: the set of toggle names, each default in
+``defaults/main.yml`` (value and type) and each argument spec must equal the generated ones, so an
+uncatalogued or misnamed toggle is a finding without relying on ``make lint-toggles``. Rule
+toggles are never declared in a role (amendment of FREES-53 to ADR 0011): a declared one is a
+finding. Toggles in any other role fail the prefix rule. An option that is not required may
+default to null, which means "not set".
 """
 
 from __future__ import annotations
@@ -33,6 +32,7 @@ ENTRY_POINT: Final[str] = "main"
 SHARED_VARIABLES: Final[frozenset[str]] = frozenset({"linux_compliance_exceptions_file"})
 NULLABLE_TYPES: Final[frozenset[str]] = frozenset({"str", "path"})
 CATALOGUE: Final[Path] = Path("remediate") / "vars" / "rules.yml"
+RULE_TOGGLE_PREFIX: Final[str] = "linux_compliance_rule_"
 TYPE_CLASSES: Final[dict[str, type]] = {
     "str": str,
     "path": str,
@@ -76,6 +76,15 @@ def _same(first: object, second: object) -> bool:
     return json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
 
 
+def _undeclared(name: str) -> str:
+    if name.startswith(RULE_TOGGLE_PREFIX):
+        return (
+            "is not a toggle generated from the rule catalogue: rule toggles are never declared "
+            "in a role and follow their family toggle when unset (ADR 0011, FREES-53)"
+        )
+    return "is not a toggle generated from the rule catalogue"
+
+
 def check_toggles(
     role_dir: Path, spec_options: dict[str, object], defaults: dict[str, object]
 ) -> list[str]:
@@ -91,8 +100,7 @@ def check_toggles(
     expected_defaults = generate_toggles.toggle_defaults(catalogue)
     expected_specs = generate_toggles.toggle_specs(catalogue)
     findings = [
-        f"{role}: {name}: is not a toggle generated from the rule catalogue"
-        for name in sorted(names - set(expected_defaults))
+        f"{role}: {name}: {_undeclared(name)}" for name in sorted(names - set(expected_defaults))
     ]
     for name in expected_defaults:
         where = f"{role}: {name}"

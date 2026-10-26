@@ -130,6 +130,8 @@ Formatting and linting
   toggles               Regenerate the toggle defaults, argument specs and docs/remediation-variables.md
   lint-role-guards      Fail when the generated family dispatch or internal-variable guards drift from the roles
   role-guards           Regenerate the family dispatch and the internal-variable guards of the roles
+  content               Fetch and verify the pinned SCAP content into build/content
+  catalogue             Regenerate the rule catalogue and docs/control-families.md from build/content, then the toggles and role guards
   lint-iac              tofu fmt check, tofu validate per root module and shellcheck of the rendered bootstrap script
   lint-packer           [pending FREES-64] Packer validation
 
@@ -143,7 +145,7 @@ Tests
   test-sanity           ansible-test sanity on a temporary collection tree, no Docker
   test-ansible-units    ansible-test units on the temporary collection tree, no Docker
   test-coverage         Unit tests with branch coverage thresholds
-  test-content-golden   Fetch the pinned content and compare the catalog with the recorded rule lists
+  test-content-golden   Fetch the pinned content, compare the catalog with the recorded rule lists and check the catalogue for drift
   test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap, also through the audit role
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
@@ -185,7 +187,7 @@ Housekeeping
 endef
 export HELP_TEXT
 
-.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-python lint-yaml lint-actions \
+.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards content catalogue lint-python lint-yaml lint-actions \
 	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
@@ -221,9 +223,18 @@ format: require-uv
 lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible lint-toggles lint-role-guards
 
 GENERATE_TOGGLES := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_toggles
+GENERATE_CATALOGUE := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_catalogue
 
 toggles: require-uv collection-link
 	$(GENERATE_TOGGLES)
+
+content: require-uv
+	$(RUN) python tools/content/fetch_content.py --output-dir build/content
+
+catalogue: require-uv collection-link
+	$(GENERATE_CATALOGUE)
+	$(GENERATE_TOGGLES)
+	$(GENERATE_ROLE_GUARDS)
 
 lint-toggles: require-uv collection-link
 	$(GENERATE_TOGGLES) --check
@@ -304,9 +315,9 @@ test-coverage: require-uv collection-link
 	$(RUN) coverage report --include='tools/*' --fail-under=100
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 
-test-content-golden: require-uv collection-link
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content
+test-content-golden: require-uv collection-link content
 	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py --no-cov
+	$(GENERATE_CATALOGUE) --check
 
 test-oscap-integration: require-uv collection-link
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
