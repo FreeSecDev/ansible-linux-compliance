@@ -225,3 +225,18 @@ def test_a_content_path_that_cannot_be_resolved_is_invalid_content(harness: Harn
         assert raised.value.error_type == "invalid_content"
     assert harness.runner.specs == []
     assert not harness.output_root.exists()
+
+
+def test_only_the_scc_backend_accepts_stream_names_longer_than_64(harness: Harness) -> None:
+    long = harness.content_dir / ("U_" + "x" * 96 + "-ds.xml")
+    harness.datastream.rename(long)
+    with pytest.raises(audit.AuditError, match=r"\{1,64\}") as raised:
+        audit.plan(harness.job(content_path=str(long)), owner_uid=UID)
+    assert raised.value.error_type == "invalid_argument"
+    planned = audit.plan(harness.job(content_path=str(long), backend="scc"), owner_uid=UID)
+    assert planned.content_path == str(long)
+    too_long = harness.content_dir / ("U_" + "x" * 130 + "-ds.xml")
+    long.rename(too_long)
+    with pytest.raises(audit.AuditError, match=r"\{1,128\}"):
+        audit.plan(harness.job(content_path=str(too_long), backend="scc"), owner_uid=UID)
+    assert {"scc"} == audit.LONG_CONTENT_NAME_BACKENDS

@@ -263,6 +263,7 @@ Images and AWS
   scc-fetch             Download the pinned SCC bundle from DISA, verify it and stage its Debian package in build/scc
   scc-image             Build the CI-only SCC image locally as SCC_IMAGE (a localhost/ tag); it is never pushed
   scc-smoke             Build the SCC image and check that cscc starts and reports the pinned version
+  scc-integration       Run a real SCC scan through compliance_scan and the egress test in SCC_IMAGE
   scc-image-clean       Remove the local SCC_IMAGE
 
 Reporting, docs and release
@@ -283,7 +284,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards content catalogue lint-python lint-yaml lint-actions \
-	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
+	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -740,6 +741,10 @@ scc-image: scc-expiry-check lint-containerfile scc-fetch
 
 scc-smoke: scc-image
 	tools/scc/smoke-test.sh '$(SCC_IMAGE)' '$(SCC_VERSION)'
+
+scc-integration: scc-image require-uv collection-link
+	uv python install
+	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_REQUIRE_SCC=1 $(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
 
 scc-image-clean:
 	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }

@@ -91,6 +91,8 @@ RULE_TOGGLE_PREFIX: Final[str] = "linux_compliance_rule_"
 RULE_TOGGLE_SUFFIX: Final[str] = "_enabled"
 
 _CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
+_LONG_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,128}"
+LONG_CONTENT_NAME_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 _BACKEND: Final[str] = r"[a-z][a-z0-9_-]{0,63}"
 _TOGGLE: Final[str] = r"linux_compliance_[a-z0-9_]{1,100}_enabled"
@@ -115,7 +117,7 @@ ERROR_DIGEST_MISMATCH: Final[str] = "digest_mismatch"
 ERROR_INVALID_CONTENT: Final[str] = "invalid_content"
 CONTENT_DIRECTORY_NAME: Final[str] = "content"
 PREVIEW_PREFIX: Final[str] = ".check-"
-MAX_DISCARD_DEPTH: Final[int] = 4
+MAX_DISCARD_DEPTH: Final[int] = 10
 
 
 class AuditError(ValueError):
@@ -585,9 +587,10 @@ def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
         AuditError: For every problem, with a stable ``error_type``.
     """
     content, benchmark, rules = _verified_profile(job, owner_uid=owner_uid)
-    if re.fullmatch(_CONTENT_NAME, Path(content).name) is None:
+    pattern = _LONG_CONTENT_NAME if job.backend in LONG_CONTENT_NAME_BACKENDS else _CONTENT_NAME
+    if re.fullmatch(pattern, Path(content).name) is None:
         _invalid(
-            f"the datastream file name must match {_CONTENT_NAME}, because it labels the "
+            f"the datastream file name must match {pattern}, because it labels the "
             f"provenance: {_safe(Path(content).name)}"
         )
     selected = {rule.rule_id for rule in rules}

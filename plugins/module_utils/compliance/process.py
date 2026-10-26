@@ -14,6 +14,17 @@ consulted. Every argument that starts with ``-`` must be an option that the
 allow-list of that executable names, and remote resource fetching is always
 refused.
 
+An executable that does not live in a trusted directory, such as the SCAP
+Compliance Checker at ``/opt/scc/cscc`` (ADR 0019), is permitted only through a
+policy that names its one absolute path (``fixed_path``). That path is vetted
+like a trusted directory: every directory on the way to it must be a real
+directory owned by root and not writable by group or others (an ancestor may be
+writable when its sticky bit is set, the directory that holds the executable may
+not), and the file must be a regular, executable, root-owned file that is not a
+symlink and not writable by group or others. Such a policy can also fix the
+complete argument list to a set of exact forms (``argument_forms``) and add
+fixed environment values (``environment``).
+
 Policy violations raise :class:`ProcessPolicyError` before anything runs.
 Failures to start or supervise a process raise :class:`ProcessExecutionError`.
 A timeout is not an exception: the process group is killed and the result has
@@ -57,6 +68,9 @@ MAX_ECHO_LENGTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 65536
 WAIT_POLL_SECONDS: Final[float] = 0.01
 ROOT_UID: Final[int] = 0
+PATH_ARGUMENT: Final[str] = "<path>"
+FIXED_ENVIRONMENT_NAMES: Final[frozenset[str]] = frozenset({"TZ", "HOME"})
+SCC_EXECUTABLE_PATH: Final[str] = "/opt/scc/cscc"
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
 FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})
@@ -68,6 +82,7 @@ _FIRST_PRINTABLE: Final[int] = 32
 _DELETE: Final[int] = 127
 _EXECUTE_BITS: Final[int] = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
 _GROUP_OR_OTHER_WRITE: Final[int] = stat.S_IWGRP | stat.S_IWOTH
+_ENVIRONMENT_VALUE: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9/._:+-]{1,256}")
 
 
 class ProcessError(Exception):
@@ -116,12 +131,25 @@ class ExecutablePolicy:
             tests; the default permits nothing.
         standalone_commands: Argument sequences that are permitted only when
             they are the complete argument list.
+        fixed_path: The one absolute path of an executable that is not in a
+            trusted directory. It is vetted before every run; ``None`` means
+            the executable is resolved in the trusted directories.
+        argument_forms: Exact complete argument lists. When any is given,
+            every argument list that is not a standalone command must match one
+            of them token for token, where :data:`PATH_ARGUMENT` stands for one
+            absolute, normalised path. Command prefixes and options are then not
+            consulted.
+        environment: Fixed ``(name, value)`` pairs added to the child
+            environment. Names must be in :data:`FIXED_ENVIRONMENT_NAMES`.
     """
 
     name: str
     allowed_options: frozenset[str] = frozenset()
     command_prefixes: tuple[tuple[str, ...], ...] = ()
     standalone_commands: tuple[tuple[str, ...], ...] = ()
+    fixed_path: str | None = None
+    argument_forms: tuple[tuple[str, ...], ...] = ()
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
@@ -131,7 +159,14 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
             frozenset({"--profile", "--results-arf", "--results", "--report", "--tailoring-file"}),
             command_prefixes=(("xccdf", "eval"), ("info",)),
             standalone_commands=(("--version",),),
-        )
+        ),
+        "cscc": ExecutablePolicy(
+            "cscc",
+            standalone_commands=(("--version",),),
+            fixed_path=SCC_EXECUTABLE_PATH,
+            argument_forms=(("-o", PATH_ARGUMENT, "-u", PATH_ARGUMENT, "-q", "-d"),),
+            environment=(("TZ", "UTC0"),),
+        ),
     }
 )
 
@@ -281,6 +316,32 @@ def _reject_forbidden_words(
                 _deny(f"argument sequence is forbidden: {_safe(' '.join(sequence))}")
 
 
+def _is_form_path(argument: str) -> bool:
+    return (
+        argument.startswith("/")
+        and not argument.startswith("//")
+        and os.path.normpath(argument) == argument
+    )
+
+
+def _match_form(args: tuple[str, ...], policy: ExecutablePolicy) -> None:
+    for form in policy.argument_forms:
+        if len(form) == len(args) and all(
+            _is_form_path(argument) if token == PATH_ARGUMENT else argument == token
+            for token, argument in zip(form, args)
+        ):
+            return
+    _deny(f"arguments do not match an allowed form for {policy.name}: {_safe(' '.join(args))}")
+
+
+def _check_policy_environment(policy: ExecutablePolicy) -> None:
+    for name, value in policy.environment:
+        if name not in FIXED_ENVIRONMENT_NAMES:
+            _deny(f"environment variable may not be fixed by a policy: {_safe(name)}")
+        if not _is_text(value) or _ENVIRONMENT_VALUE.fullmatch(value) is None:
+            _deny(f"fixed environment value is invalid for {_safe(name)}")
+
+
 def _matching_prefix(args: tuple[str, ...], policy: ExecutablePolicy) -> tuple[str, ...]:
     for prefix in policy.command_prefixes:
         if args[: len(prefix)] == prefix:
@@ -361,6 +422,65 @@ def resolve_executable(
             _deny(f"file is not executable: {_safe(candidate)}")
         return str(candidate)
     _fail(f"executable not found in the trusted directories: {_safe(name)}")
+
+
+def _vet_fixed_directory(directory: Path, *, owner_uid: int, holds_executable: bool) -> None:
+    try:
+        info = directory.lstat()
+    except FileNotFoundError:
+        _fail(f"directory of the executable does not exist: {_safe(directory)}")
+    if not stat.S_ISDIR(info.st_mode):
+        _deny(f"directory of the executable is not a real directory: {_safe(directory)}")
+    if info.st_uid not in {ROOT_UID, owner_uid}:
+        _deny(f"directory of the executable has the wrong owner: {_safe(directory)}")
+    writable = info.st_mode & _GROUP_OR_OTHER_WRITE
+    if writable and (holds_executable or not info.st_mode & stat.S_ISVTX):
+        _deny(f"directory of the executable is writable by group or others: {_safe(directory)}")
+
+
+def vet_fixed_executable(path: str, *, owner_uid: int = ROOT_UID) -> str:
+    """Vet the one absolute path that a policy names for its executable.
+
+    Every directory from ``/`` to the one that holds the file must be a real
+    directory, not a symlink, owned by root or ``owner_uid`` and not writable by
+    group or others. An ancestor above the holding directory may be writable
+    when its sticky bit is set, as for the ancestors of the output root of an
+    audit; the holding directory may not. The file must be a regular file, not a
+    symlink, owned by ``owner_uid``, not writable by group or others and
+    executable.
+
+    Args:
+        path: Absolute, normalised path of the executable.
+        owner_uid: Required owner of the file. Keyword-only; only tests change it.
+
+    Returns:
+        The vetted path.
+
+    Raises:
+        ProcessPolicyError: If the path is malformed or anything on it is unsafe.
+        ProcessExecutionError: If the file or a directory does not exist.
+    """
+    if not _is_text(path) or "\x00" in path or not _is_form_path(path) or path == "/":
+        _deny(f"fixed executable path must be absolute and normalised: {_safe(path)}")
+    parts = Path(path).parts
+    for index in range(1, len(parts)):
+        _vet_fixed_directory(
+            Path(*parts[:index]), owner_uid=owner_uid, holds_executable=index == len(parts) - 1
+        )
+    try:
+        info = Path(path).lstat()
+    except FileNotFoundError:
+        _fail(f"executable not found: {_safe(path)}")
+    mode = info.st_mode
+    if not stat.S_ISREG(mode):
+        _deny(f"executable is not a regular file: {_safe(path)}")
+    if mode & _GROUP_OR_OTHER_WRITE:
+        _deny(f"executable is writable by group or others: {_safe(path)}")
+    if info.st_uid != owner_uid:
+        _deny(f"executable has the wrong owner: {_safe(path)}")
+    if not mode & _EXECUTE_BITS or not os.access(path, os.X_OK):
+        _deny(f"file is not executable: {_safe(path)}")
+    return path
 
 
 def confined_path(base: str, candidate: str) -> str:
@@ -465,7 +585,9 @@ def _wait_for_exit(process: subprocess.Popen[bytes], deadline: float) -> bool:
     return False
 
 
-def _supervise(spec: CommandSpec, argv: tuple[str, ...]) -> CommandResult:
+def _supervise(
+    spec: CommandSpec, argv: tuple[str, ...], environment: dict[str, str]
+) -> CommandResult:
     out = _Capture(spec.max_output_bytes)
     err = _Capture(spec.max_output_bytes)
     started = time.monotonic()
@@ -478,7 +600,7 @@ def _supervise(spec: CommandSpec, argv: tuple[str, ...]) -> CommandResult:
             stderr=subprocess.PIPE,
             close_fds=True,
             start_new_session=True,
-            env=build_environment(spec),
+            env=environment,
             cwd=spec.cwd,
             bufsize=0,
         )
@@ -523,6 +645,37 @@ class _Runner(Protocol):
     ) -> CommandResult: ...
 
 
+def _check_arguments(
+    args: tuple[str, ...], policy: ExecutablePolicy, forbidden_options: frozenset[str]
+) -> None:
+    if policy.argument_forms:
+        _match_form(args, policy)
+        return
+    prefix = _matching_prefix(args, policy)
+    for argument in args[len(prefix) :]:
+        if not argument.startswith("-"):
+            continue
+        name = _option_name(argument)
+        if name in forbidden_options:
+            _deny(f"option is forbidden: {_safe(name)}")
+        if name not in policy.allowed_options:
+            _deny(f"option is not allow-listed for {policy.name}: {_safe(argument)}")
+
+
+def _copy_policy(policy: ExecutablePolicy) -> ExecutablePolicy:
+    copied = ExecutablePolicy(
+        policy.name,
+        frozenset(policy.allowed_options),
+        tuple(tuple(prefix) for prefix in policy.command_prefixes),
+        tuple(tuple(command) for command in policy.standalone_commands),
+        policy.fixed_path,
+        tuple(tuple(form) for form in policy.argument_forms),
+        tuple((pair[0], pair[1]) for pair in policy.environment),
+    )
+    _check_policy_environment(copied)
+    return copied
+
+
 def bind_policy(
     allowed: Mapping[str, ExecutablePolicy],
     trusted: Sequence[str],
@@ -537,15 +690,7 @@ def bind_policy(
     ``FORBIDDEN_*`` names of this module after import has no effect on them.
     """
     bound_policies = MappingProxyType(
-        {
-            key: ExecutablePolicy(
-                policy.name,
-                frozenset(policy.allowed_options),
-                tuple(tuple(prefix) for prefix in policy.command_prefixes),
-                tuple(tuple(command) for command in policy.standalone_commands),
-            )
-            for key, policy in allowed.items()
-        }
+        {key: _copy_policy(policy) for key, policy in allowed.items()}
     )
     bound_trusted = tuple(trusted)
     options = frozenset(forbidden_options)
@@ -574,17 +719,8 @@ def bind_policy(
         policy = (bound_policies if policies is None else policies).get(spec.executable)
         if policy is None:
             _deny(f"executable is not allow-listed: {_safe(spec.executable)}")
-        if spec.args in policy.standalone_commands:
-            return policy
-        prefix = _matching_prefix(spec.args, policy)
-        for argument in spec.args[len(prefix) :]:
-            if not argument.startswith("-"):
-                continue
-            name = _option_name(argument)
-            if name in options:
-                _deny(f"option is forbidden: {_safe(name)}")
-            if name not in policy.allowed_options:
-                _deny(f"option is not allow-listed for {spec.executable}: {_safe(argument)}")
+        if spec.args not in policy.standalone_commands:
+            _check_arguments(spec.args, policy, options)
         return policy
 
     def run(
@@ -632,14 +768,20 @@ def bind_policy(
             spec.env_allow,
             spec.cwd,
         )
-        check_policy(spec, policies=policies)
-        executable = resolve_executable(
-            spec.executable,
-            trusted_dirs=bound_trusted if trusted_dirs is None else trusted_dirs,
-            owner_uid=owner_uid,
-        )
+        policy = check_policy(spec, policies=policies)
+        _check_policy_environment(policy)
+        if policy.fixed_path is None:
+            executable = resolve_executable(
+                spec.executable,
+                trusted_dirs=bound_trusted if trusted_dirs is None else trusted_dirs,
+                owner_uid=owner_uid,
+            )
+        else:
+            executable = vet_fixed_executable(policy.fixed_path, owner_uid=owner_uid)
+        environment = build_environment(spec)
+        environment.update(policy.environment)
         argv = (executable, *spec.args)
-        return _supervise(spec, argv)
+        return _supervise(spec, argv, environment)
 
     return check_policy, run
 

@@ -152,7 +152,7 @@ jobs:
     needs: [scc-changes]
     if: needs.scc-changes.outputs.scc != 'false'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
@@ -173,6 +173,16 @@ jobs:
           key: scc-bundle-${{ hashFiles('extensions/ci/scc/scc.pins') }}
       - name: Build the SCC image locally and run the smoke test
         run: make scc-smoke
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Run a real SCC scan through compliance_scan and the egress test
+        run: make scc-integration
+      - name: Remove the local SCC image
+        if: always()
+        run: make scc-image-clean
 
   name-sets:
     name: name-sets (${{ matrix.python }})

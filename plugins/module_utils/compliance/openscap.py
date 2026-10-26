@@ -283,7 +283,7 @@ def _bounds(*, limits: XmlLimits | None) -> xmlsafe.XmlBounds:
     return xmlsafe.XmlBounds(max_elements=chosen.max_elements, max_depth=chosen.max_depth)
 
 
-def _utc_timestamp(value: str | None, name: str) -> str:
+def _utc_timestamp(value: str | None, name: str, *, assume_utc: bool) -> str:
     if value is None or not value.strip():
         _fail(f"{name} is missing")
     text = value.strip()
@@ -291,6 +291,8 @@ def _utc_timestamp(value: str | None, name: str) -> str:
         text = text[:-1] + "+00:00"
     try:
         moment = datetime.fromisoformat(text)
+        if moment.tzinfo is None and assume_utc:
+            moment = moment.replace(tzinfo=timezone.utc)
         formatted = moment.astimezone(timezone.utc).strftime(model.TIMESTAMP_FORMAT)
     except (ValueError, OverflowError):
         _fail(f"{name} is not an ISO 8601 timestamp")
@@ -328,7 +330,7 @@ def _finding(rule_id: str | None, severity: str | None, raw: str | None) -> mode
         _fail(f"invalid rule-result: {error}")
 
 
-def _extract(builder: _Builder) -> ParsedResults:
+def _extract(builder: _Builder, *, assume_utc: bool) -> ParsedResults:
     if builder.root_tag not in {_BENCHMARK, _TEST_RESULT}:
         _fail("the root element is not an XCCDF 1.2 Benchmark or TestResult")
     if builder.test_results != 1:
@@ -352,19 +354,27 @@ def _extract(builder: _Builder) -> ParsedResults:
         benchmark_id=benchmark_id,
         benchmark_version=version,
         profile_id=builder.profile_idref,
-        started_at=_utc_timestamp(attributes.get("start-time"), "start-time"),
-        finished_at=_utc_timestamp(attributes.get("end-time"), "end-time"),
+        started_at=_utc_timestamp(
+            attributes.get("start-time"), "start-time", assume_utc=assume_utc
+        ),
+        finished_at=_utc_timestamp(attributes.get("end-time"), "end-time", assume_utc=assume_utc),
         findings=findings,
     )
 
 
-def parse_results(document: str, *, limits: XmlLimits | None = None) -> ParsedResults:
+def parse_results(
+    document: str, *, limits: XmlLimits | None = None, assume_utc: bool = False
+) -> ParsedResults:
     """Parse and map an XCCDF 1.2 results document held in memory.
 
     Args:
         document: Document text.
         limits: Test-only, keyword-only element and depth bounds; the defaults
             apply when omitted.
+        assume_utc: Read a ``start-time`` or ``end-time`` without a zone offset
+            as UTC. Only a backend that fixed the scanner's time zone to UTC may
+            set it (the SCC backend fixes ``TZ=UTC0`` for its scanner); by default
+            such a time is rejected.
 
     Returns:
         The extracted benchmark, profile, times and findings. Result values go
@@ -380,10 +390,12 @@ def parse_results(document: str, *, limits: XmlLimits | None = None) -> ParsedRe
         xmlsafe.parse_text(document, builder, _bounds(limits=limits))
     except xmlsafe.XmlSafetyError as error:
         raise XccdfParseError(str(error)) from error
-    return _extract(builder)
+    return _extract(builder, assume_utc=assume_utc)
 
 
-def read_results(path: str, max_bytes: int, *, limits: XmlLimits | None = None) -> ParsedResults:
+def read_results(
+    path: str, max_bytes: int, *, limits: XmlLimits | None = None, assume_utc: bool = False
+) -> ParsedResults:
     """Stream a results file through the parser with bounds.
 
     The file must be a regular file that is not a symlink and at most
@@ -395,6 +407,8 @@ def read_results(path: str, max_bytes: int, *, limits: XmlLimits | None = None) 
     Every file operation, including the close, happens in :mod:`xmlsafe`. An
     error while the file is closed is a rejection too; its cause is the
     ``OSError`` of the close.
+
+    ``assume_utc`` has the meaning described in :func:`parse_results`.
 
     Raises:
         XccdfParseError: For every rejection, including unreadable files.
@@ -409,7 +423,7 @@ def read_results(path: str, max_bytes: int, *, limits: XmlLimits | None = None) 
         raise XccdfParseError(str(error)) from error.os_error
     except xmlsafe.XmlSafetyError as error:
         raise XccdfParseError(str(error)) from error
-    return _extract(builder)
+    return _extract(builder, assume_utc=assume_utc)
 
 
 @dataclass(frozen=True)

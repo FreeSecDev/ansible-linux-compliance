@@ -9,6 +9,7 @@ from __future__ import annotations
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     openscap,
     scanner,
+    scc,
 )
 
 
@@ -16,4 +17,5 @@ def default_registry() -> scanner.BackendRegistry:
     """Return a new registry holding every shipped backend."""
     registry = scanner.BackendRegistry()
     openscap.register(registry)
+    scc.register(registry)
     return registry

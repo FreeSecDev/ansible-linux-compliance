@@ -435,7 +435,9 @@ def test_a_check_mode_directory_that_cannot_be_removed_is_reported(harness: Harn
 
 def test_cleanup_refuses_deep_or_crowded_trees(tmp_path: Path) -> None:
     deep = tmp_path / "deep"
-    (deep / "a" / "b" / "c" / "d" / "e" / "f").mkdir(parents=True)
+    (deep / "a" / "b" / "c" / "d" / "e" / "f" / "g" / "h" / "i" / "j" / "k" / "l").mkdir(
+        parents=True
+    )
     with pytest.raises(audit.AuditError, match="nested too deeply") as nested:
         audit.discard_preview(deep)
     assert nested.value.error_type == "cleanup_failed"

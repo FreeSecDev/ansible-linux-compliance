@@ -9,7 +9,9 @@ never redistributed:
 - The SCC identifiers (the image name, the SCC paths, the ``SCC_*`` variables, the
   SCC make targets and ``cscc``) appear only in an allow-list of places: the
   ``scc-smoke`` job, the SCC variables and targets of the Makefile, ``tools/scc``,
-  ``extensions/ci/scc``, documentation and tests. None of those places pushes,
+  ``extensions/ci/scc``, the two audited plugin files that run SCC (``scc.py`` and
+  ``process.py`` in ``plugins/module_utils/compliance``),
+  documentation and tests. None of those places pushes,
   saves or exports an image.
 
 Any tracked file that names an SCC identifier may not contain a push, login, save
@@ -87,6 +89,8 @@ EXPECTED_PINS = (
     "SCC_DEB_MEMBER",
     "SCC_DEB_SHA256",
     "SCC_CSCC_SHA256",
+    "SCC_CONTENT_FILE",
+    "SCC_CONTENT_SHA256",
 )
 PACKAGE_SUFFIXES = (".deb", ".rpm", ".zip", ".tar.gz", ".tgz", ".pkg", ".exe", ".msi", ".scc")
 SCC_NAMES = re.compile(
@@ -111,13 +115,20 @@ BASE64_ALIGNMENTS = 4
 MAX_DECODED_CHARACTERS = 1024 * 1024
 SCC_IDENTIFIER = re.compile(
     r"freesecdev-scc|build/scc|extensions/ci/scc|tools/scc|scc\.pins|\bcscc\b"
-    r"|\bSCC_[A-Z][A-Z0-9_]*\b|\bscc-(?:expiry-check|fetch|image-clean|image|smoke)\b"
+    r"|\bSCC_[A-Z][A-Z0-9_]*\b|\bscc-(?:expiry-check|fetch|image-clean|image|smoke|integration)\b"
 )
 SCC_WORKFLOW = "ci.yml"
 SCC_JOBS = frozenset({"scc-changes", "scc-smoke", "ci-gate"})
 SCC_JOB_PERMISSIONS: tuple[dict[str, str], ...] = ({}, {"contents": "read"})
 SCC_TARGETS = frozenset(
-    {"scc-expiry-check", "scc-fetch", "scc-image", "scc-smoke", "scc-image-clean"}
+    {
+        "scc-expiry-check",
+        "scc-fetch",
+        "scc-image",
+        "scc-smoke",
+        "scc-image-clean",
+        "scc-integration",
+    }
 )
 GUARD_MODULE = "tests/unit/tools/test_scc_image.py"
 ACCEPTED_BINARY_FINDINGS: dict[str, str] = {}
@@ -127,6 +138,9 @@ PINS_INCLUDE = "include $(SCC_PINS)"
 EXPIRY_SCRIPT = REPOSITORY_ROOT / "tools" / "scc" / "check-expiry.sh"
 SCC_RECIPE_TARGETS = SCC_TARGETS | {"lint-containerfile"}
 ALLOWED_PREFIXES = ("docs/", "tests/", "changelogs/", "tools/scc/", "extensions/ci/scc/")
+ALLOWED_FILES = frozenset(
+    {"plugins/module_utils/compliance/scc.py", "plugins/module_utils/compliance/process.py"}
+)
 SHELL_SCRIPT_LIST = "SHELL_SCRIPTS"
 HELP_DEFINE = "define HELP_TEXT"
 ASSIGNMENT = re.compile(r"([A-Za-z0-9_.-]+)\s*(?::=|::=|\?=|\+=|=)")
@@ -177,7 +191,7 @@ PUBLISHING_ACTIONS = (
     "actions/upload-artifact",
 )
 TIMEOUT_SECONDS = 60
-DIGEST_PINS = ("SCC_BUNDLE_SHA256", "SCC_DEB_SHA256", "SCC_CSCC_SHA256")
+DIGEST_PINS = ("SCC_BUNDLE_SHA256", "SCC_DEB_SHA256", "SCC_CSCC_SHA256", "SCC_CONTENT_SHA256")
 CONTAINERFILE_FORBIDDEN = re.compile(
     r"(?i)\b(curl|wget|apt-get|apt|ADD)\b|https?://(?!github\.com/FreeSecDev/)"
 )
@@ -545,7 +559,7 @@ def file_violations(relative: str, text: str, files: dict[str, str] | None = Non
     line = publishing_line(text)
     if line is not None:
         found.append(f"{relative}:{line}: publishing command next to an SCC identifier")
-    elif names_scc and not relative.startswith(ALLOWED_PREFIXES):
+    elif names_scc and not relative.startswith(ALLOWED_PREFIXES) and relative not in ALLOWED_FILES:
         found.append(f"{relative}: SCC identifier outside the allow-list")
     return found
 
@@ -786,6 +800,10 @@ def _mutated_workflow() -> str:
         ("tools/scc/publish.sh", '#!/bin/sh\ndocker push "$SCC_IMAGE"\n'),
         ("extensions/ci/scc/push.sh", "#!/bin/sh\nskopeo copy docker-daemon:x docker://y\n"),
         ("README.example", "build/scc/download\n"),
+        ("plugins/module_utils/compliance/audit.py", "\nSCANNER = '/opt/scc/cscc'\n"),
+        ("plugins/module_utils/compliance/backends.py", "\nPIN = 'SCC_CSCC_SHA256'\n"),
+        ("plugins/modules/compliance_scan.py", "\nTARGET = 'scc-integration'\n"),
+        ("plugins/module_utils/compliance/scc_extra.py", "\nSCANNER = '/opt/scc/cscc'\n"),
     ],
 )
 def test_the_allow_list_refuses_scc_references_elsewhere(relative: str, mutation: str) -> None:
@@ -816,6 +834,8 @@ def test_the_allow_list_refuses_scc_references_elsewhere(relative: str, mutation
         {"tests/ci/load.py": INDIRECT_SAVE},
         {"docs/planning/notes.yml": "---\nstep: docker push localhost/freesecdev-scc:ci\n"},
         {"changelogs/fragments/x.yml": CHANGELOG_PUSH},
+        {"plugins/module_utils/compliance/scc.py": INDIRECT_SAVE},
+        {"plugins/module_utils/compliance/process.py": "\nX = 'podman push localhost/x:y'\n"},
     ],
 )
 def test_executable_code_in_allowed_trees_may_not_publish_the_image(
@@ -831,6 +851,19 @@ def test_executable_code_in_allowed_trees_may_not_publish_the_image(
         else:
             files[relative] = files.get(relative, "") + addition
     assert repository_violations(files)
+
+
+def test_only_the_two_audited_plugin_files_may_name_the_scc_executable() -> None:
+    assert (
+        frozenset(
+            {"plugins/module_utils/compliance/scc.py", "plugins/module_utils/compliance/process.py"}
+        )
+        == ALLOWED_FILES
+    )
+    files = tracked_text()
+    for relative in sorted(ALLOWED_FILES):
+        assert SCC_IDENTIFIER.search(files[relative]), relative
+        assert file_violations(relative, files[relative], files) == []
 
 
 MARKDOWN_PUSH = "Never run `docker push localhost/freesecdev-scc:ci`.\n"
@@ -1029,7 +1062,11 @@ def test_the_smoke_job_builds_locally_with_read_only_permissions() -> None:
     assert job["permissions"] == {"contents": "read"}
     assert "secrets" not in yaml.safe_dump(job)
     assert job["env"]["SCC_IMAGE"].startswith("localhost/")
-    assert [step.get("run") for step in job["steps"] if "run" in step] == ["make scc-smoke"]
+    assert [step.get("run") for step in job["steps"] if "run" in step] == [
+        "make scc-smoke",
+        "make scc-integration",
+        "make scc-image-clean",
+    ]
     cache = [step for step in job["steps"] if is_cache_step(step)]
     assert len(cache) == 1
     assert cache[0]["with"]["path"] == "build/scc/download"

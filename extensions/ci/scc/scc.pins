@@ -9,3 +9,5 @@ SCC_CHECKSUMS_URL := https://dl.dod.cyber.mil/wp-content/uploads/stigs/txt/SCC_5
 SCC_DEB_MEMBER := scc-5.15_linux_x86_64/scc-5.15.linux_amd64.deb
 SCC_DEB_SHA256 := 912c04a377ccbbb790144663e89c88585707eef9e02e12b42259cd785e5d7e21
 SCC_CSCC_SHA256 := ba908a907b8cbef7a3c7b1d2cad65c1c255e6290ef2ac3dd8a98ba2163afce8d
+SCC_CONTENT_FILE := U_CAN_Ubuntu_24-04_LTS_V1R5_STIG_SCAP_1-4_Benchmark-enhancedV7-signed.xml
+SCC_CONTENT_SHA256 := eac6f7a6a1e80c52d02c508d939eb09aa09b7fe6eaeb060b8aa21e095719c940

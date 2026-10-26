@@ -191,6 +191,7 @@ BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
         "clock",
         "limits",
         "registry",
+        "install_root",
     }
 )
 SEAM_OWNERS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
@@ -202,6 +203,9 @@ SEAM_OWNERS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
         Path("plugins/module_utils/compliance/fileio.py"): frozenset({"owner_uid"}),
         Path("plugins/module_utils/compliance/ledger.py"): frozenset(
             {"state_dir", "owner_uid", "lock_timeout"}
+        ),
+        Path("plugins/module_utils/compliance/scc.py"): frozenset(
+            {"runner", "clock", "limits", "install_root"}
         ),
         Path("plugins/module_utils/compliance/openscap.py"): frozenset(
             {"runner", "clock", "limits"}

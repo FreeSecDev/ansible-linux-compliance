@@ -172,6 +172,17 @@ The scan runs through the backend registry (`backends.default_registry()`). The 
 trusted root-owned directory, a minimal environment, a timeout and bounded output. `--remediate` and remote resources
 are refused by the process policy.
 
+`backend: scc` selects the SCAP Compliance Checker backend ([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md),
+amendment of FREES-145). It runs the operator-installed SCC 5.15 from its one fixed path under `/opt/scc` with exactly
+one argument form (a per-run options file, a fresh user directory, quiet mode and the debug log) and `TZ=UTC0`, again
+through `process.run`. SCC scans only content in its own content database, so `content_path` names the pinned stream
+as SCC installed it; the backend checks that those bytes equal the verified private copy before and after the scan.
+A run is `completed` only when SCC's debug log confirms that it loaded the per-run options with `downloadExternalFiles`,
+`appCheckForUpdates` and `contentCheckForUpdates` at `0` and no configuration profile, and when exactly one session of
+this run holds one XCCDF and one ARF results file for the requested benchmark and profile. SCC's exit status is 0 even
+on failure and is never taken as completion. Anything else is `failed` with every rule `error`. The backend refuses
+`disabled_rules` (FREES-146) and hosts for which no SCC benchmark is pinned, such as Ubuntu 26.04.
+
 ### SCE check scripts run as root
 
 The pinned datastreams embed Script Check Engine (SCE) check scripts: the Ubuntu 24.04 datastream has 81 `sce:script`
