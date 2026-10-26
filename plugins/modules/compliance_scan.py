@@ -50,6 +50,12 @@ options:
         file.
       - It is read only to verify it and to make the private copy that is scanned.
       - Paths containing C(..) are rejected and the file itself must not be a symbolic link.
+      - Before the datastream is opened, the directory that holds it and every ancestor are
+        walked from C(/). No component may be a symbolic link, and each must be owned by root and
+        must not be writable by group or others unless its sticky bit is set. The datastream
+        itself must be owned by root and must not be writable by group or others. Otherwise the
+        module fails with C(unsafe_content_dir) before anything is created, because another user
+        could replace the file, for example with a FIFO that blocks the audit.
       - The file name must match C([A-Za-z0-9._+-]{1,64}), because it labels the provenance.
     type: str
     required: true
@@ -378,7 +384,8 @@ planned:
 error_type:
   description:
     - Stable identifier of the failure.
-    - C(invalid_argument), C(unsafe_output_dir), C(output_exists), C(nothing_to_scan),
+    - C(invalid_argument), C(unsafe_content_dir), C(unsafe_output_dir), C(output_exists),
+      C(nothing_to_scan),
       C(unknown_backend), C(invalid_request), C(evidence_write_failed), C(cleanup_failed),
       C(scan_incomplete),
       C(digest_mismatch), C(profile_not_found), C(unsupported_content) or C(invalid_content).

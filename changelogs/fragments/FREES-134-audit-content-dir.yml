@@ -1,0 +1,15 @@
+---
+security_fixes:
+  - >-
+    ``freesecdev.linux_compliance.compliance_scan`` now vets the datastream and every directory above it before it
+    opens the file as root. No component may be a symbolic link, every directory must be owned by root and must not be
+    writable by group or others unless its sticky bit is set, and the datastream must be owned by root and must not be
+    writable by group or others. Otherwise the audit fails with ``unsafe_content_dir`` before anything is created. A
+    non-root user who could write the content directory could otherwise replace the datastream with a FIFO between the
+    type check and the ``open`` and make the audit hang.
+breaking_changes:
+  - >-
+    ``freesecdev.linux_compliance.compliance_scan`` refuses a ``content_path`` that passes through a symbolic link,
+    which it accepted before, and a datastream or content directory that a non-root user owns or can write. Move the
+    content to a root-owned directory such as ``/opt/freesecdev/content`` with mode ``0755`` and the file with mode
+    ``0644``.

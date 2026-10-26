@@ -25,7 +25,7 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `linux_compliance_discover_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. The initial implementation scope is the CIS Level 1 Server profile on Ubuntu 24.04 (ADR 0010). A profile is never substituted silently for another benchmark. |
-| `linux_compliance_discover_content_path` | `str` | `""` | Required. Absolute path on the managed host of the datastream file, or of a directory that holds exactly one `-ds.xml` file. |
+| `linux_compliance_discover_content_path` | `str` | `""` | Required. Absolute path on the managed host of the datastream file, or of a directory that holds exactly one `-ds.xml` file. The `audit` role scans it only if the file and every directory above it are owned by root, are not writable by group or others (directories may be sticky instead) and are not symlinks; see the [content directory rules](../../docs/audit.md#content-directory-rules). |
 | `linux_compliance_discover_content_sha256` | `str` | `""` | Required. Pinned SHA-256 of the datastream, from `content/manifest.yml`. |
 
 ## Obtaining the content

@@ -316,3 +316,20 @@ expiry at `min(started_at, controller time)` (a lagging host clock would extend 
 - **Summary.** The module summary is the count per outcome, the total and `run_status`; it contains no percentage and no
   compliance statement ([ADR 0016](0016-report-schema-and-summary-semantics.md)). `scan-run.json` is the `model.dumps`
   document that the reporting package reads as ScanRun JSON.
+
+### Note 2026-10-26: content directory and SCE checks (FREES-134)
+
+- **The content directory is vetted before root opens the datastream.** The plan refuses, with
+  `unsafe_content_dir`, a datastream reached through a symlink, a directory above it (including the one that holds it)
+  that is not owned by root or is writable by group or others without the sticky bit, and a datastream that is not
+  owned by root or is writable by group or others. These are the rules for the ancestors of the output directory. The
+  check runs before the datastream is opened and before the run directory is created, so a non-root user can no longer
+  swap the file for a FIFO between the `lstat` and the `open` and make the audit hang. It replaces the FREES-49 rule that
+  accepted symlinks above `content_path`. Residual risk is in the [audit guide](../audit.md#content-directory-rules).
+- **SCE checks are root-executed content, trusted through the pin.** The pinned datastreams embed SCE shell check
+  scripts (81 in Ubuntu 24.04) that `oscap` runs as root; with OpenSCAP 1.3.9 only the 18 rules without an OVAL check
+  use them (16 in `cis_level1_server`). The pinned `oscap` has no option to disable SCE; without it those rules would be
+  `notchecked`, and operators who do not want them to run list them in `disabled_rules`, which makes them `disabled`.
+  They are checks, not fixes, and `--remediate` stays refused, so [ADR 0003](0003-native-module-remediation.md) is
+  unaffected. The model is unchanged: an SCE result maps through the same XCCDF result table as an OVAL result. See
+  [T-AUDIT-2](../security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).

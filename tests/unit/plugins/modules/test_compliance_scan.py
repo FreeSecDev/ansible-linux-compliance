@@ -104,8 +104,10 @@ def content(tmp_path: Path) -> Path:
     tmp_path.chmod(0o755)
     directory = tmp_path / "content"
     directory.mkdir()
+    directory.chmod(0o755)
     path = directory / "synthetic-ds.xml"
     shutil.copyfile(SYNTHETIC, path)
+    path.chmod(0o644)
     return path
 
 
@@ -379,5 +381,5 @@ def test_running_the_file_as_a_script_runs_main(
         spec.loader.exec_module(importlib.util.module_from_spec(spec))
     assert raised.value.code == 1
     result = json.loads(capsys.readouterr().out)
-    assert result["error_type"] == "unsafe_output_dir"
+    assert result["error_type"] == "unsafe_content_dir"
     assert result["evidence_written"] is False

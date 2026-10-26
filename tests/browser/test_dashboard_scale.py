@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from playwright.sync_api import Locator
+
     from tests.browser.conftest import Dashboard
 
 RULES_PER_INPUT = 168
