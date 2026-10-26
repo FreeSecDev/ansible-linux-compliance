@@ -212,7 +212,7 @@ def test_the_output_is_deterministic_and_matches_the_golden_files(stig: Any) -> 
     cklb = checklist_formats.render_cklb(made)
     assert ckl == checklist_formats.render_ckl(again)
     assert cklb == checklist_formats.render_cklb(again)
-    assert ckl == (stig.GOLDEN / "synthetic-ckl.xml").read_text(encoding="utf-8")
+    assert ckl == (stig.GOLDEN / "synthetic-ckl.xml.golden").read_text(encoding="utf-8")
     assert cklb == (stig.GOLDEN / "synthetic-cklb.json").read_text(encoding="utf-8")
 
 
