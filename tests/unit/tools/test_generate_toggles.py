@@ -12,7 +12,14 @@ import yaml
 from tools.roles import generate_toggles as gen
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-SOURCES = (gen.CATALOGUE, gen.DEFAULTS, gen.SPECS, gen.REFERENCE)
+SOURCES = (
+    gen.CATALOGUE,
+    gen.DEFAULTS,
+    gen.SPECS,
+    gen.AUDIT_DEFAULTS,
+    gen.AUDIT_SPECS,
+    gen.REFERENCE,
+)
 
 
 def copy_repository(root: Path) -> Path:
@@ -58,6 +65,16 @@ def test_every_family_and_rule_gets_a_bool_toggle_with_a_description() -> None:
         assert option["type"] == "bool"
         assert "default" not in option
         assert defaults[str(rule["toggle"])] == gen.rule_default(rule)
+
+
+def test_both_toggle_roles_carry_the_same_toggles() -> None:
+    remediate = load(REPOSITORY_ROOT / gen.DEFAULTS)
+    audit = load(REPOSITORY_ROOT / gen.AUDIT_DEFAULTS)
+    remediate_toggles = {name: value for name, value in remediate.items() if gen.is_generated(name)}
+    audit_toggles = {name: value for name, value in audit.items() if gen.is_generated(name)}
+    assert remediate_toggles
+    assert remediate_toggles == audit_toggles
+    assert audit["linux_compliance_audit_disabled_rules"] == []
 
 
 @pytest.mark.parametrize(

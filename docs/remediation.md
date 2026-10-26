@@ -52,10 +52,11 @@ specifications are generated from the catalogue; every toggle is listed in the
 
 `tools/roles/generate_toggles.py` (`make toggles`) derives from `roles/remediate/vars/rules.yml`:
 
-- in `roles/remediate/defaults/main.yml`, `linux_compliance_<family>_enabled: true` for every registered family, in
-  registry order, then `linux_compliance_rule_<rule_short_id>_enabled: "{{ linux_compliance_<family>_enabled }}"` for
-  every catalogued rule, sorted by rule identifier;
-- in the `main` entry point of `roles/remediate/meta/argument_specs.yml`, an option of type `bool` with a description
+- in `defaults/main.yml` of the `remediate` and the `audit` role, `linux_compliance_<family>_enabled: true` for every
+  registered family, in registry order, then
+  `linux_compliance_rule_<rule_short_id>_enabled: "{{ linux_compliance_<family>_enabled }}"` for every catalogued rule,
+  sorted by rule identifier;
+- in the `main` entry point of `meta/argument_specs.yml` of both roles, an option of type `bool` with a description
   for each. A topic toggle has `default: true`. A rule toggle has no `default` in the argument specification, because
   the role argument validation would check the template string of its default against the type `bool`; its
   description names the family toggle it defaults to;
@@ -63,10 +64,17 @@ specifications are generated from the catalogue; every toggle is listed in the
 
 Every other variable and option of those files is kept, in its order, and toggles that the catalogue no longer
 contains are removed. Both YAML files are written in one canonical style that is checked to load back to the same data.
-`make lint-toggles` (part of `make lint`, CI job `lint`) regenerates all three in memory and fails with a diff when any
-of them differs from the files in the repository, so no rule can be catalogued without its toggle and no toggle can
-outlive its rule. `tools/roles/check_role_specs.py` accepts these toggles, and only in the remediate role, without the
-role prefix.
+`make lint-toggles` (part of `make lint`, CI job `lint`) regenerates all five files in memory and fails with a diff when
+any of them differs from the files in the repository, so no rule can be catalogued without its toggle and no toggle can
+outlive its rule. `tools/roles/check_role_specs.py` (`make lint-ansible`) checks the toggles on its own as well: in the
+`remediate` and `audit` roles, the set of toggle names, every default (value and type) and every argument
+specification must equal what the generator produces for the catalogue, so an uncatalogued toggle, a near-namespace
+name such as `linux_compliance_remediatex_enabled` or a rule default that points at the opt-in or at another family is
+a finding. Toggles in any other role fail its role-prefix rule.
+
+When a topic toggle is `false` but no catalogued rule of its family is in the profile (in the catalogue, when remediation
+is disabled), the notices of the role contain a `WARNING:` that the toggle currently changes nothing; the audit role
+prints the same warning ([variable reference](remediation-variables.md#what-a-topic-toggle-covers)).
 
 A rule toggle default is a template. Ansible resolves it to the boolean of the family toggle when the role reads it,
 and the filter checks that resolved value: a family toggle passed as the string `"false"` makes both the family toggle
@@ -312,6 +320,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/plugins/module_utils/compliance/test_toggles.py`, `tests/unit/plugins/filter/test_audit_disabled_rules.py` | Toggle resolution: a rule toggle overriding its family in both directions, a family switched off, the controlling variable, non-boolean values (including an unresolved template string), unknown and reserved toggle names, and that `remediation_plan` and `audit_disabled_rules` agree on the disabled rules for the same toggles, also with the generated defaults templated in | `make test-coverage` |
 | `tests/unit/tools/test_generate_toggles.py` | The generated defaults, argument specifications and reference equal the files in the repository; drift is reported with a diff and nothing is written in `--check` mode; stale toggles are removed; a new rule gets its toggle; an invalid catalogue fails; the YAML renderer round-trips and refuses what it cannot render within 120 characters. 100% line and branch coverage | `make test-coverage`, `make lint-toggles` |
 | `tests/playbooks/remediate-check-mode.yml`, toggle plays | In check mode, with the generated defaults: a single rule switched off and a whole topic switched off are not applied, name the rule toggle or the topic toggle as `disabled_by`, and the audit role's `toggles.yml` resolves the same disabled rules; a rule switched back on inside a disabled topic is applied and disabled in neither role; the audit fails before any scan on `linux_compliance_audit_enabled`, a string toggle and a catalogued rule in `linux_compliance_audit_disabled_rules`, and keeps explicit entries for uncatalogued rules | `make test-remediate-check`, CI job `test` |
+| `tests/unit/roles/test_audit_tasks.py` | The audit scan task passes exactly the toggle result (`__linux_compliance_audit_toggles.disabled_rules`), and `toggles.yml` runs after the discover check and before the scan and fails closed | `make test-coverage` |
+| `tests/playbooks/audit-toggles-oscap.yml` | The `discover` and `audit` roles, with `become` and a real `oscap`, on the pinned Ubuntu 24.04 `cis_level1_server` content with `linux_compliance_file_permissions_enabled: false`: `file_permissions_crontab` is the only `disabled` finding and names the topic toggle | `make test-oscap-integration`, CI job `oscap-integration` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where

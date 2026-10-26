@@ -77,6 +77,12 @@ _value:
           C(disabled_rules) option of C(freesecdev.linux_compliance.compliance_scan).
       type: list
       elements: dict
+    warnings:
+      description:
+        - One C(WARNING:) message per topic toggle that is false while no catalogued rule of its
+          family is selected by the profile, so that it currently excludes nothing.
+      type: list
+      elements: str
 """
 
 OPTION_KEYS: Final[frozenset[str]] = frozenset(
@@ -84,8 +90,12 @@ OPTION_KEYS: Final[frozenset[str]] = frozenset(
 )
 
 
-def _result(errors: list[str], disabled: list[dict[str, object]]) -> dict[str, object]:
-    return {"errors": errors, "disabled_rules": disabled if not errors else []}
+def _result(
+    errors: list[str], disabled: list[dict[str, object]], warnings: list[str]
+) -> dict[str, object]:
+    if errors:
+        return {"errors": errors, "disabled_rules": [], "warnings": []}
+    return {"errors": [], "disabled_rules": disabled, "warnings": warnings}
 
 
 def _profile(raw: object, errors: toggles.Errors) -> frozenset[str]:
@@ -128,13 +138,13 @@ def audit_disabled_rules(catalogue: object, options: object) -> dict[str, object
     if given is None or frozenset(given) != OPTION_KEYS:
         keys = [] if given is None else sorted(given)[:10]
         errors.add(f"options must be a mapping with exactly {sorted(OPTION_KEYS)}, got {keys}")
-        return _result(errors.items, [])
+        return _result(errors.items, [], [])
     loaded = toggles.load_catalogue(catalogue, given["families"], given["toggles"], errors)
     profile = _profile(given["profile_rule_ids"], errors)
     explicit = _explicit(given["disabled_rules"], loaded, errors)
     switched_off = toggles.disabled_rules(loaded.rules, loaded.toggles, profile)
     combined = sorted(explicit + switched_off, key=lambda entry: str(entry["rule_id"]))
-    return _result(errors.items, combined)
+    return _result(errors.items, combined, toggles.topic_warnings(loaded, profile))
 
 
 class FilterModule:

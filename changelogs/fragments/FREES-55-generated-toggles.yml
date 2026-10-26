@@ -11,7 +11,10 @@ minor_changes:
     The ``audit`` role resolves the same toggles before the scan, with the same code as the ``remediate`` role and the
     new filter ``freesecdev.linux_compliance.audit_disabled_rules``. A rule or topic switched off once is cleaned up by
     remediation and excluded from the audit through the generated XCCDF tailoring file, and is reported as
-    ``disabled`` with the controlling variable. Unknown or non-boolean toggles fail the audit before any scan.
+    ``disabled`` with the controlling variable. Unknown or non-boolean toggles fail the audit before any scan. The
+    ``audit`` role carries the same generated toggle defaults and argument specifications as the ``remediate`` role.
+    Both roles print a ``WARNING:`` when a topic toggle is false while no catalogued rule of its family is selected by
+    the profile, because the toggle then excludes nothing.
 breaking_changes:
   - >-
     ``linux_compliance_audit_disabled_rules`` is now only for rules outside the rule catalogue of the ``remediate``

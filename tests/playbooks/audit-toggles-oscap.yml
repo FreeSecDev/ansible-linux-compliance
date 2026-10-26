@@ -1,0 +1,132 @@
+---
+- name: Audit role with oscap | A topic toggle reaches the real scan and is reported as disabled
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    audit_toggles_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    audit_toggles_family_toggle: linux_compliance_file_permissions_enabled
+    audit_toggles_require: "{{ lookup('ansible.builtin.env', 'FREESECDEV_REQUIRE_OSCAP') == '1' }}"
+    audit_toggles_manifest: >-
+      {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | ansible.builtin.from_yaml }}
+    audit_toggles_stream: >-
+      {{ audit_toggles_manifest.datastreams | selectattr('name', 'equalto', 'ubuntu2404') | first }}
+    audit_toggles_file_name: "{{ audit_toggles_stream.path | basename }}"
+    audit_toggles_source: "{{ playbook_dir }}/../../build/content/{{ audit_toggles_file_name }}"
+    linux_compliance_file_permissions_enabled: false
+  tasks:
+    - name: Look for the pinned oscap binary
+      ansible.builtin.stat:
+        path: /usr/bin/oscap
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      register: audit_toggles_oscap
+
+    - name: Fail when oscap is required but missing
+      ansible.builtin.assert:
+        that:
+          - audit_toggles_oscap.stat.exists or not audit_toggles_require
+        fail_msg: /usr/bin/oscap is missing but FREESECDEV_REQUIRE_OSCAP=1.
+        quiet: true
+
+    - name: Skip the real audit when oscap is not installed
+      ansible.builtin.meta: end_play
+      when: not audit_toggles_oscap.stat.exists
+
+    - name: Look for the fetched pinned datastream
+      ansible.builtin.stat:
+        path: "{{ audit_toggles_source }}"
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      register: audit_toggles_source_stat
+
+    - name: Fail when the pinned datastream was not fetched
+      ansible.builtin.assert:
+        that:
+          - audit_toggles_source_stat.stat.isreg | default(false)
+        fail_msg: "{{ audit_toggles_source }} is missing; run make test-oscap-integration."
+        quiet: true
+
+    - name: Audit a root-owned copy of the pinned content with the topic toggle off
+      block:
+        - name: Create a root-owned working directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: freesecdev-audit-toggles-
+          become: true
+          register: audit_toggles_dir
+
+        - name: Make the working directory and the content directory root-owned and traversable
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          become: true
+          loop:
+            - "{{ audit_toggles_dir.path }}"
+            - "{{ audit_toggles_dir.path }}/content"
+
+        - name: Copy the pinned datastream into the content directory
+          ansible.builtin.copy:
+            src: "{{ audit_toggles_source }}"
+            dest: "{{ audit_toggles_dir.path }}/content/{{ audit_toggles_file_name }}"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0644"
+          become: true
+
+        - name: Discover the pinned content
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.discover
+          vars:
+            linux_compliance_discover_profile: cis_level1_server
+            linux_compliance_discover_content_path: "{{ audit_toggles_dir.path }}/content/{{ audit_toggles_file_name }}"
+            linux_compliance_discover_content_sha256: "{{ audit_toggles_stream.sha256 }}"
+
+        - name: Run the audit role with the topic toggle off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+          vars:
+            linux_compliance_audit_profile: cis_level1_server
+            linux_compliance_audit_output_dir: "{{ audit_toggles_dir.path }}/evidence"
+
+        - name: Check that the scan of the audit role reported the rule as disabled by the topic toggle
+          vars:
+            audit_toggles_findings: >-
+              {{ linux_compliance_audited.scan_run.findings
+                 | selectattr('rule_id', 'equalto', audit_toggles_rule) | list }}
+          ansible.builtin.assert:
+            that:
+              - audit_toggles_rule in linux_compliance_discovered.rule_ids
+              - linux_compliance_audited.run_status == 'completed'
+              - audit_toggles_findings | length == 1
+              - audit_toggles_findings[0].outcome == 'disabled'
+              - audit_toggles_findings[0].disabled_by == audit_toggles_family_toggle
+              - audit_toggles_family_toggle in audit_toggles_findings[0].message
+              - >-
+                linux_compliance_audited.disabled_rules
+                == [{'rule_id': audit_toggles_rule, 'disabled_by': audit_toggles_family_toggle}]
+              - linux_compliance_audited.summary.disabled == 1
+              - >-
+                linux_compliance_audited.scan_run.findings
+                | selectattr('outcome', 'equalto', 'disabled') | list | length == 1
+            quiet: true
+
+        - name: Report the finding of the disabled rule
+          ansible.builtin.debug:
+            msg: >-
+              {{ linux_compliance_audited.scan_run.findings
+                 | selectattr('rule_id', 'equalto', audit_toggles_rule) | first }}
+      always:
+        - name: Remove the working directory with the content copy and the evidence
+          ansible.builtin.file:
+            path: "{{ audit_toggles_dir.path }}"
+            state: absent
+          become: true
+          when: audit_toggles_dir.path is defined

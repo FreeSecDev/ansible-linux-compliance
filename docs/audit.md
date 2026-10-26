@@ -459,10 +459,14 @@ before the scan (`tasks/toggles.yml`, FREES-55) from two sources:
 
 The toggles are validated as in the remediate role: an unknown family or rule toggle, a name in the namespace of a
 role (for example the likely typo `linux_compliance_audit_enabled` for the auditd topic) and a value that is not a
-boolean fail the role before any host is scanned. The remediate role's toggle defaults are not loaded by the audit
-role; an unset toggle resolves exactly as its generated default would, so both roles reach the same result.
-Only catalogued rules have toggles. A topic toggle does not disable rules of the profile that the catalogue does not
-contain, even when they concern the same topic; disable those through `linux_compliance_audit_disabled_rules`.
+boolean fail the role before any host is scanned. The audit role carries the same generated toggle defaults as the
+remediate role (`make toggles` writes them into both), so a value copied from a default into the inventory, such as a
+rule toggle set to `"{{ linux_compliance_<family>_enabled }}"` without the family toggle, resolves the same way in
+both roles. Only catalogued rules have toggles. A topic toggle does not disable rules of the profile that the
+catalogue does not contain, even when they concern the same topic; disable those through
+`linux_compliance_audit_disabled_rules`. When a topic toggle is `false` but no catalogued rule of its family is
+selected by the profile, the role prints a `WARNING:` that the toggle currently excludes nothing, and the remediate role
+adds the same warning to its notices. Extending the catalogue to every profile rule is FREES-53.
 
 As ADR 0011 requires, disabled rules are excluded from the scan through a generated XCCDF 1.2 tailoring file:
 
@@ -536,8 +540,19 @@ a topic toggle is a `disabled` finding that names that toggle. `tests/playbooks/
 that both resolve the same disabled rules and controlling variable for a single rule switched off, a whole topic
 switched off and a rule switched back on inside a disabled topic, and that the audit fails before any scan on
 `linux_compliance_audit_enabled`, on a string toggle and on a catalogued rule in
-`linux_compliance_audit_disabled_rules`. These playbook tests do not run a scan, because the check-mode playbook runs
-without `oscap` and without `become`; a full audit run with toggles in a Molecule scenario is part of FREES-60.
+`linux_compliance_audit_disabled_rules`. Further plays check that a rule toggle copied from its default without the
+family toggle resolves the same way in both roles, and that both roles warn about a topic toggle that excludes
+nothing. These playbook tests do not run a scan, because the check-mode playbook runs without `oscap` and without
+`become`. `tests/unit/roles/test_audit_tasks.py` pins the wiring that they cannot see: the `compliance_scan` task
+passes exactly `{{ __linux_compliance_audit_toggles.disabled_rules }}`, `toggles.yml` is imported after the discover
+check and before the scan, and it fails closed on errors.
+
+`make test-oscap-integration` also runs `tests/playbooks/audit-toggles-oscap.yml`, which runs the `discover` and
+`audit` roles, not only the module, against a root-owned copy of the pinned Ubuntu 24.04 datastream with
+`linux_compliance_file_permissions_enabled: false` and `become`. It asserts that the completed scan reports
+`file_permissions_crontab` as `disabled` with `disabled_by: linux_compliance_file_permissions_enabled`, that this is the
+only disabled rule, and it removes the content copy and the evidence afterwards. Without `/usr/bin/oscap` the play
+ends early, unless `FREESECDEV_REQUIRE_OSCAP=1` turns that into a failure, as in CI.
 
 `make test-oscap-integration` (CI job `oscap-integration`) runs a real `oscap`. It fetches the pinned Ubuntu 24.04
 datastream through `tools/content/fetch_content.py` (archive SHA-512 and datastream SHA-256 verified) and runs

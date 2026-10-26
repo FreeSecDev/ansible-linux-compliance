@@ -324,6 +324,94 @@
               - "'linux_compliance_rule_file_permissions_crontab_enabled' in ansible_failed_result.msg"
             quiet: true
 
+- name: Toggles in check mode | Both roles agree on copied defaults and warn about empty topics
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    crontab_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+        - xccdf_org.ssgproject.content_rule_audit_rules_immutable
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Copy the generated rule default into the inventory without the family toggle
+      vars:
+        linux_compliance_rule_file_permissions_crontab_enabled: "{{ linux_compliance_file_permissions_enabled }}"
+      block:
+        - name: Resolve the disabled rules with the audit role, which carries the same defaults
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Run the remediate role with the copied default
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Check that both roles resolve the copied default from the family default
+          vars:
+            planned: "{{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', crontab_rule) | first }}"
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_audit_toggles.errors == []
+              - __linux_compliance_audit_toggles.disabled_rules == []
+              - planned.action == 'apply'
+              - linux_compliance_remediated.disabled_rules == []
+            quiet: true
+
+    - name: Switch off a topic that has no catalogued rule in the profile
+      vars:
+        linux_compliance_auditd_enabled: false
+      block:
+        - name: Resolve the disabled rules with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Run the remediate role with the empty topic switched off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Check that both roles warn that the topic toggle excludes nothing
+          vars:
+            warning_prefix: "WARNING: linux_compliance_auditd_enabled is false"
+            remediate_warnings: >-
+              {{ linux_compliance_remediated.notices | select('match', warning_prefix) | list }}
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_audit_toggles.disabled_rules == []
+              - __linux_compliance_audit_toggles.warnings | length == 1
+              - __linux_compliance_audit_toggles.warnings[0] is match(warning_prefix)
+              - "'currently excludes nothing' in __linux_compliance_audit_toggles.warnings[0]"
+              - remediate_warnings | length == 1
+            quiet: true
+
+    - name: Switch off a topic that does exclude a rule
+      vars:
+        linux_compliance_file_permissions_enabled: false
+      block:
+        - name: Resolve the disabled rules with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+
+        - name: Check that no warning is printed for an effective topic toggle
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_audit_toggles.warnings == []
+              - __linux_compliance_audit_toggles.disabled_rules | length == 1
+            quiet: true
+
 - name: Remediate role in check mode | Invalid toggles and allow-list entries fail closed
   hosts: localhost
   connection: local

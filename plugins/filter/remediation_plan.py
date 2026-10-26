@@ -107,7 +107,10 @@ _value:
       type: list
       elements: dict
     notices:
-      description: Operator messages for skipped, manual and orphaned rules.
+      description:
+        - Operator messages for skipped, manual and orphaned rules, followed by a C(WARNING:)
+          message for every topic toggle that is false while no catalogued rule of its family is
+          in the profile (in the catalogue when remediation is disabled).
       type: list
       elements: str
     summary:
@@ -344,7 +347,13 @@ def remediation_plan(catalogue: object, options: object) -> dict[str, object]:
             ),
             "orphaned": orphaned,
             "report": [{key: rule[key] for key in REPORT_KEYS} for rule in planned],
-            "notices": notices(planned, orphaned, context),
+            "notices": notices(planned, orphaned, context)
+            + toggles.topic_warnings(
+                toggles.Catalogue(
+                    rules=rules, families=registry, toggles=dict(context.toggle_values)
+                ),
+                context.profile if context.enabled else None,
+            ),
             "summary": {
                 action: sum(rule["action"] == action for rule in planned) for action in ACTIONS
             },

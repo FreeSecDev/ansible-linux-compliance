@@ -2,19 +2,21 @@
 
 Role variables are prefixed ``linux_compliance_<role>_``. The exceptions are the
 collection-wide variables in :data:`SHARED_VARIABLES`, which several roles read with one
-meaning, and the control toggles of ADR 0011 in the role :data:`TOGGLE_ROLE`, which
-``tools/roles/generate_toggles.py`` generates from the rule catalogue (its ``--check`` mode
-detects drift). A topic toggle ``linux_compliance_<family>_enabled`` is a ``bool`` that defaults
-to ``true`` in both files; a rule toggle ``linux_compliance_rule_<id>_enabled`` is a ``bool``
-whose default in ``defaults/main.yml`` is ``"{{ linux_compliance_<family>_enabled }}"`` and
-whose argument spec has no default, because the validation of a role would check the template
-string against the type. An option that is not required may default to null, which means
-"not set".
+meaning, and the control toggles of ADR 0011 in the roles of
+``generate_toggles.TOGGLE_ROLES``. Those toggles are checked exactly against the output of
+``tools/roles/generate_toggles.py`` for the rule catalogue ``roles/remediate/vars/rules.yml``:
+the set of toggle names, each default in ``defaults/main.yml`` (value and type) and each
+argument spec must equal the generated ones, so an uncatalogued or misnamed toggle or a wrong
+default template is a finding without relying on ``make lint-toggles``. A rule toggle has no
+default in its argument spec, because the validation of a role would check the template string
+against the type. Toggles in any other role fail the prefix rule. An option that is not
+required may default to null, which means "not set".
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -22,21 +24,15 @@ from typing import TYPE_CHECKING, Final, cast
 
 import yaml
 
+from tools.roles import generate_toggles
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 ENTRY_POINT: Final[str] = "main"
 SHARED_VARIABLES: Final[frozenset[str]] = frozenset({"linux_compliance_exceptions_file"})
 NULLABLE_TYPES: Final[frozenset[str]] = frozenset({"str", "path"})
-TOGGLE_ROLE: Final[str] = "remediate"
-ROLE_NAMESPACES: Final[tuple[str, ...]] = ("audit", "discover", "evidence", "remediate", "verify")
-FAMILY_TOGGLE: Final[re.Pattern[str]] = re.compile(r"linux_compliance_([a-z][a-z0-9_]*)_enabled")
-RULE_TOGGLE: Final[re.Pattern[str]] = re.compile(
-    r"linux_compliance_rule_[a-z0-9][a-z0-9_]*_enabled"
-)
-INHERITED_DEFAULT: Final[re.Pattern[str]] = re.compile(
-    r"\{\{ linux_compliance_(?!rule_)[a-z][a-z0-9_]*_enabled \}\}"
-)
+CATALOGUE: Final[Path] = Path("remediate") / "vars" / "rules.yml"
 TYPE_CLASSES: Final[dict[str, type]] = {
     "str": str,
     "path": str,
@@ -73,29 +69,37 @@ def matches_type(value: object, type_name: str, *, nullable: bool = False) -> bo
 
 def is_toggle(role: str, name: str) -> bool:
     """Return whether ``name`` is a generated control toggle that ``role`` may declare."""
-    match = FAMILY_TOGGLE.fullmatch(name)
-    if role != TOGGLE_ROLE or match is None:
-        return False
-    topic = match.group(1)
-    return not any(topic == item or topic.startswith(f"{item}_") for item in ROLE_NAMESPACES)
+    return role in generate_toggles.TOGGLE_ROLES and generate_toggles.is_generated(name)
 
 
-def check_toggle(where: str, name: str, option: dict[str, object], default: object) -> list[str]:
-    """Return findings for a generated control toggle (ADR 0011)."""
-    findings: list[str] = []
-    if option.get("type") != "bool":
-        findings.append(f"{where}: a toggle must have type bool")
-    if not option.get("description"):
-        findings.append(f"{where}: description is missing")
-    if RULE_TOGGLE.fullmatch(name):
-        if "default" in option:
-            findings.append(f"{where}: a rule toggle must not have a default in the argument spec")
-        if not isinstance(default, str) or not INHERITED_DEFAULT.fullmatch(default):
-            findings.append(
-                f"{where}: a rule toggle must default to its family toggle in defaults/main.yml"
-            )
-    elif option.get("default") is not True or default is not True:
-        findings.append(f"{where}: a topic toggle must default to true in both files")
+def _same(first: object, second: object) -> bool:
+    return json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+
+
+def check_toggles(
+    role_dir: Path, spec_options: dict[str, object], defaults: dict[str, object]
+) -> list[str]:
+    """Return findings for the control toggles of ``role_dir`` against the generated ones."""
+    role = role_dir.name
+    names = {name for name in {*spec_options, *defaults} if is_toggle(role, name)}
+    if role not in generate_toggles.TOGGLE_ROLES:
+        return []
+    try:
+        catalogue = generate_toggles.load_catalogue(role_dir.parent / CATALOGUE)
+    except generate_toggles.GenerationError as error:
+        return [f"{role}: the toggles cannot be checked: {error}"]
+    expected_defaults = generate_toggles.toggle_defaults(catalogue)
+    expected_specs = generate_toggles.toggle_specs(catalogue)
+    findings = [
+        f"{role}: {name}: is not a toggle generated from the rule catalogue"
+        for name in sorted(names - set(expected_defaults))
+    ]
+    for name in expected_defaults:
+        where = f"{role}: {name}"
+        if name not in defaults or not _same(defaults[name], expected_defaults[name]):
+            findings.append(f"{where}: defaults/main.yml differs from the generated default")
+        if name not in spec_options or not _same(spec_options[name], expected_specs[name]):
+            findings.append(f"{where}: the argument spec differs from the generated one")
     return findings
 
 
@@ -105,8 +109,6 @@ def check_option(role: str, name: str, spec: object, default: object) -> list[st
     if not isinstance(spec, dict):
         return [f"{where}: option spec must be a mapping"]
     option = cast("dict[str, object]", spec)
-    if is_toggle(role, name):
-        return check_toggle(where, name, option, default)
     if name not in SHARED_VARIABLES and not name.startswith(f"linux_compliance_{role}_"):
         return [f"{where}: variable must be prefixed linux_compliance_{role}_"]
     findings: list[str] = []
@@ -144,11 +146,15 @@ def check_role(role_dir: Path) -> list[str]:
     defaults = load_mapping(role_dir / "defaults" / "main.yml")
     if defaults is None:
         return [f"{role}: defaults/main.yml is missing or not a mapping"]
-    findings = [
+    findings = check_toggles(role_dir, spec_options, defaults)
+    findings.extend(
         f"{role}: {name}: defined in defaults/main.yml but not in the argument spec"
         for name in sorted(set(defaults) - set(spec_options))
-    ]
+        if not is_toggle(role, name)
+    )
     for name in sorted(spec_options):
+        if is_toggle(role, name):
+            continue
         if name not in defaults:
             findings.append(f"{role}: {name}: missing from defaults/main.yml")
         else:

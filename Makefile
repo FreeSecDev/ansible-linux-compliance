@@ -89,7 +89,7 @@ Tests
   test-ansible-units    ansible-test units on the temporary collection tree, no Docker
   test-coverage         Unit tests with branch coverage thresholds
   test-content-golden   Fetch the pinned content and compare the catalog with the recorded rule lists
-  test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap
+  test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap, also through the audit role
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
@@ -196,7 +196,7 @@ lint-skills: require-uv
 
 lint-ansible: require-uv collection-link
 	$(RUN) ansible-lint
-	$(RUN) python tools/roles/check_role_specs.py roles
+	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.check_role_specs roles
 	$(RUN) antsibull-changelog lint
 
 lint-iac: require-uv
@@ -244,6 +244,7 @@ test-content-golden: require-uv collection-link
 test-oscap-integration: require-uv collection-link
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
 	$(RUN) pytest tests/system --no-cov -v -s -p no:cacheprovider
+	$(RUN) ansible-playbook -i localhost, tests/playbooks/audit-toggles-oscap.yml
 
 browser-test-deps:
 	tools/browser/fetch-test-deps.sh '$(BROWSER_TEST_DIR)'

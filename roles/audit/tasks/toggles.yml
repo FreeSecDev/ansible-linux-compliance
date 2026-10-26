@@ -36,3 +36,10 @@
     quiet: true
   tags:
     - always
+
+- name: Audit | Warn about topic toggles that currently exclude nothing
+  ansible.builtin.debug:
+    msg: "{{ __linux_compliance_audit_toggles.warnings }}"
+  when: __linux_compliance_audit_toggles.warnings | length > 0
+  tags:
+    - always

@@ -332,8 +332,9 @@ The toggle variables are generated from the catalogue, and the audit role resolv
   `remediation_plan` filter to `plugins/module_utils/compliance/toggles.py`. The remediate role uses it through
   `remediation_plan`; the audit role uses it through the new filter `freesecdev.linux_compliance.audit_disabled_rules`
   in `roles/audit/tasks/toggles.yml`, which loads the catalogue from `{{ role_path }}/../remediate/vars/rules.yml` and
-  runs before the scan. The audit does not load the remediate role defaults; an unset toggle resolves exactly as its
-  generated default would. The remediation opt-in plays no part in the audit: a rule switched off is excluded from the
+  runs before the scan. The generator writes the same toggle defaults and argument specifications into the audit
+  role, so a rule toggle copied from its default into the inventory without the family toggle resolves the same way
+  in both roles (review of PR #28). The remediation opt-in plays no part in the audit: a rule switched off is excluded from the
   scan through the tailoring file of the FREES-49 amendment and reported as `disabled` with its `disabled_by`, whether
   or not remediation runs. The audit restricts the list to rules the discovered profile selects.
 - **The audit validates toggles too.** Unknown family and rule toggles, names in a role namespace and non-boolean values
@@ -345,3 +346,8 @@ The toggle variables are generated from the catalogue, and the audit role resolv
 - **Scope of a topic toggle.** Only catalogued rules have toggles. A topic toggle does not disable profile rules that
   the catalogue does not contain, even when they concern the same topic, because the collection has no family data for
   them and never guesses one.
+- **Exact specification check and empty-topic warning** (review of PR #28). `check_role_specs.py` compares the
+  toggles of both roles with the generator's own output, so it does not depend on `make lint-toggles`. A topic toggle
+  that is `false` while no catalogued rule of its family is selected by the profile produces a `WARNING:` in both roles,
+  because it currently excludes nothing; full catalogue coverage is FREES-53. A structural test and an
+  `oscap-integration` run of the audit role prove that the scan receives the toggle result.

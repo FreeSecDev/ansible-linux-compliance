@@ -346,3 +346,31 @@ def disabled_rules(
             continue
         found.append({"rule_id": rule["rule_id"], "disabled_by": toggle.disabled_by})
     return found
+
+
+def topic_warnings(catalogue: Catalogue, profile: frozenset[str] | None) -> list[str]:
+    """Return a warning for every topic toggle that is false but currently excludes nothing.
+
+    A topic toggle covers only catalogued rules. When it is false and no catalogued rule of its
+    family is selected by ``profile`` (or, when ``profile`` is ``None``, when the family has no
+    catalogued rule at all), the toggle has no effect yet; the profile rules of that topic that the
+    catalogue does not contain are still audited. Saying so prevents the false impression that the
+    whole topic is excluded.
+    """
+    warnings: list[str] = []
+    for family in catalogue.families:
+        name = toggle_name(family)
+        if catalogue.toggles.get(name, True):
+            continue
+        covered = [
+            rule
+            for rule in catalogue.rules
+            if rule["family"] == family and (profile is None or rule["rule_id"] in profile)
+        ]
+        if not covered:
+            warnings.append(
+                f"WARNING: {name} is false, but no catalogued rule of the {family} family is "
+                f"selected by the profile, so it currently excludes nothing; profile rules "
+                f"outside the rule catalogue are still audited (see docs/remediation-variables.md)"
+            )
+    return warnings

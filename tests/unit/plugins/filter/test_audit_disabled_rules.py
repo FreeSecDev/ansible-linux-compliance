@@ -64,7 +64,7 @@ def test_the_filter_is_registered() -> None:
 
 
 def test_nothing_is_disabled_without_toggles() -> None:
-    assert resolve() == {"errors": [], "disabled_rules": []}
+    assert resolve() == {"errors": [], "disabled_rules": [], "warnings": []}
 
 
 def test_a_rule_toggle_disables_one_rule() -> None:
@@ -208,3 +208,29 @@ def test_the_generated_defaults_give_the_same_result_as_unset_toggles() -> None:
     assert {
         item["disabled_by"] for item in cast("list[dict[str, object]]", first["disabled_rules"])
     } == {FAMILY}
+
+
+def test_a_topic_toggle_without_catalogued_rules_warns_that_it_excludes_nothing() -> None:
+    result = resolve(toggles={"linux_compliance_auditd_enabled": False})
+    assert result["disabled_rules"] == []
+    warnings = cast("list[str]", result["warnings"])
+    assert len(warnings) == 1
+    assert warnings[0].startswith("WARNING: linux_compliance_auditd_enabled is false")
+    assert "currently excludes nothing" in warnings[0]
+
+
+def test_a_topic_toggle_whose_rules_are_outside_the_profile_warns() -> None:
+    result = resolve(toggles={FAMILY: False}, profile_rule_ids=[ROOT_LOGIN, IMMUTABLE])
+    assert result["disabled_rules"] == []
+    assert len(cast("list[str]", result["warnings"])) == 1
+    assert FAMILY in cast("list[str]", result["warnings"])[0]
+
+
+def test_a_topic_toggle_that_excludes_a_rule_does_not_warn() -> None:
+    result = resolve(toggles={FAMILY: False, "linux_compliance_ssh_enabled": True})
+    assert result["warnings"] == []
+
+
+def test_errors_suppress_warnings() -> None:
+    result = resolve(toggles={"linux_compliance_auditd_enabled": False, FAMILY: "x"})
+    assert result["warnings"] == []

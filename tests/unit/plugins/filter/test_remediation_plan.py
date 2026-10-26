@@ -567,3 +567,36 @@ def test_toggle_names_follow_adr_0011() -> None:
         toggles.rule_toggle_name(CRONTAB)
         == "linux_compliance_rule_file_permissions_crontab_enabled"
     )
+
+
+def warnings_of(result: dict[str, object]) -> list[str]:
+    return [item for item in cast("list[str]", result["notices"]) if item.startswith("WARNING:")]
+
+
+def test_a_topic_toggle_without_rules_in_the_profile_warns() -> None:
+    result = run(toggles={"linux_compliance_sysctl_enabled": False})[0]
+    assert len(warnings_of(result)) == 1
+    assert "linux_compliance_sysctl_enabled is false" in warnings_of(result)[0]
+    result = run(
+        toggles={"linux_compliance_file_permissions_enabled": False},
+        profile_rule_ids=[ROOT_LOGIN],
+    )[0]
+    assert len(warnings_of(result)) == 1
+
+
+def test_without_opt_in_only_topics_without_catalogued_rules_warn() -> None:
+    result = run(
+        enabled=False,
+        profile_rule_ids=None,
+        toggles={
+            "linux_compliance_sysctl_enabled": False,
+            "linux_compliance_file_permissions_enabled": False,
+        },
+    )[0]
+    assert len(warnings_of(result)) == 1
+    assert "linux_compliance_sysctl_enabled" in warnings_of(result)[0]
+
+
+def test_a_topic_toggle_that_switches_rules_off_does_not_warn() -> None:
+    result = run(toggles={"linux_compliance_file_permissions_enabled": False})[0]
+    assert warnings_of(result) == []
