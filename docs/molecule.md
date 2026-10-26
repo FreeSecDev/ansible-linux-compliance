@@ -124,16 +124,24 @@ is accepted only when all of the following hold. The first group is checked from
 
 The second group is checked by inspecting the recorded container from the controller. It must be unprivileged and
 drop all capabilities, adding only those recorded in the config. It must have no bind mounts, mounts, volumes,
-devices or device requests. It must share no host or container network, pid, ipc, uts, user or cgroup namespace.
-It must have `no-new-privileges` and no unconfined seccomp, AppArmor or SELinux profile, and it must carry this run's
-labels.
+devices, device requests or device cgroup rules. It must share no host or container network, pid, ipc, uts, user
+or cgroup namespace. Its `SecurityOpt` must be exactly `no-new-privileges` (or `no-new-privileges:true`): any
+`seccomp=`, `apparmor=`, `label=` or `systempaths=` entry is refused, which covers a custom allow-all seccomp profile.
+Its `MaskedPaths` and `ReadonlyPaths` must contain every path that `molecule_docker_default_paths` in
+`shared/vars/versions.yml` pins for the major version of the Docker daemon (Docker 29 today: `/proc/kcore`,
+`/proc/keys`, `/sys/firmware` and the others masked, `/proc/sys`, `/proc/sysrq-trigger`, `/proc/bus`, `/proc/fs` and
+`/proc/irq` read-only). `--security-opt systempaths=unconfined` does not show up in `SecurityOpt`; it empties those two
+lists, which leaves `/proc/sysrq-trigger` and `/proc/sys/kernel/core_pattern` writable for root, so this check is
+what refuses it. A daemon whose major version has no pin is refused, so a Docker upgrade is noticed, and the self-test
+asserts that a default container gets exactly the pinned lists, which catches changed defaults within a major
+version. Finally, the container must carry this run's labels.
 
 The last group is checked over the real connection, by reading `/proc/1/environ` and `/proc/self/status`. PID 1 must
 carry this instance's marker. The process that the connection runs must have no permitted, effective or bounding
 capabilities, and `NoNewPrivs` must be 1. That catches a connection that reaches another container or daemon, and
 `docker exec --privileged`.
 
-`verify` feeds simulated bypass attempts to the same task files (`shared/vars/guard_cases.yml`, 54 cases). It asserts
+`verify` feeds simulated bypass attempts to the same task files (`shared/vars/guard_cases.yml`, 64 cases). It asserts
 that each is refused with a message that starts with "Refusing to run" and that a disposable container is accepted.
 The loopback check does not enumerate the controller's own addresses; the exact match against the create step's
 records is what keeps every other target out.
@@ -148,14 +156,17 @@ design. They talk to the Docker daemon through `community.docker`, and they writ
 scenario `docker-selftest`, with the instance config in `build/molecule-selftest/`:
 
 1. `create.yml` twice, then `assert_created.yml`: one container, whose name, labels and instance config agree on one
-   persisted run id.
-2. `bypass.yml` starts a second container of the same run that bind-mounts the empty directory
-   `build/molecule-selftest/host-directory`, and writes one inventory per bypass attempt.
+   persisted run id, and whose masked and read-only paths are exactly the pinned Docker defaults.
+2. `bypass.yml` starts three decoys of the same run, each with this run's labels and marker: one that bind-mounts the
+   empty directory `build/molecule-selftest/host-directory`, one with `systempaths=unconfined` (started with
+   `community.docker.docker_compose_v2`, because the Docker API takes that option only as empty path lists) and one
+   with a custom allow-all seccomp profile. It records each decoy in its own instance config, as create would, and
+   writes one inventory per bypass attempt.
 3. The guard accepts the real instance. It refuses each attempt with "Refusing to run": `ansible_docker_host`
-   steered to the mounted container, `ansible_docker_extra_args`, `ansible_docker_privileged`, a local connection,
-   an explicit `localhost`, `127.0.0.1`, an unrecorded container name, and the recorded container with the bind
-   mount.
-4. The instance config is emptied and `destroy.yml` must remove both containers by label. A new `create` follows,
+   steered to the mounted decoy, `ansible_docker_extra_args`, `ansible_docker_privileged`, a local connection, an
+   explicit `localhost`, `127.0.0.1`, an unrecorded container name, and each of the three recorded decoys, which must
+   be refused by the isolation check ("is not isolated").
+4. The instance config is emptied and `destroy.yml` must remove all four containers by label. A new `create` follows,
    the instance config is deleted, and `destroy.yml` must again remove the container. `assert_destroyed.yml` checks
    after each destroy that no container with the `docker-selftest` label is left.
 
@@ -210,7 +221,8 @@ the failure of a task inside the role.
 ### The no-change snapshot
 
 `shared/tasks/snapshot.yml` records path, mode, uid, gid, size, mtime, ctime and SHA-1 checksum of every entry below
-`/etc`, `/usr/local`, `/opt`, `/srv`, `/var/lib/dpkg`, `/var/lib/rpm`, `/var/lib/linux_compliance` and
+`/etc`, `/usr`, `/root`, `/home`, `/var/spool`, `/var/log`, `/opt`, `/srv`, `/var/lib/dpkg`, `/var/lib/rpm`,
+`/var/lib/linux_compliance` and
 `/var/lib/freesecdev`. The state ledger and the evidence directory are part of it. On a mismatch the assertion prints
 up to 20 differing entries.
 
@@ -239,9 +251,12 @@ During development, one of roughly thirty `oscap` 1.3.9 scans in the Ubuntu cont
 minutes. All 48 threads were waiting on a futex (`futex_do_wait`), with no child process and no I/O. The cause is not
 established; it looks like a deadlock in the scanner's probe threads. With the role default of 1800 seconds that
 would stall a run for half an hour. `shared/tasks/audit.yml` therefore sets the 180-second timeout. When the audit
-role fails with `run_status` `timed_out`, and only then, it logs a `WARNING: oscap did not finish` line, counts the
-timeout in `molecule_scan_timeouts` and runs the audit once more. A second timeout, or any other failure, fails the
-scenario. Search the Molecule log for that warning to see whether a run needed the retry. Each scenario runs six
+role fails because the scan of this audit timed out, and only then (the published `run_id` must differ from the one
+before the audit, `run_status` must be `timed_out` and the failure message must name it, so a stale result of an
+earlier audit never decides), it logs a `WARNING: oscap did not finish` line, counts the timeout in
+`molecule_scan_timeouts` and runs the audit once more. A second timeout, or any other failure, fails the scenario.
+`verify` tests that decision: it leaves a timed-out `linux_compliance_audited` from an earlier audit in place, runs
+the wrapper with an invalid profile and asserts that the input error fails the audit without a retry or a warning. Search the Molecule log for that warning to see whether a run needed the retry. Each scenario runs six
 scans (two in converge, two in idempotence, one real and one check-mode scan in verify); the check-mode audit
 runs only in verify.
 

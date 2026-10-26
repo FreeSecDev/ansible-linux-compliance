@@ -6,6 +6,7 @@
   hosts: all
   gather_facts: false
   vars_files:
+    - vars/versions.yml
     - vars/guard_cases.yml
   tasks:
     - name: Refuse simulated bypass attempts and accept a disposable instance
@@ -163,6 +164,46 @@
       loop_control:
         loop_var: invalid_case
         label: "{{ invalid_case.0.name }}: {{ invalid_case.1.name }}"
+
+    - name: Leave a timed-out audit result from an earlier audit, as a real scanner timeout would
+      ansible.builtin.set_fact:
+        linux_compliance_audited: >-
+          {{ linux_compliance_audited | combine({'run_id': 'earlier-timed-out-audit', 'run_status': 'timed_out'}) }}
+        verify_timeouts_before: "{{ molecule_scan_timeouts | default(0) | int }}"
+
+    - name: Run an audit that fails for another reason after that timeout
+      block:
+        - name: Run the audit wrapper with an invalid profile
+          ansible.builtin.include_tasks:
+            file: tasks/audit.yml
+          vars:
+            audit_check_mode: true
+            audit_assert: false
+            linux_compliance_audit_profile: ""
+
+        - name: Record that the invalid audit was accepted
+          ansible.builtin.set_fact:
+            verify_retry_outcome:
+              failed: false
+              msg: ""
+      rescue:
+        - name: Record the failure of the invalid audit
+          ansible.builtin.set_fact:
+            verify_retry_outcome:
+              failed: true
+              msg: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: Check that the earlier timeout did not make the wrapper retry an unrelated failure
+      ansible.builtin.assert:
+        that:
+          - verify_retry_outcome.failed
+          - verify_retry_outcome.msg is search('The audit role received an invalid input')
+          - molecule_scan_timeouts | default(0) | int == verify_timeouts_before | int
+          - not audit_timed_out | bool
+        fail_msg: >-
+          The audit wrapper treated a stale timed-out result as a timeout of this audit:
+          {{ verify_retry_outcome }}, timeouts {{ molecule_scan_timeouts | default(0) }}
+        quiet: true
 
     - name: Check the role defaults
       ansible.builtin.include_tasks:

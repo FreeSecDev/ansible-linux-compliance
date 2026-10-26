@@ -1,5 +1,9 @@
 ---
-- name: Audit | Run the audit role and retry once when the scanner timed out
+- name: Audit | Remember the run id of the previous audit, so that a stale result never decides a retry
+  ansible.builtin.set_fact:
+    audit_previous_run_id: "{{ (linux_compliance_audited | default({})).run_id | default('none') }}"
+
+- name: Audit | Run the audit role and retry once when the scanner of this audit timed out
   block:
     - name: Audit | Include the audit role
       ansible.builtin.include_role:
@@ -7,10 +11,19 @@
         apply:
           check_mode: "{{ audit_check_mode | bool }}"
   rescue:
-    - name: Audit | Fail on everything except a scanner timeout
+    - name: Audit | Decide whether this audit's own scan timed out
+      ansible.builtin.set_fact:
+        audit_timed_out: >-
+          {{ audit_published.run_id | default('none') != audit_previous_run_id
+          and audit_published.run_status | default('') == 'timed_out'
+          and (ansible_failed_result.msg | default('')) is search('run_status timed_out') }}
+      vars:
+        audit_published: "{{ linux_compliance_audited | default({}) }}"
+
+    - name: Audit | Fail on everything except a scanner timeout of this audit
       ansible.builtin.fail:
         msg: "{{ ansible_failed_result.msg | default('The audit role failed.') }}"
-      when: (linux_compliance_audited | default({})).run_status | default('') != 'timed_out'
+      when: not audit_timed_out | bool
 
     - name: Audit | Record the timed-out scan
       ansible.builtin.set_fact:
@@ -34,3 +47,4 @@
     file: assert_audit.yml
   vars:
     assert_audit_check_mode: "{{ audit_check_mode | bool }}"
+  when: audit_assert | default(true) | bool

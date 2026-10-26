@@ -267,6 +267,70 @@ guard_cases:
           - no-new-privileges:true
           - seccomp=unconfined
     refused: true
+  - name: container with unmasked system paths, as with --security-opt systempaths=unconfined
+    container:
+      HostConfig:
+        MaskedPaths: []
+        ReadonlyPaths: []
+    refused: true
+  - name: container whose /proc/sysrq-trigger and /proc/sys are writable
+    container:
+      HostConfig:
+        ReadonlyPaths:
+          - /proc/bus
+          - /proc/fs
+          - /proc/irq
+    refused: true
+  - name: container whose /proc/kcore is not masked
+    container:
+      HostConfig:
+        MaskedPaths:
+          - /proc/acpi
+          - /proc/keys
+    refused: true
+  - name: container with systempaths=unconfined listed as a security option
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - systempaths=unconfined
+    refused: true
+  - name: container with a custom allow-all seccomp profile
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - 'seccomp={"defaultAction":"SCMP_ACT_ALLOW"}'
+    refused: true
+  - name: container with an AppArmor profile chosen by name
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - apparmor=docker-default
+    refused: true
+  - name: container with an SELinux label option
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - label=disable
+    refused: true
+  - name: container with no-new-privileges set to false
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:false
+    refused: true
+  - name: container with a device cgroup rule
+    container:
+      HostConfig:
+        DeviceCgroupRules:
+          - "a *:* rwm"
+    refused: true
+  - name: Docker daemon whose default paths are not pinned
+    daemon_version: 99.0.0
+    refused: true
   - name: container with a named volume
     container:
       Mounts:

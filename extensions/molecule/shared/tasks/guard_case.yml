@@ -19,8 +19,14 @@
         file: guard_isolation.yml
       vars:
         guard_container: >-
-          {{ guard_simulation.good_container | combine(guard_case.container | default({}), recursive=true) }}
+          {{ guard_simulation.good_container
+          | combine({'HostConfig': {'MaskedPaths': guard_case_default_paths.masked,
+                                    'ReadonlyPaths': guard_case_default_paths.readonly}}, recursive=true)
+          | combine(guard_case.container | default({}), recursive=true) }}
         guard_instance: "{{ guard_simulation.instances | first }}"
+        guard_daemon_version: "{{ guard_case.daemon_version | default(guard_case_daemon_major ~ '.0.0') }}"
+        guard_case_daemon_major: "{{ molecule_docker_default_paths.keys() | list | sort | last }}"
+        guard_case_default_paths: "{{ molecule_docker_default_paths[guard_case_daemon_major] }}"
 
     - name: Guard case | Include the guard of the real connection
       ansible.builtin.include_tasks:

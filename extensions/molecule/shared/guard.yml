@@ -3,6 +3,8 @@
   hosts: all
   gather_facts: false
   any_errors_fatal: true
+  vars_files:
+    - vars/versions.yml
   vars:
     guard_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
     guard_instances: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml | default([], true) }}"
@@ -31,12 +33,18 @@
       delegate_to: localhost
       register: guard_inspect
 
+    - name: Read the version of the Docker daemon that runs the target
+      community.docker.docker_host_info:
+      delegate_to: localhost
+      register: guard_daemon
+
     - name: Check the isolation of every target before anything runs on it
       ansible.builtin.include_tasks:
         file: tasks/guard_isolation.yml
       vars:
         guard_container: "{{ guard_inspect.container | default({}, true) }}"
         guard_instance: "{{ molecule_target }}"
+        guard_daemon_version: "{{ guard_daemon.host_info.ServerVersion | default('unknown') }}"
 
     - name: Read the environment of the init process over the real connection
       ansible.builtin.slurp:

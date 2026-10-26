@@ -21,7 +21,7 @@ MOLECULE_SELFTEST_DIR := $(CURDIR)/build/molecule-selftest
 MOLECULE_SELFTEST = MOLECULE_SCENARIO_NAME=docker-selftest $(RUN) ansible-playbook \
 	-e molecule_instance_config='$(MOLECULE_SELFTEST_DIR)/instance_config.yml' -e molecule_no_log=false \
 	-e molecule_selftest_dir='$(MOLECULE_SELFTEST_DIR)' -e @extensions/molecule/selftest/vars/platforms.yml
-MOLECULE_SELFTEST_REFUSED := docker_host extra_args privileged local localhost loopback unknown mounted
+MOLECULE_SELFTEST_REFUSED := docker_host extra_args privileged local localhost loopback unknown mounted unmasked seccomp
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
 	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
 TREE_SORT := sort -z
@@ -482,13 +482,17 @@ test-molecule-docker-selftest: require-uv molecule-dependencies
 	for case in $(MOLECULE_SELFTEST_REFUSED); do \
 		[ $$status -eq 0 ] || break; \
 		config='$(MOLECULE_SELFTEST_DIR)/instance_config.yml'; \
-		if [ "$$case" = mounted ]; then config='$(MOLECULE_SELFTEST_DIR)/instance_config_mounted.yml'; fi; \
+		if [ -f "$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml" ]; then config="$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml"; fi; \
 		if $(MOLECULE_SELFTEST) -e "molecule_instance_config=$$config" -i "$(MOLECULE_SELFTEST_DIR)/$$case.yml" \
 			extensions/molecule/shared/guard.yml > "$(MOLECULE_SELFTEST_DIR)/$$case.log" 2>&1; then \
 			printf 'error: the guard accepted the bypass attempt %s\n' "$$case" >&2; status=1; \
 		elif ! grep -q 'Refusing to run' "$(MOLECULE_SELFTEST_DIR)/$$case.log"; then \
 			cat "$(MOLECULE_SELFTEST_DIR)/$$case.log"; \
 			printf 'error: the bypass attempt %s failed for another reason than the guard\n' "$$case" >&2; status=1; \
+		elif [ -f "$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml" ] \
+			&& ! grep -q 'is not isolated' "$(MOLECULE_SELFTEST_DIR)/$$case.log"; then \
+			cat "$(MOLECULE_SELFTEST_DIR)/$$case.log"; \
+			printf 'error: the decoy %s was not refused by the isolation check\n' "$$case" >&2; status=1; \
 		else printf 'guard refused the bypass attempt %s\n' "$$case"; fi; \
 	done; \
 	printf '[]\n' > '$(MOLECULE_SELFTEST_DIR)/instance_config.yml'; \

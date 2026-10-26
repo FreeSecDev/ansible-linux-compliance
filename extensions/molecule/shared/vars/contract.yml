@@ -131,7 +131,11 @@ contract_input_names:
 
 contract_snapshot_paths:
   - /etc
-  - /usr/local
+  - /usr
+  - /root
+  - /home
+  - /var/spool
+  - /var/log
   - /opt
   - /srv
   - /var/lib/dpkg
