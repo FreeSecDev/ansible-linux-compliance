@@ -34,6 +34,16 @@
   tags:
     - always
 
+- name: Audit | Mark the host that ran the read
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_exceptions_read_here: "{{ inventory_hostname }}"
+  delegate_to: "{{ inventory_hostname }}"
+  delegate_facts: true
+  run_once: true
+  when: linux_compliance_exceptions_file is not none
+  tags:
+    - always
+
 - name: Audit | Validate the exceptions file before any host is evaluated
   ansible.builtin.set_fact:
     __linux_compliance_audit_exceptions_overview: >-
@@ -48,9 +58,14 @@
   ansible.builtin.assert:
     that:
       - __linux_compliance_audit_exceptions.reader == ansible_play_batch | first
+      - >-
+        __linux_compliance_audit_exceptions_read_here != inventory_hostname
+        or inventory_hostname == ansible_play_batch | first
     fail_msg: >-
-      The exceptions file was read on {{ __linux_compliance_audit_exceptions.reader }} instead of once
-      for the batch, which happens with the free strategy. The audit role does not support the free
+      The exceptions file was not read once for the batch by its first host: it was last read on
+      {{ __linux_compliance_audit_exceptions.reader }}{{ ' and also on this host'
+         if __linux_compliance_audit_exceptions_read_here == inventory_hostname else '' }},
+      which happens with the free strategy. The audit role does not support the free
       strategy when linux_compliance_exceptions_file is set; use the linear strategy.
     quiet: true
   when: linux_compliance_exceptions_file is not none

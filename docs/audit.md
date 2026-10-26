@@ -300,11 +300,27 @@ unprefixed role variable; `tools/roles/check_role_specs.py` allows exactly the n
    Otherwise the host fails before anything is published.
 5. **Only the linear strategy.** The file is read and validated with `run_once`, which the `free` strategy does not
    honour: it runs the task on every host, and one host's facts can overwrite another's in the middle of the play.
-   The `free` strategy is therefore not supported when `linux_compliance_exceptions_file` is set. Each host checks that
-   the file was read by the first host of its batch, and a host for which that is false fails with a message naming
-   the free strategy. Under `free` this has failed at least one host in every test run, so the playbook exits with
-   status 2. The host that read the file last can still finish with its own, validated file. The linear strategy, with
-   or without `serial`, is the supported mode.
+   The `free` strategy is therefore not supported when `linux_compliance_exceptions_file` is set. The linear strategy,
+   with or without `serial`, is the supported mode. Two checks refuse `free` (FREES-143):
+   - Right after the read, a `run_once` task with `delegate_facts: true` records the host that ran it on that host
+     only. Under linear this is the first host of the batch. Under `free` every host runs the task itself, and it
+     finishes before that host's next task starts, so no timing can hide it. A host that is not the first host of its
+     batch and finds its own name there fails.
+   - Each host also checks that the shared fact naming the reader names the first host of its batch.
+
+   Both fail with a message naming the free strategy. With two or more hosts in a batch, `free` always fails at least
+   one host, so the playbook exits with status 2. Suppose no host failed: the batch stays the same, so a host other
+   than the first one has its own name recorded and fails, which is a contradiction.
+
+   Ansible exposes no strategy to tasks. A task cannot read the play's `strategy` keyword, and `ansible_play_batch` and
+   `ansible_play_hosts_all` are the same under `linear` and `free`. Only Python plugin code can reach the keyword,
+   through `Task.get_play()` in an action plugin, and the repository guard
+   ([ADR 0004](adr/0004-audited-process-execution.md)) allows plugins to import only `ansible.module_utils` and this
+   collection. Markers or barriers between hosts give no exact signal either: under `free` a host can run all of its
+   tasks while the others are idle, or after they failed, and then it sees exactly what it would see under linear.
+   So not every host is refused. One host, usually the first of the batch, or the next one after the first failed,
+   can finish. That host reads, validates and applies the same file itself, and the check after applying (item 4)
+   makes sure that the text it applied has the validated SHA-256. No host can apply a file that was not validated.
 6. **Relative paths are refused.** `lookup('ansible.builtin.file')` searches a role's `files/` directory and the
    playbook directory for a relative name, so a relative path could resolve to an unexpected file. The path must be
    absolute.
@@ -621,7 +637,19 @@ with exit status 2:
 - `audit-exceptions-invalid.yml`: an invalid file;
 - `audit-exceptions-serial.yml`: `serial: 1`, with `host_vars` that give web01 and db01 different valid files. It must
   fail in the first batch with the cross-batch message before any host is evaluated;
-- `audit-exceptions-free.yml`: the `free` strategy, which must print the free-strategy message.
+- `audit-exceptions-free.yml`: the `free` strategy, which must print the free-strategy message. Which hosts are
+  refused depends on timing, so the Makefile runs it `AUDIT_EXCEPTIONS_FREE_RUNS` times (default 10). In every
+  second run db01 starts three seconds late, so that web01 can finish; in the other runs both hosts start together and
+  are usually both refused. Each host records its outcome in its own file, through a `rescue` that records the
+  refusal and then fails the host again. After each run, `audit-exceptions-free-check.yml` requires a record from every
+  host. Each record must be either a failure with the free-strategy message and no published exceptions result, or
+  `applied` with exactly the validated path, and a `source_sha256` and `evaluation.source_sha256` equal to the
+  SHA-256 of the file as stored, which the check takes independently with `ansible.builtin.stat`. At least one host
+  must have been refused. The check prints `AUDIT-EXCEPTIONS-FREE-OUTCOME` with the outcome of each host.
+  `tests/unit/roles/test_audit_tasks.py` pins the marker task (`run_once`, `delegate_to` and `delegate_facts`) and
+  its check, because the playbook test cannot tell which of the two checks refused a host. Before
+  FREES-143 the test required a failure that, under `free`, depended on timing alone: merge-group run 40282529324
+  finished with exit status 0.
 
 `tests/playbooks/audit-exceptions-invalid.yml` runs without a rescue: the Makefile requires exit status 2, the
 validation message, no task that applies exceptions in the output and no output from the play after it, which

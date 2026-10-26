@@ -2,6 +2,33 @@
 - name: Audit exceptions | Write the exceptions files
   ansible.builtin.import_playbook: audit-exceptions-files.yml
 
+- name: Audit exceptions | Create an empty outcome directory for this free strategy run
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Look for outcomes of an earlier run
+      ansible.builtin.stat:
+        path: "{{ audit_exceptions_free_outcomes }}"
+      register: audit_exceptions_free_outcomes_stat
+
+    - name: Refuse to mix the outcomes of two runs
+      ansible.builtin.assert:
+        that:
+          - not audit_exceptions_free_outcomes_stat.stat.exists
+        fail_msg: "{{ audit_exceptions_free_outcomes }} already exists; every run needs its own directory."
+        quiet: true
+
+    - name: Create the outcome directory
+      ansible.builtin.file:
+        path: "{{ audit_exceptions_free_outcomes }}"
+        state: directory
+        mode: "0700"
+
 - name: Audit exceptions | The free strategy is refused for the exceptions path
   hosts: web01:db01
   gather_facts: false
@@ -10,13 +37,45 @@
     - vars/audit-exceptions.yml
   vars:
     linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+    audit_exceptions_free_stagger: >-
+      {{ audit_exceptions_free_stagger_seconds
+         if (audit_exceptions_free_run | default(1) | int) is even and inventory_hostname == 'db01' else 0 }}
   tasks:
-    - name: Build a synthetic audit result
-      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
-      vars:
-        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+    - name: Apply the exceptions and record the outcome of this host
+      block:
+        - name: Start db01 later in every second run, so that both outcomes occur
+          ansible.builtin.wait_for:
+            timeout: "{{ audit_exceptions_free_stagger | int }}"
+          when: audit_exceptions_free_stagger | int > 0
 
-    - name: Apply the exceptions with the audit role
-      ansible.builtin.include_role:
-        name: freesecdev.linux_compliance.audit
-        tasks_from: evaluate.yml
+        - name: Build a synthetic audit result
+          ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+          vars:
+            audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+        - name: Apply the exceptions with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: evaluate.yml
+
+        - name: Record that this host applied the exceptions
+          ansible.builtin.copy:
+            dest: "{{ audit_exceptions_free_outcomes }}/{{ inventory_hostname }}.json"
+            mode: "0600"
+            content: >-
+              {{ {'failed': false, 'message': none,
+                  'exceptions': linux_compliance_audited.exceptions} | ansible.builtin.to_json }}
+      rescue:
+        - name: Record that this host was refused
+          ansible.builtin.copy:
+            dest: "{{ audit_exceptions_free_outcomes }}/{{ inventory_hostname }}.json"
+            mode: "0600"
+            content: >-
+              {{ {'failed': true, 'message': audit_exceptions_free_refusal,
+                  'exceptions': linux_compliance_audited.exceptions | default(none)} | ansible.builtin.to_json }}
+          vars:
+            audit_exceptions_free_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+        - name: Fail this host again with the refusal of the audit role
+          ansible.builtin.fail:
+            msg: "{{ ansible_failed_result.msg | default('the audit role failed this host') }}"

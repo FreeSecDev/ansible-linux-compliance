@@ -54,8 +54,10 @@ named with their suffix because `tasks_from` must end in `.yml`:
 - `stale.yml` aggregates stale exceptions once over the target hosts in `linux_compliance_audit_stale_hosts` (the
   final play of `playbooks/audit.yml`).
 
-With an exceptions file, only the linear strategy is supported (with or without `serial`); the `free` strategy is
-detected and fails. Every host of the play, across all `serial` batches, must resolve the variable to the same path.
+With an exceptions file, only the linear strategy is supported (with or without `serial`). Under the `free` strategy
+at least one host of every batch with two or more hosts fails, so the play fails. A host that finishes has applied
+the validated file ([audit guide](../../docs/audit.md#reading-and-validating-the-file)). Every host of the play,
+across all `serial` batches, must resolve the variable to the same path.
 
 ## Variables
 

@@ -65,3 +65,5 @@ audit_exceptions_not_run:
   evidence_written: false
   disabled_rules: []
   planned: {}
+audit_exceptions_free_outcomes: "{{ audit_exceptions_dir }}/free-{{ audit_exceptions_free_run | default('single') }}"
+audit_exceptions_free_stagger_seconds: 3
