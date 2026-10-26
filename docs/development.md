@@ -402,8 +402,9 @@ added as a job together with the documentation pipeline (FREES-80).
 The toolbox runner image is built in AWS by the `linux-compliance-runner` repository (FREES-36) and published as
 `ghcr.io/freesecdev/linux-compliance-runner`, signed with cosign and attested. This repository consumes it by digest
 only: `ghcr.io/freesecdev/linux-compliance-runner@sha256:<digest>`, never a tag.
-`tests/unit/tools/test_runner_image_pin.py` fails on any other reference in a workflow, Makefile, script or
-configuration file. Before adopting a new digest, verify its signature and attestations as described in the runner
+`tests/unit/tools/test_runner_image_pin.py` reads every tracked file except Markdown. It fails on any other reference
+to the image, and on any reference to the unsigned ECR staging image outside `infra/`. It reads literal text only,
+so a name assembled from variables is left to review. Before adopting a new digest, verify its signature and attestations as described in the runner
 repository's `docs/image-build.md`. Jobs still run on `ubuntu-24.04` with a pinned `uv`; moving them into the image is
 follow-up work.
 

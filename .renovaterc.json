@@ -121,6 +121,18 @@
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "{{{org}}}/packer-plugin-{{{plugin}}}",
       "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Digest of the CodeBuild builder image quay.io/buildah/stable (immutable release tag in the variable description); bump EXPECTED_BUILDAH_VERSION in the runner repository in step",
+      "managerFilePatterns": [
+        "/^infra/account/variables\\.tf$/"
+      ],
+      "matchStrings": [
+        "\\(Buildah (?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+-immutable), run rootless by the build script\\)\\.\"\\n\\s+type\\s+= string\\n\\s+default\\s+= \"(?<depName>quay\\.io/buildah/stable)@(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-immutable$"
     }
   ],
   "pre-commit": {

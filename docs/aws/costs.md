@@ -30,8 +30,8 @@ Notes:
 Prices from the AWS price list API offer files for `eu-west-1`: CodeBuild published 2026-09-11, ECR 2026-09-11,
 CloudWatch 2026-10-07 and KMS 2026-10-26. They were read on 2026-10-26. The usage assumes about 15 builds a month
 (pushes to `main` that change an image input, plus manual runs). Each build takes 8 to 10 minutes on
-`BUILD_GENERAL1_MEDIUM`; the build took 4.6 minutes on a 2026 workstation, plus queueing, builder image pull and
-push.
+`BUILD_GENERAL1_MEDIUM`; the build took 4.6 minutes on a 2026 workstation, plus the gate's clone, the builder image
+pull and the push.
 
 | Resource | Pricing basis | Assumed usage | Monthly estimate |
 |---|---|---|---|
@@ -46,8 +46,13 @@ push.
 
 Notes:
 
-- The cost scales with builds. The worst case for one build is the 45-minute timeout, 0.45. The concurrency limit
-  of 1 and the queue timeout stop parallel or piling builds.
+- The cost scales with builds. A role holder can raise the project timeout with `timeoutInMinutesOverride`, which
+  has no IAM condition key and allows up to 2160 minutes, about 21.60 USD for one build. The inline gate caps the
+  billed time anyway: the clone has a 5-minute `timeout` and the build script a 35-minute `timeout`, so one build
+  costs at most about 41 minutes, 0.41 USD.
+- With concurrency 1, a role holder who starts builds back to back would spend about 0.60 USD an hour, 14.40 USD a
+  day. Only the `image-build` workflow on `main` can assume the role. The 50 USD budget alert is the backstop, and
+  an EventBridge rule on long or frequent builds is a cheap follow-up.
 - Images expire from ECR after 14 days, so storage is bounded by the build rate. GHCR storage is free for public
   packages.
 - There is no always-on compute and no EC2 builder.

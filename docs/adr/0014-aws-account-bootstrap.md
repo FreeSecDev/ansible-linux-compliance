@@ -74,12 +74,12 @@ The runner image is built by CodeBuild, as [ADR 0007](0007-registry-build-and-si
 live in this stack (`infra/account/image_build.tf` and `iam_image_build_role.tf`) because this repository owns the
 account IaC. They are:
 
-- the CodeBuild project `freesecdev-linux-compliance-runner`. It builds the public runner repository at the
-  requested commit with the digest-pinned builder `quay.io/buildah/stable@sha256:7c2b6052...`
-  (`image_builder_image`), and its settings are:
+- the CodeBuild project `freesecdev-linux-compliance-runner`. It has no source (`NO_SOURCE`); the inline
+  buildspec in this stack is the build gate (below). The builder is the digest-pinned
+  `quay.io/buildah/stable@sha256:7c2b6052...` (`image_builder_image`), and the other settings are:
   - `BUILD_GENERAL1_MEDIUM`;
   - a concurrency limit of 1;
-  - a 45-minute build timeout and a 15-minute queue timeout;
+  - a 40-minute build timeout and a 10-minute queue timeout;
   - no artifacts;
   - CloudWatch logs only;
 - the private ECR repository `linux-compliance-runner-staging`: immutable tags, scan on push, KMS encryption with
@@ -97,7 +97,35 @@ account IaC. They are:
 
 Every resource carries the default tags plus `component = runner-image-build` and
 `consumer = FreeSecDev/linux-compliance-runner`. There is no EC2 builder, so no reaper is needed; the CodeBuild
-timeouts bound every build.
+timeouts and the gate's own timeouts bound every build.
+
+#### The build gate (inline buildspec)
+
+Which code runs in the privileged build container is decided here, not by the caller and not by the runner
+repository. The project has no source, and its buildspec is inline in `image_build.tf`
+(`local.codebuild_buildspec`). Overriding it is denied (below). The buildspec runs these steps in order, and any
+failure ends the build:
+
+1. `EXPECTED_COMMIT` must match `^[0-9a-f]{40}$` and `BUILD_DATE` must match `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`
+   (bash `[[ =~ ]]` on the whole value, so an embedded newline fails).
+2. It clones `https://github.com/FreeSecDev/linux-compliance-runner.git`, branch `main`, without any credential
+   (`credential.helper` empty, `GIT_TERMINAL_PROMPT=0`, a 300-second `timeout`).
+3. `git merge-base --is-ancestor "$EXPECTED_COMMIT" refs/remotes/origin/main` must succeed: only a commit that is on
+   protected `main` is built. A fork pull request head, another branch or an unknown commit fails.
+4. It checks out exactly that commit, detached, and exports `BUILT_COMMIT` after checking that `HEAD` equals it.
+5. It runs that commit's `codebuild/build-image.sh` with `IMAGE_SOURCE_DIR` set to the checkout, under
+   `timeout --kill-after=60` of `image_build_timeout_minutes * 60 - 300` seconds (2100 by default).
+6. It loads the result file the script wrote, so CodeBuild exports `IMAGE_DIGEST`, `IMAGE_TAG`, `IMAGE_REFERENCE`,
+   `BUILDAH_VERSION` and `BUILT_COMMIT` to the caller.
+
+The steps were run in the pinned builder image against the live runner repository on 2026-10-26:
+
+- a `main` commit passed every gate step;
+- the head of the runner pull request branch, an unknown SHA, a 7-character SHA and a SHA followed by a newline
+  were all refused.
+
+`NO_SOURCE` also means CodeBuild never needs a GitHub credential, so `CreateProject` cannot fail for want of one,
+and no imported source credential could widen what a source override reads.
 
 The build role trusts only tokens where all of these hold, all compared with `StringEquals`:
 
@@ -117,6 +145,8 @@ The build role's permissions:
 | Statement | Actions | Resource |
 |---|---|---|
 | RunTheImageBuild | `codebuild:StartBuild`, `codebuild:BatchGetBuilds`, `codebuild:StopBuild` | the project ARN |
+| DenyStartBuildOverride0 to DenyStartBuildOverride25 (Deny) | `codebuild:StartBuild` when the condition key below is present (`Null` = `false`), one statement per key | `*` |
+| DenyStartBuildEnvironmentVariablesOtherThanTheGateInputs (Deny) | `codebuild:StartBuild` when any overridden environment variable name is not `EXPECTED_COMMIT` or `BUILD_DATE` (`ForAnyValue:StringNotEquals` on `codebuild:environment.environmentVariables.name`) | `*` |
 | ReadTheBuildLogs | `logs:GetLogEvents` | the project's log streams |
 | GetRegistryToken | `ecr:GetAuthorizationToken` | `*` |
 | PullAndDescribeStagedImages | `ecr:BatchCheckLayerAvailability`, `ecr:BatchGetImage`, `ecr:DescribeImages`, `ecr:GetDownloadUrlForLayer` | the staging repository ARN |
@@ -138,15 +168,75 @@ Wildcard resources, each required by AWS:
 - **`logs:DescribeLogGroups` on `log-group:*` for the plan role:** the action lists log groups and cannot be limited
   to one group. The grant is scoped to this account and region and is read-only.
 
-Neither role can pass a role (`iam:PassRole`) or call `sts:AssumeRole`. `codebuild:StartBuild` accepts overrides of
-the build specification, image and environment, and IAM offers no condition key to restrict them. The mitigation is
-that only reviewed workflow code on `main` can assume the role, and that the service role cannot be swapped without
-`iam:PassRole`.
+Neither role can pass a role (`iam:PassRole`) or call `sts:AssumeRole`.
+
+#### Restricting `StartBuild` overrides
+
+`codebuild:StartBuild` lets the caller override most of the project. IAM can restrict that: the AWS service
+reference (`servicereference.us-east-1.amazonaws.com/v1/codebuild/codebuild.json`, read on 2026-10-26) lists
+condition keys that are present only when the matching override is sent. Conditions inside one statement are ANDed,
+so the build role has one Deny statement per key. Each denies `StartBuild` when that key is present. The 26 keys,
+all prefixed `codebuild:`, are:
+
+- **Whole override objects:** `source`, `secondarySources`, `artifacts`, `secondaryArtifacts`, `cache`, `logsConfig`.
+  These cover every key below them, for example `cache.location`, `secondarySources.buildspec` and the
+  `secondarySources/${sourceIdentifier}...` keys.
+- **Source:** `source.buildspec`, `source.location`, `source.auth.type`, `source.auth.resource`,
+  `source.insecureSsl`, `source.buildStatusConfig.context`, `source.buildStatusConfig.targetUrl`.
+- **Environment:** `environment.type`, `environment.image`, `environment.computeType`, `environment.privilegedMode`,
+  `environment.certificate`, `environment.imagePullCredentialsType`, `environment.registryCredential`,
+  `environment.registryCredential.credential`, `environment.registryCredential.credentialProvider`,
+  `environment.fleet.fleetArn`.
+- **Other:** `serviceRole`, `encryptionKey`, `autoRetryLimit`.
+
+The `environment` and `environment.environmentVariables` keys are not denied, because the two gate inputs are
+environment variable overrides. A separate Deny allows only the names `EXPECTED_COMMIT` and `BUILD_DATE`, so
+`STAGING_REPOSITORY_URI` and every other variable cannot be overridden. The gate validates both values. The unit
+test checks every `StartBuild` key of the service reference: each must be denied directly or through a denied parent,
+or be one of the five environment-variable keys.
+
+Two overrides have no condition key: `sourceVersion` and `timeoutInMinutesOverride`.
+
+- **`sourceVersion`:** the project has no source, so the version is not used. The gate builds only a commit that is
+  on `main`.
+- **`timeoutInMinutesOverride`:** it can raise the project limit to 2160 minutes, but the gate's own `timeout`
+  stops the build script after 35 minutes and the clone after 5 minutes. A build therefore ends after about 41
+  minutes, whatever the override. The cost of this residual is in [costs](../aws/costs.md).
+
+`queuedTimeoutInMinutesOverride` only changes how long a build may wait, and waiting is not billed.
+`debugSessionEnabled` is inert, because the service role has no `ssmmessages:*` permission.
+
+If AWS ever populated one of these keys for a call that sends no override, `StartBuild` would be denied: the
+control fails closed, and the first workflow run shows it.
+
+The credentials themselves are scoped as well. The runner workflow passes them only to the steps that call AWS:
+`make image-build` and `make staging-login`. It uses `configure-aws-credentials` with
+`output-env-credentials: false`. The pytest dependencies, Grype, Syft and crane never see AWS keys; they see only
+the ECR registry token, which can pull from the staging repository.
+
+#### Privileged build container (pending owner acceptance)
 
 Rootless Buildah needs user namespaces, and an unprivileged container is denied them, so the CodeBuild project uses
-`privileged_mode = true`. Buildah still runs as a non-root user inside the build container. The build container is
-single-use, holds no secret, and its only credential is the service role above. The runner repository's ADR 0002
-records the tests and the alternatives.
+`privileged_mode = true`. Two independent tests on 2026-10-26 used the pinned builder on Docker 29 with the default
+seccomp profile, and both found the same:
+
+- Rootless Buildah fails with `unshare(CLONE_NEWUSER): Operation not permitted`.
+- Root Buildah with `--isolation chroot` and vfs also fails: it sees no `CAP_SYS_ADMIN`, re-executes into a user
+  namespace, and seccomp refuses it.
+- The CodeBuild-provided Docker daemon also needs privileged mode, and privileged mode cannot be limited to some
+  build steps.
+- Kaniko runs unprivileged, but upstream kaniko is archived and it contradicts ADR 0007.
+
+The containment:
+
+- Buildah runs as a non-root user, and `RUN` steps run in a user namespace.
+- The container is single-use and has no VPC.
+- It holds no secret. Its only credential is the service role above: write its logs, push to staging, use the key.
+- Only a `main` commit chosen through the gate runs in it, because every code-selecting override is denied.
+- Nothing is published except by the main-only workflow.
+
+This exemption (CKV_AWS_316) is **pending owner acceptance**. The owner's dated acceptance is to be added here
+before the stack is applied. The runner repository's ADR 0002 records the alternatives.
 
 ### Tooling
 
@@ -194,19 +284,25 @@ root" item is recorded above. Trust policy changes require `security-review` bef
   runner build role. The subject is `...:environment:release`, with the same four extra conditions. This is the
   pattern the owner accepted on 2026-10-26.
 - **CKV_AWS_316 on `aws_codebuild_project.runner_image`:** the privileged build container that rootless Buildah
-  needs (above).
+  needs (above). Pending owner acceptance.
 
 `tests/unit/infra/test_image_build_role.py` is the control that replaces the two build-related exemptions. It pins:
 
-- the single trust statement, its principal and its five exact `StringEquals` conditions, and fails on wildcards or
-  on a condition that is added or removed;
-- the subject and workflow expressions and their rendered values;
-- every permission statement of both build roles, with `*` allowed only for `ecr:GetAuthorizationToken`;
-- the CodeBuild service-role trust;
-- the CodeBuild guardrails: concurrency 1, timeouts, the digest-pinned builder, no artifacts, the GitHub source and
-  the CMK;
-- the ECR settings;
-- the exact content of the baseline.
+- **Files:** the exact `git ls-files infra/account` set, which rejects `*_override.tf`, `*.tf.json`, `*.auto.tfvars`
+  and any new file.
+- **Blocks:** the exact `kind.type.name` inventory of the stack, which rejects extra roles, policy attachments,
+  projects and any `module` block.
+- **Whole-block equality:** every block of `image_build.tf` and `iam_image_build_role.tf`, their locals, and the
+  image build variables and outputs, against the reviewed snapshot `tests/fixtures/infra/expected_image_build_blocks.json`.
+  This includes the inline gate buildspec, the KMS key policy and the lifecycle policy, decoded.
+- **Semantic checks:**
+  - the five exact trust conditions;
+  - the `StartBuild` denials against the service reference;
+  - `*` allowed only in Deny statements and for `ecr:GetAuthorizationToken`;
+  - the exact baseline.
+- **Negative cases:** M1 to M10 of the PR #51 review, plus mutations of the deny list, the allowed environment
+  variables, the trust subject, a permissions boundary, the lifecycle rule and tag mutability. Each must fail the
+  section it targets.
 
 Every other check, and both check IDs on any other resource, still applies. A change to a trust policy or to the
 project needs the baseline and that test reviewed again.

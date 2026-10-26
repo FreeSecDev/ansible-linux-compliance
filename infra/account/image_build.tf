@@ -11,8 +11,32 @@ locals {
   codebuild_project_arn       = "arn:aws:codebuild:${var.aws_region}:${var.account_id}:project/${local.codebuild_project_name}"
   codebuild_service_role_name = "freesecdev-codebuild-linux-compliance-runner"
   codebuild_service_role_arn  = "arn:aws:iam::${var.account_id}:role/${local.codebuild_service_role_name}"
-  codebuild_source_url        = "https://github.com/${var.runner_repository}.git"
-  codebuild_buildspec         = "codebuild/buildspec.yml"
+  runner_clone_url            = "https://github.com/${var.runner_repository}.git"
+  runner_source_dir           = "/tmp/runner-source"
+  build_script_timeout        = var.image_build_timeout_minutes * 60 - 300
+  codebuild_buildspec = yamlencode({
+    version = 0.2
+    env = {
+      shell              = "bash"
+      exported-variables = ["BUILT_COMMIT", "IMAGE_DIGEST", "IMAGE_TAG", "IMAGE_REFERENCE", "BUILDAH_VERSION"]
+    }
+    phases = {
+      build = {
+        on-failure = "ABORT"
+        commands = [
+          "[[ \"$EXPECTED_COMMIT\" =~ ^[0-9a-f]{40}$ ]] || { echo 'error: EXPECTED_COMMIT must be a full commit SHA' >&2; false; }",
+          "[[ \"$BUILD_DATE\" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || { echo 'error: BUILD_DATE must be a UTC RFC 3339 time' >&2; false; }",
+          "rm -rf ${local.runner_source_dir}",
+          "GIT_TERMINAL_PROMPT=0 timeout 300 git -c credential.helper= clone --quiet --no-tags --single-branch --branch main ${local.runner_clone_url} ${local.runner_source_dir}",
+          "git -C ${local.runner_source_dir} merge-base --is-ancestor \"$EXPECTED_COMMIT\" refs/remotes/origin/main || { echo 'error: EXPECTED_COMMIT is not a commit on main of ${var.runner_repository}' >&2; false; }",
+          "git -C ${local.runner_source_dir} -c advice.detachedHead=false checkout --quiet --detach \"$EXPECTED_COMMIT\"",
+          "export BUILT_COMMIT=\"$(git -C ${local.runner_source_dir} rev-parse HEAD)\" && test \"$BUILT_COMMIT\" = \"$EXPECTED_COMMIT\"",
+          "cd ${local.runner_source_dir} && IMAGE_SOURCE_DIR=${local.runner_source_dir} timeout --kill-after=60 ${local.build_script_timeout} bash codebuild/build-image.sh",
+          ". /tmp/image-build/result.env",
+        ]
+      }
+    }
+  })
 
   image_build_log_group_name = "/aws/codebuild/${local.codebuild_project_name}"
   image_build_log_group_arn  = "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:${local.image_build_log_group_name}"
@@ -184,14 +208,13 @@ resource "aws_iam_role_policy" "codebuild_service" {
 
 resource "aws_codebuild_project" "runner_image" {
   name                   = local.codebuild_project_name
-  description            = "Builds the ${var.runner_repository} image with rootless Buildah and pushes it to ECR staging"
+  description            = "Builds a main commit of ${var.runner_repository} with rootless Buildah and pushes it to ECR staging"
   service_role           = aws_iam_role.codebuild_service.arn
   build_timeout          = var.image_build_timeout_minutes
   queued_timeout         = var.image_build_queued_timeout_minutes
   concurrent_build_limit = 1
   encryption_key         = aws_kms_key.image_build.arn
   badge_enabled          = false
-  source_version         = "main"
 
   artifacts {
     type = "NO_ARTIFACTS"
@@ -223,12 +246,8 @@ resource "aws_codebuild_project" "runner_image" {
   }
 
   source {
-    type                = "GITHUB"
-    location            = local.codebuild_source_url
-    buildspec           = local.codebuild_buildspec
-    git_clone_depth     = 0
-    report_build_status = false
-    insecure_ssl        = false
+    type      = "NO_SOURCE"
+    buildspec = local.codebuild_buildspec
   }
 
   tags = local.image_build_tags

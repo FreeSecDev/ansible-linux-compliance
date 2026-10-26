@@ -1,0 +1,601 @@
+{
+  "data.aws_iam_policy_document.codebuild_permissions": {
+    "statement": [
+      {
+        "actions": [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${local.image_build_log_group_arn}:log-stream:*"
+        ],
+        "sid": "WriteBuildLogs"
+      },
+      {
+        "actions": [
+          "ecr:GetAuthorizationToken"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "*"
+        ],
+        "sid": "GetRegistryToken"
+      },
+      {
+        "actions": [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${local.staging_repository_arn}"
+        ],
+        "sid": "PushStagingImage"
+      },
+      {
+        "actions": [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${aws_kms_key.image_build.arn}"
+        ],
+        "sid": "UseBuildKey"
+      }
+    ]
+  },
+  "data.aws_iam_policy_document.codebuild_trust": {
+    "statement": [
+      {
+        "actions": [
+          "sts:AssumeRole"
+        ],
+        "condition": [
+          {
+            "test": "StringEquals",
+            "values": [
+              "${var.account_id}"
+            ],
+            "variable": "aws:SourceAccount"
+          },
+          {
+            "test": "ArnEquals",
+            "values": [
+              "${local.codebuild_project_arn}"
+            ],
+            "variable": "aws:SourceArn"
+          }
+        ],
+        "effect": "Allow",
+        "principals": [
+          {
+            "identifiers": [
+              "codebuild.amazonaws.com"
+            ],
+            "type": "Service"
+          }
+        ],
+        "sid": "CodeBuildForTheRunnerProjectOnly"
+      }
+    ]
+  },
+  "data.aws_iam_policy_document.image_build_permissions": {
+    "dynamic": [
+      {
+        "statement": {
+          "content": [
+            {
+              "actions": [
+                "codebuild:StartBuild"
+              ],
+              "condition": [
+                {
+                  "test": "Null",
+                  "values": [
+                    "false"
+                  ],
+                  "variable": "codebuild:${statement.value}"
+                }
+              ],
+              "effect": "Deny",
+              "resources": [
+                "*"
+              ],
+              "sid": "DenyStartBuildOverride${statement.key}"
+            }
+          ],
+          "for_each": "${local.start_build_denied_override_keys}"
+        }
+      }
+    ],
+    "statement": [
+      {
+        "actions": [
+          "codebuild:StartBuild",
+          "codebuild:BatchGetBuilds",
+          "codebuild:StopBuild"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${aws_codebuild_project.runner_image.arn}"
+        ],
+        "sid": "RunTheImageBuild"
+      },
+      {
+        "actions": [
+          "codebuild:StartBuild"
+        ],
+        "condition": [
+          {
+            "test": "ForAnyValue:StringNotEquals",
+            "values": "${local.start_build_allowed_environment_variables}",
+            "variable": "codebuild:environment.environmentVariables.name"
+          }
+        ],
+        "effect": "Deny",
+        "resources": [
+          "*"
+        ],
+        "sid": "DenyStartBuildEnvironmentVariablesOtherThanTheGateInputs"
+      },
+      {
+        "actions": [
+          "logs:GetLogEvents"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${local.image_build_log_group_arn}:log-stream:*"
+        ],
+        "sid": "ReadTheBuildLogs"
+      },
+      {
+        "actions": [
+          "ecr:GetAuthorizationToken"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "*"
+        ],
+        "sid": "GetRegistryToken"
+      },
+      {
+        "actions": [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:DescribeImages",
+          "ecr:GetDownloadUrlForLayer"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${aws_ecr_repository.runner_staging.arn}"
+        ],
+        "sid": "PullAndDescribeStagedImages"
+      }
+    ]
+  },
+  "data.aws_iam_policy_document.image_build_trust": {
+    "statement": [
+      {
+        "actions": [
+          "sts:AssumeRoleWithWebIdentity"
+        ],
+        "condition": [
+          {
+            "test": "StringEquals",
+            "values": [
+              "sts.amazonaws.com"
+            ],
+            "variable": "${local.oidc_host}:aud"
+          },
+          {
+            "test": "StringEquals",
+            "values": [
+              "${local.image_build_subject}"
+            ],
+            "variable": "${local.oidc_host}:sub"
+          },
+          {
+            "test": "StringEquals",
+            "values": [
+              "${var.runner_repository_id}"
+            ],
+            "variable": "${local.oidc_host}:repository_id"
+          },
+          {
+            "test": "StringEquals",
+            "values": [
+              "${var.github_owner_id}"
+            ],
+            "variable": "${local.oidc_host}:repository_owner_id"
+          },
+          {
+            "test": "StringEquals",
+            "values": [
+              "${local.image_build_workflow}"
+            ],
+            "variable": "${local.oidc_host}:job_workflow_ref"
+          }
+        ],
+        "effect": "Allow",
+        "principals": [
+          {
+            "identifiers": [
+              "${data.aws_iam_openid_connect_provider.github.arn}"
+            ],
+            "type": "Federated"
+          }
+        ],
+        "sid": "RunnerImageBuildFromTheReleaseEnvironmentOnMain"
+      }
+    ]
+  },
+  "data.aws_iam_policy_document.plan_image_build_permissions": {
+    "statement": [
+      {
+        "actions": [
+          "iam:GetRole",
+          "iam:GetRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListRoleTags"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${local.image_build_role_arn}",
+          "${local.codebuild_service_role_arn}"
+        ],
+        "sid": "ReadImageBuildRoles"
+      },
+      {
+        "actions": [
+          "codebuild:BatchGetProjects"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${local.codebuild_project_arn}"
+        ],
+        "sid": "ReadImageBuildProject"
+      },
+      {
+        "actions": [
+          "ecr:DescribeRepositories",
+          "ecr:GetLifecyclePolicy",
+          "ecr:GetRepositoryPolicy",
+          "ecr:ListTagsForResource"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${local.staging_repository_arn}"
+        ],
+        "sid": "ReadStagingRepository"
+      },
+      {
+        "actions": [
+          "logs:DescribeLogGroups"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:*"
+        ],
+        "sid": "DescribeLogGroupsInTheAccountRegion"
+      },
+      {
+        "actions": [
+          "logs:ListTagsForResource"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${local.image_build_log_group_arn}"
+        ],
+        "sid": "ReadImageBuildLogGroupTags"
+      },
+      {
+        "actions": [
+          "kms:DescribeKey",
+          "kms:GetKeyPolicy",
+          "kms:GetKeyRotationStatus",
+          "kms:ListResourceTags"
+        ],
+        "effect": "Allow",
+        "resources": [
+          "${aws_kms_key.image_build.arn}"
+        ],
+        "sid": "ReadImageBuildKey"
+      }
+    ]
+  },
+  "local.build_script_timeout": "${var.image_build_timeout_minutes * 60 - 300}",
+  "local.codebuild_buildspec": "${yamlencode({'version': 0.2, 'env': {'shell': 'bash', 'exported-variables': ['BUILT_COMMIT', 'IMAGE_DIGEST', 'IMAGE_TAG', 'IMAGE_REFERENCE', 'BUILDAH_VERSION']}, 'phases': {'build': {'on-failure': 'ABORT', 'commands': ['[[ \\\\\"$EXPECTED_COMMIT\\\\\" =~ ^[0-9a-f]{40}$ ]] || { echo \\'error: EXPECTED_COMMIT must be a full commit SHA\\' >&2; false; }', '[[ \\\\\"$BUILD_DATE\\\\\" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || { echo \\'error: BUILD_DATE must be a UTC RFC 3339 time\\' >&2; false; }', 'rm -rf ${local.runner_source_dir}', 'GIT_TERMINAL_PROMPT=0 timeout 300 git -c credential.helper= clone --quiet --no-tags --single-branch --branch main ${local.runner_clone_url} ${local.runner_source_dir}', 'git -C ${local.runner_source_dir} merge-base --is-ancestor \\\\\"$EXPECTED_COMMIT\\\\\" refs/remotes/origin/main || { echo \\'error: EXPECTED_COMMIT is not a commit on main of ${var.runner_repository}\\' >&2; false; }', 'git -C ${local.runner_source_dir} -c advice.detachedHead=false checkout --quiet --detach \\\\\"$EXPECTED_COMMIT\\\\\"', 'export BUILT_COMMIT=\\\\\"$(git -C ${local.runner_source_dir} rev-parse HEAD)\\\\\" && test \\\\\"$BUILT_COMMIT\\\\\" = \\\\\"$EXPECTED_COMMIT\\\\\"', 'cd ${local.runner_source_dir} && IMAGE_SOURCE_DIR=${local.runner_source_dir} timeout --kill-after=60 ${local.build_script_timeout} bash codebuild/build-image.sh', '. /tmp/image-build/result.env']}}})}",
+  "local.codebuild_project_arn": "arn:aws:codebuild:${var.aws_region}:${var.account_id}:project/${local.codebuild_project_name}",
+  "local.codebuild_project_name": "freesecdev-linux-compliance-runner",
+  "local.codebuild_service_role_arn": "arn:aws:iam::${var.account_id}:role/${local.codebuild_service_role_name}",
+  "local.codebuild_service_role_name": "freesecdev-codebuild-linux-compliance-runner",
+  "local.image_build_log_group_arn": "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:${local.image_build_log_group_name}",
+  "local.image_build_log_group_name": "/aws/codebuild/${local.codebuild_project_name}",
+  "local.image_build_role_arn": "arn:aws:iam::${var.account_id}:role/${local.image_build_role_name}",
+  "local.image_build_role_name": "freesecdev-gha-linux-compliance-runner-build",
+  "local.image_build_subject": "repo:${local.runner_owner_name}@${var.github_owner_id}/${local.runner_repository_name}@${var.runner_repository_id}:environment:${var.image_build_environment}",
+  "local.image_build_tags": [
+    {
+      "component": "runner-image-build",
+      "consumer": "${var.runner_repository}"
+    }
+  ],
+  "local.image_build_workflow": "${var.runner_repository}/.github/workflows/${var.image_build_workflow_file}@refs/heads/main",
+  "local.runner_clone_url": "https://github.com/${var.runner_repository}.git",
+  "local.runner_owner_name": "${split(\"/\",var.runner_repository)[0]}",
+  "local.runner_repository_name": "${split(\"/\",var.runner_repository)[1]}",
+  "local.runner_source_dir": "/tmp/runner-source",
+  "local.staging_repository_arn": "arn:aws:ecr:${var.aws_region}:${var.account_id}:repository/${local.staging_repository_name}",
+  "local.staging_repository_name": "linux-compliance-runner-staging",
+  "local.start_build_allowed_environment_variables": [
+    "EXPECTED_COMMIT",
+    "BUILD_DATE"
+  ],
+  "local.start_build_denied_override_keys": [
+    "source",
+    "source.buildspec",
+    "source.location",
+    "source.auth.type",
+    "source.auth.resource",
+    "source.insecureSsl",
+    "source.buildStatusConfig.context",
+    "source.buildStatusConfig.targetUrl",
+    "secondarySources",
+    "artifacts",
+    "secondaryArtifacts",
+    "cache",
+    "logsConfig",
+    "serviceRole",
+    "encryptionKey",
+    "autoRetryLimit",
+    "environment.type",
+    "environment.image",
+    "environment.computeType",
+    "environment.privilegedMode",
+    "environment.certificate",
+    "environment.imagePullCredentialsType",
+    "environment.registryCredential",
+    "environment.registryCredential.credential",
+    "environment.registryCredential.credentialProvider",
+    "environment.fleet.fleetArn"
+  ],
+  "output.image_build_project_name": {
+    "description": "Name of the CodeBuild project that builds the runner image.",
+    "value": "${aws_codebuild_project.runner_image.name}"
+  },
+  "output.image_build_role_arn": {
+    "description": "ARN of the runner image build role, assumed from the release environment of the runner repository on main.",
+    "value": "${aws_iam_role.image_build.arn}"
+  },
+  "output.image_staging_repository_url": {
+    "description": "URL of the private ECR staging repository for the runner image.",
+    "value": "${aws_ecr_repository.runner_staging.repository_url}"
+  },
+  "resource.aws_cloudwatch_log_group.image_build": {
+    "kms_key_id": "${aws_kms_key.image_build.arn}",
+    "name": "${local.image_build_log_group_name}",
+    "retention_in_days": "${var.image_build_log_retention_days}",
+    "tags": "${local.image_build_tags}"
+  },
+  "resource.aws_codebuild_project.runner_image": {
+    "artifacts": [
+      {
+        "type": "NO_ARTIFACTS"
+      }
+    ],
+    "badge_enabled": false,
+    "build_timeout": "${var.image_build_timeout_minutes}",
+    "concurrent_build_limit": 1,
+    "depends_on": [
+      "${aws_iam_role_policy.codebuild_service}"
+    ],
+    "description": "Builds a main commit of ${var.runner_repository} with rootless Buildah and pushes it to ECR staging",
+    "encryption_key": "${aws_kms_key.image_build.arn}",
+    "environment": [
+      {
+        "compute_type": "BUILD_GENERAL1_MEDIUM",
+        "environment_variable": [
+          {
+            "name": "STAGING_REPOSITORY_URI",
+            "type": "PLAINTEXT",
+            "value": "${aws_ecr_repository.runner_staging.repository_url}"
+          }
+        ],
+        "image": "${var.image_builder_image}",
+        "image_pull_credentials_type": "CODEBUILD",
+        "privileged_mode": true,
+        "type": "LINUX_CONTAINER"
+      }
+    ],
+    "logs_config": [
+      {
+        "cloudwatch_logs": [
+          {
+            "group_name": "${aws_cloudwatch_log_group.image_build.name}",
+            "status": "ENABLED"
+          }
+        ],
+        "s3_logs": [
+          {
+            "status": "DISABLED"
+          }
+        ]
+      }
+    ],
+    "name": "${local.codebuild_project_name}",
+    "queued_timeout": "${var.image_build_queued_timeout_minutes}",
+    "service_role": "${aws_iam_role.codebuild_service.arn}",
+    "source": [
+      {
+        "buildspec": "${local.codebuild_buildspec}",
+        "type": "NO_SOURCE"
+      }
+    ],
+    "tags": "${local.image_build_tags}"
+  },
+  "resource.aws_ecr_lifecycle_policy.runner_staging": {
+    "policy": "${jsonencode({'rules': [{'rulePriority': 1, 'description': 'Expire staged images ${var.image_staging_retention_days} days after the push', 'selection': {'tagStatus': 'any', 'countType': 'sinceImagePushed', 'countUnit': 'days', 'countNumber': '${var.image_staging_retention_days}'}, 'action': {'type': 'expire'}}]})}",
+    "repository": "${aws_ecr_repository.runner_staging.name}"
+  },
+  "resource.aws_ecr_repository.runner_staging": {
+    "encryption_configuration": [
+      {
+        "encryption_type": "KMS"
+      }
+    ],
+    "force_delete": false,
+    "image_scanning_configuration": [
+      {
+        "scan_on_push": true
+      }
+    ],
+    "image_tag_mutability": "IMMUTABLE",
+    "name": "${local.staging_repository_name}",
+    "tags": "${local.image_build_tags}"
+  },
+  "resource.aws_iam_role.codebuild_service": {
+    "assume_role_policy": "${data.aws_iam_policy_document.codebuild_trust.json}",
+    "description": "Service role of the ${local.codebuild_project_name} CodeBuild project: build logs and pushes to the ECR staging repository",
+    "max_session_duration": 3600,
+    "name": "${local.codebuild_service_role_name}",
+    "tags": "${local.image_build_tags}"
+  },
+  "resource.aws_iam_role.image_build": {
+    "assume_role_policy": "${data.aws_iam_policy_document.image_build_trust.json}",
+    "description": "Starts the runner image CodeBuild build and pulls the staged digest, from the ${var.image_build_environment} environment of ${var.runner_repository} on main",
+    "max_session_duration": 3600,
+    "name": "${local.image_build_role_name}",
+    "tags": "${local.image_build_tags}"
+  },
+  "resource.aws_iam_role_policy.codebuild_service": {
+    "name": "runner-image-build",
+    "policy": "${data.aws_iam_policy_document.codebuild_permissions.json}",
+    "role": "${aws_iam_role.codebuild_service.id}"
+  },
+  "resource.aws_iam_role_policy.image_build": {
+    "name": "runner-image-build",
+    "policy": "${data.aws_iam_policy_document.image_build_permissions.json}",
+    "role": "${aws_iam_role.image_build.id}"
+  },
+  "resource.aws_iam_role_policy.plan_image_build": {
+    "name": "plan-read-image-build",
+    "policy": "${data.aws_iam_policy_document.plan_image_build_permissions.json}",
+    "role": "${aws_iam_role.plan.id}"
+  },
+  "resource.aws_kms_key.image_build": {
+    "deletion_window_in_days": 30,
+    "description": "Encrypts the CodeBuild logs and build settings of the linux-compliance-runner image build",
+    "enable_key_rotation": true,
+    "key_usage": "ENCRYPT_DECRYPT",
+    "policy": "${jsonencode({'Version': '2012-10-17', 'Statement': [{'Sid': 'AccountAdministersTheKey', 'Effect': 'Allow', 'Principal': {'AWS': 'arn:aws:iam::${var.account_id}:root'}, 'Action': 'kms:*', 'Resource': '*'}, {'Sid': 'CloudWatchLogsUsesTheKeyForTheBuildLogGroup', 'Effect': 'Allow', 'Principal': {'Service': 'logs.${var.aws_region}.amazonaws.com'}, 'Action': ['kms:Encrypt', 'kms:Decrypt', 'kms:ReEncrypt*', 'kms:GenerateDataKey*', 'kms:DescribeKey'], 'Resource': '*', 'Condition': {'ArnEquals': {'kms:EncryptionContext:aws:logs:arn': '${local.image_build_log_group_arn}'}}}]})}",
+    "rotation_period_in_days": 365,
+    "tags": "${local.image_build_tags}"
+  },
+  "variable.image_build_environment": {
+    "default": "release",
+    "description": "Protected deployment environment of the runner repository whose jobs may assume the image build role; it accepts main only.",
+    "type": "${string}",
+    "validation": [
+      {
+        "condition": "${can(regex(\"^[A-Za-z0-9_-]+$\",var.image_build_environment))}",
+        "error_message": "image_build_environment must be a plain environment name."
+      }
+    ]
+  },
+  "variable.image_build_log_retention_days": {
+    "default": 365,
+    "description": "Retention of the CodeBuild log group in days; at least one year.",
+    "type": "${number}",
+    "validation": [
+      {
+        "condition": "${contains([365, 400, 545, 731],var.image_build_log_retention_days)}",
+        "error_message": "image_build_log_retention_days must be 365, 400, 545 or 731."
+      }
+    ]
+  },
+  "variable.image_build_queued_timeout_minutes": {
+    "default": 10,
+    "description": "Minutes a build may wait in the CodeBuild queue before it is stopped.",
+    "type": "${number}",
+    "validation": [
+      {
+        "condition": "${var.image_build_queued_timeout_minutes >= 5 && var.image_build_queued_timeout_minutes <= 15}",
+        "error_message": "image_build_queued_timeout_minutes must be between 5 and 15."
+      }
+    ]
+  },
+  "variable.image_build_timeout_minutes": {
+    "default": 40,
+    "description": "CodeBuild timeout for one image build, in minutes; the inline buildspec stops the build script five minutes earlier.",
+    "type": "${number}",
+    "validation": [
+      {
+        "condition": "${var.image_build_timeout_minutes >= 15 && var.image_build_timeout_minutes <= 60}",
+        "error_message": "image_build_timeout_minutes must be between 15 and 60."
+      }
+    ]
+  },
+  "variable.image_build_workflow_file": {
+    "default": "image-build.yml",
+    "description": "Workflow file on main of the runner repository that may assume the image build role, matched exactly through job_workflow_ref.",
+    "type": "${string}",
+    "validation": [
+      {
+        "condition": "${can(regex(\"^[A-Za-z0-9._-]+\\\\.ya?ml$\",var.image_build_workflow_file))}",
+        "error_message": "image_build_workflow_file must be a plain workflow file name such as image-build.yml."
+      }
+    ]
+  },
+  "variable.image_builder_image": {
+    "default": "quay.io/buildah/stable@sha256:7c2b605262748ace2c5c57c5550942d0adad57aec82ede3070927722306c0ffb",
+    "description": "Digest-pinned build environment image of the CodeBuild project (Buildah v1.43.5-immutable, run rootless by the build script).",
+    "type": "${string}",
+    "validation": [
+      {
+        "condition": "${can(regex(\"^[a-z0-9.-]+(/[a-z0-9._-]+)+@sha256:[0-9a-f]{64}$\",var.image_builder_image))}",
+        "error_message": "image_builder_image must be pinned by digest (name@sha256:<64 hex>) without a tag."
+      }
+    ]
+  },
+  "variable.image_staging_retention_days": {
+    "default": 14,
+    "description": "Days an image stays in the private ECR staging repository before the lifecycle policy expires it (ADR 0007).",
+    "type": "${number}",
+    "validation": [
+      {
+        "condition": "${var.image_staging_retention_days >= 1 && var.image_staging_retention_days <= 30}",
+        "error_message": "image_staging_retention_days must be between 1 and 30."
+      }
+    ]
+  },
+  "variable.runner_repository": {
+    "default": "FreeSecDev/linux-compliance-runner",
+    "description": "GitHub repository (owner/name) that builds the CI runner image and may assume the image build role.",
+    "type": "${string}",
+    "validation": [
+      {
+        "condition": "${can(regex(\"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$\",var.runner_repository))}",
+        "error_message": "runner_repository must be owner/name."
+      }
+    ]
+  },
+  "variable.runner_repository_id": {
+    "default": "1433323102",
+    "description": "Numeric ID of the runner repository; its immutable subjects embed it.",
+    "type": "${string}",
+    "validation": [
+      {
+        "condition": "${can(regex(\"^[0-9]+$\",var.runner_repository_id))}",
+        "error_message": "runner_repository_id must be numeric."
+      }
+    ]
+  }
+}

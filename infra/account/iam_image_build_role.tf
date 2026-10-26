@@ -1,3 +1,35 @@
+locals {
+  start_build_allowed_environment_variables = ["EXPECTED_COMMIT", "BUILD_DATE"]
+  start_build_denied_override_keys = [
+    "source",
+    "source.buildspec",
+    "source.location",
+    "source.auth.type",
+    "source.auth.resource",
+    "source.insecureSsl",
+    "source.buildStatusConfig.context",
+    "source.buildStatusConfig.targetUrl",
+    "secondarySources",
+    "artifacts",
+    "secondaryArtifacts",
+    "cache",
+    "logsConfig",
+    "serviceRole",
+    "encryptionKey",
+    "autoRetryLimit",
+    "environment.type",
+    "environment.image",
+    "environment.computeType",
+    "environment.privilegedMode",
+    "environment.certificate",
+    "environment.imagePullCredentialsType",
+    "environment.registryCredential",
+    "environment.registryCredential.credential",
+    "environment.registryCredential.credentialProvider",
+    "environment.fleet.fleetArn",
+  ]
+}
+
 data "aws_iam_policy_document" "image_build_trust" {
   statement {
     sid     = "RunnerImageBuildFromTheReleaseEnvironmentOnMain"
@@ -47,6 +79,36 @@ data "aws_iam_policy_document" "image_build_permissions" {
     effect    = "Allow"
     actions   = ["codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:StopBuild"]
     resources = [aws_codebuild_project.runner_image.arn]
+  }
+
+  dynamic "statement" {
+    for_each = local.start_build_denied_override_keys
+
+    content {
+      sid       = "DenyStartBuildOverride${statement.key}"
+      effect    = "Deny"
+      actions   = ["codebuild:StartBuild"]
+      resources = ["*"]
+
+      condition {
+        test     = "Null"
+        variable = "codebuild:${statement.value}"
+        values   = ["false"]
+      }
+    }
+  }
+
+  statement {
+    sid       = "DenyStartBuildEnvironmentVariablesOtherThanTheGateInputs"
+    effect    = "Deny"
+    actions   = ["codebuild:StartBuild"]
+    resources = ["*"]
+
+    condition {
+      test     = "ForAnyValue:StringNotEquals"
+      variable = "codebuild:environment.environmentVariables.name"
+      values   = local.start_build_allowed_environment_variables
+    }
   }
 
   statement {

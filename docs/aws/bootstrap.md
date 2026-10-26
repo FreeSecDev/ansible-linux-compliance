@@ -133,7 +133,7 @@ pipeline is documented in the runner repository's `docs/image-build.md`.
 
 | Resource | Name |
 |---|---|
-| CodeBuild project | `freesecdev-linux-compliance-runner` |
+| CodeBuild project | `freesecdev-linux-compliance-runner`: `NO_SOURCE`, with the inline gate buildspec |
 | ECR repository (private staging) | `linux-compliance-runner-staging` |
 | CloudWatch log group | `/aws/codebuild/freesecdev-linux-compliance-runner` (365 days, CMK) |
 | KMS key | customer managed, yearly rotation, used by the log group and the project |

@@ -133,7 +133,7 @@ variable "image_build_environment" {
 }
 
 variable "image_builder_image" {
-  description = "Digest-pinned build environment image of the CodeBuild project (Buildah, run rootless by the build script)."
+  description = "Digest-pinned build environment image of the CodeBuild project (Buildah v1.43.5-immutable, run rootless by the build script)."
   type        = string
   default     = "quay.io/buildah/stable@sha256:7c2b605262748ace2c5c57c5550942d0adad57aec82ede3070927722306c0ffb"
 
@@ -144,24 +144,24 @@ variable "image_builder_image" {
 }
 
 variable "image_build_timeout_minutes" {
-  description = "Hard CodeBuild timeout for one image build, in minutes."
+  description = "CodeBuild timeout for one image build, in minutes; the inline buildspec stops the build script five minutes earlier."
   type        = number
-  default     = 45
+  default     = 40
 
   validation {
-    condition     = var.image_build_timeout_minutes >= 10 && var.image_build_timeout_minutes <= 90
-    error_message = "image_build_timeout_minutes must be between 10 and 90."
+    condition     = var.image_build_timeout_minutes >= 15 && var.image_build_timeout_minutes <= 60
+    error_message = "image_build_timeout_minutes must be between 15 and 60."
   }
 }
 
 variable "image_build_queued_timeout_minutes" {
   description = "Minutes a build may wait in the CodeBuild queue before it is stopped."
   type        = number
-  default     = 15
+  default     = 10
 
   validation {
-    condition     = var.image_build_queued_timeout_minutes >= 5 && var.image_build_queued_timeout_minutes <= 60
-    error_message = "image_build_queued_timeout_minutes must be between 5 and 60."
+    condition     = var.image_build_queued_timeout_minutes >= 5 && var.image_build_queued_timeout_minutes <= 15
+    error_message = "image_build_queued_timeout_minutes must be between 5 and 15."
   }
 }
 
