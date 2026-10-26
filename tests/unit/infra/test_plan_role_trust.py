@@ -1,0 +1,638 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+from hcl2 import api as hcl2_api
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+ACCOUNT_DIRECTORY = REPOSITORY_ROOT / "infra" / "account"
+GIT_TIMEOUT_SECONDS = 30
+LINE_MARKER_PREFIX = "__"
+OIDC_HOST = "${local.oidc_host}"
+STRING_EQUALS = "StringEquals"
+
+EXPECTED_TRUST: dict[str, object] = {
+    "statement": [
+        {
+            "sid": "GitHubActionsMainOnly",
+            "effect": "Allow",
+            "actions": ["sts:AssumeRoleWithWebIdentity"],
+            "principals": [
+                {
+                    "type": "Federated",
+                    "identifiers": ["${data.aws_iam_openid_connect_provider.github.arn}"],
+                },
+            ],
+            "condition": [
+                {
+                    "test": STRING_EQUALS,
+                    "variable": f"{OIDC_HOST}:aud",
+                    "values": ["sts.amazonaws.com"],
+                },
+                {
+                    "test": STRING_EQUALS,
+                    "variable": f"{OIDC_HOST}:sub",
+                    "values": ["${local.plan_subject}"],
+                },
+                {
+                    "test": STRING_EQUALS,
+                    "variable": f"{OIDC_HOST}:repository_id",
+                    "values": ["${var.github_repository_id}"],
+                },
+                {
+                    "test": STRING_EQUALS,
+                    "variable": f"{OIDC_HOST}:repository_owner_id",
+                    "values": ["${var.github_owner_id}"],
+                },
+                {
+                    "test": STRING_EQUALS,
+                    "variable": f"{OIDC_HOST}:job_workflow_ref",
+                    "values": "${local.plan_workflow_refs}",
+                },
+            ],
+        },
+    ],
+}
+
+EXPECTED_PLAN_ROLE: dict[str, object] = {
+    "name": "${local.plan_role_name}",
+    "description": "Read-only tofu plan of infra/account from ${var.github_repository} on main",
+    "assume_role_policy": "${data.aws_iam_policy_document.plan_trust.json}",
+    "max_session_duration": 3600,
+}
+
+EXPECTED_FILES = frozenset(
+    {
+        ".terraform.lock.hcl",
+        "account.example.tfvars",
+        "backend.hcl.example",
+        "budget.tf",
+        "iam_plan_role.tf",
+        "locals.tf",
+        "oidc.tf",
+        "outputs.tf",
+        "providers.tf",
+        "variables.tf",
+        "versions.tf",
+    }
+)
+
+EXPECTED_BLOCKS = frozenset(
+    {
+        "data.aws_iam_openid_connect_provider.github",
+        "data.aws_iam_policy_document.plan_permissions",
+        "data.aws_iam_policy_document.plan_trust",
+        "resource.aws_budgets_budget.monthly",
+        "resource.aws_iam_role.plan",
+        "resource.aws_iam_role_policy.plan",
+    }
+)
+
+LOCAL_ONLY_FILES = frozenset({"backend.hcl", "account.local.tfvars"})
+TERRAFORM_FILES = tuple(sorted(name for name in EXPECTED_FILES if name.endswith(".tf")))
+
+EXPECTED_LOCALS: dict[str, object] = {
+    "oidc_host": "token.actions.githubusercontent.com",
+    "oidc_provider_arn": "arn:aws:iam::${var.account_id}:oidc-provider/${local.oidc_host}",
+    "github_owner_name": '${split("/",var.github_repository)[0]}',
+    "github_repository_name": '${split("/",var.github_repository)[1]}',
+    "plan_subject": (
+        "repo:${local.github_owner_name}@${var.github_owner_id}"
+        "/${local.github_repository_name}@${var.github_repository_id}:ref:refs/heads/main"
+    ),
+    "plan_workflow_refs": (
+        '${[for file in var.plan_workflow_files : "${var.github_repository}'
+        '/.github/workflows/${file}@refs/heads/main"]}'
+    ),
+}
+
+EXPECTED_VARIABLES: dict[str, object] = {
+    "github_owner_id": {
+        "description": "Numeric ID of the GitHub organization; immutable subjects embed it.",
+        "type": "${string}",
+        "default": "347867179",
+        "validation": [
+            {
+                "condition": '${can(regex("^[0-9]+$",var.github_owner_id))}',
+                "error_message": "github_owner_id must be numeric.",
+            },
+        ],
+    },
+    "github_repository_id": {
+        "description": "Numeric ID of the GitHub repository; immutable subjects embed it.",
+        "type": "${string}",
+        "default": "1433323044",
+        "validation": [
+            {
+                "condition": '${can(regex("^[0-9]+$",var.github_repository_id))}',
+                "error_message": "github_repository_id must be numeric.",
+            },
+        ],
+    },
+    "github_repository": {
+        "description": "GitHub repository (owner/name) whose workflows may assume the plan role.",
+        "type": "${string}",
+        "default": "FreeSecDev/ansible-linux-compliance",
+    },
+    "plan_workflow_files": {
+        "description": (
+            "Workflow files on main that may assume the plan role; "
+            "each is matched exactly through job_workflow_ref."
+        ),
+        "type": "${list(string)}",
+        "default": ["oidc-check.yml"],
+        "validation": [
+            {
+                "condition": (
+                    "${length(var.plan_workflow_files) > 0 && alltrue([for f in "
+                    'var.plan_workflow_files : can(regex("^[A-Za-z0-9._-]+\\\\.ya?ml$",f))])}'
+                ),
+                "error_message": (
+                    "plan_workflow_files must list plain workflow file names "
+                    "such as oidc-check.yml."
+                ),
+            },
+        ],
+    },
+}
+
+EXPECTED_OIDC: dict[str, object] = {
+    "arn": "${local.oidc_provider_arn}",
+    "lifecycle": [
+        {
+            "postcondition": [
+                {
+                    "condition": '${contains(self.client_id_list,"sts.amazonaws.com")}',
+                    "error_message": (
+                        "The existing GitHub OIDC provider must list the audience "
+                        "sts.amazonaws.com."
+                    ),
+                },
+            ],
+        },
+    ],
+}
+
+
+def load_terraform(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as handle:
+        return cast("dict[str, Any]", hcl2_api.load(handle))
+
+
+def normalise_member(member: object) -> object:
+    if not isinstance(member, list):
+        return member
+    items = cast("list[object]", member)
+    if items and all(isinstance(item, dict) for item in items):
+        return [normalise_block(cast("dict[str, object]", item)) for item in items]
+    if len(items) == 1:
+        return items[0]
+    return items
+
+
+def normalise_block(block: dict[str, object]) -> dict[str, object]:
+    return {
+        key: normalise_member(member)
+        for key, member in block.items()
+        if not key.startswith(LINE_MARKER_PREFIX)
+    }
+
+
+def condition_order(condition: object) -> str:
+    return json.dumps(condition, sort_keys=True)
+
+
+def sort_conditions(policy: dict[str, object]) -> dict[str, object]:
+    statements = policy.get("statement")
+    if isinstance(statements, list):
+        for statement in cast("list[object]", statements):
+            if isinstance(statement, dict):
+                entries = cast("dict[str, object]", statement)
+                conditions = entries.get("condition")
+                if isinstance(conditions, list):
+                    entries["condition"] = sorted(
+                        cast("list[object]", conditions), key=condition_order
+                    )
+    return policy
+
+
+def blocks_of(document: dict[str, Any], kind: str) -> list[dict[str, Any]]:
+    return cast("list[dict[str, Any]]", document.get(kind, []))
+
+
+def labelled_blocks(
+    document: dict[str, Any], kind: str, type_name: str, name: str
+) -> list[dict[str, object]]:
+    found: list[dict[str, object]] = []
+    for block in blocks_of(document, kind):
+        by_name = cast("dict[str, dict[str, object]]", block.get(type_name, {}))
+        if name in by_name:
+            found.append(by_name[name])
+    return found
+
+
+def only_block(blocks: list[dict[str, object]]) -> dict[str, object] | None:
+    return normalise_block(blocks[0]) if len(blocks) == 1 else None
+
+
+def trust_policy(directory: Path) -> object:
+    document = load_terraform(directory / "iam_plan_role.tf")
+    block = only_block(labelled_blocks(document, "data", "aws_iam_policy_document", "plan_trust"))
+    return None if block is None else sort_conditions(block)
+
+
+def plan_role(directory: Path) -> object:
+    document = load_terraform(directory / "iam_plan_role.tf")
+    return only_block(labelled_blocks(document, "resource", "aws_iam_role", "plan"))
+
+
+def git_tracked_files(directory: Path) -> list[str]:
+    git = shutil.which("git")
+    if git is None:
+        message = "git is required to list the tracked files of infra/account"
+        raise RuntimeError(message)
+    prefix = f"{directory.relative_to(REPOSITORY_ROOT).as_posix()}/"
+    completed = subprocess.run(
+        [git, "-C", str(REPOSITORY_ROOT), "ls-files", "-z", "--", prefix],
+        capture_output=True,
+        check=True,
+        text=True,
+        timeout=GIT_TIMEOUT_SECONDS,
+        shell=False,
+        env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+    )
+    return [entry.removeprefix(prefix) for entry in completed.stdout.split("\0") if entry]
+
+
+def file_inventory(directory: Path) -> object:
+    if directory == ACCOUNT_DIRECTORY:
+        return sorted(git_tracked_files(directory))
+    return sorted(
+        path.relative_to(directory).as_posix() for path in directory.rglob("*") if path.is_file()
+    )
+
+
+def block_inventory(directory: Path) -> object:
+    found: set[str] = set()
+    for path in sorted(directory.glob("*.tf")):
+        document = load_terraform(path)
+        for kind in ("resource", "data"):
+            for entry in blocks_of(document, kind):
+                for type_name, named in entry.items():
+                    found.update(f"{kind}.{type_name}.{name}" for name in named)
+        for entry in blocks_of(document, "module"):
+            found.update(f"module.{name}" for name in entry)
+    return sorted(found)
+
+
+def local_values(directory: Path) -> object:
+    document = load_terraform(directory / "locals.tf")
+    merged: dict[str, object] = {}
+    for entry in blocks_of(document, "locals"):
+        merged.update(normalise_block(cast("dict[str, object]", entry)))
+    return {name: merged.get(name) for name in EXPECTED_LOCALS}
+
+
+def variable_blocks(directory: Path) -> object:
+    document = load_terraform(directory / "variables.tf")
+    declared: dict[str, object] = {}
+    for entry in blocks_of(document, "variable"):
+        for name, body in entry.items():
+            declared[name] = normalise_block(cast("dict[str, object]", body))
+    return {name: declared.get(name) for name in EXPECTED_VARIABLES}
+
+
+def oidc_data_source(directory: Path) -> object:
+    document = load_terraform(directory / "oidc.tf")
+    return only_block(
+        labelled_blocks(document, "data", "aws_iam_openid_connect_provider", "github")
+    )
+
+
+SECTIONS = {
+    "trust_policy": (trust_policy, sort_conditions(dict(EXPECTED_TRUST))),
+    "plan_role": (plan_role, EXPECTED_PLAN_ROLE),
+    "file_inventory": (file_inventory, sorted(EXPECTED_FILES)),
+    "block_inventory": (block_inventory, sorted(EXPECTED_BLOCKS)),
+    "locals": (local_values, EXPECTED_LOCALS),
+    "variables": (variable_blocks, EXPECTED_VARIABLES),
+    "oidc_data_source": (oidc_data_source, EXPECTED_OIDC),
+}
+
+
+def copy_account(destination: Path) -> Path:
+    destination.mkdir()
+    for name in sorted(EXPECTED_FILES):
+        shutil.copy(ACCOUNT_DIRECTORY / name, destination / name)
+    return destination
+
+
+def mutate(directory: Path, file_name: str, old: str, new: str) -> None:
+    path = directory / file_name
+    text = path.read_text(encoding="utf-8")
+    assert old in text
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+SECOND_STATEMENT = """  }
+
+  statement {
+    sid     = "Extra"
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "plan_permissions" {"""
+
+NEGATIVE_CASES = {
+    "subject_is_repo_wildcard": (
+        "locals.tf",
+        "locals",
+        (
+            'plan_subject           = "repo:${local.github_owner_name}@${var.github_owner_id}'
+            '/${local.github_repository_name}@${var.github_repository_id}:ref:refs/heads/main"'
+        ),
+        'plan_subject           = "repo:*"',
+    ),
+    "subject_condition_is_repo_wildcard": (
+        "iam_plan_role.tf",
+        "trust_policy",
+        "values   = [local.plan_subject]",
+        'values   = ["repo:*"]',
+    ),
+    "string_like_instead_of_string_equals": (
+        "iam_plan_role.tf",
+        "trust_policy",
+        'test     = "StringEquals"\n      variable = "${local.oidc_host}:sub"',
+        'test     = "StringLike"\n      variable = "${local.oidc_host}:sub"',
+    ),
+    "removed_condition": (
+        "iam_plan_role.tf",
+        "trust_policy",
+        (
+            '    condition {\n      test     = "StringEquals"\n'
+            '      variable = "${local.oidc_host}:repository_id"\n'
+            "      values   = [var.github_repository_id]\n    }\n\n"
+        ),
+        "",
+    ),
+    "extra_condition": (
+        "iam_plan_role.tf",
+        "trust_policy",
+        (
+            '    condition {\n      test     = "StringEquals"\n'
+            '      variable = "${local.oidc_host}:aud"'
+        ),
+        (
+            '    condition {\n      test     = "StringLike"\n'
+            '      variable = "${local.oidc_host}:ref"\n      values   = ["*"]\n    }\n\n'
+            '    condition {\n      test     = "StringEquals"\n'
+            '      variable = "${local.oidc_host}:aud"'
+        ),
+    ),
+    "second_statement": (
+        "iam_plan_role.tf",
+        "trust_policy",
+        '  }\n}\n\ndata "aws_iam_policy_document" "plan_permissions" {',
+        SECOND_STATEMENT,
+    ),
+    "changed_principal": (
+        "iam_plan_role.tf",
+        "trust_policy",
+        "identifiers = [data.aws_iam_openid_connect_provider.github.arn]\n    }\n\n    condition",
+        'identifiers = ["*"]\n    }\n\n    condition',
+    ),
+    "url_lookup_in_oidc": (
+        "oidc.tf",
+        "oidc_data_source",
+        "arn = local.oidc_provider_arn",
+        'url = "https://token.actions.githubusercontent.com"',
+    ),
+    "audience_postcondition_removed": (
+        "oidc.tf",
+        "oidc_data_source",
+        'contains(self.client_id_list, "sts.amazonaws.com")',
+        "true",
+    ),
+    "owner_id_default_changed": (
+        "variables.tf",
+        "variables",
+        '"347867179"',
+        '"1"',
+    ),
+    "repository_id_validation_removed": (
+        "variables.tf",
+        "variables",
+        'can(regex("^[0-9]+$", var.github_repository_id))',
+        "true",
+    ),
+    "workflow_refs_widened": (
+        "locals.tf",
+        "locals",
+        '@refs/heads/main"\n  ]',
+        '@refs/heads/*"\n  ]',
+    ),
+    "role_uses_other_policy": (
+        "iam_plan_role.tf",
+        "plan_role",
+        "assume_role_policy   = data.aws_iam_policy_document.plan_trust.json",
+        "assume_role_policy   = data.aws_iam_policy_document.plan_permissions.json",
+    ),
+    "role_session_extended": (
+        "iam_plan_role.tf",
+        "plan_role",
+        "max_session_duration = 3600",
+        "max_session_duration = 43200",
+    ),
+    "role_permissions_boundary_added": (
+        "iam_plan_role.tf",
+        "plan_role",
+        "max_session_duration = 3600",
+        'max_session_duration = 3600\n  permissions_boundary = "arn:aws:iam::aws:policy/Admin"',
+    ),
+    "role_path_added": (
+        "iam_plan_role.tf",
+        "plan_role",
+        "max_session_duration = 3600",
+        'max_session_duration = 3600\n  path                 = "/other/"',
+    ),
+}
+
+LOOSE_ROLE = """
+data "aws_iam_policy_document" "loose_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "${local.oidc_host}:sub"
+      values   = ["repo:*"]
+    }
+  }
+}
+
+resource "aws_iam_role" "loose" {
+  name               = "loose"
+  assume_role_policy = data.aws_iam_policy_document.loose_trust.json
+}
+"""
+
+OVERRIDE_TRUST = """
+data "aws_iam_policy_document" "plan_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "${local.oidc_host}:sub"
+      values   = ["repo:*"]
+    }
+  }
+}
+"""
+
+INLINE_JSON_ROLE = """
+resource "aws_iam_role" "inline" {
+  name = "inline"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Principal = { Federated = data.aws_iam_openid_connect_provider.github.arn }
+    }]
+  })
+}
+"""
+
+MODULE_BLOCK = """
+module "extra" {
+  source = "./extra"
+}
+"""
+
+JSON_ROLE = '{"resource": {"aws_iam_role": {"json": {"name": "json", "assume_role_policy": "{}"}}}}'
+
+TFVARS_OVERRIDE = 'github_repository_id = "1"\ngithub_owner_id      = "1"\n'
+
+ADDED_FILE_CASES = {
+    "override_file_redefines_trust": (
+        "iam_plan_role_override.tf",
+        OVERRIDE_TRUST,
+        "file_inventory",
+    ),
+    "second_role_in_new_file_blocks": ("loose_role.tf", LOOSE_ROLE, "block_inventory"),
+    "second_role_in_new_file_files": ("loose_role.tf", LOOSE_ROLE, "file_inventory"),
+    "json_role_file": ("role.tf.json", JSON_ROLE, "file_inventory"),
+    "inline_jsonencode_role": ("inline_role.tf", INLINE_JSON_ROLE, "block_inventory"),
+    "auto_tfvars_override": ("account.auto.tfvars", TFVARS_OVERRIDE, "file_inventory"),
+    "terraform_tfvars_override": ("terraform.tfvars", TFVARS_OVERRIDE, "file_inventory"),
+    "module_block": ("module.tf", MODULE_BLOCK, "block_inventory"),
+    "local_backend_file_present": ("backend.hcl", 'bucket = "x"\n', "file_inventory"),
+}
+
+APPENDED_CASES = {
+    "second_role_appended": ("iam_plan_role.tf", LOOSE_ROLE, "block_inventory"),
+}
+
+
+@pytest.mark.parametrize("section", sorted(SECTIONS))
+def test_account_stack_matches_the_pinned_section(section: str) -> None:
+    reader, expected = SECTIONS[section]
+
+    assert reader(ACCOUNT_DIRECTORY) == expected
+
+
+def test_trust_policy_has_exactly_one_statement() -> None:
+    policy = cast("dict[str, list[object]]", trust_policy(ACCOUNT_DIRECTORY))
+
+    assert list(policy) == ["statement"]
+    assert len(policy["statement"]) == 1
+
+
+def test_trust_policy_conditions_are_all_string_equals() -> None:
+    policy = cast(
+        "dict[str, list[dict[str, list[dict[str, str]]]]]", trust_policy(ACCOUNT_DIRECTORY)
+    )
+    conditions = policy["statement"][0]["condition"]
+
+    assert {condition["test"] for condition in conditions} == {STRING_EQUALS}
+    assert sorted(condition["variable"].split(":")[1] for condition in conditions) == [
+        "aud",
+        "job_workflow_ref",
+        "repository_id",
+        "repository_owner_id",
+        "sub",
+    ]
+
+
+def test_unmutated_copy_passes_every_section(tmp_path: Path) -> None:
+    copy = copy_account(tmp_path / "account")
+
+    for reader, expected in SECTIONS.values():
+        assert reader(copy) == expected
+
+
+def test_local_only_files_are_not_tracked() -> None:
+    tracked = set(git_tracked_files(ACCOUNT_DIRECTORY))
+
+    assert not tracked & LOCAL_ONLY_FILES
+
+
+def test_every_stack_file_is_part_of_the_inventory() -> None:
+    assert {path.name for path in ACCOUNT_DIRECTORY.glob("*.tf")} == set(TERRAFORM_FILES)
+
+
+@pytest.mark.parametrize("case", sorted(NEGATIVE_CASES))
+def test_mutated_copy_fails_the_pinned_section(tmp_path: Path, case: str) -> None:
+    file_name, section, old, new = NEGATIVE_CASES[case]
+    copy = copy_account(tmp_path / "account")
+    mutate(copy, file_name, old, new)
+    reader, expected = SECTIONS[section]
+
+    assert reader(copy) != expected
+
+
+@pytest.mark.parametrize("case", sorted(ADDED_FILE_CASES))
+def test_added_file_fails_the_inventory(tmp_path: Path, case: str) -> None:
+    file_name, content, section = ADDED_FILE_CASES[case]
+    copy = copy_account(tmp_path / "account")
+    (copy / file_name).write_text(content, encoding="utf-8")
+    reader, expected = SECTIONS[section]
+
+    assert reader(copy) != expected
+
+
+@pytest.mark.parametrize("case", sorted(APPENDED_CASES))
+def test_appended_block_fails_the_inventory(tmp_path: Path, case: str) -> None:
+    file_name, content, section = APPENDED_CASES[case]
+    copy = copy_account(tmp_path / "account")
+    path = copy / file_name
+    path.write_text(path.read_text(encoding="utf-8") + content, encoding="utf-8")
+    reader, expected = SECTIONS[section]
+
+    assert reader(copy) != expected
