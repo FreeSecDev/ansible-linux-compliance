@@ -49,19 +49,36 @@
       - lifecycle_topic.disruptive == lifecycle_registry_entry.disruptive
       - not lifecycle_topic.disruptive or (lifecycle_topic.containment | default('') | length > 0)
       - lifecycle_items.values() | map('length') | sum > 0
+      - lifecycle_applied.values() | map('length') | sum > 0
       - lifecycle_pre_states | map(attribute='name') | unique | list | length == lifecycle_pre_states | length
     fail_msg: >-
       The lifecycle declaration of {{ lifecycle_family }} does not match the catalogue: its family must be
       {{ lifecycle_family }}, disruptive must be {{ lifecycle_registry_entry.disruptive }} as in the registry, a
-      disruptive topic must describe its containment, at least one item must be declared for this platform and
-      every pre-state needs a distinct name. tools/roles/check_lifecycle_topics.py checks the full format.
+      disruptive topic must describe its containment, at least one item and one applied expectation must be declared
+      for this platform and every pre-state needs a distinct name. tools/roles/check_lifecycle_topics.py checks the
+      full format.
     quiet: true
 
-- name: Lifecycle topic | Report a topic that the profile of this platform does not select
+- name: Lifecycle topic | Refuse a topic that this platform skips without the declaration saying so, and the reverse
+  ansible.builtin.assert:
+    that:
+      - (lifecycle_rules | length == 0) is sameas (lifecycle_platform in lifecycle_unselected_platforms)
+    fail_msg: >-
+      {{ lifecycle_family }} has {{ lifecycle_rules | length }} native rules in {{ molecule_profile_id }} on
+      {{ molecule_target.instance }}, but its declaration lists {{ lifecycle_unselected_platforms }} under
+      unselected_platforms. A platform whose profile selects no native rule of the topic must be listed there with a
+      reason, and a platform that runs the topic must not be; tools/roles/check_lifecycle_topics.py refuses a
+      declaration that lists every platform, so no topic can be skipped everywhere.
+    quiet: true
+  vars:
+    lifecycle_unselected_platforms: >-
+      {{ lifecycle_topic.unselected_platforms | default([], true) | map(attribute='platform') | list }}
+
+- name: Lifecycle topic | Report a topic that the profile of this platform does not select, as declared
   ansible.builtin.debug:
     msg: >-
-      {{ lifecycle_family }} has no native rule in {{ molecule_profile_id }} on {{ molecule_target.instance }}; its
-      lifecycle is not run on this platform.
+      {{ lifecycle_family }} has no native rule in {{ molecule_profile_id }} on {{ molecule_target.instance }}, as its
+      declaration states; its lifecycle runs on the other platforms.
   when: lifecycle_rules | length == 0
 
 - name: Lifecycle topic | Take the state of the topic before any cycle
@@ -80,6 +97,14 @@
       The state ledger already records rules of {{ lifecycle_family }}, so the state before the collection is not
       known: {{ lifecycle_pristine.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids) | list }}.
     quiet: true
+
+- name: Lifecycle topic | Take the state of the whole instance before any cycle
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Lifecycle topic | Remember the state of the whole instance before any cycle
+  ansible.builtin.set_fact:
+    lifecycle_broad_pristine: "{{ lifecycle_broad_lines }}"
 
 - name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state
   ansible.builtin.include_tasks:
@@ -110,3 +135,11 @@
       - lifecycle_state.ledger == lifecycle_pristine.ledger
     fail_msg: "{{ lifecycle_family }} left the ledger at {{ lifecycle_state.ledger }}."
     quiet: true
+
+- name: Lifecycle topic | Assert that the whole instance is back to its state before any cycle
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: "{{ lifecycle_family }}"
+    lifecycle_broad_step: the topic after every cycle
+    lifecycle_broad_reference: "{{ lifecycle_broad_pristine }}"

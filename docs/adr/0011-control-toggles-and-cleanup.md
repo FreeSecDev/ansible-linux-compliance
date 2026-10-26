@@ -584,8 +584,14 @@ harness, `extensions/molecule/shared/lifecycle.yml`, rather than one scenario pe
   state in the ledger; a second apply changes nothing; switching off plans the cleanup in check mode with the
   controlling `disabled_by`, restores the declared state and the ledger exactly and is reported as `disabled` by the
   audit; a further run changes nothing. A customised pre-state proves that cleanup restores the recorded value rather
-  than a distribution default. The step's own self-check proves that the comparison detects a missing control, an
-  undeclared change and a file left behind or removed.
+  than a distribution default.
+- **Restored exactly means the whole instance** (review of PR #50). Besides the declared items, the harness records
+  every file below the system trees with its inode, times and SHA-256, every readable kernel parameter, every package,
+  user, group and service, before each cycle and before the first, and the state after the cleanup and after the last
+  cycle must equal it. The only allowed differences are listed in the harness and the Molecule guide: the times of the
+  declared files and their directories, the ledger file, the evidence tree, the RPM database times and eleven kernel
+  usage counters. A declaration must have at least one `applied` expectation, and a platform may skip a topic only
+  when the declaration says so, never all platforms. Self-checks prove that both comparisons refuse what they must.
 - **Disruptive families** opt in through their declaration (`disruptive: true` and a `containment` note) and get the
   allow-list for their own family and runs only. They run after every non-disruptive topic, the first failure ends the
   play, and the guard's connection test runs after every remediate run, so a topic that breaks the container fails

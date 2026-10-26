@@ -1,0 +1,44 @@
+---
+- name: Lifecycle broad lines | Normalise the instance state, leaving out only the listed differences
+  ansible.builtin.set_fact:
+    lifecycle_broad_text: >-
+      {%- set declared = lifecycle_broad_declared | list -%}
+      {%- set parents = declared | map('dirname') | unique | list -%}
+      {%- set ignored_trees = '^(' ~ (lifecycle_broad_ignored_trees | map('regex_escape') | join('|')) ~ ')(/|$)' -%}
+      {%- set volatile_trees = '^(' ~ (lifecycle_broad_volatile_sysctl_trees | map('regex_escape') | join('|'))
+      ~ ')(/|$)' -%}
+      {%- for entry in lifecycle_broad_raw.files | sort(attribute='path') -%}
+      {%- if entry.path not in lifecycle_broad_ignored_paths and entry.path is not match(ignored_trees) -%}
+      {%- set times = '-|-' if entry.path in declared or entry.path in parents
+      or entry.path is match(contract_snapshot_volatile_times) else entry.mtime ~ '|' ~ entry.ctime -%}
+      file|{{ entry.path }}|{{ 'link' if entry.islnk else 'file' if entry.isreg else 'directory' if entry.isdir
+      else 'other' }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|{{ entry.size }}|{{ entry.inode }}|
+      {{- times }}|{{ entry.checksum | default('') }}{{ '\n' }}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for entry in lifecycle_broad_raw.sysctl | sort(attribute='path') -%}
+      {%- if entry.path not in lifecycle_broad_volatile_sysctl and entry.path is not match(volatile_trees) -%}
+      sysctl|{{ entry.path }}|{{ entry.checksum | default('') }}{{ '\n' }}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for name, versions in lifecycle_broad_raw.packages | dictsort -%}
+      package|{{ name }}|{{ versions | map('dictsort') | map('to_json') | sort | join(',') }}{{ '\n' }}
+      {%- endfor -%}
+      {%- for name, entry in lifecycle_broad_raw.users | dictsort -%}
+      user|{{ name }}|{{ entry | to_json }}{{ '\n' }}
+      {%- endfor -%}
+      {%- for name, entry in lifecycle_broad_raw.groups | dictsort -%}
+      group|{{ name }}|{{ entry | to_json }}{{ '\n' }}
+      {%- endfor -%}
+      {%- if lifecycle_broad_raw.services is none -%}
+      services|no service manager{{ '\n' }}
+      {%- else -%}
+      {%- for name, entry in lifecycle_broad_raw.services | dictsort -%}
+      service|{{ name }}|{{ entry.state | default('') }}|{{ entry.status | default('') }}{{ '\n' }}
+      {%- endfor -%}
+      {%- endif -%}
+
+- name: Lifecycle broad lines | Turn the normalised state into a sorted list
+  ansible.builtin.set_fact:
+    lifecycle_broad_lines: >-
+      {{ (lifecycle_broad_text | default('', true)).split('\n') | reject('equalto', '') | sort }}

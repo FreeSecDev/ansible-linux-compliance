@@ -11,10 +11,13 @@ The topics are derived from the catalogue ``roles/remediate/vars/rules.yml`` wit
 check fails when a native topic has no declaration, when a declaration names a topic without
 a native rule, and when a declaration does not follow the format of ``docs/molecule.md``:
 unknown keys, a family or disruptive flag that disagrees with the file name or the registry,
-a disruptive topic without a containment note, an expectation or a pre-state for an item that
-is not declared, an unknown attribute or platform, or a malformed mode. A topic therefore
-cannot gain a native rule without its lifecycle test, and the harness cannot silently skip a
-declared expectation. The harness repeats the coverage check at run time.
+a disruptive topic without a containment note, a declaration without an ``applied``
+expectation, an expectation or a pre-state for an item that is not declared, an unknown
+attribute or platform, a malformed mode, or ``unselected_platforms`` that name every
+platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
+without its lifecycle test, and the harness cannot silently skip a declared expectation or a
+topic. The harness repeats the coverage check at run time and fails on a platform that skips
+a topic without the declaration saying so.
 """
 
 from __future__ import annotations
@@ -40,9 +43,18 @@ TOPICS: Final[Path] = Path("extensions/molecule/shared/vars/topics")
 VERSIONS: Final[Path] = Path("extensions/molecule/shared/vars/versions.yml")
 IMAGES_KEY: Final[str] = "molecule_images"
 TOP_KEYS: Final[frozenset[str]] = frozenset(
-    {"family", "disruptive", "containment", "audit", "state", "applied", "pre_states"}
+    {
+        "family",
+        "disruptive",
+        "containment",
+        "audit",
+        "state",
+        "applied",
+        "pre_states",
+        "unselected_platforms",
+    }
 )
-REQUIRED_KEYS: Final[tuple[str, ...]] = ("family", "disruptive", "state")
+REQUIRED_KEYS: Final[tuple[str, ...]] = ("family", "disruptive", "state", "applied")
 CATEGORY_KEYS: Final[dict[str, str]] = {
     "files": "path",
     "packages": "name",
@@ -53,7 +65,20 @@ CATEGORY_KEYS: Final[dict[str, str]] = {
 }
 ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
     "files": frozenset(
-        {"exists", "type", "mode", "owner", "group", "uid", "gid", "checksum", "link_target"}
+        {
+            "exists",
+            "type",
+            "mode",
+            "owner",
+            "group",
+            "uid",
+            "gid",
+            "inode",
+            "mtime",
+            "attributes",
+            "checksum",
+            "link_target",
+        }
     ),
     "packages": frozenset({"installed", "versions"}),
     "services": frozenset({"exists", "state", "status"}),
@@ -65,6 +90,7 @@ AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
 PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files"})
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset({"path", "mode", "owner", "group"})
+UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
 CHANGES_KEY: Final[str] = "changes"
 MODE: Final[re.Pattern[str]] = re.compile(r"[0-7]{4}")
@@ -201,6 +227,7 @@ class Declaration:
         if applied is None:
             return
         self.keys(applied, frozenset(CATEGORY_KEYS), "applied")
+        expectations = 0
         for category in CATEGORY_KEYS:
             if category not in applied:
                 continue
@@ -220,6 +247,36 @@ class Declaration:
                 if key in seen:
                     self.error(f"{what} expects {key} twice")
                 seen.add(key)
+                expectations += 1
+        if expectations == 0:
+            self.error(
+                "applied declares no expectation; the state after apply is the evidence that the "
+                "remediation works when a container audit cannot show it"
+            )
+
+    def unselected(self, value: object) -> None:
+        """Check the platforms whose profile selects no native rule of the topic."""
+        seen: set[str] = set()
+        for index, entry in enumerate(self.sequence(value, "unselected_platforms")):
+            what = f"unselected_platforms[{index}]"
+            item = self.mapping(entry, what)
+            if item is None:
+                continue
+            self.keys(item, UNSELECTED_KEYS, what)
+            platform = item.get("platform")
+            if not isinstance(platform, str) or platform not in self.platforms:
+                self.error(f"{what} needs a known platform")
+            elif platform in seen:
+                self.error(f"{what} lists {platform} twice")
+            else:
+                seen.add(platform)
+            if not _text(item.get("reason")):
+                self.error(f"{what} needs a reason")
+        if seen and seen >= self.platforms:
+            self.error(
+                "unselected_platforms lists every platform, so the lifecycle of the topic "
+                "would run nowhere"
+            )
 
     def audit(self, value: object) -> None:
         """Check the additional audit outcomes that the container platform allows."""
@@ -318,6 +375,8 @@ def check_declaration(
         declaration.audit(data["audit"])
     if "pre_states" in data:
         declaration.pre_states(data["pre_states"])
+    if "unselected_platforms" in data:
+        declaration.unselected(data["unselected_platforms"])
     return declaration.errors
 
 

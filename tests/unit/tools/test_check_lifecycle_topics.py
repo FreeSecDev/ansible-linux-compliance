@@ -47,6 +47,7 @@ VALID: dict[str, object] = {
             "files": [{"path": "/etc/crontab", "mode": "0640", "owner": "root", "group": "root"}],
         },
     ],
+    "unselected_platforms": [{"platform": "rhel_compatible", "reason": "No profile selects it."}],
 }
 
 
@@ -139,7 +140,12 @@ def test_a_disruptive_topic_must_describe_its_containment(tmp_path: Path) -> Non
     catalogue = tmp_path / "rules.yml"
     shutil.copyfile(REPOSITORY_ROOT / generate_toggles.CATALOGUE, catalogue)
     assert promote.main(["--catalogue", str(catalogue), "--rule", SSH_RULE]) == 0
-    ssh = {"family": "ssh", "disruptive": True, "state": {"files": [{"path": "/etc/ssh/x"}]}}
+    ssh = {
+        "family": "ssh",
+        "disruptive": True,
+        "state": {"files": [{"path": "/etc/ssh/x"}]},
+        "applied": {"files": [{"path": "/etc/ssh/x", "exists": True}]},
+    }
     root = make_root(tmp_path, {"file_permissions": VALID, "ssh": ssh}, catalogue=catalogue)
     assert lifecycle.check(root)[1] == [
         f"{root / lifecycle.TOPICS / 'ssh.yml'}: a disruptive topic must describe its containment"
@@ -195,6 +201,45 @@ def test_a_disruptive_topic_must_describe_its_containment(tmp_path: Path) -> Non
             "state.files[0] names the unknown platform 'debian'",
         ),
         (changed(state={}, applied=REMOVE, pre_states=REMOVE), "state declares no item"),
+        (changed(applied=REMOVE), "the declaration needs 'applied'"),
+        (changed(applied=NO_KEYS), "applied declares no expectation"),
+        (changed(applied={"files": NO_ITEMS}), "applied declares no expectation"),
+        (changed(unselected_platforms=NO_KEYS), "unselected_platforms must be a list"),
+        (changed(unselected_platforms=["x"]), "unselected_platforms[0] must be a mapping"),
+        (
+            changed(unselected_platforms=[{"platform": "ubuntu", "reason": "r", "x": 1}]),
+            "unselected_platforms[0] has the unknown key 'x'",
+        ),
+        (
+            changed(unselected_platforms=[{"platform": "debian", "reason": "r"}]),
+            "unselected_platforms[0] needs a known platform",
+        ),
+        (
+            changed(unselected_platforms=[{"reason": "r"}]),
+            "unselected_platforms[0] needs a known platform",
+        ),
+        (
+            changed(
+                unselected_platforms=[
+                    {"platform": "ubuntu", "reason": "r"},
+                    {"platform": "ubuntu", "reason": "r"},
+                ]
+            ),
+            "unselected_platforms[1] lists ubuntu twice",
+        ),
+        (
+            changed(unselected_platforms=[{"platform": "ubuntu", "reason": " "}]),
+            "unselected_platforms[0] needs a reason",
+        ),
+        (
+            changed(
+                unselected_platforms=[
+                    {"platform": "ubuntu", "reason": "r"},
+                    {"platform": "rhel_compatible", "reason": "r"},
+                ]
+            ),
+            "unselected_platforms lists every platform",
+        ),
         (changed(applied=[]), "applied must be a mapping"),
         (changed(applied={"mounts": []}), "applied has the unknown key 'mounts'"),
         (changed(applied={"files": {}}), "applied.files must be a list"),
@@ -333,13 +378,19 @@ def test_an_invalid_declaration_is_reported(
     assert any(message in error for error in errors), errors
 
 
-def test_a_minimal_declaration_needs_only_family_disruptive_and_state(tmp_path: Path) -> None:
+def test_a_minimal_declaration_needs_family_disruptive_state_and_applied(tmp_path: Path) -> None:
     minimal = {
         "family": "file_permissions",
         "disruptive": False,
         "state": {"users": [{"name": "root"}]},
+        "applied": {"users": [{"name": "root", "exists": True}]},
     }
     assert errors_for(tmp_path, minimal) == []
+
+
+def test_identity_attributes_of_a_file_may_be_expected(tmp_path: Path) -> None:
+    expectation = {"path": "/etc/crontab", "inode": 5, "mtime": 1.0, "attributes": ["e"]}
+    assert errors_for(tmp_path, changed(applied={"files": [expectation]})) == []
 
 
 def test_an_unreadable_declaration_stops_the_check(

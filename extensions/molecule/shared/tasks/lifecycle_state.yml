@@ -17,13 +17,13 @@
     get_checksum: true
     checksum_algorithm: sha256
     get_mime: false
-    get_attributes: false
+    get_attributes: true
   loop: "{{ lifecycle_items.files }}"
   loop_control:
     label: "{{ item.path }}"
   register: lifecycle_state_files
 
-- name: Lifecycle state | Record existence, type, mode, owner, group, content hash and link target of each file
+- name: Lifecycle state | Record existence, type, mode, owner, inode, mtime, attributes, content and link of each file
   ansible.builtin.set_fact:
     lifecycle_state: >-
       {{ lifecycle_state | combine({'files': {item.item.path: {
@@ -35,6 +35,9 @@
            'group': item.stat.gr_name | default(none),
            'uid': item.stat.uid | default(none),
            'gid': item.stat.gid | default(none),
+           'inode': item.stat.inode | default(none),
+           'mtime': item.stat.mtime | default(none),
+           'attributes': item.stat.attributes | default(none),
            'checksum': item.stat.checksum | default(none),
            'link_target': item.stat.lnk_target | default(none)}}}, recursive=true) }}
   loop: "{{ lifecycle_state_files.results }}"

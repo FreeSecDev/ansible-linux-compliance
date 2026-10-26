@@ -344,19 +344,25 @@ unknown.
 
 The topics are derived from the catalogue at run time: every family of `roles/remediate/vars/rules.yml` with a rule
 whose strategy is not `audit_only`, in registry order with the non-disruptive families first. The rules of a topic
-are its native rules that the verified profile of the platform selects; a topic without such a rule on a platform is
-reported and skipped there. Before the first topic, `shared/tasks/lifecycle_selfcheck.yml` feeds synthetic states to
-the comparison and asserts that it reports a missing control, a change that nothing declares, a file left behind or
-removed by a cleanup, and a declared change that did not happen, so a comparison that always passes fails the run.
+are its native rules that the verified profile of the platform selects. A platform whose profile selects none must
+be listed under `unselected_platforms` in the declaration, with a reason, and a listed platform must select none; the
+run fails otherwise, and the coverage gate refuses a declaration that lists every platform, so no topic can be skipped
+everywhere. Before the first topic, two self-checks feed synthetic states to the comparisons and fail the run if a
+comparison would pass what it must refuse: `shared/tasks/lifecycle_selfcheck.yml` for the declared state (a missing
+control, a change that nothing declares, a file left behind or removed, a declared change that did not happen) and
+`shared/tasks/lifecycle_broad_selfcheck.yml` for the [whole instance](#the-whole-instance-comparison) (an undeclared
+file left behind, modified or only touched, a declared file replaced by another inode, a file next to the ledger, a
+kernel parameter, a package, a user, a group and a service added or changed must be refused; the listed differences
+must be accepted).
 
 For each topic, for the topic toggle and then the rule toggles, and for each declared pre-state:
 
 1. The pre-state is set (only file modes and ownership), the topic is switched on and the **declared state** is
-   recorded: per file existence, type, mode, owner, group, uid, gid, SHA-256 and link target (`stat` without following
-   links); per package whether it is installed and its versions (`package_facts`); per service whether it exists, its
+   recorded: per file existence, type, mode, owner, group, uid, gid, inode, mtime, `lsattr` attributes, SHA-256 and
+   link target (`stat` without following links); per package whether it is installed and its versions (`package_facts`); per service whether it exists, its
    state and its status (`service_facts`); per kernel parameter its value (`slurp` of `/proc/sys`); per user and group
    whether it exists and its entry (`getent`); and every entry of the state ledger (`control_state` `list`). The
-   ledger must not record any rule of the topic.
+   ledger must not record any rule of the topic. The state of the whole instance is recorded as well (see below).
 2. **Check mode on.** The remediate role runs in check mode. The plan must have `apply` for every rule of the topic and
    the results must report each as `applied` and changed, while the [no-change snapshot](#the-no-change-snapshot) of
    every watched path stays identical.
@@ -373,16 +379,52 @@ For each topic, for the topic toggle and then the rule toggles, and for each dec
    the results must report the cleanup, and the no-change snapshot must be identical.
 6. **Cleanup.** Every rule must be cleaned up, changed and not `cleanup_incomplete`. The declared state must equal the
    state of step 1 exactly: a file that did not exist before must not exist, a file that existed must still exist with
-   only the collection's changes reverted, and the ledger must equal its entries of step 1. With `audit: true` a real
-   scan must report every rule `disabled` by the same toggle.
+   only the collection's changes reverted, and the ledger must equal its entries of step 1. The whole instance must
+   equal its state of step 1, with only the listed differences. With `audit: true` a real scan must report every rule
+   `disabled` by the same toggle.
 7. **Off again.** A further run must plan `none` for every rule, give no result and leave the no-change snapshot
    identical.
 
 After every remediate run the harness reads `/proc/1/environ` and `/proc/self/status` over the connection and applies
 the guard's own connection test (`shared/tasks/guard_connection.yml`): the run still reaches the container that the
 create step started, by its marker, without capabilities and with `NoNewPrivs`. After the last cycle the files of the
-pre-states get their original mode and ownership back, and the declared state and the ledger must equal those before
-the first cycle.
+pre-states get their original mode and ownership back, and the declared state, the ledger and the whole instance
+must equal those before the first cycle.
+
+### The whole-instance comparison
+
+A declaration names what a topic is expected to touch, so a cleanup that forgets something the declaration also
+forgot, such as a backup file, a second drop-in or a package, would pass a comparison of the declared items alone.
+`shared/tasks/lifecycle_broad.yml` therefore records the whole instance before each cycle and before the first cycle,
+and the state after the cleanup and after the last cycle must equal it:
+
+- every entry below `/etc`, `/usr`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib`
+  (`find` without following links): path, type, mode, uid, gid, size, inode, mtime, ctime and the SHA-256 of every
+  regular file;
+- every kernel parameter that the instance may read (`find` over `/proc/sys` with a SHA-256 of each value);
+- every installed package with its versions (`package_facts`), every user and group with its entry (`getent`), and
+  every service where a service manager runs (`service_facts`; the containers have none, which is recorded as such).
+
+Only these differences are allowed, each listed in `shared/vars/lifecycle.yml`:
+
+| Difference | Why |
+|---|---|
+| mtime and ctime of the declared files and of their parent directories | changing a mode changes the ctime, and creating or removing a drop-in changes the times of its directory; everything else about these entries still counts, and the declared state compares the declared files exactly |
+| `/var/lib/freesecdev`, `/var/lib/freesecdev/linux_compliance` and its `state.json` | the ledger, compared entry by entry instead; any other file in that directory counts |
+| `/var/lib/freesecdev/linux_compliance/evidence` and everything below it | the evidence and output of the real scans of the cycle |
+| the times of `/var/lib/rpm/rpmdb.sqlite-shm` and `-wal` | the scanner's RPM probes, as in the [no-change snapshot](#the-no-change-snapshot) |
+| the kernel usage counters `fs/aio-nr`, `fs/dentry-state`, `fs/file-nr`, `fs/inode-nr`, `fs/inode-state`, `fs/quota/*`, `kernel/hung_task_detect_count`, `kernel/ns_last_pid`, `kernel/pty/nr`, `kernel/random/entropy_avail` and `kernel/random/uuid` | they count current kernel use, change between two reads without any write, and are not settings; two reads in a fresh container differed in six of them |
+
+`find` does not report the target of a symbolic link. A link cannot be changed in place, so a new target shows up as
+a new inode, mtime and ctime of the link, which are recorded. Extended attributes, POSIX ACLs and SELinux contexts are
+not recorded: `ansible.builtin` has no module that reads them (`ansible.posix.acl` and `community.general.xattr` are
+not pinned dependencies, and the images have neither the `acl` tools nor SELinux), so a topic that manages them needs
+a module or the libvirt scenarios first. `lsattr` attributes are recorded for declared files only, through `stat`;
+where the file system of the container does not support them, `stat` reports none both times.
+
+Three mutations of the remediate role, each applied only to a local copy and reverted, made the harness fail at the
+first cleanup with the offending entry: writing an undeclared `/etc/fsd-review-stray` during apply, appending a line
+to `/etc/issue`, and appending a user to `/etc/passwd` (which shows as the changed file and the new `user` entry).
 
 The topic-toggle cycles run before the rule-toggle cycles, because a rule toggle that is set wins over the topic
 toggle and set facts cannot be unset. The harness asserts that no rule toggle of the topic exists before a
@@ -390,7 +432,8 @@ topic-toggle cycle. The toggles are set with `set_fact` under the names that the
 and audit roles find through `varnames`, exactly as inventory values.
 
 For `file_permissions` each scenario runs four cycles (topic and rule toggle, from the as-built state and from a
-customised mode), 24 remediate runs and four real scans. The customised pre-state (`0640`) is what shows that cleanup
+customised mode), 24 remediate runs, four real scans and ten whole-instance records; the Ubuntu step took seven and a
+half minutes on a WSL2 workstation. The customised pre-state (`0640`) is what shows that cleanup
 restores the recorded prior value and not a distribution default: with the cleanup changed to always restore `0644`,
 the harness fails with `cleanup: files /etc/crontab: mode changed from 0640 to 0644`.
 
@@ -443,9 +486,10 @@ pre_states:
 | `disruptive` | yes | Must equal the flag of the family in the registry |
 | `containment` | for disruptive topics only | What the topic can break in the container and why the harness still reaches it; see below |
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform |
-| `applied` | no | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
+| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles) and `files` (mode, owner or group of declared files); the default is the as-built state with scans |
+| `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
 with services fails there with a clear message. A topic whose remediation must write kernel parameters, mounts or
@@ -461,13 +505,17 @@ No topic can gain a native rule without its lifecycle test:
   and fails when a native topic has no declaration, when a declaration names a topic without a native rule, or when a
   declaration breaks the format above: unknown keys, attributes or platforms, a family or disruptive flag that
   disagrees with the file name or the registry, a disruptive topic without `containment`, an expectation or pre-state
-  for an undeclared item, an expectation that expects nothing, or a mode that is not a four-digit octal string.
-- `shared/lifecycle.yml` repeats the coverage check at run time, before any topic runs, and checks each declaration
-  against the registry again, so both Molecule jobs fail too.
+  for an undeclared item, a declaration without an `applied` expectation, an expectation that expects nothing, a
+  mode that is not a four-digit octal string, or `unselected_platforms` that list every platform. A container audit
+  often reports `notapplicable`, so the state after apply is the positive evidence that the remediation works, and it
+  is required.
+- `shared/lifecycle.yml` repeats the coverage check at run time, before any topic runs, checks each declaration
+  against the registry again, and fails when a platform skips a topic that its declaration does not list under
+  `unselected_platforms`, so both Molecule jobs fail too.
 
 ### Disruptive topics
 
-The disruptive families (`ssh`, `pam`, `accounts`, `sudo`, `firewall` and the others that the registry flags) have no
+The disruptive families (`ssh`, `pam`, `sssd`, `sudo`, `faillock` and the others that the registry flags) have no
 native rule yet. When one gains a rule, its topic is opted in by its declaration: `disruptive: true`, which must match
 the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the

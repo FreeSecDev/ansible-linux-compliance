@@ -61,6 +61,14 @@
         loop_var: lifecycle_selfcheck_case
         label: "{{ lifecycle_selfcheck_case.name }}"
 
+    - name: Check that the whole-instance comparison refuses leftovers and allows only the listed differences
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_broad_selfcheck.yml
+      loop: "{{ lifecycle_broad_selfcheck_cases }}"
+      loop_control:
+        loop_var: lifecycle_broad_selfcheck_case
+        label: "{{ lifecycle_broad_selfcheck_case.name }}"
+
     - name: Run the toggle lifecycle of every native topic
       ansible.builtin.include_tasks:
         file: tasks/lifecycle_topic.yml

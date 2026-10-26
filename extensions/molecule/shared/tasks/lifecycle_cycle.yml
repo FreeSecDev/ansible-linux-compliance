@@ -55,6 +55,14 @@
     fail_msg: "{{ lifecycle_label }}: the ledger already records {{ lifecycle_before.ledger }}."
     quiet: true
 
+- name: Lifecycle cycle | Take the state of the whole instance before the topic is applied
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Lifecycle cycle | Remember the state of the whole instance before the topic is applied
+  ansible.builtin.set_fact:
+    lifecycle_broad_before: "{{ lifecycle_broad_lines }}"
+
 - name: Lifecycle cycle | Take the no-change snapshot before check mode
   ansible.builtin.include_tasks:
     file: snapshot.yml
@@ -259,6 +267,13 @@
     fail_msg: >-
       {{ lifecycle_label }}, cleanup: ledger {{ lifecycle_state.ledger }}, before {{ lifecycle_before.ledger }}
     quiet: true
+
+- name: Lifecycle cycle | Assert that the cleanup left nothing anywhere on the instance
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_broad_step: the cleanup
+    lifecycle_broad_reference: "{{ lifecycle_broad_before }}"
 
 - name: Lifecycle cycle | Audit the switched-off topic with a real scan
   ansible.builtin.include_tasks:
