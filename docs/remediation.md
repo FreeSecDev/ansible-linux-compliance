@@ -2,7 +2,7 @@
 
 Scope: the `freesecdev.linux_compliance.remediate` role, its safety model, its variables, the rule catalogue and the
 contract that every control family task file implements. Audience: operators, playbook authors, family authors and
-reviewers. Jira: FREES-52. Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
+reviewers. Jira: FREES-52, FREES-55 (generated toggles). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendment of
 FREES-52).
 
@@ -13,8 +13,9 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 ## Status
 
 The dispatcher, the safety model and one reference family are implemented. The catalogue holds exactly one rule,
-`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`). The control families of
-FREES-53, the generated toggles of FREES-55 and the cleanup paths of the other families (FREES-57) follow. The
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`). The toggles of every family
+and rule are generated from the catalogue (FREES-55) and honoured by the audit role too. The control families of
+FREES-53 and the cleanup paths of the other families (FREES-57) follow. The
 reference rule was exercised for real only in a disposable Ubuntu 24.04 container (see [Testing](#testing)); no
 Molecule scenario exists yet.
 
@@ -40,19 +41,49 @@ The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_r
 | `linux_compliance_remediate_enabled` | `bool` | `false` | Global opt-in. |
 | `linux_compliance_remediate_allow_disruptive` | `list` of `str` | `[]` | Disruptive families that may be applied and cleaned up. The argument specification accepts only the disruptive families of the registry. |
 | `linux_compliance_remediate_profile` | `str` | `cis_level1_server` | Profile short identifier; must equal the profile the `discover` role verified. |
-| `linux_compliance_<family>_enabled` | `bool` | not set (on) | Topic toggle of a registered family, for example `linux_compliance_auditd_enabled: false` turns off every auditd rule. |
-| `linux_compliance_rule_<rule_short_id>_enabled` | `bool` | not set (the family toggle) | Toggle of one catalogued rule, for example `linux_compliance_rule_file_permissions_crontab_enabled`. |
+| `linux_compliance_<family>_enabled` | `bool` | `true` | Topic toggle of a registered family, for example `linux_compliance_auditd_enabled: false` turns off every auditd rule. |
+| `linux_compliance_rule_<rule_short_id>_enabled` | `bool` | `"{{ linux_compliance_<family>_enabled }}"` | Toggle of one catalogued rule, for example `linux_compliance_rule_file_permissions_crontab_enabled`. |
 
-The topic and rule toggles are flat booleans, so any inventory layer can set one of them. FREES-55 will generate their
-defaults and argument specifications from the catalogue. Until then they are optional: a toggle that is not set
-counts as on.
+The topic and rule toggles are flat booleans, so any inventory layer can set one of them. Their defaults and argument
+specifications are generated from the catalogue; every toggle is listed in the
+[remediation variable reference](remediation-variables.md).
+
+### Generated toggles
+
+`tools/roles/generate_toggles.py` (`make toggles`) derives from `roles/remediate/vars/rules.yml`:
+
+- in `roles/remediate/defaults/main.yml`, `linux_compliance_<family>_enabled: true` for every registered family, in
+  registry order, then `linux_compliance_rule_<rule_short_id>_enabled: "{{ linux_compliance_<family>_enabled }}"` for
+  every catalogued rule, sorted by rule identifier;
+- in the `main` entry point of `roles/remediate/meta/argument_specs.yml`, an option of type `bool` with a description
+  for each. A topic toggle has `default: true`. A rule toggle has no `default` in the argument specification, because
+  the role argument validation would check the template string of its default against the type `bool`; its
+  description names the family toggle it defaults to;
+- the reference page [remediation-variables.md](remediation-variables.md).
+
+Every other variable and option of those files is kept, in its order, and toggles that the catalogue no longer
+contains are removed. Both YAML files are written in one canonical style that is checked to load back to the same data.
+`make lint-toggles` (part of `make lint`, CI job `lint`) regenerates all three in memory and fails with a diff when any
+of them differs from the files in the repository, so no rule can be catalogued without its toggle and no toggle can
+outlive its rule. `tools/roles/check_role_specs.py` accepts these toggles, and only in the remediate role, without the
+role prefix.
+
+A rule toggle default is a template. Ansible resolves it to the boolean of the family toggle when the role reads it,
+and the filter checks that resolved value: a family toggle passed as the string `"false"` makes both the family toggle
+and every rule toggle that follows it fail the role as non-boolean.
 
 ### Effective state of a rule
 
 For every catalogued rule the filter `freesecdev.linux_compliance.remediation_plan` resolves:
 
 1. The **toggle state**: the rule toggle when it is set, else the family toggle when it is set, else on. The variable
-   that switched a rule off is reported as `disabled_by`.
+   that switched a rule off is reported as `disabled_by`: the family toggle whenever the family toggle is off, and the
+   rule toggle otherwise. Because the generated default of a rule toggle is its family toggle, the role cannot tell a
+   rule toggle that follows a disabled family from one that is also set to `false`; both name the family toggle. A
+   rule toggle set to `true` wins over a disabled family toggle. The resolution lives in
+   `plugins/module_utils/compliance/toggles.py`, which the audit role uses as well, so a rule that is switched off is
+   reported as `disabled` by the audit with the same controlling variable
+   ([disabled rules in the audit](audit.md#disabled-rules-adr-0011)).
 2. The **action**, in this order:
 
 | Condition | Action | Reason |
@@ -222,7 +253,7 @@ The role publishes `linux_compliance_remediated`:
 | `summary` | Number of rules per action (`apply`, `cleanup`, `manual`, `none`, `skip`) |
 | `rules` | Every rule with `rule_id`, `family`, `action`, `reason`, `disabled_by`, `pending_cleanup` and `runbook` |
 | `results` | Exactly one result per rule planned for `apply` or `cleanup`, from the family files, with `rule_id`, `family`, `action`, `status`, `reason`, `changed` and `message` |
-| `disabled_rules` | Rules switched off by a toggle (`rule_id`, `disabled_by`), restricted to the profile when remediation is enabled, in the format of `linux_compliance_audit_disabled_rules`; FREES-55 will feed it to the audit |
+| `disabled_rules` | Rules switched off by a toggle (`rule_id`, `disabled_by`), restricted to the profile when remediation is enabled. The audit role computes the same list itself from the same toggles, so it does not depend on this fact |
 | `orphaned` | Ledger entries for rules that the catalogue no longer contains; nothing is done to them |
 | `notices` | Operator messages |
 
@@ -278,6 +309,9 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/roles/test_remediate_tasks.py` | Every task in `roles/remediate/tasks/*.yml`, including tasks in blocks, is tagged exactly `[always]`; the only exceptions are the two guard tasks of `main.yml`. Every include applies exactly `always` and loads a file below `{{ role_path }}/tasks/`. The completeness check asserts the `remediation_unaccounted` result of the plan and runs before the dispatch is marked complete | `make test-coverage` |
 | `tests/unit/tools/test_check_role_specs.py` | The guard tag is accepted only, and alone, on a top-level `assert`, `fail` or the `__linux_compliance_<role>_dispatched: false` `set_fact` of the role's `tasks/main.yml`. It is refused on other modules, a `set_fact` with other keys, includes, imports, blocks, conditions, loops, nested tasks, `apply`, other task files and another role's name | `make test-coverage` |
 | `tests/playbooks/remediate-check-mode.yml` | Against localhost, in check mode and without `become`. Nothing happens without the opt-in: the ledger read and the profile check are skipped. The reference rule is planned and the host is unchanged. Invalid toggles, allow-list entries, a profile mismatch and an empty profile fail. A disruptive family is skipped without the allow-list. The `file_permissions` helpers, called with synthetic planned rules against `tests/playbooks/fixtures/remediate/` (a regular file and a symbolic link): the prior mode is recorded only without a ledger entry, a symbolic link or an absent target is never changed, invalid recorded modes (`abc`, `06440`, a trailing newline, no mode) and absent or non-regular targets keep the entry as `cleanup_incomplete`, and the family file and helpers refuse to run without the opt-in or for a rule the dispatcher did not plan. Every play refuses to run without `--check`. The target runs it twice, the second time with `--skip-tags file_permissions` | `make test-remediate-check`, CI job `test` |
+| `tests/unit/plugins/module_utils/compliance/test_toggles.py`, `tests/unit/plugins/filter/test_audit_disabled_rules.py` | Toggle resolution: a rule toggle overriding its family in both directions, a family switched off, the controlling variable, non-boolean values (including an unresolved template string), unknown and reserved toggle names, and that `remediation_plan` and `audit_disabled_rules` agree on the disabled rules for the same toggles, also with the generated defaults templated in | `make test-coverage` |
+| `tests/unit/tools/test_generate_toggles.py` | The generated defaults, argument specifications and reference equal the files in the repository; drift is reported with a diff and nothing is written in `--check` mode; stale toggles are removed; a new rule gets its toggle; an invalid catalogue fails; the YAML renderer round-trips and refuses what it cannot render within 120 characters. 100% line and branch coverage | `make test-coverage`, `make lint-toggles` |
+| `tests/playbooks/remediate-check-mode.yml`, toggle plays | In check mode, with the generated defaults: a single rule switched off and a whole topic switched off are not applied, name the rule toggle or the topic toggle as `disabled_by`, and the audit role's `toggles.yml` resolves the same disabled rules; a rule switched back on inside a disabled topic is applied and disabled in neither role; the audit fails before any scan on `linux_compliance_audit_enabled`, a string toggle and a catalogued rule in `linux_compliance_audit_disabled_rules`, and keeps explicit entries for uncatalogued rules | `make test-remediate-check`, CI job `test` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
@@ -319,10 +353,15 @@ yet, and checks that the run stops at the dispatch.
 
 The Molecule scenario (nothing changes without the opt-in, disruptive families skipped without the allow-list, the
 reference rule applied, idempotent and cleaned up on disable, check mode changing nothing) waits for the Docker Molecule
-framework of FREES-59 and is tracked as a FREES-60 follow-up.
+framework of FREES-59 and is tracked as a FREES-60 follow-up. The Molecule assertions of FREES-55 (a single rule and a
+whole topic switched off after being applied are cleaned up, and the following audit reports them as `disabled` with
+the controlling variable) belong to the same follow-up, because the Docker Molecule framework (pull request #14) has not
+been merged. Until then the toggles are proven by the unit tests and the check-mode playbook above, which do not apply
+a rule for real or run a scan.
 
 ## Related decisions and issues
 
 - [ADR 0003](adr/0003-native-module-remediation.md), [ADR 0011](adr/0011-control-toggles-and-cleanup.md)
-- FREES-52 (this page), FREES-53 (first families), FREES-55 (generated toggles), FREES-57 (cleanup per family),
+- FREES-52 (this page), FREES-53 (first families), FREES-55 (generated toggles,
+  [variable reference](remediation-variables.md)), FREES-57 (cleanup per family),
   FREES-54 (verify), FREES-59 and FREES-60 (Molecule)

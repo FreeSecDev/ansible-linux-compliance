@@ -303,3 +303,45 @@ refinements apply.
 - **Catalogue shape.** Each rule has exactly `rule_id`, `family`, `disruptive`, `reversible`, `revert_strategy`, `toggle`
   (`linux_compliance_rule_<short id>_enabled`), `runbook` (required exactly for irreversible rules) and `parameters`
   (family-specific); anything else fails the role.
+
+## Amendment 2026-10-26: generated toggles shared by audit and remediation (FREES-55)
+
+The toggle variables are generated from the catalogue, and the audit role resolves them itself
+([remediation variable reference](../remediation-variables.md)). These refinements apply.
+
+- **Generated defaults.** `tools/roles/generate_toggles.py` (`make toggles`) writes, from
+  `roles/remediate/vars/rules.yml`, `linux_compliance_<family>_enabled: true` for every registered family and
+  `linux_compliance_rule_<rule_short_id>_enabled: "{{ linux_compliance_<family>_enabled }}"` for every catalogued rule
+  into the remediate role defaults, a `bool` option with a description for each into `meta/argument_specs.yml`, and
+  `docs/remediation-variables.md`. `make lint-toggles` (part of `make lint`) regenerates them in memory and fails on any
+  difference. Families get a toggle even before they have rules, so `linux_compliance_auditd_enabled: false` can be set
+  now and keeps applying as auditd rules are catalogued.
+- **No default in the argument specification of a rule toggle.** Role argument validation applies the specification
+  defaults and checks their types, so a template string as `default` of a `bool` option would fail every run. The
+  rule toggle options therefore have no `default`; their description names the family toggle. `check_role_specs.py`
+  accepts the toggles only in the remediate role, without the role prefix, and checks this shape.
+- **The family-default rule replaces "not set counts as on".** The resolution order is unchanged (rule toggle, else
+  family toggle, else on), but in the remediate role every toggle is now set. A templated rule toggle reaches the
+  filter as the boolean of its family toggle; a value that is still not a boolean, such as a family toggle passed as
+  the string `"false"`, fails the role as before.
+- **Controlling variable.** Once templated, a rule toggle that follows a disabled family cannot be told apart from one
+  set to `false` by the operator. `disabled_by` is therefore the family toggle whenever the family toggle is off, and
+  the rule toggle otherwise. This replaces "the variable that switched a rule off" of the FREES-52 amendment for the case
+  where both are off; it gives the same answer whether or not the defaults are loaded, which the audit role relies on.
+- **One resolution for both roles.** The catalogue validation, the toggle validation and the resolution moved from the
+  `remediation_plan` filter to `plugins/module_utils/compliance/toggles.py`. The remediate role uses it through
+  `remediation_plan`; the audit role uses it through the new filter `freesecdev.linux_compliance.audit_disabled_rules`
+  in `roles/audit/tasks/toggles.yml`, which loads the catalogue from `{{ role_path }}/../remediate/vars/rules.yml` and
+  runs before the scan. The audit does not load the remediate role defaults; an unset toggle resolves exactly as its
+  generated default would. The remediation opt-in plays no part in the audit: a rule switched off is excluded from the
+  scan through the tailoring file of the FREES-49 amendment and reported as `disabled` with its `disabled_by`, whether
+  or not remediation runs. The audit restricts the list to rules the discovered profile selects.
+- **The audit validates toggles too.** Unknown family and rule toggles, names in a role namespace and non-boolean values
+  fail the audit role before any scan, so a typo cannot make the audit and remediation disagree.
+- **`linux_compliance_audit_disabled_rules` is for rules outside the catalogue.** It is still accepted and merged with
+  the toggle result, for profile rules that have no toggle (for example SCE checks). A catalogued rule in it fails the
+  audit role, because the audit would otherwise skip a rule that remediation still applies; the message names the
+  toggle. The FREES-49 amendment's "FREES-55 will compute the list from the toggles" is implemented this way.
+- **Scope of a topic toggle.** Only catalogued rules have toggles. A topic toggle does not disable profile rules that
+  the catalogue does not contain, even when they concern the same topic, because the collection has no family data for
+  them and never guesses one.

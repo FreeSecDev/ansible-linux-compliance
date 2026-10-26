@@ -1,8 +1,15 @@
 """Check that each role's ``defaults/main.yml`` matches its ``meta/argument_specs.yml``.
 
-Role variables are prefixed ``linux_compliance_<role>_``. The only exceptions are the
+Role variables are prefixed ``linux_compliance_<role>_``. The exceptions are the
 collection-wide variables in :data:`SHARED_VARIABLES`, which several roles read with one
-meaning. An option that is not required may default to null, which means "not set".
+meaning, and the control toggles of ADR 0011 in the role :data:`TOGGLE_ROLE`, which
+``tools/roles/generate_toggles.py`` generates from the rule catalogue (its ``--check`` mode
+detects drift). A topic toggle ``linux_compliance_<family>_enabled`` is a ``bool`` that defaults
+to ``true`` in both files; a rule toggle ``linux_compliance_rule_<id>_enabled`` is a ``bool``
+whose default in ``defaults/main.yml`` is ``"{{ linux_compliance_<family>_enabled }}"`` and
+whose argument spec has no default, because the validation of a role would check the template
+string against the type. An option that is not required may default to null, which means
+"not set".
 """
 
 from __future__ import annotations
@@ -21,6 +28,15 @@ if TYPE_CHECKING:
 ENTRY_POINT: Final[str] = "main"
 SHARED_VARIABLES: Final[frozenset[str]] = frozenset({"linux_compliance_exceptions_file"})
 NULLABLE_TYPES: Final[frozenset[str]] = frozenset({"str", "path"})
+TOGGLE_ROLE: Final[str] = "remediate"
+ROLE_NAMESPACES: Final[tuple[str, ...]] = ("audit", "discover", "evidence", "remediate", "verify")
+FAMILY_TOGGLE: Final[re.Pattern[str]] = re.compile(r"linux_compliance_([a-z][a-z0-9_]*)_enabled")
+RULE_TOGGLE: Final[re.Pattern[str]] = re.compile(
+    r"linux_compliance_rule_[a-z0-9][a-z0-9_]*_enabled"
+)
+INHERITED_DEFAULT: Final[re.Pattern[str]] = re.compile(
+    r"\{\{ linux_compliance_(?!rule_)[a-z][a-z0-9_]*_enabled \}\}"
+)
 TYPE_CLASSES: Final[dict[str, type]] = {
     "str": str,
     "path": str,
@@ -55,14 +71,44 @@ def matches_type(value: object, type_name: str, *, nullable: bool = False) -> bo
     return isinstance(value, expected)
 
 
+def is_toggle(role: str, name: str) -> bool:
+    """Return whether ``name`` is a generated control toggle that ``role`` may declare."""
+    match = FAMILY_TOGGLE.fullmatch(name)
+    if role != TOGGLE_ROLE or match is None:
+        return False
+    topic = match.group(1)
+    return not any(topic == item or topic.startswith(f"{item}_") for item in ROLE_NAMESPACES)
+
+
+def check_toggle(where: str, name: str, option: dict[str, object], default: object) -> list[str]:
+    """Return findings for a generated control toggle (ADR 0011)."""
+    findings: list[str] = []
+    if option.get("type") != "bool":
+        findings.append(f"{where}: a toggle must have type bool")
+    if not option.get("description"):
+        findings.append(f"{where}: description is missing")
+    if RULE_TOGGLE.fullmatch(name):
+        if "default" in option:
+            findings.append(f"{where}: a rule toggle must not have a default in the argument spec")
+        if not isinstance(default, str) or not INHERITED_DEFAULT.fullmatch(default):
+            findings.append(
+                f"{where}: a rule toggle must default to its family toggle in defaults/main.yml"
+            )
+    elif option.get("default") is not True or default is not True:
+        findings.append(f"{where}: a topic toggle must default to true in both files")
+    return findings
+
+
 def check_option(role: str, name: str, spec: object, default: object) -> list[str]:
     """Return findings for one option, given its spec and the value from the defaults file."""
     where = f"{role}: {name}"
-    if name not in SHARED_VARIABLES and not name.startswith(f"linux_compliance_{role}_"):
-        return [f"{where}: variable must be prefixed linux_compliance_{role}_"]
     if not isinstance(spec, dict):
         return [f"{where}: option spec must be a mapping"]
     option = cast("dict[str, object]", spec)
+    if is_toggle(role, name):
+        return check_toggle(where, name, option, default)
+    if name not in SHARED_VARIABLES and not name.startswith(f"linux_compliance_{role}_"):
+        return [f"{where}: variable must be prefixed linux_compliance_{role}_"]
     findings: list[str] = []
     type_name = option.get("type")
     if not isinstance(type_name, str) or type_name not in TYPE_CLASSES:

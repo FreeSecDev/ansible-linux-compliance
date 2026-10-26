@@ -55,6 +55,11 @@
   tags:
     - always
 
+- name: Audit | Resolve the rules that the control toggles disable
+  ansible.builtin.import_tasks: toggles.yml
+  tags:
+    - always
+
 - name: Audit | Check that host facts were gathered
   ansible.builtin.assert:
     that:
@@ -77,7 +82,7 @@
     profile_id: "{{ linux_compliance_discovered.profile_id }}"
     output_dir: "{{ linux_compliance_audit_output_dir }}"
     scan_timeout: "{{ linux_compliance_audit_scan_timeout }}"
-    disabled_rules: "{{ linux_compliance_audit_disabled_rules }}"
+    disabled_rules: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
     fail_on_incomplete: false
     host:
       hostname: "{{ ansible_facts['hostname'] }}"

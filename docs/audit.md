@@ -30,19 +30,21 @@ pinned content.
    invalid file fails the play before any host is scanned ([exceptions in the audit role](#exceptions-in-the-audit-role)).
 3. Requires the fact `linux_compliance_discovered` from the `discover` role, for the same profile. The audit scans only
    content whose SHA-256 was verified and never substitutes another profile.
-4. Requires gathered facts, which identify the host in the scan run.
-5. Runs `compliance_scan` with `become: true` on that task only and `fail_on_incomplete: false`, so the result is
+4. Resolves the disabled rules from the control toggles and `linux_compliance_audit_disabled_rules`
+   ([disabled rules](#disabled-rules-adr-0011)); invalid toggles fail the host before any scan.
+5. Requires gathered facts, which identify the host in the scan run.
+6. Runs `compliance_scan` with `become: true` on that task only and `fail_on_incomplete: false`, so the result is
    always registered.
-6. Publishes the fact `linux_compliance_audited` (`run_id`, `run_status`, `summary`, `scan_run`, `evidence`,
+7. Publishes the fact `linux_compliance_audited` (`run_id`, `run_status`, `summary`, `scan_run`, `evidence`,
    `evidence_written`, `disabled_rules`, `planned`) for the evidence and verify roles. `summary` and `scan_run` are
    the raw result and are never changed afterwards.
-7. Applies the exceptions file to the scan run of the host and adds the waived result as
+8. Applies the exceptions file to the scan run of the host and adds the waived result as
    `linux_compliance_audited.exceptions`, next to the raw one.
-8. Fails when the scan did not complete.
-9. Fails when `linux_compliance_audit_fail_on_noncompliant` is true and the gate counts at least one rule: `fail` and
-   `error` of the raw result by default, or `fail` of the waived result plus `error` with
-   `linux_compliance_audit_fail_on_noncompliant_after_waivers` ([the gate](#the-failure-gate-and-waivers)). The
-   decision is recorded as `linux_compliance_audited.gate`.
+9. Fails when the scan did not complete.
+10. Fails when `linux_compliance_audit_fail_on_noncompliant` is true and the gate counts at least one rule: `fail` and
+    `error` of the raw result by default, or `fail` of the waived result plus `error` with
+    `linux_compliance_audit_fail_on_noncompliant_after_waivers` ([the gate](#the-failure-gate-and-waivers)). The
+    decision is recorded as `linux_compliance_audited.gate`.
 
 The variables are listed in the [role README](../roles/audit/README.md).
 
@@ -436,11 +438,31 @@ audited, because the gate would fail hosts in the second audit before the verify
 
 ## Disabled rules (ADR 0011)
 
-`disabled_rules` (role variable `linux_compliance_audit_disabled_rules`) lists rules of the profile that operator
-toggles disable, each with `rule_id` (full XCCDF identifier) and an optional `disabled_by` (the controlling variable,
-`linux_compliance_<name>_enabled`, default `linux_compliance_rule_<short id>_enabled`). The per-rule and per-family
-toggle variables are generated from the rule catalogue in FREES-55, which does not exist yet; until then the list is
-passed explicitly, and FREES-55 will compute it from the toggles.
+The `disabled_rules` option of `compliance_scan` lists the rules of the profile that are switched off, each with
+`rule_id` (full XCCDF identifier) and an optional `disabled_by` (the controlling variable,
+`linux_compliance_<name>_enabled`, default `linux_compliance_rule_<short id>_enabled`). The audit role builds it
+before the scan (`tasks/toggles.yml`, FREES-55) from two sources:
+
+1. **The control toggles.** The role loads the rule catalogue and the family registry of the remediate role
+   (`roles/remediate/vars/rules.yml`), finds every variable that matches `^linux_compliance_.+_enabled$` and resolves
+   each catalogued rule that the discovered profile selects with the filter
+   `freesecdev.linux_compliance.audit_disabled_rules`. That filter and the `remediation_plan` filter of the remediate
+   role use the same code (`plugins/module_utils/compliance/toggles.py`): the rule toggle when it is set, else the
+   family toggle, else on. A rule that is off is disabled with `disabled_by` set to the family toggle when the family
+   toggle is off, and to the rule toggle otherwise. So `linux_compliance_auditd_enabled: false` in the inventory
+   disables every catalogued auditd rule in the audit and in remediation at once, and names that variable in both.
+   The global remediation opt-in plays no part: the audit honours the toggles whether or not remediation runs. The
+   toggles are listed in the [remediation variable reference](remediation-variables.md).
+2. **`linux_compliance_audit_disabled_rules`**, for rules that the catalogue does not contain (for example SCE checks,
+   see above). A catalogued rule in that list fails the role before any scan, because the audit would then skip a
+   rule that remediation still applies; the message names the toggle to use instead.
+
+The toggles are validated as in the remediate role: an unknown family or rule toggle, a name in the namespace of a
+role (for example the likely typo `linux_compliance_audit_enabled` for the auditd topic) and a value that is not a
+boolean fail the role before any host is scanned. The remediate role's toggle defaults are not loaded by the audit
+role; an unset toggle resolves exactly as its generated default would, so both roles reach the same result.
+Only catalogued rules have toggles. A topic toggle does not disable rules of the profile that the catalogue does not
+contain, even when they concern the same topic; disable those through `linux_compliance_audit_disabled_rules`.
 
 As ADR 0011 requires, disabled rules are excluded from the scan through a generated XCCDF 1.2 tailoring file:
 
@@ -503,6 +525,19 @@ in writable, foreign and sticky directories, chains that resolve through a writa
 the 40-link bound, dangling links, a final component that is a symlink, unreadable links, a group-writable inode
 reached through a hard link, races, and `effective_uid`. The discover module tests cover the same refusals through
 `benchmark_info` and `profile_info`. `audit.py`, `catalog.py` and the modules have 100% line and branch coverage.
+
+The toggle resolution is covered by `tests/unit/plugins/module_utils/compliance/test_toggles.py` and
+`tests/unit/plugins/filter/test_audit_disabled_rules.py` (a rule toggle, a topic toggle, a rule toggle that overrides
+its disabled topic, a disruptive topic, the profile restriction, explicit entries, a catalogued explicit entry, unknown,
+reserved and non-boolean toggles, and that the audit and remediation filters return the same disabled rules for the
+same toggles, also with the generated defaults templated in). `test_compliance_scan.py` checks that a rule disabled by
+a topic toggle is a `disabled` finding that names that toggle. `tests/playbooks/remediate-check-mode.yml`
+(`make test-remediate-check`) runs `tasks/toggles.yml` of the role next to the remediate role in check mode and checks
+that both resolve the same disabled rules and controlling variable for a single rule switched off, a whole topic
+switched off and a rule switched back on inside a disabled topic, and that the audit fails before any scan on
+`linux_compliance_audit_enabled`, on a string toggle and on a catalogued rule in
+`linux_compliance_audit_disabled_rules`. These playbook tests do not run a scan, because the check-mode playbook runs
+without `oscap` and without `become`; a full audit run with toggles in a Molecule scenario is part of FREES-60.
 
 `make test-oscap-integration` (CI job `oscap-integration`) runs a real `oscap`. It fetches the pinned Ubuntu 24.04
 datastream through `tools/content/fetch_content.py` (archive SHA-512 and datastream SHA-256 verified) and runs

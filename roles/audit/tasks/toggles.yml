@@ -1,0 +1,38 @@
+---
+- name: Audit | Load the rule catalogue and the family registry of the remediate role
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../remediate/vars/rules.yml"
+    name: __linux_compliance_audit_catalogue
+  tags:
+    - always
+
+- name: Audit | Find the toggle variables
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_toggle_names: >-
+      {{ lookup('ansible.builtin.varnames', __linux_compliance_audit_toggle_pattern, wantlist=True) | sort }}
+  tags:
+    - always
+
+- name: Audit | Resolve the rules that the toggles disable, as the remediate role does
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_toggles: >-
+      {{ __linux_compliance_audit_catalogue.__linux_compliance_remediate_rules
+         | freesecdev.linux_compliance.audit_disabled_rules({
+           'families': __linux_compliance_audit_catalogue.__linux_compliance_remediate_families,
+           'toggles': dict(__linux_compliance_audit_toggle_names | zip(
+             lookup('ansible.builtin.vars', *__linux_compliance_audit_toggle_names, wantlist=True))),
+           'profile_rule_ids': linux_compliance_discovered.rule_ids,
+           'disabled_rules': linux_compliance_audit_disabled_rules}) }}
+  tags:
+    - always
+
+- name: Audit | Stop on unknown or invalid toggles before any scan
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_toggles.errors | length == 0
+    fail_msg: >-
+      The toggles or linux_compliance_audit_disabled_rules are invalid and nothing was scanned:
+      {{ __linux_compliance_audit_toggles.errors | join('; ') }}
+    quiet: true
+  tags:
+    - always

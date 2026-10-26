@@ -9,8 +9,8 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 ## Status
 
 Dispatcher and safety model implemented (FREES-52), with one reference rule:
-`xccdf_org.ssgproject.content_rule_file_permissions_crontab` in the `file_permissions` family. The control families of
-FREES-53 and the generated toggles of FREES-55 follow. The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` in the `file_permissions` family, and toggles generated
+from the catalogue for every family and rule (FREES-55). The control families of FREES-53 follow. The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL
 9 compatible, per [ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested
 support: the reference rule was run in a disposable Ubuntu 24.04 container for the pull request, and no Molecule
 scenario exists yet (FREES-60).
@@ -34,7 +34,8 @@ scenario exists yet (FREES-60).
 
 ## Variables
 
-Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
+Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree. The toggles in both files are generated
+from `vars/rules.yml` with `make toggles`; `make lint-toggles` fails on drift.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
@@ -42,10 +43,12 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | `linux_compliance_remediate_allow_disruptive` | `list` | `[]` | Disruptive families that may be applied or cleaned up; only the disruptive families of the registry are accepted. |
 | `linux_compliance_remediate_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. With the opt-in it must equal the profile the `discover` role verified. A profile is never substituted silently. |
 
-Toggles ([ADR 0011](../../docs/adr/0011-control-toggles-and-cleanup.md)) are flat booleans that are not set by default
-and then count as on: `linux_compliance_<family>_enabled` for a whole topic and
-`linux_compliance_rule_<rule_short_id>_enabled` for one rule, which wins over its family toggle. FREES-55 generates their
-defaults from the catalogue.
+Toggles ([ADR 0011](../../docs/adr/0011-control-toggles-and-cleanup.md)) are flat booleans:
+`linux_compliance_<family>_enabled` for a whole topic, default `true`, and `linux_compliance_rule_<rule_short_id>_enabled`
+for one rule, default `"{{ linux_compliance_<family>_enabled }}"`, which wins over its family toggle when it is set.
+Every toggle is listed in the [remediation variable reference](../../docs/remediation-variables.md). The `audit` role
+reads the same toggles with the same resolution, so a rule or topic switched off once is cleaned up here and reported as
+`disabled` by the audit, naming the controlling variable.
 
 ## Result
 

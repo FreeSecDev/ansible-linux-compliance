@@ -1,0 +1,2 @@
+---
+__linux_compliance_audit_toggle_pattern: "^linux_compliance_.+_enabled$"

@@ -10,6 +10,10 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     remediation_plan as plan_filter,
 )
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import restricted_mode
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    toggles,
+)
+from tools.roles import generate_toggles
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ROLE = REPOSITORY_ROOT / "roles" / "remediate"
@@ -130,23 +134,56 @@ def test_the_toggle_pattern_of_the_role_matches_the_filter() -> None:
     pattern = str(role_vars["__linux_compliance_remediate_toggle_pattern"])
     assert pattern == "^linux_compliance_.+_enabled$"
     assert re.fullmatch(pattern.strip("^$"), "linux_compliance_ssh_enabled")
-    assert plan_filter.TOGGLE_PATTERN.startswith("linux_compliance_")
+    assert toggles.TOGGLE_PATTERN.startswith("linux_compliance_")
 
 
 def test_the_reserved_namespaces_are_the_roles_of_the_collection() -> None:
     roles = sorted(path.name for path in (REPOSITORY_ROOT / "roles").iterdir() if path.is_dir())
-    assert list(plan_filter.ROLE_NAMESPACES) == roles
+    assert list(toggles.ROLE_NAMESPACES) == roles
 
 
 def test_the_defaults_keep_remediation_off_and_nothing_allow_listed() -> None:
     defaults = load(ROLE / "defaults" / "main.yml")
     assert defaults["linux_compliance_remediate_enabled"] is False
     assert defaults["linux_compliance_remediate_allow_disruptive"] == []
-    assert not [
+    others = [
         name
         for name in defaults
         if name.endswith("_enabled") and name != "linux_compliance_remediate_enabled"
     ]
+    assert others
+    assert all(generate_toggles.is_generated(name) for name in others)
+
+
+def test_every_family_and_every_rule_has_its_generated_toggle_default() -> None:
+    defaults = load(ROLE / "defaults" / "main.yml")
+    for family in registry():
+        assert defaults[toggles.toggle_name(str(family["name"]))] is True
+    for rule in rules():
+        family_toggle = toggles.toggle_name(str(rule["family"]))
+        assert defaults[str(rule["toggle"])] == "{{ " + family_toggle + " }}"
+    expected = {toggles.toggle_name(str(family["name"])) for family in registry()} | {
+        str(rule["toggle"]) for rule in rules()
+    }
+    assert {name for name in defaults if generate_toggles.is_generated(name)} == expected
+
+
+def test_the_audit_role_finds_the_toggles_and_the_catalogue_like_the_remediate_role() -> None:
+    audit_role = REPOSITORY_ROOT / "roles" / "audit"
+    audit_vars = load(audit_role / "vars" / "main.yml")
+    remediate_vars = load(ROLE / "vars" / "main.yml")
+    assert (
+        audit_vars["__linux_compliance_audit_toggle_pattern"]
+        == remediate_vars["__linux_compliance_remediate_toggle_pattern"]
+        == toggles.TOGGLE_VARIABLE_PATTERN
+    )
+    tasks = cast(
+        "list[dict[str, dict[str, str]]]",
+        yaml.safe_load((audit_role / "tasks" / "toggles.yml").read_text(encoding="utf-8")),
+    )
+    catalogue_file = tasks[0]["ansible.builtin.include_vars"]["file"]
+    assert catalogue_file == "{{ role_path }}/../remediate/vars/rules.yml"
+    assert (audit_role / "../remediate/vars/rules.yml").resolve() == ROLE / "vars" / "rules.yml"
 
 
 def test_without_opt_in_the_real_catalogue_only_skips() -> None:
@@ -157,7 +194,7 @@ def test_without_opt_in_the_real_catalogue_only_skips() -> None:
 
 def test_the_pinned_disruptive_families_are_the_disruptive_families_of_the_registry() -> None:
     disruptive = {str(family["name"]) for family in registry() if family["disruptive"] is True}
-    assert disruptive == set(plan_filter.DISRUPTIVE_FAMILIES)
+    assert disruptive == set(toggles.DISRUPTIVE_FAMILIES)
 
 
 def test_the_ignored_role_variables_are_the_enabled_options_of_the_role_specs() -> None:
@@ -165,5 +202,9 @@ def test_the_ignored_role_variables_are_the_enabled_options_of_the_role_specs() 
     for path in sorted((REPOSITORY_ROOT / "roles").glob("*/meta/argument_specs.yml")):
         specs = load(path)
         main = cast("dict[str, dict[str, dict[str, object]]]", specs["argument_specs"])["main"]
-        declared |= {name for name in main["options"] if name.endswith("_enabled")}
-    assert declared == set(plan_filter.ROLE_TOGGLE_VARIABLES)
+        declared |= {
+            name
+            for name in main["options"]
+            if name.endswith("_enabled") and not generate_toggles.is_generated(name)
+        }
+    assert declared == set(toggles.ROLE_TOGGLE_VARIABLES)

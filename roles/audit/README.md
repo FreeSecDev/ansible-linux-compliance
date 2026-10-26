@@ -29,20 +29,22 @@ when the output directory does not exist, check mode does not create it and the 
 2. When `linux_compliance_exceptions_file` is set, read and validate it once on the controller (`run_once`); an invalid
    file fails the play before any scan. Warn about exceptions that set a framework but no profiles.
 3. Check that `linux_compliance_discovered` exists and names the same profile (`discover` must run first).
-4. Check that host facts were gathered.
-5. Run `compliance_scan` with `fail_on_incomplete: false`, so the result is always registered.
-6. Set the fact `linux_compliance_audited` with the raw result.
-7. Apply the exceptions file to a completed scan run and add `linux_compliance_audited.exceptions`; in check mode
+4. Resolve the disabled rules from the control toggles and `linux_compliance_audit_disabled_rules` (`toggles.yml`);
+   invalid toggles fail the host before any scan.
+5. Check that host facts were gathered.
+6. Run `compliance_scan` with `fail_on_incomplete: false`, so the result is always registered.
+7. Set the fact `linux_compliance_audited` with the raw result.
+8. Apply the exceptions file to a completed scan run and add `linux_compliance_audited.exceptions`; in check mode
    without a scan, report that waivers were not applied. A scan start in the future fails the host.
-8. Fail when the scan did not complete (`run_status` `failed` or `timed_out`).
-9. Record `linux_compliance_audited.gate` and fail on failed or errored rules when
-   `linux_compliance_audit_fail_on_noncompliant` is true, counting the raw result unless
-   `linux_compliance_audit_fail_on_noncompliant_after_waivers` is true. `error` always counts.
+9. Fail when the scan did not complete (`run_status` `failed` or `timed_out`).
+10. Record `linux_compliance_audited.gate` and fail on failed or errored rules when
+    `linux_compliance_audit_fail_on_noncompliant` is true, counting the raw result unless
+    `linux_compliance_audit_fail_on_noncompliant_after_waivers` is true. `error` always counts.
 
-`tasks/main.yml` imports `exceptions_file.yml`, `exceptions_apply.yml` and `gate.yml`. Two more entry points exist,
+`tasks/main.yml` imports `exceptions_file.yml`, `toggles.yml`, `exceptions_apply.yml` and `gate.yml`. Two more entry points exist,
 named with their suffix because `tasks_from` must end in `.yml`:
 
-- `evaluate.yml` runs steps 2, 7, 8 and 9 on an existing `linux_compliance_audited` fact without scanning.
+- `evaluate.yml` runs steps 2, 8, 9 and 10 on an existing `linux_compliance_audited` fact without scanning.
 - `stale.yml` aggregates stale exceptions once over the target hosts in `linux_compliance_audit_stale_hosts` (the
   final play of `playbooks/audit.yml`).
 
@@ -62,7 +64,14 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | `linux_compliance_audit_backend` | `str` | `"openscap"` | Scanner backend; `openscap` is the only one. |
 | `linux_compliance_audit_output_dir` | `str` | `"/var/lib/freesecdev/linux_compliance/evidence"` | Root-owned directory without group or other permissions below which each run gets its own directory. Missing components are created with mode `0700`; symlinks are refused. |
 | `linux_compliance_audit_scan_timeout` | `int` | `1800` | Scan time limit in seconds, 1 to 3600. |
-| `linux_compliance_audit_disabled_rules` | `list` of `dict` | `[]` | Rules disabled by operator toggles (ADR 0011): `rule_id` (full XCCDF identifier) and optional `disabled_by` (variable name, default `linux_compliance_rule_<short id>_enabled`). Reported as `disabled`, never as passing. |
+| `linux_compliance_audit_disabled_rules` | `list` of `dict` | `[]` | Rules outside the rule catalogue to disable (ADR 0011): `rule_id` (full XCCDF identifier) and optional `disabled_by` (variable name, default `linux_compliance_rule_<short id>_enabled`). Reported as `disabled`, never as passing. A catalogued rule here fails the role; switch it off with its toggle. |
+
+The control toggles of ADR 0011 (`linux_compliance_<family>_enabled` and
+`linux_compliance_rule_<rule_short_id>_enabled`, listed in the
+[remediation variable reference](../../docs/remediation-variables.md)) are read by this role too. Before the scan it
+resolves them for the catalogued rules that the profile selects, with the same code as the remediate role, and adds the
+rules they switch off to the disabled rules, with the controlling variable as `disabled_by`. Unknown or non-boolean
+toggles fail the role before any scan. See [docs/audit.md](../../docs/audit.md#disabled-rules-adr-0011).
 
 ## Result
 

@@ -8,6 +8,9 @@ from typing import cast
 import pytest
 import yaml
 
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    toggles,
+)
 from tools.roles import check_role_specs as specs
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -267,6 +270,77 @@ def test_module_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as raised:
         runpy.run_path(specs.__file__, run_name="__main__")
     assert raised.value.code == 0
+
+
+TOPIC = "linux_compliance_ssh_enabled"
+RULE = "linux_compliance_rule_sshd_disable_root_login_enabled"
+INHERITED = "{{ linux_compliance_ssh_enabled }}"
+
+
+def toggle_role(root: Path, options: dict[str, object], defaults: dict[str, object]) -> Path:
+    role = write_role(root).rename(root / "remediate")
+    (role / "meta" / "argument_specs.yml").write_text(
+        yaml.safe_dump({"argument_specs": {"main": {"options": options}}})
+    )
+    (role / "defaults" / "main.yml").write_text(yaml.safe_dump(defaults))
+    return role
+
+
+def topic_option(**overrides: object) -> dict[str, object]:
+    option: dict[str, object] = {"type": "bool", "default": True, "description": ["Topic."]}
+    option.update(overrides)
+    return option
+
+
+def rule_option(**overrides: object) -> dict[str, object]:
+    option: dict[str, object] = {"type": "bool", "description": ["Rule."]}
+    option.update(overrides)
+    return option
+
+
+def test_generated_toggles_are_accepted_in_the_remediate_role(tmp_path: Path) -> None:
+    role = toggle_role(
+        tmp_path, {TOPIC: topic_option(), RULE: rule_option()}, {TOPIC: True, RULE: INHERITED}
+    )
+    assert specs.check_role(role) == []
+
+
+def test_toggles_are_refused_in_other_roles(tmp_path: Path) -> None:
+    role = write_role(tmp_path, options={TOPIC: topic_option()}, defaults={TOPIC: True})
+    assert "must be prefixed linux_compliance_demo_" in specs.check_role(role)[0]
+
+
+@pytest.mark.parametrize(
+    ("options", "defaults", "message"),
+    [
+        ({TOPIC: topic_option(type="str")}, {TOPIC: True}, "a toggle must have type bool"),
+        ({TOPIC: topic_option(description=[])}, {TOPIC: True}, "description is missing"),
+        ({TOPIC: topic_option(default=False)}, {TOPIC: False}, "must default to true"),
+        ({TOPIC: topic_option()}, {TOPIC: 1}, "must default to true"),
+        ({RULE: rule_option(default=True)}, {RULE: INHERITED}, "must not have a default"),
+        ({RULE: rule_option()}, {RULE: True}, "must default to its family toggle"),
+        (
+            {RULE: rule_option()},
+            {RULE: "{{ linux_compliance_rule_other_enabled }}"},
+            "must default to its family toggle",
+        ),
+        ({RULE: "x"}, {RULE: INHERITED}, "option spec must be a mapping"),
+        (
+            {"linux_compliance_audit_x_enabled": topic_option()},
+            {"linux_compliance_audit_x_enabled": True},
+            "must be prefixed linux_compliance_remediate_",
+        ),
+    ],
+)
+def test_invalid_toggles_are_findings(
+    tmp_path: Path, options: dict[str, object], defaults: dict[str, object], message: str
+) -> None:
+    findings = specs.check_role(toggle_role(tmp_path, options, defaults))
+    assert any(message in item for item in findings), findings
+
+
+def test_the_role_namespaces_match_the_toggle_resolution() -> None:
+    assert specs.ROLE_NAMESPACES == toggles.ROLE_NAMESPACES
 
 
 def test_tasks_file_is_required(tmp_path: Path) -> None:
