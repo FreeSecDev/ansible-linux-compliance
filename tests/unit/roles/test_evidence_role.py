@@ -20,7 +20,7 @@ LOCAL_MODULES = {
     "ansible.builtin.assert",
     "ansible.builtin.debug",
     "ansible.builtin.fail",
-    "ansible.builtin.include_tasks",
+    "ansible.builtin.import_tasks",
 }
 
 

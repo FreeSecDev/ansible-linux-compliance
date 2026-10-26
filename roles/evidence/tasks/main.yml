@@ -81,7 +81,7 @@
     - always
 
 - name: Evidence | Collect the bundle on the controller
-  ansible.builtin.include_tasks: collect.yml
+  ansible.builtin.import_tasks: collect.yml
   when:
     - linux_compliance_audited.evidence_written
     - not ansible_check_mode

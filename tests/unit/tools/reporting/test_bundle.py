@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -121,9 +121,9 @@ def write_bundle(
     )
     result = evidence.build_documents(audited_fact(run, waivers, received), collected, NOW)
     contents = dict(received)
-    for path, document in result["documents"].items():
+    for path, document in cast("dict[str, str]", result["documents"]).items():
         contents[path] = document.encode("utf-8")
-    contents[evidence.MANIFEST_NAME] = result["manifest"].encode("utf-8")
+    contents[evidence.MANIFEST_NAME] = cast("str", result["manifest"]).encode("utf-8")
     for path, data in contents.items():
         (root / host / path).parent.mkdir(parents=True, exist_ok=True)
         (root / host / path).write_bytes(data)
@@ -278,7 +278,7 @@ def test_a_bundle_that_cannot_be_listed_is_refused(
     def refuse(_directory: int) -> object:
         raise PermissionError
 
-    monkeypatch.setattr(bundle.os, "scandir", refuse)
+    monkeypatch.setattr(os, "scandir", refuse)
     with pytest.raises(InvalidInputError, match="cannot be read"):
         bundle.read_bundle(target, 1024)
 

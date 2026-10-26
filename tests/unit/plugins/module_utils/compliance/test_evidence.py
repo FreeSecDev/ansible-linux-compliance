@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -221,7 +221,7 @@ def collected(
 
 
 def build(
-    fact: dict[str, object] | None = None, **changes: object
+    fact: dict[str, object] | None = None, /, **changes: object
 ) -> tuple[dict[str, object], Contents]:
     fact = audited() if fact is None else fact
     received = fetched(fact, host_files(scan_run()))
@@ -331,18 +331,10 @@ def test_a_plan_records_exceptions_that_were_not_applied(status: str) -> None:
 def mutate(
     fact: dict[str, object], path: tuple[str | int, ...], value: object
 ) -> dict[str, object]:
-    target: object = fact
+    target: Any = fact
     for step in path[:-1]:
-        target = (
-            cast("dict[str, object]", target)[cast("str", step)]
-            if isinstance(step, str)
-            else cast("list[object]", target)[step]
-        )
-    last = path[-1]
-    if isinstance(last, str):
-        cast("dict[str, object]", target)[last] = value
-    else:
-        cast("list[object]", target)[last] = value
+        target = target[step]
+    target[path[-1]] = value
     return fact
 
 
@@ -351,113 +343,111 @@ def scan_run_entry(fact: dict[str, object]) -> int:
     return next(index for index, item in enumerate(files) if item["kind"] == "scan_run")
 
 
-@pytest.mark.parametrize(
-    ("change", "message"),
-    [
-        (lambda _fact: "not a mapping", "linux_compliance_audited must be a mapping"),
-        (lambda fact: {**fact, "evidence_written": False}, "no evidence was written"),
-        (lambda fact: {**fact, "run_id": "../x"}, "run_id"),
-        (lambda fact: {**fact, "scan_run": "{"}, "scan_run is invalid"),
-        (lambda fact: {**fact, "run_id": "run-2"}, "belongs to another run ID"),
-        (lambda fact: {**fact, "run_status": "failed"}, "run_status contradicts"),
-        (lambda fact: {**fact, "evidence": None}, "evidence must be a mapping"),
-        (
-            lambda fact: mutate(fact, ("evidence", "directory"), "/var/lib/x/../run-1"),
-            "must be an absolute, normalised path",
+PLAN_CASES: list[tuple[Callable[[dict[str, object]], object], str]] = [
+    (lambda _fact: "not a mapping", "linux_compliance_audited must be a mapping"),
+    (lambda fact: {**fact, "evidence_written": False}, "no evidence was written"),
+    (lambda fact: {**fact, "run_id": "../x"}, "run_id"),
+    (lambda fact: {**fact, "scan_run": "{"}, "scan_run is invalid"),
+    (lambda fact: {**fact, "run_id": "run-2"}, "belongs to another run ID"),
+    (lambda fact: {**fact, "run_status": "failed"}, "run_status contradicts"),
+    (lambda fact: {**fact, "evidence": None}, "evidence must be a mapping"),
+    (
+        lambda fact: mutate(fact, ("evidence", "directory"), "/var/lib/x/../run-1"),
+        "must be an absolute, normalised path",
+    ),
+    (lambda fact: mutate(fact, ("evidence", "directory"), "relative/run-1"), "absolute"),
+    (lambda fact: mutate(fact, ("evidence", "directory"), "//srv/run-1"), "absolute"),
+    (lambda fact: mutate(fact, ("evidence", "directory"), "/srv/other"), "run ID run-1"),
+    (lambda fact: mutate(fact, ("evidence", "files"), {}), "files must be a list"),
+    (lambda fact: mutate(fact, ("evidence", "files"), [None] * 65), "more than 64 items"),
+    (lambda fact: mutate(fact, ("evidence", "files", 0), {"path": "x"}), "missing keys"),
+    (
+        lambda fact: mutate(
+            fact, ("evidence", "files", 0, "path"), "/var/lib/freesecdev/state.json"
         ),
-        (lambda fact: mutate(fact, ("evidence", "directory"), "relative/run-1"), "absolute"),
-        (lambda fact: mutate(fact, ("evidence", "directory"), "//srv/run-1"), "absolute"),
-        (lambda fact: mutate(fact, ("evidence", "directory"), "/srv/other"), "run ID run-1"),
-        (lambda fact: mutate(fact, ("evidence", "files"), {}), "files must be a list"),
-        (lambda fact: mutate(fact, ("evidence", "files"), [{}] * 65), "more than 64 items"),
-        (lambda fact: mutate(fact, ("evidence", "files", 0), {"path": "x"}), "missing keys"),
-        (
-            lambda fact: mutate(
-                fact, ("evidence", "files", 0, "path"), "/var/lib/freesecdev/state.json"
-            ),
-            "is not inside the run directory",
+        "is not inside the run directory",
+    ),
+    (
+        lambda fact: mutate(fact, ("evidence", "files", 0, "path"), f"{DIRECTORY}/../state.json"),
+        "is not inside the run directory",
+    ),
+    (lambda fact: mutate(fact, ("evidence", "files", 0, "sha256"), "0"), "sha256"),
+    (
+        lambda fact: mutate(fact, ("evidence", "files", 0, "size"), ENABLED),
+        "size must be an integer",
+    ),
+    (
+        lambda fact: mutate(fact, ("evidence", "files", 0, "size"), -1),
+        "size must be an integer",
+    ),
+    (lambda fact: mutate(fact, ("evidence", "files", 0, "kind"), "Scan"), "kind"),
+    (
+        lambda fact: mutate(
+            fact, ("evidence", "files", scan_run_entry(fact), "kind"), "scanner_output"
         ),
-        (
-            lambda fact: mutate(
-                fact, ("evidence", "files", 0, "path"), f"{DIRECTORY}/../state.json"
-            ),
-            "is not inside the run directory",
+        "must have kind scan_run",
+    ),
+    (
+        lambda fact: mutate(
+            fact,
+            ("evidence", "files"),
+            cast("list[object]", cast("dict[str, object]", fact["evidence"])["files"]) * 2,
         ),
-        (lambda fact: mutate(fact, ("evidence", "files", 0, "sha256"), "0"), "sha256"),
-        (
-            lambda fact: mutate(fact, ("evidence", "files", 0, "size"), ENABLED),
-            "size must be an integer",
+        "lists a file twice",
+    ),
+    (
+        lambda fact: mutate(
+            fact,
+            ("evidence", "files"),
+            [
+                item
+                for item in cast(
+                    "list[dict[str, object]]",
+                    cast("dict[str, object]", fact["evidence"])["files"],
+                )
+                if item["kind"] != "scan_run"
+            ],
         ),
-        (
-            lambda fact: mutate(fact, ("evidence", "files", 0, "size"), -1),
-            "size must be an integer",
+        "has no scan-run.json",
+    ),
+    (lambda fact: mutate(fact, ("exceptions",), "applied"), "exceptions must be a mapping"),
+    (lambda fact: mutate(fact, ("exceptions", "status"), "maybe"), "status 'maybe' is unknown"),
+    (lambda fact: mutate(fact, ("exceptions", "applied"), "yes"), "applied must be a boolean"),
+    (lambda fact: mutate(fact, ("exceptions", "applied"), DISABLED), "contradicts its status"),
+    (lambda fact: mutate(fact, ("exceptions", "source_sha256"), None), "source_sha256"),
+    (
+        lambda fact: mutate(fact, ("exceptions", "file"), "relative.yml"),
+        "absolute controller path",
+    ),
+    (
+        lambda fact: mutate(fact, ("exceptions", "evaluation"), None),
+        "evaluation must be a mapping",
+    ),
+    (
+        lambda fact: mutate(fact, ("exceptions", "evaluation", "target"), None),
+        "target must be a mapping",
+    ),
+    (
+        lambda fact: mutate(fact, ("exceptions", "evaluation", "target", "host"), "db01"),
+        "was made for 'db01', not for web01",
+    ),
+    (
+        lambda fact: mutate(fact, ("exceptions", "evaluation", "source_sha256"), "c" * 64),
+        "names another exceptions file",
+    ),
+    (lambda _fact: {1: 2}, "has a key that is not a string"),
+    (
+        lambda fact: mutate(
+            fact,
+            ("evidence", "files", 0),
+            {"extra": 1, "kind": "x", "path": "x", "sha256": "x", "size": 1},
         ),
-        (lambda fact: mutate(fact, ("evidence", "files", 0, "kind"), "Scan"), "kind"),
-        (
-            lambda fact: mutate(
-                fact, ("evidence", "files", scan_run_entry(fact), "kind"), "scanner_output"
-            ),
-            "must have kind scan_run",
-        ),
-        (
-            lambda fact: mutate(
-                fact,
-                ("evidence", "files"),
-                cast("list[object]", cast("dict[str, object]", fact["evidence"])["files"]) * 2,
-            ),
-            "lists a file twice",
-        ),
-        (
-            lambda fact: mutate(
-                fact,
-                ("evidence", "files"),
-                [
-                    item
-                    for item in cast(
-                        "list[dict[str, object]]",
-                        cast("dict[str, object]", fact["evidence"])["files"],
-                    )
-                    if item["kind"] != "scan_run"
-                ],
-            ),
-            "has no scan-run.json",
-        ),
-        (lambda fact: mutate(fact, ("exceptions",), "applied"), "exceptions must be a mapping"),
-        (lambda fact: mutate(fact, ("exceptions", "status"), "maybe"), "status 'maybe' is unknown"),
-        (lambda fact: mutate(fact, ("exceptions", "applied"), "yes"), "applied must be a boolean"),
-        (lambda fact: mutate(fact, ("exceptions", "applied"), DISABLED), "contradicts its status"),
-        (lambda fact: mutate(fact, ("exceptions", "source_sha256"), None), "source_sha256"),
-        (
-            lambda fact: mutate(fact, ("exceptions", "file"), "relative.yml"),
-            "absolute controller path",
-        ),
-        (
-            lambda fact: mutate(fact, ("exceptions", "evaluation"), None),
-            "evaluation must be a mapping",
-        ),
-        (
-            lambda fact: mutate(fact, ("exceptions", "evaluation", "target"), None),
-            "target must be a mapping",
-        ),
-        (
-            lambda fact: mutate(fact, ("exceptions", "evaluation", "target", "host"), "db01"),
-            "was made for 'db01', not for web01",
-        ),
-        (
-            lambda fact: mutate(fact, ("exceptions", "evaluation", "source_sha256"), "c" * 64),
-            "names another exceptions file",
-        ),
-        (lambda _fact: {1: 2}, "has a key that is not a string"),
-        (
-            lambda fact: mutate(
-                fact,
-                ("evidence", "files", 0),
-                {"extra": 1, "kind": "x", "path": "x", "sha256": "x", "size": 1},
-            ),
-            "unknown keys: 'extra'",
-        ),
-    ],
-)
+        "unknown keys: 'extra'",
+    ),
+]
+
+
+@pytest.mark.parametrize(("change", "message"), PLAN_CASES)
 def test_a_plan_refuses_malformed_or_tampered_audit_results(
     change: Callable[[dict[str, object]], object], message: str
 ) -> None:
@@ -553,33 +543,33 @@ def test_the_written_files_are_checked_before_the_manifest() -> None:
 
 def received_with(path: str, **changes: object) -> Callable[[Contents], dict[str, object]]:
     def change(received: Contents) -> dict[str, object]:
-        observed = {name: stat_of(data) for name, data in received.items()}
+        observed: dict[str, object] = {name: stat_of(data) for name, data in received.items()}
         observed[path] = stat_of(received[path], **changes)
         return observed
 
     return change
 
 
-@pytest.mark.parametrize(
-    ("observe", "message"),
-    [
-        (
-            received_with("raw/scan/results.xml", checksum="0" * 64),
-            "checksum mismatch for .*/scan/results.xml",
-        ),
-        (received_with("raw/scan/results.xml", size=1), "checksum mismatch"),
-        (received_with("raw/tailoring.xml", mode="0644"), "has mode '0644', not 0600"),
-        (received_with("raw/tailoring.xml", uid=0), "not owned by the controller user"),
-        (received_with("raw/tailoring.xml", islnk=True), "is not a regular file"),
-        (received_with("raw/tailoring.xml", isreg=False), "is not a regular file"),
-        (
-            lambda received: {"raw/scan-run.json": stat_of(received["raw/scan-run.json"])},
-            "was not found in the bundle",
-        ),
-        (lambda received: {name: {"checksum": "x"} for name in received}, "is not a regular file"),
-        (lambda _received: [], "observed files must be a mapping"),
-    ],
-)
+OBSERVE_CASES: list[tuple[Callable[[Contents], object], str]] = [
+    (
+        received_with("raw/scan/results.xml", checksum="0" * 64),
+        "checksum mismatch for .*/scan/results.xml",
+    ),
+    (received_with("raw/scan/results.xml", size=1), "checksum mismatch"),
+    (received_with("raw/tailoring.xml", mode="0644"), "has mode '0644', not 0600"),
+    (received_with("raw/tailoring.xml", uid=0), "not owned by the controller user"),
+    (received_with("raw/tailoring.xml", islnk=True), "is not a regular file"),
+    (received_with("raw/tailoring.xml", isreg=False), "is not a regular file"),
+    (
+        lambda received: {"raw/scan-run.json": stat_of(received["raw/scan-run.json"])},
+        "was not found in the bundle",
+    ),
+    (lambda received: {name: {"checksum": "x"} for name in received}, "is not a regular file"),
+    (lambda _received: [], "observed files must be a mapping"),
+]
+
+
+@pytest.mark.parametrize(("observe", "message"), OBSERVE_CASES)
 def test_fetched_files_that_do_not_match_the_audit_record_fail_closed(
     observe: Callable[[Contents], object], message: str
 ) -> None:
@@ -756,8 +746,8 @@ def test_manifest_lists_must_be_sorted_and_unique() -> None:
     with pytest.raises(evidence.EvidenceError, match="unique and sorted by source"):
         evidence.parse_manifest(evidence.canonical_json(document).encode("utf-8"))
     document = manifest_of(bundle())
-    files = cast("list[dict[str, object]]", document["files"])
-    document["files"] = [item for item in files if item["path"] != "exceptions/stale.json"]
+    entries = cast("list[dict[str, object]]", document["files"])
+    document["files"] = [item for item in entries if item["path"] != "exceptions/stale.json"]
     with pytest.raises(evidence.EvidenceError, match="name different documents"):
         evidence.parse_manifest(evidence.canonical_json(document).encode("utf-8"))
 
@@ -767,30 +757,30 @@ def test_an_oversized_manifest_is_refused() -> None:
         evidence.parse_manifest(b" " * (evidence.MAX_MANIFEST_BYTES + 1))
 
 
-@pytest.mark.parametrize(
-    ("tamper", "message"),
-    [
-        (lambda contents: contents.pop(evidence.MANIFEST_NAME), "has no bundle.json"),
-        (lambda contents: contents.update({"bundle.sigstore.json": b"{}"}), "carries a signature"),
-        (
-            lambda contents: contents.update({"raw/extra.txt": b"x"}),
-            "does not list: 'raw/extra.txt'",
-        ),
-        (lambda contents: contents.pop("raw/tailoring.xml"), "is missing raw/tailoring.xml"),
-        (
-            lambda contents: contents.update({"raw/scan/results.xml": XCCDF + b" "}),
-            "checksum mismatch for raw/scan/results.xml",
-        ),
-        (
-            lambda contents: contents.update({"raw/scan/results.xml": b"x" * len(XCCDF)}),
-            "checksum mismatch",
-        ),
-        (
-            lambda contents: contents.update({evidence.CHECKSUMS_NAME: b"x"}),
-            "SHA256SUMS does not match",
-        ),
-    ],
-)
+TAMPER_CASES: list[tuple[Callable[[Contents], object], str]] = [
+    (lambda contents: contents.pop(evidence.MANIFEST_NAME), "has no bundle.json"),
+    (lambda contents: contents.update({"bundle.sigstore.json": b"{}"}), "carries a signature"),
+    (
+        lambda contents: contents.update({"raw/extra.txt": b"x"}),
+        "does not list: 'raw/extra.txt'",
+    ),
+    (lambda contents: contents.pop("raw/tailoring.xml"), "is missing raw/tailoring.xml"),
+    (
+        lambda contents: contents.update({"raw/scan/results.xml": XCCDF + b" "}),
+        "checksum mismatch for raw/scan/results.xml",
+    ),
+    (
+        lambda contents: contents.update({"raw/scan/results.xml": b"x" * len(XCCDF)}),
+        "checksum mismatch",
+    ),
+    (
+        lambda contents: contents.update({evidence.CHECKSUMS_NAME: b"x"}),
+        "SHA256SUMS does not match",
+    ),
+]
+
+
+@pytest.mark.parametrize(("tamper", "message"), TAMPER_CASES)
 def test_a_bundle_that_changed_after_it_was_written_is_refused(
     tamper: Callable[[Contents], object], message: str
 ) -> None:

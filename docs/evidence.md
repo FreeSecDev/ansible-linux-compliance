@@ -44,7 +44,8 @@ changes the managed host.
 1. Validate the variables and check that `linux_compliance_audited` exists.
 2. Resolve the output directory (relative paths against the playbook directory) and require a normalised absolute path.
 3. Skip the host with a message when the audit wrote no evidence (`evidence_written: false`: check mode, or no scan).
-   In check mode nothing is fetched or written; the role prints the bundle it would write.
+   With `--check` nothing is fetched or written; the role prints the bundle it would write (no test covers check
+   mode yet).
 4. Plan the bundle with `freesecdev.linux_compliance.evidence_plan` (below).
 5. Refuse an existing bundle (a bundle is never overwritten) and an existing output or host directory that is a
    symbolic link, not a directory or not mode `0700`. Nothing is repaired.
