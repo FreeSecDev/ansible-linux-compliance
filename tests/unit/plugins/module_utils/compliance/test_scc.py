@@ -742,3 +742,47 @@ def test_the_default_clock_is_the_system_clock(setup: Setup) -> None:
     run = backend.audit(setup.request())
     assert run.status is model.ScanStatus.FAILED
     assert run.finished_at >= "2026-10-26T00:00:00Z"
+
+
+def test_a_fixed_result_is_an_error_because_scc_never_remediates(setup: Setup) -> None:
+    document = results_document(outcomes=("fixed", "fail", "notapplicable", "notchecked", "pass"))
+    run = setup.audit(FakeScc(results=document))
+    assert run.status is model.ScanStatus.COMPLETED
+    finding = next(item for item in run.findings if item.rule_id == RULES[0])
+    assert finding.outcome is model.Outcome.ERROR
+    assert finding.evaluated_outcome is model.Outcome.ERROR
+    assert finding.flags == ()
+    assert finding.severity is model.Severity.MEDIUM
+    assert finding.message == scc.FIXED_MESSAGE
+    assert outcomes(run)[RULES[4]] == "pass"
+    assert model.Outcome.PASS not in {
+        item.outcome for item in run.findings if item.rule_id == RULES[0]
+    }
+
+
+def test_a_crowded_scc_directory_fails_the_run_instead_of_being_read_partly(
+    setup: Setup,
+) -> None:
+    class CrowdedXml(FakeScc):
+        """Writes more entries than the backend reads into the results directory."""
+
+        def write(self, user: Path, options: str) -> None:
+            super().write(user, options)
+            xml = user / "Sessions" / SESSION / "Results" / "SCAP" / "XML"
+            for index in range(scc.MAX_SESSION_ENTRIES):
+                (xml / f"extra-{index:02d}.xml").write_text("<x/>", encoding="utf-8")
+
+    assert_failed(setup.audit(CrowdedXml()), f"more than {scc.MAX_SESSION_ENTRIES} entries")
+
+
+def test_a_crowded_log_directory_fails_the_run(setup: Setup) -> None:
+    class CrowdedLogs(FakeScc):
+        """Writes more entries than the backend reads into the log directory."""
+
+        def write(self, user: Path, options: str) -> None:
+            super().write(user, options)
+            logs = user / "ApplicationLogs"
+            for index in range(scc.MAX_SESSION_ENTRIES):
+                (logs / f"other-{index:02d}.txt").write_text("x", encoding="utf-8")
+
+    assert_failed(setup.audit(CrowdedLogs()), f"more than {scc.MAX_SESSION_ENTRIES} entries")

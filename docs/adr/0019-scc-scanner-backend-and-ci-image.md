@@ -718,12 +718,33 @@ results file, the results parse through the hardened parser and name the request
 `cscc --version` reported the pinned release, the SHA-256 of `/opt/scc/cscc` is the pinned one, the release has not
 expired (2026-11-25 for 5.15, and SCC's own "Software expires in N days" must be positive), and the installed stream
 and the private copy did not change. A non-zero exit, a start failure or a timeout is `failed` or `timed_out`; exit 0
-is never evidence. The outcomes map through ADR 0013: `unknown` and any unlisted value become `error` with a message,
-`notchecked` stays `notchecked`, and the integration test asserts that the 194 findings of a real MAC-1 scan are
-only `pass`, `fail`, `notapplicable`, `notchecked` and `error`.
+is never evidence.
 
-The audit accepts datastream file names of up to 128 characters, because SCC's stream names are longer than 64; the
-OpenSCAP backend keeps its own 64-character label rule.
+The outcomes map through ADR 0013, with one SCC-specific exception:
+
+| SCC XCCDF result | Finding |
+|---|---|
+| `pass`, `fail`, `notapplicable`, `notchecked`, `error` | the same outcome |
+| `unknown` and any unlisted value | `error`, with a message naming the value |
+| `informational` | `notchecked` (flag `informational`) |
+| `notselected` | dropped for a rule the profile does not select, otherwise `notchecked` (flag `notselected`) |
+| `fixed` | **`error`** ("SCC reported 'fixed', but SCC never remediates"), not the `pass` of ADR 0013 |
+| expected rule without a result, or any rule of a run that did not complete | `error` |
+
+SCC has no remediation (FAQ A.8), so a `fixed` result is contradictory output and never evidence of compliance; it is
+the only route by which SCC output could otherwise have become `pass` without SCC reporting `pass`. The same
+question for `oscap xccdf eval` without `--remediate` is a follow-up for ADR 0013. The integration test asserts that
+the 194 findings of a real MAC-1 scan are only `pass`, `fail`, `notapplicable`, `notchecked` and `error`.
+
+The audit accepts datastream file names of up to 128 characters only for `backend: scc` (`LONG_CONTENT_NAME_BACKENDS`
+in `audit.py`), because SCC's stream names are longer than 64. Every other backend, OpenSCAP included, keeps the
+64-character label rule.
+
+A local user on the managed host who can make text appear in SCC's debug log (for example through a file name that
+SCC logs) can add a second, mismatching options record and so make the confirmation refuse the run. That is a denial
+of service, a `failed` run with every rule `error`; it can never produce a false confirmation, because every record
+must name the run's file and the dump must hold each value exactly once. A directory that SCC fills with more than 16
+entries also fails the run instead of being read partly.
 
 ### Residual state writes (decision 2, open item 2)
 
@@ -737,6 +758,12 @@ The integration test hashes every file below `/opt/scc` and `/root` before and a
 These are SCC's own bookkeeping, like the temporary files of `oscap`. This amendment proposes to accept them as the
 residual of an SCC audit; merging it is the lead architect's acceptance. The test fails on any other change, so the
 residual cannot grow unseen.
+
+Operator housekeeping: SCC adds one session database to `/opt/scc/Local` per scan and never removes it, so the
+directory grows with every audit (the files observed in CI were small). The collection never deletes anything below
+`/opt/scc`, because an audit does not change the host beyond this residual. Operators who scan often remove old
+`/opt/scc/Local/*.db` files with their own housekeeping, outside any scan, or reinstall SCC; the content databases in
+`Resources/Content/DB` are rebuilt by SCC on every run and need no care.
 
 ### Test tooling
 

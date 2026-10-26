@@ -1,6 +1,7 @@
 """Egress test of the SCC backend (ADR 0019, decision 2; FREES-145).
 
-The scan container runs on an internal Docker network (``--internal``) whose only
+The scan container runs on an internal Docker network (``--internal``, on a random free
+``172.31.x.0/24`` per run, so concurrent runs do not collide) whose only
 peer is a sink container (:mod:`egress_sink`). The scan container's resolver is
 the sink, which answers every name with its own address, accepts or resets TCP
 on every port and logs every DNS query, connection and datagram it receives.
@@ -29,6 +30,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
+import subprocess
 import time
 import uuid
 from dataclasses import dataclass
@@ -39,9 +42,8 @@ import pytest
 
 from tests.system.scc import egress_content, harness
 
-SUBNET = "172.31.250.0/24"
-SINK_ADDRESS = "172.31.250.2"
-SCAN_ADDRESS = "172.31.250.3"
+SUBNET_ATTEMPTS = 8
+SUBNET_OCTETS = range(16, 255)
 HOSTNAME = "scc-egress-target"
 OWN_NAMES = frozenset({HOSTNAME, f"{HOSTNAME}.localdomain"})
 PROBE_HOSTS = frozenset({egress_content.REMOTE_COMPONENT_HOST, egress_content.REMOTE_CHECK_HOST})
@@ -123,6 +125,37 @@ def _violations(events: list[dict[str, object]]) -> list[dict[str, object]]:
 
 
 @dataclass(frozen=True)
+class Network:
+    """The internal network of one test run and the two addresses on it."""
+
+    name: str
+    subnet: str
+    sink: str
+    scan: str
+
+    @classmethod
+    def create(cls, name: str) -> Network:
+        """Create an internal network on a random free /24, or fail clearly."""
+        tried: list[str] = []
+        for _attempt in range(SUBNET_ATTEMPTS):
+            octet = SUBNET_OCTETS[secrets.randbelow(len(SUBNET_OCTETS))]
+            prefix = f"172.31.{octet}"
+            subnet = f"{prefix}.0/24"
+            tried.append(subnet)
+            completed = subprocess.run(
+                [harness.docker(), "network", "create", "--internal", "--subnet", subnet, name],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=harness.CONTAINER_TIMEOUT_SECONDS,
+            )
+            if completed.returncode == 0:
+                return cls(name, subnet, f"{prefix}.2", f"{prefix}.3")
+        message = f"no free subnet for the egress network after trying {', '.join(tried)}"
+        raise RuntimeError(message)
+
+
+@dataclass(frozen=True)
 class Workspace:
     """The files that the sink and the scan container mount."""
 
@@ -130,9 +163,10 @@ class Workspace:
     probe_sha256: str
     logs: Path
     resolver: Path
+    network: Network
 
     @classmethod
-    def create(cls, work: Path) -> Workspace:
+    def create(cls, work: Path, network: Network) -> Workspace:
         """Write the probe stream, the sink log directory and the resolver file."""
         probe_directory = work / "probe"
         probe_directory.mkdir()
@@ -143,10 +177,10 @@ class Workspace:
         logs.mkdir()
         logs.chmod(0o777)
         resolver = work / "resolv.conf"
-        resolver.write_text(f"nameserver {SINK_ADDRESS}\noptions attempts:1 timeout:1\n", "utf-8")
+        resolver.write_text(f"nameserver {network.sink}\noptions attempts:1 timeout:1\n", "utf-8")
         resolver.chmod(0o644)
         digest = hashlib.sha256(probe.read_bytes()).hexdigest()
-        return cls(probe, digest, logs, resolver)
+        return cls(probe, digest, logs, resolver, network)
 
 
 def _start_sink(name: str, network: str, workspace: Workspace) -> None:
@@ -159,7 +193,7 @@ def _start_sink(name: str, network: str, workspace: Workspace) -> None:
             "--network",
             network,
             "--ip",
-            SINK_ADDRESS,
+            workspace.network.sink,
             "--cap-drop",
             "ALL",
             "--cap-add",
@@ -177,7 +211,7 @@ def _start_sink(name: str, network: str, workspace: Workspace) -> None:
             "-I",
             f"{harness.SOURCE_MOUNT}/tests/system/scc/egress_sink.py",
             "--address",
-            SINK_ADDRESS,
+            workspace.network.sink,
             "--log",
             "/log/events.jsonl",
         ]
@@ -194,7 +228,7 @@ def _start_scan(name: str, network: str, workspace: Workspace) -> None:
             "--network",
             network,
             "--ip",
-            SCAN_ADDRESS,
+            workspace.network.scan,
             "--hostname",
             HOSTNAME,
             "--volume",
@@ -230,16 +264,16 @@ def _measure(scan_name: str, sink: Sink, workspace: Workspace) -> dict[str, obje
 @pytest.fixture(scope="module")
 def egress(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
     harness.image()
-    workspace = Workspace.create(tmp_path_factory.mktemp("scc-egress"))
     suffix = uuid.uuid4().hex[:12]
     network, sink_name, scan_name = (
         f"freesecdev-egress-{suffix}",
         f"sink-{suffix}",
         f"scan-{suffix}",
     )
-    sink = Sink(workspace.logs / "events.jsonl")
-    harness.run(["network", "create", "--internal", "--subnet", SUBNET, network])
+    created = Network.create(network)
     try:
+        workspace = Workspace.create(tmp_path_factory.mktemp("scc-egress"), created)
+        sink = Sink(workspace.logs / "events.jsonl")
         _start_sink(sink_name, network, workspace)
         _wait_ready(sink)
         _start_scan(scan_name, network, workspace)

@@ -69,8 +69,8 @@ options:
         writable by group or others. Otherwise the module fails with C(unsafe_content_dir) before
         anything is created, because another user could replace the file, for example with a FIFO
         that blocks the audit. The private copy is made from the resolved path.
-      - The file name must match C([A-Za-z0-9._+-]{1,128}), because it labels the provenance. The
-        C(openscap) backend accepts at most 64 characters.
+      - The file name must match C([A-Za-z0-9._+-]{1,64}), because it labels the provenance. With
+        O(backend=scc) it may have up to 128 characters, because SCC stream names are longer.
     type: str
     required: true
   expected_sha256:

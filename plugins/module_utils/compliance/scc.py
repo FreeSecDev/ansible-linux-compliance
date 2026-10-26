@@ -54,7 +54,9 @@ carry ``start-time`` and ``end-time`` no earlier than the start of the run, and
 the installed stream and the private copy did not change. Anything else is
 ``failed``, a timeout is ``timed_out``, and both report every expected rule as
 ``error``. Result values map through :func:`model.map_xccdf_result`: ``unknown``
-and every unlisted value become ``error`` and ``notchecked`` stays
+and every unlisted value become ``error``, ``fixed`` becomes ``error`` too
+(SCC never remediates, so a ``fixed`` result is contradictory output), and
+``notchecked`` stays
 ``notchecked``; nothing that SCC could not evaluate becomes ``pass``.
 
 The XCCDF and ARF results are copied to ``results.xml`` and ``results-arf.xml``
@@ -108,6 +110,9 @@ MAX_OPTIONS_BYTES: Final[int] = 16 * 1024 * 1024
 MAX_LOG_BYTES: Final[int] = 64 * 1024 * 1024
 MAX_MESSAGE_LENGTH: Final[int] = 1024
 MAX_SESSION_ENTRIES: Final[int] = 16
+FIXED_MESSAGE: Final[str] = (
+    "SCC reported 'fixed', but SCC never remediates, so the result is not evidence"
+)
 HASH_CHUNK_BYTES: Final[int] = 1024 * 1024
 DUMP_PREFIX: Final[str] = "*"
 CONFIRMED_ZERO: Final[tuple[str, ...]] = (
@@ -716,10 +721,17 @@ def _is_real(path: Path, kind: Callable[[int], bool]) -> bool:
         return False
 
 
+class _CrowdedError(ValueError):
+    """Raised when SCC wrote more entries into a directory than the backend reads."""
+
+
 def _entries(directory: Path, pattern: str, kind: Callable[[int], bool]) -> list[Path]:
     if not _is_real(directory, stat.S_ISDIR):
         return []
-    entries = sorted(directory.iterdir())[: MAX_SESSION_ENTRIES + 1]
+    entries = sorted(directory.iterdir())
+    if len(entries) > MAX_SESSION_ENTRIES:
+        message = f"SCC wrote more than {MAX_SESSION_ENTRIES} entries into {_clip(directory.name)}"
+        raise _CrowdedError(message)
     return [
         entry
         for entry in entries
@@ -938,10 +950,11 @@ class SccBackend:
         output: Path,
         started: datetime,
     ) -> openscap.ParsedResults | _Failure:
-        confirmation = self._confirm(user, options)
-        if confirmation is not None:
-            return confirmation
-        located = self._results(user)
+        try:
+            confirmation = self._confirm(user, options)
+            located = self._results(user) if confirmation is None else confirmation
+        except _CrowdedError as error:
+            return _Failure(model.ScanStatus.FAILED, str(error))
         if isinstance(located, _Failure):
             return located
         results = output / RESULTS_FILE_NAME
@@ -1025,7 +1038,13 @@ def _verify(
         problem = "the results end before they start"
     if problem is not None:
         return _Failure(model.ScanStatus.FAILED, problem)
-    return replace(parsed, findings=(*kept, *missing))
+    return replace(parsed, findings=(*(_never_fixed(finding) for finding in kept), *missing))
+
+
+def _never_fixed(finding: model.Finding) -> model.Finding:
+    if model.ResultFlag.FIXED not in finding.flags:
+        return finding
+    return replace(_error_finding(finding.rule_id, FIXED_MESSAGE), severity=finding.severity)
 
 
 def _error_finding(rule_id: str, message: str) -> model.Finding:
