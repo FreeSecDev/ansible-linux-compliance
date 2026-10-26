@@ -15,6 +15,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_verify_gate$') == [] or '__linux_compliance_verify_gate'
         in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_verify_host_nonce$') == [] or
+        '__linux_compliance_verify_host_nonce' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_verify_marker$') == [] or
         '__linux_compliance_verify_marker' in (hostvars[inventory_hostname] | list)
     fail_msg: >-
@@ -23,6 +26,27 @@
       include_tasks or import_tasks) or a block or play variable. It is refused by its name, whatever its value, because
       a template could evaluate to the value that a later check expects. The failed assertion names it. Remove it and
       pass only the documented linux_compliance_* variables. Nothing was scanned, changed or compared.
+    quiet: true
+  tags:
+    - always
+
+- name: Verify | Record a random nonce in the facts of this host
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_host_nonce: "{{ 1000000000000 | ansible.builtin.random }}"
+  tags:
+    - always
+
+- name: Verify | Refuse an inventory_hostname that names another host
+  ansible.builtin.assert:
+    that:
+      - >-
+        (hostvars[inventory_hostname] | default({}))['__linux_compliance_verify_host_nonce'] | default(none) ==
+        __linux_compliance_verify_host_nonce
+    fail_msg: >-
+      inventory_hostname is {{ inventory_hostname }}, but the nonce that the previous task recorded in the facts of this
+      host is not __linux_compliance_verify_host_nonce of hostvars[inventory_hostname]: a role parameter, an include
+      parameter or an extra variable named inventory_hostname points the verify role at another host. Remove it. Nothing
+      was scanned, changed or compared.
     quiet: true
   tags:
     - always

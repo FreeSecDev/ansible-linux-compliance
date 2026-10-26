@@ -896,7 +896,7 @@ adds an exemption, and no lint limit was raised.
   `localhost` already has, in `hostvars`, any `__linux_compliance_*` name or a role output: every public
   `linux_compliance_*` fact that a role sets (`role_outputs`), among them `linux_compliance_audited`,
   `linux_compliance_discovered`, `linux_compliance_audit_stale_exceptions` and `linux_compliance_baseline`. It also
-  refuses `inventory_hostname` as an extra variable. As in the FREES-150 Molecule guard it reads only the magic
+  refuses `inventory_hostname` and `group_names` as extra variables (see below). As in the FREES-150 Molecule guard it reads only the magic
   variables `groups` and `hostvars` and literals, and it refuses by name, so a template cannot pass it. Two
   exceptions keep legitimate runs working. A fact that a role sets with `cacheable: true`, today only
   `__linux_compliance_verify_baseline_recorded`, survives in a persistent fact cache by design and is checked where
@@ -918,13 +918,28 @@ adds an exemption, and no lint limit was raised.
   run output outside the reset.
 - `tools/roles/promote_native_rule.py` also refuses a hard link to `roles/remediate/vars/rules.yml`: it compares
   `st_dev` and `st_ino` of the target with the repository catalogue before it writes.
+- Host nonce (review of PR #44): an include parameter `inventory_hostname: <other host>` pointed the parameter check
+  at the facts of that host, so a decoy fact of the forged name there let a templated parameter pass. After the
+  parameter check the guard now records `__linux_compliance_<role>_host_nonce: "{{ 1000000000000 |
+  ansible.builtin.random }}"` and asserts that `hostvars[inventory_hostname]` holds the same nonce. `set_fact` always
+  writes to the host that runs the task, so the assertion fails whenever `inventory_hostname` names another host,
+  through an include parameter, a role parameter or an extra variable. The nonce is a run output of the guard: it is
+  never reset to a sentinel and never read back, its name is in the parameter check, and the generator refuses a
+  role variable of that name.
+- `group_names` (review of PR #44): an extra variable replaces `group_names` in `vars` and in `hostvars`, and an
+  include parameter replaces it in `vars`; the `groups` magic variable cannot be replaced by either. The audit role
+  passed `group_names` to `apply_exceptions`, so `-e group_names=[<group>]` widened the hosts an exception scoped to
+  that group applied to. `exceptions_apply.yml` now derives the groups of the host from `groups` (every group except
+  `all` that lists `inventory_hostname`), and the run-start check compares the `<host> <group>` pairs of
+  `hostvars[*].group_names` with those of `groups` and refuses any difference.
+- Two shipped playbooks in one `ansible-playbook` invocation are refused by the run-start check of the second, because
+  the first left role outputs and internal facts in `hostvars`. This fails closed and is intended: the shipped
+  playbooks that need another one import it with the marker, and facts of a finished playbook must not seed the next.
 - Residuals, each needing control of the playbook or the command line:
   - The parameter check cannot tell a parameter from a fact of the same name, so when an earlier entry point of the
     same role already ran on the host in this run (the verify role's `preflight.yml` before `baseline.yml` and
     `main.yml`, the second audit of `playbooks/remediate.yml`, the `stale.yml` play on `localhost`), a templated
     parameter of that name meets only the read-backs.
-  - An include parameter `inventory_hostname` points `hostvars[inventory_hostname]` at another host; it helps only
-    when that host already has a fact of the parameter's name.
   - An extra variable is in `hostvars`, so the parameter check passes it. The run-start check refuses it in the
     shipped playbooks; a custom playbook that does not import `playbooks/run_start.yml` keeps the template residual
     of FREES-153 for `-e`.

@@ -343,8 +343,9 @@ unprefixed role variable; `tools/roles/check_role_specs.py` allows exactly the n
 ### Applying the file to each host
 
 After the scan and the publication of the raw result, each host applies the validated text to its own scan run with
-`freesecdev.linux_compliance.apply_exceptions`, matching scopes against `inventory_hostname` and `group_names` (never
-the host name that the scanned host reports). The filter takes the controller's clock: a scan start more than five
+`freesecdev.linux_compliance.apply_exceptions`, matching scopes against `inventory_hostname` and the groups that the
+`groups` magic variable lists for it (never the host name that the scanned host reports, and never `group_names`,
+which an extra variable or an include parameter can replace; FREES-157). The filter takes the controller's clock: a scan start more than five
 minutes after the controller time fails **that host** with a clear message, and the other hosts continue. Waivers are
 applied only to a completed run:
 

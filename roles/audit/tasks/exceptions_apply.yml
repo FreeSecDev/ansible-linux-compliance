@@ -4,7 +4,10 @@
     __linux_compliance_audit_evaluation: >-
       {{ linux_compliance_audited.scan_run
          | freesecdev.linux_compliance.apply_exceptions(
-             __linux_compliance_audit_exceptions.text, inventory_hostname, group_names)
+             __linux_compliance_audit_exceptions.text, inventory_hostname,
+             groups | dict2items | rejectattr('key', 'equalto', 'all')
+             | selectattr('value', 'ansible.builtin.contains', inventory_hostname)
+             | map(attribute='key') | sort)
          if __linux_compliance_audit_waivers_apply else none }}
   vars:
     __linux_compliance_audit_waivers_apply: >-

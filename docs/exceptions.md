@@ -163,7 +163,7 @@ requires that every document the loader accepts loads to the same value with PyY
 | Key | Matches |
 |---|---|
 | `hosts` | The inventory host name (`inventory_hostname`), exactly |
-| `groups` | Any of the inventory groups of the host (`group_names`), exactly; `all` and `ungrouped` are rejected because `group_names` never contains them |
+| `groups` | Any of the inventory groups of the host, exactly. The audit role takes them from the `groups` magic variable, not from `group_names`, which an extra variable or an include parameter can replace (FREES-157); the shipped playbooks also refuse `-e group_names`. `all` and `ungrouped` are rejected because they match every host or none deliberately |
 | `profiles` | The full XCCDF profile identifier of the scan run (`profile_id`), exactly |
 | `benchmark.id`, `benchmark.version` | The `benchmark_id` and the content version (`content.content_version`) of the scan run; both must be equal. The version is a token (`[A-Za-z0-9][A-Za-z0-9._+~:-]*`, at most 64 characters). Requires `profiles` |
 

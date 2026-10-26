@@ -26,7 +26,8 @@ def anything(value: object, *arguments: object) -> object:
 def names_of(expression: str) -> set[str]:
     environment = jinja2.Environment(autoescape=True)
     environment.tests["match"] = anything
-    environment.filters["flatten"] = anything
+    for name in ("flatten", "zip", "dict2items", "ansible.builtin.subelements"):
+        environment.filters[name] = anything
     return jinja2.meta.find_undeclared_variables(environment.parse("{{ " + expression + " }}"))
 
 
@@ -66,6 +67,13 @@ def test_the_check_refuses_every_internal_name_and_role_output_by_its_name() -> 
     assert "select('match', '^__linux_compliance_')" in that[0]
     assert "map('extract', hostvars, 'inventory_hostname')" in that[1]
     assert "(groups['all'] + ['localhost']) | unique" in that[1]
+    assert that[2] == run_start.memberships()
+    stated, actual = that[2].split(" == ")
+    assert "ansible.builtin.subelements('group_names')" in stated
+    assert "map('extract', hostvars)" in stated
+    assert actual.startswith("(groups | dict2items | rejectattr('key', 'equalto', 'all')")
+    assert "hostvars" not in actual
+    assert "group_names" in str(assertion["fail_msg"])
 
 
 def test_the_play_is_folded_within_the_line_limit() -> None:

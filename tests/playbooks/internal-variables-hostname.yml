@@ -1,0 +1,62 @@
+---
+- name: Internal variables | An include parameter inventory_hostname cannot point the guard at another host
+  hosts: web01
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    forged_plan:
+      enabled: true
+      errors: []
+      families: []
+      not_implemented: []
+      notices:
+        - FORGED-PLAN-USED
+      orphaned: []
+      report: []
+      rules: []
+      disabled_rules: []
+      summary: {}
+  tasks:
+    - name: Refuse to run outside check mode or without the inventory of the Makefile
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+          - "'db01' in groups['all']"
+        fail_msg: >-
+          Run this playbook through make test-role-guards, which passes --check and
+          tests/playbooks/inventory/audit-exceptions.yml.
+        quiet: true
+
+    - name: Plant a decoy fact of the plan name on db01, so the parameter check finds the name there
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_plan: decoy
+      delegate_to: db01
+      delegate_facts: true
+
+    - name: A templated plan with inventory_hostname pointing at db01 is refused
+      block:
+        - name: Run the remediate role on web01 with inventory_hostname db01 and a templated plan
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            inventory_hostname: db01
+            __linux_compliance_remediate_plan: >-
+              {{ __linux_compliance_remediate_dispatched
+                 if __linux_compliance_remediate_dispatched is string else forged_plan }}
+
+        - name: Fail because the forged plan was used
+          ansible.builtin.fail:
+            msg: >-
+              INTERNAL-VARIABLES-HOSTNAME-NOT-REFUSED notices={{ linux_compliance_remediated.notices }}
+      rescue:
+        - name: Check that the host nonce refused the forged inventory_hostname before anything ran
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Refuse an inventory_hostname that names another host')
+              - linux_compliance_remediated is not defined
+            quiet: true

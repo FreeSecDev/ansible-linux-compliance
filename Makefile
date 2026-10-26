@@ -449,6 +449,8 @@ test-audit-exceptions: require-uv collection-link
 	rm -rf '$(AUDIT_EXCEPTIONS_DIR)'
 	mkdir -p '$(AUDIT_EXCEPTIONS_DIR)'
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions.yml
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) -e '{"group_names": ["web"]}' \
+		tests/playbooks/audit-exceptions-group-names.yml
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) --limit db01,localhost tests/playbooks/audit-exceptions-limit.yml \
 		| tee '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
 	grep -q 'unmatched on 1 of 2 target hosts; not covered: web01' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
@@ -622,6 +624,14 @@ test-role-guards: require-uv collection-link
 	$(call run_start_expect_refusal,comparison,verify,-e '{"__linux_compliance_verify_comparison": {}}',__linux_compliance_verify_comparison)
 	$(call run_start_expect_refusal,marker,remediate,-e linux_compliance_run_start_checked=true,linux_compliance_run_start_checked)
 	$(call run_start_expect_refusal,inventory_hostname,evidence,-e inventory_hostname=freesecdev_forged,none)
+	$(call run_start_expect_refusal,group_names,audit,-e '{"group_names": ["web"]}',none)
+	$(call run_start_expect_refusal,group_names_grouped,audit,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e '{"group_names": ["web"]}',none)
+	$(REMEDIATE_CHECK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/internal-variables-hostname.yml
+	status=0; $(RUN_START_PLAYBOOK) playbooks/audit.yml playbooks/audit.yml > '$(ROLE_GUARDS_DIR)/run-start-twice.log' 2>&1 \
+		|| status=$$?; cat '$(ROLE_GUARDS_DIR)/run-start-twice.log'; \
+		test "$$status" -eq 2 || { printf 'error: two shipped playbooks in one invocation gave status %s\n' "$$status" >&2; exit 1; }; \
+		grep -qF '$(RUN_START_REFUSAL) (__linux_compliance_audit_' '$(ROLE_GUARDS_DIR)/run-start-twice.log' || \
+		{ printf 'error: the second shipped playbook was not refused by its run-start check\n' >&2; exit 1; }
 
 VERIFY_DIR := build/test-verify
 VERIFY_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(AUDIT_EXCEPTIONS_INVENTORY) \

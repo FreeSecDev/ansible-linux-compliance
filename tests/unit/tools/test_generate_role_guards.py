@@ -24,6 +24,18 @@ def copy_roles(root: Path) -> Path:
     return root
 
 
+def assert_nonce(record: dict[str, object], check: dict[str, object], name: str) -> None:
+    assert record[gen.SET_FACT] == {name: "{{ 1000000000000 | ansible.builtin.random }}"}
+    assertion = cast("dict[str, object]", check["ansible.builtin.assert"])
+    assert [" ".join(item.split()) for item in cast("list[str]", assertion["that"])] == [
+        f"(hostvars[inventory_hostname] | default({{}}))['{name}'] | default(none) == {name}"
+    ]
+    assert str(check["name"]).endswith("Refuse an inventory_hostname that names another host")
+    assert "vars" not in check
+    assert "vars" not in record
+    assert record["tags"] == check["tags"] == ["always"]
+
+
 def parameter_check(name: str) -> str:
     return (
         f"query('ansible.builtin.varnames', '^{name}$') == [] "
@@ -308,14 +320,18 @@ def test_the_guard_resets_facts_and_shadows_task_variables() -> None:
         {"__linux_compliance_remediate_constant": "(x)['y']"},
     )
     text = gen.guard("remediate", found)
-    parameters, reset, refuse, second_reset, second_refuse, final_reset = load(text)
+    tasks = load(text)
+    parameters, record, nonce_check = tasks[:3]
+    reset, refuse, second_reset, second_refuse, final_reset = tasks[3:]
     checks = cast("dict[str, object]", parameters["ansible.builtin.assert"])
     assert checks["that"] == [
         parameter_check("__linux_compliance_remediate_a"),
         parameter_check("__linux_compliance_remediate_b"),
         parameter_check("__linux_compliance_remediate_constant"),
+        parameter_check("__linux_compliance_remediate_host_nonce"),
         parameter_check("__linux_compliance_remediate_local"),
     ]
+    assert_nonce(record, nonce_check, "__linux_compliance_remediate_host_nonce")
     assert parameters["name"] == f"{refuse['name']} as parameters"
     assert "vars" not in parameters
     assert "whatever its value" in str(checks["fail_msg"])
@@ -372,11 +388,14 @@ def test_a_value_supplied_from_outside_cannot_equal_both_sentinels() -> None:
             for task in tasks
             if "ansible.builtin.assert" in task
         ]
-        assert len(checks) == 3, role
-        for name in [*found.facts, *found.locals]:
+        assert len(checks) == 4, role
+        for name in [*found.facts, *found.locals, gen.host_nonce(role)]:
             assert parameter_check(name) in [" ".join(item.split()) for item in checks[0]], name
-            assert f"{name} == '{SENTINEL}'" in checks[1], name
-            assert f"{name} == '{SECOND_SENTINEL}'" in checks[2], name
+        assert_nonce(tasks[1], tasks[2], gen.host_nonce(role))
+        for name in [*found.facts, *found.locals]:
+            assert f"{name} == '{SENTINEL}'" in checks[2], name
+            assert f"{name} == '{SECOND_SENTINEL}'" in checks[3], name
+        assert gen.host_nonce(role) not in str(tasks[3:]), role
         assert tasks[0]["ansible.builtin.assert"] is not None
         assert gen.SET_FACT not in tasks[0]
         resets = [task["ansible.builtin.set_fact"] for task in tasks if gen.SET_FACT in task]
@@ -385,9 +404,10 @@ def test_a_value_supplied_from_outside_cannot_equal_both_sentinels() -> None:
 
 def test_a_guard_with_only_task_variables_reads_back_twice_without_a_reset() -> None:
     found = gen.RoleVariables(set(), {"__linux_compliance_verify_local"}, {})
-    parameters, first, second = load(gen.guard("verify", found))
+    parameters, _, _, first, second = load(gen.guard("verify", found))
     assert cast("dict[str, list[str]]", parameters["ansible.builtin.assert"])["that"] == [
-        parameter_check("__linux_compliance_verify_local")
+        parameter_check("__linux_compliance_verify_host_nonce"),
+        parameter_check("__linux_compliance_verify_local"),
     ]
     assert first["vars"] == {"__linux_compliance_verify_local": SENTINEL}
     assert second["vars"] == {"__linux_compliance_verify_local": SECOND_SENTINEL}
@@ -438,7 +458,7 @@ def test_a_role_with_internal_variables_but_no_guard_is_an_error(tmp_path: Path)
         gen.outputs(root)
 
 
-def test_a_guard_without_facts_or_task_variables_has_only_the_assertion() -> None:
+def test_a_guard_without_facts_or_task_variables_reads_back_only_the_constants() -> None:
     text = gen.guard(
         "verify",
         gen.RoleVariables(
@@ -449,8 +469,14 @@ def test_a_guard_without_facts_or_task_variables_has_only_the_assertion() -> Non
         ),
     )
     tasks = load(text)
-    assert len(tasks) == 1
-    assert "vars" not in tasks[0]
+    assert len(tasks) == 4
+    assert cast("dict[str, list[str]]", tasks[0]["ansible.builtin.assert"])["that"] == [
+        parameter_check("__linux_compliance_verify_host_nonce")
+    ]
+    assert "vars" not in tasks[3]
+    assert cast("dict[str, list[str]]", tasks[3]["ansible.builtin.assert"])["that"] == [
+        "__linux_compliance_verify_c is not defined or __linux_compliance_verify_c == 1"
+    ]
 
 
 def test_long_assertions_are_folded_within_the_line_limit() -> None:
@@ -463,7 +489,7 @@ def test_long_assertions_are_folded_within_the_line_limit() -> None:
     found = gen.RoleVariables(set(), set(), {name: value}, role_vars={name})
     text = gen.guard("audit", found)
     assert all(len(line) <= generate_toggles.MAX_LINE for line in text.splitlines())
-    that = cast("dict[str, list[str]]", load(text)[0]["ansible.builtin.assert"])["that"]
+    that = cast("dict[str, list[str]]", load(text)[3]["ansible.builtin.assert"])["that"]
     assert that[0].endswith(value)
 
 
@@ -529,6 +555,7 @@ def test_the_parameter_check_comes_first_and_skips_only_the_constants_of_the_var
     assert cast("dict[str, list[str]]", first["ansible.builtin.assert"])["that"] == [
         parameter_check("__linux_compliance_demo_fact"),
         parameter_check("__linux_compliance_demo_loaded"),
+        parameter_check("__linux_compliance_verify_host_nonce"),
     ]
 
 
@@ -543,6 +570,7 @@ def test_every_guard_refuses_its_internal_names_as_parameters_before_any_reset()
             for item in cast("dict[str, list[str]]", first["ansible.builtin.assert"])["that"]
         ]
         names = found.facts | found.locals | (set(found.constants) - found.role_vars)
+        names |= {gen.host_nonce(role)}
         assert that == [parameter_check(name) for name in sorted(names)], role
         assert not found.role_vars & (found.facts | found.locals), role
 
@@ -573,3 +601,16 @@ def test_main_creates_the_directory_of_the_run_start_playbook(tmp_path: Path) ->
     shutil.rmtree(root / "playbooks")
     assert gen.main(["--root", str(root)]) == 0
     assert (root / run_start.RUN_START).is_file()
+
+
+def test_the_name_of_the_host_nonce_is_reserved(tmp_path: Path) -> None:
+    role = make_role(
+        tmp_path,
+        {
+            "main.yml": (
+                "---\n- ansible.builtin.set_fact:\n    __linux_compliance_demo_host_nonce: 1\n"
+            )
+        },
+    )
+    with pytest.raises(gen.GenerationError, match="the name of the host nonce of the guard"):
+        gen.role_variables(role, {})

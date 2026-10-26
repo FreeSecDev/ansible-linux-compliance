@@ -126,3 +126,22 @@ def test_the_published_audit_result_is_checked_against_the_scan_right_after_it_i
     assert "extra variable (-e)" in str(assertion["fail_msg"])
     assert check["tags"] == ["always"]
     assert "when" not in check
+
+
+def test_the_exception_scope_uses_the_groups_magic_variable_not_group_names() -> None:
+    steps = tasks("exceptions_apply.yml")
+    apply = next(
+        task
+        for task in steps
+        if "__linux_compliance_audit_evaluation"
+        in cast("dict[str, object]", task.get("ansible.builtin.set_fact", {}))
+    )
+    facts = cast("dict[str, str]", apply["ansible.builtin.set_fact"])
+    expression = " ".join(facts["__linux_compliance_audit_evaluation"].split())
+    assert "group_names" not in expression
+    assert (
+        "inventory_hostname, groups | dict2items | rejectattr('key', 'equalto', 'all')"
+        " | selectattr('value', 'ansible.builtin.contains', inventory_hostname)"
+        " | map(attribute='key') | sort)" in expression
+    )
+    assert "group_names" not in str(apply.get("vars"))

@@ -24,6 +24,16 @@ security_fixes:
   - >-
     evidence role - ``tasks/collect.yml`` is merged into ``tasks/main.yml``, so ``tasks_from`` can no longer start the
     collection without the internal-variable guard and the output directory validation.
+  - >-
+    role guards - after the parameter check each guard records a random host nonce and refuses the run unless it reads
+    back through ``hostvars[inventory_hostname]``, so a role parameter, an include parameter or an extra variable
+    ``inventory_hostname`` can no longer point the guard at the facts of another host.
+  - >-
+    audit role - exception scopes match the groups that the ``groups`` magic variable lists for the host, not
+    ``group_names``, which an extra variable or an include parameter can replace; ``-e group_names=[web]`` no longer
+    puts a host outside ``web`` in the scope of an exception for ``web``. ``playbooks/run_start.yml`` also refuses an
+    extra variable ``group_names``, and two shipped playbooks in one ``ansible-playbook`` invocation are refused by
+    design.
 trivial:
   - >-
     ``tools/roles/promote_native_rule.py`` refuses a hard link to the repository catalogue, recognised by its device

@@ -18,12 +18,21 @@ FREES-157). Its one play on `localhost` refuses the run before anything else whe
 already has an internal `__linux_compliance_*` variable or a role output (`linux_compliance_audited`,
 `linux_compliance_discovered`, `linux_compliance_audit_stale_exceptions`, `linux_compliance_baseline` and every other
 `linux_compliance_*` fact that a role sets) in `hostvars`, that is from an extra variable (`-e`), the inventory,
-`group_vars`, `host_vars` or a fact cache, or when `inventory_hostname` is an extra variable. An extra variable
+`group_vars`, `host_vars` or a fact cache, when `inventory_hostname` is an extra variable, or when the `group_names` of
+a host differ from the groups that the `groups` magic variable lists for it, which only an extra variable
+`group_names` can cause and which would widen the hosts that an exception scoped to a group applies to. An extra variable
 outranks every fact a role sets and a template can imitate any value a role checks, so these names are refused
 whatever their value. The cacheable baseline marker of the `verify` role is exempt; `baseline.yml` and the `verify`
 role check it where they read it. When `remediate.yml` imports `audit.yml` and `verify.yml`, and `verify.yml` imports
 `audit.yml`, they pass the play variable `linux_compliance_run_start_checked: true`, so the imported check does not
 refuse the facts of the earlier plays; the marker itself is refused as an extra or inventory variable.
+
+Run one shipped playbook per `ansible-playbook` invocation. Two of them in one invocation, for example
+`ansible-playbook playbooks/audit.yml playbooks/remediate.yml`, are refused by design: the run-start check of the
+second finds the role outputs and internal facts that the first left in `hostvars`, and it cannot tell them from
+values planted with `-e`, the inventory or a fact cache, so it fails closed before the second playbook audits or
+changes anything. Facts do not survive between invocations, so the next invocation starts clean. A playbook that needs
+another one imports it, as `remediate.yml` imports `audit.yml` and `verify.yml`.
 
 `remediate.yml` imports `audit.yml` first, by relative path so that the repository guard can scan the imported
 playbook. Every remediation therefore starts from a verified profile and a recorded baseline audit, and the

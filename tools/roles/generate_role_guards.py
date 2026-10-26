@@ -18,7 +18,11 @@ Two kinds of task file are derived from the repository and checked for drift in 
   value. The guard first refuses every internal fact, task variable and ``include_vars``
   constant that the ``varnames`` lookup sees but ``hostvars`` does not: such a name was passed
   as a role, include, block or play parameter, and it is refused whatever its value, because
-  a template can imitate the sentinels below (FREES-157). The guard then sets every fact and
+  a template can imitate the sentinels below (FREES-157). It records a random host nonce
+  (``__linux_compliance_<role>_host_nonce``, a run output that is never reset) and refuses the
+  run unless the nonce reads back through ``hostvars[inventory_hostname]``, which fails when a
+  parameter or extra variable named ``inventory_hostname`` names another host and would point
+  the parameter check at that host's facts. The guard then sets every fact and
   registered variable of the role to a sentinel and asserts that each reads back as the
   sentinel; it gives every task and loop variable the sentinel as a task variable of the
   assertion and asserts the same; and it asserts that every constant of the role's variable
@@ -73,6 +77,7 @@ RUN_OUTPUTS: Final[dict[str, frozenset[str]]] = {
 }
 ROLE_TASK_FILES: Final[frozenset[str]] = frozenset({"main", "dispatch", "internal_variables"})
 PUBLIC_PREFIX: Final[str] = "linux_compliance_"
+HOST_NONCE: Final[str] = "host_nonce"
 SENTINEL: Final[str] = "__linux_compliance_unset__"
 SECOND_SENTINEL: Final[str] = "__linux_compliance_unset_again__"
 NESTED: Final[tuple[str, ...]] = ("block", "rescue", "always")
@@ -266,6 +271,9 @@ def _checked(role: str, found: RoleVariables, referenced: set[str]) -> RoleVaria
     constant = set(owned.constants) & (owned.facts | owned.locals)
     if constant:
         problems.append(f"a constant that is also assigned: {', '.join(sorted(constant))}")
+    reserved = {host_nonce(role)} & (owned.facts | owned.locals | set(owned.constants) | referenced)
+    if reserved:
+        problems.append(f"the name of the host nonce of the guard: {', '.join(sorted(reserved))}")
     unclassified = referenced - owned.facts - owned.locals - set(owned.constants)
     if unclassified:
         problems.append(f"used but never defined: {', '.join(sorted(unclassified))}")
@@ -359,11 +367,55 @@ def _parameters(role: str, names: Sequence[str], name: str) -> list[str]:
     return lines
 
 
+def host_nonce(role: str) -> str:
+    """Return the name of the host nonce of ``role``, a run output of its guard."""
+    return f"{prefix(role)}{HOST_NONCE}"
+
+
+def _nonce(role: str, title: str) -> list[list[str]]:
+    """Return the tasks that record a random nonce and read it back through ``hostvars``.
+
+    ``set_fact`` always writes to the host that runs the task, so the nonce reads back through
+    ``hostvars[inventory_hostname]`` only when ``inventory_hostname`` names that host; an
+    include parameter, a role parameter or an extra variable of that name points elsewhere.
+    """
+    name = host_nonce(role)
+    record = [
+        f"- name: {title} | Record a random nonce in the facts of this host",
+        f"  {SET_FACT}:",
+        f'    {name}: "{{{{ 1000000000000 | ansible.builtin.random }}}}"',
+        "  tags:",
+        "    - always",
+    ]
+    message = (
+        "inventory_hostname is {{ inventory_hostname }}, but the nonce that the previous task "
+        f"recorded in the facts of this host is not {name} of hostvars[inventory_hostname]: a role "
+        "parameter, an include parameter or an extra variable named inventory_hostname points the "
+        f"{role} role at another host. Remove it. Nothing was scanned, changed or compared."
+    )
+    check = [
+        f"- name: {title} | Refuse an inventory_hostname that names another host",
+        "  ansible.builtin.assert:",
+        "    that:",
+        *_that(
+            f"(hostvars[inventory_hostname] | default({{}}))['{name}'] | default(none) == {name}"
+        ),
+        "    fail_msg: >-",
+        *_folded(message, 6),
+        "    quiet: true",
+        "  tags:",
+        "    - always",
+    ]
+    return [record, check]
+
+
 def guard(role: str, found: RoleVariables) -> str:
     """Return the internal-variable guard task file of ``role``.
 
     A fact, task variable or ``include_vars`` constant passed as a parameter is refused by its
-    name first. The facts are reset to ``SENTINEL`` and read back with the task variables and the
+    name first, together with the host nonce, which is then recorded and read back through
+    ``hostvars[inventory_hostname]``. The nonce is a run output: it is never reset. The facts are
+    reset to ``SENTINEL`` and read back with the task variables and the
     constants. When the role has facts or task variables, the reset and the read-back are
     repeated with ``SECOND_SENTINEL``, and the facts end as ``SENTINEL``: a value supplied
     from outside cannot equal both sentinels.
@@ -372,9 +424,11 @@ def guard(role: str, found: RoleVariables) -> str:
     facts = sorted(found.facts)
     refuse = f"{title} | Refuse internal variables supplied from outside the role"
     tasks: list[list[str]] = []
-    parameters = sorted(found.facts | found.locals | (set(found.constants) - found.role_vars))
-    if parameters:
-        tasks.append(_parameters(role, parameters, f"{refuse} as parameters"))
+    parameters = sorted(
+        found.facts | found.locals | (set(found.constants) - found.role_vars) | {host_nonce(role)}
+    )
+    tasks.append(_parameters(role, parameters, f"{refuse} as parameters"))
+    tasks.extend(_nonce(role, title))
     if facts:
         tasks.append(_reset(title, facts, SENTINEL, "Reset the internal facts of the role"))
     tasks.append(_read_back(role, found, SENTINEL, refuse, constants=True))
