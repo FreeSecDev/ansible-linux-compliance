@@ -50,6 +50,7 @@ build_ignore:
   - dist
   - docs/planning
   - docs/research
+  - extensions/ci
   - htmlcov
   - pyproject.toml
   - tests/unit/tools

@@ -1,0 +1,7 @@
+---
+trivial:
+  - >-
+    CI: ADR 0019 proposes the SCAP Compliance Checker (SCC) as a second scanner backend. A CI-only SCC 5.15 image is
+    built on the runner from the DISA download, verified against pinned and published SHA-256 values and never
+    pushed (make scc-image, make scc-smoke, CI job scc-smoke), and a repository test fails if an SCC bundle,
+    package, binary or checklist is tracked or a workflow publishes an image.

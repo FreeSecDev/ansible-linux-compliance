@@ -1,0 +1,11 @@
+SCC_VERSION := 5.15
+SCC_PUBLISHED := 2026-09-09
+SCC_EXPIRES := 2026-11-25
+SCC_BUNDLE := scc-5.15_linux_x86_64_bundle.zip
+SCC_BUNDLE_URL := https://dl.dod.cyber.mil/wp-content/uploads/stigs/zip/scc-5.15_linux_x86_64_bundle.zip
+SCC_BUNDLE_SIZE := 138893023
+SCC_BUNDLE_SHA256 := f3fac797a54efe8fb8bba8604b984a73302a98a4900befda17be85c6ef7fcee4
+SCC_CHECKSUMS_URL := https://dl.dod.cyber.mil/wp-content/uploads/stigs/txt/SCC_5.15_Checksums.txt
+SCC_DEB_MEMBER := scc-5.15_linux_x86_64/scc-5.15.linux_amd64.deb
+SCC_DEB_SHA256 := 912c04a377ccbbb790144663e89c88585707eef9e02e12b42259cd785e5d7e21
+SCC_CSCC_SHA256 := ba908a907b8cbef7a3c7b1d2cad65c1c255e6290ef2ac3dd8a98ba2163afce8d

@@ -20,5 +20,6 @@
 | [0016](0016-report-schema-and-summary-semantics.md) | Report schema and summary semantics | proposed |
 | [0017](0017-offline-html-dashboard.md) | Offline single-file HTML dashboard | proposed |
 | [0018](0018-evidence-bundle-provenance.md) | Signed evidence bundles and verified report inputs | proposed |
+| [0019](0019-scc-scanner-backend-and-ci-image.md) | SCAP Compliance Checker as a second scanner backend, with a CI-only image | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.
