@@ -32,6 +32,14 @@ options:
       - Absolute path of the datastream file, or of a directory that holds exactly one C(*-ds.xml)
         file.
       - The final path component must not be a symbolic link. Paths containing C(..) are rejected.
+      - Before the datastream is opened, the directory part is resolved to its real path. Every
+        directory of the resolved chain must be owned by root or by the user that the module runs
+        as and must not be writable by group or others unless its sticky bit is set; every
+        symbolic link that is followed must have such an owner too. The datastream must have such
+        an owner and must not be writable by group or others. Otherwise the module fails with
+        C(unsafe_content_dir), because another user could replace the file, for example with a
+        FIFO that blocks the task. Under C(become) the user is root, as in
+        M(freesecdev.linux_compliance.compliance_scan).
     type: str
     required: true
   expected_sha256:
@@ -80,7 +88,7 @@ EXAMPLES = r"""
 
 RETURN = r"""
 content_path:
-  description: The datastream file that was read.
+  description: The real path of the datastream file that was read.
   returned: success
   type: str
   sample: /opt/freesecdev/content/ssg-ubuntu2404-ds.xml
@@ -143,7 +151,8 @@ rules:
 error_type:
   description:
     - Stable identifier of the failure.
-    - One of C(digest_mismatch), C(profile_not_found), C(unsupported_content) or C(invalid_content).
+    - One of C(digest_mismatch), C(profile_not_found), C(unsupported_content),
+      C(unsafe_content_dir) or C(invalid_content).
   returned: failure
   type: str
   sample: profile_not_found

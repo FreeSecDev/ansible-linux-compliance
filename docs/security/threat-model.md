@@ -1,7 +1,7 @@
 # Threat model
 
 Scope: the `freesecdev.linux_compliance` collection on managed hosts. Audience: reviewers using the `security-review`
-skill, and authors of changes that add an asset, trust boundary or entry point. Jira: FREES-134 (audit content). The
+skill, and authors of changes that add an asset, trust boundary or entry point. Jira: FREES-134, FREES-138 and FREES-139 (audit content). The
 platform-wide threat model (CI, AWS OIDC, supply chain, reporting) is FREES-25; it extends this file and does not
 replace these entries.
 
@@ -30,28 +30,36 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
 |---|---|---|
 | `content_path` (the datastream file or its directory) | Operator, through the `discover` role | The path is operator input; the bytes are trusted only if their SHA-256 equals the pin from `content/manifest.yml` |
 | `expected_sha256` | The pinned content manifest in this repository | Trusted: reviewed in Git |
-| The file system around `content_path` | Whoever owns or can write those directories | Untrusted unless root-owned and not writable by others |
+| The file system around `content_path`, including symlinks on the way to it | Whoever owns or can write those directories and links | Untrusted unless root-owned and not writable by others |
 | Scanner output in the run directory | `oscap` | Untrusted input to the parser (hostile XML, oversized files, symlinks) |
 | `/usr/bin/oscap` and its libraries | The distribution package manager | Trusted: root-owned binary in a trusted directory ([ADR 0004](../adr/0004-audited-process-execution.md)) |
 
 ### T-AUDIT-1: the datastream is replaced by a FIFO or symlink
 
 - **Attacker:** a local non-root user who can write the directory that holds the datastream, or one of its ancestors,
-  or who owns the datastream in a sticky directory.
-- **Failure:** `xmlsafe.open_regular` checks the path with `lstat` and then opens it; it cannot use `O_NOFOLLOW` or
+  who owns the datastream in a sticky directory, or who owns or can replace a symlink on the way to it.
+- **Failure:** `xmlsafe.RegularFile` checks the path with `lstat` and then opens it; it cannot use `O_NOFOLLOW` or
   `O_NONBLOCK`, because the repository guard allows only `os.path` in plugins. Between the two calls the user swaps the
   file for a FIFO, and root's `open` blocks. A swap for a symlink makes root copy the link's target.
-- **Impact:** the audit hangs (availability). There is no wrong result, because every read is hashed and compared with
+- **Impact:** the audit, or a discover task under `become`, hangs (availability). There is no wrong result, because every read is hashed and compared with
   the pin, and no disclosure, because a copy that does not match is deleted and only the digest is reported.
-- **Mitigation (FREES-134):** before the datastream is opened, `audit.inspect_content_path` walks the directory that
-  holds it from `/` and refuses (`unsafe_content_dir`) a symlink, a component that is not a directory, a directory that
-  is not owned by root or that is writable by group or others without the sticky bit, and a datastream that is not
-  owned by root or that is writable by group or others. These are the rules for the ancestors of the output directory.
-  Unit tests cover world- and group-writable directories, writable and sticky ancestors, non-root owners of directories
-  and of the file, symlinks, and that a refused path is never opened.
-- **Residual:** path-based checks; only root can change a vetted component. Root, network and FUSE file systems are out
-  of scope ([audit guide](../audit.md#content-directory-rules)). The `discover` modules read the same path without the
-  directory checks; under `become` the hang is possible there (FREES-138).
+- **Mitigation (FREES-134, FREES-139):** before the datastream is opened, `catalog.vetted_content_path` resolves the
+  real path once, walking from `/` with `lstat`. It refuses (`unsafe_content_dir`) a component of the resolved chain
+  that is not a directory, is not owned by root or is writable by group or others without the sticky bit, a followed
+  symlink that is not owned by root (its directory is a component of the resolved chain, so it obeys the same rules),
+  more than 40 symlinks (loops), and a datastream that is not owned by root or that is writable by group or others.
+  The resolved path is what is hashed, parsed and copied. A root-owned link in a root-controlled directory, such as
+  `/opt` to `var/opt` on image-mode RHEL, cannot be repointed by another user and is accepted; FREES-134 refused it.
+  Hard links add nothing: owner and mode belong to the inode. Unit tests cover writable, sticky and foreign
+  directories, foreign owners of links, directories and the file, links in writable directories, chains through
+  writable directories, loops, races, and that a refused path is never opened.
+- **Mitigation (FREES-138):** `benchmark_info` and `profile_info` run the same check, from the same code, before they
+  open anything, and fail with the same `unsafe_content_dir`. It always applies; the accepted owners are root and the
+  user that the module runs as (the owner of `/proc/self`, root if it cannot be read). Under `become` that is root
+  only, exactly the audit rules; without it, only the connecting user's own files are added, and that user can only
+  stall their own task.
+- **Residual:** path-based checks; only root can change a vetted component or a followed link. Root, network and FUSE
+  file systems are out of scope ([audit guide](../audit.md#content-directory-rules)).
 
 ### T-AUDIT-2: SCE check scripts run as root
 

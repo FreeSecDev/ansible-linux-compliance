@@ -326,6 +326,8 @@ expiry at `min(started_at, controller time)` (a lagging host clock would extend 
   check runs before the datastream is opened and before the run directory is created, so a non-root user can no longer
   swap the file for a FIFO between the `lstat` and the `open` and make the audit hang. It replaces the FREES-49 rule that
   accepted symlinks above `content_path`. Residual risk is in the [audit guide](../audit.md#content-directory-rules).
+  The refusal of every symlink above `content_path` is superseded by the FREES-139 note below, which vets the resolved
+  chain and the links followed instead.
 - **SCE checks are root-executed content, trusted through the pin.** The pinned datastreams embed SCE shell check
   scripts (81 in Ubuntu 24.04) that `oscap` runs as root; with OpenSCAP 1.3.9 only the 18 rules without an OVAL check
   use them (16 in `cis_level1_server`). The pinned `oscap` has no option to disable SCE; without it those rules would be
@@ -333,6 +335,35 @@ expiry at `min(started_at, controller time)` (a lagging host clock would extend 
   They are checks, not fixes, and `--remediate` stays refused, so [ADR 0003](0003-native-module-remediation.md) is
   unaffected. The model is unchanged: an SCE result maps through the same XCCDF result table as an OVAL result. See
   [T-AUDIT-2](../security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).
+
+### Note 2026-10-26: resolved content path, shared with discovery (FREES-138, FREES-139)
+
+- **The resolved chain is vetted, not every symlink refused.** The FREES-134 rule refused every symlink above
+  `content_path`. That is stricter than the hang requires, because a root-owned link in a root-controlled directory
+  cannot be repointed by another user, and it refused image-mode RHEL (`/opt` is a link to `var/opt`) and hosts with a
+  relocated `/opt` or `/var`. `catalog.vetted_content_path` now resolves the directory part of `content_path` to its
+  real path once, walking from `/` with `lstat`. Every component of the resolved chain must satisfy the FREES-134
+  directory rules (a directory, not a symlink, owned by root, not writable by group or others unless sticky), every
+  symlink followed must be owned by root, and the directory that holds such a link is a component of the resolved
+  chain, so it is root-controlled. More than 40 symlinks, which every loop reaches, are refused. The final component of
+  `content_path` is still not followed, and the datastream rules are unchanged. A missing component or a dangling link
+  is `invalid_content`, as it was when the path could not be resolved.
+- **The audit reads the resolved path.** The plan verifies and parses the resolved file, the private copy is made and
+  hashed from it, and `planned.content_path` and `content.source_path` report it. `content_path` as given is never
+  opened.
+- **One check for audit and discovery.** `benchmark_info` and `profile_info` call the same function before they open
+  anything and fail with the same `unsafe_content_dir`. For them the check always applies, with root and the user the
+  module runs as (the owner of `/proc/self`, or root only when it cannot be read) as the accepted owners, so under
+  `become` the rules are those of the audit. Their `content_path` result is the resolved path.
+- **Hard links.** Ownership and mode belong to the inode, so the datastream rules apply whatever name reaches it, and
+  another name gives no user more write access.
+
+Rejected alternatives: keep refusing every symlink (breaks the layouts above without making the audit safer), follow
+links with `Path.resolve` and vet only the result (the links themselves, and their directories, would not be vetted, so
+a user-owned link could be repointed after the check), apply the discover check only when the module runs as root
+(another user could still stall an unprivileged task, and both modes would need separate tests), and accept only root
+in the discover modules (it would refuse content in the connecting user's own directory, which only that user can
+change).
 
 ## Amendment 2026-10-26: exceptions in the audit role (FREES-136)
 

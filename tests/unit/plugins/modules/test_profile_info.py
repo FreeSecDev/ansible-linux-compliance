@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -10,6 +11,7 @@ import pytest
 from ansible.module_utils.testing import patch_module_args
 
 from ansible_collections.freesecdev.linux_compliance.plugins.modules import profile_info
+from tests.unit.plugins.modules.test_benchmark_info import content_tree, owned_by
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -118,3 +120,32 @@ def test_running_the_file_as_a_script_runs_main(capsys: pytest.CaptureFixture[st
         run_as_script()
     assert raised.value.code == 0
     assert json.loads(capsys.readouterr().out)["rule_count"] == 2
+
+
+def test_a_vetted_symlinked_layout_reports_the_real_path(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    real = content_tree(tmp_path)
+    code, result = run(capsys, arguments(content_path=str(tmp_path / "opt" / "content")))
+    assert code == 0
+    assert result["content_path"] == str(real)
+    assert result["rule_count"] == 2
+
+
+@pytest.mark.parametrize("target", ["directory", "link"])
+def test_an_unsafe_content_path_is_refused_before_it_is_read(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    real = content_tree(tmp_path)
+    if target == "directory":
+        real.parent.chmod(0o777)
+    else:
+        owned_by(monkeypatch, tmp_path / "opt", os.geteuid() + 1)
+    code, result = run(capsys, arguments(content_path=str(tmp_path / "opt" / "content")))
+    assert code == 1
+    assert result["changed"] is False
+    assert result["error_type"] == "unsafe_content_dir"
+    assert "rule_ids" not in result

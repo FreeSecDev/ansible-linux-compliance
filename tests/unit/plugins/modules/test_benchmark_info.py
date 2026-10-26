@@ -3,8 +3,11 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import shutil
+import stat
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from ansible.module_utils.testing import patch_module_args
@@ -117,3 +120,92 @@ def test_running_the_file_as_a_script_runs_main(capsys: pytest.CaptureFixture[st
         run_as_script()
     assert raised.value.code == 0
     assert json.loads(capsys.readouterr().out)["changed"] is False
+
+
+def content_tree(tmp_path: Path) -> Path:
+    """Lay out ``opt`` as a symlink to ``var/opt``, as on image-mode RHEL; return the file."""
+    tmp_path.chmod(0o755)
+    real = tmp_path / "var" / "opt" / "content"
+    real.mkdir(parents=True)
+    for folder in (tmp_path / "var", tmp_path / "var" / "opt", real):
+        folder.chmod(0o755)
+    shutil.copyfile(SYNTHETIC, real / "copy-ds.xml")
+    (real / "copy-ds.xml").chmod(0o644)
+    (tmp_path / "opt").symlink_to("var/opt")
+    return real / "copy-ds.xml"
+
+
+def owned_by(monkeypatch: pytest.MonkeyPatch, path: Path, uid: int) -> None:
+    original = Path.lstat
+
+    def lstat(self: Path) -> os.stat_result:
+        info = original(self)
+        if self != path:
+            return info
+        fields = list(info[:10])
+        fields[stat.ST_UID] = uid
+        return os.stat_result(fields)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+
+
+def test_a_vetted_symlinked_layout_reports_the_real_path(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    real = content_tree(tmp_path)
+    for given in (tmp_path / "opt" / "content", tmp_path / "opt" / "content" / "copy-ds.xml"):
+        code, result = run(capsys, arguments(content_path=str(given)))
+        assert code == 0
+        assert result["content_path"] == str(real)
+
+
+@pytest.mark.parametrize("permissions", [0o777, 0o775])
+def test_a_writable_content_directory_is_refused_before_it_is_read(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    permissions: int,
+) -> None:
+    real = content_tree(tmp_path)
+    real.parent.chmod(permissions)
+    opened: list[str] = []
+    original = Path.open
+
+    def recording_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        opened.append(str(self))
+        return cast("Any", original(self, *args, **kwargs))
+
+    monkeypatch.setattr(Path, "open", recording_open)
+    code, result = run(capsys, arguments(content_path=str(tmp_path / "opt" / "content")))
+    assert code == 1
+    assert result["changed"] is False
+    assert result["error_type"] == "unsafe_content_dir"
+    assert "writable by group or others" in str(result["msg"])
+    assert "benchmark_id" not in result
+    assert str(real) not in opened
+
+
+@pytest.mark.parametrize("target", ["link", "ancestor", "datastream"])
+def test_content_that_another_user_owns_is_refused(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    real = content_tree(tmp_path)
+    paths = {"link": tmp_path / "opt", "ancestor": tmp_path / "var", "datastream": real}
+    owned_by(monkeypatch, paths[target], os.geteuid() + 1)
+    code, result = run(capsys, arguments(content_path=str(tmp_path / "opt" / "content")))
+    assert code == 1
+    assert result["error_type"] == "unsafe_content_dir"
+    assert "unexpected owner" in str(result["msg"])
+
+
+def test_a_group_writable_datastream_is_refused(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    real = content_tree(tmp_path)
+    real.chmod(0o664)
+    code, result = run(capsys, arguments(content_path=str(real)))
+    assert code == 1
+    assert result["error_type"] == "unsafe_content_dir"

@@ -18,6 +18,11 @@ rule decides that rule, the identifier of a group decides that group. The last
 of the rule itself (true when absent), and a group is selected when the last
 ``select`` says so or else by its own default (true when absent).
 
+Before root opens a datastream, :func:`vetted_content_path` resolves its real
+path and vets the way to it, so that no user other than root (or the one other
+owner that the caller accepts) can replace the file, for example with a FIFO whose
+``open`` would block. The audit and the discover modules share it.
+
 The catalog fails closed and never returns a partial or guessed rule list. These
 raise :class:`UnsupportedContentError`: a profile with ``extends``, a ``select``
 of an identifier that is neither a rule nor a group, an identifier that is both,
@@ -56,6 +61,11 @@ MAX_RULES: Final[int] = 100_000
 MAX_TEXT_LENGTH: Final[int] = 512
 _TEXT_BUDGET: Final[int] = MAX_TEXT_LENGTH * 4
 HASH_CHUNK_BYTES: Final[int] = xmlsafe.READ_CHUNK_BYTES
+ROOT_UID: Final[int] = 0
+MAX_SYMLINKS: Final[int] = 40
+MAX_ECHO_LENGTH: Final[int] = 64
+ERROR_UNSAFE_CONTENT: Final[str] = "unsafe_content_dir"
+PROCESS_DIRECTORY: Final[str] = "/proc/self"
 SEVERITIES: Final[frozenset[str]] = frozenset({"unknown", "info", "low", "medium", "high"})
 
 _GROUP_ID: Final[str] = r"xccdf_[A-Za-z0-9_.+-]+"
@@ -65,6 +75,8 @@ _VERSION: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._+:~-]{0,63}"
 _XML_LANG: Final[str] = "http://www.w3.org/XML/1998/namespace}lang"
 _DROPPED_CATEGORIES: Final[frozenset[str]] = frozenset({"Cc", "Cf", "Zl", "Zp"})
 _BOOLEANS: Final[dict[str, bool]] = {"true": True, "1": True, "false": False, "0": False}
+_GROUP_OR_OTHER_WRITE: Final[int] = stat.S_IWGRP | stat.S_IWOTH
+_ANCESTOR: Final[str] = "the content directory or an ancestor"
 
 
 def _qualified(local: str) -> str:
@@ -115,8 +127,23 @@ class UnsupportedContentError(CatalogError):
     """
 
 
+class UnsafeContentError(CatalogError):
+    """Raised when a user other than root or the accepted owner could replace the datastream.
+
+    Modules report it as ``unsafe_content_dir``.
+    """
+
+
 def _fail(message: str) -> NoReturn:
     raise CatalogError(message)
+
+
+def _unsafe(message: str) -> NoReturn:
+    raise UnsafeContentError(message)
+
+
+def _echo(value: object) -> str:
+    return repr(str(value)[:MAX_ECHO_LENGTH])
 
 
 @dataclass(frozen=True)
@@ -527,6 +554,162 @@ def resolve_content_path(path: str) -> str:
     return found[0]
 
 
+@dataclass(frozen=True)
+class _Status:
+    mode: int
+    uid: int
+
+
+def _inspect(path: Path) -> _Status | None:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        _unsafe(f"content_path cannot be inspected: {error.strerror or type(error).__name__}")
+    return _Status(info.st_mode, info.st_uid)
+
+
+def _existing(path: Path) -> _Status:
+    info = _inspect(path)
+    if info is None:
+        _fail(f"the content path cannot be read: {_echo(path)} does not exist")
+    return info
+
+
+def _still_there(path: Path) -> _Status:
+    info = _inspect(path)
+    if info is None:
+        _unsafe(f"content_path vanished while it was inspected: {_echo(path)}")
+    return info
+
+
+def _accepted_owner(info: _Status, owner_uid: int) -> bool:
+    return info.uid in {ROOT_UID, owner_uid}
+
+
+def _vet_directory(path: Path, info: _Status, owner_uid: int) -> None:
+    if not stat.S_ISDIR(info.mode):
+        _unsafe(f"content_path component is not a directory: {_echo(path)}")
+    if not _accepted_owner(info, owner_uid):
+        _unsafe(f"{_ANCESTOR} has an unexpected owner: {_echo(path)}")
+    if info.mode & _GROUP_OR_OTHER_WRITE and not info.mode & stat.S_ISVTX:
+        _unsafe(f"{_ANCESTOR} is writable by group or others: {_echo(path)}")
+
+
+def _link_target(path: Path, info: _Status, owner_uid: int) -> Path:
+    if not _accepted_owner(info, owner_uid):
+        _unsafe(f"a symlink on the way to content_path has an unexpected owner: {_echo(path)}")
+    try:
+        return path.readlink()
+    except OSError as error:
+        _unsafe(f"content_path cannot be inspected: {error.strerror or type(error).__name__}")
+
+
+def _real_directory(path: Path, owner_uid: int) -> Path:
+    """Resolve a directory like ``realpath`` and vet everything the resolution uses.
+
+    The walk starts at ``/`` and keeps a resolved prefix that contains no symlink.
+    Each component it adds is vetted with the directory rules before the walk goes
+    on, so the directory that holds a symlink is always a vetted component of that
+    prefix. A symlink must be owned by root or ``owner_uid``; its target replaces it
+    and is resolved against the prefix, ``..`` included. More than
+    :data:`MAX_SYMLINKS` symlinks, which every loop reaches, are refused.
+    """
+    resolved = Path("/")
+    _vet_directory(resolved, _existing(resolved), owner_uid)
+    pending = list(path.parts[1:])
+    followed = 0
+    while pending:
+        name = pending.pop(0)
+        if name == "..":
+            resolved = resolved.parent
+            continue
+        candidate = resolved / name
+        info = _existing(candidate)
+        if not stat.S_ISLNK(info.mode):
+            _vet_directory(candidate, info, owner_uid)
+            resolved = candidate
+            continue
+        followed += 1
+        if followed > MAX_SYMLINKS:
+            _unsafe(
+                f"content_path follows more than {MAX_SYMLINKS} symlinks, "
+                f"probably a loop: {_echo(candidate)}"
+            )
+        target = _link_target(candidate, info, owner_uid)
+        if target.is_absolute():
+            resolved = Path("/")
+        pending[:0] = target.parts[1:] if target.is_absolute() else target.parts
+    return resolved
+
+
+def vetted_content_path(path: str, owner_uid: int) -> str:
+    """Resolve the datastream that ``path`` names and vet the way to it.
+
+    Root reads the datastream, and :class:`xmlsafe.RegularFile` checks the type
+    with ``lstat`` before it opens the path. A user who could replace the file in
+    between could swap it for a FIFO and block the ``open``. So before anything is
+    opened:
+
+    - the directory part of ``path`` is resolved to its real path. Every component
+      of the resolved chain, from ``/`` to the directory that holds the datastream,
+      must be a directory that is not a symlink, owned by root or ``owner_uid``,
+      and not writable by group or others unless its sticky bit is set. Every
+      symlink that the resolution follows must be owned by root or ``owner_uid``,
+      and the directory that holds it is a component of the resolved chain, so it
+      obeys the same rules. A symlink that another user owns, or that sits in a
+      directory that another user can change, is refused, and so is a loop;
+    - the final component of ``path`` is not followed: a regular file is the
+      datastream, a directory must hold exactly one (see
+      :func:`resolve_content_path`) and obeys the directory rules too;
+    - the datastream must be a regular file owned by root or ``owner_uid`` and
+      not writable by group or others. A hard link is not a separate object: the
+      owner and mode belong to the file, whatever name reaches it.
+
+    Nothing is opened, created or repaired. The caller reads, hashes and copies
+    the returned path, never ``path``.
+
+    Args:
+        path: Absolute ``content_path`` as the operator gave it.
+        owner_uid: The only owner besides root that is accepted. Production
+            audits pass root; the discover modules pass :func:`effective_uid`.
+
+    Returns:
+        The real path of the datastream file.
+
+    Raises:
+        UnsafeContentError: For every violation of the rules above.
+        CatalogError: If the path is invalid, missing or ambiguous.
+    """
+    given = Path(_checked_path(path))
+    target = _real_directory(given.parent, owner_uid) / given.name
+    datastream = Path(resolve_content_path(str(target)))
+    if datastream != target:
+        _vet_directory(target, _still_there(target), owner_uid)
+    info = _still_there(datastream)
+    if not stat.S_ISREG(info.mode):
+        _unsafe(f"the datastream is not a regular file: {_echo(datastream)}")
+    if not _accepted_owner(info, owner_uid):
+        _unsafe(f"the datastream has an unexpected owner: {_echo(datastream)}")
+    if info.mode & _GROUP_OR_OTHER_WRITE:
+        _unsafe(f"the datastream is writable by group or others: {_echo(datastream)}")
+    return str(datastream)
+
+
+def effective_uid() -> int:
+    """Return the user that this process runs as, or root when that is unknown.
+
+    The owner of ``/proc/self`` is the effective user of the process. When it
+    cannot be read, root is returned, which accepts fewer owners and so fails
+    closed.
+    """
+    try:
+        return Path(PROCESS_DIRECTORY).stat().st_uid
+    except OSError:
+        return ROOT_UID
+
+
 def _handle_digest(handle: BinaryIO, max_bytes: int) -> str:
     digest = hashlib.sha256()
     try:
@@ -653,16 +836,20 @@ def error_type(error: CatalogError) -> str:
         return "profile_not_found"
     if isinstance(error, UnsupportedContentError):
         return "unsupported_content"
+    if isinstance(error, UnsafeContentError):
+        return ERROR_UNSAFE_CONTENT
     return "invalid_content"
 
 
 def benchmark_report(path: str, expected_sha256: str) -> dict[str, object]:
     """Describe the benchmark and profiles of a verified datastream.
 
-    The result holds only JSON-serializable values. See :func:`read_benchmarks`
-    for the verification and the errors.
+    The path is resolved and vetted with :func:`vetted_content_path` before it is
+    opened, accepting root and :func:`effective_uid` as owners. The result holds
+    only JSON-serializable values. See :func:`read_benchmarks` for the
+    verification and the other errors.
     """
-    content = resolve_content_path(path)
+    content = vetted_content_path(path, effective_uid())
     benchmark = single_benchmark(read_benchmarks(content, expected_sha256))
     return {
         "content_path": content,
@@ -684,11 +871,14 @@ def benchmark_report(path: str, expected_sha256: str) -> dict[str, object]:
 def profile_report(path: str, expected_sha256: str, profile_id: str) -> dict[str, object]:
     """Describe one profile of a verified datastream and the rules it selects.
 
+    The path is vetted like in :func:`benchmark_report`.
+
     Raises:
         ProfileNotFoundError: If the benchmark does not contain the profile.
             No other profile is substituted.
+        UnsafeContentError: If the way to the datastream is unsafe.
     """
-    content = resolve_content_path(path)
+    content = vetted_content_path(path, effective_uid())
     benchmark = single_benchmark(read_benchmarks(content, expected_sha256))
     profile = find_profile(benchmark, profile_id)
     rules = profile_rules(benchmark, profile)
