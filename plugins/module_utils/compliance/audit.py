@@ -31,12 +31,15 @@ ancestors that are owned by root or the expected owner and not writable by group
 others unless the sticky bit is set. Each run gets a new directory (mode 0700) that
 is never reused, and every file in it has mode 0600.
 
-The datastream is read as root, so :func:`plan` first vets where it lives with the
-same rules: the directory that holds it and every ancestor must be reached without
-symlinks, be owned by root or the expected owner and not be writable by group or
-others unless the sticky bit is set, and the file itself must be owned by root or
-the expected owner and not be writable by group or others. No other user can then
-replace the file, for example with a FIFO whose ``open`` would block the audit.
+The datastream is read as root, so :func:`plan` first resolves its real path and
+vets the way to it with :func:`catalog.vetted_content_path`, the check that the
+discover modules use too: every directory of the resolved chain must be owned by
+root or the expected owner and not be writable by group or others unless the
+sticky bit is set, every symlink followed must be owned by root or the expected
+owner, and the file itself must be owned by root or the expected owner and not be
+writable by group or others. No other user can then replace the file, for example
+with a FIFO whose ``open`` would block the audit. The private copy is made from the
+resolved path.
 
 Writing evidence is not a change to the configuration of the host: the module always
 reports ``changed: false`` and reports the evidence separately (``evidence_written``).
@@ -101,7 +104,7 @@ _GROUP_OR_OTHER_ANY: Final[int] = 0o077
 
 ERROR_INVALID_ARGUMENT: Final[str] = "invalid_argument"
 ERROR_UNSAFE_OUTPUT: Final[str] = "unsafe_output_dir"
-ERROR_UNSAFE_CONTENT: Final[str] = "unsafe_content_dir"
+ERROR_UNSAFE_CONTENT: Final[str] = catalog.ERROR_UNSAFE_CONTENT
 ERROR_OUTPUT_EXISTS: Final[str] = "output_exists"
 ERROR_NOTHING_TO_SCAN: Final[str] = "nothing_to_scan"
 ERROR_UNKNOWN_BACKEND: Final[str] = "unknown_backend"
@@ -297,9 +300,6 @@ class _Subject:
 
 
 _OUTPUT: Final[_Subject] = _Subject("output_dir", "an ancestor of output_dir", ERROR_UNSAFE_OUTPUT)
-_CONTENT: Final[_Subject] = _Subject(
-    "content_path", "the content directory or an ancestor", ERROR_UNSAFE_CONTENT
-)
 
 
 def _vet_component(path: Path, info: _Status, subject: _Subject) -> None:
@@ -338,50 +338,6 @@ def _lstat(path: Path, subject: _Subject = _OUTPUT) -> _Status | None:
             f"{subject.name} cannot be inspected: {error.strerror or type(error).__name__}"
         )
     return _Status(info.st_mode, info.st_uid)
-
-
-def _content_status(path: Path) -> _Status:
-    info = _lstat(path, _CONTENT)
-    if info is None:
-        _CONTENT.refuse(f"content_path vanished while it was inspected: {_safe(path)}")
-    return info
-
-
-def inspect_content_path(path: str, owner_uid: int) -> None:
-    """Vet the datastream file and every directory above it before root opens it.
-
-    The directories are walked from ``/`` with ``lstat``. Each one, including the
-    directory that holds the file, must not be a symlink, must be owned by root or
-    ``owner_uid`` and must not be writable by group or others unless its sticky bit
-    is set: the rules for the ancestors of the output root. The file must be a
-    regular file that is not a symlink, owned by root or ``owner_uid`` and not
-    writable by group or others. Nothing is created or repaired.
-
-    Together these mean that no other user can rename, remove or replace the file.
-    A writable directory would let a user swap it, between the type check and the
-    ``open``, for a FIFO whose ``open`` blocks; a sticky directory protects only
-    the files that a user does not own.
-
-    Args:
-        path: Absolute path of the datastream file, as resolved by
-            :func:`catalog.resolve_content_path`.
-        owner_uid: The only owner besides root that is accepted.
-
-    Raises:
-        AuditError: With ``unsafe_content_dir`` for every violation.
-    """
-    target = Path(path)
-    parts = target.parent.parts
-    for index in range(len(parts)):
-        current = Path(*parts[: index + 1])
-        _vet_ancestor(current, _content_status(current), owner_uid, _CONTENT)
-    info = _content_status(target)
-    if not stat.S_ISREG(info.mode):
-        _CONTENT.refuse(f"the datastream is not a regular file: {_safe(target)}")
-    if info.uid not in {ROOT_UID, owner_uid}:
-        _CONTENT.refuse(f"the datastream has an unexpected owner: {_safe(target)}")
-    if info.mode & _GROUP_OR_OTHER_WRITE:
-        _CONTENT.refuse(f"the datastream is writable by group or others: {_safe(target)}")
 
 
 def _make_directory(path: Path) -> None:
@@ -591,11 +547,7 @@ def _verified_profile(
     job: AuditJob, owner_uid: int
 ) -> tuple[str, catalog.Benchmark, tuple[catalog.Rule, ...]]:
     try:
-        content = catalog.resolve_content_path(job.content_path)
-    except catalog.CatalogError as error:
-        raise AuditError(catalog.error_type(error), str(error)) from error
-    inspect_content_path(content, owner_uid)
-    try:
+        content = catalog.vetted_content_path(job.content_path, owner_uid)
         benchmark = catalog.single_benchmark(catalog.read_benchmarks(content, job.expected_sha256))
         profile = catalog.find_profile(benchmark, job.profile_id)
     except catalog.CatalogError as error:
@@ -614,8 +566,8 @@ def _tailored_profile_id(profile_id: str) -> str:
 def plan(job: AuditJob, owner_uid: int) -> AuditPlan:
     """Validate an audit against the host without writing anything.
 
-    Resolves the datastream and vets it and its directories with
-    :func:`inspect_content_path` before it is opened, verifies the datastream
+    Resolves the real path of the datastream and vets it and the way to it with
+    :func:`catalog.vetted_content_path` before it is opened, verifies the datastream
     digest and the profile and the datastream file name, checks that every
     disabled rule is selected by the profile and that at least one rule stays
     enabled, and inspects the output root and the run directory. Everything the

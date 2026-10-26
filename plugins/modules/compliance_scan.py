@@ -50,12 +50,14 @@ options:
         file.
       - It is read only to verify it and to make the private copy that is scanned.
       - Paths containing C(..) are rejected and the file itself must not be a symbolic link.
-      - Before the datastream is opened, the directory that holds it and every ancestor are
-        walked from C(/). No component may be a symbolic link, and each must be owned by root and
-        must not be writable by group or others unless its sticky bit is set. The datastream
-        itself must be owned by root and must not be writable by group or others. Otherwise the
-        module fails with C(unsafe_content_dir) before anything is created, because another user
-        could replace the file, for example with a FIFO that blocks the audit.
+      - Before the datastream is opened, the directory part is resolved to its real path. Every
+        directory of the resolved chain, from C(/) to the one that holds the datastream, must be
+        owned by root and must not be writable by group or others unless its sticky bit is set.
+        Every symbolic link that is followed, such as C(/opt) to C(var/opt) on image-mode RHEL,
+        must be owned by root. The datastream itself must be owned by root and must not be
+        writable by group or others. Otherwise the module fails with C(unsafe_content_dir) before
+        anything is created, because another user could replace the file, for example with a FIFO
+        that blocks the audit. The private copy is made from the resolved path.
       - The file name must match C([A-Za-z0-9._+-]{1,64}), because it labels the provenance.
     type: str
     required: true
@@ -340,7 +342,8 @@ evidence:
 content:
   description:
     - The datastream that was scanned. Null when no scan ran.
-    - C(source_path) and C(sha256) identify the verified file on the host; C(private_copy) is the
+    - C(source_path) is the real path of the verified file on the host, after symbolic links in its
+      directory part were resolved, and C(sha256) is its digest; C(private_copy) is the
       copy in the run directory that the scanner read, and C(copy_removed) is always true because
       the copy is deleted after the scan so that evidence does not hold the datastream again.
   returned: success

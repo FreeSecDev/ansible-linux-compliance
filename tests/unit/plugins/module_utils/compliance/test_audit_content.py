@@ -1,4 +1,4 @@
-"""Content directory rules of the audit: what root may open (FREES-134)."""
+"""Content directory rules of the audit: what root may open (FREES-134, FREES-139)."""
 
 from __future__ import annotations
 
@@ -44,10 +44,59 @@ def owned_by(monkeypatch: pytest.MonkeyPatch, owners: dict[Path, int]) -> None:
     monkeypatch.setattr(Path, "lstat", lstat)
 
 
-def test_a_symlinked_content_directory_is_refused(harness: Harness) -> None:
+def test_a_symlinked_content_directory_that_another_user_owns_is_refused(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
     link = harness.root / "linked"
     link.symlink_to(harness.content_dir)
-    refused_content(harness, str(link / "synthetic-ds.xml"), "must not pass through a symlink")
+    owned_by(monkeypatch, {link: UID + 1})
+    refused_content(
+        harness,
+        str(link / "synthetic-ds.xml"),
+        "a symlink on the way to content_path has an unexpected owner",
+    )
+
+
+def test_a_vetted_symlinked_content_directory_is_copied_from_its_real_path(
+    harness: Harness,
+) -> None:
+    link = harness.root / "linked"
+    link.symlink_to(harness.content_dir)
+    result = harness.run(content_path=str(link / "synthetic-ds.xml"))
+    assert result["run_status"] == "completed"
+    assert result["planned"]["content_path"] == str(harness.datastream)
+    assert result["content"]["source_path"] == str(harness.datastream)
+    assert result["content"]["private_copy"] == str(
+        harness.run_dir / "content" / "synthetic-ds.xml"
+    )
+    assert harness.runner.scanned == [
+        (str(harness.run_dir / "content" / "synthetic-ds.xml"), result["content"]["sha256"])
+    ]
+
+
+def test_an_image_mode_opt_link_is_scanned_through_var_opt(harness: Harness) -> None:
+    real = harness.root / "var" / "opt" / "freesecdev"
+    real.mkdir(parents=True)
+    for directory in (harness.root / "var", harness.root / "var" / "opt", real):
+        directory.chmod(0o755)
+    harness.content_dir.rename(real / "content")
+    (harness.root / "opt").symlink_to("var/opt")
+    given = harness.root / "opt" / "freesecdev" / "content"
+    result = harness.run(content_path=str(given))
+    resolved = str(real / "content" / "synthetic-ds.xml")
+    assert result["run_status"] == "completed"
+    assert result["planned"]["content_path"] == resolved
+    assert result["content"]["source_path"] == resolved
+
+
+def test_a_symlink_in_a_writable_directory_is_refused(harness: Harness) -> None:
+    shared = harness.root / "shared"
+    shared.mkdir()
+    shared.chmod(0o777)
+    (shared / "linked").symlink_to(harness.content_dir)
+    refused_content(
+        harness, str(shared / "linked" / "synthetic-ds.xml"), "or an ancestor is writable"
+    )
 
 
 @pytest.mark.parametrize(
@@ -153,21 +202,6 @@ def test_a_content_check_never_opens_the_datastream(
     assert str(harness.datastream) not in opened
 
 
-def test_inspect_content_path_refuses_what_is_not_a_regular_file(harness: Harness) -> None:
-    link = harness.content_dir / "link-ds.xml"
-    link.symlink_to(harness.datastream)
-    for target, match in [
-        (harness.content_dir, "not a regular file"),
-        (link, "not a regular file"),
-        (harness.content_dir / "absent-ds.xml", "vanished"),
-        (harness.root / "absent" / "synthetic-ds.xml", "vanished"),
-        (harness.datastream / "synthetic-ds.xml", "not a directory"),
-    ]:
-        with pytest.raises(audit.AuditError, match=match) as raised:
-            audit.inspect_content_path(str(target), UID)
-        assert raised.value.error_type == "unsafe_content_dir"
-
-
 def test_an_uninspectable_content_component_is_refused(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -179,15 +213,7 @@ def test_an_uninspectable_content_component_is_refused(
         return original(self)
 
     monkeypatch.setattr(Path, "lstat", failing_lstat)
-    with pytest.raises(audit.AuditError, match="content_path cannot be inspected") as raised:
-        audit.inspect_content_path(str(harness.datastream), UID)
-    assert raised.value.error_type == "unsafe_content_dir"
-
-
-def test_inspect_content_path_accepts_a_vetted_datastream(harness: Harness) -> None:
-    audit.inspect_content_path(str(harness.datastream), UID)
-    assert mode(harness.content_dir) == 0o755
-    assert mode(harness.datastream) == 0o644
+    refused_content(harness, str(harness.datastream), "content_path cannot be inspected")
 
 
 def test_a_content_path_that_cannot_be_resolved_is_invalid_content(harness: Harness) -> None:

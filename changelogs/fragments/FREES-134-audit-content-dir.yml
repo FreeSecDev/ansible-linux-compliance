@@ -1,15 +1,17 @@
 ---
 security_fixes:
   - >-
-    ``freesecdev.linux_compliance.compliance_scan`` now vets the datastream and every directory above it before it
-    opens the file as root. No component may be a symbolic link, every directory must be owned by root and must not be
-    writable by group or others unless its sticky bit is set, and the datastream must be owned by root and must not be
-    writable by group or others. Otherwise the audit fails with ``unsafe_content_dir`` before anything is created. A
-    non-root user who could write the content directory could otherwise replace the datastream with a FIFO between the
-    type check and the ``open`` and make the audit hang.
+    ``freesecdev.linux_compliance.compliance_scan`` now vets the datastream and the way to it before it opens the file
+    as root. Every directory of the resolved path must be owned by root and must not be writable by group or others
+    unless its sticky bit is set, and the datastream must be owned by root and must not be writable by group or
+    others. Otherwise the audit fails with ``unsafe_content_dir`` before anything is created. A non-root user who could
+    write the content directory could otherwise replace the datastream with a FIFO between the type check and the
+    ``open`` and make the audit hang.
 breaking_changes:
   - >-
-    ``freesecdev.linux_compliance.compliance_scan`` refuses a ``content_path`` that passes through a symbolic link,
-    which it accepted before, and a datastream or content directory that a non-root user owns or can write. Move the
-    content to a root-owned directory such as ``/opt/freesecdev/content`` with mode ``0755`` and the file with mode
-    ``0644``.
+    ``freesecdev.linux_compliance.compliance_scan`` refuses a datastream or content directory that a non-root user
+    owns or can write, and a ``content_path`` that passes through a symbolic link that a non-root user owns or that
+    sits in a directory that a non-root user owns or can write. Root-owned symbolic links in root-controlled
+    directories are followed (see the FREES-138 and FREES-139 entry). Move the content to a root-owned directory such
+    as ``/opt/freesecdev/content`` with mode ``0755`` and the file with mode ``0644``; this also works on image-mode
+    RHEL, where ``/opt`` is a root-owned link to ``var/opt``.

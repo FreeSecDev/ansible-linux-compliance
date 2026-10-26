@@ -1,0 +1,16 @@
+---
+security_fixes:
+  - >-
+    benchmark_info, profile_info - vet the datastream and the way to it before opening it, with the same check as
+    ``freesecdev.linux_compliance.compliance_scan``, and fail with ``unsafe_content_dir``. Under ``become`` a non-root
+    user who could write the content directory could otherwise swap the datastream for a FIFO and make the task hang.
+    The accepted owners are root and the user that the module runs as (FREES-138).
+minor_changes:
+  - >-
+    compliance_scan, benchmark_info, profile_info - resolve the real path of ``content_path`` and vet every directory
+    of the resolved chain and every symbolic link followed, instead of refusing every symbolic link above the
+    datastream. A root-owned link in a root-controlled directory, such as ``/opt`` to ``var/opt`` on image-mode RHEL
+    or a relocated ``/opt`` or ``/var``, is accepted; a link that a non-root user owns, a link in a directory that a
+    non-root user owns or can write, a chain that resolves through such a directory and a loop are refused. The
+    resolved path is verified, copied and reported as ``content_path``, ``planned.content_path`` and
+    ``content.source_path`` (FREES-139).

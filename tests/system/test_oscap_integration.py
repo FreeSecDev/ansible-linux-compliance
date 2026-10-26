@@ -24,6 +24,7 @@ import yaml
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     audit,
+    catalog,
     model,
     openscap,
 )
@@ -105,7 +106,7 @@ def datastream(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
     vetted = directory / path.name
     shutil.copyfile(path, vetted)
     vetted.chmod(0o644)
-    audit.inspect_content_path(str(vetted), UID)
+    assert catalog.vetted_content_path(str(vetted), UID) == str(vetted)
     return vetted, digest
 
 
