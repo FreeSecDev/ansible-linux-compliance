@@ -1,0 +1,66 @@
+---
+audit_exceptions_valid_file: "{{ audit_exceptions_dir }}/exceptions-valid.yml"
+audit_exceptions_invalid_file: "{{ audit_exceptions_dir }}/exceptions-invalid.yml"
+audit_exceptions_profile: xccdf_org.ssgproject.content_profile_cis_level1_server
+audit_exceptions_rule_root_login: xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+audit_exceptions_rule_login_events: xccdf_org.ssgproject.content_rule_audit_rules_login_events
+audit_exceptions_rule_broken: xccdf_org.ssgproject.content_rule_audit_rules_time_adjtimex
+audit_exceptions_rule_passing: xccdf_org.ssgproject.content_rule_package_telnet_removed
+audit_exceptions_finding_base:
+  disabled_by: null
+  evidence: []
+  exception:
+    exception_id: null
+    expires_at: null
+    reason: null
+    state: "none"
+  flags: []
+  message: null
+  remediation: null
+  severity: high
+audit_exceptions_outcomes_mixed:
+  - rule_id: "{{ audit_exceptions_rule_login_events }}"
+    outcome: fail
+    evaluated_outcome: fail
+  - rule_id: "{{ audit_exceptions_rule_broken }}"
+    outcome: error
+    evaluated_outcome: error
+  - rule_id: "{{ audit_exceptions_rule_passing }}"
+    outcome: pass
+    evaluated_outcome: pass
+  - rule_id: "{{ audit_exceptions_rule_root_login }}"
+    outcome: fail
+    evaluated_outcome: fail
+audit_exceptions_outcomes_waivable: >-
+  {{ audit_exceptions_outcomes_mixed | rejectattr('outcome', 'equalto', 'error') | list }}
+audit_exceptions_run_base:
+  benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU2404
+  content:
+    content_sha256: "{{ '0' * 64 }}"
+    content_version: "0.1.82"
+    source: ssg-ubuntu2404-ds.xml
+  error_message: null
+  host:
+    architecture: x86_64
+    distribution_id: ubuntu
+    distribution_version: "24.04"
+    hostname: "{{ inventory_hostname }}"
+    machine_id: null
+  profile_id: "{{ audit_exceptions_profile }}"
+  run_id: "synthetic-{{ inventory_hostname }}"
+  scanner:
+    name: openscap
+    version: "1.3.9"
+  schema_version: "1.0"
+  status: completed
+audit_exceptions_not_run:
+  run_id: synthetic-not-run
+  run_status: not_run
+  summary: null
+  scan_run: null
+  evidence:
+    directory: null
+    files: []
+  evidence_written: false
+  disabled_rules: []
+  planned: {}

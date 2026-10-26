@@ -1,7 +1,8 @@
 # Exceptions and waivers
 
 Scope: the policy for accepted risks, the exceptions file format and how the collection applies it. Audience:
-operators who write exceptions, the people who approve them, and role and report authors. Jira: FREES-50. Decision:
+operators who write exceptions, the people who approve them, and role and report authors. Jira: FREES-50,
+FREES-136 (audit role). Decision:
 [ADR 0013, amendment of FREES-50](adr/0013-normalized-findings-model.md#amendment-2026-10-25-exceptions-file-and-waivers-frees-50).
 
 An exception (waiver) records that a specific rule may fail on specific hosts for a limited time, why, who owns that
@@ -12,8 +13,9 @@ provides evidence, not certification; an exception does not make a host complian
 
 Code: `plugins/module_utils/compliance/exceptions.py` (validation and matching),
 `plugins/module_utils/compliance/yamlsubset.py` (strict loader), and the controller filters
-`freesecdev.linux_compliance.apply_exceptions` and `freesecdev.linux_compliance.stale_exceptions` in
-`plugins/filter/`.
+`freesecdev.linux_compliance.apply_exceptions`, `freesecdev.linux_compliance.stale_exceptions`,
+`freesecdev.linux_compliance.validate_exceptions` and `freesecdev.linux_compliance.scan_summary` in `plugins/filter/`.
+The `audit` role applies the file ([below](#using-the-exceptions-file-with-the-audit-role)).
 
 ## Policy
 
@@ -192,7 +194,8 @@ read the marked findings.
 `freesecdev.linux_compliance.stale_exceptions` takes the evaluations of all hosts and returns the identifiers that are
 `unmatched` on every one. The answer covers only the hosts that were evaluated; an exception for a host outside the
 play is reported as stale. An exception that is `not_failing` everywhere is not stale but is a candidate for removal,
-because the rule now passes.
+because the rule now passes. `playbooks/audit.yml` computes it once in a final play, after every host and every
+`serial` batch ([audit guide](audit.md#stale-exceptions-once-for-all-hosts)).
 
 ### Evaluation document
 
@@ -213,41 +216,45 @@ because the rule now passes.
 
 A scan run whose findings already carry exception data is rejected, so a waiver cannot be applied twice.
 
-## Using the filters from a role
+## Using the exceptions file with the audit role
 
-The filters run on the controller. The exceptions file is read with `ansible.builtin.file`, which reads it on the
-controller as well, so the file never has to be copied to a managed host.
+Jira: FREES-136. The `audit` role applies the file when `linux_compliance_exceptions_file` is the absolute path of
+the file on the controller; the default `null` applies nothing. The full behaviour is in the
+[audit guide](audit.md#exceptions-in-the-audit-role). In short:
 
-The `audit` role (FREES-49) is implemented and publishes the scan run as `linux_compliance_audited.scan_run`, but it
-does not apply exceptions yet: its `linux_compliance_audit_fail_on_noncompliant` check counts the failures the scan
-reported, before any waiver. The `verify` role (FREES-54) is still a skeleton. Wiring the filters into these roles is a
-separate follow-up. Until then a play can apply them after the `audit` role, for example:
-
-```yaml
----
-- name: Apply the exceptions file to the scan run
-  ansible.builtin.set_fact:
-    linux_compliance_audit_evaluation: >-
-      {{ linux_compliance_audited.scan_run
-         | freesecdev.linux_compliance.apply_exceptions(
-             lookup('ansible.builtin.file', linux_compliance_audit_exceptions_file),
-             inventory_hostname, group_names) }}
-  when: linux_compliance_audit_exceptions_file | length > 0
-
-- name: Report exceptions that no host of this play needs
-  ansible.builtin.debug:
-    msg: >-
-      {{ ansible_play_hosts
-         | map('extract', hostvars, 'linux_compliance_audit_evaluation')
-         | list
-         | freesecdev.linux_compliance.stale_exceptions }}
-  run_once: true
-  when: linux_compliance_audit_exceptions_file | length > 0
+```text
+ansible-playbook -i inventory.yml freesecdev.linux_compliance.audit \
+  -e linux_compliance_target_hosts=web01 \
+  -e linux_compliance_discover_content_path=/opt/freesecdev/content/ssg-ubuntu2404-ds.xml \
+  -e linux_compliance_discover_content_sha256=<sha256 from content/manifest.yml> \
+  -e linux_compliance_exceptions_file=/srv/compliance/exceptions.yml
 ```
 
-The filter accepts the scan run as a mapping or as its JSON text. `linux_compliance_audit_exceptions_file` and
-`linux_compliance_audit_evaluation` are illustrative names in the play, not role variables; the roles will define
-their own when they wire the filters in. An invalid file fails the task with a message that names the entry or line.
+- The file is read once with `lookup('ansible.builtin.file', path, rstrip=false)` and validated once with
+  `freesecdev.linux_compliance.validate_exceptions`, both `run_once` on the controller, before any host is scanned. An
+  invalid file fails the play; nothing is applied from it. Every host of the play must use the same file.
+- An exception that sets `framework` without `profiles` produces a `WARNING:` message, because it applies to every
+  profile scanned on the hosts in its scope.
+- Each host applies the file to its own scan run with `freesecdev.linux_compliance.apply_exceptions`. A scan start
+  more than five minutes after the controller time fails that host.
+- The raw result stays in `linux_compliance_audited.scan_run` and `linux_compliance_audited.summary`. The waived result
+  is `linux_compliance_audited.exceptions.evaluation` (the evaluation document below, whose `scan_run` has the waived
+  findings) and `linux_compliance_audited.exceptions.summary` (the count per outcome, from
+  `freesecdev.linux_compliance.scan_summary`).
+- Check mode without a scan (`run_status: not_run`, `scan_run` null) skips the filter and reports that waivers were not
+  applied. A run that did not complete is never waived.
+- `linux_compliance_audit_fail_on_noncompliant` counts the **raw** result by default, so a waiver never passes the gate.
+  `linux_compliance_audit_fail_on_noncompliant_after_waivers: true` counts the waived result instead. `error` always
+  counts in both modes.
+- `playbooks/audit.yml` ends with a play on the controller that runs the role's `stale` entry point once over every
+  audited host and publishes `linux_compliance_audit_stale_exceptions` (stale identifiers, evaluated and not evaluated
+  hosts).
+
+The `verify` role (FREES-54) is still a skeleton. When it is implemented it must compare raw with raw or waived with
+waived, from the same exceptions file, and must never count a waived result as an improvement over a failed one.
+
+The filters remain usable on their own, for example on a scan run read from `scan-run.json`. They accept the scan run as
+a mapping or as its JSON text. An invalid file fails the task with a message that names the entry or line.
 
 ## Reporting
 

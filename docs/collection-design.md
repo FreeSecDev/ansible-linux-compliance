@@ -15,7 +15,7 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
 | `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root), `audit.py` (audit orchestration behind `compliance_scan`), `exceptions.py` (exceptions file and waivers), `yamlsubset.py` (strict YAML subset loader) |
 | `plugins/modules/` | `control_state.py` (ledger), the read-only discovery modules `benchmark_info.py` and `profile_info.py`, and the audit module `compliance_scan.py` |
-| `plugins/filter/` | Controller filters `apply_exceptions` and `stale_exceptions` ([exceptions](exceptions.md)) |
+| `plugins/filter/` | Controller filters `apply_exceptions`, `stale_exceptions`, `validate_exceptions` and `scan_summary` ([exceptions](exceptions.md)) |
 | `docs/schemas/`, `docs/examples/` | JSON Schema and example of the exceptions file |
 | `content/manifest.yml` | Pinned ComplianceAsCode release, archive SHA-512, datastream SHA-256 and profiles ([ADR 0015](adr/0015-content-acquisition-and-pinning.md)); the only file in `content/` |
 | `tools/content/fetch_content.py` | Controller-side tool that downloads or reads the pinned archive and extracts only the listed datastreams |
@@ -44,7 +44,7 @@ files ([audit guide](audit.md)). The platforms in each `meta/main.yml` are inten
 | Role | Changes the host | Tracked in | Variables (default) |
 |---|---|---|---|
 | `discover` | Never | FREES-43 (implemented) | `linux_compliance_discover_profile` (`cis_level1_server`), `linux_compliance_discover_content_path` (empty, required), `linux_compliance_discover_content_sha256` (empty, required) |
-| `audit` | Never; writes evidence files | FREES-49 (implemented) | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`), `linux_compliance_audit_backend` (`openscap`), `linux_compliance_audit_output_dir` (`/var/lib/freesecdev/linux_compliance/evidence`), `linux_compliance_audit_scan_timeout` (`1800`), `linux_compliance_audit_disabled_rules` (`[]`) |
+| `audit` | Never; writes evidence files | FREES-49 (implemented) | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`), `linux_compliance_audit_backend` (`openscap`), `linux_compliance_audit_output_dir` (`/var/lib/freesecdev/linux_compliance/evidence`), `linux_compliance_audit_scan_timeout` (`1800`), `linux_compliance_audit_disabled_rules` (`[]`), `linux_compliance_audit_fail_on_noncompliant_after_waivers` (`false`), `linux_compliance_exceptions_file` (`null`) |
 | `remediate` | Only with explicit opt-in | FREES-52 | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
 | `verify` | Never | FREES-54 | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`) |
 | `evidence` | Never; writes on the controller only | FREES-51 | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_host_facts` (`false`) |
@@ -55,7 +55,9 @@ Per-rule and per-family toggles do not exist yet; they are generated from the ru
 `README.md` and in `meta/argument_specs.yml`.
 `tools/roles/check_role_specs.py` (part of `make lint-ansible`) fails when a role's `defaults/main.yml` and
 `meta/argument_specs.yml` disagree in names, types or values, when an option lacks a description or default, or when
-a variable lacks the `linux_compliance_<role>_` prefix.
+a variable lacks the `linux_compliance_<role>_` prefix. The only unprefixed role variable is the collection-wide
+`linux_compliance_exceptions_file` (shared by `audit` and `verify`), listed in the checker's `SHARED_VARIABLES`. An
+option that is not required may default to `null` when its type is `str` or `path`; `null` means "not set".
 
 The playbooks `playbooks/audit.yml`, `playbooks/remediate.yml` and `playbooks/verify.yml` only reference roles by
 FQCN, for example `freesecdev.linux_compliance.audit`. The target comes from the variable
@@ -296,9 +298,9 @@ exceptions leave the finding `fail`, and every exception gets a status per run. 
 profiles, and expiry is judged at the later of the scan start and the controller time, so neither a shared benchmark
 identifier nor a host clock that runs behind widens a waiver. The filters
 `freesecdev.linux_compliance.apply_exceptions` and `freesecdev.linux_compliance.stale_exceptions` wrap it for roles;
-the implemented `audit` role (FREES-49) does not call them yet, and neither does the `verify` skeleton (FREES-54);
-a play can apply them to `linux_compliance_audited.scan_run` after the `audit` role (see
-[exceptions](exceptions.md#using-the-filters-from-a-role)). Both filter files pass the deny-by-default
+the `audit` role applies them when `linux_compliance_exceptions_file` is set (FREES-136, see
+[exceptions](exceptions.md#using-the-exceptions-file-with-the-audit-role)), and the `verify` skeleton (FREES-54) does
+not yet. Both filter files pass the deny-by-default
 plugin guard without an exemption. Unit tests cover the loader, every required field, the expiry boundaries, scope
 matching and the filters; `tests/unit/tools/test_exceptions_schema.py` compares the JSON Schema with the
 validator's constants and validates the example with `jsonschema`, so the two cannot drift, and

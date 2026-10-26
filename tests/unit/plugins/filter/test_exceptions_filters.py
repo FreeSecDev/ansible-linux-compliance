@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
@@ -7,7 +9,9 @@ import pytest
 
 from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
     apply_exceptions,
+    scan_summary,
     stale_exceptions,
+    validate_exceptions,
 )
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     exceptions,
@@ -173,3 +177,145 @@ def test_the_filter_validates_the_scan_lag_limit(hours: object) -> None:
         apply_exceptions.apply_exceptions(
             scan_run().to_dict(), exceptions_text(), "web01", [], hours
         )
+
+
+PROFILE = "xccdf_org.ssgproject.content_profile_cis_level1_server"
+
+
+def profiled_text() -> str:
+    created = (TODAY - timedelta(days=3)).isoformat()
+    expires = (TODAY + timedelta(days=3)).isoformat()
+    return "\n".join(
+        [
+            "---",
+            "schema_version: '1.0'",
+            "exceptions:",
+            "  - id: EXC-STIG",
+            f"    rule: {RULE}",
+            "    framework: stig",
+            "    scope:",
+            f"      profiles: [{PROFILE}]",
+            "    justification: Limited to one profile.",
+            "    owner: platform-team",
+            "    approval:",
+            "      approver: security-lead",
+            f"      date: {created}",
+            f"    created: {created}",
+            f"    expires: {expires}",
+            "    risk: high",
+            "",
+        ]
+    )
+
+
+def test_new_filter_plugins_expose_their_filters() -> None:
+    validate = validate_exceptions.FilterModule().filters()
+    summary = scan_summary.FilterModule().filters()
+    assert validate == {"validate_exceptions": validate_exceptions.validate_exceptions}
+    assert summary == {"scan_summary": scan_summary.scan_summary}
+
+
+def test_validate_exceptions_describes_a_valid_file() -> None:
+    text = exceptions_text()
+    overview = validate_exceptions.validate_exceptions(text)
+    assert overview["schema_version"] == "1.0"
+    assert overview["count"] == 2
+    assert overview["ids"] == ["EXC-1", "EXC-2"]
+    assert overview["source_sha256"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
+    assert overview["framework_without_profiles"] == [
+        {"framework": "cis", "id": "EXC-1"},
+        {"framework": "cis", "id": "EXC-2"},
+    ]
+    stamp = str(overview["validated_at"]).replace("Z", "+0000")
+    validated_at = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S%z")
+    assert abs(validated_at - datetime.now(timezone.utc)) < timedelta(minutes=1)
+
+
+def test_validate_exceptions_does_not_warn_about_profiled_exceptions() -> None:
+    overview = validate_exceptions.validate_exceptions(profiled_text())
+    assert overview["ids"] == ["EXC-STIG"]
+    assert overview["framework_without_profiles"] == []
+
+
+def test_validate_exceptions_matches_the_digest_of_the_evaluation() -> None:
+    text = exceptions_text()
+    evaluation = apply_exceptions.apply_exceptions(scan_run().to_dict(), text, "web01", [])
+    overview = validate_exceptions.validate_exceptions(text)
+    assert overview["source_sha256"] == evaluation["source_sha256"]
+
+
+def test_validate_exceptions_accepts_an_empty_list() -> None:
+    overview = validate_exceptions.validate_exceptions(
+        "---\nschema_version: '1.0'\nexceptions: []\n"
+    )
+    assert overview["count"] == 0
+    assert overview["ids"] == []
+    assert overview["framework_without_profiles"] == []
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        (None, "the exceptions file must be text"),
+        (42, "the exceptions file must be text"),
+        ("---\nschema_version: '1.0'\n", "missing keys: exceptions"),
+        ("schema_version: '1.0'\n", "exceptions file"),
+        ("---\nschema_version: '2.0'\nexceptions: []\n", "unsupported schema_version"),
+    ],
+)
+def test_validate_exceptions_rejects_invalid_files(text: object, message: str) -> None:
+    with pytest.raises(exceptions.ExceptionsError, match=message):
+        validate_exceptions.validate_exceptions(text)
+
+
+def test_validate_exceptions_rejects_the_whole_file_for_one_bad_entry() -> None:
+    text = exceptions_text().replace("    risk: low\n", "    risk: none\n", 1)
+    with pytest.raises(exceptions.ExceptionsError, match=r"exceptions\[0\]\.risk"):
+        validate_exceptions.validate_exceptions(text)
+
+
+@pytest.mark.parametrize("form", ["mapping", "json"])
+def test_scan_summary_counts_every_outcome(form: str) -> None:
+    run = scan_run()
+    value: object = run.to_dict() if form == "mapping" else model.dumps(run)
+    assert scan_summary.scan_summary(value) == {
+        "disabled": 0,
+        "error": 0,
+        "fail": 2,
+        "notapplicable": 0,
+        "notchecked": 0,
+        "pass": 0,
+        "run_status": "completed",
+        "total": 2,
+        "waived": 0,
+    }
+
+
+def test_scan_summary_counts_the_waived_run() -> None:
+    evaluation = apply_exceptions.apply_exceptions(
+        scan_run().to_dict(), exceptions_text(), "web01", []
+    )
+    summary = scan_summary.scan_summary(evaluation["scan_run"])
+    assert summary["waived"] == 1
+    assert summary["fail"] == 1
+    assert summary["total"] == 2
+
+
+def test_scan_summary_of_a_run_without_findings() -> None:
+    run = replace(scan_run(), findings=())
+    summary = scan_summary.scan_summary(run.to_dict())
+    assert summary["total"] == 0
+    assert summary["fail"] == 0
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (None, "the scan run must be a mapping or JSON text"),
+        ("{", "invalid scan run"),
+        ({"schema_version": "1.0"}, "invalid scan run"),
+    ],
+)
+def test_scan_summary_rejects_invalid_scan_runs(value: object, message: str) -> None:
+    with pytest.raises(exceptions.ExceptionsError, match=message):
+        scan_summary.scan_summary(value)

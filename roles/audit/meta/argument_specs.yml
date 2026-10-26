@@ -10,6 +10,8 @@ argument_specs:
       - "It writes evidence files below linux_compliance_audit_output_dir."
       - "It fails when the scan did not complete."
       - "It fails on failed or errored rules when linux_compliance_audit_fail_on_noncompliant is true."
+      - "With linux_compliance_exceptions_file set, it validates the file on the controller before any host is scanned."
+      - "It then applies the file to the scan run of each host and publishes the waived result next to the raw one."
     author: "FreeSecDev contributors"
     options:
       linux_compliance_audit_profile:
@@ -26,6 +28,27 @@ argument_specs:
         description:
           - "Fail the play when the audit reports at least one rule with outcome fail or error."
           - "The audit never changes the host either way, and a scan that did not complete always fails."
+          - "By default the gate counts the raw result, so a waiver never passes it."
+          - "See linux_compliance_audit_fail_on_noncompliant_after_waivers."
+      linux_compliance_audit_fail_on_noncompliant_after_waivers:
+        type: bool
+        default: false
+        description:
+          - "Opt in to counting the waived result instead of the raw result in the failure gate."
+          - "Only failures that an exception in effect covers are then not counted."
+          - "Rules with outcome error always count, in both modes, because an error is never waived."
+          - "Without an exceptions file, or when no waiver was applied, the gate counts the raw result."
+          - "It has no effect unless linux_compliance_audit_fail_on_noncompliant is true."
+      linux_compliance_exceptions_file:
+        type: str
+        default: null
+        description:
+          - "Absolute path, on the controller, of the version-controlled exceptions file (docs/exceptions.md)."
+          - "Null, the default, applies no exceptions and leaves the role behaviour unchanged."
+          - "It is read once per play batch with the ansible.builtin.file lookup and validated before any scan."
+          - "An invalid file fails the play; a scan start too far after the controller time fails the host."
+          - "Every host of the play must use the same value; set it in play or extra variables, not per host."
+          - "The variable is shared by the audit and verify roles, so it has no role prefix."
       linux_compliance_audit_backend:
         type: str
         default: "openscap"
@@ -70,3 +93,43 @@ argument_specs:
             type: str
             description:
               - "Name of the controlling toggle variable, linux_compliance_<name>_enabled."
+  evaluate:
+    short_description: "Apply the exceptions file and the failure gate to an existing audit result"
+    description:
+      - "Runs the second half of the main entry point on the fact linux_compliance_audited, without scanning."
+      - "Validates linux_compliance_exceptions_file once on the controller and applies it to each host's scan run."
+      - "Then fails when the scan did not complete and evaluates the failure gate."
+      - "The raw scan_run and summary of linux_compliance_audited are never changed."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_audit_fail_on_noncompliant:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one rule with outcome fail or error."
+      linux_compliance_audit_fail_on_noncompliant_after_waivers:
+        type: bool
+        default: false
+        description:
+          - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_exceptions_file:
+        type: str
+        default: null
+        description:
+          - "Absolute path, on the controller, of the exceptions file; null applies no exceptions."
+  stale:
+    short_description: "Report the exceptions that matched no finding on any audited host"
+    description:
+      - "Aggregates the exceptions evaluations published on the given hosts and runs stale_exceptions once."
+      - "Run it in a play after the audit play, as playbooks/audit.yml does, so every serial batch is included."
+      - "Publishes the fact linux_compliance_audit_stale_exceptions on the hosts of the play that runs it."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_audit_stale_hosts:
+        type: list
+        elements: str
+        required: true
+        description:
+          - "Inventory host names whose audit results are aggregated."
+          - "Hosts without an audit result are ignored."
+          - "Audited hosts without an evaluation are listed as not evaluated."

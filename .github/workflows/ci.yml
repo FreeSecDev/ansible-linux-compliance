@@ -71,6 +71,8 @@ jobs:
           enable-cache: false
       - name: Run test-coverage
         run: make test-coverage
+      - name: Run test-audit-exceptions
+        run: make test-audit-exceptions
       - name: Run test-content-golden
         run: make test-content-golden
       - name: Run test-browser

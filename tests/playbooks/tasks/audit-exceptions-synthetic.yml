@@ -1,0 +1,29 @@
+---
+- name: Take the synthetic scan start
+  ansible.builtin.set_fact:
+    audit_exceptions_started_at: >-
+      {{ '%Y-%m-%dT%H:%M:%SZ'
+         | ansible.builtin.strftime(now().timestamp() + (audit_exceptions_start_offset | default(0) | int), utc=true) }}
+
+- name: Build the synthetic scan run
+  ansible.builtin.set_fact:
+    audit_exceptions_scan_run: >-
+      {{ audit_exceptions_run_base | ansible.builtin.combine({
+           'started_at': audit_exceptions_started_at,
+           'finished_at': audit_exceptions_started_at,
+           'findings': audit_exceptions_outcomes
+             | map('ansible.builtin.combine', audit_exceptions_finding_base) | list}) }}
+
+- name: Publish the synthetic audit result in the shape of the main entry point
+  ansible.builtin.set_fact:
+    linux_compliance_audited:
+      run_id: "{{ audit_exceptions_scan_run.run_id }}"
+      run_status: completed
+      summary: "{{ audit_exceptions_scan_run | freesecdev.linux_compliance.scan_summary }}"
+      scan_run: "{{ audit_exceptions_scan_run }}"
+      evidence:
+        directory: null
+        files: []
+      evidence_written: false
+      disabled_rules: []
+      planned: {}

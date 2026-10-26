@@ -8,7 +8,7 @@ until that role is implemented.
 
 | Playbook | Roles in order | `become` |
 |---|---|---|
-| `playbooks/audit.yml` | `discover`, `audit` | `audit` only |
+| `playbooks/audit.yml` | `discover`, `audit`; then the `audit` role's `stale` entry point in a second play on `localhost` | `audit` only |
 | `playbooks/remediate.yml` | `remediate` | `remediate` |
 | `playbooks/verify.yml` | `verify` | `verify` |
 
@@ -16,6 +16,11 @@ until that role is implemented.
 `linux_compliance_audit_output_dir` and reports them separately from `changed`. `remediate` changes a host only after
 the opt-in below. `become` is set on the role entry, never on the whole play, and the audit role also sets it on its
 scan task only. The `evidence` role is not part of a playbook yet.
+
+`playbooks/audit.yml` has two plays. The first audits the target hosts. The second runs on the controller after every
+host and every `serial` batch of the first, and reports the exceptions that no audited host needed
+([audit guide](audit.md#stale-exceptions-once-for-all-hosts)); without an exceptions file it does nothing visible. When
+every host of the first play fails, Ansible ends the playbook and the second play does not run.
 
 ## Selecting hosts
 
@@ -40,6 +45,8 @@ Role variables are documented in each role `README.md` and in `meta/argument_spe
 | `linux_compliance_<role>_profile` | `cis_level1_server` | `discover`, `audit`, `remediate`, `verify` |
 | `linux_compliance_discover_content_path`, `linux_compliance_discover_content_sha256` | empty, required | `discover` |
 | `linux_compliance_audit_fail_on_noncompliant` | `false` | `audit` |
+| `linux_compliance_audit_fail_on_noncompliant_after_waivers` | `false` | `audit` |
+| `linux_compliance_exceptions_file` | `null` | `audit` (and `verify` once implemented) |
 | `linux_compliance_audit_output_dir` | `/var/lib/freesecdev/linux_compliance/evidence` | `audit` |
 | `linux_compliance_audit_scan_timeout` | `1800` | `audit` |
 | `linux_compliance_audit_disabled_rules` | `[]` | `audit` |

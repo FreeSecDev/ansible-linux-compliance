@@ -1,0 +1,102 @@
+---
+- name: Audit exceptions | Write the exceptions files on the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    audit_exceptions_epoch: "{{ now().timestamp() }}"
+    audit_exceptions_day: 86400
+    audit_exceptions_created: >-
+      {{ '%Y-%m-%d' | ansible.builtin.strftime(audit_exceptions_epoch | float - 10 * audit_exceptions_day, utc=true) }}
+    audit_exceptions_approved: >-
+      {{ '%Y-%m-%d' | ansible.builtin.strftime(audit_exceptions_epoch | float - 9 * audit_exceptions_day, utc=true) }}
+    audit_exceptions_expires: >-
+      {{ '%Y-%m-%d' | ansible.builtin.strftime(audit_exceptions_epoch | float + 30 * audit_exceptions_day, utc=true) }}
+  tasks:
+    - name: Require the output directory from the Makefile
+      ansible.builtin.assert:
+        that:
+          - audit_exceptions_dir is defined
+          - audit_exceptions_dir is match('^/')
+        fail_msg: Run this playbook through make test-audit-exceptions.
+        quiet: true
+
+    - name: Create the output directory
+      ansible.builtin.file:
+        path: "{{ audit_exceptions_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Write a valid exceptions file
+      ansible.builtin.copy:
+        dest: "{{ audit_exceptions_valid_file }}"
+        mode: "0600"
+        content: |
+          ---
+          schema_version: "1.0"
+          exceptions:
+            - id: EXC-WEB-ROOT-LOGIN
+              rule: {{ audit_exceptions_rule_root_login }}
+              framework: cis
+              scope:
+                hosts: [web01]
+              justification: The legacy deployment tool logs in as root until OPS-1 ships.
+              owner: platform-team
+              approval:
+                approver: security-lead
+                date: {{ audit_exceptions_approved }}
+              created: {{ audit_exceptions_created }}
+              expires: {{ audit_exceptions_expires }}
+              risk: medium
+            - id: EXC-WEB-LOGIN-EVENTS
+              rule: {{ audit_exceptions_rule_login_events }}
+              framework: cis
+              scope:
+                groups: [web]
+                profiles: [{{ audit_exceptions_profile }}]
+              justification: Login events are collected by the central agent until OPS-2 ships.
+              owner: platform-team
+              approval:
+                approver: security-lead
+                date: {{ audit_exceptions_approved }}
+              created: {{ audit_exceptions_created }}
+              expires: {{ audit_exceptions_expires }}
+              risk: low
+            - id: EXC-UNUSED
+              rule: xccdf_org.ssgproject.content_rule_partition_for_tmp
+              framework: stig
+              scope:
+                hosts: [web01, db01]
+                profiles: [xccdf_org.ssgproject.content_profile_stig]
+              justification: The tmp partition is planned for the next rebuild.
+              owner: platform-team
+              approval:
+                approver: security-lead
+                date: {{ audit_exceptions_approved }}
+              created: {{ audit_exceptions_created }}
+              expires: {{ audit_exceptions_expires }}
+              risk: low
+
+    - name: Write an exceptions file whose only entry has no risk
+      ansible.builtin.copy:
+        dest: "{{ audit_exceptions_invalid_file }}"
+        mode: "0600"
+        content: |
+          ---
+          schema_version: "1.0"
+          exceptions:
+            - id: EXC-NO-RISK
+              rule: {{ audit_exceptions_rule_root_login }}
+              framework: cis
+              scope:
+                hosts: [web01]
+              justification: Missing the risk field.
+              owner: platform-team
+              approval:
+                approver: security-lead
+                date: {{ audit_exceptions_approved }}
+              created: {{ audit_exceptions_created }}
+              expires: {{ audit_exceptions_expires }}

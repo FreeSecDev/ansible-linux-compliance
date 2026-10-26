@@ -6,3 +6,16 @@
     - role: freesecdev.linux_compliance.discover
     - role: freesecdev.linux_compliance.audit
       become: true
+
+- name: Report exceptions that no audited host needed
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Aggregate the exceptions evaluations of every audited host once
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: stale
+      vars:
+        linux_compliance_audit_stale_hosts: >-
+          {{ query('ansible.builtin.inventory_hostnames',
+                   linux_compliance_target_hosts | default('linux_compliance')) }}

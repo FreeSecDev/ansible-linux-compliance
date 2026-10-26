@@ -29,6 +29,11 @@ BROWSER_TEST_DIR := build/browser-test
 NAME_SET_PYTHONS := 3.9 3.10 3.11 3.12 3.13 3.14 3.15
 NAME_SET_PYTHON ?=
 NAME_SET_DIRECTORY := build/name-sets
+AUDIT_EXCEPTIONS_DIR := build/test-audit-exceptions
+AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_HOME='$(CURDIR)/build/ansible-home' \
+	ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' ANSIBLE_NOCOLOR=1 \
+	$(RUN) ansible-playbook -i tests/playbooks/inventory/audit-exceptions.yml \
+	-e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
 
 space := $(subst ,, )
@@ -75,6 +80,7 @@ Tests
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
+  test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
@@ -106,7 +112,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -235,6 +241,18 @@ test-name-sets: require-uv collection-link
 	@test -n '$(NAME_SET_PYTHON)' || { printf 'error: set NAME_SET_PYTHON to an installed Python version, for example 3.9.25\n' >&2; exit 2; }
 	FREESECDEV_NAME_SET_PYTHON="$$(uv python find --no-project '$(NAME_SET_PYTHON)')" $(RUN) pytest tests/unit/tools/test_name_sets.py --no-cov
 
+test-audit-exceptions: require-uv collection-link
+	rm -rf '$(AUDIT_EXCEPTIONS_DIR)'
+	mkdir -p build/ansible-home '$(AUDIT_EXCEPTIONS_DIR)'
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) tests/playbooks/audit-exceptions.yml
+	status=0; $(AUDIT_EXCEPTIONS_PLAYBOOK) tests/playbooks/audit-exceptions-invalid.yml \
+		> '$(AUDIT_EXCEPTIONS_DIR)/invalid.log' 2>&1 || status=$$?; \
+		cat '$(AUDIT_EXCEPTIONS_DIR)/invalid.log'; \
+		test "$$status" -eq 2 || { printf 'error: an invalid exceptions file did not fail the play (status %s)\n' "$$status" >&2; exit 1; }; \
+		grep -q 'missing keys: risk' '$(AUDIT_EXCEPTIONS_DIR)/invalid.log' || { printf 'error: the validation error is missing\n' >&2; exit 1; }; \
+		if grep -q 'Apply the exceptions file to the scan run' '$(AUDIT_EXCEPTIONS_DIR)/invalid.log'; then printf 'error: a host was evaluated with an invalid file\n' >&2; exit 1; fi; \
+		if grep -q 'AUDIT-EXCEPTIONS-NOT-REACHED' '$(AUDIT_EXCEPTIONS_DIR)/invalid.log'; then printf 'error: the playbook continued after an invalid file\n' >&2; exit 1; fi
+
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)
 
@@ -346,4 +364,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage test-browser security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions security docs test-sanity test-ansible-units package-check

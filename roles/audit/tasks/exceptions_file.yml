@@ -1,0 +1,52 @@
+---
+- name: Audit | Read the exceptions file once on the controller
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_exceptions:
+      file: "{{ linux_compliance_exceptions_file }}"
+      text: >-
+        {{ lookup('ansible.builtin.file', linux_compliance_exceptions_file, rstrip=false)
+           if linux_compliance_exceptions_file is not none else none }}
+  run_once: true
+  any_errors_fatal: true
+  tags:
+    - always
+
+- name: Audit | Validate the exceptions file before any host is evaluated
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_exceptions_overview: >-
+      {{ __linux_compliance_audit_exceptions.text | freesecdev.linux_compliance.validate_exceptions
+         if __linux_compliance_audit_exceptions.text is not none else none }}
+  run_once: true
+  any_errors_fatal: true
+  tags:
+    - always
+
+- name: Audit | Check that every host uses the exceptions file that was validated
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_exceptions.file == linux_compliance_exceptions_file
+    fail_msg: >-
+      linux_compliance_exceptions_file must be the same for every host of the play, because the file
+      is read and validated once. This host uses {{ linux_compliance_exceptions_file }}, the play
+      validated {{ __linux_compliance_audit_exceptions.file }}. Set it in play or extra variables.
+    quiet: true
+  tags:
+    - always
+
+- name: Audit | Warn about exceptions that name a framework but no profiles
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ __linux_compliance_audit_unprofiled | map(attribute='id') | join(', ') }} in
+      {{ linux_compliance_exceptions_file }} set a framework
+      ({{ __linux_compliance_audit_unprofiled | map(attribute='framework') | unique | join(', ') }})
+      but no profiles. The framework does not restrict matching, so each of them applies to every
+      profile scanned on the hosts in its scope. List the profiles of the framework in
+      scope.profiles to limit it (docs/exceptions.md).
+  vars:
+    __linux_compliance_audit_unprofiled: "{{ __linux_compliance_audit_exceptions_overview.framework_without_profiles }}"
+  when:
+    - __linux_compliance_audit_exceptions_overview is not none
+    - __linux_compliance_audit_exceptions_overview.framework_without_profiles | length > 0
+  run_once: true
+  tags:
+    - always

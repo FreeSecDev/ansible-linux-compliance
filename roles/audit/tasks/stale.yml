@@ -1,0 +1,68 @@
+---
+- name: Audit | Validate the hosts whose evaluations are aggregated
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audit_stale_hosts is sequence
+      - linux_compliance_audit_stale_hosts is not string
+      - linux_compliance_audit_stale_hosts is not mapping
+      - linux_compliance_audit_stale_hosts | reject('string') | list | length == 0
+      - linux_compliance_audit_stale_hosts | reject('in', hostvars) | list | length == 0
+    fail_msg: >-
+      linux_compliance_audit_stale_hosts must be a list of inventory host names, for example
+      query('ansible.builtin.inventory_hostnames', linux_compliance_target_hosts).
+    quiet: true
+  run_once: true
+  tags:
+    - always
+
+- name: Audit | Aggregate the exceptions evaluations of every audited host once
+  ansible.builtin.set_fact:
+    linux_compliance_audit_stale_exceptions:
+      computed: "{{ __linux_compliance_audit_stale_evaluated | length > 0 }}"
+      stale: >-
+        {{ __linux_compliance_audit_stale_evaluations | freesecdev.linux_compliance.stale_exceptions
+           if __linux_compliance_audit_stale_evaluated | length > 0 else none }}
+      source_sha256: >-
+        {{ (__linux_compliance_audit_stale_evaluations | first).source_sha256
+           if __linux_compliance_audit_stale_evaluated | length > 0 else none }}
+      audited_hosts: "{{ __linux_compliance_audit_stale_audited }}"
+      evaluated_hosts: "{{ __linux_compliance_audit_stale_evaluated }}"
+      not_evaluated_hosts: >-
+        {{ __linux_compliance_audit_stale_audited
+           | ansible.builtin.difference(__linux_compliance_audit_stale_evaluated) | sort }}
+  vars:
+    __linux_compliance_audit_stale_audited: >-
+      {{ linux_compliance_audit_stale_hosts | unique
+         | select('in', hostvars)
+         | map('extract', hostvars) | selectattr('linux_compliance_audited', 'defined')
+         | map(attribute='inventory_hostname') | sort }}
+    __linux_compliance_audit_stale_evaluated: >-
+      {{ __linux_compliance_audit_stale_audited
+         | map('extract', hostvars) | selectattr('linux_compliance_audited.exceptions.applied', 'defined')
+         | selectattr('linux_compliance_audited.exceptions.applied', 'equalto', true)
+         | map(attribute='inventory_hostname') | sort }}
+    __linux_compliance_audit_stale_evaluations: >-
+      {{ __linux_compliance_audit_stale_evaluated
+         | map('extract', hostvars, ['linux_compliance_audited', 'exceptions', 'evaluation']) | list }}
+  run_once: true
+  tags:
+    - always
+
+- name: Audit | Report exceptions that no audited host needed
+  ansible.builtin.debug:
+    msg: "{{ __linux_compliance_audit_stale_found ~ __linux_compliance_audit_stale_uncovered }}"
+  vars:
+    __linux_compliance_audit_stale_report: "{{ linux_compliance_audit_stale_exceptions }}"
+    __linux_compliance_audit_stale_count: "{{ __linux_compliance_audit_stale_report.evaluated_hosts | length }}"
+    __linux_compliance_audit_stale_found: >-
+      {{ 'WARNING: ' ~ (__linux_compliance_audit_stale_report.stale | join(', ')) ~ ' matched no finding on any of the '
+      ~ __linux_compliance_audit_stale_count ~ ' evaluated host(s); review and remove them.'
+      if __linux_compliance_audit_stale_report.stale
+      else 'No stale exceptions on the ' ~ __linux_compliance_audit_stale_count ~ ' evaluated host(s).' }}
+    __linux_compliance_audit_stale_uncovered: >-
+      {{ ' Not evaluated, so not covered: ' ~ (__linux_compliance_audit_stale_report.not_evaluated_hosts | join(', '))
+      ~ '.' if __linux_compliance_audit_stale_report.not_evaluated_hosts else '' }}
+  when: linux_compliance_audit_stale_exceptions.computed
+  run_once: true
+  tags:
+    - always

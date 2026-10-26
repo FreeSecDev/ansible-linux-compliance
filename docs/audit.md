@@ -1,7 +1,7 @@
 # Audit
 
 Scope: the `freesecdev.linux_compliance.compliance_scan` module and the `freesecdev.linux_compliance.audit` role.
-Audience: operators, playbook authors and reviewers. Jira: FREES-49. Decisions: [ADR 0004](adr/0004-audited-process-execution.md)
+Audience: operators, playbook authors and reviewers. Jira: FREES-49, FREES-136 (exceptions). Decisions: [ADR 0004](adr/0004-audited-process-execution.md)
 (process execution), [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles),
 [ADR 0013](adr/0013-normalized-findings-model.md) (findings model) and
 [ADR 0015](adr/0015-content-acquisition-and-pinning.md) (content pinning).
@@ -26,15 +26,23 @@ pinned content.
 ## What the role does
 
 1. Validates its variables (also through `meta/argument_specs.yml`).
-2. Requires the fact `linux_compliance_discovered` from the `discover` role, for the same profile. The audit scans only
+2. When `linux_compliance_exceptions_file` is set, reads and validates the exceptions file once on the controller; an
+   invalid file fails the play before any host is scanned ([exceptions in the audit role](#exceptions-in-the-audit-role)).
+3. Requires the fact `linux_compliance_discovered` from the `discover` role, for the same profile. The audit scans only
    content whose SHA-256 was verified and never substitutes another profile.
-3. Requires gathered facts, which identify the host in the scan run.
-4. Runs `compliance_scan` with `become: true` on that task only and `fail_on_incomplete: false`, so the result is
+4. Requires gathered facts, which identify the host in the scan run.
+5. Runs `compliance_scan` with `become: true` on that task only and `fail_on_incomplete: false`, so the result is
    always registered.
-5. Publishes the fact `linux_compliance_audited` (`run_id`, `run_status`, `summary`, `scan_run`, `evidence`,
-   `evidence_written`, `disabled_rules`, `planned`) for the evidence and verify roles.
-6. Fails when the scan did not complete.
-7. Fails when `linux_compliance_audit_fail_on_noncompliant` is true and at least one rule is `fail` or `error`.
+6. Publishes the fact `linux_compliance_audited` (`run_id`, `run_status`, `summary`, `scan_run`, `evidence`,
+   `evidence_written`, `disabled_rules`, `planned`) for the evidence and verify roles. `summary` and `scan_run` are
+   the raw result and are never changed afterwards.
+7. Applies the exceptions file to the scan run of the host and adds the waived result as
+   `linux_compliance_audited.exceptions`, next to the raw one.
+8. Fails when the scan did not complete.
+9. Fails when `linux_compliance_audit_fail_on_noncompliant` is true and the gate counts at least one rule: `fail` and
+   `error` of the raw result by default, or `fail` of the waived result plus `error` with
+   `linux_compliance_audit_fail_on_noncompliant_after_waivers` ([the gate](#the-failure-gate-and-waivers)). The
+   decision is recorded as `linux_compliance_audited.gate`.
 
 The variables are listed in the [role README](../roles/audit/README.md).
 
@@ -223,6 +231,150 @@ check and the use can only be swapped by root or by the owner of a vetted ancest
 Python 3.9 follows symlinks; every scanner output is checked to be a regular file with `lstat` first, inside a `0700`
 root-owned directory that the run created.
 
+## Exceptions in the audit role
+
+Jira: FREES-136. The policy and the file format are in [Exceptions and waivers](exceptions.md). With
+`linux_compliance_exceptions_file` set to the absolute path of an exceptions file on the controller, the audit role
+applies it to every scanned host. With the default `null` nothing changes: no file is read, no waiver is applied and the
+gate counts the raw result as before.
+
+`linux_compliance_exceptions_file` has no role prefix on purpose: the `verify` role will read the same file with the
+same meaning (FREES-54), so it is a collection-wide variable like `linux_compliance_target_hosts`. It is the only
+unprefixed role variable; `tools/roles/check_role_specs.py` allows exactly the names in its `SHARED_VARIABLES`.
+
+### Reading and validating the file
+
+1. **Once, on the controller, before any scan.** Right after its input checks the role reads the file with
+   `lookup('ansible.builtin.file', path, rstrip=false)` and validates it with the
+   `freesecdev.linux_compliance.validate_exceptions` filter. Both tasks use `run_once: true` and
+   `any_errors_fatal: true`. A `run_once` task runs on the first host of the batch and Ansible copies its facts to every
+   host of the batch, so the file is read and validated once and every host applies the same text. `rstrip=false`
+   keeps the file byte for byte, so the recorded `source_sha256` is the SHA-256 of the file as stored in Git.
+2. **An invalid file fails the play.** When the validation fails, Ansible marks every host of the batch as failed
+   (`run_once` failures apply to all hosts) and stops the play; `any_errors_fatal` also stops later `serial` batches.
+   No host is scanned or evaluated, and the playbook ends with exit status 2. The message names the entry or line.
+3. **One file per play.** Every host must use the same value. A host whose `linux_compliance_exceptions_file` differs
+   from the validated one fails, so a per-host value in `host_vars` cannot silently use another host's file. Set the
+   variable in play variables or with `-e`.
+4. **Relative paths are refused.** `lookup('ansible.builtin.file')` searches a role's `files/` directory and the
+   playbook directory for a relative name, so a relative path could resolve to an unexpected file. The path must be
+   absolute.
+5. **Framework without profiles.** For every exception whose scope has no `profiles` the role prints a `WARNING:`
+   message once per play: `framework` is recorded but does not restrict matching, so the exception applies to every
+   profile scanned on the hosts in its scope ([scope](exceptions.md#scope)). The identifiers are also published as
+   `linux_compliance_audited.exceptions.framework_without_profiles`.
+
+### Applying the file to each host
+
+After the scan and the publication of the raw result, each host applies the validated text to its own scan run with
+`freesecdev.linux_compliance.apply_exceptions`, matching scopes against `inventory_hostname` and `group_names` (never
+the host name that the scanned host reports). The filter takes the controller's clock: a scan start more than five
+minutes after the controller time fails **that host** with a clear message, and the other hosts continue. Waivers are
+applied only to a completed run:
+
+| `exceptions.status` | When | Waived result |
+|---|---|---|
+| `not_requested` | `linux_compliance_exceptions_file` is null | none; use the raw result |
+| `applied` | the run completed and the file was applied | `exceptions.evaluation.scan_run` and `exceptions.summary` |
+| `not_run` | check mode ran no scan (`run_status: not_run`, `scan_run` null) | none; the role prints that waivers were not applied |
+| `not_completed` | the run is `failed` or `timed_out` | none; every rule is `error`, which is never waived, and the role then fails as before |
+
+The file is still validated in check mode, so a broken file is found before a real run.
+
+### What the role publishes
+
+The raw result is never changed or discarded. `linux_compliance_audited.scan_run` and `linux_compliance_audited.summary`
+are exactly what the scanner reported. The waived result is added next to them:
+
+| Key | Content |
+|---|---|
+| `exceptions.file` | The path, or null |
+| `exceptions.status`, `exceptions.applied`, `exceptions.message` | See the table above; the message is also printed |
+| `exceptions.source_sha256` | SHA-256 of the validated file, also when it was not applied (check mode) |
+| `exceptions.framework_without_profiles` | `id` and `framework` of the exceptions without `profiles` |
+| `exceptions.evaluation` | The evaluation document of `apply_exceptions` ([exceptions](exceptions.md#evaluation-document)); its `scan_run` is the waived scan run, with the exception identifier, reason and expiry on every waived finding |
+| `exceptions.summary` | The count per outcome of the waived scan run, in the shape of `summary` (`freesecdev.linux_compliance.scan_summary`) |
+| `gate` | Which result the failure gate counted, see below |
+
+When the scan started more than 24 hours before the controller time, the evaluation is flagged with
+`scan_lag_exceeded` and the role prints a warning.
+
+### The failure gate and waivers
+
+`linux_compliance_audit_fail_on_noncompliant` fails the play when the gate counts at least one rule. Which result it
+counts is an explicit choice:
+
+- **Default: the raw result.** The gate counts `fail` and `error` of `linux_compliance_audited.summary`, before any
+  waiver. A waiver never silently passes the gate: a waived failure still fails it, and the message says how many
+  failures were waived and how to opt in.
+- **Opt-in: the waived result.** With `linux_compliance_audit_fail_on_noncompliant_after_waivers: true` the gate
+  counts `fail` of `exceptions.summary`, so failures that an exception in effect covers no longer fail it. Expired or
+  not yet effective exceptions leave the finding `fail`, so they still count. Without an exceptions file, or when
+  nothing was applied (check mode, incomplete run), the gate falls back to the raw result.
+- **`error` always counts**, in both modes, and is taken from the raw summary. An `error` is never waived, so a broken
+  check can never pass the gate.
+
+`linux_compliance_audited.gate` records `enabled`, `after_waivers`, `basis` (`raw` or `waived`), `counted` (false for
+`not_run`) and the `fail`, `error` and `waived` counts that the gate used.
+
+### Stale exceptions, once for all hosts
+
+An exception is stale when it matched no finding on any evaluated host, which no single host can decide. The
+aggregation therefore runs **once, after every host**, in a dedicated final play of `playbooks/audit.yml`:
+
+```yaml
+- name: Report exceptions that no audited host needed
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Aggregate the exceptions evaluations of every audited host once
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: stale
+      vars:
+        linux_compliance_audit_stale_hosts: >-
+          {{ query('ansible.builtin.inventory_hostnames',
+                   linux_compliance_target_hosts | default('linux_compliance')) }}
+```
+
+A final play is used rather than a `run_once` task at the end of the role because of Ansible's execution model. With
+`serial`, a `run_once` task runs once per batch and sees only the hosts evaluated so far; with the `free` strategy it
+runs on every host as soon as that host reaches it. A play after the audit play starts only when every batch of the
+audit play is done, so it sees every evaluation. Facts set with `set_fact` survive across plays, so the final play
+reads them from `hostvars`. It runs on the controller (`localhost`, no facts, no connection to a managed host).
+
+The `stale` entry point of the role takes the host names, keeps those with a `linux_compliance_audited` fact, runs
+`freesecdev.linux_compliance.stale_exceptions` once over the evaluations of the hosts where the file was applied, and
+publishes `linux_compliance_audit_stale_exceptions` on the host that runs it:
+
+| Key | Content |
+|---|---|
+| `computed` | Whether at least one host was evaluated |
+| `stale` | The sorted identifiers that are `unmatched` on every evaluated host, or null when nothing was evaluated |
+| `source_sha256` | The file all evaluations came from; evaluations of different files fail the task |
+| `audited_hosts`, `evaluated_hosts`, `not_evaluated_hosts` | Which hosts the answer covers; audited hosts without an evaluation (check mode without a scan) are not covered |
+
+It prints a `WARNING:` with the stale identifiers. The answer covers only the evaluated hosts: an exception for a host
+outside the play, or for a host that was not evaluated, is reported as stale. Two limits follow from Ansible: when
+every host of the audit play fails (for example all of them fail the gate), Ansible ends the playbook and the final
+play does not run, and an unreachable host has no audit result and is not listed.
+
+### Entry points
+
+| Entry point | Use |
+|---|---|
+| `main` | Validate, scan, publish the raw result, apply the exceptions, enforce the gates |
+| `evaluate` | Apply the exceptions file and the gates to an existing `linux_compliance_audited` fact, without scanning; used by the playbook test |
+| `stale` | Aggregate stale exceptions over the given hosts, after the audit play |
+
+### Verify compares like with like
+
+The `verify` role (FREES-54) is still a skeleton and is unchanged. When it is implemented it must compare raw with raw
+(`scan_run` of the baseline and the post-remediation audit) or waived with waived (`exceptions.evaluation.scan_run`
+of both, from the same exceptions file, `source_sha256` equal), never one with the other. A finding that is `fail` in
+the baseline and `waived` afterwards is not an improvement: the rule still fails, and a waiver must never count as
+a fix or as a pass. This rule is recorded on FREES-136 for FREES-54.
+
 ## Disabled rules (ADR 0011)
 
 `disabled_rules` (role variable `linux_compliance_audit_disabled_rules`) lists rules of the profile that operator
@@ -311,6 +463,31 @@ skipping when `oscap` or the content is missing. Locally they skip only when `/u
 as the unprivileged runner user (the tests pass the expected owner explicitly), so rules that need root may report
 other results than on a managed host; the assertions are about the protocol, not about the host's compliance.
 
+`make test-audit-exceptions` (CI job `test`, part of `make ci`) runs the exceptions path of the role without
+`oscap`. It uses the `evaluate` and `stale` entry points against two local inventory hosts (`web01` in group `web`,
+`db01` in group `db`, both `ansible_connection: local`) with synthetic scan runs whose start time is the current time,
+and exceptions files written at run time with dates relative to today, so the test never ages out. Its private
+`ANSIBLE_HOME` is `build/ansible-home`. `tests/playbooks/audit-exceptions.yml` checks that:
+
+- waived findings appear in `exceptions.evaluation.scan_run` with their exception, that `exceptions.summary` counts
+  them, and that the recorded SHA-256 is the digest of the file;
+- the raw `scan_run` and `summary` are unchanged on every host, and that a host outside every scope has nothing waived;
+- the stale aggregation runs once and reports exactly the exception that no host needed, and later lists a host
+  without an evaluation as not covered;
+- the gate counts the raw result by default, so waived failures still fail it; the opt-in passes when every failure is
+  waived; and an `error` fails the gate in both modes;
+- a check-mode result without a scan (`not_run`, `scan_run` null) skips the waivers, reports that, and is not counted
+  by the gate;
+- without an exceptions file nothing changes;
+- a scan start one hour ahead of the controller fails only that host.
+
+`tests/playbooks/audit-exceptions-invalid.yml` runs without a rescue: the Makefile requires exit status 2, the
+validation message, no task that applies exceptions in the output and no output from the play after it, which
+shows that an invalid file stops every host of the play before any evaluation. The new filters `validate_exceptions`
+and `scan_summary` and the changes to `tools/roles/check_role_specs.py` have unit tests at 100% line and branch
+coverage.
+
 Not covered yet: a Molecule scenario on a managed host that asserts that the audit role changes nothing, that check
 mode leaves nothing behind and that a second run is idempotent. The Docker Molecule framework (FREES-59, pull request
-14) had not merged when this was written, so that scenario is a follow-up for FREES-60.
+14) had not merged when this was written, so that scenario is a follow-up for FREES-60. The same holds for a Molecule
+step that runs the exceptions path through the main entry point with a real scan; it is still needed under FREES-60.
