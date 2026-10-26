@@ -80,7 +80,8 @@ Deviations and decisions:
   trusted directories and binaries must be root-owned and not writable by group or others.
 - A symlink inside a trusted directory that points elsewhere, such as an `update-alternatives` link under `/etc`,
   is refused. This is deliberate and conservative.
-- `tools/lint/check_repo_rules.py` applies a deny-by-default rule to Python files under `plugins/` other than
+- `tools/lint/check_repo_rules.py` (the rules live in `tools/lint/repo_rules/`, this one in `isolation.py`) applies
+  a deny-by-default rule to Python files under `plugins/` other than
   `process.py`. They may import only allow-listed standard library modules (`__future__`, `collections`,
   `collections.abc`, `dataclasses`, `datetime`, `enum`, `functools`, `hashlib`, `itertools`, `json`, `os.path`,
   `pathlib`, `re`, `stat`, `types`, `typing`, `unicodedata`; `xml.parsers.expat` for `openscap.py` only), `ansible.module_utils` and this
@@ -116,7 +117,7 @@ narrow policy changes; everything else is unchanged.
   and the rule that every `-` argument must be allow-listed still apply, and a test asserts that the new entry opens
   no other option. The backend never passes `--remediate`, `--fetch-remote-resources` or `--report`.
 - Import allow-list for `plugins/`: `xml.parsers.expat` is allowed **only in `plugins/module_utils/compliance/openscap.py`**
-  (`EXTRA_IMPORTS` in `tools/lint/check_repo_rules.py`); every other plugin file that imports it fails the guard, which
+  (`EXTRA_IMPORTS` in `tools/lint/repo_rules/names.py`); every other plugin file that imports it fails the guard, which
   tests show for several paths. The XCCDF parser needs the expat parser object to turn off parameter entity parsing
   (`SetParamEntityParsing`) and to force UTF-8, which the high-level `ElementTree` parser does not expose. The parser does
   not import `xml.etree.ElementTree` at all: it never stores elements, so Bandit B405 and Ruff S405 do not apply and no
@@ -196,7 +197,7 @@ deny-by-default for these:
   `return collections.abc` fail, which closes the gap where a stored submodule escaped R-A, the read-only rule and R-B.
   A from-import of such a name (`from json import decoder`, `from typing import functools`, also with `as`) binds a tracked
   module name, so R-A and R-B apply to it as well. The name sets are checked-in constants (`STDLIB_MODULE_NAMES`,
-  `KNOWN_SUBMODULE_ATTRIBUTES` in `tools/lint/check_repo_rules.py`), the union over CPython 3.9 to 3.15, not values read from
+  `KNOWN_SUBMODULE_ATTRIBUTES` in `tools/lint/repo_rules/names.py`), the union over CPython 3.9 to 3.15, not values read from
   the controller interpreter, because plugins run on 3.9 to 3.14. A unit test asserts that the sets of the running
   interpreter are subsets, so a new Python release fails CI instead of opening a gap. The reflection names `evaluate`,
   `call_evaluate_function` and `annotationlib` (the 3.14 counterparts of `ForwardRef._evaluate`) are banned.
@@ -243,7 +244,7 @@ today; remove them if they stay unused.
 
 - Import allow-list for `plugins/`: `xml.parsers.expat` is now allowed in exactly two files,
   `plugins/module_utils/compliance/openscap.py` and `plugins/module_utils/compliance/xmlsafe.py` (`EXTRA_IMPORTS` in
-  `tools/lint/check_repo_rules.py`). `xmlsafe.py` holds the same layered defences as the XCCDF results parser (byte
+  `tools/lint/repo_rules/names.py`). `xmlsafe.py` holds the same layered defences as the XCCDF results parser (byte
   scan for DOCTYPE and ENTITY, UTF-8 forced, parameter entities off, element and depth bounds, no stored elements) as a
   public API, so that `catalog.py` and later parsers use it without importing private names of `openscap.py`. Every
   other plugin file that imports expat still fails the guard, and a test shows it for several paths. `openscap.py`
@@ -253,7 +254,7 @@ today; remove them if they stay unused.
 ## Amendment 2026-10-25: one XML parser (FREES-126)
 
 - Import allow-list for `plugins/`: `xml.parsers.expat` is allowed in exactly one file,
-  `plugins/module_utils/compliance/xmlsafe.py` (`EXTRA_IMPORTS` in `tools/lint/check_repo_rules.py`), in the form
+  `plugins/module_utils/compliance/xmlsafe.py` (`EXTRA_IMPORTS` in `tools/lint/repo_rules/names.py`), in the form
   `from xml.parsers import expat`. `plugins/module_utils/compliance/openscap.py` has lost the allowance that FREES-48
   gave it and fails the guard if it imports expat in any form, as does every other plugin file; tests in
   `tests/unit/tools/test_check_repo_rules.py` show this for `openscap.py` and several other paths. The guard tests that
@@ -291,7 +292,7 @@ the submodules of the global allow-list, so they only had to be the base of an a
 parser with no declaration scan, no bounds and no reject handlers.
 
 - Reserved names: the components of an `EXTRA_IMPORTS` name that no allow-listed import provides (today `parsers` and
-  `expat`, `RESERVED_ATTRIBUTES` in `tools/lint/check_repo_rules.py`) may be used only in the file that owns the entry,
+  `expat`, `RESERVED_ATTRIBUTES` in `tools/lint/repo_rules/names.py`) may be used only in the file that owns the entry,
   `plugins/module_utils/compliance/xmlsafe.py`. In every other plugin file, they are banned:
   - as an attribute name on any object, whether read, called, stored or deleted (`xmlsafe.expat.ParserCreate()`,
     `x = xmlsafe.expat`, `xmlsafe.parsers.expat`, `obj.expat`);
@@ -324,7 +325,7 @@ Non-blocking follow-ups from the final review of PR #11 (FREES-125) and the revi
 (FREES-49). Every change tightens the guard; none adds an exemption.
 
 - Generated name sets (regeneration note): `STDLIB_MODULE_NAMES` and `KNOWN_SUBMODULE_ATTRIBUTES` stay checked-in
-  constants in `tools/lint/check_repo_rules.py`, but they are now generated. `tools/lint/name_set_probe.py` (standard
+  constants in `tools/lint/repo_rules/names.py`, but they are now generated. `tools/lint/name_set_probe.py` (standard
   library only, Python 3.9 syntax) runs in a clean interpreter, `python -I -S`, so neither the test session nor a `.pth`
   file of a virtual environment can add to or hide from the result; it imports every probed module first and then
   reads each module-typed attribute with `getattr`, which also resolves `lazy import` bindings of Python 3.15
@@ -460,14 +461,16 @@ Non-blocking follow-ups from the review of PR #21 (FREES-128, FREES-129). Every 
 
 - The repository guard is split into the package `tools/lint/repo_rules/`, one module per rule group, because the
   single module had reached its 1700-line limit. The change is behaviour-identical: no rule, message, order or exit
-  status changed, every guard test passes unchanged, and coverage stays at 100%.
+  status changed and coverage stays at 100%. Every existing guard test passes unchanged except one meta-test: the
+  test that pinned the 1700-line exception was replaced by `test_no_module_exceeds_the_module_line_limit`. One
+  meta-test was added, `test_the_repository_guard_is_a_package_of_small_modules`.
   - `common.py`: `Violation`, `REPO_ROOT` and the file suffixes.
   - `yaml_text.py`: the document-start marker and the YAML comment ban (ADR 0005).
   - `ansible_tasks.py`: banned command modules, task keys, includes, role entry points and role names.
   - `names.py`: every name set of the Python rules, including `ALLOWED_IMPORTS`, `EXTRA_IMPORTS`, `FILE_IO_HELPER`,
     `FILE_IO_ATTRIBUTES`, `BANNED_KEYWORDS`, `SEAM_OWNERS`, `RESERVED_ATTRIBUTES` and the generated
-    `STDLIB_MODULE_NAMES` and `KNOWN_SUBMODULE_ATTRIBUTES`. Earlier amendments and ADR 0011 that name these constants
-    "in `tools/lint/check_repo_rules.py`" now refer to this file; `make name-sets` rewrites it.
+    `STDLIB_MODULE_NAMES` and `KNOWN_SUBMODULE_ATTRIBUTES`. The earlier amendments and ADR 0011 name this file
+    inline where they cite these constants (FREES-153); `make name-sets` rewrites it.
   - `python_scope.py`: the per-file facts (`Scope`) and binding helpers that the Python rules share.
   - `imports.py`, `seams.py` and `attributes.py`: the import, test seam, and name, attribute and call rules.
   - `isolation.py`: `check_process_isolation`, which applies the Python rules to one plugin file.
@@ -478,3 +481,39 @@ Non-blocking follow-ups from the review of PR #21 (FREES-128, FREES-129). Every 
 - The per-file Pylint exception of the previous amendment is removed. Every guard module is below 600 lines,
   `make lint-pylint` lints the package in its main pass with the global `max-module-lines` of 1500, and a unit test
   fails when any module exceeds 1500 lines.
+
+## Amendment 2026-10-26: guard and role-guard follow-ups (FREES-153)
+
+The behaviour-changing items left over from FREES-141 and the non-blocking findings of its review. Each tightens a
+rule; none adds an exemption, and no lint limit was raised.
+
+- Seam storage (`tools/lint/repo_rules/seams.py`): an owner file may store or delete its seam attribute only directly
+  in the body of `__init__`. A store from a function or `async` function nested in `__init__`, at any depth, is
+  refused with the existing message, because such a function can run after construction and replace the seam.
+- Compiled modules (`COMPILED_MODULE_SUFFIXES` in `tools/lint/repo_rules/common.py`, checked first in
+  `tools/lint/repo_rules/repository.py`): a file ending in `.so`, `.pyd`, `.pyc`, `.pyo` or `.fwork`, in any case and
+  with any ABI tag (`.cpython-312-x86_64-linux-gnu.so`, `.abi3.so`, `.cp312-win_amd64.pyd`), is refused anywhere in
+  the repository without being read. The import system loads an extension module or bytecode before, or instead of,
+  a `.py` source of the same name, so such a file would run code that no rule has seen. The suffixes cover every
+  entry of `importlib.machinery.EXTENSION_SUFFIXES` and `BYTECODE_SUFFIXES`, the Windows `.pyd` forms and the
+  `.fwork` files of the Apple framework loader, which a unit test checks against the running interpreter.
+  `make lint-repo` passes these suffixes to the guard with case-insensitive pathspecs, and the pre-commit hook matches
+  them as well; the existing `git ls-files` check for `__pycache__` and `.py[cod]` stays.
+- Package size: the test that keeps every guard module below 600 lines walks the package with `rglob`, so a module in
+  a subpackage is covered; a test shows it with a 601-line module in a subpackage.
+- Internal role variables, second read-back: a value supplied from outside a role is fixed for the run, so a forged
+  value equal to the sentinel string `__linux_compliance_unset__` passed the read-back of FREES-137. The generated
+  guard now resets the facts to a second sentinel, `__linux_compliance_unset_again__`, reads every fact and task
+  variable back again, and resets the facts to the first sentinel. A forged value cannot equal both, so the sentinel
+  string is refused by the second read-back, through `-e`, include parameters and the task variables alike.
+  Residual: an extra variable is templated, so an operator who writes a template for `-e` that evaluates differently
+  per task could still pass both; such an operator already controls the play.
+- Internal role variables, type checks: the key facts of each guarded role are checked for their type and shape in
+  the task right after the role sets them, so a replaced value is refused before it is used even if a read-back were
+  passed: remediate (toggle names, plan, results, the dispatched flag), audit (toggle names, toggle resolution, the
+  exceptions evaluation), verify (comparison, the dispatched flag) and evidence (output directory, bundle plan).
+  `tests/unit/roles/test_role_type_checks.py` fails when such a `set_fact` is not followed by its check.
+- Guarded roles: the evidence role names `__linux_compliance_evidence_*` variables, including the controller output
+  directory, but was not guarded. It is now in `GUARDED_ROLES`, and its entry points `main.yml` and `summary.yml`
+  import the generated guard. `tools/roles/generate_role_guards.py` fails when a role below `roles/` names an internal
+  variable of its own and is not guarded, and a unit test checks the same against the repository.

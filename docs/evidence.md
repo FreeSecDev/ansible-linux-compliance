@@ -90,6 +90,9 @@ All tasks except two run on the controller (`delegate_to: localhost`, `become: f
 and `ansible.builtin.fetch` reach the managed host, with `become: "{{ linux_compliance_evidence_become }}"`; neither
 changes it.
 
+0. Refuse internal `__linux_compliance_evidence_*` variables supplied from outside the role, such as a forged
+   output directory, with the generated `tasks/internal_variables.yml` (also the first task of `summary.yml`;
+   FREES-153).
 1. Validate the variables and check that `linux_compliance_audited` exists.
 2. Resolve the output directory (relative paths against the playbook directory) and require a normalised absolute path.
 3. Skip the host with a message when the audit wrote no evidence (`evidence_written: false`: check mode, or no scan).
