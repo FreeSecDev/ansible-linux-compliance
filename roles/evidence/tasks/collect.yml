@@ -5,6 +5,23 @@
       {{ linux_compliance_audited | freesecdev.linux_compliance.evidence_plan(
            inventory_hostname, linux_compliance_evidence_include_arf) }}
 
+- name: Evidence | Check the type and shape of the bundle plan
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_evidence_plan is mapping
+      - __linux_compliance_evidence_plan.directory is string
+      - __linux_compliance_evidence_plan.directories is sequence
+      - __linux_compliance_evidence_plan.directories is not string
+      - __linux_compliance_evidence_plan.directories is not mapping
+      - __linux_compliance_evidence_plan.fetch is sequence
+      - __linux_compliance_evidence_plan.fetch is not string
+      - __linux_compliance_evidence_plan.fetch is not mapping
+    fail_msg: >-
+      An internal fact of the evidence role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was collected.
+    quiet: true
+
 - name: Evidence | Name the directories of the bundle
   ansible.builtin.set_fact:
     __linux_compliance_evidence_host_dir: "{{ __linux_compliance_evidence_root }}/{{ inventory_hostname }}"

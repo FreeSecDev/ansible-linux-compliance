@@ -2,7 +2,7 @@
 
 A parameter named like a banned keyword (a test seam) must be keyword-only, and
 only the files in ``SEAM_OWNERS`` may define one, forward it unchanged and assign
-``self._<seam>`` in ``__init__``.
+``self._<seam>`` directly in ``__init__``, never from a function nested in it.
 """
 
 from __future__ import annotations
@@ -125,7 +125,8 @@ def seam_attribute_findings(node: ast.Attribute, scope: Scope) -> Iterable[str]:
     """Yield descriptions for a reserved seam attribute used outside its owner or set late.
 
     Another file may not name the attribute at all. The owner may read it, and may
-    store or delete it only on ``self`` inside ``__init__``.
+    store or delete it only on ``self`` directly in the body of ``__init__``: a
+    function or lambda nested in ``__init__`` could run later, so it may not (FREES-153).
     """
     if is_foreign_seam_attribute(node.attr, scope):
         yield f"the seam attribute {node.attr!r} is reserved for the file that defines the seam"
@@ -134,10 +135,12 @@ def seam_attribute_findings(node: ast.Attribute, scope: Scope) -> Iterable[str]:
         return
     target = node.value
     method = scope.own_method(target)
+    enclosing = next((item for item in scope.ancestors(node) if isinstance(item, CALLABLES)), None)
     if not (
         isinstance(target, ast.Name)
         and target.id == "self"
         and method is not None
         and method.name == INIT
+        and enclosing is method
     ):
         yield f"the seam attribute {node.attr!r} may only be assigned to self in __init__"

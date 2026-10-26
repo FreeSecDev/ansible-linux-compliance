@@ -1,0 +1,104 @@
+---
+- name: Disruptive rule in check mode | Without the allow-list the rule is skipped and reported
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - "{{ disruptive_rule }}"
+  tasks:
+    - name: Refuse to run outside check mode or outside make test-remediate-disruptive
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+          - disruptive_rule is defined
+          - disruptive_family is defined
+        fail_msg: >-
+          Run this playbook through make test-remediate-disruptive, which passes --check, the collection
+          copy with the promoted rule, disruptive_rule and disruptive_family. It must never change the host.
+        quiet: true
+
+    - name: Run the remediate role with the default toggles and the default allow-list
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+
+    - name: Check that the disruptive rule was skipped and reported with its reason
+      vars:
+        planned: >-
+          {{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', disruptive_rule) | list }}
+        notice: >-
+          {{ disruptive_rule }}: skipped, family {{ disruptive_family }} is disruptive and not named in
+          linux_compliance_remediate_allow_disruptive
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.allow_disruptive == []
+          - planned | length == 1
+          - planned[0].family == disruptive_family
+          - planned[0].action == 'skip'
+          - planned[0].reason == 'disruptive_not_allowed'
+          - planned[0].pending_cleanup is false
+          - linux_compliance_remediated.summary.skip == 1
+          - linux_compliance_remediated.summary.apply == 0
+          - linux_compliance_remediated.summary.cleanup == 0
+          - linux_compliance_remediated.results == []
+          - __linux_compliance_remediate_plan.families == []
+          - linux_compliance_remediated.notices | select('equalto', notice | trim) | list | length == 1
+          - linux_compliance_remediated.notices | select('search', 'is disruptive') | list | length == 1
+        quiet: true
+
+- name: Disruptive rule in check mode | With the allow-list the rule is planned and the role fails closed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - "{{ disruptive_family }}"
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - "{{ disruptive_rule }}"
+  tasks:
+    - name: Refuse to run outside check mode or outside make test-remediate-disruptive
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+          - disruptive_rule is defined
+          - disruptive_family is defined
+        fail_msg: >-
+          Run this playbook through make test-remediate-disruptive, which passes --check, the collection
+          copy with the promoted rule, disruptive_rule and disruptive_family. It must never change the host.
+        quiet: true
+
+    - name: Run the remediate role with the family of the rule on the allow-list
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because a family without a task file was reported as remediated
+          ansible.builtin.fail:
+            msg: REMEDIATE-DISRUPTIVE-OPT-IN-NOT-FAILED-CLOSED
+      rescue:
+        - name: Check that the rule was planned for apply and that nothing ran for its family
+          vars:
+            planned: >-
+              {{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', disruptive_rule) | list }}
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Remediate | Check that every planned rule has exactly one result'
+              - linux_compliance_remediated.allow_disruptive == [disruptive_family]
+              - planned | length == 1
+              - planned[0].action == 'apply'
+              - planned[0].reason == 'enabled'
+              - linux_compliance_remediated.summary.skip == 0
+              - linux_compliance_remediated.summary.apply == 1
+              - __linux_compliance_remediate_plan.families | map(attribute='name') | list == [disruptive_family]
+              - linux_compliance_remediated.results == []
+              - linux_compliance_remediated.notices | select('search', 'is disruptive') | list == []
+            quiet: true

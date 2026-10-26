@@ -8,6 +8,9 @@ from typing import Final
 
 YAML_SUFFIXES: Final[frozenset[str]] = frozenset({".yml", ".yaml"})
 PYTHON_SUFFIXES: Final[frozenset[str]] = frozenset({".py"})
+COMPILED_MODULE_SUFFIXES: Final[frozenset[str]] = frozenset(
+    {".so", ".pyd", ".pyc", ".pyo", ".fwork"}
+)
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 PLUGINS_DIRECTORY: Final[str] = "plugins"
 

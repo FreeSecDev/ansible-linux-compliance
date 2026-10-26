@@ -262,6 +262,38 @@ SEAM_ATTRIBUTE_CHANGES = {
         ),
         LATE.format("_owner_uid"),
     ),
+    "nested-function-in-init": (
+        (
+            "class A:\n"
+            "    def __init__(self, *, owner_uid=0):\n"
+            "        def later():\n"
+            "            self._owner_uid = 1000\n"
+            "        self.later = later\n"
+        ),
+        LATE.format("_owner_uid"),
+    ),
+    "nested-async-function-in-init": (
+        (
+            "class A:\n"
+            "    def __init__(self, *, clock=None):\n"
+            "        async def later():\n"
+            "            self._clock = None\n"
+            "        self.later = later\n"
+        ),
+        LATE.format("_clock"),
+    ),
+    "deeply-nested-delete-in-init": (
+        (
+            "class A:\n"
+            "    def __init__(self, *, registry=None):\n"
+            "        def outer():\n"
+            "            def inner():\n"
+            "                del self._registry\n"
+            "            return inner\n"
+            "        self.outer = outer\n"
+        ),
+        LATE.format("_registry"),
+    ),
     "setattr": (
         "class A:\n    def weaken(self):\n        setattr(self, '_owner_uid', 1000)\n",
         DYNAMIC.format("_owner_uid", "setattr"),
@@ -373,6 +405,19 @@ def test_a_seam_attribute_is_reserved_for_its_owner(
     tmp_path: Path, name: str, source: str, message: str
 ) -> None:
     assert message in process_messages(tmp_path, source, name)
+
+
+def test_an_owner_stores_its_seam_directly_in_init(tmp_path: Path) -> None:
+    source = (
+        "class A:\n"
+        "    def __init__(self, *, owner_uid=0, clock=None):\n"
+        "        if clock is None:\n"
+        "            self._clock = clock\n"
+        "        with open('x') as handle:\n"
+        "            self._owner_uid = owner_uid\n"
+        "        self.items = [handle for _ in ()]\n"
+    )
+    assert process_messages(tmp_path, source, AUDIT) == []
 
 
 def test_other_private_attributes_keep_their_rules(tmp_path: Path) -> None:

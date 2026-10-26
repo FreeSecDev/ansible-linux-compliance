@@ -15,6 +15,7 @@ from tools.roles import generate_toggles
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 SENTINEL = "__linux_compliance_unset__"
+SECOND_SENTINEL = "__linux_compliance_unset_again__"
 
 
 def copy_roles(root: Path) -> Path:
@@ -42,6 +43,7 @@ def test_the_repository_files_are_up_to_date() -> None:
     assert set(generated) == {
         gen.DISPATCH,
         Path("roles/audit/tasks/internal_variables.yml"),
+        Path("roles/evidence/tasks/internal_variables.yml"),
         Path("roles/remediate/tasks/internal_variables.yml"),
         Path("roles/verify/tasks/internal_variables.yml"),
     }
@@ -249,11 +251,28 @@ def test_the_guard_resets_facts_and_shadows_task_variables() -> None:
         {"__linux_compliance_remediate_constant": "(x)['y']"},
     )
     text = gen.guard("remediate", found)
-    reset, refuse = load(text)
+    reset, refuse, second_reset, second_refuse, final_reset = load(text)
     assert reset["ansible.builtin.set_fact"] == {
         "__linux_compliance_remediate_a": SENTINEL,
         "__linux_compliance_remediate_b": SENTINEL,
     }
+    assert second_reset["ansible.builtin.set_fact"] == {
+        "__linux_compliance_remediate_a": SECOND_SENTINEL,
+        "__linux_compliance_remediate_b": SECOND_SENTINEL,
+    }
+    assert final_reset["ansible.builtin.set_fact"] == reset["ansible.builtin.set_fact"]
+    second = cast("dict[str, object]", second_refuse["ansible.builtin.assert"])
+    assert second["that"] == [
+        f"__linux_compliance_remediate_a == '{SECOND_SENTINEL}'",
+        f"__linux_compliance_remediate_b == '{SECOND_SENTINEL}'",
+        f"__linux_compliance_remediate_local == '{SECOND_SENTINEL}'",
+    ]
+    assert second_refuse["vars"] == {"__linux_compliance_remediate_local": SECOND_SENTINEL}
+    assert str(second_refuse["name"]).startswith(str(refuse["name"]))
+    assert (
+        second["fail_msg"]
+        == cast("dict[str, object]", refuse["ansible.builtin.assert"])["fail_msg"]
+    )
     assertion = cast("dict[str, object]", refuse["ansible.builtin.assert"])
     assert assertion["that"] == [
         f"__linux_compliance_remediate_a == '{SENTINEL}'",
@@ -267,7 +286,82 @@ def test_the_guard_resets_facts_and_shadows_task_variables() -> None:
     assert refuse["vars"] == {"__linux_compliance_remediate_local": SENTINEL}
     assert "set from outside the role" in str(assertion["fail_msg"])
     assert all(len(line) <= generate_toggles.MAX_LINE for line in text.splitlines())
-    assert reset["tags"] == refuse["tags"] == ["always"]
+    assert all(task["tags"] == ["always"] for task in load(text))
+
+
+def test_a_value_supplied_from_outside_cannot_equal_both_sentinels() -> None:
+    assert SENTINEL != SECOND_SENTINEL
+    assert gen.SENTINEL == SENTINEL
+    assert gen.SECOND_SENTINEL == SECOND_SENTINEL
+    for relative in gen.outputs(REPOSITORY_ROOT):
+        if relative.name != gen.GUARD_FILE:
+            continue
+        role = relative.parts[1]
+        found = gen.role_variables(REPOSITORY_ROOT / "roles" / role, {})
+        tasks = load((REPOSITORY_ROOT / relative).read_text(encoding="utf-8"))
+        checks = [
+            cast("list[str]", cast("dict[str, object]", task["ansible.builtin.assert"])["that"])
+            for task in tasks
+            if "ansible.builtin.assert" in task
+        ]
+        assert len(checks) == 2, role
+        for name in [*found.facts, *found.locals]:
+            assert f"{name} == '{SENTINEL}'" in checks[0], name
+            assert f"{name} == '{SECOND_SENTINEL}'" in checks[1], name
+        resets = [task["ansible.builtin.set_fact"] for task in tasks if gen.SET_FACT in task]
+        assert resets[-1] == dict.fromkeys(sorted(found.facts), SENTINEL), role
+
+
+def test_a_guard_with_only_task_variables_reads_back_twice_without_a_reset() -> None:
+    found = gen.RoleVariables(set(), {"__linux_compliance_verify_local"}, {})
+    first, second = load(gen.guard("verify", found))
+    assert first["vars"] == {"__linux_compliance_verify_local": SENTINEL}
+    assert second["vars"] == {"__linux_compliance_verify_local": SECOND_SENTINEL}
+    assert cast("dict[str, list[str]]", second["ansible.builtin.assert"])["that"] == [
+        f"__linux_compliance_verify_local == '{SECOND_SENTINEL}'"
+    ]
+
+
+def test_every_role_with_internal_variables_is_guarded() -> None:
+    roles = gen.internal_variable_roles(REPOSITORY_ROOT / "roles")
+    assert roles == {"audit", "evidence", "remediate", "verify"}
+    assert roles <= set(gen.GUARDED_ROLES)
+    for role in gen.GUARDED_ROLES:
+        first = load((REPOSITORY_ROOT / "roles" / role / "tasks" / "main.yml").read_text())[0]
+        assert "internal_variables.yml" in str(
+            first.get("ansible.builtin.import_tasks", first.get("ansible.builtin.include_tasks"))
+        ), role
+    summary = load((REPOSITORY_ROOT / "roles/evidence/tasks/summary.yml").read_text())[0]
+    assert summary["ansible.builtin.import_tasks"] == gen.GUARD_FILE
+
+
+def test_internal_variables_are_found_in_every_file_of_a_role(tmp_path: Path) -> None:
+    roles = tmp_path / "roles"
+    for role, relative, text in (
+        ("plain", "tasks/main.yml", "---\n- ansible.builtin.debug: {msg: '{{ linux_x }}'}\n"),
+        (
+            "other",
+            "tasks/main.yml",
+            "---\n- ansible.builtin.debug: {msg: '{{ __linux_compliance_plain_x }}'}\n",
+        ),
+        ("defaults_only", "defaults/main.yml", "---\n__linux_compliance_defaults_only_x: 1\n"),
+        ("templated", "templates/a.j2", "{{ __linux_compliance_templated_y }}\n"),
+    ):
+        (roles / role / relative).parent.mkdir(parents=True, exist_ok=True)
+        (roles / role / relative).write_text(text, encoding="utf-8")
+    (roles / "binary" / "files").mkdir(parents=True)
+    (roles / "binary" / "files" / "blob").write_bytes(b"\xff\xfe__linux_compliance_binary_z")
+    (roles / "README.md").write_text("__linux_compliance_README_x\n", encoding="utf-8")
+    assert gen.internal_variable_roles(roles) == {"binary", "defaults_only", "templated"}
+
+
+def test_a_role_with_internal_variables_but_no_guard_is_an_error(tmp_path: Path) -> None:
+    root = copy_roles(tmp_path)
+    make_role(
+        root, {"main.yml": "---\n- ansible.builtin.set_fact:\n    __linux_compliance_demo_x: 1\n"}
+    )
+    with pytest.raises(gen.GenerationError, match="internal variables but no guard: demo;"):
+        gen.outputs(root)
 
 
 def test_a_guard_without_facts_or_task_variables_has_only_the_assertion() -> None:

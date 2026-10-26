@@ -130,6 +130,7 @@ SHELL_SCRIPTS := build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/bro
 	tools/lint/fetch-hadolint.sh tools/scc/fetch-scc.sh tools/scc/smoke-test.sh tools/scc/check-expiry.sh \
 	tools/scc/needs-smoke.sh
 
+COMPILED_MODULE_PATHSPECS := ':(icase)*.so' ':(icase)*.pyd' ':(icase)*.pyc' ':(icase)*.pyo' ':(icase)*.fwork'
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
 PYLINT_MODULE_DIRECTORIES := plugins/modules
 PYLINT_MODULE_IGNORES := $(subst $(space),|,$(patsubst %,^%/,$(PYLINT_MODULE_DIRECTORIES)))
@@ -191,6 +192,7 @@ Tests
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
+  test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check)
   test-role-guards      Check in check mode that forged internal role variables are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
@@ -231,7 +233,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards content catalogue lint-python lint-yaml lint-actions \
-	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
+	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -313,7 +315,7 @@ lint-containerfile:
 
 lint-repo: require-uv
 	@if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$$'; then printf 'error: compiled Python files are tracked\n' >&2; exit 1; fi
-	$(TRACKED) -- '*.yml' '*.yaml' '*.py' | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py
+	$(TRACKED) -- '*.yml' '*.yaml' '*.py' $(COMPILED_MODULE_PATHSPECS) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py
 
 lint-skills: require-uv
 	$(RUN) python tools/skills/validate_skills.py
@@ -462,7 +464,23 @@ test-evidence: require-uv collection-link
 
 REMEDIATE_CHECK = $(RUN) ansible-playbook -i localhost, --check
 
-test-remediate-check: require-uv collection-link
+REMEDIATE_DISRUPTIVE_DIR := build/test-remediate-disruptive
+REMEDIATE_DISRUPTIVE_TREE := $(REMEDIATE_DISRUPTIVE_DIR)/collections/$(COLLECTION_PATH)
+REMEDIATE_DISRUPTIVE_RULE := xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+REMEDIATE_DISRUPTIVE_FAMILY := ssh
+
+test-remediate-disruptive: ANSIBLE_COLLECTIONS_PATH = $(CURDIR)/$(REMEDIATE_DISRUPTIVE_DIR)/collections
+test-remediate-disruptive: require-uv collection-link
+	rm -rf '$(REMEDIATE_DISRUPTIVE_DIR)'
+	mkdir -p '$(REMEDIATE_DISRUPTIVE_TREE)'
+	cp -R roles '$(REMEDIATE_DISRUPTIVE_TREE)/roles'
+	ln -s '$(CURDIR)/plugins' '$(REMEDIATE_DISRUPTIVE_TREE)/plugins'
+	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.promote_native_rule \
+		--catalogue '$(REMEDIATE_DISRUPTIVE_TREE)/roles/remediate/vars/rules.yml' --rule '$(REMEDIATE_DISRUPTIVE_RULE)'
+	$(REMEDIATE_CHECK) -e disruptive_rule='$(REMEDIATE_DISRUPTIVE_RULE)' -e disruptive_family='$(REMEDIATE_DISRUPTIVE_FAMILY)' \
+		tests/playbooks/remediate-disruptive.yml
+
+test-remediate-check: require-uv collection-link test-remediate-disruptive
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
@@ -471,6 +489,8 @@ ROLE_GUARDS_DIR := build/test-role-guards
 ROLE_GUARDS_FORGED_PLAN := {"__linux_compliance_remediate_plan": {"enabled": true, "errors": [], \
 	"families": [{"name": "../../../../tmp/forged", "disruptive": false, "apply": [], "cleanup": []}]}}
 ROLE_GUARDS_FORGED_FAMILY := {"__linux_compliance_remediate_family": {"name": "../../../../tmp/forged"}}
+ROLE_GUARDS_SENTINEL_PLAN := {"__linux_compliance_remediate_plan": "__linux_compliance_unset__"}
+ROLE_GUARDS_SENTINEL_FAMILY := {"__linux_compliance_remediate_family": "__linux_compliance_unset__"}
 
 ROLE_GUARDS_REFUSALS := is set from outside the role|Validation of arguments failed
 
@@ -491,6 +511,10 @@ test-role-guards: require-uv collection-link
 	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_FORGED_PLAN)' -e internal_forged_variable=__linux_compliance_remediate_plan \
 		tests/playbooks/internal-variables-extra.yml
 	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_FORGED_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
+		tests/playbooks/internal-variables-extra.yml
+	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_SENTINEL_PLAN)' -e internal_forged_variable=__linux_compliance_remediate_plan \
+		tests/playbooks/internal-variables-extra.yml
+	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_SENTINEL_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
 		tests/playbooks/internal-variables-extra.yml
 	$(call role_guards_expect_refusal,forged_plan)
 	$(call role_guards_expect_refusal,forged_family)

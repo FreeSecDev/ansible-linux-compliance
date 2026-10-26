@@ -10,6 +10,19 @@
   tags:
     - linux_compliance_verify_guard
 
+- name: Verify | Check that the guard is armed with the boolean false
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_dispatched is boolean
+      - __linux_compliance_verify_dispatched is false
+    fail_msg: >-
+      An internal fact of the verify role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was compared.
+    quiet: true
+  tags:
+    - linux_compliance_verify_guard
+
 - name: Verify | Validate inputs
   ansible.builtin.assert:
     that:
@@ -98,6 +111,27 @@
          | freesecdev.linux_compliance.compare_scans(
              linux_compliance_audited, linux_compliance_verify_mode,
              'xccdf_org.ssgproject.content_profile_' ~ linux_compliance_verify_profile) }}
+  tags:
+    - always
+
+- name: Verify | Check the type and shape of the comparison
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_comparison is mapping
+      - __linux_compliance_verify_comparison.complete is boolean
+      - >-
+        __linux_compliance_verify_comparison.regression_detected is boolean
+        or (__linux_compliance_verify_comparison.regression_detected is none
+            and not __linux_compliance_verify_comparison.complete)
+      - >-
+        __linux_compliance_verify_comparison.new_failure_detected is boolean
+        or (__linux_compliance_verify_comparison.new_failure_detected is none
+            and not __linux_compliance_verify_comparison.complete)
+    fail_msg: >-
+      An internal fact of the verify role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was compared.
+    quiet: true
   tags:
     - always
 
@@ -222,6 +256,7 @@
 - name: Verify | Fail when the always-tagged tasks were skipped
   ansible.builtin.assert:
     that:
+      - __linux_compliance_verify_dispatched is boolean
       - __linux_compliance_verify_dispatched
     fail_msg: >-
       The verify role did not compare anything because its tasks tagged always were skipped

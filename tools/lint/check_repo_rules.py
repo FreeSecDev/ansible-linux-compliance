@@ -2,6 +2,9 @@
 
 Rules:
 
+* No compiled module file (``.so``, ``.pyd``, ``.pyc``, ``.pyo``, ``.fwork``, in any
+  case) is tracked: the import system loads an extension module or bytecode before, or
+  instead of, a ``.py`` source of the same name (FREES-153).
 * Every YAML file starts with ``---`` followed by a newline.
 * YAML files contain no comments, except a trailing ``# vX.Y.Z`` version
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
@@ -68,7 +71,8 @@ Rules:
   A parameter named like a banned keyword (a test seam) must be keyword-only, and only the files
   in ``SEAM_OWNERS`` may define one. They may pass their own seams on unchanged, as ``name=name``
   from a keyword-only parameter of the enclosing function or as ``name=self._name`` in a class whose
-  ``__init__`` takes the seam, and may assign ``self._name`` only in ``__init__`` (FREES-137).
+  ``__init__`` takes the seam, and may assign ``self._name`` only directly in ``__init__``,
+  never from a function nested in it (FREES-137, FREES-153).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
 """
@@ -84,7 +88,12 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.lint.repo_rules.ansible_tasks import TASK_FILE_SUFFIXES, check_banned_modules
-from tools.lint.repo_rules.common import PLUGINS_DIRECTORY, REPO_ROOT, Violation
+from tools.lint.repo_rules.common import (
+    COMPILED_MODULE_SUFFIXES,
+    PLUGINS_DIRECTORY,
+    REPO_ROOT,
+    Violation,
+)
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
 from tools.lint.repo_rules.names import (
     ALLOWED_IMPORTS,
@@ -123,6 +132,7 @@ __all__ = [
     "BANNED_KEYWORDS",
     "BANNED_MODULE_ATTRIBUTES",
     "COLLECTION_MODULE_ATTRIBUTES",
+    "COMPILED_MODULE_SUFFIXES",
     "DUNDER_READS",
     "EXTRA_IMPORTS",
     "FILE_IO_ATTRIBUTES",

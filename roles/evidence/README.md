@@ -31,6 +31,8 @@ are intentions, not tested support. Bundles are not signed;
 
 ## Order
 
+0. Refuse internal `__linux_compliance_evidence_*` variables supplied from outside the role (the generated
+   `tasks/internal_variables.yml`, also the first task of `summary.yml`; FREES-153).
 1. Validate the inputs and check that `linux_compliance_audited` exists.
 2. Resolve `linux_compliance_evidence_output_dir` and require a normalised absolute path.
 3. Skip the host when the audit wrote no evidence; in check mode print the planned bundle and write nothing.

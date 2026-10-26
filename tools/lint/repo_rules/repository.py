@@ -7,7 +7,13 @@ import tokenize
 from typing import TYPE_CHECKING
 
 from tools.lint.repo_rules.ansible_tasks import check_banned_modules
-from tools.lint.repo_rules.common import PYTHON_SUFFIXES, REPO_ROOT, YAML_SUFFIXES, Violation
+from tools.lint.repo_rules.common import (
+    COMPILED_MODULE_SUFFIXES,
+    PYTHON_SUFFIXES,
+    REPO_ROOT,
+    YAML_SUFFIXES,
+    Violation,
+)
 from tools.lint.repo_rules.imports import file_io_import_findings
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
 from tools.lint.repo_rules.names import FILE_IO_IMPORTERS, SHEBANG_PREFIX
@@ -35,8 +41,22 @@ def check_python_comments(path: Path, data: bytes) -> list[Violation]:
 
 
 def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
-    """Apply every rule that matches the suffix and location of ``path``."""
+    """Apply every rule that matches the suffix and location of ``path``.
+
+    A compiled module (an extension module or bytecode) is refused wherever it is,
+    without being read: the import system loads it before, or instead of, a ``.py``
+    source of the same name, so it would run code that no rule has seen (FREES-153).
+    """
     suffix = path.suffix.lower()
+    if suffix in COMPILED_MODULE_SUFFIXES:
+        return [
+            Violation(
+                path,
+                1,
+                f"compiled module file ({suffix}) is not allowed: the import system loads it "
+                "before or instead of the Python source",
+            )
+        ]
     if suffix not in YAML_SUFFIXES | PYTHON_SUFFIXES:
         return []
     try:

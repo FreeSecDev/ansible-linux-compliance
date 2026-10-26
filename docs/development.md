@@ -64,14 +64,14 @@ overriding them.
 | `lint-ansible` | implemented | `molecule-dependencies`, then `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-toggles` | implemented | `tools/roles/generate_toggles.py --check`: fails with a diff when the generated toggle defaults, argument specs or `docs/remediation-variables.md` differ from the rule catalogue ([remediation guide](remediation.md#generated-toggles)) |
 | `toggles` | implemented | Regenerates the topic toggle defaults, the topic toggle argument specs and the allow-list choices of the `remediate` and `audit` roles and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
-| `lint-role-guards` | implemented | `tools/roles/generate_role_guards.py --check`: fails with a diff when `roles/remediate/tasks/dispatch.yml` or a `tasks/internal_variables.yml` of the audit, remediate or verify role differs from what the family registry and the role files give (FREES-137) |
-| `role-guards` | implemented | Regenerates the static family dispatch of the remediate role, with one include per family that has a native rule, and the internal-variable guards of the audit, remediate and verify roles |
+| `lint-role-guards` | implemented | `tools/roles/generate_role_guards.py --check`: fails with a diff when `roles/remediate/tasks/dispatch.yml` or a `tasks/internal_variables.yml` of the audit, evidence, remediate or verify role differs from what the family registry and the role files give, or a role with internal variables is not guarded (FREES-137, FREES-153) |
+| `role-guards` | implemented | Regenerates the static family dispatch of the remediate role, with one include per family that has a native rule, and the internal-variable guards of the audit, evidence, remediate and verify roles |
 | `content` | implemented | `tools/content/fetch_content.py --output-dir build/content`: fetches the pinned release archive and extracts the verified datastreams |
 | `catalogue` | implemented | `tools/roles/generate_catalogue.py`, then `toggles` and `role-guards`: regenerates `roles/remediate/vars/rules.yml` and `docs/control-families.md` from the datastreams in `build/content` and the family mapping `content/catalogue.yml` (run `make content` first) |
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |
-| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on tracked and new YAML and Python files |
+| `lint-repo` | implemented | `tools/lint/check_repo_rules.py` on tracked and new YAML and Python files and on compiled module files (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`, any case), which it refuses |
 | `lint-skills` | implemented | `tools/skills/validate_skills.py` |
 | `security` | implemented | Bandit (`tools`, `plugins`), Checkov on `infra/`, gitleaks history scan, zizmor (pedantic persona) |
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
@@ -92,11 +92,12 @@ overriding them.
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
 | `collection-link` | implemented | Links `plugins/` and `roles/` into `build/collections` for pytest, the type checkers, ansible-lint and `test-remediate-check` |
 | `ansible-home` | implemented | Creates `ANSIBLE_HOME` and `ANSIBLE_TEST_HOME` ([per-checkout Ansible home](#per-checkout-ansible-home)); a prerequisite of `collection-link` and `collection-tree` |
-| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become`; the toggle plays also run the audit role's toggle resolution ([remediation guide](remediation.md#testing)) |
+| `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become`; the toggle plays also run the audit role's toggle resolution ([remediation guide](remediation.md#testing)). Runs `test-remediate-disruptive` first |
+| `test-remediate-disruptive` | implemented | Copies the collection into `build/test-remediate-disruptive`, promotes the `ssh` rule `sshd_disable_root_login` to a native rule there with `tools/roles/promote_native_rule.py`, and runs `tests/playbooks/remediate-disruptive.yml` against the copy in check mode: the rule is skipped as `disruptive_not_allowed` without the allow-list and planned for apply, failing closed, with it (FREES-153) |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches, coverage output and `build/`, including the per-checkout Ansible home |
-| `test-role-guards` | implemented | Runs `tests/playbooks/internal-variables-include.yml`, `internal-variables-extra.yml` (twice, with a forged plan and a forged family as extra variables) and `internal-variables-role-param.yml` (per host) against localhost with `--check`, and fails unless every forged internal role variable is refused before the remediate role reads the ledger |
-| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check` |
+| `test-role-guards` | implemented | Runs `tests/playbooks/internal-variables-include.yml`, `internal-variables-extra.yml` (four times: a forged plan and a forged family, and both forged as the sentinel string, as extra variables) and `internal-variables-role-param.yml` (per host) against localhost with `--check`, and fails unless every forged internal role variable is refused before the remediate role reads the ledger |
+| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-evidence test-remediate-check` (with `test-remediate-disruptive`) `test-role-guards test-verify security docs test-sanity test-ansible-units package-check` |
 | `test-evidence` | implemented | Runs the evidence role against local inventory hosts with synthetic audit results and fixture files: bundle content, provenance, permissions, planted secrets, carried target facts and SCE output, a refused second collection, and fail-closed checksum, path, host-symlink and exceptions-file mismatches; reports on the bundles with `--exceptions-file`, refuses them without it or with another file, and rejects a tampered copy; then runs the plays of `playbooks/evidence.yml` with the gate on and checks that failing and incomplete hosts are collected, missing hosts are named and the play still fails; and checks that no variable route (`-e`, `group_vars`, `host_vars`, include or role import parameters) defers the audit gate ([evidence bundles](evidence.md#tests)) |
 | `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with the per-checkout `ANSIBLE_HOME`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play. The `free` case runs `AUDIT_EXCEPTIONS_FREE_RUNS` times (default 10), and each time every host must have been refused or must have applied exactly the validated SHA-256 (FREES-143, [audit guide](audit.md#tests)) |
 | `test-verify` | implemented | Runs the verify role (`baseline.yml` and `main`) on the local inventory host `web01` with synthetic baseline and later audits, without `oscap`, with the per-checkout `ANSIBLE_HOME`; requires the printed regression and applicability warnings, then that baselines not recorded by `baseline.yml` (extra, play, host and inventory variables, a pre-set marker, none at all) are refused and that `--skip-tags always` fails the role ([verify guide](verify.md#tests)) |
@@ -277,11 +278,16 @@ which holds one module per rule group; the name sets and allow-lists live in `to
     dispatches with one static include per catalogued family in `roles/remediate/tasks/dispatch.yml`, which
     `make role-guards` generates from the family registry and `make lint-role-guards` checks for drift. A test
     playbook that chose a helper by template now uses one static include per helper with `when`.
-  - Every entry point of the audit, remediate and verify roles starts with the generated
+  - Every entry point of the audit, evidence, remediate and verify roles starts with the generated
     `tasks/internal_variables.yml`, which refuses an internal `__linux_compliance_<role>_*` variable supplied from
     outside the role (a role parameter, an include parameter, an extra variable, or a play `set_fact` of a constant
-    the role loads). Regenerate it with `make role-guards` after adding an internal variable; the generator fails on a
-    variable it cannot classify. `make test-role-guards` checks the refusals in check mode.
+    the role loads). It reads every fact and task variable back with two different sentinels, so a value forged
+    as the sentinel string is refused too, and the key facts are type-checked right after the role sets them
+    (FREES-153). Regenerate it with `make role-guards` after adding an internal variable; the generator fails on a
+    variable it cannot classify and on a role with internal variables that is not in `GUARDED_ROLES`.
+    `make test-role-guards` checks the refusals in check mode.
+  - Seam owners store their seam attributes directly in `__init__`, never from a function nested in it, and no
+    compiled module file (`.so`, `.pyd`, `.pyc`, `.pyo`, `.fwork`) may be tracked (FREES-153).
   - A repository test fails when a symlink below the repository points outside it or is a symlinked directory other
     than `.claude/skills`, because the guard does not scan through a symlinked directory.
   - Role names of `include_role` and `import_role` (mapping and free-form `name=`) and of the `roles` of a play

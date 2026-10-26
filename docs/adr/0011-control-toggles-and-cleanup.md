@@ -133,7 +133,7 @@ diff and error unless `get` or `list` is called with `reveal_sensitive` (the tas
 The repository guard allows only `os.path` and bans `fcntl`, `errno` and `time` in `plugins/`. Safe state files need
 `os.open` with `O_NOFOLLOW`, directory-relative operations, `fsync`, `rename`, `fchmod` and `flock`, so, as for
 `process.py` (ADR 0004), exactly one file gets a narrow exemption: `plugins/module_utils/compliance/fileio.py`
-(`FILE_IO_HELPER` in `tools/lint/check_repo_rules.py`).
+(`FILE_IO_HELPER` in `tools/lint/repo_rules/names.py`).
 
 - In that file only, `import os`, `import fcntl`, `import errno` and `import time` are allowed, and each may be used only
   as `module.attribute` with an attribute from `FILE_IO_ATTRIBUTES`: `os` (`O_RDONLY`, `O_WRONLY`, `O_CREAT`, `O_EXCL`,
@@ -442,3 +442,16 @@ how many have a native remediation. These refinements apply.
   `not_implemented`. The `oscap-integration` job audits the runner with the Ubuntu 24.04 `cis_level2_server` profile,
   `linux_compliance_auditd_enabled: false` and the crontab rule toggle off, and checks that every auditd rule of the
   profile and the crontab rule come back `disabled` with the counts of the catalogue. Molecule scenarios remain FREES-60.
+
+## Amendment 2026-10-26: disruptive skip end to end (FREES-153)
+
+The FREES-52 check-mode play that showed a disruptive rule skipped without the allow-list set a synthetic catalogue,
+which the internal-variable guard of FREES-137 refuses. With the FREES-53 catalogue every rule of a disruptive family
+is `audit_only`, and the plan decides `audit_only` before the allow-list, as this ADR records, so the pinned catalogue
+alone cannot show the gate. `make test-remediate-disruptive` (run by `make test-remediate-check`) copies the
+collection into `build/test-remediate-disruptive/`, promotes the catalogued `ssh` rule `sshd_disable_root_login` to a
+native rule in the copy with `tools/roles/promote_native_rule.py` (which refuses to rewrite the repository catalogue),
+and runs the real remediate role against the copy in check mode. With the default toggles and allow-list the rule is
+`skip` with the reason `disruptive_not_allowed` and one notice, and no family is dispatched. With `ssh` on the
+allow-list the rule is planned for `apply`; the copy has no `ssh` task file, so the role fails closed at the
+completeness check and nothing runs for the family. The precedence of `audit_only` over the allow-list is unchanged.
