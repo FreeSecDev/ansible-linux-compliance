@@ -416,6 +416,7 @@ how many have a native remediation. These refinements apply.
   344 KB catalogue) it took 10.1 to 10.8 s: role argument validation 0.75 to 0.8 s per remediate run, catalogue loading
   0.5 to 0.7 s per load, and plan resolution 0.8 to 1.1 s, mostly templating the 1203 defaults. Without the rule toggle
   declarations it took 5.1 s, and with the compact catalogue as well 3.1 s, where no task of the roles exceeds 0.25 s.
+  After the internal-variable guards of FREES-137, the same playbook takes 2.26 s on `main` and 3.2 s with this change.
   Only the topic toggles are therefore role defaults and argument specification options. A rule toggle that is not set
   follows its family toggle in `toggles.resolve_toggle`, exactly as its former default did, so the resolution order and
   `disabled_by` are unchanged; a rule toggle that is set is validated by both roles before anything is scanned or
