@@ -215,13 +215,15 @@ def test_an_umbrella_that_excludes_nothing_warns_once_naming_its_families() -> N
 
 
 def test_an_umbrella_that_excludes_a_rule_of_one_family_does_not_warn() -> None:
-    loaded, _ = load({SERVICES: False})
+    loaded, errors = load({SERVICES: False})
+    assert errors == []
     assert toggles.topic_warnings(loaded, frozenset({CHRONY})) == []
     assert toggles.topic_warnings(loaded, None) == []
 
 
 def test_a_heading_family_warns_only_when_none_of_its_families_has_a_rule() -> None:
-    loaded, _ = load({PAM: False})
+    loaded, errors = load({PAM: False})
+    assert errors == []
     assert toggles.topic_warnings(loaded, frozenset({PWQUALITY})) == []
     assert toggles.topic_warnings(loaded, frozenset({CRONTAB})) == [
         (
