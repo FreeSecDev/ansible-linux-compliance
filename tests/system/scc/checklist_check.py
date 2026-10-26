@@ -58,6 +58,18 @@ def _vulns(ckl: bytes) -> list[dict[str, str]]:
     ]
 
 
+def mismatches(run: model.ScanRun, ckl: dict[str, str], cklb: dict[str, str]) -> list[str]:
+    """Return the rules whose CKL or CKLB status is not the one ADR 0020 gives their finding."""
+    found: list[str] = []
+    for finding in run.findings:
+        matched = RULE.fullmatch(finding.rule_id)
+        reference = matched.group(1) if matched else finding.rule_id
+        expected = expected_status(run, finding)
+        if ckl.get(reference) != expected or cklb.get(reference) != CKLB_NAMES[expected]:
+            found.append(reference)
+    return found
+
+
 def check(directory: Path, scan_run: Path) -> dict[str, object]:
     """Return the counts and mismatches of the checklists in ``directory``."""
     ckl_files = sorted(directory.glob("*.ckl"))
@@ -72,13 +84,6 @@ def check(directory: Path, scan_run: Path) -> dict[str, object]:
     ckl = checklist_formats.read_ckl(ckl_files[0].read_bytes())
     cklb = checklist_formats.read_cklb(cklb_files[0].read_bytes())
     run = model.loads(scan_run.read_text(encoding="utf-8"))
-    mismatches: list[str] = []
-    for finding in run.findings:
-        matched = RULE.fullmatch(finding.rule_id)
-        reference = matched.group(1) if matched else finding.rule_id
-        expected = expected_status(run, finding)
-        if ckl.get(reference) != expected or cklb.get(reference) != CKLB_NAMES[expected]:
-            mismatches.append(reference)
     vulns = _vulns(ckl_files[0].read_bytes())
     counts: dict[str, int] = {}
     for status in ckl.values():
@@ -90,7 +95,7 @@ def check(directory: Path, scan_run: Path) -> dict[str, object]:
             "findings": len(run.findings),
             "statuses": counts,
             "ckl": ckl,
-            "mismatches": mismatches,
+            "mismatches": mismatches(run, ckl, cklb),
             "vuln_numbers": sum(1 for vuln in vulns if VULN_NUMBER.fullmatch(vuln["Vuln_Num"])),
             "titled": sum(1 for vuln in vulns if vuln["Rule_Title"] and vuln["Rule_Ver"]),
             "with_cci": sum(1 for vuln in vulns if vuln.get("CCI_REF", "").startswith("CCI-")),
