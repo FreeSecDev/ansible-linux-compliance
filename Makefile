@@ -18,9 +18,11 @@ export ANSIBLE_HOME ANSIBLE_COLLECTIONS_PATH
 MOLECULE_DOCKER_SCENARIOS := docker-ubuntu docker-rhel-compatible
 MOLECULE_DOCKER_SELFTEST ?= true
 MOLECULE_SELFTEST_DIR := $(CURDIR)/build/molecule-selftest
-MOLECULE_SELFTEST = MOLECULE_SCENARIO_NAME=docker-selftest $(RUN) ansible-playbook \
-	-e molecule_instance_config='$(MOLECULE_SELFTEST_DIR)/instance_config.yml' -e molecule_no_log=false \
+MOLECULE_SELFTEST_CONFIG := $(MOLECULE_SELFTEST_DIR)/instance_config.yml
+MOLECULE_SELFTEST_PLAYBOOK = MOLECULE_SCENARIO_NAME=docker-selftest $(RUN) ansible-playbook -e molecule_no_log=false \
 	-e molecule_selftest_dir='$(MOLECULE_SELFTEST_DIR)' -e @extensions/molecule/selftest/vars/platforms.yml
+MOLECULE_SELFTEST = MOLECULE_INSTANCE_CONFIG='$(MOLECULE_SELFTEST_CONFIG)' $(MOLECULE_SELFTEST_PLAYBOOK) \
+	-e molecule_instance_config='$(MOLECULE_SELFTEST_CONFIG)'
 MOLECULE_SELFTEST_REFUSED := docker_host extra_args privileged local localhost loopback unknown mounted unmasked seccomp
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
 	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
@@ -498,8 +500,9 @@ test-molecule-docker-selftest: require-uv molecule-dependencies
 		[ $$status -eq 0 ] || break; \
 		config='$(MOLECULE_SELFTEST_DIR)/instance_config.yml'; \
 		if [ -f "$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml" ]; then config="$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml"; fi; \
-		if $(MOLECULE_SELFTEST) -e "molecule_instance_config=$$config" -i "$(MOLECULE_SELFTEST_DIR)/$$case.yml" \
-			extensions/molecule/shared/guard.yml > "$(MOLECULE_SELFTEST_DIR)/$$case.log" 2>&1; then \
+		if MOLECULE_INSTANCE_CONFIG="$$config" $(MOLECULE_SELFTEST_PLAYBOOK) -e "molecule_instance_config=$$config" \
+			-i "$(MOLECULE_SELFTEST_DIR)/$$case.yml" extensions/molecule/shared/guard.yml \
+			> "$(MOLECULE_SELFTEST_DIR)/$$case.log" 2>&1; then \
 			printf 'error: the guard accepted the bypass attempt %s\n' "$$case" >&2; status=1; \
 		elif ! grep -q 'Refusing to run' "$(MOLECULE_SELFTEST_DIR)/$$case.log"; then \
 			cat "$(MOLECULE_SELFTEST_DIR)/$$case.log"; \
@@ -509,6 +512,23 @@ test-molecule-docker-selftest: require-uv molecule-dependencies
 			cat "$(MOLECULE_SELFTEST_DIR)/$$case.log"; \
 			printf 'error: the decoy %s was not refused by the isolation check\n' "$$case" >&2; status=1; \
 		else printf 'guard refused the bypass attempt %s\n' "$$case"; fi; \
+	done; \
+	extra='$(MOLECULE_SELFTEST_DIR)/extra-vars'; \
+	if [ $$status -eq 0 ] && [ ! -s "$$extra/cases" ]; then \
+		printf 'error: bypass.yml listed no extra-variable bypass attempts\n' >&2; status=1; \
+	fi; \
+	for case in $$(cat "$$extra/cases" 2>/dev/null); do \
+		[ $$status -eq 0 ] || break; \
+		if MOLECULE_INSTANCE_CONFIG="$$extra/$$case/instance_config.yml" $(MOLECULE_SELFTEST_PLAYBOOK) \
+			-e "molecule_instance_config=$$extra/$$case/instance_config.yml" -e "@$$extra/$$case/vars.yml" \
+			-i "$$extra/$$case/inventory.yml" extensions/molecule/shared/guard.yml > "$$extra/$$case/guard.log" 2>&1; then \
+			printf 'error: the guard accepted the extra variable %s\n' "$$case" >&2; status=1; \
+		elif ! grep -q 'Refusing to run: a variable that the guard relies on was supplied from outside' \
+			"$$extra/$$case/guard.log"; then \
+			cat "$$extra/$$case/guard.log"; \
+			printf 'error: the extra variable %s was not refused as supplied from outside the guard\n' "$$case" >&2; \
+			status=1; \
+		else printf 'guard refused the extra variable %s\n' "$$case"; fi; \
 	done; \
 	printf '[]\n' > '$(MOLECULE_SELFTEST_DIR)/instance_config.yml'; \
 	$(MOLECULE_SELFTEST) extensions/molecule/shared/destroy.yml || status=1; \
