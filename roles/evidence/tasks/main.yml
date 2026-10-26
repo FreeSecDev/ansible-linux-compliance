@@ -4,18 +4,86 @@
     that:
       - linux_compliance_evidence_output_dir is string
       - linux_compliance_evidence_output_dir | length > 0
-      - linux_compliance_evidence_include_host_facts is boolean
+      - linux_compliance_evidence_include_arf is boolean
+      - linux_compliance_evidence_become is boolean
+      - linux_compliance_evidence_stale_exceptions is mapping
     fail_msg: >-
       The evidence role received an invalid input; see meta/argument_specs.yml.
       Boolean variables must be real booleans on the command line, for example
-      -e '{"linux_compliance_evidence_include_host_facts": true}';
-      -e linux_compliance_evidence_include_host_facts=true passes a string.
+      -e '{"linux_compliance_evidence_include_arf": true}';
+      -e linux_compliance_evidence_include_arf=true passes a string.
     quiet: true
   tags:
     - always
 
-- name: Evidence | Stop because the role is not implemented yet
-  ansible.builtin.fail:
-    msg: The evidence role is not implemented yet (tracked in FREES-51). No change was made to the host.
+- name: Evidence | Check that the audit role published a result
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited is defined
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.evidence_written is defined
+      - linux_compliance_audited.evidence_written is boolean
+    fail_msg: >-
+      Run the freesecdev.linux_compliance.audit role first: the evidence role collects the
+      evidence that it recorded in the fact linux_compliance_audited.
+    quiet: true
+  tags:
+    - always
+
+- name: Evidence | Resolve the output directory on the controller
+  ansible.builtin.set_fact:
+    __linux_compliance_evidence_root: >-
+      {{ linux_compliance_evidence_output_dir if linux_compliance_evidence_output_dir is match('/')
+         else playbook_dir ~ '/' ~ linux_compliance_evidence_output_dir }}
+  tags:
+    - always
+
+- name: Evidence | Check that the output directory is a normalised absolute path
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_evidence_root is match('/.')
+      - __linux_compliance_evidence_root is not search('//')
+      - __linux_compliance_evidence_root is not search('/$')
+      - __linux_compliance_evidence_root is not search('(^|/)[.][.]?(/|$)')
+    fail_msg: >-
+      linux_compliance_evidence_output_dir resolves to {{ __linux_compliance_evidence_root }}, which is
+      not a normalised absolute path other than /. Remove '.' and '..' components, repeated and
+      trailing slashes.
+    quiet: true
+  tags:
+    - always
+
+- name: Evidence | Report that the host has no evidence to collect
+  ansible.builtin.debug:
+    msg: >-
+      No evidence was written on {{ inventory_hostname }} (run_status
+      {{ linux_compliance_audited.run_status | default('unknown') }}, check mode or no scan),
+      so no bundle is collected.
+  when: not linux_compliance_audited.evidence_written
+  tags:
+    - always
+
+- name: Evidence | Report what check mode would collect
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: the bundle of {{ inventory_hostname }} would be written to
+      {{ __linux_compliance_evidence_root }}/{{ __linux_compliance_evidence_preview.directory }}
+      with {{ __linux_compliance_evidence_preview.fetch | map(attribute='path') | join(', ') }};
+      nothing was fetched or written.
+  vars:
+    __linux_compliance_evidence_preview: >-
+      {{ linux_compliance_audited | freesecdev.linux_compliance.evidence_plan(
+           inventory_hostname, linux_compliance_evidence_include_arf) }}
+  when:
+    - linux_compliance_audited.evidence_written
+    - ansible_check_mode
+  tags:
+    - always
+
+- name: Evidence | Collect the bundle on the controller
+  ansible.builtin.import_tasks: collect.yml
+  when:
+    - linux_compliance_audited.evidence_written
+    - not ansible_check_mode
   tags:
     - always

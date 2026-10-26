@@ -41,10 +41,16 @@ when the output directory does not exist, check mode does not create it and the 
     `linux_compliance_audit_fail_on_noncompliant` is true, counting the raw result unless
     `linux_compliance_audit_fail_on_noncompliant_after_waivers` is true. `error` always counts.
 
-`tasks/main.yml` imports `exceptions_file.yml`, `toggles.yml`, `exceptions_apply.yml` and `gate.yml`. Two more entry points exist,
+`tasks/main.yml` imports `scan.yml` (which imports `exceptions_file.yml`, `toggles.yml` and `exceptions_apply.yml`) and
+`gate.yml`. More entry points exist,
 named with their suffix because `tasks_from` must end in `.yml`:
 
 - `evaluate.yml` runs steps 2, 8, 9 and 10 on an existing `linux_compliance_audited` fact without scanning.
+- `deferred.yml` runs `main` without its result gates and `evaluate_deferred.yml` runs `evaluate.yml` without them;
+  both record `linux_compliance_audited.gate` as `{deferred: true, enforced: false}`.
+- `enforce.yml` enforces the gates that one of them deferred: it records the decision with `deferred: true` and
+  `enforced: true`, then fails the host as `main` would. `playbooks/evidence.yml` uses this pair so that the evidence
+  of every audited host is collected; no variable defers a gate.
 - `stale.yml` aggregates stale exceptions once over the target hosts in `linux_compliance_audit_stale_hosts` (the
   final play of `playbooks/audit.yml`).
 

@@ -1,16 +1,17 @@
 # Playbooks
 
 Scope: the orchestration playbooks shipped in `playbooks/`. Audience: operators and playbook authors.
-Jira: FREES-41, FREES-52, FREES-54. The playbooks contain no component logic; they only reference roles and other
-playbooks by FQCN. The `discover`, `audit` ([audit guide](audit.md)), `remediate` ([remediation guide](remediation.md))
-and `verify` ([verify guide](verify.md)) roles are implemented. The `evidence` role is a skeleton (FREES-40) that fails
-with a "not implemented yet" message naming its tracking issue.
+Jira: FREES-41, FREES-52, FREES-54, FREES-51. The playbooks contain no component logic; they only reference roles and
+other playbooks by FQCN. The `discover`, `audit` ([audit guide](audit.md)), `remediate`
+([remediation guide](remediation.md)), `verify` ([verify guide](verify.md)) and `evidence`
+([evidence bundles](evidence.md)) roles are implemented.
 
 | Playbook | Plays and roles in order | `become` |
 |---|---|---|
 | `playbooks/audit.yml` | `discover`, `audit`; then the `audit` role's `stale` entry point in a second play on `localhost` | `audit` only |
 | `playbooks/remediate.yml` | the `verify` role's `preflight.yml` entry point; `audit.yml` (`discover`, `audit`, then the read-only stale-exceptions report on `localhost`); the `verify` role's `baseline.yml` entry point; `remediate`; then `verify.yml` | `audit`, `remediate` |
 | `playbooks/verify.yml` | the `verify` role's `preflight.yml` entry point, `audit.yml` again (`discover`, `audit`, stale-exceptions report), then `verify` | `audit` |
+| `playbooks/evidence.yml` | `discover` and the `audit` role's `deferred.yml`; the stale-exceptions report on `localhost`; on every target host the `audit` role's `enforce.yml` with the `evidence` role in its `always` section (with the stale result of the run); then the `evidence` role's `summary.yml` on `localhost` | `audit`; the `evidence` role's host `stat` and fetch only |
 
 `remediate.yml` imports `audit.yml` first, by relative path so that the repository guard can scan the imported
 playbook. Every remediation therefore starts from a verified profile and a recorded baseline audit, and the
@@ -42,7 +43,8 @@ fails with a message that says how to record the baseline; facts do not survive 
 `discover`, `audit` and `verify` never change the host; `audit` writes evidence files below
 `linux_compliance_audit_output_dir` and reports them separately from `changed`. `verify` only reads facts on the
 controller and runs without `become`. `remediate` changes a host only after the opt-in below. `become` is set on the
-role entry, never on the whole play, and the audit role also sets it on its scan task only. The `evidence` role is not part of a playbook yet.
+role entry, never on the whole play, and the audit role also sets it on its scan task only. The `evidence` role
+writes only on the controller; `playbooks/evidence.yml` runs it after `audit.yml`.
 
 `playbooks/audit.yml` has two plays. The first audits the target hosts. The second runs on the controller after every
 host and every `serial` batch of the first, and reports the exceptions that no audited host needed

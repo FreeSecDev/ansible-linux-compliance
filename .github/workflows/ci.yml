@@ -73,6 +73,8 @@ jobs:
         run: make test-coverage
       - name: Run test-audit-exceptions
         run: make test-audit-exceptions
+      - name: Run test-evidence
+        run: make test-evidence
       - name: Run test-remediate-check
         run: make test-remediate-check
       - name: Run test-role-guards

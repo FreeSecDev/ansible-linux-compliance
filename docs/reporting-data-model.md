@@ -31,7 +31,8 @@ and `REPORT_HTML` override them). `--scope` and `--output` are required; `--html
 | `--codebuild` | `aws codebuild batch-get-builds` JSON |
 | `--molecule` | Molecule results summary (below) |
 | `--exceptions-evaluation` | Exceptions evaluation JSON written by the `apply_exceptions` filter, one per scan run ([exceptions](exceptions.md#reporting)); requires `--exceptions-file` |
-| `--exceptions-file` | The exceptions file the evaluations were made from (one file, not repeatable) |
+| `--exceptions-file` | The reviewed exceptions file the evaluations were made from (one file, not repeatable); required with `--exceptions-evaluation` and with evidence bundles whose exceptions were applied |
+| `--evidence-bundle` | An evidence bundle directory written by the `evidence` role ([evidence bundles](evidence.md#in-the-report)); verified, then read as its evaluation or, without exceptions, its raw scan run |
 
 Metadata options are `--commit`, `--pull-request`, `--workflow-run`, `--started-at`, `--finished-at` and
 `--generated-at`. They are validated and written as given; timestamps use `YYYY-MM-DDTHH:MM:SSZ`. Nothing is read
@@ -45,8 +46,9 @@ Exit status:
   not an error, and it is never shown as passed.
 - 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`).
 - 2: invalid arguments or metadata, `--html` naming the same file as `--output`, a scope that the data contradicts
-  (below), repeated scan runs without `--allow-repeated-scans`, `--exceptions-evaluation` without
-  `--exceptions-file` (or the reverse), an exceptions file that cannot be read, or an output that cannot be
+  (below), repeated scan runs without `--allow-repeated-scans`, `--exceptions-evaluation` or an evidence bundle with
+  applied exceptions without `--exceptions-file`, `--exceptions-file` without any evaluation, an evidence bundle whose
+  copy of the exceptions file is not byte-identical to `--exceptions-file`, an exceptions file that cannot be read, or an output that cannot be
   written. No report is written in these cases.
 - 3: the JSON report was written, but the dashboard was not, because the report is above the dashboard size cap
   (128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)). A dashboard left at that path by an earlier

@@ -1,12 +1,15 @@
 ---
-- name: Audit | Stop when the scan did not complete
+- name: Audit | Check that there is an audit result to gate
   ansible.builtin.assert:
     that:
-      - linux_compliance_audited.run_status in ['completed', 'not_run']
+      - linux_compliance_audited is defined
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.run_status is defined
+      - linux_compliance_audited.exceptions is defined
+      - linux_compliance_audit_fail_on_noncompliant is boolean
+      - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
     fail_msg: >-
-      The scan did not complete (run_status {{ linux_compliance_audited.run_status }}). Every rule
-      of the profile is reported as error and nothing is compliant. Evidence is in
-      {{ linux_compliance_audited.evidence.directory | default('no directory') }}.
+      The gate needs the fact linux_compliance_audited from the audit role, and boolean gate variables.
     quiet: true
   tags:
     - always
@@ -25,6 +28,8 @@
          else linux_compliance_audited.summary }}
     __linux_compliance_audit_gate_counted: "{{ linux_compliance_audited.run_status == 'completed' }}"
     __linux_compliance_audit_gate:
+      deferred: "{{ (linux_compliance_audited.gate | default({})).deferred | default(false) is sameas true }}"
+      enforced: true
       enabled: "{{ linux_compliance_audit_fail_on_noncompliant }}"
       after_waivers: "{{ linux_compliance_audit_fail_on_noncompliant_after_waivers }}"
       basis: "{{ __linux_compliance_audit_gate_basis }}"
@@ -33,6 +38,18 @@
       error: "{{ linux_compliance_audited.summary.error | int if __linux_compliance_audit_gate_counted else none }}"
       waived: >-
         {{ __linux_compliance_audit_gate_summary.waived | int if __linux_compliance_audit_gate_counted else none }}
+  tags:
+    - always
+
+- name: Audit | Stop when the scan did not complete
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited.run_status in ['completed', 'not_run']
+    fail_msg: >-
+      The scan did not complete (run_status {{ linux_compliance_audited.run_status }}). Every rule
+      of the profile is reported as error and nothing is compliant. Evidence is in
+      {{ linux_compliance_audited.evidence.directory | default('no directory') }}.
+    quiet: true
   tags:
     - always
 

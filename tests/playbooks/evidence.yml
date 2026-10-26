@@ -1,0 +1,452 @@
+---
+- name: Evidence | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Evidence | Build audit results with evidence on the hosts and plant secrets around them
+  hosts: web01:db01
+  gather_facts: true
+  environment:
+    FREESECDEV_EVIDENCE_PLANTED: "{{ evidence_secret_env }}"
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/evidence.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+  tasks:
+    - name: Require the output directory from the Makefile
+      ansible.builtin.assert:
+        that:
+          - evidence_test_dir is defined
+          - evidence_test_dir is match('/')
+        fail_msg: Run this playbook through make test-evidence.
+        quiet: true
+
+    - name: Check that the planted environment secret is in the gathered facts
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['env']['FREESECDEV_EVIDENCE_PLANTED'] == evidence_secret_env
+        quiet: true
+
+    - name: Hold a secret in a no_log fact
+      ansible.builtin.set_fact:
+        evidence_test_token: "{{ evidence_secret_no_log }}"
+      no_log: true
+
+    - name: Build the audit result and its evidence files
+      ansible.builtin.include_tasks: tasks/evidence-fixture.yml
+      vars:
+        evidence_fixture_run_id: "synthetic-{{ inventory_hostname }}"
+
+    - name: Apply the exceptions with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+    - name: Check that exceptions were applied to the audit result
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.exceptions.applied
+          - linux_compliance_audited.evidence_written
+        quiet: true
+
+- name: Evidence | Aggregate stale exceptions once over every host
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Aggregate the evaluations with the audit role
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: stale.yml
+      vars:
+        linux_compliance_audit_stale_hosts: "{{ query('ansible.builtin.inventory_hostnames', 'web01:db01') }}"
+
+- name: Evidence | Collect each host's bundle and check its content, provenance and permissions
+  hosts: web01:db01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/evidence.yml
+  vars:
+    linux_compliance_evidence_output_dir: "{{ evidence_bundles_dir }}"
+    linux_compliance_evidence_become: false
+    linux_compliance_evidence_stale_exceptions: "{{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] }}"
+    evidence_bundle_dir: "{{ evidence_bundles_dir }}/{{ inventory_hostname }}/synthetic-{{ inventory_hostname }}"
+  tasks:
+    - name: Collect the bundle with the evidence role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.evidence
+
+    - name: List every entry of the bundle
+      ansible.builtin.find:
+        paths: "{{ evidence_bundle_dir }}"
+        recurse: true
+        hidden: true
+        file_type: any
+      delegate_to: localhost
+      register: evidence_entries
+
+    - name: Check that the bundle holds exactly the expected files
+      ansible.builtin.assert:
+        that:
+          - evidence_files == evidence_expected_files
+          - evidence_directories == ['exceptions', 'raw', 'raw/scan']
+          - linux_compliance_evidence_bundle.directory == evidence_bundle_dir
+          - linux_compliance_evidence_bundle.files == evidence_expected_files | reject('equalto', 'bundle.json') | list
+        fail_msg: "Unexpected bundle content: {{ evidence_files }} and {{ evidence_directories }}"
+        quiet: true
+      vars:
+        evidence_files: >-
+          {{ evidence_entries.files | rejectattr('isdir') | map(attribute='path')
+             | map('regex_replace', '^' ~ evidence_bundle_dir ~ '/', '') | sort(case_sensitive=true) }}
+        evidence_directories: >-
+          {{ evidence_entries.files | selectattr('isdir') | map(attribute='path')
+             | map('regex_replace', '^' ~ evidence_bundle_dir ~ '/', '') | sort(case_sensitive=true) }}
+
+    - name: Check that files are 0600, directories 0700 and everything belongs to the controller user
+      ansible.builtin.assert:
+        that:
+          - evidence_entries.files | selectattr('isdir') | rejectattr('mode', 'equalto', '0700') | list | length == 0
+          - evidence_entries.files | rejectattr('isdir') | rejectattr('mode', 'equalto', '0600') | list | length == 0
+          - evidence_entries.files | selectattr('islnk') | list | length == 0
+          - evidence_entries.files | rejectattr('uid', 'equalto', ansible_facts['user_uid']) | list | length == 0
+        quiet: true
+
+    - name: Read every file of the bundle
+      ansible.builtin.slurp:
+        src: "{{ item.path }}"
+      loop: "{{ evidence_entries.files | rejectattr('isdir') | list }}"
+      loop_control:
+        label: "{{ item.path }}"
+      delegate_to: localhost
+      register: evidence_contents
+
+    - name: Check that no planted secret reached the bundle
+      ansible.builtin.assert:
+        that:
+          - evidence_leaks | length == 0
+        fail_msg: "Planted secrets reached {{ evidence_leaks }}"
+        quiet: true
+      vars:
+        evidence_leaks: >-
+          {{ evidence_contents.results
+             | selectattr('content', 'defined')
+             | map(attribute='content') | map('b64decode')
+             | select('search', evidence_secrets | map('regex_escape') | join('|'))
+             | list }}
+
+    - name: Read the planted host files to show that the secrets were there to leak
+      vars:
+        evidence_planted_run: >-
+          {{ evidence_hosts_dir }}/{{ inventory_hostname }}/evidence/synthetic-{{ inventory_hostname }}
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ evidence_hosts_dir }}/{{ inventory_hostname }}/state.json"
+        - "{{ evidence_planted_run }}/scan/notes.txt"
+        - "{{ evidence_planted_run }}/scan/results-arf.xml"
+      register: evidence_planted
+
+    - name: Check that the planted files hold their secrets
+      ansible.builtin.assert:
+        that:
+          - (evidence_planted.results[0].content | b64decode) is search(evidence_secret_ledger)
+          - (evidence_planted.results[1].content | b64decode) is search(evidence_secret_notes)
+          - (evidence_planted.results[2].content | b64decode) is search(evidence_secret_arf | regex_escape)
+        quiet: true
+
+    - name: Check that the XCCDF results are carried verbatim, with target facts and SCE output
+      ansible.builtin.assert:
+        that:
+          - evidence_results is search(evidence_carried_sce | regex_escape)
+          - evidence_results is search(evidence_carried_address | regex_escape)
+          - evidence_results is search(evidence_carried_mac | regex_escape)
+        fail_msg: docs/evidence.md says that results.xml carries these values; the test must show it.
+        quiet: true
+      vars:
+        evidence_results: >-
+          {{ lookup('ansible.builtin.file', evidence_bundle_dir ~ '/raw/scan/results.xml', rstrip=false) }}
+
+    - name: Hash the exceptions file that was applied
+      ansible.builtin.stat:
+        path: "{{ audit_exceptions_valid_file }}"
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      delegate_to: localhost
+      register: evidence_exceptions_stat
+
+    - name: Check the provenance in the manifest
+      ansible.builtin.assert:
+        that:
+          - manifest.schema_version == '1.0'
+          - manifest.kind == 'freesecdev.linux_compliance.evidence_bundle'
+          - manifest.collection.name == 'freesecdev.linux_compliance'
+          - manifest.collection.version == '0.1.0'
+          - manifest.collected_at is match('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$')
+          - manifest.host.inventory_hostname == inventory_hostname
+          - manifest.host.machine_id == ansible_facts['machine_id']
+          - manifest.host.reported == linux_compliance_audited.scan_run.host
+          - manifest.run.run_id == 'synthetic-' ~ inventory_hostname
+          - manifest.run.status == 'completed'
+          - manifest.run.started_at == linux_compliance_audited.scan_run.started_at
+          - manifest.run.finished_at == linux_compliance_audited.scan_run.finished_at
+          - manifest.run.profile_id == linux_compliance_audited.scan_run.profile_id
+          - manifest.scanner.name == 'openscap'
+          - manifest.scanner.version == '1.3.9'
+          - manifest.content == linux_compliance_audited.scan_run.content
+          - manifest.exceptions.status == 'applied'
+          - manifest.exceptions.source_sha256 == evidence_exceptions_stat.stat.checksum
+          - manifest.exceptions.evaluation == 'exceptions/evaluation.json'
+          - manifest.exceptions.file == 'exceptions/exceptions.yml'
+          - manifest.exceptions.stale == 'exceptions/stale.json'
+          - manifest.checksums.path == 'SHA256SUMS'
+          - >-
+            manifest.files | map(attribute='path') | list
+            == evidence_expected_files | reject('in', ['SHA256SUMS', 'bundle.json']) | list
+          - excluded_reasons['scan/notes.txt'] == 'not_allow_listed'
+          - excluded_reasons['scan/results-arf.xml'] == 'arf_not_requested'
+          - excluded_reasons | length == 2
+          - >-
+            raw_scan_run.sha256
+            == (linux_compliance_audited.evidence.files | selectattr('kind', 'equalto', 'scan_run') | first).sha256
+        quiet: true
+      vars:
+        manifest: >-
+          {{ lookup('ansible.builtin.file', evidence_bundle_dir ~ '/bundle.json') | ansible.builtin.from_json }}
+        raw_scan_run: "{{ manifest.files | selectattr('path', 'equalto', 'raw/scan-run.json') | first }}"
+        excluded_reasons: >-
+          {{ dict(manifest.excluded | map(attribute='source')
+                  | map('regex_replace', '^.*/synthetic-' ~ inventory_hostname ~ '/', '')
+                  | zip(manifest.excluded | map(attribute='reason'))) }}
+
+    - name: Check that the evaluation, the exceptions file and the stale result are in the bundle
+      ansible.builtin.assert:
+        that:
+          - evaluation == linux_compliance_audited.exceptions.evaluation
+          - exceptions_text == lookup('ansible.builtin.file', audit_exceptions_valid_file, rstrip=false)
+          - stale.kind == 'freesecdev.linux_compliance.stale_exceptions'
+          - stale.result.stale == ['EXC-UNUSED']
+          - stale.result.evaluated_hosts == ['db01', 'web01']
+          - stale.result.source_sha256 == evidence_exceptions_stat.stat.checksum
+        quiet: true
+      vars:
+        evaluation: >-
+          {{ lookup('ansible.builtin.file', evidence_bundle_dir ~ '/exceptions/evaluation.json')
+             | ansible.builtin.from_json }}
+        exceptions_text: >-
+          {{ lookup('ansible.builtin.file', evidence_bundle_dir ~ '/exceptions/exceptions.yml', rstrip=false) }}
+        stale: >-
+          {{ lookup('ansible.builtin.file', evidence_bundle_dir ~ '/exceptions/stale.json')
+             | ansible.builtin.from_json }}
+
+    - name: Expect a second collection of the same run to be refused
+      block:
+        - name: Collect the same run again
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+
+        - name: Fail because an existing bundle was overwritten
+          ansible.builtin.fail:
+            msg: EVIDENCE-OVERWRITE-NOT-REFUSED
+      rescue:
+        - name: Check that the existing bundle was refused and kept
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('already exists, and a bundle is never overwritten')
+              - lookup('ansible.builtin.file', evidence_bundle_dir ~ '/bundle.json') | length > 0
+            quiet: true
+
+- name: Evidence | A checksum mismatch, a path outside the run and a changed exceptions file fail closed
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/evidence.yml
+  vars:
+    linux_compliance_evidence_output_dir: "{{ evidence_bundles_dir }}"
+    linux_compliance_evidence_become: false
+  tasks:
+    - name: Build a run whose recorded digest does not match its XCCDF results
+      ansible.builtin.include_tasks: tasks/evidence-fixture.yml
+      vars:
+        evidence_fixture_run_id: tampered-web01
+
+    - name: Record a wrong digest for the XCCDF results
+      ansible.builtin.set_fact:
+        linux_compliance_audited: >-
+          {{ linux_compliance_audited | ansible.builtin.combine({'evidence': {'files':
+               linux_compliance_audited.evidence.files | rejectattr('path', 'search', 'results.xml$') | list
+               + [linux_compliance_audited.evidence.files | selectattr('path', 'search', 'results.xml$') | first
+                  | ansible.builtin.combine({'sha256': '0' * 64})]}}, recursive=true) }}
+
+    - name: Expect the checksum mismatch to fail the collection
+      block:
+        - name: Collect the tampered run
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+
+        - name: Fail because the mismatch was accepted
+          ansible.builtin.fail:
+            msg: EVIDENCE-MISMATCH-ACCEPTED
+      rescue:
+        - name: Check that the mismatch was reported
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('checksum mismatch for .*/tampered-web01/scan/results.xml')
+              - ansible_failed_result.msg is search('the incomplete directory')
+            quiet: true
+
+    - name: Inspect the bundle directory of the tampered run
+      ansible.builtin.stat:
+        path: "{{ evidence_bundles_dir }}/web01/tampered-web01"
+      delegate_to: localhost
+      register: evidence_tampered
+
+    - name: Check that nothing of the tampered run was kept
+      ansible.builtin.assert:
+        that:
+          - not evidence_tampered.stat.exists
+        quiet: true
+
+    - name: Build a run whose evidence list names the state ledger
+      ansible.builtin.include_tasks: tasks/evidence-fixture.yml
+      vars:
+        evidence_fixture_run_id: ledger-web01
+
+    - name: Add the state ledger to the recorded evidence
+      ansible.builtin.set_fact:
+        linux_compliance_audited: >-
+          {{ linux_compliance_audited | ansible.builtin.combine({'evidence': {'files':
+               linux_compliance_audited.evidence.files + [{'kind': 'scanner_output',
+                 'path': evidence_fixture_dir ~ '/../../state.json', 'sha256': '0' * 64, 'size': 1}]}},
+               recursive=true) }}
+
+    - name: Expect the path outside the run directory to fail the collection
+      block:
+        - name: Collect the run that names the ledger
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+
+        - name: Fail because the ledger was accepted
+          ansible.builtin.fail:
+            msg: EVIDENCE-LEDGER-ACCEPTED
+      rescue:
+        - name: Check that the path was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('is not inside the run directory')
+            quiet: true
+
+    - name: Inspect the bundle directory of the run that names the ledger
+      ansible.builtin.stat:
+        path: "{{ evidence_bundles_dir }}/web01/ledger-web01"
+      delegate_to: localhost
+      register: evidence_ledger
+
+    - name: Check that nothing was collected for the run that names the ledger
+      ansible.builtin.assert:
+        that:
+          - not evidence_ledger.stat.exists
+        quiet: true
+
+    - name: Build a run whose XCCDF results are a symbolic link on the host
+      ansible.builtin.include_tasks: tasks/evidence-fixture.yml
+      vars:
+        evidence_fixture_run_id: symlink-web01
+
+    - name: Move the XCCDF results out of the run directory
+      ansible.builtin.copy:
+        src: "{{ evidence_fixture_dir }}/scan/results.xml"
+        dest: "{{ evidence_fixture_root }}/outside.xml"
+        mode: "0600"
+
+    - name: Replace the XCCDF results with a symbolic link to the same bytes
+      ansible.builtin.file:
+        path: "{{ evidence_fixture_dir }}/scan/results.xml"
+        src: "{{ evidence_fixture_root }}/outside.xml"
+        state: link
+        force: true
+
+    - name: Expect the symbolic link to be refused before anything is fetched
+      block:
+        - name: Collect the run with the symbolic link
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+
+        - name: Fail because the symbolic link was followed
+          ansible.builtin.fail:
+            msg: EVIDENCE-SYMLINK-FOLLOWED
+      rescue:
+        - name: Check that the symbolic link was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('scan/results.xml is a symbolic link on the host')
+            quiet: true
+
+    - name: Inspect the bundle directory of the run with the symbolic link
+      ansible.builtin.stat:
+        path: "{{ evidence_bundles_dir }}/web01/symlink-web01"
+      delegate_to: localhost
+      register: evidence_symlink
+
+    - name: Check that nothing was kept for the run with the symbolic link
+      ansible.builtin.assert:
+        that:
+          - not evidence_symlink.stat.exists
+        quiet: true
+
+    - name: Copy the exceptions file to a file that will change after it was applied
+      ansible.builtin.copy:
+        src: "{{ audit_exceptions_valid_file }}"
+        dest: "{{ evidence_test_dir }}/exceptions-changed.yml"
+        mode: "0600"
+      delegate_to: localhost
+
+    - name: Build a run for the changed exceptions file
+      ansible.builtin.include_tasks: tasks/evidence-fixture.yml
+      vars:
+        evidence_fixture_run_id: changed-web01
+
+    - name: Apply the copy with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+      vars:
+        linux_compliance_exceptions_file: "{{ evidence_test_dir }}/exceptions-changed.yml"
+
+    - name: Change the exceptions file after it was applied
+      ansible.builtin.copy:
+        dest: "{{ evidence_test_dir }}/exceptions-changed.yml"
+        content: >-
+          {{ lookup('ansible.builtin.file', audit_exceptions_valid_file, rstrip=false)
+             ~ '# changed after it was applied' }}
+        mode: "0600"
+      delegate_to: localhost
+
+    - name: Expect the changed exceptions file to fail the collection
+      block:
+        - name: Collect the run whose exceptions file changed
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+
+        - name: Fail because the changed file was accepted
+          ansible.builtin.fail:
+            msg: EVIDENCE-CHANGED-EXCEPTIONS-ACCEPTED
+      rescue:
+        - name: Check that the change was reported
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('no longer the file that was applied')
+            quiet: true
+
+    - name: Inspect the bundle directory of the run whose exceptions file changed
+      ansible.builtin.stat:
+        path: "{{ evidence_bundles_dir }}/web01/changed-web01"
+      delegate_to: localhost
+      register: evidence_changed
+
+    - name: Check that nothing was kept for the run whose exceptions file changed
+      ansible.builtin.assert:
+        that:
+          - not evidence_changed.stat.exists
+        quiet: true

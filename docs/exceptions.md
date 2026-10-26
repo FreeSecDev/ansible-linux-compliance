@@ -348,6 +348,11 @@ nothing from it is shown as waived. The report records the exceptions file path 
 section once every evaluation passed. Only the reviewed Git history makes the file itself trustworthy; signed
 evidence is proposed in [ADR 0018](adr/0018-evidence-bundle-provenance.md).
 
+An evidence bundle written by the `evidence` role carries the evaluation and a byte-exact copy of the exceptions
+file, so `--evidence-bundle DIR` replaces `--exceptions-evaluation` and needs no manual export. `--exceptions-file` is
+still required: the bundle is not signed, so its copy is only accepted when it is byte-identical to the reviewed file
+you pass ([evidence bundles](evidence.md#in-the-report)).
+
 Passing only the marked scan run with `--scan-run` still works, but then the report has no exceptions section and does
 not count waivers that lapsed during the scan.
 

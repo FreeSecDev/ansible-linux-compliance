@@ -1041,7 +1041,19 @@ def _instant(value: object, where: str) -> datetime:
         _fail(f"{where} is not a UTC timestamp")
 
 
-def _unmarked(run: model.ScanRun) -> model.ScanRun:
+def unmarked(run: model.ScanRun) -> model.ScanRun:
+    """Return the scan run with every waiver mark of an evaluation removed.
+
+    A waived finding gets its evaluated outcome back and every finding loses its
+    exception data, which gives the scan run as the scanner reported it before
+    :func:`evaluate_run` marked it.
+
+    Args:
+        run: A scan run from an evaluation document.
+
+    Returns:
+        The scan run without exception data.
+    """
     findings: list[model.Finding] = []
     for finding in run.findings:
         state = finding.exception.state
@@ -1081,7 +1093,7 @@ def _verify_evaluation(document: object, exceptions_text: str) -> Evaluation:
     if data["source_sha256"] != hashlib.sha256(exceptions_text.encode("utf-8")).hexdigest():
         _fail("the evaluation was not made from this exceptions file (source_sha256 differs)")
     parsed = parse_exceptions(exceptions_text, controller)
-    original = _unmarked(load_scan_run(data["scan_run"]))
+    original = unmarked(load_scan_run(data["scan_run"]))
     evaluation = evaluate_run(
         original, parsed, target, controller, max_scan_lag=timedelta(seconds=lag)
     )

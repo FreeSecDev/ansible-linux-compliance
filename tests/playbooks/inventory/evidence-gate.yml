@@ -1,0 +1,22 @@
+---
+all:
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  children:
+    web:
+      hosts:
+        web01:
+    db:
+      hosts:
+        db01:
+    app:
+      hosts:
+        app01:
+    lost:
+      hosts:
+        lost01:
+          ansible_connection: ssh
+          ansible_host: 127.0.0.1
+          ansible_port: 9
+          ansible_ssh_common_args: -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes

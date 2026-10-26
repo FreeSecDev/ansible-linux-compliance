@@ -37,6 +37,49 @@ AUDIT_EXCEPTIONS_DIR := build/test-audit-exceptions
 AUDIT_EXCEPTIONS_INVENTORY := tests/playbooks/inventory/audit-exceptions.yml
 AUDIT_EXCEPTIONS_FORBIDDEN := Apply the exceptions file to the scan run|AUDIT-EXCEPTIONS-NOT-REACHED
 AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
+EVIDENCE_DIR := build/test-evidence
+EVIDENCE_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -e evidence_test_dir='$(CURDIR)/$(EVIDENCE_DIR)'
+EVIDENCE_REPORT := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.reporting
+EVIDENCE_EXCEPTIONS := $(EVIDENCE_DIR)/exceptions/exceptions-valid.yml
+EVIDENCE_BUNDLES := --evidence-bundle '$(EVIDENCE_DIR)/bundles/web01/synthetic-web01' \
+	--evidence-bundle '$(EVIDENCE_DIR)/bundles/db01/synthetic-db01'
+EVIDENCE_GATE_BUNDLES := --evidence-bundle '$(EVIDENCE_DIR)/bundles-gate/web01/gate-web01' \
+	--evidence-bundle '$(EVIDENCE_DIR)/bundles-gate/db01/gate-db01' \
+	--exceptions-file '$(EVIDENCE_DIR)/exceptions-gate/exceptions-valid.yml'
+EVIDENCE_REPORT_CHECK := .sections.compliance.status == "available" and .sections.exceptions.status == "available" \
+	and ([.sections.compliance.items[].format] | unique) == ["exceptions_evaluation"] \
+	and ([.sections.compliance.groups[].summary.counts.waived] | add) == 2 \
+	and .sections.exceptions.summary.by_status.stale == 1 and .sections.exceptions.summary.by_status.in_effect == 2 \
+	and .sections.exceptions.exceptions_file.verified \
+	and (.sections.exceptions.exceptions_file.path | endswith("/exceptions/exceptions-valid.yml")) \
+	and (.overview.error | length) == 0
+EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
+	and ([.sections.compliance.items[].format] | sort) == ["exceptions_evaluation", "scan_run"] \
+	and ([.sections.compliance.groups[].summary.run_status] | sort) == ["completed", "failed"] \
+	and ([.sections.compliance.groups[].host.hostname] | sort) == ["db01", "web01"]
+EVIDENCE_TAMPERED_CHECK := .sections.compliance.status == "error" \
+	and (.sections.compliance.gaps[0].reason | test("checksum mismatch for raw/scan/results.xml"))
+
+EVIDENCE_ROUTES_PLAYBOOK := $(EVIDENCE_PLAYBOOK) tests/playbooks/audit-gate-routes.yml
+EVIDENCE_FORGED_DEFERRAL := {"linux_compliance_audit_defer_gate": true, "__linux_compliance_audit_gate_deferred": true}
+
+define evidence_gate_route
+status=0; $(EVIDENCE_ROUTES_PLAYBOOK) $(2) > '$(EVIDENCE_DIR)/route-$(1).log' 2>&1 || status=$$?; \
+	cat '$(EVIDENCE_DIR)/route-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: gate route %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -q 'The audit reported 2 failed and 1 errored rule(s)' '$(EVIDENCE_DIR)/route-$(1).log' && \
+	grep -q 'The scan did not complete (run_status failed)' '$(EVIDENCE_DIR)/route-$(1).log' || \
+	{ printf 'error: gate route %s did not gate both hosts\n' '$(1)' >&2; exit 1; }; \
+	if grep -q 'GATE-ROUTE-PASSED' '$(EVIDENCE_DIR)/route-$(1).log'; then \
+		printf 'error: gate route %s let a host pass\n' '$(1)' >&2; exit 1; fi
+endef
+
+define evidence_expect_status
+status=0; $(2) > '$(EVIDENCE_DIR)/$(1).log' 2>&1 || status=$$?; cat '$(EVIDENCE_DIR)/$(1).log'; \
+	test "$$status" -eq $(3) || { printf 'error: %s gave exit status %s, not %s\n' '$(1)' "$$status" '$(3)' >&2; exit 1; }; \
+	grep -q -- '$(4)' '$(EVIDENCE_DIR)/$(1).log' || { printf 'error: %s: the expected message is missing\n' '$(1)' >&2; exit 1; }
+endef
+
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' env HOME='$(ANSIBLE_TEST_HOME)' ansible-test
 
 space := $(subst ,, )
@@ -98,6 +141,7 @@ Tests
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
+  test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
   test-role-guards      Check in check mode that forged internal role variables are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
@@ -133,7 +177,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-remediate-check test-role-guards test-verify \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -291,6 +335,43 @@ test-audit-exceptions: require-uv collection-link
 	$(call audit_exceptions_expect_failure,invalid,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-invalid.yml,missing keys: risk,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
+
+test-evidence: require-uv collection-link
+	rm -rf '$(EVIDENCE_DIR)'
+	mkdir -p '$(EVIDENCE_DIR)'
+	$(EVIDENCE_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) -e audit_exceptions_dir='$(CURDIR)/$(EVIDENCE_DIR)/exceptions' \
+		tests/playbooks/evidence.yml | tee '$(EVIDENCE_DIR)/playbook.log'
+	if grep -q 'FREESECDEV-PLANTED' '$(EVIDENCE_DIR)/playbook.log'; then printf 'error: a planted secret was printed\n' >&2; exit 1; fi
+	$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/report.json' $(EVIDENCE_BUNDLES) \
+		--exceptions-file '$(EVIDENCE_EXCEPTIONS)'
+	jq -e '$(EVIDENCE_REPORT_CHECK)' '$(EVIDENCE_DIR)/report.json' > /dev/null
+	$(call evidence_expect_status,unreviewed,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/unreviewed.json' $(EVIDENCE_BUNDLES),2,requires --exceptions-file)
+	$(call evidence_expect_status,foreign,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/foreign.json' $(EVIDENCE_BUNDLES) --exceptions-file '$(EVIDENCE_DIR)/exceptions-changed.yml',2,not byte-identical to --exceptions-file)
+	test ! -e '$(EVIDENCE_DIR)/unreviewed.json' && test ! -e '$(EVIDENCE_DIR)/foreign.json'
+	cp -a '$(EVIDENCE_DIR)/bundles/web01/synthetic-web01' '$(EVIDENCE_DIR)/tampered'
+	printf ' ' >> '$(EVIDENCE_DIR)/tampered/raw/scan/results.xml'
+	$(call evidence_expect_status,tampered,$(EVIDENCE_REPORT) --scope single_host --output '$(EVIDENCE_DIR)/tampered.json' --evidence-bundle '$(EVIDENCE_DIR)/tampered' --exceptions-file '$(EVIDENCE_EXCEPTIONS)',1,report written)
+	jq -e '$(EVIDENCE_TAMPERED_CHECK)' '$(EVIDENCE_DIR)/tampered.json' > /dev/null
+	status=0; $(EVIDENCE_PLAYBOOK) -i tests/playbooks/inventory/evidence-gate.yml \
+		-e audit_exceptions_dir='$(CURDIR)/$(EVIDENCE_DIR)/exceptions-gate' tests/playbooks/evidence-gate.yml \
+		> '$(EVIDENCE_DIR)/gate.log' 2>&1 || status=$$?; cat '$(EVIDENCE_DIR)/gate.log'; \
+		test "$$status" -ne 0 || { printf 'error: the gated play did not fail\n' >&2; exit 1; }
+	grep -q 'WARNING: no evidence bundle for 2 of 4 target host(s): app01, lost01' '$(EVIDENCE_DIR)/gate.log'
+	grep -q 'The audit reported 2 failed and 1 errored rule(s)' '$(EVIDENCE_DIR)/gate.log'
+	grep -q 'The scan did not complete (run_status failed)' '$(EVIDENCE_DIR)/gate.log'
+	grep -q 'EVIDENCE-GATE-PASSED app01' '$(EVIDENCE_DIR)/gate.log'
+	if grep -qE 'EVIDENCE-GATE-PASSED (web01|db01)' '$(EVIDENCE_DIR)/gate.log'; then printf 'error: a gated host passed\n' >&2; exit 1; fi
+	grep -qE '^web01 +: .*failed=1' '$(EVIDENCE_DIR)/gate.log'
+	grep -qE '^db01 +: .*failed=1' '$(EVIDENCE_DIR)/gate.log'
+	grep -qE '^lost01 +: .*unreachable=1' '$(EVIDENCE_DIR)/gate.log'
+	$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/gate.json' $(EVIDENCE_GATE_BUNDLES)
+	$(call evidence_gate_route,baseline,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline)
+	$(call evidence_gate_route,extra,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline -e '$(EVIDENCE_FORGED_DEFERRAL)')
+	$(call evidence_gate_route,group_vars,-i tests/playbooks/inventory/gate-routes-group -e gate_route=baseline)
+	$(call evidence_gate_route,host_vars,-i tests/playbooks/inventory/gate-routes-host -e gate_route=baseline)
+	$(call evidence_gate_route,include,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=include)
+	$(call evidence_gate_route,import,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=import)
+	jq -e '$(EVIDENCE_GATE_CHECK)' '$(EVIDENCE_DIR)/gate.json' > /dev/null
 
 REMEDIATE_CHECK = $(RUN) ansible-playbook -i localhost, --check
 
@@ -466,4 +547,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check

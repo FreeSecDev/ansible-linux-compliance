@@ -28,7 +28,7 @@ def index_of(items: list[Task], predicate: str) -> int:
 
 
 def test_the_scan_uses_the_toggle_result_and_nothing_else() -> None:
-    main = tasks("main.yml")
+    main = tasks("scan.yml")
     scan = cast("dict[str, object]", main[index_of(main, SCAN_MODULE)][SCAN_MODULE])
     assert scan["disabled_rules"] == TOGGLE_RESULT
     scans = [task for task in main if SCAN_MODULE in task]
@@ -36,7 +36,7 @@ def test_the_scan_uses_the_toggle_result_and_nothing_else() -> None:
 
 
 def test_the_toggles_are_resolved_after_the_discover_check_and_before_the_scan() -> None:
-    main = tasks("main.yml")
+    main = tasks("scan.yml")
     discover_check = next(
         position
         for position, task in enumerate(main)

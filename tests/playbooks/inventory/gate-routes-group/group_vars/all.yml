@@ -1,0 +1,6 @@
+---
+linux_compliance_audit_defer_gate: true
+__linux_compliance_audit_gate_deferred: true
+__linux_compliance_audit_gate:
+  deferred: true
+  enforced: false

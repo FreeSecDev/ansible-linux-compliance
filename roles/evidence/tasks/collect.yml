@@ -1,0 +1,301 @@
+---
+- name: Evidence | Plan the bundle from the audit result
+  ansible.builtin.set_fact:
+    __linux_compliance_evidence_plan: >-
+      {{ linux_compliance_audited | freesecdev.linux_compliance.evidence_plan(
+           inventory_hostname, linux_compliance_evidence_include_arf) }}
+
+- name: Evidence | Name the directories of the bundle
+  ansible.builtin.set_fact:
+    __linux_compliance_evidence_host_dir: "{{ __linux_compliance_evidence_root }}/{{ inventory_hostname }}"
+    __linux_compliance_evidence_dir: >-
+      {{ __linux_compliance_evidence_root }}/{{ __linux_compliance_evidence_plan.directory }}
+
+- name: Evidence | Inspect the output directories on the controller
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop:
+    - "{{ __linux_compliance_evidence_root }}"
+    - "{{ __linux_compliance_evidence_host_dir }}"
+    - "{{ __linux_compliance_evidence_dir }}"
+  delegate_to: localhost
+  become: false
+  register: __linux_compliance_evidence_existing
+
+- name: Evidence | Refuse an existing bundle and unsafe output directories
+  ansible.builtin.assert:
+    that:
+      - not __linux_compliance_evidence_existing.results[2].stat.exists
+      - __linux_compliance_evidence_unsafe | length == 0
+    fail_msg: >-
+      The bundle {{ __linux_compliance_evidence_dir }} was not written:
+      {{ ('it already exists, and a bundle is never overwritten'
+          if __linux_compliance_evidence_existing.results[2].stat.exists
+          else __linux_compliance_evidence_unsafe | join(', ')
+               ~ ' must be a directory with mode 0700 that is not a symbolic link; it is never repaired') }}.
+    quiet: true
+  vars:
+    __linux_compliance_evidence_unsafe: >-
+      {{ __linux_compliance_evidence_existing.results[:2]
+         | selectattr('stat.exists') | rejectattr('stat.isdir')
+         | map(attribute='item') | list
+         + __linux_compliance_evidence_existing.results[:2]
+         | selectattr('stat.exists') | selectattr('stat.isdir')
+         | rejectattr('stat.mode', 'equalto', '0700')
+         | map(attribute='item') | list }}
+
+- name: Evidence | Create the output directories and the bundle directory with mode 0700
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ __linux_compliance_evidence_root }}"
+    - "{{ __linux_compliance_evidence_host_dir }}"
+    - "{{ __linux_compliance_evidence_dir }}"
+  delegate_to: localhost
+  become: false
+
+- name: Evidence | Collect, check and commit the bundle
+  block:
+    - name: Evidence | Inspect the directories that will hold the bundle
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop:
+        - "{{ __linux_compliance_evidence_root }}"
+        - "{{ __linux_compliance_evidence_host_dir }}"
+        - "{{ __linux_compliance_evidence_dir }}"
+      delegate_to: localhost
+      become: false
+      register: __linux_compliance_evidence_directories
+
+    - name: Evidence | Record the controller user that owns the bundle
+      ansible.builtin.set_fact:
+        __linux_compliance_evidence_uid: "{{ __linux_compliance_evidence_directories.results[2].stat.uid }}"
+
+    - name: Evidence | Check that the controller user owns every directory of the bundle path
+      ansible.builtin.assert:
+        that:
+          - >-
+            __linux_compliance_evidence_directories.results
+            | map(attribute='stat')
+            | selectattr('isdir')
+            | rejectattr('islnk')
+            | selectattr('mode', 'equalto', '0700')
+            | selectattr('uid', 'equalto', __linux_compliance_evidence_uid | int)
+            | list | length == 3
+        fail_msg: >-
+          {{ __linux_compliance_evidence_root }}, {{ __linux_compliance_evidence_host_dir }} and
+          {{ __linux_compliance_evidence_dir }} must be directories with mode 0700 owned by the
+          controller user.
+        quiet: true
+
+    - name: Evidence | Create the subdirectories of the bundle with mode 0700
+      ansible.builtin.file:
+        path: "{{ __linux_compliance_evidence_dir }}/{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: "{{ __linux_compliance_evidence_plan.directories }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Evidence | Inspect the recorded evidence files on the host without following links
+      ansible.builtin.stat:
+        path: "{{ item.source }}"
+        follow: false
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop: "{{ __linux_compliance_evidence_plan.fetch }}"
+      loop_control:
+        label: "{{ item.path }}"
+      become: "{{ linux_compliance_evidence_become }}"
+      register: __linux_compliance_evidence_on_host
+
+    - name: Evidence | Refuse symbolic links, special files and sizes that differ from the record
+      ansible.builtin.assert:
+        that:
+          - >-
+            linux_compliance_audited
+            | freesecdev.linux_compliance.evidence_host_files(inventory_hostname,
+                linux_compliance_evidence_include_arf, __linux_compliance_evidence_host_observed)
+            | length == __linux_compliance_evidence_plan.fetch | length
+        quiet: true
+      vars:
+        __linux_compliance_evidence_host_observed: >-
+          {{ dict(__linux_compliance_evidence_on_host.results | map(attribute='item.path')
+                  | zip(__linux_compliance_evidence_on_host.results | map(attribute='stat'))) }}
+
+    - name: Evidence | Fetch the recorded evidence files from the host
+      ansible.builtin.fetch:
+        src: "{{ item.source }}"
+        dest: "{{ __linux_compliance_evidence_dir }}/{{ item.path }}"
+        flat: true
+        fail_on_missing: true
+        validate_checksum: true
+      loop: "{{ __linux_compliance_evidence_plan.fetch }}"
+      loop_control:
+        label: "{{ item.path }}"
+      become: "{{ linux_compliance_evidence_become }}"
+
+    - name: Evidence | Restrict the fetched files to mode 0600
+      ansible.builtin.file:
+        path: "{{ __linux_compliance_evidence_dir }}/{{ item.path }}"
+        state: file
+        mode: "0600"
+      loop: "{{ __linux_compliance_evidence_plan.fetch }}"
+      loop_control:
+        label: "{{ item.path }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Evidence | Hash the fetched files on the controller
+      ansible.builtin.stat:
+        path: "{{ __linux_compliance_evidence_dir }}/{{ item.path }}"
+        follow: false
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      loop: "{{ __linux_compliance_evidence_plan.fetch }}"
+      loop_control:
+        label: "{{ item.path }}"
+      delegate_to: localhost
+      become: false
+      register: __linux_compliance_evidence_fetched
+
+    - name: Evidence | Check the fetched files against the audit record and build the documents
+      ansible.builtin.set_fact:
+        __linux_compliance_evidence_documents: >-
+          {{ linux_compliance_audited | freesecdev.linux_compliance.evidence_documents(
+               __linux_compliance_evidence_collected) }}
+      vars:
+        __linux_compliance_evidence_collected:
+          host: "{{ inventory_hostname }}"
+          include_arf: "{{ linux_compliance_evidence_include_arf }}"
+          observed: >-
+            {{ dict(__linux_compliance_evidence_fetched.results | map(attribute='item.path')
+                    | zip(__linux_compliance_evidence_fetched.results | map(attribute='stat'))) }}
+          scan_run_text: >-
+            {{ lookup('ansible.builtin.file', __linux_compliance_evidence_dir ~ '/raw/scan-run.json',
+                      rstrip=false) }}
+          exceptions_text: >-
+            {{ lookup('ansible.builtin.file', __linux_compliance_evidence_plan.exceptions_file, rstrip=false)
+               if __linux_compliance_evidence_plan.applied else none }}
+          stale: "{{ linux_compliance_evidence_stale_exceptions }}"
+          machine_id: "{{ ansible_facts['machine_id'] | default(none) }}"
+          collection_version: "{{ __linux_compliance_evidence_collection_version }}"
+          controller_uid: "{{ __linux_compliance_evidence_uid | int }}"
+
+    - name: Evidence | Write the documents of the bundle with mode 0600
+      ansible.builtin.copy:
+        dest: "{{ __linux_compliance_evidence_dir }}/{{ item.key }}"
+        content: "{{ item.value }}"
+        mode: "0600"
+        force: false
+      loop: "{{ __linux_compliance_evidence_documents.documents | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      delegate_to: localhost
+      become: false
+      diff: false
+
+    - name: Evidence | Hash every file of the bundle on the controller
+      ansible.builtin.stat:
+        path: "{{ __linux_compliance_evidence_dir }}/{{ item }}"
+        follow: false
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      loop: "{{ __linux_compliance_evidence_documents.expected | list }}"
+      delegate_to: localhost
+      become: false
+      register: __linux_compliance_evidence_written
+
+    - name: Evidence | Check every file of the bundle before the manifest commits it
+      ansible.builtin.assert:
+        that:
+          - >-
+            __linux_compliance_evidence_documents.expected
+            | freesecdev.linux_compliance.evidence_written(__linux_compliance_evidence_observed,
+                __linux_compliance_evidence_uid | int)
+            | length == __linux_compliance_evidence_documents.expected | length
+        quiet: true
+      vars:
+        __linux_compliance_evidence_observed: >-
+          {{ dict(__linux_compliance_evidence_written.results | map(attribute='item')
+                  | zip(__linux_compliance_evidence_written.results | map(attribute='stat'))) }}
+
+    - name: Evidence | Commit the bundle by writing its manifest last
+      ansible.builtin.copy:
+        dest: "{{ __linux_compliance_evidence_dir }}/bundle.json"
+        content: "{{ __linux_compliance_evidence_documents.manifest }}"
+        mode: "0600"
+        force: false
+      delegate_to: localhost
+      become: false
+      diff: false
+
+    - name: Evidence | Hash the manifest on the controller
+      ansible.builtin.stat:
+        path: "{{ __linux_compliance_evidence_dir }}/bundle.json"
+        follow: false
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      delegate_to: localhost
+      become: false
+      register: __linux_compliance_evidence_manifest
+
+    - name: Evidence | Check that the manifest was written as built
+      ansible.builtin.assert:
+        that:
+          - __linux_compliance_evidence_manifest.stat.isreg
+          - not __linux_compliance_evidence_manifest.stat.islnk
+          - __linux_compliance_evidence_manifest.stat.mode == '0600'
+          - __linux_compliance_evidence_manifest.stat.uid == __linux_compliance_evidence_uid | int
+          - __linux_compliance_evidence_manifest.stat.checksum == __linux_compliance_evidence_documents.manifest_sha256
+        fail_msg: The manifest bundle.json differs from the manifest that was built.
+        quiet: true
+
+  rescue:
+    - name: Evidence | Remove the incomplete bundle
+      ansible.builtin.file:
+        path: "{{ __linux_compliance_evidence_dir }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+
+    - name: Evidence | Fail because the bundle could not be collected
+      ansible.builtin.fail:
+        msg: >-
+          The evidence bundle of {{ inventory_hostname }} was not written and the incomplete
+          directory {{ __linux_compliance_evidence_dir }} was removed:
+          {{ ansible_failed_result.msg | default('unknown error') }}
+
+- name: Evidence | Publish the collected bundle
+  ansible.builtin.set_fact:
+    linux_compliance_evidence_bundle:
+      directory: "{{ __linux_compliance_evidence_dir }}"
+      run_id: "{{ __linux_compliance_evidence_plan.run_id }}"
+      manifest_sha256: "{{ __linux_compliance_evidence_documents.manifest_sha256 }}"
+      files: "{{ __linux_compliance_evidence_documents.expected | list | sort(case_sensitive=true) }}"
+      excluded: "{{ __linux_compliance_evidence_plan.excluded | map(attribute='source') | list }}"
+      exceptions_applied: "{{ __linux_compliance_evidence_plan.applied }}"
+
+- name: Evidence | Report the collected bundle
+  ansible.builtin.debug:
+    msg: >-
+      Wrote the evidence bundle {{ linux_compliance_evidence_bundle.directory }}
+      ({{ linux_compliance_evidence_bundle.files | length }} files, manifest SHA-256
+      {{ linux_compliance_evidence_bundle.manifest_sha256 }}).
+      {{ (linux_compliance_evidence_bundle.excluded | length) ~ ' recorded file(s) were excluded: '
+         ~ (linux_compliance_evidence_bundle.excluded | join(', '))
+         if linux_compliance_evidence_bundle.excluded else '' }}

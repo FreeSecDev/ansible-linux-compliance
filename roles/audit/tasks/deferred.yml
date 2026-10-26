@@ -1,0 +1,15 @@
+---
+- name: Audit | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
+- name: Audit | Scan the host, publish the raw result and apply the exceptions file
+  ansible.builtin.import_tasks: scan.yml
+  tags:
+    - always
+
+- name: Audit | Record that the result gates are deferred to the enforce.yml entry point
+  ansible.builtin.import_tasks: defer.yml
+  tags:
+    - always

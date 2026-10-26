@@ -54,6 +54,7 @@ INPUT_OPTIONS: Final[tuple[str, ...]] = (
     "codebuild",
     "molecule",
     "exceptions_evaluation",
+    "evidence_bundle",
 )
 METADATA_OPTIONS: Final[tuple[str, ...]] = (
     "commit",
@@ -81,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="the exceptions file that every --exceptions-evaluation was made from; required "
-        "with --exceptions-evaluation",
+        "with --exceptions-evaluation unless an --evidence-bundle carries it",
     )
     parser.add_argument(
         "--allow-repeated-scans",

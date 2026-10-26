@@ -4,9 +4,9 @@ galaxy_info:
   namespace: freesecdev
   author: FreeSecDev contributors
   description: >-
-    Export an evidence bundle (controller side).
-    Skeleton only: not implemented yet, tracked in FREES-51.
-    The platforms below are intended targets and none is tested yet.
+    Collect the evidence of an audit run into a versioned, checksummed bundle on the controller.
+    The platforms below are intended targets of the audit; the role itself only fetches files.
+    No Molecule scenario runs it yet (FREES-60).
   license: Apache-2.0
   min_ansible_version: "2.20"
   platforms:

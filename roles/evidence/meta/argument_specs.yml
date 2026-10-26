@@ -1,21 +1,63 @@
 ---
 argument_specs:
   main:
-    short_description: "Export an evidence bundle (controller side)"
+    short_description: "Collect the evidence of an audit run into a bundle on the controller"
     description:
-      - "Exports findings and run metadata as an evidence bundle on the controller."
-      - "Skeleton only: the role validates its inputs and then fails until FREES-51 is implemented."
+      - "Fetches the evidence files that the audit role recorded on the host into a versioned bundle on the controller."
+      - "Every fetched file must have the SHA-256 and size that the audit recorded; any mismatch fails the host."
+      - "A failed collection removes the incomplete bundle."
+      - "The bundle holds the raw scan run, the XCCDF results, the tailoring file and a manifest with provenance."
+      - "With exceptions applied it also holds the evaluation, the exceptions file and the stale result."
+      - "Nothing from facts, the environment, the inventory or the state ledger is written."
+      - "Files have mode 0600 in directories with mode 0700, owned by the controller user."
+      - "The format is documented in docs/evidence.md."
+      - "The role never changes the managed host; only the fetch task uses become."
     author: "FreeSecDev contributors"
     options:
       linux_compliance_evidence_output_dir:
         type: path
         default: "evidence"
         description:
-          - "Controller directory that receives the evidence bundle."
+          - "Controller directory below which each host gets a directory and each run a bundle, <host>/<run_id>."
           - "A relative path is resolved against the playbook directory."
-      linux_compliance_evidence_include_host_facts:
+          - "Missing directories are created with mode 0700."
+          - "An existing directory must have mode 0700, be owned by the controller user and not be a symbolic link."
+          - "It is never repaired."
+      linux_compliance_evidence_include_arf:
         type: bool
         default: false
         description:
-          - "Include gathered host facts in the bundle."
-          - "Facts can identify the host, so they are excluded by default."
+          - "Also collect the ARF results (scan/results-arf.xml)."
+          - "ARF holds the system characteristics that OVAL collected, such as matched lines of /etc/shadow."
+          - "It can therefore contain password hashes and other credential material, so it is excluded by default."
+          - "An excluded ARF file is listed in the manifest with its recorded SHA-256."
+      linux_compliance_evidence_become:
+        type: bool
+        default: true
+        description:
+          - "Use become on the fetch task, which is the only task that runs on the managed host."
+          - "The audit evidence is owned by root with mode 0600, so a real collection needs it."
+          - "Set it to false only when the connecting user can read the evidence, for example in tests."
+      linux_compliance_evidence_stale_exceptions:
+        type: dict
+        default: {}
+        description:
+          - "The fact linux_compliance_audit_stale_exceptions from the stale entry point of the audit role."
+          - "When exceptions were applied, it is written to the bundle as exceptions/stale.json."
+          - "It must come from the same exceptions file and include this host."
+          - "An empty mapping writes no stale result."
+  summary.yml:
+    short_description: "Name the target hosts that have no evidence bundle"
+    description:
+      - "Runs once on the controller after the collection play, as playbooks/evidence.yml does."
+      - "Publishes linux_compliance_evidence_collection with the target, collected and missing hosts."
+      - "Missing hosts are split into no audit result, no evidence written and collection failed."
+      - "Prints a WARNING that names every target host without a bundle."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_evidence_summary_hosts:
+        type: list
+        elements: str
+        required: true
+        description:
+          - "Inventory host names that the run targets, for example from the inventory_hostnames lookup."

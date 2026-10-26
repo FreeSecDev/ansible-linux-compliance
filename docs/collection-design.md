@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role), FREES-50 (exceptions), FREES-52 (remediation dispatcher), FREES-54 (verify role).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role), FREES-50 (exceptions), FREES-52 (remediation dispatcher), FREES-54 (verify role), FREES-51 (evidence role).
 
 ## Layout
 
@@ -24,8 +24,8 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
 | `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; inert data, shipped with the tests in the tarball |
-| `roles/` | The `discover`, `audit`, `remediate` and `verify` roles and the `evidence` role skeleton (FREES-40) |
-| `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml` and `verify.yml` |
+| `roles/` | The `discover`, `audit`, `remediate`, `verify` and `evidence` roles |
+| `playbooks/` | Orchestration playbooks `audit.yml`, `remediate.yml`, `verify.yml` and `evidence.yml` |
 | `.ansible-lint` | ansible-lint `production` profile |
 
 Everything else (`tools/`, `.agents/`, `.github/`, the Python tooling files, `docs/planning`, `docs/research`) supports
@@ -33,11 +33,11 @@ development and is listed in `build_ignore`, so it is not part of the tarball.
 
 ## Roles and playbooks
 
-The `discover` (FREES-43), `audit` (FREES-49), `remediate` (FREES-52, [remediation guide](remediation.md)) and
-`verify` (FREES-54, [verify guide](verify.md)) roles are implemented. The `evidence` role is a skeleton: it validates
-its inputs and then fails with a message that names the issue that tracks its implementation, so a playbook can never
-report success for work that does not exist yet. The skeleton uses only `ansible.builtin.assert` and
-`ansible.builtin.fail`; `discover` uses `assert`, `benchmark_info`, `profile_info` and `set_fact`, and `audit` uses
+The `discover` (FREES-43), `audit` (FREES-49), `remediate` (FREES-52, [remediation guide](remediation.md)),
+`verify` (FREES-54, [verify guide](verify.md)) and `evidence` (FREES-51, [evidence bundles](evidence.md)) roles are
+implemented. `evidence` uses `assert`, `set_fact`, `debug`, `fail`, `import_tasks` and the `evidence_plan`,
+`evidence_documents` and `evidence_written` filters, `ansible.builtin.fetch` (the only task on the host) and `stat`,
+`file` and `copy` on the controller; it writes only on the controller. `discover` uses `assert`, `benchmark_info`, `profile_info` and `set_fact`, and `audit` uses
 `assert`, `compliance_scan` and `set_fact`. None of them changes the configuration of the host; `audit` writes evidence
 files ([audit guide](audit.md)). `remediate` uses `assert`, `include_vars`, `set_fact`, `include_tasks`, `debug`,
 `control_state`, `stat` and `file`, and changes the host only after the explicit opt-in. `verify` uses `assert`,
@@ -50,7 +50,7 @@ files ([audit guide](audit.md)). `remediate` uses `assert`, `include_vars`, `set
 | `audit` | Never; writes evidence files | FREES-49 (implemented) | `linux_compliance_audit_profile` (`cis_level1_server`), `linux_compliance_audit_fail_on_noncompliant` (`false`), `linux_compliance_audit_backend` (`openscap`), `linux_compliance_audit_output_dir` (`/var/lib/freesecdev/linux_compliance/evidence`), `linux_compliance_audit_scan_timeout` (`1800`), `linux_compliance_audit_disabled_rules` (`[]`), `linux_compliance_audit_fail_on_noncompliant_after_waivers` (`false`), `linux_compliance_exceptions_file` (`null`) |
 | `remediate` | Only with explicit opt-in | FREES-52 (implemented) | `linux_compliance_remediate_enabled` (`false`), `linux_compliance_remediate_allow_disruptive` (`[]`), `linux_compliance_remediate_profile` (`cis_level1_server`) |
 | `verify` | Never | FREES-54 (implemented) | `linux_compliance_verify_profile` (`cis_level1_server`), `linux_compliance_verify_fail_on_regression` (`true`), `linux_compliance_verify_fail_on_new_failures` (`true`), `linux_compliance_verify_mode` (`raw`), `linux_compliance_exceptions_file` (`null`) |
-| `evidence` | Never; writes on the controller only | FREES-51 | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_host_facts` (`false`) |
+| `evidence` | Never; writes on the controller only | FREES-51 (implemented, [evidence bundles](evidence.md)) | `linux_compliance_evidence_output_dir` (`evidence`), `linux_compliance_evidence_include_arf` (`false`), `linux_compliance_evidence_become` (`true`), `linux_compliance_evidence_stale_exceptions` (`{}`) |
 
 Per-rule and per-family toggles are read by the `remediate` and `audit` roles with the same resolution
 (`plugins/module_utils/compliance/toggles.py`), and both fail on unknown toggle names; their defaults and argument

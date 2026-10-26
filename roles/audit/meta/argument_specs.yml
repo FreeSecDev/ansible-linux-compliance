@@ -268,6 +268,71 @@ argument_specs:
         default: null
         description:
           - "Absolute path, on the controller, of the exceptions file; null applies no exceptions."
+  deferred.yml:
+    short_description: "Audit a host like the main entry point, with the result gates deferred"
+    description:
+      - "Runs every task of the main entry point except the result gates, with the same inputs and validation."
+      - "Records linux_compliance_audited.gate as deferred true and enforced false instead of a gate decision."
+      - "A scan that did not complete or failed rules therefore do not fail the host in this play."
+      - "The deferral comes only from choosing this entry point; no variable defers or skips a gate."
+      - "playbooks/evidence.yml uses it and runs enforce.yml before it collects the evidence of each host."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_audit_fail_on_noncompliant:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one rule with outcome fail or error."
+      linux_compliance_audit_fail_on_noncompliant_after_waivers:
+        type: bool
+        default: false
+        description:
+          - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_exceptions_file:
+        type: str
+        default: null
+        description:
+          - "Absolute path, on the controller, of the exceptions file; null applies no exceptions."
+  evaluate_deferred.yml:
+    short_description: "Apply the exceptions file to an existing audit result, with the result gates deferred"
+    description:
+      - "Runs evaluate.yml without its result gates and records the gate as deferred and not enforced."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_audit_fail_on_noncompliant:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one rule with outcome fail or error."
+      linux_compliance_audit_fail_on_noncompliant_after_waivers:
+        type: bool
+        default: false
+        description:
+          - "Count the waived result instead of the raw result in the gate; error always counts."
+      linux_compliance_exceptions_file:
+        type: str
+        default: null
+        description:
+          - "Absolute path, on the controller, of the exceptions file; null applies no exceptions."
+  enforce.yml:
+    short_description: "Enforce the result gates that deferred.yml or evaluate_deferred.yml deferred"
+    description:
+      - "Requires linux_compliance_audited.gate to record a deferral."
+      - "Records the gate decision with deferred true and enforced true."
+      - "Then fails the host when the scan did not complete."
+      - "With linux_compliance_audit_fail_on_noncompliant it also fails the host on failed or errored rules."
+    author: "FreeSecDev contributors"
+    options:
+      linux_compliance_audit_fail_on_noncompliant:
+        type: bool
+        default: false
+        description:
+          - "Fail the play when the gate counts at least one rule with outcome fail or error."
+      linux_compliance_audit_fail_on_noncompliant_after_waivers:
+        type: bool
+        default: false
+        description:
+          - "Count the waived result instead of the raw result in the gate; error always counts."
   stale.yml:
     short_description: "Report the exceptions that matched no finding on any audited host"
     description:

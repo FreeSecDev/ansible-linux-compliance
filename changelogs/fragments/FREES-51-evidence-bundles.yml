@@ -1,0 +1,47 @@
+---
+minor_changes:
+  - >-
+    evidence role - implemented. It fetches the evidence files that the audit recorded on each host
+    (``ansible.builtin.fetch``, ``become`` on that task only) into a versioned bundle
+    ``<output_dir>/<inventory host>/<run_id>`` on the controller, checks every file against the SHA-256 and size the
+    audit recorded and fails closed on a mismatch, removing the incomplete bundle. A bundle holds the raw
+    ``scan-run.json``, the XCCDF results, the tailoring file, ``SHA256SUMS`` and the manifest ``bundle.json`` with
+    provenance (collection version, collection time, inventory host and machine ID, the host identity the scan run
+    reports, scanner, content source, version and SHA-256, and the SHA-256 of the exceptions file). With exceptions
+    applied it also holds the verified evaluation, the byte-exact exceptions file and the stale result. Files are
+    ``0600`` in ``0700`` directories, owned by the controller user, and the manifest is written last. Nothing from
+    facts, the environment, the inventory or the state ledger is written. The ARF results are excluded unless
+    ``linux_compliance_evidence_include_arf`` is true, because they can hold credential material such as matched
+    lines of ``/etc/shadow``. The format is documented in ``docs/evidence.md``.
+  - >-
+    evidence role - the skeleton option ``linux_compliance_evidence_include_host_facts`` is removed; host facts are
+    never written to a bundle. New options are ``linux_compliance_evidence_include_arf`` (default ``false``),
+    ``linux_compliance_evidence_become`` (default ``true``) and ``linux_compliance_evidence_stale_exceptions``
+    (default ``{}``).
+  - >-
+    Add the playbook ``freesecdev.linux_compliance.evidence``. It audits with the result gates deferred, then enforces
+    them on each host with the evidence collection in an ``always`` section, so every audited host (including hosts
+    with failed rules and scans that did not complete) gets a bundle with the stale result of the run and the hosts
+    that a gate fails still fail the play. It then names every target host without a bundle.
+  - >-
+    audit role - add the ``deferred.yml`` and ``evaluate_deferred.yml`` entry points, which run ``main`` and
+    ``evaluate.yml`` without the result gates and record ``linux_compliance_audited.gate`` as deferred and not enforced,
+    and the ``enforce.yml`` entry point, which enforces them later. ``linux_compliance_audited.gate`` gains
+    ``deferred`` and ``enforced``. No variable defers a gate. The gate decision is now recorded before the host fails,
+    also for a scan that did not complete.
+  - >-
+    evidence role - inspect every recorded file on the host with ``stat`` and ``follow: false`` before fetching it, and
+    refuse symbolic links, special files and sizes other than the recorded one; add the ``summary.yml`` entry point,
+    which publishes ``linux_compliance_evidence_collection`` and names the target hosts without a bundle.
+  - >-
+    Add the controller filters ``freesecdev.linux_compliance.evidence_plan``,
+    ``freesecdev.linux_compliance.evidence_documents``, ``freesecdev.linux_compliance.evidence_written`` and
+    ``freesecdev.linux_compliance.evidence_host_files``.
+trivial:
+  - >-
+    Reporting - ``--evidence-bundle DIR`` reads an evidence bundle directly. The bundle is read without following
+    symbolic links and verified (manifest, every SHA-256 and size, ``SHA256SUMS``, the scan run against the manifest,
+    the evaluation against the bundled exceptions file and the raw scan run) before its evaluation, or its raw scan
+    run, becomes a report input; a bundle that does not verify is an input error. A bundle with applied exceptions
+    requires ``--exceptions-file`` and its copy must be byte-identical to it, because the bundle is not signed. The
+    report schema is unchanged and nothing is labelled verified (ADR 0018 stays proposed).

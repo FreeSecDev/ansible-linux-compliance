@@ -7,7 +7,9 @@ no timestamp is generated: metadata times are supplied by the caller.
 
 Exceptions evaluations are inputs of two sections: their scan runs feed
 ``compliance`` and their exception statuses feed ``exceptions``. They are listed once
-in ``raw_artifacts``. More than one completed ScanRun for one host, benchmark, content
+in ``raw_artifacts``. An evidence bundle (``--evidence-bundle``) is verified first and
+contributes its evaluation, or its raw scan run when no exceptions were applied, and
+its exceptions file. More than one completed ScanRun for one host, benchmark, content
 version and profile is refused unless ``allow_repeated_scans`` is set.
 """
 
@@ -19,6 +21,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Final, cast
 
+from tools.reporting.bundle import BundleInput, parse_bundle
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
     Json,
@@ -73,9 +76,9 @@ SECTION_NAMES: Final[tuple[str, ...]] = (
 )
 SECTION_INPUTS: Final[dict[str, tuple[str, ...]]] = {
     "codebuild": ("codebuild",),
-    "compliance": ("xccdf", "arf", "scan_run", "exceptions_evaluation"),
+    "compliance": ("xccdf", "arf", "scan_run", "exceptions_evaluation", "evidence_bundle"),
     "coverage": ("cobertura",),
-    "exceptions": ("exceptions_evaluation",),
+    "exceptions": ("exceptions_evaluation", "evidence_bundle"),
     "lint": ("lint",),
     "molecule": ("molecule",),
     "packer": ("packer",),
@@ -171,6 +174,7 @@ class ReportInputs:
     codebuild: tuple[Path, ...] = ()
     molecule: tuple[Path, ...] = ()
     exceptions_evaluation: tuple[Path, ...] = ()
+    evidence_bundle: tuple[Path, ...] = ()
     exceptions_file: Path | None = None
     max_bytes: int = DEFAULT_MAX_BYTES
     allow_repeated_scans: bool = False
@@ -331,35 +335,67 @@ def _compliance_section(
     return section
 
 
-def _exceptions_file(inputs: ReportInputs) -> ParseResult[str] | None:
-    """Read the exceptions file that every evaluation must be verified against.
+def _exceptions_file(
+    inputs: ReportInputs, bundles: Sequence[BundleInput]
+) -> ParseResult[str] | None:
+    """Return the reviewed exceptions file that every evaluation must be verified against.
+
+    It is always ``--exceptions-file``, the file the operator supplies. A bundle is not
+    signed, so its own copy of the exceptions file is never the reference: a bundle
+    built consistently from a made-up file would otherwise turn failures into waivers.
+    Every bundle whose exceptions were applied carries a copy, and each copy must be
+    byte-identical to ``--exceptions-file``.
 
     Raises:
-        ReportError: If evaluations are supplied without the file, the file without
-            evaluations, or the file cannot be read.
+        ReportError: If evaluations or bundles with applied exceptions are supplied
+            without ``--exceptions-file``, the file without any evaluation, the file
+            cannot be read, or a bundle carries another exceptions file.
     """
+    copies = [bundle.exceptions_file for bundle in bundles if bundle.exceptions_file is not None]
+    evaluated = bool(inputs.exceptions_evaluation) or any(
+        bundle.evaluation is not None for bundle in bundles
+    )
     if inputs.exceptions_file is None:
         if inputs.exceptions_evaluation:
             message = "--exceptions-evaluation requires --exceptions-file"
             raise ReportError(message)
+        if copies:
+            message = (
+                "an --evidence-bundle whose exceptions were applied requires --exceptions-file: "
+                "the bundle is not signed, so its own copy of the exceptions file is not trusted"
+            )
+            raise ReportError(message)
         return None
-    if not inputs.exceptions_evaluation:
-        message = "--exceptions-file is only used with --exceptions-evaluation"
+    if not evaluated:
+        message = (
+            "--exceptions-file is only used with --exceptions-evaluation or with evidence "
+            "bundles whose exceptions were applied"
+        )
         raise ReportError(message)
-    result = parse_exceptions_file(inputs.exceptions_file, inputs.max_bytes)
-    if result.data is None:
-        message = f"the exceptions file cannot be used: {result.reason}"
+    source = parse_exceptions_file(inputs.exceptions_file, inputs.max_bytes)
+    if source.data is None:
+        message = f"the exceptions file cannot be used: {source.reason}"
         raise ReportError(message)
-    return result
+    foreign = [copy for copy in copies if copy.artifact.sha256 != source.artifact.sha256]
+    if foreign:
+        message = (
+            f"{len(foreign)} evidence bundle(s) carry an exceptions file that is not "
+            "byte-identical to --exceptions-file; report the runs of each exceptions file "
+            "separately, each with its reviewed file"
+        )
+        raise ReportError(message)
+    return source
 
 
 def _evaluations(
-    inputs: ReportInputs,
+    inputs: ReportInputs, bundles: Sequence[BundleInput]
 ) -> tuple[ParseResult[str] | None, list[ParseResult[EvaluationData]]]:
-    source = _exceptions_file(inputs)
+    source = _exceptions_file(inputs, bundles)
     text = "" if source is None else source.data or ""
     paths = inputs.exceptions_evaluation
-    return source, [parse_evaluation(path, text, inputs.max_bytes) for path in paths]
+    supplied = [parse_evaluation(path, text, inputs.max_bytes) for path in paths]
+    bundled = [bundle.evaluation for bundle in bundles if bundle.evaluation is not None]
+    return source, supplied + bundled
 
 
 def _exceptions_section(
@@ -431,6 +467,33 @@ def _overview(sections: dict[str, dict[str, Json]]) -> dict[str, Json]:
     return overview
 
 
+def _compliance_inputs(
+    inputs: ReportInputs,
+    evaluations: Sequence[ParseResult[EvaluationData]],
+    bundles: Sequence[BundleInput],
+) -> list[ParseResult[ComplianceData]]:
+    size = inputs.max_bytes
+    return (
+        _parse_all(inputs.xccdf, parse_xccdf, size)
+        + _parse_all(inputs.arf, parse_arf, size)
+        + _parse_all(inputs.scan_run, parse_scan_run, size)
+        + [compliance_result(result) for result in evaluations]
+        + [bundle.compliance for bundle in bundles if bundle.evaluation is None]
+    )
+
+
+def _scan_inputs(
+    inputs: ReportInputs,
+) -> tuple[
+    ParseResult[str] | None,
+    list[ParseResult[EvaluationData]],
+    list[ParseResult[ComplianceData]],
+]:
+    bundles = [parse_bundle(path, inputs.max_bytes) for path in inputs.evidence_bundle]
+    source, evaluations = _evaluations(inputs, bundles)
+    return source, evaluations, _compliance_inputs(inputs, evaluations, bundles)
+
+
 def build_report(inputs: ReportInputs) -> dict[str, Json]:
     """Parse every input and assemble the report document.
 
@@ -442,13 +505,7 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
     """
     _check_input_counts(inputs)
     size = inputs.max_bytes
-    source, evaluations = _evaluations(inputs)
-    compliance = (
-        _parse_all(inputs.xccdf, parse_xccdf, size)
-        + _parse_all(inputs.arf, parse_arf, size)
-        + _parse_all(inputs.scan_run, parse_scan_run, size)
-        + [compliance_result(result) for result in evaluations]
-    )
+    source, evaluations, compliance = _scan_inputs(inputs)
     tests = _parse_all(inputs.junit, parse_junit, size) + _parse_all(
         inputs.pytest_json, parse_pytest_json, size
     )

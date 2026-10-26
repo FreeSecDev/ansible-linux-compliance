@@ -46,7 +46,8 @@ pinned content.
     `linux_compliance_audit_fail_on_noncompliant_after_waivers` ([the gate](#the-failure-gate-and-waivers)). The
     decision is recorded as `linux_compliance_audited.gate`.
 
-The variables are listed in the [role README](../roles/audit/README.md).
+The variables are listed in the [role README](../roles/audit/README.md). The `evidence` role collects the evidence
+of each run, with the waived evaluation, into a bundle on the controller ([evidence bundles](evidence.md)).
 
 ## What the module does
 
@@ -420,6 +421,22 @@ gate), Ansible ends the playbook and the final play does not run.
 | `main` | Validate, scan, publish the raw result, apply the exceptions, enforce the gates |
 | `evaluate.yml` | Apply the exceptions file and the gates to an existing `linux_compliance_audited` fact, without scanning; used by the playbook test |
 | `stale.yml` | Aggregate stale exceptions over the given target hosts, after the audit play |
+| `deferred.yml` | `main` without the result gates; records `linux_compliance_audited.gate` as `{deferred: true, enforced: false}` |
+| `evaluate_deferred.yml` | `evaluate.yml` without the result gates, recorded the same way |
+| `enforce.yml` | Enforce the gates that `deferred.yml` or `evaluate_deferred.yml` deferred: record the decision with `deferred: true` and `enforced: true`, then fail the host as `main` would |
+
+`main` and `evaluate.yml` always enforce the gates; no variable defers or skips them. Only the choice of the
+`deferred.yml` or `evaluate_deferred.yml` entry point defers them, and `enforce.yml` must then run on the same hosts.
+`playbooks/evidence.yml` uses the pair so that every audited host is collected before a gate can drop it from the run
+([evidence bundles](evidence.md#running-it)). The gate record has `deferred` and `enforced` next to the decision, so
+whatever reads the fact can tell a deferred gate that was never enforced.
+
+A custom playbook that deliberately calls `deferred.yml` or `evaluate_deferred.yml` and never runs `enforce.yml`,
+or that writes `linux_compliance_audited.gate` with its own `set_fact`, can still end without the gates. That is a
+deliberate act by whoever writes the playbook, the same class as the documented residual of the `verify` role's
+baseline marker; no variable from the inventory, `group_vars`, `host_vars`, `-e`, a role parameter or an include
+parameter can defer a gate. Such a run never produces a bundle: the evidence role refuses an audit result whose
+gate is recorded as deferred and not enforced, and the report refuses a manifest without an enforced gate.
 
 The entry points are named with their file suffix (`tasks_from: evaluate.yml`), because the repository guard
 (FREES-128) only scans role entry points that end in `.yml` or `.yaml`, and Ansible looks up the argument spec under

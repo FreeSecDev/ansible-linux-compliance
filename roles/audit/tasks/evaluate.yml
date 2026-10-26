@@ -4,35 +4,8 @@
   tags:
     - always
 
-- name: Audit | Validate the inputs of the evaluation
-  ansible.builtin.assert:
-    that:
-      - linux_compliance_audit_fail_on_noncompliant is boolean
-      - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
-      - >-
-        linux_compliance_exceptions_file is none or
-        (linux_compliance_exceptions_file is string and linux_compliance_exceptions_file is match('^/'))
-      - linux_compliance_audited is defined
-      - linux_compliance_audited is mapping
-      - linux_compliance_audited.run_status in ['completed', 'failed', 'timed_out', 'not_run']
-      - linux_compliance_audited.scan_run is none or linux_compliance_audited.scan_run is mapping
-      - linux_compliance_audited.summary is none or linux_compliance_audited.summary is mapping
-      - (linux_compliance_audited.scan_run is none) == (linux_compliance_audited.run_status == 'not_run')
-    fail_msg: >-
-      The evaluate entry point of the audit role needs the fact linux_compliance_audited from the
-      main entry point and valid inputs; see meta/argument_specs.yml. linux_compliance_exceptions_file
-      must be null or an absolute path on the controller.
-    quiet: true
-  tags:
-    - always
-
-- name: Audit | Read and validate the exceptions file before any host is evaluated
-  ansible.builtin.import_tasks: exceptions_file.yml
-  tags:
-    - always
-
-- name: Audit | Apply the exceptions file and publish the waived result
-  ansible.builtin.import_tasks: exceptions_apply.yml
+- name: Audit | Validate the audit result and apply the exceptions file
+  ansible.builtin.import_tasks: evaluation.yml
   tags:
     - always
 
