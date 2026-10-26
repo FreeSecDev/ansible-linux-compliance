@@ -11,6 +11,8 @@
     __linux_compliance_evidence_on_host: __linux_compliance_unset__
     __linux_compliance_evidence_plan: __linux_compliance_unset__
     __linux_compliance_evidence_root: __linux_compliance_unset__
+    __linux_compliance_evidence_summary_existing: __linux_compliance_unset__
+    __linux_compliance_evidence_summary_written: __linux_compliance_unset__
     __linux_compliance_evidence_uid: __linux_compliance_unset__
     __linux_compliance_evidence_written: __linux_compliance_unset__
   tags:
@@ -29,15 +31,16 @@
       - __linux_compliance_evidence_on_host == '__linux_compliance_unset__'
       - __linux_compliance_evidence_plan == '__linux_compliance_unset__'
       - __linux_compliance_evidence_root == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_summary_existing == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_summary_written == '__linux_compliance_unset__'
       - __linux_compliance_evidence_uid == '__linux_compliance_unset__'
       - __linux_compliance_evidence_written == '__linux_compliance_unset__'
       - __linux_compliance_evidence_collected == '__linux_compliance_unset__'
       - __linux_compliance_evidence_host_observed == '__linux_compliance_unset__'
-      - __linux_compliance_evidence_no_audit == '__linux_compliance_unset__'
-      - __linux_compliance_evidence_no_evidence == '__linux_compliance_unset__'
       - __linux_compliance_evidence_observed == '__linux_compliance_unset__'
       - __linux_compliance_evidence_preview == '__linux_compliance_unset__'
       - __linux_compliance_evidence_summary == '__linux_compliance_unset__'
+      - __linux_compliance_evidence_target_vars == '__linux_compliance_unset__'
       - __linux_compliance_evidence_targets == '__linux_compliance_unset__'
       - __linux_compliance_evidence_unsafe == '__linux_compliance_unset__'
       - >-
@@ -53,11 +56,10 @@
   vars:
     __linux_compliance_evidence_collected: __linux_compliance_unset__
     __linux_compliance_evidence_host_observed: __linux_compliance_unset__
-    __linux_compliance_evidence_no_audit: __linux_compliance_unset__
-    __linux_compliance_evidence_no_evidence: __linux_compliance_unset__
     __linux_compliance_evidence_observed: __linux_compliance_unset__
     __linux_compliance_evidence_preview: __linux_compliance_unset__
     __linux_compliance_evidence_summary: __linux_compliance_unset__
+    __linux_compliance_evidence_target_vars: __linux_compliance_unset__
     __linux_compliance_evidence_targets: __linux_compliance_unset__
     __linux_compliance_evidence_unsafe: __linux_compliance_unset__
   tags:
@@ -75,6 +77,8 @@
     __linux_compliance_evidence_on_host: __linux_compliance_unset_again__
     __linux_compliance_evidence_plan: __linux_compliance_unset_again__
     __linux_compliance_evidence_root: __linux_compliance_unset_again__
+    __linux_compliance_evidence_summary_existing: __linux_compliance_unset_again__
+    __linux_compliance_evidence_summary_written: __linux_compliance_unset_again__
     __linux_compliance_evidence_uid: __linux_compliance_unset_again__
     __linux_compliance_evidence_written: __linux_compliance_unset_again__
   tags:
@@ -93,15 +97,16 @@
       - __linux_compliance_evidence_on_host == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_plan == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_root == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_summary_existing == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_summary_written == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_uid == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_written == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_collected == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_host_observed == '__linux_compliance_unset_again__'
-      - __linux_compliance_evidence_no_audit == '__linux_compliance_unset_again__'
-      - __linux_compliance_evidence_no_evidence == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_observed == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_preview == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_summary == '__linux_compliance_unset_again__'
+      - __linux_compliance_evidence_target_vars == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_targets == '__linux_compliance_unset_again__'
       - __linux_compliance_evidence_unsafe == '__linux_compliance_unset_again__'
     fail_msg: >-
@@ -113,11 +118,10 @@
   vars:
     __linux_compliance_evidence_collected: __linux_compliance_unset_again__
     __linux_compliance_evidence_host_observed: __linux_compliance_unset_again__
-    __linux_compliance_evidence_no_audit: __linux_compliance_unset_again__
-    __linux_compliance_evidence_no_evidence: __linux_compliance_unset_again__
     __linux_compliance_evidence_observed: __linux_compliance_unset_again__
     __linux_compliance_evidence_preview: __linux_compliance_unset_again__
     __linux_compliance_evidence_summary: __linux_compliance_unset_again__
+    __linux_compliance_evidence_target_vars: __linux_compliance_unset_again__
     __linux_compliance_evidence_targets: __linux_compliance_unset_again__
     __linux_compliance_evidence_unsafe: __linux_compliance_unset_again__
   tags:
@@ -135,6 +139,8 @@
     __linux_compliance_evidence_on_host: __linux_compliance_unset__
     __linux_compliance_evidence_plan: __linux_compliance_unset__
     __linux_compliance_evidence_root: __linux_compliance_unset__
+    __linux_compliance_evidence_summary_existing: __linux_compliance_unset__
+    __linux_compliance_evidence_summary_written: __linux_compliance_unset__
     __linux_compliance_evidence_uid: __linux_compliance_unset__
     __linux_compliance_evidence_written: __linux_compliance_unset__
   tags:
