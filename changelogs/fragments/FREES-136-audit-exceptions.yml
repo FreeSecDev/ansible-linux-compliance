@@ -1,0 +1,29 @@
+---
+minor_changes:
+  - >-
+    audit role - add ``linux_compliance_exceptions_file`` (default ``null``). When it is set, the role reads the
+    exceptions file once on the controller, validates it before any host is scanned (an invalid file fails the play),
+    applies it to the scan run of each host and publishes the waived result as ``linux_compliance_audited.exceptions``
+    next to the unchanged raw ``scan_run`` and ``summary``. A scan start more than five minutes after the controller
+    time fails that host. Check mode without a scan skips the waivers and reports that they were not applied.
+  - >-
+    audit role - ``linux_compliance_audit_fail_on_noncompliant`` counts the raw result by default, so a waiver never
+    passes the gate. The new ``linux_compliance_audit_fail_on_noncompliant_after_waivers`` (default ``false``) counts
+    the waived result instead; ``error`` always counts. The decision is published as ``linux_compliance_audited.gate``.
+  - >-
+    audit role - warn about exceptions that set a ``framework`` but no ``profiles``, because they apply to every
+    profile scanned on the hosts in their scope.
+  - >-
+    audit role - add the ``evaluate.yml`` entry point (apply the exceptions file and the gates to an existing audit
+    result) and the ``stale.yml`` entry point. ``playbooks/audit.yml`` runs ``stale.yml`` in a final play on the
+    controller, once after every host and every serial batch, and publishes ``linux_compliance_audit_stale_exceptions``.
+    Target hosts without an evaluation (limited out, unreachable, failed) are listed, and an exception is called
+    stale only when every target host was evaluated.
+  - >-
+    audit role - with an exceptions file, every host of the play must resolve the same file, also across serial
+    batches; each host checks that the applied text has the validated SHA-256; the free strategy is detected and
+    refused.
+  - >-
+    Add the controller filters ``freesecdev.linux_compliance.validate_exceptions`` (validate an exceptions file and
+    list the exceptions without profiles) and ``freesecdev.linux_compliance.scan_summary`` (count the findings of a
+    scan run per outcome).

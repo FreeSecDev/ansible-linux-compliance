@@ -1,0 +1,355 @@
+---
+- name: Audit exceptions | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Audit exceptions | Waived findings appear and the raw findings are kept
+  hosts: web01:db01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+  tasks:
+    - name: Build a synthetic audit result with failures, an error and a pass
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Apply the exceptions with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+    - name: Hash the exceptions file on the controller
+      ansible.builtin.stat:
+        path: "{{ audit_exceptions_valid_file }}"
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      delegate_to: localhost
+      register: audit_exceptions_valid_stat
+
+    - name: Check that the recorded digest is the digest of the file as written
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.exceptions.source_sha256 == audit_exceptions_valid_stat.stat.checksum
+        quiet: true
+
+    - name: Check that the raw result is unchanged on every host
+      vars:
+        raw_outcomes: >-
+          {{ linux_compliance_audited.scan_run.findings | items2dict(key_name='rule_id', value_name='outcome') }}
+        evaluation: "{{ linux_compliance_audited.exceptions.evaluation }}"
+        unprofiled: "{{ linux_compliance_audited.exceptions.framework_without_profiles }}"
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.scan_run == audit_exceptions_scan_run
+          - raw_outcomes[audit_exceptions_rule_root_login] == 'fail'
+          - raw_outcomes[audit_exceptions_rule_login_events] == 'fail'
+          - linux_compliance_audited.summary.fail == 2
+          - linux_compliance_audited.summary.error == 1
+          - linux_compliance_audited.summary.waived == 0
+          - linux_compliance_audited.exceptions.status == 'applied'
+          - linux_compliance_audited.exceptions.applied
+          - linux_compliance_audited.exceptions.file == audit_exceptions_valid_file
+          - linux_compliance_audited.exceptions.source_sha256 is match('^[0-9a-f]{64}$')
+          - evaluation.source_sha256 == linux_compliance_audited.exceptions.source_sha256
+          - unprofiled | map(attribute='id') | list == ['EXC-WEB-ROOT-LOGIN']
+          - unprofiled | map(attribute='framework') | list == ['cis']
+          - linux_compliance_audited.gate.basis == 'raw'
+          - linux_compliance_audited.gate.fail == 2
+          - linux_compliance_audited.gate.error == 1
+        quiet: true
+
+    - name: Check that web01 has both failures waived and keeps its error
+      vars:
+        waived_findings: "{{ linux_compliance_audited.exceptions.evaluation.scan_run.findings }}"
+        waived_outcomes: "{{ waived_findings | items2dict(key_name='rule_id', value_name='outcome') }}"
+        root_login: "{{ waived_findings | selectattr('rule_id', 'equalto', audit_exceptions_rule_root_login) | first }}"
+        statuses: >-
+          {{ linux_compliance_audited.exceptions.evaluation.exceptions
+             | items2dict(key_name='id', value_name='status') }}
+      ansible.builtin.assert:
+        that:
+          - waived_outcomes[audit_exceptions_rule_root_login] == 'waived'
+          - waived_outcomes[audit_exceptions_rule_login_events] == 'waived'
+          - waived_outcomes[audit_exceptions_rule_broken] == 'error'
+          - waived_outcomes[audit_exceptions_rule_passing] == 'pass'
+          - root_login.evaluated_outcome == 'fail'
+          - root_login.exception.state == 'active'
+          - root_login.exception.exception_id == 'EXC-WEB-ROOT-LOGIN'
+          - root_login.exception.reason is search('owner. platform-team')
+          - linux_compliance_audited.exceptions.summary.waived == 2
+          - linux_compliance_audited.exceptions.summary.fail == 0
+          - linux_compliance_audited.exceptions.summary.error == 1
+          - linux_compliance_audited.exceptions.summary.total == 4
+          - statuses['EXC-UNUSED'] == 'unmatched'
+          - statuses['EXC-WEB-LOGIN-EVENTS'] == 'waived'
+          - statuses['EXC-WEB-ROOT-LOGIN'] == 'waived'
+        quiet: true
+      when: inventory_hostname == 'web01'
+
+    - name: Check that db01, outside every scope, has nothing waived
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.exceptions.applied
+          - linux_compliance_audited.exceptions.summary.waived == 0
+          - linux_compliance_audited.exceptions.summary.fail == 2
+          - linux_compliance_audited.exceptions.evaluation.summary.unmatched == 3
+        quiet: true
+      when: inventory_hostname == 'db01'
+
+- name: Audit exceptions | Stale exceptions are aggregated once over every evaluated host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Aggregate the evaluations with the audit role
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: stale.yml
+      vars:
+        linux_compliance_audit_stale_hosts: "{{ query('ansible.builtin.inventory_hostnames', 'web01:db01') }}"
+
+    - name: Check that only the exception that no host needed is stale
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audit_stale_exceptions.computed
+          - linux_compliance_audit_stale_exceptions.stale == ['EXC-UNUSED']
+          - linux_compliance_audit_stale_exceptions.evaluated_hosts == ['db01', 'web01']
+          - linux_compliance_audit_stale_exceptions.audited_hosts == ['db01', 'web01']
+          - linux_compliance_audit_stale_exceptions.not_evaluated_hosts == []
+          - linux_compliance_audit_stale_exceptions.target_hosts == ['db01', 'web01']
+          - linux_compliance_audit_stale_exceptions.complete
+          - linux_compliance_audit_stale_exceptions.unmatched == ['EXC-UNUSED']
+          - >-
+            linux_compliance_audit_stale_exceptions.source_sha256 ==
+            hostvars['web01'].linux_compliance_audited.exceptions.source_sha256
+        quiet: true
+
+- name: Audit exceptions | The gate counts the raw result by default, so waivers do not pass it
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+    linux_compliance_audit_fail_on_noncompliant: true
+  tasks:
+    - name: Build a synthetic audit result whose failures are all waived
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_waivable }}"
+
+    - name: Expect the raw gate to fail
+      block:
+        - name: Apply the exceptions and the gate with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: evaluate.yml
+
+        - name: Fail because the gate passed
+          ansible.builtin.fail:
+            msg: The raw gate passed although two rules failed before the waivers.
+      rescue:
+        - name: Check that the gate failed on the raw result
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Stop on failed or errored rules')
+              - ansible_failed_result.msg is search('2 failed and 0 errored')
+              - ansible_failed_result.msg is search('raw result')
+              - linux_compliance_audited.gate.basis == 'raw'
+              - linux_compliance_audited.gate.fail == 2
+              - linux_compliance_audited.exceptions.summary.waived == 2
+              - linux_compliance_audited.exceptions.summary.fail == 0
+            quiet: true
+
+- name: Audit exceptions | The opt-in counts the waived result
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+    linux_compliance_audit_fail_on_noncompliant: true
+    linux_compliance_audit_fail_on_noncompliant_after_waivers: true
+  tasks:
+    - name: Build a synthetic audit result whose failures are all waived
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_waivable }}"
+
+    - name: Apply the exceptions and the gate with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+    - name: Check that the gate passed on the waived result and kept the raw one
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.gate.basis == 'waived'
+          - linux_compliance_audited.gate.fail == 0
+          - linux_compliance_audited.gate.error == 0
+          - linux_compliance_audited.gate.waived == 2
+          - linux_compliance_audited.summary.fail == 2
+        quiet: true
+
+- name: Audit exceptions | Errors always count, also with the opt-in
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+    linux_compliance_audit_fail_on_noncompliant: true
+    linux_compliance_audit_fail_on_noncompliant_after_waivers: true
+  tasks:
+    - name: Build a synthetic audit result with an error
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Expect the waived gate to fail on the error
+      block:
+        - name: Apply the exceptions and the gate with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: evaluate.yml
+
+        - name: Fail because the gate passed
+          ansible.builtin.fail:
+            msg: The waived gate passed although a rule errored.
+      rescue:
+        - name: Check that the error failed the gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Stop on failed or errored rules')
+              - ansible_failed_result.msg is search('0 failed and 1 errored')
+              - linux_compliance_audited.gate.basis == 'waived'
+              - linux_compliance_audited.gate.error == 1
+            quiet: true
+
+- name: Audit exceptions | Check mode without a scan skips the waivers and says so
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+    linux_compliance_audit_fail_on_noncompliant: true
+  tasks:
+    - name: Publish a check-mode result without a scan
+      ansible.builtin.set_fact:
+        linux_compliance_audited: "{{ audit_exceptions_not_run }}"
+
+    - name: Apply the exceptions with the audit role in check mode
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+        apply:
+          check_mode: true
+
+    - name: Check that the waivers were skipped and reported
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.scan_run is none
+          - linux_compliance_audited.exceptions.status == 'not_run'
+          - not linux_compliance_audited.exceptions.applied
+          - linux_compliance_audited.exceptions.evaluation is none
+          - linux_compliance_audited.exceptions.summary is none
+          - linux_compliance_audited.exceptions.message is search('Waivers were not applied')
+          - linux_compliance_audited.exceptions.source_sha256 is match('^[0-9a-f]{64}$')
+          - not linux_compliance_audited.gate.counted
+        quiet: true
+
+- name: Audit exceptions | Stale aggregation names the hosts it could not cover
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Aggregate the evaluations with the audit role
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: stale.yml
+      vars:
+        linux_compliance_audit_stale_hosts: [web01, db01]
+
+    - name: Check that web01, without a scan, is not counted and nothing is called stale
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audit_stale_exceptions.evaluated_hosts == ['db01']
+          - linux_compliance_audit_stale_exceptions.not_evaluated_hosts == ['web01']
+          - not linux_compliance_audit_stale_exceptions.complete
+          - linux_compliance_audit_stale_exceptions.stale is none
+          - >-
+            linux_compliance_audit_stale_exceptions.unmatched ==
+            ['EXC-UNUSED', 'EXC-WEB-LOGIN-EVENTS', 'EXC-WEB-ROOT-LOGIN']
+        quiet: true
+
+- name: Audit exceptions | Without an exceptions file the behaviour is unchanged
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  tasks:
+    - name: Build a synthetic audit result with failures, an error and a pass
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Run the evaluation without an exceptions file
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+    - name: Check that nothing was waived and the raw result is unchanged
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.scan_run == audit_exceptions_scan_run
+          - linux_compliance_audited.exceptions.status == 'not_requested'
+          - not linux_compliance_audited.exceptions.applied
+          - linux_compliance_audited.exceptions.file is none
+          - linux_compliance_audited.exceptions.evaluation is none
+          - linux_compliance_audited.gate.basis == 'raw'
+          - linux_compliance_audited.gate.fail == 2
+        quiet: true
+
+- name: Audit exceptions | A scan start in the future fails only that host
+  hosts: web01:db01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+  tasks:
+    - name: Build a synthetic audit result that web01 dates one hour ahead
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+        audit_exceptions_start_offset: "{{ 3600 if inventory_hostname == 'web01' else 0 }}"
+
+    - name: Apply the exceptions and record a failure
+      block:
+        - name: Apply the exceptions with the audit role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: evaluate.yml
+      rescue:
+        - name: Record the failure of this host
+          ansible.builtin.set_fact:
+            audit_exceptions_skew_failure: "{{ ansible_failed_result.msg }}"
+
+    - name: Check that the skewed host failed
+      ansible.builtin.assert:
+        that:
+          - audit_exceptions_skew_failure is search('later than the controller time')
+        quiet: true
+      when: inventory_hostname == 'web01'
+
+    - name: Check that the other host was evaluated
+      ansible.builtin.assert:
+        that:
+          - audit_exceptions_skew_failure is not defined
+          - linux_compliance_audited.exceptions.applied
+        quiet: true
+      when: inventory_hostname == 'db01'

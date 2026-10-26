@@ -29,12 +29,26 @@ BROWSER_TEST_DIR := build/browser-test
 NAME_SET_PYTHONS := 3.9 3.10 3.11 3.12 3.13 3.14 3.15
 NAME_SET_PYTHON ?=
 NAME_SET_DIRECTORY := build/name-sets
+AUDIT_EXCEPTIONS_DIR := build/test-audit-exceptions
+AUDIT_EXCEPTIONS_INVENTORY := tests/playbooks/inventory/audit-exceptions.yml
+AUDIT_EXCEPTIONS_FORBIDDEN := Apply the exceptions file to the scan run|AUDIT-EXCEPTIONS-NOT-REACHED
+AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_HOME='$(CURDIR)/build/ansible-home' \
+	ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' ANSIBLE_NOCOLOR=1 \
+	$(RUN) ansible-playbook -e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
 
 space := $(subst ,, )
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
 PYLINT_MODULE_DIRECTORIES := plugins/modules
 PYLINT_MODULE_IGNORES := $(subst $(space),|,$(patsubst %,^%/,$(PYLINT_MODULE_DIRECTORIES)))
+
+define audit_exceptions_expect_failure
+status=0; $(AUDIT_EXCEPTIONS_PLAYBOOK) $(2) > '$(AUDIT_EXCEPTIONS_DIR)/$(1).log' 2>&1 || status=$$?; \
+	cat '$(AUDIT_EXCEPTIONS_DIR)/$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: %s did not fail the play (status %s)\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -q '$(3)' '$(AUDIT_EXCEPTIONS_DIR)/$(1).log' || { printf 'error: %s: the expected message is missing\n' '$(1)' >&2; exit 1; }; \
+	if grep -qE '$(4)' '$(AUDIT_EXCEPTIONS_DIR)/$(1).log'; then printf 'error: %s: forbidden output found\n' '$(1)' >&2; exit 1; fi
+endef
 
 NOT_IMPLEMENTED = @printf 'not implemented yet: %s (tracked in %s)\n' '$(1)' '$(2)' >&2; exit 2
 
@@ -75,6 +89,7 @@ Tests
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
+  test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
@@ -106,7 +121,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -235,6 +250,18 @@ test-name-sets: require-uv collection-link
 	@test -n '$(NAME_SET_PYTHON)' || { printf 'error: set NAME_SET_PYTHON to an installed Python version, for example 3.9.25\n' >&2; exit 2; }
 	FREESECDEV_NAME_SET_PYTHON="$$(uv python find --no-project '$(NAME_SET_PYTHON)')" $(RUN) pytest tests/unit/tools/test_name_sets.py --no-cov
 
+test-audit-exceptions: require-uv collection-link
+	rm -rf '$(AUDIT_EXCEPTIONS_DIR)'
+	mkdir -p build/ansible-home '$(AUDIT_EXCEPTIONS_DIR)'
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions.yml
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) --limit db01,localhost tests/playbooks/audit-exceptions-limit.yml \
+		| tee '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
+	grep -q 'unmatched on 1 of 2 target hosts; not covered: web01' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
+	if grep -q 'review and remove' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'; then printf 'error: a limited run advised removal\n' >&2; exit 1; fi
+	$(call audit_exceptions_expect_failure,invalid,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-invalid.yml,missing keys: risk,$(AUDIT_EXCEPTIONS_FORBIDDEN))
+	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
+	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
+
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)
 
@@ -346,4 +373,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage test-browser security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions security docs test-sanity test-ansible-units package-check

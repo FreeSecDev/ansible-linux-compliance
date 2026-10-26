@@ -1,0 +1,30 @@
+---
+- name: Audit exceptions | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Audit exceptions | An invalid file fails the whole play, without a rescue
+  hosts: web01:db01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_invalid_file }}"
+  tasks:
+    - name: Build a synthetic audit result
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Apply the invalid exceptions file with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+- name: Audit exceptions | This play must never run
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Report that the playbook continued
+      ansible.builtin.debug:
+        msg: AUDIT-EXCEPTIONS-NOT-REACHED

@@ -4,11 +4,13 @@ Scope: role `freesecdev.linux_compliance.audit`. Audience: playbook authors and 
 
 Scans the host against the profile that the `discover` role verified, with the
 `freesecdev.linux_compliance.compliance_scan` module, and publishes normalized findings, provenance and evidence paths
-as the fact `linux_compliance_audited`. The full guide is [docs/audit.md](../../docs/audit.md).
+as the fact `linux_compliance_audited`. With `linux_compliance_exceptions_file` set it applies the exceptions file
+([docs/exceptions.md](../../docs/exceptions.md)) and publishes the waived result next to the raw one. The full guide
+is [docs/audit.md](../../docs/audit.md).
 
 ## Status
 
-Implemented (FREES-49). The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL 9 compatible, per
+Implemented (FREES-49; exceptions FREES-136). The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL 9 compatible, per
 [ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested support: no Molecule
 scenario runs a real scan yet.
 
@@ -24,12 +26,28 @@ when the output directory does not exist, check mode does not create it and the 
 ## Order
 
 1. Validate the inputs.
-2. Check that `linux_compliance_discovered` exists and names the same profile (`discover` must run first).
-3. Check that host facts were gathered.
-4. Run `compliance_scan` with `fail_on_incomplete: false`, so the result is always registered.
-5. Set the fact `linux_compliance_audited`.
-6. Fail when the scan did not complete (`run_status` `failed` or `timed_out`).
-7. Fail on failed or errored rules when `linux_compliance_audit_fail_on_noncompliant` is true.
+2. When `linux_compliance_exceptions_file` is set, read and validate it once on the controller (`run_once`); an invalid
+   file fails the play before any scan. Warn about exceptions that set a framework but no profiles.
+3. Check that `linux_compliance_discovered` exists and names the same profile (`discover` must run first).
+4. Check that host facts were gathered.
+5. Run `compliance_scan` with `fail_on_incomplete: false`, so the result is always registered.
+6. Set the fact `linux_compliance_audited` with the raw result.
+7. Apply the exceptions file to a completed scan run and add `linux_compliance_audited.exceptions`; in check mode
+   without a scan, report that waivers were not applied. A scan start in the future fails the host.
+8. Fail when the scan did not complete (`run_status` `failed` or `timed_out`).
+9. Record `linux_compliance_audited.gate` and fail on failed or errored rules when
+   `linux_compliance_audit_fail_on_noncompliant` is true, counting the raw result unless
+   `linux_compliance_audit_fail_on_noncompliant_after_waivers` is true. `error` always counts.
+
+`tasks/main.yml` imports `exceptions_file.yml`, `exceptions_apply.yml` and `gate.yml`. Two more entry points exist,
+named with their suffix because `tasks_from` must end in `.yml`:
+
+- `evaluate.yml` runs steps 2, 7, 8 and 9 on an existing `linux_compliance_audited` fact without scanning.
+- `stale.yml` aggregates stale exceptions once over the target hosts in `linux_compliance_audit_stale_hosts` (the
+  final play of `playbooks/audit.yml`).
+
+With an exceptions file, only the linear strategy is supported (with or without `serial`); the `free` strategy is
+detected and fails. Every host of the play, across all `serial` batches, must resolve the variable to the same path.
 
 ## Variables
 
@@ -38,7 +56,9 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `linux_compliance_audit_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. Must equal the profile the `discover` role verified. A profile is never substituted silently. |
-| `linux_compliance_audit_fail_on_noncompliant` | `bool` | `false` | Fail the play when at least one rule is `fail` or `error`. A scan that did not complete always fails. |
+| `linux_compliance_audit_fail_on_noncompliant` | `bool` | `false` | Fail the play when at least one rule is `fail` or `error`, counted on the raw result by default, so a waiver never passes it. A scan that did not complete always fails. |
+| `linux_compliance_audit_fail_on_noncompliant_after_waivers` | `bool` | `false` | Count the waived result instead of the raw result in that gate. `error` always counts. Without applied waivers the raw result is counted. |
+| `linux_compliance_exceptions_file` | `str` | `null` | Absolute path, on the controller, of the exceptions file. `null` applies no exceptions. The same for every host of the play. Shared with the `verify` role, so it has no role prefix. |
 | `linux_compliance_audit_backend` | `str` | `"openscap"` | Scanner backend; `openscap` is the only one. |
 | `linux_compliance_audit_output_dir` | `str` | `"/var/lib/freesecdev/linux_compliance/evidence"` | Root-owned directory without group or other permissions below which each run gets its own directory. Missing components are created with mode `0700`; symlinks are refused. |
 | `linux_compliance_audit_scan_timeout` | `int` | `1800` | Scan time limit in seconds, 1 to 3600. |
@@ -49,10 +69,28 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 `linux_compliance_audited` holds `run_id`, `run_status` (`completed`, `failed`, `timed_out`, or `not_run` in check
 mode without an existing output directory), `summary` (counts per outcome), `scan_run` (the normalized findings document of ADR 0013), `evidence`
 (`directory` and `files` with path, kind, SHA-256 and size), `evidence_written`, `disabled_rules` and `planned`.
+`scan_run` and `summary` are the raw result and are never changed. `exceptions` holds `file`, `status`
+(`not_requested`, `applied`, `not_run` or `not_completed`), `applied`, `message`, `source_sha256`,
+`framework_without_profiles`, `evaluation` (the `apply_exceptions` evaluation document; its `scan_run` is the waived
+scan run) and `summary` (the count per outcome of the waived run). `gate` holds `enabled`, `after_waivers`, `basis`
+(`raw` or `waived`), `counted` and the `fail`, `error` and `waived` counts used.
+
+The `stale.yml` entry point publishes `linux_compliance_audit_stale_exceptions` with these keys:
+
+- `computed`;
+- `complete`, true only when every target host was evaluated;
+- `unmatched`, the identifiers unmatched on every evaluated host;
+- `stale`, equal to `unmatched` when `complete` is true and null otherwise;
+- `source_sha256`;
+- `target_hosts`, `audited_hosts` and `evaluated_hosts`;
+- `not_evaluated_hosts`: every target host without an evaluation, including hosts limited out, unreachable or failed.
+
+Only complete coverage produces the advice to remove an exception.
 
 ## Running
 
 Select hosts with `-e linux_compliance_target_hosts=<group or host>`. Only `-e` works: play `hosts:` is evaluated
 before inventory variables apply, so setting it in `group_vars` has no effect. Pass booleans as JSON, for example
 `-e '{"linux_compliance_audit_fail_on_noncompliant": true}'`; `-e linux_compliance_audit_fail_on_noncompliant=true`
-passes a string and the input validation fails closed.
+passes a string and the input validation fails closed. Set `linux_compliance_exceptions_file` in play variables or with
+`-e`, never per host.

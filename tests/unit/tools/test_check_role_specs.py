@@ -114,6 +114,49 @@ def test_prefix_is_enforced(tmp_path: Path) -> None:
     assert "must be prefixed linux_compliance_demo_" in specs.check_role(role)[0]
 
 
+def test_shared_variables_need_no_role_prefix(tmp_path: Path) -> None:
+    name = "linux_compliance_exceptions_file"
+    option = {"type": "str", "default": None, "description": "x"}
+    role = write_role(tmp_path, options={name: option}, defaults={name: None})
+    assert specs.check_role(role) == []
+
+
+def test_unlisted_unprefixed_variables_are_still_refused(tmp_path: Path) -> None:
+    name = "linux_compliance_other_file"
+    option = {"type": "str", "default": None, "description": "x"}
+    role = write_role(tmp_path, options={name: option}, defaults={name: None})
+    assert "must be prefixed linux_compliance_demo_" in specs.check_role(role)[0]
+
+
+@pytest.mark.parametrize("type_name", ["str", "path"])
+def test_optional_string_options_may_default_to_null(tmp_path: Path, type_name: str) -> None:
+    name = "linux_compliance_demo_file"
+    option = {"type": type_name, "default": None, "description": "x"}
+    role = write_role(tmp_path, options={name: option}, defaults={name: None})
+    assert specs.check_role(role) == []
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        {"type": "str", "default": None, "required": True, "description": "x"},
+        {"type": "bool", "default": None, "description": "x"},
+        {"type": "list", "elements": "str", "default": None, "description": "x"},
+    ],
+)
+def test_null_defaults_are_refused_elsewhere(tmp_path: Path, option: dict[str, object]) -> None:
+    name = "linux_compliance_demo_value"
+    role = write_role(tmp_path, options={name: option}, defaults={name: None})
+    assert any("default does not have the declared type" in item for item in specs.check_role(role))
+
+
+def test_null_defaults_must_match(tmp_path: Path) -> None:
+    name = "linux_compliance_demo_file"
+    option = {"type": "str", "default": None, "description": "x"}
+    role = write_role(tmp_path, options={name: option}, defaults={name: ""})
+    assert "does not equal the argument spec default" in specs.check_role(role)[0]
+
+
 def test_option_spec_must_be_mapping(tmp_path: Path) -> None:
     role = write_role(tmp_path, options={FLAG: "bool"}, defaults={FLAG: False})
     assert "option spec must be a mapping" in specs.check_role(role)[0]
@@ -169,6 +212,14 @@ def test_equal_values_of_different_type_are_a_mismatch(tmp_path: Path) -> None:
 )
 def test_matches_type(value: object, type_name: str, expected: bool) -> None:
     assert specs.matches_type(value, type_name) is expected
+
+
+@pytest.mark.parametrize(
+    ("type_name", "nullable", "expected"),
+    [("str", True, True), ("path", True, True), ("str", False, False), ("int", True, False)],
+)
+def test_matches_type_with_null(type_name: str, nullable: bool, expected: bool) -> None:
+    assert specs.matches_type(None, type_name, nullable=nullable) is expected
 
 
 def test_list_requires_elements(tmp_path: Path) -> None:

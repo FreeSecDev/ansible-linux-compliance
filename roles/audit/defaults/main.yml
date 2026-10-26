@@ -5,3 +5,5 @@ linux_compliance_audit_backend: "openscap"
 linux_compliance_audit_output_dir: "/var/lib/freesecdev/linux_compliance/evidence"
 linux_compliance_audit_scan_timeout: 1800
 linux_compliance_audit_disabled_rules: []
+linux_compliance_audit_fail_on_noncompliant_after_waivers: false
+linux_compliance_exceptions_file: null

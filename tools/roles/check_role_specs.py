@@ -1,4 +1,9 @@
-"""Check that each role's ``defaults/main.yml`` matches its ``meta/argument_specs.yml``."""
+"""Check that each role's ``defaults/main.yml`` matches its ``meta/argument_specs.yml``.
+
+Role variables are prefixed ``linux_compliance_<role>_``. The only exceptions are the
+collection-wide variables in :data:`SHARED_VARIABLES`, which several roles read with one
+meaning. An option that is not required may default to null, which means "not set".
+"""
 
 from __future__ import annotations
 
@@ -13,6 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 ENTRY_POINT: Final[str] = "main"
+SHARED_VARIABLES: Final[frozenset[str]] = frozenset({"linux_compliance_exceptions_file"})
+NULLABLE_TYPES: Final[frozenset[str]] = frozenset({"str", "path"})
 TYPE_CLASSES: Final[dict[str, type]] = {
     "str": str,
     "path": str,
@@ -34,8 +41,13 @@ def load_mapping(path: Path) -> dict[str, object] | None:
     return cast("dict[str, object]", loaded)
 
 
-def matches_type(value: object, type_name: str) -> bool:
-    """Return whether ``value`` is acceptable for the argument spec type ``type_name``."""
+def matches_type(value: object, type_name: str, *, nullable: bool = False) -> bool:
+    """Return whether ``value`` is acceptable for the argument spec type ``type_name``.
+
+    ``None`` is acceptable only when ``nullable`` is true and the type is a string type.
+    """
+    if value is None:
+        return nullable and type_name in NULLABLE_TYPES
     expected = TYPE_CLASSES[type_name]
     if isinstance(value, bool) and expected is not bool:
         return False
@@ -45,7 +57,7 @@ def matches_type(value: object, type_name: str) -> bool:
 def check_option(role: str, name: str, spec: object, default: object) -> list[str]:
     """Return findings for one option, given its spec and the value from the defaults file."""
     where = f"{role}: {name}"
-    if not name.startswith(f"linux_compliance_{role}_"):
+    if name not in SHARED_VARIABLES and not name.startswith(f"linux_compliance_{role}_"):
         return [f"{where}: variable must be prefixed linux_compliance_{role}_"]
     if not isinstance(spec, dict):
         return [f"{where}: option spec must be a mapping"]
@@ -60,7 +72,8 @@ def check_option(role: str, name: str, spec: object, default: object) -> list[st
         findings.append(f"{where}: default is missing from the argument spec")
     elif option["default"] != default or type(option["default"]) is not type(default):
         findings.append(f"{where}: defaults/main.yml does not equal the argument spec default")
-    if not matches_type(default, type_name):
+    nullable = option.get("required") is not True
+    if not matches_type(default, type_name, nullable=nullable):
         findings.append(f"{where}: default does not have the declared type {type_name}")
     if type_name == "list" and not option.get("elements"):
         findings.append(f"{where}: list options must declare elements")

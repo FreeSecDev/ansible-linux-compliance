@@ -56,7 +56,8 @@ make help
 | `collection-link` | implemented | Links `plugins/` into `build/collections` for pytest and the type checkers |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches and coverage output |
-| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser security docs test-sanity test-ansible-units package-check` |
+| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions security docs test-sanity test-ansible-units package-check` |
+| `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with `ANSIBLE_HOME=build/ansible-home`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play ([audit guide](audit.md#tests)) |
 | `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
 | `lint-iac` | implemented | `tofu fmt -check -recursive infra/`, `tofu init -backend=false` and `tofu validate` per root module, shellcheck of the rendered bootstrap script; needs `tofu` on `PATH`, runs in the `iac` CI job and in `make ci`, not in `make lint` |
 | `aws-bootstrap-render` | implemented | Renders `infra/bootstrap/bootstrap.sh.tmpl` to the gitignored `infra/bootstrap/bootstrap.local.sh` |
@@ -237,7 +238,7 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage`, `make test-content-golden`, `make test-browser` |
+| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-content-golden`, `make test-browser` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |

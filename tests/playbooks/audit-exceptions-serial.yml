@@ -1,0 +1,29 @@
+---
+- name: Audit exceptions | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Audit exceptions | Different files per host fail the play, also across serial batches
+  hosts: web01:db01
+  gather_facts: false
+  serial: 1
+  vars_files:
+    - vars/audit-exceptions.yml
+  tasks:
+    - name: Build a synthetic audit result
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Apply the exceptions with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+- name: Audit exceptions | This play must never run
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Report that the playbook continued
+      ansible.builtin.debug:
+        msg: AUDIT-EXCEPTIONS-NOT-REACHED

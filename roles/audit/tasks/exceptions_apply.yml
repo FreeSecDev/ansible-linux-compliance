@@ -1,0 +1,95 @@
+---
+- name: Audit | Apply the exceptions file to the scan run of this host
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_evaluation: >-
+      {{ linux_compliance_audited.scan_run
+         | freesecdev.linux_compliance.apply_exceptions(
+             __linux_compliance_audit_exceptions.text, inventory_hostname, group_names)
+         if __linux_compliance_audit_waivers_apply else none }}
+  vars:
+    __linux_compliance_audit_waivers_apply: >-
+      {{ __linux_compliance_audit_exceptions.text is not none
+         and linux_compliance_audited.run_status == 'completed'
+         and linux_compliance_audited.scan_run is not none }}
+  tags:
+    - always
+
+- name: Audit | Check that the applied text is the text that was validated
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_exceptions_overview is not none
+      - __linux_compliance_audit_evaluation.source_sha256 == __linux_compliance_audit_exceptions_overview.source_sha256
+      - __linux_compliance_audit_exceptions.file == linux_compliance_exceptions_file
+    fail_msg: >-
+      The exceptions text applied to this host (SHA-256
+      {{ __linux_compliance_audit_evaluation.source_sha256 }}) is not the text validated for the play
+      (SHA-256 {{ __linux_compliance_audit_exceptions_overview.source_sha256 | default('none') }}).
+      Nothing from it is published; run the play again with one exceptions file and the linear strategy.
+    quiet: true
+  when: __linux_compliance_audit_evaluation is not none
+  tags:
+    - always
+
+- name: Audit | Publish the waived result next to the raw result
+  ansible.builtin.set_fact:
+    linux_compliance_audited: >-
+      {{ linux_compliance_audited | ansible.builtin.combine({'exceptions': __linux_compliance_audit_waivers}) }}
+  vars:
+    __linux_compliance_audit_waivers_status: >-
+      {{ 'not_requested' if linux_compliance_exceptions_file is none
+         else 'applied' if __linux_compliance_audit_evaluation is not none
+         else 'not_run' if linux_compliance_audited.run_status == 'not_run'
+         else 'not_completed' }}
+    __linux_compliance_audit_waivers_summary: >-
+      {{ __linux_compliance_audit_evaluation.scan_run | freesecdev.linux_compliance.scan_summary
+         if __linux_compliance_audit_evaluation is not none else none }}
+    __linux_compliance_audit_waivers_messages:
+      not_requested: >-
+        No exceptions file is set (linux_compliance_exceptions_file), so no waiver was applied;
+        use the raw scan_run and summary.
+      applied: >-
+        Applied {{ linux_compliance_exceptions_file }} (SHA-256
+        {{ __linux_compliance_audit_exceptions_overview.source_sha256 | default('') }}):
+        {{ __linux_compliance_audit_waivers_summary.waived | default(0) }} failed rule(s) waived.
+        The raw scan_run and summary are unchanged.
+      not_run: >-
+        Waivers were not applied: check mode ran no scan (run_status not_run, scan_run null),
+        so {{ linux_compliance_exceptions_file }} was validated but not applied to this host.
+      not_completed: >-
+        Waivers were not applied: the scan did not complete (run_status
+        {{ linux_compliance_audited.run_status }}), every rule is error and an error is never waived.
+    __linux_compliance_audit_waivers:
+      file: "{{ linux_compliance_exceptions_file }}"
+      status: "{{ __linux_compliance_audit_waivers_status }}"
+      applied: "{{ __linux_compliance_audit_evaluation is not none }}"
+      message: "{{ __linux_compliance_audit_waivers_messages[__linux_compliance_audit_waivers_status] }}"
+      source_sha256: >-
+        {{ __linux_compliance_audit_exceptions_overview.source_sha256
+           if __linux_compliance_audit_exceptions_overview is not none else none }}
+      framework_without_profiles: >-
+        {{ __linux_compliance_audit_exceptions_overview.framework_without_profiles
+           if __linux_compliance_audit_exceptions_overview is not none else [] }}
+      evaluation: "{{ __linux_compliance_audit_evaluation }}"
+      summary: "{{ __linux_compliance_audit_waivers_summary }}"
+  tags:
+    - always
+
+- name: Audit | Report whether waivers were applied
+  ansible.builtin.debug:
+    msg: "{{ linux_compliance_audited.exceptions.message }}"
+  when: linux_compliance_audited.exceptions.status != 'not_requested'
+  tags:
+    - always
+
+- name: Audit | Warn when the scan started long before the exceptions were applied
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the scan of {{ inventory_hostname }} started
+      {{ linux_compliance_audited.exceptions.evaluation.scan_lag_seconds }} seconds before the
+      controller time, more than {{ linux_compliance_audited.exceptions.evaluation.max_scan_lag_seconds }}.
+      Waivers were judged at the controller time; check the clock of the host.
+  when:
+    - linux_compliance_audited.exceptions.applied
+    - linux_compliance_audited.exceptions.evaluation.scan_lag_exceeded
+  tags:
+    - always

@@ -5,6 +5,10 @@
       - linux_compliance_audit_profile is string
       - linux_compliance_audit_profile is match('^[a-z0-9][a-z0-9_]{0,127}$')
       - linux_compliance_audit_fail_on_noncompliant is boolean
+      - linux_compliance_audit_fail_on_noncompliant_after_waivers is boolean
+      - >-
+        linux_compliance_exceptions_file is none or
+        (linux_compliance_exceptions_file is string and linux_compliance_exceptions_file is match('^/'))
       - linux_compliance_audit_backend is string
       - linux_compliance_audit_backend in ['openscap']
       - linux_compliance_audit_output_dir is string
@@ -24,6 +28,11 @@
       -e '{"linux_compliance_audit_fail_on_noncompliant": true}';
       -e linux_compliance_audit_fail_on_noncompliant=true passes a string.
     quiet: true
+  tags:
+    - always
+
+- name: Audit | Read and validate the exceptions file before any host is scanned
+  ansible.builtin.import_tasks: exceptions_file.yml
   tags:
     - always
 
@@ -94,28 +103,12 @@
   tags:
     - always
 
-- name: Audit | Stop when the scan did not complete
-  ansible.builtin.assert:
-    that:
-      - linux_compliance_audited.run_status in ['completed', 'not_run']
-    fail_msg: >-
-      The scan did not complete (run_status {{ linux_compliance_audited.run_status }}). Every rule
-      of the profile is reported as error and nothing is compliant. Evidence is in
-      {{ linux_compliance_audited.evidence.directory }}.
-    quiet: true
+- name: Audit | Apply the exceptions file and publish the waived result
+  ansible.builtin.import_tasks: exceptions_apply.yml
   tags:
     - always
 
-- name: Audit | Stop on failed or errored rules when requested
-  ansible.builtin.assert:
-    that:
-      - (linux_compliance_audited.summary.fail | int) + (linux_compliance_audited.summary.error | int) == 0
-    fail_msg: >-
-      The audit reported {{ linux_compliance_audited.summary.fail }} failed and
-      {{ linux_compliance_audited.summary.error }} errored rule(s). The host was not changed.
-    quiet: true
-  when:
-    - linux_compliance_audit_fail_on_noncompliant
-    - linux_compliance_audited.run_status == 'completed'
+- name: Audit | Enforce the result gates
+  ansible.builtin.import_tasks: gate.yml
   tags:
     - always

@@ -333,3 +333,34 @@ expiry at `min(started_at, controller time)` (a lagging host clock would extend 
   They are checks, not fixes, and `--remediate` stays refused, so [ADR 0003](0003-native-module-remediation.md) is
   unaffected. The model is unchanged: an SCE result maps through the same XCCDF result table as an OVAL result. See
   [T-AUDIT-2](../security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).
+
+## Amendment 2026-10-26: exceptions in the audit role (FREES-136)
+
+The `audit` role applies the exceptions file ([audit guide](../audit.md#exceptions-in-the-audit-role)). The model is
+unchanged; these are the consumer rules.
+
+- **Raw and waived results are both kept.** `linux_compliance_audited.scan_run` and `summary` stay exactly what the
+  scanner reported. The waived scan run and its counts are added as `linux_compliance_audited.exceptions.evaluation`
+  and `exceptions.summary`. A consumer that needs the scanner's verdict reads the raw result; a waived finding still
+  carries `evaluated_outcome: fail`.
+- **The failure gate counts the raw result by default.** `linux_compliance_audit_fail_on_noncompliant` counts `fail` and
+  `error` before any waiver, so a waiver never silently passes it. `linux_compliance_audit_fail_on_noncompliant_after_waivers`
+  opts into counting `fail` of the waived result. `error` is taken from the raw result and counts in both modes.
+- **Fail closed.** The file is read and validated once on the controller (`run_once`, `any_errors_fatal`) before any host
+  is scanned; an invalid file fails the play and nothing is applied. Every host of the play, across `serial` batches,
+  must resolve the same file, each host checks that the SHA-256 of the text it applied is the validated one, and the
+  `free` strategy is detected and refused. A scan start more
+  than five minutes after the controller time fails that host. Waivers are never applied to a run that is not
+  `completed`, and check mode without a scan reports that they were not applied.
+- **Stale exceptions are aggregated once, after every host**, in a final play on the controller, because a `run_once`
+  task inside the role would run once per `serial` batch (or on every host with the `free` strategy) and see only part of
+  the evaluations. The result names every target host that was not evaluated (limited out, unreachable, failed,
+  check mode), and an exception is called stale, with the advice to remove it, only when every target host was
+  evaluated.
+- **Verification compares like with like.** The `verify` role (FREES-54) must compare raw with raw or waived with waived,
+  from the same exceptions file, and must never count a waived result as an improvement over a failed one.
+
+Rejected alternatives: gating on the waived result by default (an approved waiver would make a failing host pass the
+gate without anyone opting in), reading the file once per host (a file changed during the play would give hosts
+different waivers; the digest check of `stale_exceptions` would only catch it at the end), and replacing
+`linux_compliance_audited.scan_run` with the waived run (consumers could no longer see what the scanner decided).

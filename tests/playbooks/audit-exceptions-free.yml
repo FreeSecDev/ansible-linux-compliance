@@ -1,0 +1,22 @@
+---
+- name: Audit exceptions | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Audit exceptions | The free strategy is refused for the exceptions path
+  hosts: web01:db01
+  gather_facts: false
+  strategy: ansible.builtin.free
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+  tasks:
+    - name: Build a synthetic audit result
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Apply the exceptions with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml

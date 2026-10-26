@@ -1,0 +1,54 @@
+---
+- name: Audit exceptions | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Audit exceptions | Evaluate the hosts that --limit leaves in the play
+  hosts: web01:db01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+  tasks:
+    - name: Require that the Makefile limited the run to db01 and localhost
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all == ['db01']
+        fail_msg: Run this playbook through make test-audit-exceptions, which passes --limit db01,localhost.
+        quiet: true
+
+    - name: Build a synthetic audit result with failures, an error and a pass
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Apply the exceptions with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+- name: Audit exceptions | A limited run never advises removing an exception
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Aggregate the evaluations over every target host, as playbooks/audit.yml does
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: stale.yml
+      vars:
+        linux_compliance_audit_stale_hosts: "{{ query('ansible.builtin.inventory_hostnames', 'web01:db01') }}"
+
+    - name: Check that the limited-out host is named and nothing is called stale
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audit_stale_exceptions.target_hosts == ['db01', 'web01']
+          - linux_compliance_audit_stale_exceptions.evaluated_hosts == ['db01']
+          - linux_compliance_audit_stale_exceptions.audited_hosts == ['db01']
+          - linux_compliance_audit_stale_exceptions.not_evaluated_hosts == ['web01']
+          - not linux_compliance_audit_stale_exceptions.complete
+          - linux_compliance_audit_stale_exceptions.stale is none
+          - >-
+            linux_compliance_audit_stale_exceptions.unmatched ==
+            ['EXC-UNUSED', 'EXC-WEB-LOGIN-EVENTS', 'EXC-WEB-ROOT-LOGIN']
+        quiet: true
