@@ -68,8 +68,14 @@ class MarkingBackend:
 
 
 @pytest.fixture
-def harness(tmp_path: Path) -> Harness:
+def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harness:
     tmp_path.chmod(0o755)
+    release = tmp_path / "os-release"
+    release.write_text(
+        'PRETTY_NAME="Ubuntu 26.04 LTS"\nNAME="Ubuntu"\nVERSION_ID="26.04"\nID=ubuntu\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(release))
     return Harness(tmp_path)
 
 
@@ -151,3 +157,55 @@ def test_without_the_opt_in_the_backend_is_told_so(harness: Harness) -> None:
     backend = MarkingBackend()
     auditor(backend).run(harness.job(backend="scc", host=TARGET), check_mode=False)
     assert [request.allow_off_platform_benchmark for request in backend.requests] == [False]
+
+
+def test_the_scc_backend_refuses_a_host_that_reports_another_release(harness: Harness) -> None:
+    host = model.HostIdentity("host.example", "ubuntu", "24.04", "x86_64", None)
+    with pytest.raises(audit.AuditError, match=r"VERSION_ID '26\.04'") as raised:
+        audit.plan(harness.job(backend="scc", host=host), owner_uid=UID)
+    assert raised.value.error_type == "host_mismatch"
+    assert not harness.output_root.exists()
+
+
+def test_the_scc_backend_refuses_an_unreadable_release_file(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(harness.root / "absent"))
+    with pytest.raises(audit.AuditError, match="cannot be read") as raised:
+        audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
+    assert raised.value.error_type == "host_mismatch"
+
+
+def test_an_oversized_release_file_is_refused(harness: Harness) -> None:
+    big = harness.root / "big-os-release"
+    big.write_bytes(b"#" * (audit.MAX_OS_RELEASE_BYTES + 1))
+    with pytest.raises(audit.AuditError, match="exceeds") as raised:
+        audit.check_host_release(TARGET, str(big))
+    assert raised.value.error_type == "host_mismatch"
+
+
+def test_the_release_file_is_read_like_os_release(harness: Harness) -> None:
+    release = harness.root / "quoted"
+    release.write_text(
+        '# comment\nID=\'ubuntu\'\nVERSION_ID="26.04"\nlowercase=ignored\nNAME="\nBROKEN\n',
+        encoding="utf-8",
+    )
+    values = audit.read_os_release(str(release))
+    assert values == {"ID": "ubuntu", "VERSION_ID": "26.04", "NAME": '"'}
+    audit.check_host_release(TARGET, str(release))
+
+
+def test_the_openscap_backend_does_not_read_the_release_file(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(harness.root / "absent"))
+    planned = audit.plan(harness.job(), owner_uid=UID)
+    assert planned.job.backend == "openscap"
+    assert {"scc"} == audit.OS_RELEASE_BACKENDS
+
+
+def test_the_summary_names_the_off_platform_marker(harness: Harness) -> None:
+    job = harness.job(backend="scc", host=TARGET, allow_off_platform_benchmark=True)
+    result: dict[str, Any] = auditor(MarkingBackend()).run(job, check_mode=False)
+    assert result["summary"]["off_platform"] == MARKER.to_dict()
+    assert audit.summarize(None) is None

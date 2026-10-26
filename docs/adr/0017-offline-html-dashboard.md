@@ -178,6 +178,10 @@ and refuses every other version.
     input, its SHA-256, the content version, the profile and the rules per outcome, captioned "not a figure".
   - **Inputs and findings.** The inputs table shows "off-platform: no figure" instead of a per-input figure. The
     findings table flags each marked finding "off-platform" with both platforms, and the flag can be filtered.
+- **Host coverage.** When a target host has only an off-platform scan, the "Target hosts are missing from this
+  report." callout adds how many target hosts have only an off-platform scan, says that they are not covered, and
+  names each. The coverage pairs show "Only an off-platform scan (not covered)". The target host table shows "only an
+  off-platform scan: not covered" in the bad tone.
 - **No new figure.** The script computes nothing. Every count comes from the report. A report without off-platform
   inputs shows neither the callout nor the table.
 - **Safety unchanged.**

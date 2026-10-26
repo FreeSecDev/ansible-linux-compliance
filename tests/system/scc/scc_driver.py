@@ -16,11 +16,17 @@ Commands:
   options with the backend's own functions, sets ``downloadExternalFiles`` to
   ``1``, runs ``cscc`` in the backend's scan form and reports whether the
   backend's confirmation accepts SCC's debug log (it must not).
-- ``off-platform``: in the Ubuntu 26.04 image (FREES-161), run the module for a
-  26.04 host without the opt-in (it must be refused) and with
-  ``allow_off_platform_benchmark``, and report both results, the outcomes that
-  SCC wrote into the kept XCCDF results, the ``VERSION_ID`` of the image and the
-  state changes below ``/opt/scc`` and ``/root``.
+- ``off-platform``: in the Ubuntu 26.04 image (FREES-161):
+  - run the module for a 26.04 host without the opt-in (it must be refused);
+  - run the module for a host that claims 24.04 (``/etc/os-release`` refuses it);
+  - run the module with ``allow_off_platform_benchmark``;
+  - run the SCC backend itself, below the module's release check, for a host
+    self-asserted as 24.04, so that only SCC's own CPE platform test can stop it.
+
+  It reports every result, the outcomes in the kept XCCDF copy, whether SCC's logs
+  say that it ignored the platform test (opted in) or rejected the stream by it
+  (backstop), the ``VERSION_ID`` of the image and the state changes below
+  ``/opt/scc`` and ``/root``.
 """
 
 from __future__ import annotations
@@ -37,7 +43,10 @@ from pathlib import Path
 from typing import cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    catalog,
+    model,
     openscap,
+    scanner,
     scc,
 )
 
@@ -52,6 +61,9 @@ DOWNLOAD_OFF = "<downloadExternalFiles>0</downloadExternalFiles>"
 DOWNLOAD_ON = "<downloadExternalFiles>1</downloadExternalFiles>"
 PROFILE = "xccdf_mil.disa.stig_profile_MAC-1_Classified"
 OS_RELEASE = Path("/etc/os-release")
+IGNORED_PLATFORM_TEST = "Ignoring CPE-OVAL Results and continuing scanning"
+REJECTED_BY_PLATFORM_TEST = "is not applicable to this target system"
+BACKSTOP_ROOT = Path("/root/backstop")
 MAX_RESULTS_BYTES = 128 * 1024 * 1024
 
 
@@ -222,14 +234,54 @@ def kept_outcomes(results: Path) -> dict[str, int]:
     return counts
 
 
+def logged(scc_tree: Path, text: str) -> bool:
+    """Return whether any log that SCC wrote below ``scc_tree`` contains ``text``."""
+    return any(
+        text in path.read_text(encoding="utf-8", errors="replace")
+        for path in sorted(scc_tree.rglob("*.txt"))
+        if path.is_file()
+    )
+
+
+def backstop(content: str, digest: str) -> dict[str, object]:
+    """Run the SCC backend for a host self-asserted as 24.04, without the opt-in."""
+    BACKSTOP_ROOT.mkdir(mode=0o700)
+    stream = catalog.vetted_content_path(content)
+    benchmark = catalog.single_benchmark(catalog.read_benchmarks(stream, digest))
+    rules = catalog.profile_rules(benchmark, catalog.find_profile(benchmark, PROFILE))
+    settings = scanner.ScanSettings(
+        str(Path(stream).parent), str(BACKSTOP_ROOT), SCC_TIMEOUT_SECONDS
+    )
+    request = scanner.ScanRequest(
+        run_id="backstop",
+        host=model.HostIdentity("scc-backstop", "ubuntu", "24.04", "x86_64", None),
+        benchmark_id=benchmark.benchmark_id,
+        profile_id=PROFILE,
+        content_path=Path(stream).name,
+        output_dir="scan",
+        expected_rule_ids=tuple(rule.rule_id for rule in rules),
+    )
+    run = scc.create_backend(settings).audit(request)
+    tree = BACKSTOP_ROOT / "scan" / "scc"
+    return {
+        "status": run.status.value,
+        "error_message": run.error_message,
+        "off_platform": run.off_platform is not None,
+        "outcomes": sorted({finding.outcome.value for finding in run.findings}),
+        "rejected_by_platform_test": logged(tree, REJECTED_BY_PLATFORM_TEST),
+    }
+
+
 def off_platform(options: argparse.Namespace) -> dict[str, object]:
-    """Scan this Ubuntu 26.04 container with the 24.04 benchmark, refused and then opted in."""
+    """Scan this Ubuntu 26.04 container with the 24.04 benchmark in every way it is gated."""
     module = options.repository / "plugins" / "modules" / "compliance_scan.py"
     python_path = f"{options.repository / 'build' / 'collections'}:{options.site_packages}"
     arguments = module_arguments(options)
     host = cast("dict[str, object]", arguments["host"])
     arguments["host"] = {**host, "hostname": "scc-off-platform", "distribution_version": "26.04"}
     refused = run_module(module, {**arguments, "run_id": "refused"}, python_path)
+    claimed = {**arguments, "host": {**host, "hostname": "scc-claims-2404"}}
+    mismatch = run_module(module, {**claimed, "run_id": "mismatch"}, python_path)
     before = snapshot(WATCHED)
     marked = run_module(
         module,
@@ -237,11 +289,14 @@ def off_platform(options: argparse.Namespace) -> dict[str, object]:
         python_path,
     )
     after = snapshot(WATCHED)
-    results = Path(options.output_dir) / "off-platform" / "scan" / "results.xml"
+    scan_directory = Path(options.output_dir) / "off-platform" / "scan"
     return {
         "refused": refused,
+        "mismatch": mismatch,
         "scan": marked,
-        "kept_outcomes": kept_outcomes(results),
+        "kept_outcomes": kept_outcomes(scan_directory / scc.OFF_PLATFORM_RESULTS_FILE_NAME),
+        "ignored_platform_test": logged(scan_directory / "scc", IGNORED_PLATFORM_TEST),
+        "backstop": backstop(options.content, options.sha256),
         "version_id": version_id(),
         "state": difference(before, after),
     }

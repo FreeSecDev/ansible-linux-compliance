@@ -507,6 +507,19 @@ the host's own release, and no such baseline exists.
 - **Listed whatever the section status.** The list is filled when the section is `partial` or `error` too, so a
   partial report still names its off-platform inputs.
 - **Counted.** `overview.off_platform` is the number of those entries.
+- **Host coverage (PR #47 review).** With `--evidence-collection`, a target host whose accepted bundles all carry
+  the marker is not covered:
+  - its `hosts` entry has `off_platform: true`, and `summary.off_platform` counts such hosts;
+  - it gets a missing compliance input of its own, so the compliance section is `partial` and has no summary,
+    groups or aggregates;
+  - the coverage is `incomplete`, with a reason that names the hosts, so `--require-host-coverage` fails.
+
+  `complete` requires `summary.off_platform` to be `0`, which the schema enforces. In a 2.2 document every `hosts`
+  entry has `off_platform` and the summary, when present, has `off_platform`.
+- **Raw results.** The XCCDF and ARF parsers refuse `*.off-platform.xml` files, and files next to a marked or
+  unreadable `scan-run.json`
+  ([ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161),
+  decision 9).
 - **Item data.** `complianceData` has `off_platform`: the marker, or `null`. XCCDF and ARF inputs carry no marker
   ([ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161),
   residual 9).

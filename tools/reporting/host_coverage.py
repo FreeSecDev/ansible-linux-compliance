@@ -14,6 +14,11 @@ account for each of them:
   the hosts that are present. The compliance section is therefore never ``available``
   while a host is missing, so it has no summary, group or pooled figure, and the command
   exits with status 1.
+- A target host whose bundles in the report all carry an off-platform marker
+  (FREES-161) has no on-platform evidence. It is not covered: it is counted in
+  ``off_platform``, it gets a missing input of its own, and the coverage is
+  ``incomplete``, so ``--require-host-coverage`` fails. No option lets such a fleet
+  pass.
 - ``host_coverage`` names every target host with its status and counts them.
 
 Without ``--evidence-collection`` the coverage is ``unknown``: the report cannot tell
@@ -107,11 +112,17 @@ def _listed(identity: BundleIdentity, summary: collection.Collection) -> bool:
     )
 
 
+def _on_platform(item: BundleInput) -> bool:
+    data = item.compliance.data
+    return data is None or data.off_platform is None
+
+
 def _checked(
     bundles: list[BundleInput], summary: collection.Collection
-) -> tuple[list[BundleInput], set[str]]:
+) -> tuple[list[BundleInput], set[str], set[str]]:
     checked: list[BundleInput] = []
     present: set[str] = set()
+    covered: set[str] = set()
     for item in bundles:
         identity = item.identity
         if identity is None:
@@ -119,6 +130,8 @@ def _checked(
         elif _listed(identity, summary):
             checked.append(item)
             present.add(identity.inventory_host)
+            if _on_platform(item):
+                covered.add(identity.inventory_host)
         else:
             reason = (
                 f"the collection summary {summary.collection_id} does not list run "
@@ -126,7 +139,7 @@ def _checked(
                 "bundle.json"
             )
             checked.append(refuse(identity, reason))
-    return checked, present
+    return checked, present, covered
 
 
 def _missing(host: collection.TargetHost, directory: str, *, holds_exceptions: bool) -> BundleInput:
@@ -148,6 +161,33 @@ def _missing(host: collection.TargetHost, directory: str, *, holds_exceptions: b
     )
 
 
+def _off_platform_only(host: collection.TargetHost, directory: str) -> BundleInput:
+    name = host.inventory_host
+    run = "" if host.bundle is None else f"/{host.bundle.run_id}"
+    reason = (
+        f"target host {name} has only an off-platform scan in this report, which is never its "
+        "compliance evidence"
+    )
+    return missing_input(
+        ArtifactRef(f"{directory}/{name}{run}", None, None),
+        SectionStatus.UNAVAILABLE,
+        reason,
+        holds_exceptions=False,
+    )
+
+
+def _reason(absent: int, off_platform: list[str], total: int) -> str | None:
+    parts: list[str] = []
+    if absent:
+        parts.append(f"{absent} of {total} target host(s) have no evidence bundle in this report")
+    if off_platform:
+        parts.append(
+            f"{len(off_platform)} of {total} target host(s) have only an off-platform scan "
+            f"({', '.join(off_platform)}), which never counts as their compliance evidence"
+        )
+    return "; ".join(parts) or None
+
+
 def account(
     bundles: list[BundleInput],
     artifact: ArtifactRef,
@@ -166,10 +206,13 @@ def account(
     Returns:
         The checked bundles, one missing input per absent target host and the coverage.
     """
-    checked, present = _checked(bundles, summary)
+    checked, present, covered = _checked(bundles, summary)
     directory = str(PurePosixPath(artifact.path).parent)
     absent = [host for host in summary.hosts if host.inventory_host not in present]
+    marked = [host for host in summary.hosts if host.inventory_host in present - covered]
     missing = [_missing(host, directory, holds_exceptions=holds_exceptions) for host in absent]
+    missing += [_off_platform_only(host, directory) for host in marked]
+    off_platform = [host.inventory_host for host in marked]
     by_status: dict[str, Json] = {
         status: sum(1 for host in summary.hosts if host.status == status)
         for status in collection.HOST_STATUSES
@@ -187,20 +230,19 @@ def account(
                 "host": host.inventory_host,
                 "in_report": host.inventory_host in present,
                 "manifest_sha256": None if host.bundle is None else host.bundle.manifest_sha256,
+                "off_platform": host.inventory_host in off_platform,
                 "run_id": None if host.bundle is None else host.bundle.run_id,
                 "status": host.status,
             }
             for host in summary.hosts
         ],
-        "reason": None
-        if not absent
-        else f"{len(absent)} of {len(summary.hosts)} target host(s) have no evidence bundle "
-        "in this report",
-        "status": INCOMPLETE if absent else COMPLETE,
+        "reason": _reason(len(absent), off_platform, len(summary.hosts)),
+        "status": INCOMPLETE if absent or off_platform else COMPLETE,
         "summary": {
             "by_status": by_status,
             "in_report": len(summary.hosts) - len(absent),
             "missing": len(absent),
+            "off_platform": len(off_platform),
             "target_hosts": len(summary.hosts),
         },
     }

@@ -313,6 +313,7 @@ def test_scan_summary_counts_every_outcome(form: str) -> None:
         "notapplicable": 0,
         "notchecked": 0,
         "pass": 0,
+        "off_platform": None,
         "run_status": "completed",
         "total": 2,
         "waived": 0,

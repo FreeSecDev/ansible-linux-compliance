@@ -234,6 +234,9 @@ a baseline of the host's own release.
 - `sections.compliance.off_platform` lists every such input, whatever the section status, with `artifact`,
   `input_sha256`, `kind`, `host`, `benchmark_id`, `content_version`, `profile_id`, `benchmark_platform`,
   `target_platform`, `run_status` and `counts`. `overview.off_platform` counts them.
+- A target host whose bundles all carry the marker is not covered: see [host coverage](#host-coverage).
+- XCCDF and ARF files named `*.off-platform.xml`, and files next to a marked or unreadable `scan-run.json` (in the
+  same directory or the one above), are refused as input errors: they carry no marker.
 
 ## Host coverage
 
@@ -245,11 +248,11 @@ can account for each one.
 
 | Field | Content |
 |---|---|
-| `status` | `unknown` without `--evidence-collection`; `complete` when every target host has a bundle in the report; `incomplete` when at least one has not |
+| `status` | `unknown` without `--evidence-collection`; `complete` when every target host has a bundle in the report with an on-platform scan; `incomplete` when at least one has no bundle or only an off-platform scan |
 | `reason` | Why the coverage is `unknown` or `incomplete` (`2 of 4 target host(s) have no evidence bundle in this report`); `null` when `complete` |
 | `collection` | `path`, `sha256` and `size` of the summary as read, its `collection_id` and `collected_at`; `null` when `unknown` |
-| `summary` | `target_hosts`, `in_report`, `missing` and `by_status` (one count per collection status); `null` when `unknown` |
-| `hosts` | One entry per target host, sorted by name: inventory `host`, collection `status`, `in_report`, and the `run_id` and `manifest_sha256` of a collected bundle (else `null`); empty when `unknown` |
+| `summary` | `target_hosts`, `in_report`, `missing`, `off_platform` (schema 2.2: target hosts with only an off-platform scan) and `by_status` (one count per collection status); `null` when `unknown` |
+| `hosts` | One entry per target host, sorted by name: inventory `host`, collection `status`, `in_report`, `off_platform` (schema 2.2: the host has only an off-platform scan, so it is not covered), and the `run_id` and `manifest_sha256` of a collected bundle (else `null`); empty when `unknown` |
 
 The collection statuses are `collected`, `unreachable`, `limited_out`, `no_audit_result`, `no_evidence_written` and
 `collection_failed` ([collection summary](evidence.md#the-collection-summary)).

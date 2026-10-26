@@ -5,10 +5,15 @@ minor_changes:
     to scan an Ubuntu 26.04 host with the pinned Ubuntu 24.04 STIG benchmark, the only allowed pair; every other
     combination is still refused and ``backend: openscap`` refuses the option. The scan run and every finding carry an
     ``off_platform`` marker that names the benchmark's platform and the host's (findings model schema 1.1, 1.0
-    documents are still read), and a completed off-platform run with more than 50 % ``notapplicable`` rules is
-    failed (FREES-161).
+    documents are still read). Such a scan sets SCC's ``ignoreCPEOVALResults`` and completes only when SCC's debug
+    log confirms it, while every other scan must show it off and ``saveResultsForNotApplicableContent`` must always
+    be off; a completed off-platform run with more than 50 % ``notapplicable`` rules is failed. Its raw copies are
+    named ``*.off-platform.xml``, the ``summary`` carries ``off_platform``, and ``backend: scc`` now refuses a host
+    whose ``/etc/os-release`` does not match ``host`` (``host_mismatch``) (FREES-161).
   - >-
     reporting - report schema 2.2 keeps off-platform scan runs out of every rule list, group, pooled figure and
     summary, gives them no per-input percentage (assessment ``off_platform_benchmark``) and lists them in
-    ``sections.compliance.off_platform``; the dashboard labels them on the Overview and the Compliance tab and still
-    reads 2.0 and 2.1 reports (FREES-161).
+    ``sections.compliance.off_platform``; a target host with only an off-platform scan is not covered, so the host
+    coverage is ``incomplete`` and ``--require-host-coverage`` fails; raw ``*.off-platform.xml`` results, and XCCDF
+    or ARF files next to a marked scan run, are refused; the dashboard labels all of it and still reads 2.0 and 2.1
+    reports (FREES-161).

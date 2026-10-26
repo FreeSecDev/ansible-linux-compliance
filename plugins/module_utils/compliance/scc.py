@@ -42,7 +42,8 @@ Writing the values is not enough, because SCC also reads its installed options
 and may apply a configuration profile. After every scan the backend reads SCC's
 application debug log (``-d``) and confirms (:func:`confirm_options`) that SCC
 loaded the per-run file and no other, that no configuration profile was enabled,
-and that SCC's own dump of the options it used shows the three values as ``0``.
+and that SCC's own dump of the options it used shows the three values as ``0``
+and ``ignoreCPEOVALResults`` as ``0``, or as ``1`` for an off-platform run.
 The egress test of ADR 0019 ties this evidence to SCC's behaviour. Without the
 confirmation the run is ``failed`` and every expected rule is ``error``.
 
@@ -69,10 +70,16 @@ platform, but only for the exact pairs in :data:`OFF_PLATFORM_BENCHMARKS`: the
 Ubuntu 24.04 STIG benchmark on an Ubuntu 26.04 host. Every other combination is
 still refused. Such a run carries a :class:`model.OffPlatform` marker that names
 the benchmark's platform and the host's, and so does every finding. Its per-run
-options keep SCC's results for content that SCC judges not applicable
-(``saveResultsForNotApplicableContent``), so that SCC writes results even when the
-benchmark's platform test does not match. A completed off-platform run in which
-more than :data:`OFF_PLATFORM_NOTAPPLICABLE_PERCENT` percent of the expected
+options set SCC's documented ``ignoreCPEOVALResults`` ("Run all content
+regardless of applicability"), which makes SCC evaluate the stream although its
+CPE-OVAL platform test does not match the host. The confirmation requires SCC's
+dump to show ``ignoreCPEOVALResults`` exactly once, as ``1`` for an off-platform
+run and as ``0`` for every other run, and ``saveResultsForNotApplicableContent``
+exactly once as ``0`` for every run. The XCCDF and ARF copies of an off-platform
+run are named ``results.off-platform.xml`` and ``results-arf.off-platform.xml``,
+so that a raw copy is never mistaken for an on-platform result. A completed
+off-platform run in which more than :data:`OFF_PLATFORM_NOTAPPLICABLE_PERCENT`
+percent of the expected
 rules are ``notapplicable`` is turned into a ``failed`` run with every expected
 rule ``error``, so that it can never read as clean (ADR 0019, amendment of
 FREES-161).
@@ -119,6 +126,9 @@ OPTIONS_FILE_NAME: Final[str] = "options.xml"
 USER_DIRECTORY_NAME: Final[str] = "user"
 RESULTS_FILE_NAME: Final[str] = openscap.RESULTS_FILE_NAME
 ARF_FILE_NAME: Final[str] = openscap.ARF_FILE_NAME
+OFF_PLATFORM_SUFFIX: Final[str] = ".off-platform.xml"
+OFF_PLATFORM_RESULTS_FILE_NAME: Final[str] = "results" + OFF_PLATFORM_SUFFIX
+OFF_PLATFORM_ARF_FILE_NAME: Final[str] = "results-arf" + OFF_PLATFORM_SUFFIX
 DIRECTORY_MODE: Final[int] = 0o700
 FILE_MODE: Final[int] = 0o600
 UNKNOWN_VERSION: Final[str] = "unknown"
@@ -140,6 +150,8 @@ CONFIRMED_ZERO: Final[tuple[str, ...]] = (
 )
 DEFAULT_CONFIGURATION_PROFILE: Final[str] = "default"
 NOT_APPLICABLE_RESULTS: Final[str] = "saveResultsForNotApplicableContent"
+IGNORE_PLATFORM_TEST: Final[str] = "ignoreCPEOVALResults"
+OFF_PLATFORM_OVERRIDES: Final[Mapping[str, str]] = MappingProxyType({IGNORE_PLATFORM_TEST: "1"})
 
 
 @dataclass(frozen=True)
@@ -535,19 +547,19 @@ def read_installed_content(options_path: str, file_name: str) -> InstalledConten
 
 
 def options_document(
-    content: InstalledContent, profile_id: str, *, keep_not_applicable: bool = False
+    content: InstalledContent, profile_id: str, *, off_platform: bool = False
 ) -> str:
     """Return the per-run options document for ``content`` and ``profile_id``.
 
     Every value is escaped, although every value is either a reviewed constant or
     a field that matched a pattern without markup characters. With
-    ``keep_not_applicable`` (off-platform runs only) the one setting
-    ``saveResultsForNotApplicableContent`` is ``1``, so that SCC writes results
-    for a stream whose platform test does not match the host; every other value
-    is the template's.
+    ``off_platform`` (allowed off-platform runs only) the one setting of
+    :data:`OFF_PLATFORM_OVERRIDES`, ``ignoreCPEOVALResults``, is ``1``, so that SCC
+    evaluates the stream although its CPE-OVAL platform test does not match the
+    host. Without it the document is exactly the template.
     """
     scanner.check_xccdf_id(profile_id, "profile", "profile_id")
-    overrides = {NOT_APPLICABLE_RESULTS: "1"} if keep_not_applicable else {}
+    overrides: Mapping[str, str] = OFF_PLATFORM_OVERRIDES if off_platform else {}
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<options>"]
     lines.extend(
         f"  <{name}>{xml_escape(overrides.get(name, value))}</{name}>"
@@ -624,7 +636,7 @@ def _log_records(log_text: str) -> tuple[dict[str, list[str]], dict[str, list[st
     return records, values
 
 
-def confirm_options(log_text: str, options_path: str) -> None:
+def confirm_options(log_text: str, options_path: str, *, off_platform: bool = False) -> None:
     """Confirm from SCC's application debug log that the run used ``options_path``.
 
     The log must show, every time SCC records it, that SCC loaded
@@ -633,7 +645,10 @@ def confirm_options(log_text: str, options_path: str) -> None:
     (``selectedConfigProfile:`` empty, configuration profile ``default``), and it
     must hold exactly one dump of that file (``Contents of <file>:``) in which
     ``downloadExternalFiles``, ``appCheckForUpdates`` and
-    ``contentCheckForUpdates`` each appear exactly once with the value ``0`` and
+    ``contentCheckForUpdates`` each appear exactly once with the value ``0``,
+    ``ignoreCPEOVALResults`` appears exactly once with ``1`` for an off-platform
+    run (``off_platform``) and ``0`` otherwise,
+    ``saveResultsForNotApplicableContent`` appears exactly once with ``0``, and
     ``selectedConfigProfile`` is empty.
 
     Raises:
@@ -651,8 +666,11 @@ def confirm_options(log_text: str, options_path: str) -> None:
     if len(dumps) != 1:
         _refuse(f"SCC's debug log holds {len(dumps)} dumps of the options, expected one")
     _all_equal(dumps, options_path, "the dumped options file")
-    for name in (*CONFIRMED_ZERO, "selectedConfigProfile"):
-        expected = "" if name == "selectedConfigProfile" else "0"
+    expected_values: dict[str, str] = dict.fromkeys(CONFIRMED_ZERO, "0")
+    expected_values[IGNORE_PLATFORM_TEST] = "1" if off_platform else "0"
+    expected_values[NOT_APPLICABLE_RESULTS] = "0"
+    expected_values["selectedConfigProfile"] = ""
+    for name, expected in expected_values.items():
         seen = values.get(name, [])
         if len(seen) != 1:
             _refuse(f"SCC's options dump holds {name} {len(seen)} times, expected once")
@@ -937,9 +955,7 @@ class SccBackend:
         _new_directory(user, "SCC user directory")
         _write_new_file(
             options,
-            options_document(
-                prepared.record, request.profile_id, keep_not_applicable=marker is not None
-            ),
+            options_document(prepared.record, request.profile_id, off_platform=marker is not None),
         )
         spec = process.CommandSpec(
             EXECUTABLE,
@@ -960,7 +976,7 @@ class SccBackend:
             return _Failure(model.ScanStatus.FAILED, "the content changed during the scan")
         return outcome
 
-    def _confirm(self, user: Path, options: str) -> _Failure | None:
+    def _confirm(self, user: Path, options: str, *, off_platform: bool) -> _Failure | None:
         logs = user / "ApplicationLogs"
         every = _entries(logs, _ANY_APPLICATION_DEBUG_LOG, stat.S_ISREG)
         found = _single(_entries(logs, _APPLICATION_LOG, stat.S_ISREG), "application debug logs")
@@ -973,7 +989,7 @@ class SccBackend:
         try:
             data = b"".join(xmlsafe.iter_file_chunks(str(found), MAX_LOG_BYTES, subject="log"))
             text = data.decode("utf-8", "replace")
-            confirm_options(text, options)
+            confirm_options(text, options, off_platform=off_platform)
         except (xmlsafe.XmlSafetyError, OptionsConfirmationError) as error:
             return _Failure(
                 model.ScanStatus.FAILED,
@@ -1006,17 +1022,19 @@ class SccBackend:
         output: Path,
         started: datetime,
     ) -> openscap.ParsedResults | _Failure:
+        marked = self._check_request(request) is not None
         try:
-            confirmation = self._confirm(user, options)
+            confirmation = self._confirm(user, options, off_platform=marked)
             located = self._results(user) if confirmation is None else confirmation
         except _CrowdedError as error:
             return _Failure(model.ScanStatus.FAILED, str(error))
         if isinstance(located, _Failure):
             return located
-        results = output / RESULTS_FILE_NAME
+        results = output / (OFF_PLATFORM_RESULTS_FILE_NAME if marked else RESULTS_FILE_NAME)
+        arf = output / (OFF_PLATFORM_ARF_FILE_NAME if marked else ARF_FILE_NAME)
         try:
             _copy_regular(located[0], results, self._settings.max_result_bytes)
-            _copy_regular(located[1], output / ARF_FILE_NAME, self._settings.max_result_bytes)
+            _copy_regular(located[1], arf, self._settings.max_result_bytes)
             parsed = openscap.read_results(
                 str(results), self._settings.max_result_bytes, limits=self._limits, assume_utc=True
             )

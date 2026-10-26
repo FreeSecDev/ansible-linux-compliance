@@ -94,7 +94,12 @@ _CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
 _LONG_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,128}"
 LONG_CONTENT_NAME_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
 OFF_PLATFORM_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+OS_RELEASE_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+OS_RELEASE_PATH: Final[str] = "/etc/os-release"
+MAX_OS_RELEASE_BYTES: Final[int] = 64 * 1024
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+_OS_RELEASE_KEY: Final[str] = r"[A-Z][A-Z0-9_]*"
+_QUOTES: Final[tuple[str, ...]] = ('"', "'")
 _BACKEND: Final[str] = r"[a-z][a-z0-9_-]{0,63}"
 _TOGGLE: Final[str] = r"linux_compliance_[a-z0-9_]{1,100}_enabled"
 _SHORT_RULE: Final[str] = r"[a-z0-9_]{1,100}"
@@ -116,6 +121,7 @@ ERROR_EVIDENCE: Final[str] = "evidence_write_failed"
 ERROR_CLEANUP: Final[str] = "cleanup_failed"
 ERROR_DIGEST_MISMATCH: Final[str] = "digest_mismatch"
 ERROR_INVALID_CONTENT: Final[str] = "invalid_content"
+ERROR_HOST_MISMATCH: Final[str] = "host_mismatch"
 CONTENT_DIRECTORY_NAME: Final[str] = "content"
 PREVIEW_PREFIX: Final[str] = ".check-"
 MAX_DISCARD_DEPTH: Final[int] = 10
@@ -566,6 +572,56 @@ class AuditPlan:
         }
 
 
+def _mismatch(message: str) -> NoReturn:
+    raise AuditError(ERROR_HOST_MISMATCH, message)
+
+
+def read_os_release(path: str) -> dict[str, str]:
+    """Return the ``KEY=VALUE`` assignments of an os-release file, unquoted.
+
+    Raises:
+        AuditError: With ``host_mismatch`` if the file cannot be read or is too large.
+    """
+    try:
+        with Path(path).open("rb") as handle:
+            data = handle.read(MAX_OS_RELEASE_BYTES + 1)
+    except OSError as error:
+        _mismatch(
+            f"the release of the host cannot be read from {path}: {error.strerror or 'error'}"
+        )
+    if len(data) > MAX_OS_RELEASE_BYTES:
+        _mismatch(f"{path} exceeds {MAX_OS_RELEASE_BYTES} bytes")
+    values: dict[str, str] = {}
+    for line in data.decode("utf-8", "replace").splitlines():
+        key, separator, value = line.strip().partition("=")
+        if separator and re.fullmatch(_OS_RELEASE_KEY, key) is not None:
+            text = value.strip()
+            quoted = len(text) > 1 and text[0] in _QUOTES and text[-1] == text[0]
+            values[key] = text[1:-1] if quoted else text
+    return values
+
+
+def check_host_release(host: model.HostIdentity, path: str) -> None:
+    """Refuse a host whose ``ID`` and ``VERSION_ID`` in ``path`` differ from ``host``.
+
+    The SCC backend chooses between its on-platform and off-platform rules by the
+    asserted distribution and version, so the module compares them with what the
+    managed host itself reports before anything is created.
+
+    Raises:
+        AuditError: With ``host_mismatch``.
+    """
+    values = read_os_release(path)
+    reported = (values.get("ID", ""), values.get("VERSION_ID", ""))
+    asserted = (host.distribution_id, host.distribution_version)
+    if reported != asserted:
+        _mismatch(
+            f"the host reports ID {_safe(reported[0])} and VERSION_ID {_safe(reported[1])} in "
+            f"{path}, but host.distribution_id and host.distribution_version are "
+            f"{_safe(asserted[0])} and {_safe(asserted[1])}"
+        )
+
+
 def _verified_profile(
     job: AuditJob, *, owner_uid: int
 ) -> tuple[str, catalog.Benchmark, tuple[catalog.Rule, ...]]:
@@ -604,8 +660,12 @@ def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
             and root by default; only tests change it.
 
     Raises:
-        AuditError: For every problem, with a stable ``error_type``.
+        AuditError: For every problem, with a stable ``error_type``. A backend in
+            :data:`OS_RELEASE_BACKENDS` also needs the host's ``/etc/os-release``
+            to report the asserted distribution and version (``host_mismatch``).
     """
+    if job.backend in OS_RELEASE_BACKENDS:
+        check_host_release(job.host, OS_RELEASE_PATH)
     content, benchmark, rules = _verified_profile(job, owner_uid=owner_uid)
     pattern = _LONG_CONTENT_NAME if job.backend in LONG_CONTENT_NAME_BACKENDS else _CONTENT_NAME
     if re.fullmatch(pattern, Path(content).name) is None:
@@ -1003,8 +1063,9 @@ def summarize(run: model.ScanRun | None) -> dict[str, object] | None:
     """Count the findings of a run by outcome, with the run status first.
 
     The summary never states compliance (AGENTS.md rule 9): it holds ``run_status``, the
-    number of findings per outcome and the total. A run that did not complete has
-    only ``error`` findings, so it can never look compliant.
+    number of findings per outcome, the total and ``off_platform``, the off-platform
+    marker of the run or ``None``. A run that did not complete has only ``error``
+    findings, so it can never look compliant.
     """
     if run is None:
         return None
@@ -1014,6 +1075,7 @@ def summarize(run: model.ScanRun | None) -> dict[str, object] | None:
         counts[key] = cast("int", counts[key]) + 1
     counts["total"] = len(run.findings)
     counts["run_status"] = run.status.value
+    counts["off_platform"] = None if run.off_platform is None else run.off_platform.to_dict()
     return counts
 
 

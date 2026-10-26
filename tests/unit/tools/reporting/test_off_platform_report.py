@@ -225,3 +225,62 @@ def test_the_dashboard_embeds_a_2_2_report(marked_document: dict[str, Any]) -> N
     page = dashboard.render_dashboard(marked_document)
     assert page.startswith("<!DOCTYPE html>")
     assert "off_platform_benchmark" in page
+
+
+def _compliance_reasons(document: dict[str, Any]) -> list[str | None]:
+    return [item["reason"] for item in document["sections"]["compliance"]["items"]]
+
+
+def test_raw_off_platform_copies_are_refused(kit: Any, tmp_path: Path) -> None:
+    xccdf = tmp_path / "results.off-platform.xml"
+    xccdf.write_text(kit.xccdf_text("lab2604.example"), encoding="utf-8")
+    arf = tmp_path / "results-arf.off-platform.xml"
+    arf.write_bytes((kit.REPORTING / "arf.xml").read_bytes())
+    document = build(scope=Scope.MULTI_HOST, xccdf=(xccdf,), arf=(arf,))
+    assert document["sections"]["compliance"]["status"] == "error"
+    reasons = _compliance_reasons(document)
+    assert len(reasons) == 2
+    assert all(reason is not None and "off-platform scan run" in reason for reason in reasons)
+
+
+def test_results_next_to_a_marked_scan_run_are_refused(kit: Any, tmp_path: Path) -> None:
+    run_directory = tmp_path / "run-1"
+    (run_directory / "scan").mkdir(parents=True)
+    (run_directory / "scan-run.json").write_text(
+        model.dumps(off_platform_run(kit)), encoding="utf-8"
+    )
+    beside = run_directory / "scan" / "results.xml"
+    beside.write_text(kit.xccdf_text("lab2604.example"), encoding="utf-8")
+    same = run_directory / "results.xml"
+    same.write_text(kit.xccdf_text("lab2604.example"), encoding="utf-8")
+    document = build(scope=Scope.MULTI_HOST, xccdf=(beside, same))
+    reasons = _compliance_reasons(document)
+    assert all(reason is not None and "off-platform scan run" in reason for reason in reasons)
+
+
+def test_results_next_to_an_unmarked_scan_run_are_read(kit: Any, tmp_path: Path) -> None:
+    (tmp_path / "scan").mkdir()
+    (tmp_path / "scan-run.json").write_text(
+        model.dumps(kit.scan_run((kit.finding("a"),))), encoding="utf-8"
+    )
+    results = tmp_path / "scan" / "results.xml"
+    results.write_text(kit.xccdf_text("host.example"), encoding="utf-8")
+    document = build(scope=Scope.MULTI_HOST, xccdf=(results,))
+    assert document["sections"]["compliance"]["status"] == "available"
+
+
+def test_an_unreadable_or_invalid_neighbour_refuses_the_results(kit: Any, tmp_path: Path) -> None:
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "scan-run.json").write_text("{}", encoding="utf-8")
+    first = broken / "results.xml"
+    first.write_text(kit.xccdf_text("host.example"), encoding="utf-8")
+    linked = tmp_path / "linked"
+    linked.mkdir()
+    (linked / "scan-run.json").symlink_to(broken / "scan-run.json")
+    second = linked / "results.xml"
+    second.write_text(kit.xccdf_text("host.example"), encoding="utf-8")
+    document = build(scope=Scope.MULTI_HOST, xccdf=(first, second))
+    reasons = _compliance_reasons(document)
+    assert any(reason is not None and "is not a valid scan run" in reason for reason in reasons)
+    assert any(reason is not None and "cannot be read" in reason for reason in reasons)

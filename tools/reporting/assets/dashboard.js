@@ -917,6 +917,12 @@
     });
   }
 
+  function offPlatformHosts(coverage) {
+    return list(coverage.hosts).map(obj).filter(function (host) {
+      return host.off_platform === true;
+    });
+  }
+
   function missingHostText(host) {
     const status = plain(host.status);
     if (status === "collected") {
@@ -934,16 +940,30 @@
       ]));
     }
     if (status === "incomplete") {
-      return callout("bad", "Target hosts are missing from this report.", [
-        el("p", null, [
+      const parts = [];
+      const absent = missingHosts(coverage);
+      if (absent.length > 0) {
+        parts.push(el("p", null, [
           val(summary.missing), " of ", val(summary.target_hosts), " target hosts of the evidence collection "
             + "have no evidence bundle in this report. No figure covers them, and the compliance section has no "
             + "summary or pooled figure while a host is missing."
-        ]),
-        el("ul", null, missingHosts(coverage).map(function (host) {
+        ]));
+        parts.push(el("ul", null, absent.map(function (host) {
           return el("li", null, [mono(host.host), ": ", missingHostText(host)]);
-        }))
-      ]);
+        })));
+      }
+      const marked = offPlatformHosts(coverage);
+      if (marked.length > 0) {
+        parts.push(el("p", null, [
+          val(summary.off_platform), " of ", val(summary.target_hosts), " target hosts have only an off-platform "
+            + "scan in this report. An off-platform scan is never a host's compliance evidence, so these hosts are "
+            + "not covered, and the compliance section has no summary or pooled figure."
+        ]));
+        parts.push(el("ul", null, marked.map(function (host) {
+          return el("li", null, [mono(host.host), ": ", badge("off_platform", "only an off-platform scan")]);
+        })));
+      }
+      return callout("bad", "Target hosts are missing from this report.", parts);
     }
     return callout("warn", "Host coverage unknown.", [
       el("p", null, ["Reason: ", val(coverage.reason)]),
@@ -961,6 +981,7 @@
       ["Target hosts", val(summary.target_hosts, "not known")],
       ["With a bundle in this report", val(summary.in_report, "not known")],
       ["Missing from this report", val(summary.missing, "not known")],
+      ["Only an off-platform scan (not covered)", val(summary.off_platform, "not known")],
       ["Unreachable", val(byStatus.unreachable, "not known")],
       ["Limited out", val(byStatus.limited_out, "not known")],
       ["No audit result", val(byStatus.no_audit_result, "not known")],
@@ -987,8 +1008,14 @@
           return mono(row.host);
         } },
         { label: "In this report", value: function (row) {
+          if (row.off_platform === true) {
+            return "only an off-platform scan";
+          }
           return row.in_report === true ? "yes" : "no";
         }, cell: function (row) {
+          if (row.off_platform === true) {
+            return badge("missing_from_report", "only an off-platform scan: not covered");
+          }
           return row.in_report === true ? badge("in_report", "yes") : badge("missing_from_report", "no: missing");
         }, filter: true },
         { label: "Collection status", value: function (row) {

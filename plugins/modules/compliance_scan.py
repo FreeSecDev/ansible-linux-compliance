@@ -35,7 +35,9 @@ description:
     matches the request. SCC's exit status is never taken as evidence of completion. The C(scc)
     backend scans Ubuntu 24.04 hosts with the pinned DISA benchmark and refuses other releases
     such as Ubuntu 26.04, unless O(allow_off_platform_benchmark) opts into the one allowed
-    off-platform pair. It does not support O(disabled_rules) yet.
+    off-platform pair. It does not support O(disabled_rules) yet. Before anything is created
+    it reads C(/etc/os-release) on the managed host and stops with C(host_mismatch) unless its
+    C(ID) and C(VERSION_ID) are O(host.distribution_id) and O(host.distribution_version).
   - The module never changes the configuration of the host and always returns C(changed=false).
     Outside check mode it writes evidence files below O(output_dir), which is reported separately in
     RV(evidence_written) and RV(evidence) and is not a change to the host.
@@ -178,12 +180,18 @@ options:
         run has findings model schema C(1.1). The results are scan evidence about the host under
         the Ubuntu 24.04 benchmark, never compliance with an Ubuntu 26.04 baseline. Reports keep
         them out of every figure.
-      - The per-run options of such a scan keep SCC's results for content that SCC judges not
-        applicable. A completed off-platform run in which more than 50 % of the rules of the
+      - The per-run options of such a scan set SCC's documented C(ignoreCPEOVALResults) ("Run all
+        content regardless of applicability"), so SCC evaluates the 24.04 benchmark although its
+        CPE-OVAL platform test does not match the 26.04 host, and the scan completes only when SCC's
+        debug log shows that setting as C(1). Every other scan requires it as C(0), and every scan
+        requires C(saveResultsForNotApplicableContent) as C(0). SCC warns that such results may be
+        incomplete or false positives.
+      - The raw copies of such a scan are named C(results.off-platform.xml) and
+        C(results-arf.off-platform.xml), and the report refuses them, and any XCCDF or ARF file
+        next to such a C(scan-run.json), as inputs, because they carry no marker.
+      - As a safety net, a completed off-platform run in which more than 50 % of the rules of the
         profile are C(notapplicable) becomes C(failed) with every rule C(error), because the
         benchmark's applicability checks do not fit the host; SCC's results stay in the evidence.
-        With SCC 5.15 the platform test of the 24.04 benchmark does not match an Ubuntu 26.04
-        container, and SCC reports every rule as C(notapplicable), so such a scan fails.
     type: bool
     default: false
   fail_on_incomplete:
@@ -216,11 +224,12 @@ notes:
   - Exit status 2 of C(oscap) means that rules failed; it is a completed scan. Any other non-zero
     status, a signal or a timeout is a scanner failure.
   - With the C(scc) backend, C(<output_dir>/<run_id>/scan/results.xml) and C(results-arf.xml) are
-    copies of SCC's XCCDF and ARF results, and SCC's own tree with its debug logs stays in the
-    root-only C(scan/scc) directory, which is listed as skipped and not recorded as evidence. SCC
-    itself updates its content databases below C(/opt/scc/Resources/Content/DB) and adds one
-    session database to C(/opt/scc/Local) per scan; its configuration, content and binaries stay
-    unchanged.
+    copies of SCC's XCCDF and ARF results (C(results.off-platform.xml) and
+    C(results-arf.off-platform.xml) for an off-platform scan), and SCC's own tree with its debug
+    logs stays in the root-only C(scan/scc) directory, which is listed as skipped and not
+    recorded as evidence. SCC itself updates its content databases below
+    C(/opt/scc/Resources/Content/DB) and adds one session database to C(/opt/scc/Local) per
+    scan; its configuration, content and binaries stay unchanged.
   - A scan result is evidence about one host, not a certification and not a claim of compliance
     with any framework.
 seealso:
@@ -321,7 +330,8 @@ run_status:
   sample: completed
 summary:
   description:
-    - Number of findings per outcome, the total and the run status. Null when no scan ran.
+    - Number of findings per outcome, the total, the run status and C(off_platform), the
+      off-platform marker of the scan run or null. Null when no scan ran.
     - It never states compliance. A run that did not complete has only C(error) findings.
   returned: success
   type: dict
@@ -335,6 +345,7 @@ summary:
     waived: 0
     disabled: 1
     total: 3
+    off_platform: null
 scan_run:
   description:
     - The normalized scan run (findings model schema 1.0, ADR 0013), with its provenance
@@ -460,7 +471,8 @@ error_type:
       C(nothing_to_scan),
       C(unknown_backend), C(invalid_request), C(evidence_write_failed), C(cleanup_failed),
       C(scan_incomplete),
-      C(digest_mismatch), C(profile_not_found), C(unsupported_content) or C(invalid_content).
+      C(digest_mismatch), C(profile_not_found), C(unsupported_content), C(invalid_content) or
+      C(host_mismatch).
   returned: failure
   type: str
   sample: digest_mismatch

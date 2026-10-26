@@ -75,6 +75,7 @@ the Compliance tab:
   target host has no evidence bundle in it. The callout gives the count and lists every missing host with its status
   (unreachable, limited out, no audit result, no evidence written, collection failed, or collected but its bundle not
   in the report). The compliance section is then partial and shows no summary or pooled figure.
+  A target host that has only an off-platform scan is listed in the same callout as not covered.
 - **Every target host is accounted for.** Every target host of the collection has a bundle in the report.
 - **Host coverage unknown.** The report was built without a collection summary, so hosts without an input are not
   visible and the figures may not cover every host. A report with schema version 2.0 is always shown this way.

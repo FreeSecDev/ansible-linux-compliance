@@ -2165,6 +2165,9 @@
             }
           ]
         },
+        "off_platform": {
+          "type": "boolean"
+        },
         "run_id": {
           "oneOf": [
             {
@@ -3434,6 +3437,11 @@
                   "properties": {
                     "in_report": {
                       "const": true
+                    },
+                    "off_platform": {
+                      "not": {
+                        "const": true
+                      }
                     }
                   }
                 }
@@ -3444,6 +3452,9 @@
               "summary": {
                 "properties": {
                   "missing": {
+                    "const": 0
+                  },
+                  "off_platform": {
                     "const": 0
                   }
                 }
@@ -3463,28 +3474,57 @@
             ]
           },
           "then": {
-            "properties": {
-              "hosts": {
-                "contains": {
-                  "properties": {
-                    "in_report": {
-                      "const": false
+            "anyOf": [
+              {
+                "properties": {
+                  "hosts": {
+                    "contains": {
+                      "properties": {
+                        "in_report": {
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "in_report"
+                      ]
                     }
                   },
-                  "required": [
-                    "in_report"
-                  ]
-                }
-              },
-              "reason": {
-                "type": "string"
-              },
-              "summary": {
-                "properties": {
-                  "missing": {
-                    "minimum": 1
+                  "summary": {
+                    "properties": {
+                      "missing": {
+                        "minimum": 1
+                      }
+                    }
                   }
                 }
+              },
+              {
+                "properties": {
+                  "hosts": {
+                    "contains": {
+                      "properties": {
+                        "off_platform": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "off_platform"
+                      ]
+                    }
+                  },
+                  "summary": {
+                    "properties": {
+                      "off_platform": {
+                        "minimum": 1
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
               }
             }
           }
@@ -3606,6 +3646,10 @@
                   "type": "integer"
                 },
                 "missing": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "off_platform": {
                   "minimum": 0,
                   "type": "integer"
                 },
@@ -9862,6 +9906,29 @@
             "properties": {
               "compliance": {
                 "properties": {
+                  "host_coverage": {
+                    "properties": {
+                      "hosts": {
+                        "items": {
+                          "required": [
+                            "off_platform"
+                          ]
+                        }
+                      },
+                      "summary": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "required": [
+                              "off_platform"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
                   "items": {
                     "items": {
                       "properties": {
@@ -9920,6 +9987,33 @@
                   ]
                 },
                 "properties": {
+                  "host_coverage": {
+                    "properties": {
+                      "hosts": {
+                        "items": {
+                          "not": {
+                            "required": [
+                              "off_platform"
+                            ]
+                          }
+                        }
+                      },
+                      "summary": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "not": {
+                              "required": [
+                                "off_platform"
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
                   "items": {
                     "items": {
                       "properties": {

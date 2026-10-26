@@ -197,11 +197,20 @@ No DISA benchmark for Ubuntu 26.04 exists yet. `allow_off_platform_benchmark: tr
   and the scan run has findings model schema 1.1. The results are scan evidence about the host under the 24.04
   benchmark, never compliance with an Ubuntu 26.04 baseline. Reports keep them out of every figure and list them
   separately ([reporting data model](reporting-data-model.md#off-platform-results)).
-- **Mostly not applicable means failed.** A completed off-platform run in which more than 50 % of the profile's rules
-  are `notapplicable` becomes `failed` with every rule `error`. SCC's own results stay in the evidence directory.
-  With SCC 5.15 the 24.04 stream's platform test does not match an Ubuntu 26.04 container, and SCC reports every
-  rule as `notapplicable`, so such a scan fails. `make scc-integration` checks this against a pinned Ubuntu 26.04
-  image.
+- **The release is checked.** For `backend: scc` the module reads `/etc/os-release` on the managed host and stops with
+  `host_mismatch` unless its `ID` and `VERSION_ID` equal `host.distribution_id` and `host.distribution_version`.
+- **The platform test is skipped.** The 24.04 stream's own CPE-OVAL platform test does not match an Ubuntu 26.04
+  host. The per-run options of an off-platform scan therefore set SCC's documented `ignoreCPEOVALResults` ("Run all
+  content regardless of applicability"). The scan completes only when SCC's debug log shows that setting as `1`, and
+  every other scan requires it as `0`. SCC warns that such results may be incomplete or false positives.
+- **Real results, checked in CI.** `make scc-integration` scans a pinned Ubuntu 26.04 image. It got real results:
+  28 `pass`, 136 `fail`, 13 `notapplicable`, 16 `notchecked` and 1 `error` of 194 rules.
+- **Labelled raw copies.** The raw copies are `scan/results.off-platform.xml` and `scan/results-arf.off-platform.xml`.
+  The report refuses them as XCCDF or ARF inputs, and a fleet report does not count a host with only an off-platform
+  scan as covered. The module's `summary` carries `off_platform`.
+- **Mostly not applicable means failed.** As a safety net, a completed off-platform run in which more than 50 % of the
+  profile's rules are `notapplicable` becomes `failed` with every rule `error`. SCC's own results stay in the evidence
+  directory.
 
 ```yaml
 - name: Scan an Ubuntu 26.04 host with the Ubuntu 24.04 STIG benchmark, labelled off-platform
@@ -221,7 +230,7 @@ No DISA benchmark for Ubuntu 26.04 exists yet. `allow_off_platform_benchmark: tr
   register: off_platform_audit
 ```
 
-Report such runs through `scan-run.json` or evidence bundles: the raw `results.xml` carries no marker.
+Report such runs through `scan-run.json` or evidence bundles, which carry the marker.
 
 ### SCE check scripts run as root
 
