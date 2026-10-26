@@ -128,7 +128,11 @@ def test_the_committed_evaluation_is_what_the_filter_writes_for_the_exceptions_f
 
 
 def test_every_exception_of_the_file_appears_with_its_status(kit: Any) -> None:
-    document = build(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE,))
+    document = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
     section = document["sections"]["exceptions"]
     assert section["status"] == "available"
     text = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8")
@@ -191,7 +195,11 @@ def test_every_exception_of_the_file_appears_with_its_status(kit: Any) -> None:
 
 
 def test_matched_hosts_and_scopes_never_carry_names_the_host_reports(kit: Any) -> None:
-    document = build(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE,))
+    document = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
     listed = json.dumps(document["sections"]["exceptions"]["exceptions"])
     assert kit.EVALUATION_HOST.hostname not in listed
     assert "web01" in listed
@@ -205,7 +213,11 @@ def test_a_waiver_that_lapsed_during_the_scan_counts_in_expired_waivers(
     evaluation = kit.evaluate()
     lapsed = kit.RULE_PREFIX + "lapsed_rule"
     assert evaluation.lapsed_rule_ids() == (lapsed,)
-    with_evaluation = build(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE,))
+    with_evaluation = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
     marked_only = build(scope=Scope.FLEET, scan_run=(write_run("marked.json", evaluation.run),))
     new = with_evaluation["sections"]["compliance"]
     old = marked_only["sections"]["compliance"]
@@ -223,7 +235,11 @@ def test_the_exceptions_section_changes_no_compliance_figure(
     kit: Any, write_run: Callable[..., Path]
 ) -> None:
     evaluation = kit.evaluate()
-    with_evaluation = build(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE,))
+    with_evaluation = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
     marked_only = build(scope=Scope.FLEET, scan_run=(write_run("marked.json", evaluation.run),))
     for key in ("summary", "groups", "aggregates"):
         new = copy.deepcopy(with_evaluation["sections"]["compliance"][key])
@@ -243,15 +259,16 @@ def test_an_exception_superseded_on_every_host_is_a_removal_candidate(
 ) -> None:
     hosts = (("web01", "e" * 32), ("web02", "f" * 32))
     paths: list[Path] = []
+    text = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8").replace(
+        "hosts: [web01]", "hosts: [web01, web02]"
+    )
     for inventory, machine in hosts:
         identity = model.HostIdentity(f"{inventory}.example", "rhel", "9", "x86_64", machine)
         run = kit.evaluation_run(host=identity, run_id=f"run-{inventory}")
-        text = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8").replace(
-            "hosts: [web01]", "hosts: [web01, web02]"
-        )
         evaluation = kit.evaluate(run, inventory_host=inventory, text=text)
         paths.append(write_evaluation(write, f"{inventory}.json", evaluation))
-    document = build(scope=Scope.FLEET, exceptions_evaluation=tuple(paths))
+    source = write("exceptions.yml", text)
+    document = build(scope=Scope.FLEET, exceptions_evaluation=tuple(paths), exceptions_file=source)
     superseded = entries_of(document)["EXC-SUPERSEDED"]
     assert [(m["host"], m["status"]) for m in superseded["matched_hosts"]] == [
         ("web01", "superseded"),
@@ -269,7 +286,8 @@ def test_hostile_justification_text_is_data(kit: Any, write: Callable[..., Path]
     )
     evaluation = kit.evaluate(text=text)
     path = write_evaluation(write, "hostile.json", evaluation)
-    document = build(scope=Scope.FLEET, exceptions_evaluation=(path,))
+    source = write("hostile.yml", text)
+    document = build(scope=Scope.FLEET, exceptions_evaluation=(path,), exceptions_file=source)
     assert entries_of(document)["EXC-STALE"]["justification"] == HOSTILE_JUSTIFICATION
     assert entries_of(document)["EXC-STALE"]["status"] == "stale"
     html = dashboard.render_dashboard(document)
@@ -291,7 +309,9 @@ def test_a_tampered_evaluation_is_an_input_error_never_a_waiver(
     lapsed = next(entry for entry in forged["exceptions"] if entry["id"] == "EXC-LAPSED")
     lapsed["status"] = "waived"
     path = write("forged.json", json.dumps(forged))
-    document = build(scope=Scope.FLEET, exceptions_evaluation=(path,))
+    document = build(
+        scope=Scope.FLEET, exceptions_evaluation=(path,), exceptions_file=kit.EXCEPTIONS_FILE
+    )
     for name in ("compliance", "exceptions"):
         section = document["sections"][name]
         assert section["status"] == "error"
@@ -302,7 +322,7 @@ def test_a_tampered_evaluation_is_an_input_error_never_a_waiver(
     assert document["overview"]["error"] == ["compliance", "exceptions"]
     output = tmp_path / "report.json"
     argv = ["--scope", "fleet", "--output", str(output), "--exceptions-evaluation", str(path)]
-    assert cli.main(argv) == 1
+    assert cli.main([*argv, "--exceptions-file", str(kit.EXCEPTIONS_FILE)]) == 1
 
 
 @pytest.mark.parametrize(
@@ -310,7 +330,7 @@ def test_a_tampered_evaluation_is_an_input_error_never_a_waiver(
     [
         ("schema_version", "2.0", "unsupported schema_version"),
         ("target", None, "not a valid host name"),
-        ("exceptions", "x", "exceptions must be a list"),
+        ("exceptions", "x", "does not match a new evaluation"),
     ],
 )
 def test_invalid_evaluations_are_input_errors(
@@ -323,7 +343,9 @@ def test_invalid_evaluations_are_input_errors(
     else:
         document[key] = value
     path = write("invalid.json", json.dumps(document))
-    built = build(scope=Scope.FLEET, exceptions_evaluation=(path,))
+    built = build(
+        scope=Scope.FLEET, exceptions_evaluation=(path,), exceptions_file=kit.EXCEPTIONS_FILE
+    )
     gaps = built["sections"]["exceptions"]["gaps"]
     assert reason in gaps[0]["reason"]
 
@@ -334,6 +356,7 @@ def test_a_missing_evaluation_makes_the_section_partial_without_counts(
     document = build(
         scope=Scope.FLEET,
         exceptions_evaluation=(kit.EVALUATION_FILE, tmp_path / "absent.json"),
+        exceptions_file=kit.EXCEPTIONS_FILE,
     )
     section = document["sections"]["exceptions"]
     assert section["status"] == "partial"
@@ -344,30 +367,161 @@ def test_a_missing_evaluation_makes_the_section_partial_without_counts(
     assert section["items"][0]["data"]["target_host"] == "web01"
 
 
-def test_evaluations_of_different_exceptions_files_are_refused(
+def web02_run(kit: Any) -> Any:
+    identity = model.HostIdentity("web02.example", "rhel", "9", "x86_64", "f" * 32)
+    return kit.evaluation_run(host=identity, run_id="run-web02")
+
+
+def test_an_evaluation_of_another_exceptions_file_is_refused(
+    kit: Any, write: Callable[..., Path], tmp_path: Path
+) -> None:
+    text = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8").replace("risk: high", "risk: critical")
+    other = write_evaluation(
+        write, "other.json", kit.evaluate(web02_run(kit), inventory_host="web02", text=text)
+    )
+    document = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE, other),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
+    section = document["sections"]["exceptions"]
+    assert section["status"] == "error"
+    assert section["exceptions"] == []
+    assert section["exceptions_file"] is None
+    assert "not made from the supplied exceptions file" in section["gaps"][0]["reason"]
+    assert document["sections"]["compliance"]["status"] == "error"
+    output = tmp_path / "report.json"
+    argv = [
+        "--scope",
+        "fleet",
+        "--output",
+        str(output),
+        "--exceptions-file",
+        str(kit.EXCEPTIONS_FILE),
+    ]
+    assert cli.main([*argv, "--exceptions-evaluation", str(other)]) == 1
+
+
+def test_the_reviewers_made_up_exceptions_file_is_refused(
+    kit: Any, write: Callable[..., Path], write_run: Callable[..., Path]
+) -> None:
+    rows = "".join(
+        f"  - id: EXC-FAKE-{index}\n"
+        f"    rule: {kit.RULE_PREFIX}{rule}\n"
+        "    framework: cis\n"
+        "    scope:\n"
+        "      hosts: [web01]\n"
+        "    justification: Nobody reviewed this file.\n"
+        "    owner: mallory\n"
+        "    approval:\n"
+        "      approver: trent\n"
+        "      date: '2026-10-02'\n"
+        "    created: '2026-10-01'\n"
+        "    expires: '2027-01-31'\n"
+        "    risk: high\n"
+        for index, rule in enumerate(("waived_rule", "lapsed_rule", "plain_failure"))
+    )
+    made_up = "---\nschema_version: '1.0'\nexceptions:\n" + rows
+    forged = kit.evaluate(text=made_up)
+    assert {result.status.value for result in forged.results} == {"waived"}
+    path = write_evaluation(write, "made-up.json", forged)
+    document = build(
+        scope=Scope.FLEET, exceptions_evaluation=(path,), exceptions_file=kit.EXCEPTIONS_FILE
+    )
+    assert document["sections"]["exceptions"]["status"] == "error"
+    assert document["sections"]["compliance"]["status"] == "error"
+    assert document["sections"]["compliance"]["summary"] is None
+    assert document["overview"]["exceptions"] is None
+    honest = build(scope=Scope.FLEET, scan_run=(write_run("plain.json", kit.evaluation_run()),))
+    assert honest["sections"]["compliance"]["summary"]["counts"]["waived"] == 0
+    with pytest.raises(ReportError, match="requires --exceptions-file"):
+        report.build_report(ReportInputs(scope=Scope.FLEET, exceptions_evaluation=(path,)))
+    accepted = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(path,),
+        exceptions_file=write("made-up.yml", made_up),
+    )
+    assert accepted["sections"]["exceptions"]["exceptions_file"]["path"].endswith("made-up.yml")
+
+
+def test_the_exceptions_file_is_required_readable_and_reported(
+    kit: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = tmp_path / "report.json"
+    argv = ["--scope", "fleet", "--output", str(output)]
+    evaluation = ["--exceptions-evaluation", str(kit.EVALUATION_FILE)]
+    assert cli.main([*argv, *evaluation]) == 2
+    assert "--exceptions-evaluation requires --exceptions-file" in capsys.readouterr().err
+    assert not output.exists()
+    assert cli.main([*argv, "--exceptions-file", str(kit.EXCEPTIONS_FILE)]) == 2
+    assert "only used with --exceptions-evaluation" in capsys.readouterr().err
+    absent = ["--exceptions-file", str(tmp_path / "absent.yml")]
+    assert cli.main([*argv, *evaluation, *absent]) == 2
+    assert (
+        "the exceptions file cannot be used: input file does not exist" in capsys.readouterr().err
+    )
+    assert not output.exists()
+    assert cli.main([*argv, *evaluation, "--exceptions-file", str(kit.EXCEPTIONS_FILE)]) == 0
+    document = json.loads(output.read_text(encoding="utf-8"))
+    section = document["sections"]["exceptions"]
+    digest = hashlib.sha256(kit.EXCEPTIONS_FILE.read_bytes()).hexdigest()
+    assert section["exceptions_file"] == {
+        "path": str(kit.EXCEPTIONS_FILE),
+        "sha256": digest,
+        "verified": True,
+    }
+    assert section["source_sha256"] == digest
+    formats = [ref["format"] for ref in document["raw_artifacts"]]
+    assert sorted(formats) == ["exceptions_evaluation", "exceptions_file"]
+
+
+def test_an_invalid_exceptions_file_is_refused_for_every_evaluation(
     kit: Any, write: Callable[..., Path]
 ) -> None:
-    identity = model.HostIdentity("web02.example", "rhel", "9", "x86_64", "f" * 32)
-    run = kit.evaluation_run(host=identity, run_id="run-web02")
-    text = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8").replace("risk: high", "risk: critical")
-    evaluated = kit.evaluate(run, inventory_host="web02", text=text)
-    other = write_evaluation(write, "other.json", evaluated)
+    broken = "---\nschema_version: '1.0'\nexceptions: [\n"
+    forged = json.loads(kit.EVALUATION_FILE.read_text(encoding="utf-8"))
+    forged["source_sha256"] = hashlib.sha256(broken.encode()).hexdigest()
+    path = write("broken-source.json", json.dumps(forged))
+    document = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(path,),
+        exceptions_file=write("broken.yml", broken),
+    )
+    reason = document["sections"]["exceptions"]["gaps"][0]["reason"]
+    assert reason.startswith("exceptions evaluation rejected: exceptions file: line 3")
+
+
+def test_an_evaluation_of_the_file_without_its_final_newline_is_accepted(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    text = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8")
+    lookup = kit.evaluate(web02_run(kit), inventory_host="web02", text=text.rstrip())
+    path = write_evaluation(write, "lookup.json", lookup)
+    document = build(
+        scope=Scope.FLEET, exceptions_evaluation=(path,), exceptions_file=kit.EXCEPTIONS_FILE
+    )
+    section = document["sections"]["exceptions"]
+    assert section["status"] == "available"
+    assert section["source_sha256"] == hashlib.sha256(text.rstrip().encode()).hexdigest()
+    assert section["exceptions_file"]["sha256"] == hashlib.sha256(text.encode()).hexdigest()
     with pytest.raises(ReportError, match="different exceptions files"):
         report.build_report(
-            ReportInputs(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE, other))
-        )
-    same_records = kit.EXCEPTIONS_FILE.read_text(encoding="utf-8") + "\n"
-    rerun = kit.evaluate(run, inventory_host="web02", text=same_records)
-    moved = write_evaluation(write, "moved.json", rerun)
-    with pytest.raises(ReportError, match="different exceptions files"):
-        report.build_report(
-            ReportInputs(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE, moved))
+            ReportInputs(
+                scope=Scope.FLEET,
+                exceptions_evaluation=(kit.EVALUATION_FILE, path),
+                exceptions_file=kit.EXCEPTIONS_FILE,
+            )
         )
 
 
 def test_the_evaluation_is_listed_once_in_the_raw_artifacts(kit: Any) -> None:
-    document = build(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE,) * 2)
-    assert [ref["format"] for ref in document["raw_artifacts"]] == ["exceptions_evaluation"] * 2
+    document = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,) * 2,
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
+    formats = [ref["format"] for ref in document["raw_artifacts"]]
+    assert sorted(formats) == ["exceptions_evaluation", "exceptions_evaluation", "exceptions_file"]
     assert len(document["sections"]["exceptions"]["items"]) == 2
     assert document["sections"]["exceptions"]["summary"]["evaluations"] == 1
     assert len(document["sections"]["compliance"]["groups"]) == 1
@@ -380,6 +534,7 @@ def test_a_scan_run_and_its_evaluation_are_a_repeated_scan(
     inputs: dict[str, Any] = {
         "scan_run": (marked,),
         "exceptions_evaluation": (kit.EVALUATION_FILE,),
+        "exceptions_file": kit.EXCEPTIONS_FILE,
     }
     with pytest.raises(ReportError, match="more than one completed scan run"):
         report.build_report(ReportInputs(scope=Scope.FLEET, **inputs))
@@ -389,7 +544,11 @@ def test_a_scan_run_and_its_evaluation_are_a_repeated_scan(
 
 
 def test_the_schema_rejects_inconsistent_exception_entries(kit: Any) -> None:
-    document = build(scope=Scope.FLEET, exceptions_evaluation=(kit.EVALUATION_FILE,))
+    document = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
     exceptions_list = ("sections", "exceptions", "exceptions")
     index = {
         entry["id"]: i for i, entry in enumerate(document["sections"]["exceptions"]["exceptions"])
@@ -414,6 +573,14 @@ def test_the_schema_rejects_inconsistent_exception_entries(kit: Any) -> None:
     assert broken("EXC-WAIVED", {"id": "<script>"})
     assert broken("EXC-WAIVED", {"scope": {"hosts": ["web 01"], "groups": [], "profiles": []}})
     assert broken("EXC-WAIVED", {"justification": "x" * 4097})
+    for version in ("</script><b>", "all controls compliant", "1" * 65):
+        hostile_scope = {
+            "benchmark": {"id": kit.BENCHMARK, "version": version},
+            "groups": [],
+            "hosts": [],
+            "profiles": [kit.PROFILE],
+        }
+        assert broken("EXC-SUPERSEDED", {"scope": hostile_scope})
     assert broken("EXC-WAIVED", {"status": "waived"})
     superseded = copy.deepcopy(document)
     match = superseded["sections"]["exceptions"]["exceptions"][index["EXC-SUPERSEDED"]]
@@ -427,10 +594,60 @@ def test_the_schema_rejects_inconsistent_exception_entries(kit: Any) -> None:
     assert not VALIDATOR.is_valid(empty)
 
 
+def changed(document: dict[str, Any], path: tuple[str | int, ...], value: Any) -> bool:
+    """Return whether the schema rejects ``document`` with ``value`` at ``path``."""
+    candidate = copy.deepcopy(document)
+    node: Any = candidate
+    for step in path[:-1]:
+        node = node[step]
+    node[path[-1]] = value
+    return not VALIDATOR.is_valid(candidate)
+
+
+def test_the_schema_enforces_every_exceptions_coupling(kit: Any, tmp_path: Path) -> None:
+    available = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE,),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
+    partial = build(
+        scope=Scope.FLEET,
+        exceptions_evaluation=(kit.EVALUATION_FILE, tmp_path / "absent.json"),
+        exceptions_file=kit.EXCEPTIONS_FILE,
+    )
+    section = ("sections", "exceptions")
+    entries = available["sections"]["exceptions"]["exceptions"]
+    waived = next(i for i, entry in enumerate(entries) if entry["id"] == "EXC-WAIVED")
+    match = (*section, "exceptions", waived, "matched_hosts", 0)
+    assert changed(available, (*section, "exceptions_file"), None)
+    assert changed(available, (*section, "exceptions_file", "verified"), value=False)
+    assert changed(available, (*section, "source_sha256"), None)
+    assert changed(available, (*section, "summary"), None)
+    assert changed(available, ("overview", "exceptions"), None)
+    assert changed(available, (*match, "superseded_by"), "EXC-STALE")
+    assert changed(available, (*match, "status"), "unmatched")
+    assert changed(partial, (*section, "exceptions"), entries)
+    assert changed(
+        partial, (*section, "exceptions_file"), available[section[0]][section[1]]["exceptions_file"]
+    )
+    assert changed(partial, (*section, "source_sha256"), "a" * 64)
+    assert changed(partial, (*section, "summary"), available["overview"]["exceptions"])
+    assert changed(partial, ("overview", "exceptions"), available["overview"]["exceptions"])
+    item = ("sections", "compliance", "items", 0, "data")
+    assert available["sections"]["compliance"]["items"][0]["data"]["lapsed_waivers"]
+    assert changed(available, (*item, "kind"), "scan_run")
+    xccdf = build(scope=Scope.FLEET, xccdf=(kit.XCCDF / "mixed-results.xml",))
+    rule = kit.RULE_PREFIX + "x"
+    assert changed(xccdf, (*item, "lapsed_waivers"), [rule])
+    assert changed(available, (*item, "lapsed_waivers"), ["not a rule"])
+    assert changed(xccdf, ("sections", "compliance", "notes"), [{"kind": "merged_inputs"}])
+
+
 def test_the_cli_reads_evaluations(kit: Any, tmp_path: Path) -> None:
     output = tmp_path / "report.json"
     argv = ["--scope", "fleet", "--output", str(output)]
-    assert cli.main([*argv, "--exceptions-evaluation", str(kit.EVALUATION_FILE)]) == 0
+    evaluation = ["--exceptions-evaluation", str(kit.EVALUATION_FILE)]
+    assert cli.main([*argv, *evaluation, "--exceptions-file", str(kit.EXCEPTIONS_FILE)]) == 0
     document = json.loads(output.read_text(encoding="utf-8"))
     assert document["overview"]["exceptions"]["by_status"]["stale"] == 1
     assert document["overview"]["available"] == ["compliance", "exceptions"]
@@ -531,11 +748,12 @@ OUTCOMES = [model.Outcome.FAIL, model.Outcome.PASS, model.Outcome.ERROR]
 
 def random_evaluations(
     chooser: Chooser, kit: Any, write: Callable[..., Path], case: int
-) -> list[Path]:
+) -> tuple[list[Path], Path]:
     now = dt.datetime(2026, 10, 25, 0, 0, tzinfo=dt.UTC) + dt.timedelta(
         hours=chooser.randrange(24 * 20)
     )
     text = random_file(chooser, kit, chooser.randrange(1, 12), now.date())
+    source = write(f"case{case}.yml", text)
     paths: list[Path] = []
     for host_index, host in enumerate(("web01", "web02", "db01")[: 1 + chooser.randrange(3)]):
         chosen = {f"rule{rule}": chooser.choice(OUTCOMES) for rule in range(chooser.randrange(9))}
@@ -554,7 +772,7 @@ def random_evaluations(
         except exceptions.ExceptionsError:
             continue
         paths.append(write_evaluation(write, f"case{case}-{host}.json", evaluation))
-    return paths
+    return paths, source
 
 
 def test_random_exceptions_files_always_give_schema_valid_reports(
@@ -564,11 +782,13 @@ def test_random_exceptions_files_always_give_schema_valid_reports(
     verdicts: set[str] = set()
     reports = 0
     for case in range(40):
-        paths = random_evaluations(chooser, kit, write, case)
+        paths, source = random_evaluations(chooser, kit, write, case)
         if not paths:
             continue
         reports += 1
-        document = build(scope=Scope.FLEET, exceptions_evaluation=tuple(paths))
+        document = build(
+            scope=Scope.FLEET, exceptions_evaluation=tuple(paths), exceptions_file=source
+        )
         assert document["sections"]["exceptions"]["status"] == "available"
         listed = entries_of(document)
         assert len(listed) == document["sections"]["exceptions"]["summary"]["total"]

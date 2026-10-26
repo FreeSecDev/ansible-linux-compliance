@@ -112,10 +112,14 @@ report, including host evidence, and must be shared with the same care.
 The dashboard reads report schema 2.0 only ([ADR 0016](0016-report-schema-and-summary-semantics.md)) and refuses 1.0.
 
 - **Merge notes.** The report now writes one `merged_inputs` note per group with its group key, so the view no longer
-  infers merges. `views.groups[i].note` is the index of the note whose group key (benchmark, content version and the
-  structured host key) equals the key of `groups[i]`, or `null`; the old intersection of a per-host note's sources
+  infers merges. `views.groups[i].note` is the index of the note whose group key (benchmark, content version,
+  profile and the structured host key) equals the key of `groups[i]`, or `null`; the old intersection of a per-host note's sources
   with the group's inputs is removed. A group shows "Merged in this group" exactly when the report has such a note,
   with the note's sources and, when two completed inputs repeat a profile, a "repeated scan" badge.
+- **Profiles.** The pooled figures, host groups and rules tables show and filter by profile, because a figure
+  covers one profile; a host with a CIS and a STIG run has two rows, never one combined figure.
+- **Exceptions file.** The Exceptions tab shows the exceptions file path and SHA-256 with "every evaluation verified
+  against this file", which the report states only when every evaluation was verified against it.
 - **Hosts counted as one.** `same_host_across_groups` notes are listed under "Hosts counted as one" on the Compliance
   tab with the host, its identity, the groups and the inputs, and the text says that the figures stay separate and
   nothing is combined across the groups.

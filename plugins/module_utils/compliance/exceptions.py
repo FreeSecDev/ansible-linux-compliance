@@ -78,7 +78,7 @@ ID_PATTERN: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]*"
 HOST_PATTERN: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._:-]*"
 GROUP_PATTERN: Final[str] = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 DATE_PATTERN: Final[str] = r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
-TRIMMED_PATTERN: Final[str] = r"\S(?:.*\S)?"
+VERSION_PATTERN: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._+~:-]*"
 HANDLE_PATTERN: Final[str] = r"[a-z0-9][a-z0-9._-]{0,63}"
 EMAIL_PATTERN: Final[str] = (
     r"[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -117,9 +117,6 @@ EVALUATION_KEYS: Final[tuple[str, ...]] = (
     "source_sha256",
     "summary",
     "target",
-)
-RESULT_KEYS: Final[frozenset[str]] = frozenset(
-    {"expired", "expires_at", "outcome", "status", "superseded_by"}
 )
 TARGET_KEYS: Final[tuple[str, ...]] = ("groups", "host")
 SHA256_PATTERN: Final[str] = r"[0-9a-f]{64}"
@@ -596,7 +593,7 @@ def _parse_scope(value: object, where: str) -> Scope:
                 bench["version"],
                 f"{where}.benchmark.version",
                 max_length=MAX_VERSION_LENGTH,
-                pattern=TRIMMED_PATTERN,
+                pattern=VERSION_PATTERN,
             ),
         )
     return Scope(hosts, groups, benchmark, profiles)
@@ -1063,13 +1060,6 @@ def _unmarked(run: model.ScanRun) -> model.ScanRun:
     return replace(run, findings=tuple(findings))
 
 
-def _record_fields(entry: object, where: str) -> dict[str, object]:
-    if not isinstance(entry, dict):
-        _fail(f"{where} must be a mapping")
-    item = cast("dict[str, object]", entry)
-    return {key: value for key, value in item.items() if key not in RESULT_KEYS}
-
-
 def _canonical(value: object) -> str:
     try:
         return json.dumps(value, sort_keys=True, allow_nan=False)
@@ -1077,71 +1067,57 @@ def _canonical(value: object) -> str:
         _fail("the evaluation is not JSON data")
 
 
-def _load_evaluation(document: object) -> Evaluation:
+def _verify_evaluation(document: object, exceptions_text: str) -> Evaluation:
     data = _mapping(document, "evaluation", EVALUATION_KEYS, required=True)
     version = data["schema_version"]
     if not isinstance(version, str) or version not in SUPPORTED_EVALUATION_SCHEMA_VERSIONS:
         _fail(f"evaluation has an unsupported schema_version {str(version)[:16]!r}")
-    digest = _text(
-        data["source_sha256"], "evaluation.source_sha256", max_length=64, pattern=SHA256_PATTERN
-    )
     controller = _instant(data["controller_time"], "evaluation.controller_time")
     lag = data["max_scan_lag_seconds"]
     if isinstance(lag, bool) or not isinstance(lag, int):
         _fail("evaluation.max_scan_lag_seconds must be an integer")
     where = _mapping(data["target"], "evaluation.target", TARGET_KEYS, required=True)
     target = make_target(where["host"], where["groups"])
-    entries = data["exceptions"]
-    if not isinstance(entries, list):
-        _fail("evaluation.exceptions must be a list")
-    listed = cast("list[object]", entries)
-    if len(listed) > MAX_EXCEPTIONS:
-        _fail(f"evaluation.exceptions has more than {MAX_EXCEPTIONS} entries")
-    fields = [
-        _record_fields(entry, f"evaluation.exceptions[{index}]")
-        for index, entry in enumerate(listed)
-    ]
-    records = parse_document(
-        {"schema_version": FILE_SCHEMA_VERSION, "exceptions": fields}, controller
-    )
+    parsed = parse_exceptions(exceptions_text, controller)
+    if data["source_sha256"] != parsed.source_sha256:
+        _fail("the evaluation was not made from this exceptions file (source_sha256 differs)")
     original = _unmarked(load_scan_run(data["scan_run"]))
     evaluation = evaluate_run(
-        original,
-        ExceptionSet(records, digest),
-        target,
-        controller,
-        max_scan_lag=timedelta(seconds=lag),
+        original, parsed, target, controller, max_scan_lag=timedelta(seconds=lag)
     )
     if _canonical(evaluation.to_dict()) != _canonical(document):
         _fail(
-            "the evaluation does not match a new evaluation of its own scan run, "
-            "exceptions, target and times"
+            "the evaluation does not match a new evaluation of its scan run with this "
+            "exceptions file, target and times"
         )
     return evaluation
 
 
-def load_evaluation(document: object) -> Evaluation:
-    """Verify an evaluation document and return the evaluation it records.
+def verify_evaluation(document: object, exceptions_text: object) -> Evaluation:
+    """Verify an evaluation document against the exceptions file it names.
 
-    The document is not trusted: the exceptions it lists are validated like an
-    exceptions file (with its controller time as "today"), the waiver marks are
-    removed from its scan run, and the scan run is evaluated again with the
-    same target, times and scan lag limit. The document is accepted only when
-    the new evaluation is exactly the same, so no status, mark, count or time
-    can be edited without the change being detected. The SHA-256 of the
-    exceptions file cannot be checked without the file and is taken as given.
+    The document is not trusted. ``exceptions_text`` is validated like any exceptions
+    file (with the controller time of the document as "today"), its SHA-256 must be
+    the document's ``source_sha256``, the waiver marks are removed from the document's
+    scan run, and the run is evaluated again with that file and the target, controller
+    time and scan lag limit that the document records. The document is accepted only
+    when the new evaluation is exactly the same, so neither an edited status, mark,
+    count or time nor an evaluation made from another exceptions file is accepted.
 
     Args:
         document: An evaluation document (:meth:`Evaluation.to_dict`) loaded from JSON.
+        exceptions_text: The text of the exceptions file the evaluation was made from.
 
     Returns:
         The verified evaluation.
 
     Raises:
         ExceptionsError: If the document is malformed, has an unsupported
-            ``schema_version`` or differs from the new evaluation.
+            ``schema_version``, names another exceptions file, the file is invalid, or
+            the document differs from the new evaluation.
     """
+    text = _string(exceptions_text, "the exceptions file must be text")
     try:
-        return _load_evaluation(document)
+        return _verify_evaluation(document, text)
     except model.ModelError as error:
         raise ExceptionsError(str(error)) from error

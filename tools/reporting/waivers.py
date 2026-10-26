@@ -1,6 +1,7 @@
 """The ``exceptions`` section: every exception of the exceptions file and what it did (FREES-132).
 
-The section is built from verified exceptions evaluations, one per scan run. Every
+The section is built from exceptions evaluations, one per scan run, each verified
+against the exceptions file (:func:`exceptions.verify_evaluation`). Every
 exception of the file is listed once, with its record, a structured scope, its status
 on every evaluated scan run, the inventory hosts where its scope matched and one
 review verdict (:func:`exceptions.review`). Nothing here changes a compliance figure:

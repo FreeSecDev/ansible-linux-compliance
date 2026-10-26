@@ -165,7 +165,7 @@ requires that every document the loader accepts loads to the same value with PyY
 | `hosts` | The inventory host name (`inventory_hostname`), exactly |
 | `groups` | Any of the inventory groups of the host (`group_names`), exactly; `all` and `ungrouped` are rejected because `group_names` never contains them |
 | `profiles` | The full XCCDF profile identifier of the scan run (`profile_id`), exactly |
-| `benchmark.id`, `benchmark.version` | The `benchmark_id` and the content version (`content.content_version`) of the scan run; both must be equal. Requires `profiles` |
+| `benchmark.id`, `benchmark.version` | The `benchmark_id` and the content version (`content.content_version`) of the scan run; both must be equal. The version is a token (`[A-Za-z0-9][A-Za-z0-9._+~:-]*`, at most 64 characters). Requires `profiles` |
 
 Every key that is present must match (AND); within a list one entry is enough (OR). There are no wildcards or
 patterns. Host scopes are matched against the controller's inventory name, never against the host name the scanned
@@ -311,8 +311,12 @@ Write each evaluation document to a JSON file and pass them to `tools/reporting`
 
 ```bash
 python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
+  --exceptions-file inventory/exceptions.yml \
   --exceptions-evaluation web01-evaluation.json --exceptions-evaluation web02-evaluation.json
 ```
+
+`--exceptions-file` is required with `--exceptions-evaluation`: it is the reviewed exceptions file that the
+evaluations were made from.
 
 An evaluation is a compliance input on its own; do not pass its scan run with `--scan-run` as well, because two
 completed scan runs of one host and profile are refused as a repeated scan. The report then shows:
@@ -327,10 +331,19 @@ completed scan runs of one host and profile are refused as a repeated scan. The 
   exceptions file ([reporting data model](reporting-data-model.md#exceptions-section));
 - the stale, expired and removal-candidate counts in the overview. None of this changes a compliance percentage.
 
-The report does not trust the evaluation file: it removes the waiver marks from the scan run, evaluates it again with
-the exceptions, inventory host, groups, controller time and scan lag limit that the file records, and accepts the file
-only when the result is identical. An edited status, count, mark or time is an input error. The SHA-256 of the
-exceptions file is taken as given; signing it is proposed in [ADR 0018](adr/0018-evidence-bundle-provenance.md).
+The report does not trust the evaluation file. It checks the evaluation against the exceptions file:
+
+- the SHA-256 of the exceptions file must be the evaluation's `source_sha256`. The `ansible.builtin.file` lookup
+  removes trailing whitespace by default, so the report also accepts the digest of the file without trailing
+  whitespace;
+- the exceptions file must pass the same validation as in the filter, at the evaluation's controller time;
+- the scan run, with its waiver marks removed, is evaluated again with that file and the inventory host, groups,
+  controller time and scan lag limit the evaluation records, and the result must be identical.
+
+An edited status, count, mark or time, or an evaluation made from another exceptions file, is an input error, and
+nothing from it is shown as waived. The report records the exceptions file path and SHA-256 in the exceptions
+section once every evaluation passed. Only the reviewed Git history makes the file itself trustworthy; signed
+evidence is proposed in [ADR 0018](adr/0018-evidence-bundle-provenance.md).
 
 Passing only the marked scan run with `--scan-run` still works, but then the report has no exceptions section and does
 not count waivers that lapsed during the scan.

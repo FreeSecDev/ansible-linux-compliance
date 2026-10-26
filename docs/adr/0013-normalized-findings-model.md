@@ -369,6 +369,9 @@ different waivers; the digest check of `stale_exceptions` would only catch it at
 
 The model entities and `schema_version` `"1.0"` of the ScanRun and of the evaluation document are unchanged.
 
+- **Benchmark scope version.** `scope.benchmark.version` must be a version token
+  (`[A-Za-z0-9][A-Za-z0-9._+~:-]*`, at most 64 characters). It only ever matched a content version of that form, and
+  the token keeps free text out of the scope that reports show.
 - **Same person.** `exceptions.same_person` compares `person_identity`: a handle is its own identity, and an email
   address is its local part without a plus-address suffix, whatever the domain. `alice+audit@example.org` and
   `alice@example.org` are the same person, and so are `alice@a.example` and `alice@b.example`. The handle rule already
@@ -386,13 +389,18 @@ The model entities and `schema_version` `"1.0"` of the ScanRun and of the evalua
   `freesecdev.linux_compliance.exception_removal_candidates` wraps `removal_candidate_ids`.
 - **Evaluation versions.** Every reader of evaluation documents checks `schema_version` against
   `SUPPORTED_EVALUATION_SCHEMA_VERSIONS` (`{"1.0"}`) and refuses any other value, including a missing one.
-- **Verified evaluations.** `exceptions.load_evaluation` reads an evaluation document for the reporting package and
-  trusts none of it: it validates the listed exceptions with the file rules (`today` is the controller time of the
-  document), removes the waiver marks from the scan run (`waived` back to its evaluated `fail`, exception data to
-  `none`), evaluates the run again with the same target, controller time and scan lag limit, and accepts the
-  document only when the new evaluation serializes identically. No status, count, mark, reason or time can be edited
-  without detection. The SHA-256 of the exceptions file cannot be checked without the file and is taken as given
-  ([ADR 0018](0018-evidence-bundle-provenance.md) proposes signing it into the evidence bundle).
+- **Evaluations verified against the exceptions file.** `exceptions.verify_evaluation(document, exceptions_text)`
+  reads an evaluation document for the reporting package and trusts none of it:
+  - it parses and validates `exceptions_text` with the file rules (`today` is the controller time of the document);
+  - it requires the SHA-256 of that text to be the document's `source_sha256`;
+  - it removes the waiver marks from the scan run (`waived` back to its evaluated `fail`, exception data to `none`);
+  - it evaluates the run again with that file and the target, controller time and scan lag limit of the document.
+
+  The document is accepted only when the new evaluation serializes identically, so no status, count, mark, reason,
+  record or time can be edited. An evaluation made consistently from another, unreviewed exceptions file is refused,
+  because its digest or its records differ. The reporting package requires the file (`--exceptions-file`). A waived
+  finding inside a plain ScanRun JSON has no such check; [ADR 0018](0018-evidence-bundle-provenance.md) proposes
+  signed evidence for that.
 - **Lapsed waivers.** `Evaluation.lapsed_rule_ids` lists the rules whose chosen exception is `expired` in the
   evaluation but had not expired at the scan start. Their findings stay `fail` without exception data, because the
   model only allows the state `expired` for an expiry at or before the scan start; the report counts them in

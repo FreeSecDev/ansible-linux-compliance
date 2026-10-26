@@ -30,7 +30,8 @@ and `REPORT_HTML` override them). `--scope` and `--output` are required; `--html
 | `--packer` | Packer `manifest.json` |
 | `--codebuild` | `aws codebuild batch-get-builds` JSON |
 | `--molecule` | Molecule results summary (below) |
-| `--exceptions-evaluation` | Exceptions evaluation JSON written by the `apply_exceptions` filter, one per scan run ([exceptions](exceptions.md#reporting)) |
+| `--exceptions-evaluation` | Exceptions evaluation JSON written by the `apply_exceptions` filter, one per scan run ([exceptions](exceptions.md#reporting)); requires `--exceptions-file` |
+| `--exceptions-file` | The exceptions file the evaluations were made from (one file, not repeatable) |
 
 Metadata options are `--commit`, `--pull-request`, `--workflow-run`, `--started-at`, `--finished-at` and
 `--generated-at`. They are validated and written as given; timestamps use `YYYY-MM-DDTHH:MM:SSZ`. Nothing is read
@@ -44,8 +45,9 @@ Exit status:
   not an error, and it is never shown as passed.
 - 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`).
 - 2: invalid arguments or metadata, `--html` naming the same file as `--output`, a scope that the data contradicts
-  (below), repeated scan runs without `--allow-repeated-scans`, exceptions evaluations of different exceptions files,
-  or an output that cannot be written. No report is written in these cases.
+  (below), repeated scan runs without `--allow-repeated-scans`, `--exceptions-evaluation` without
+  `--exceptions-file` (or the reverse), an exceptions file that cannot be read, evaluations that record different
+  exceptions file digests, or an output that cannot be written. No report is written in these cases.
 - 3: the JSON report was written, but the dashboard was not, because the report is above the dashboard size cap
   (128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)). A dashboard left at that path by an earlier
   run is removed. Status 3 takes precedence over 1; the sections of the JSON still show any missing or invalid input.
@@ -101,16 +103,19 @@ lists every item that is not `available` with its path, status and reason.
 
 ## Compliance summary
 
-Figures are never pooled across benchmarks or content versions. The compliance section has:
+Figures are never pooled across benchmarks, content versions or profiles. In ComplianceAsCode the CIS and STIG
+profiles of a distribution share one benchmark identifier, so the profile is part of every key; a host with a CIS and
+a STIG run has two separate figures and no combined one. The compliance section has:
 
-- `groups`: one figure per (benchmark, content version, host).
-- `aggregates`: for scopes other than `single_host`, one pooled figure per (benchmark, content version), with
-  `host_count` and the report `scope` as its label. It pools hosts of the same benchmark and version only.
-- `summary`: the pooled figure when exactly one benchmark and content version is present, otherwise `null`.
+- `groups`: one figure per (benchmark, content version, profile, host).
+- `aggregates`: for scopes other than `single_host`, one pooled figure per (benchmark, content version, profile),
+  with `host_count` and the report `scope` as its label. It pools hosts of the same benchmark, version and profile
+  only.
+- `summary`: the pooled figure when exactly one benchmark, content version and profile is present, otherwise `null`.
 - Each item also carries the summary of its own file.
 
 The declared `scope` is checked against the data. `single_host` with inputs from more than one host, or `benchmark`
-with more than one benchmark or content version, is rejected (exit 2). The schema also bounds `aggregates` (none for
+with more than one benchmark, content version or profile, is rejected (exit 2). The schema also bounds `aggregates` (none for
 `single_host`, at most one for `benchmark`).
 
 A host name taken from a file must satisfy the ScanRun host rule (letters, digits and `._:+-`, starting with a letter or
@@ -130,13 +135,14 @@ same SHA-256 count once.
 `notes` records, as structured entries without prose, every place where inputs were combined or counted as one host.
 Consumers build the wording, so no input text becomes prose.
 
-- `{"kind": "merged_inputs", "group": {"benchmark_id", "content_version", "host"}, "sources": [sha256, ...],
-  "repeated_profile": bool}`: one note for **every group built from more than one input**, whatever the input types.
+- `{"kind": "merged_inputs", "group": {"benchmark_id", "content_version", "profile_id", "host"},
+  "sources": [sha256, ...], "repeated_profile": bool}`: one note for **every group built from more than one input**, whatever the input types.
   Two ScanRuns with the same `hostname` and `machine_id`, a ScanRun and an XCCDF file that name the same host, or two
   XCCDF files that claim one name all get it. `group` is the key of the group in `groups`, so a consumer attaches the
-  note by key. `repeated_profile` is true when two completed inputs of the group report the same profile.
-- `{"kind": "same_host_across_groups", "host": {...}, "groups": [{"benchmark_id", "content_version"}, ...],
-  "sources": [...]}`: one note for every host key with inputs in more than one group. These inputs count as one host
+  note by key. `repeated_profile` is true when two or more inputs of the group completed: the same profile was
+  scanned again.
+- `{"kind": "same_host_across_groups", "host": {...}, "groups": [{"benchmark_id", "content_version",
+  "profile_id"}, ...], "sources": [...]}`: one note for every host key with inputs in more than one group. These inputs count as one host
   (for the scope checks and `host_count`), but every group keeps its own figure and nothing is combined across them.
 
 A group with a single input has no note. Each input is in at most one note of each kind.
@@ -148,7 +154,8 @@ content version and profile is refused with exit status 2. A machine ID is not a
 of a real host could add passing rules that the real run did not evaluate, and the rule-by-rule merge would raise the
 host's figure (the FREES-130 probe went from 0.0 to 99.0 percent). `--allow-repeated-scans` merges such runs, worst
 outcome first, and the group's note has `repeated_profile: true`. Runs of different profiles on one host (for example
-CIS and STIG, which share a benchmark ID) are merged and noted without the flag; runs that did not complete are never
+CIS and STIG, which share a benchmark ID) are different groups with their own figures, so a forged run with another
+profile can neither be refused as a repeat nor change the real run's figure; runs that did not complete are never
 refused and withhold the group's figure; XCCDF and ARF files are self-asserted by construction and always merged with
 a note. Signed evidence that tells a genuine run from a forged one is proposed in
 [ADR 0018](adr/0018-evidence-bundle-provenance.md).
@@ -188,18 +195,29 @@ A profile that selects 10 rules, all passing, among 90 `notselected` rules gives
 
 ### Deduplication and sources
 
-`rules` has one entry per rule ID, host and content version, with the worst `outcome`, the highest `severity`,
+`rules` has one entry per rule ID, host, benchmark, content version and profile (all part of the entry), with the
+worst `outcome`, the highest `severity`,
 `expired_waiver` (of the sources that have the worst outcome) and every contributing `sources` entry (`artifact`,
-`benchmark_id`, `profile_id`, `outcome`, `expired_waiver`), so the outcome of each file stays visible. Two runs of
-one host with the same benchmark and version are merged, worst outcome first.
+`benchmark_id`, `profile_id`, `outcome`, `expired_waiver`), so the outcome of each file stays visible. Two inputs of
+one host with the same benchmark, version and profile are merged, worst outcome first.
 
 ## Exceptions section
 
-The `exceptions` section is built from exceptions evaluations (`--exceptions-evaluation`). Every evaluation is
-verified: the reporting package evaluates its scan run again from the exceptions, target and times it lists and
-accepts it only when the result is identical (`exceptions.load_evaluation`, see
-[exceptions](exceptions.md#reporting)). A document that does not verify, has an unknown `schema_version`, or names an
-inventory host that is not a host name is an input error in both the compliance and the exceptions section.
+The `exceptions` section is built from exceptions evaluations (`--exceptions-evaluation`) and the exceptions file
+they were made from (`--exceptions-file`, required with evaluations; a file without evaluations, or a file that cannot
+be read, is refused with exit status 2). Every evaluation is verified against the file
+(`exceptions.verify_evaluation`, see [exceptions](exceptions.md#reporting)):
+
+- the SHA-256 of the file must be the evaluation's `source_sha256`. The Ansible file lookup strips trailing
+  whitespace by default, so the file as read and the file without trailing whitespace are both tried;
+- the file must be a valid exceptions file, checked with the controller time of the evaluation as "today";
+- the evaluation's scan run, with the waiver marks removed, is evaluated again with that file and the target,
+  controller time and scan lag limit the evaluation records, and the result must be exactly the evaluation.
+
+An evaluation that fails any of these, including one made from another exceptions file, has an unknown
+`schema_version`, or names an inventory host that is not a host name, is an input error in both the compliance and the
+exceptions section. `exceptions_file` (`path`, `sha256` of the bytes read, `verified: true`) is set only when the
+section is available, that is, when every evaluation passed.
 
 The scan run of an evaluation is also a compliance input, with the format `exceptions_evaluation`. A rule whose
 exception lapsed between the scan start and the controller time stays `fail` and counts in `expired_waivers`; its ID is
@@ -260,7 +278,8 @@ Common behaviour of every parser:
 | Packer manifest | `parsers/packer.py` | Requires at least one build with `name`, `builder_type` and `artifact_id`. `build_time` (epoch seconds from the file) is written in UTC and must be valid if present. `in_last_run` marks the builds of `last_run_uuid`. `custom_data` keys and values must be non-empty strings of at most 512 characters (longer is an error, never cut), at most 1000 keys. At most 10000 builds and 1000 files. |
 | CodeBuild | `parsers/codebuild.py` | `batch-get-builds` output. `buildStatus` must be a known CodeBuild status. Any entry in `buildsNotFound` makes the file an error, because a requested build is missing. The section summary counts succeeded, failed and in-progress builds, so a failed build is never shown as clean. Times are numbers (epoch seconds, written in UTC) or strings as supplied. |
 | Molecule summary | `parsers/molecule.py` | The project-defined format below. |
-| Exceptions evaluation | `parsers/evaluation.py` | The evaluation document of `apply_exceptions` (evaluation `schema_version` `"1.0"`), verified by `exceptions.load_evaluation` against a new evaluation of its own content. The target host must match the exceptions host pattern. At most 1000 exceptions. |
+| Exceptions evaluation | `parsers/evaluation.py` | The evaluation document of `apply_exceptions` (evaluation `schema_version` `"1.0"`), verified by `exceptions.verify_evaluation` against `--exceptions-file`: same SHA-256, valid file, and a new evaluation of the scan run with that file equal to the document. The target host must match the exceptions host pattern. At most 1000 exceptions. |
+| Exceptions file | `parsers/evaluation.py` | Read as UTF-8 with the common size and path rules and parsed by the collection's strict exceptions loader; listed in `raw_artifacts` as `exceptions_file`. |
 
 ### Molecule results summary format
 
@@ -279,14 +298,18 @@ scenario is required. Any other `format` or `version` is an error.
 
 - 1.0: first version (FREES-75), including the `partial` section status, `groups`, `aggregates` and `gaps`. A change that adds a field bumps the minor version; a breaking change bumps the major
   version, and `report-v<major>.json` is a new file. The version, this page and ADR 0016 change together.
-- The HTML dashboard (FREES-77, ADR 0017) reads version 1.0 and adds no field to the document; it refuses any
-  other version.
+- The HTML dashboard (FREES-77, ADR 0017) adds no field to the document and refuses every version it does not
+  know; it reads 2.0 only.
 - 2.0 (FREES-130, FREES-132, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132)):
-  `report-v2.json`. Breaking: the 1.0 note `shared_self_asserted_host` is replaced by the per-group
-  `merged_inputs` and the host-level `same_host_across_groups` notes; `sections.exceptions` and `overview.exceptions`
-  are new required keys; compliance items and data gain the format and kind `exceptions_evaluation` and the
-  `lapsed_waivers` list. Unchanged: metadata, scope, every section status coupling, items, gaps, raw artifacts, rules,
-  groups, aggregates and every summary and counting rule. A 1.0 consumer migrates by accepting `"2.0"` and the
-  `exceptions` section name, reading notes by their new kinds and treating `exceptions_evaluation` like `scan_run`.
-  Inputs are unchanged, except that an XCCDF file whose target and fqdn fact disagree is now an error and repeated scan
-  runs are refused unless allowed. The dashboard reads 2.0 only; `report-v1.json` is in the Git history.
+  `report-v2.json`. Breaking: every figure key includes the profile (`groups`, `aggregates` and `rules` gain
+  `profile_id`, `rules` also `benchmark_id`, and a CIS and a STIG run of one host are two figures); the 1.0 note
+  `shared_self_asserted_host` is replaced by the per-group `merged_inputs` and the host-level
+  `same_host_across_groups` notes; `sections.exceptions` and `overview.exceptions` are new required keys; compliance
+  items and data gain the format and kind `exceptions_evaluation` and the `lapsed_waivers` list; raw artifacts gain
+  the format `exceptions_file`. Deliberate counting changes: figures are per profile, and waivers that lapsed during
+  the scan count in `expired_waivers` (the outcome stays `fail`). Unchanged: metadata, scope, every section status
+  coupling, items, gaps and the percentage rules. A 1.0 consumer migrates by accepting `"2.0"` and the `exceptions`
+  section name, reading `profile_id`, reading notes by their new kinds and treating `exceptions_evaluation` like
+  `scan_run`. Inputs are unchanged, except that an XCCDF file whose target and fqdn fact disagree is now an error,
+  repeated scan runs are refused unless allowed, and evaluations need their exceptions file. `report-v1.json` is in
+  the Git history.

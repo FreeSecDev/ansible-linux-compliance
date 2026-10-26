@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 from typing import Any
 
@@ -197,7 +198,22 @@ def data_for(
     )
 
 
-def test_rollup_deduplicates_by_rule_id_across_benchmarks_and_keeps_every_source(kit: Any) -> None:
+def test_rollup_deduplicates_by_rule_id_within_one_profile_and_keeps_every_source(
+    kit: Any,
+) -> None:
+    first = kit.scan_run((kit.finding("a"), kit.finding("b", OC.FAIL)))
+    second = kit.scan_run((kit.finding("a", OC.FAIL, severity=SV.HIGH), kit.finding("c")))
+    rules = compliance.rollup([("one.json", data_for(first)), ("two.json", data_for(second))])
+    assert [rule.rule_id.rsplit("_", 1)[-1] for rule in rules] == ["a", "b", "c"]
+    merged = rules[0]
+    assert merged.outcome is OC.FAIL
+    assert merged.severity is SV.HIGH
+    assert (merged.benchmark_id, merged.profile_id) == (kit.BENCHMARK, kit.PROFILE)
+    assert [source.artifact for source in merged.sources] == ["one.json", "two.json"]
+    assert len(rules[1].sources) == 1
+
+
+def test_rollup_never_pools_benchmarks_or_profiles(kit: Any) -> None:
     cis = kit.scan_run(
         (kit.finding("a"), kit.finding("b", OC.FAIL)), benchmark_id=kit.BENCHMARK + "_cis"
     )
@@ -205,16 +221,18 @@ def test_rollup_deduplicates_by_rule_id_across_benchmarks_and_keeps_every_source
         (kit.finding("a", OC.FAIL, severity=SV.HIGH), kit.finding("c")),
         benchmark_id=kit.BENCHMARK + "_stig",
     )
-    rules = compliance.rollup([("cis.json", data_for(cis)), ("stig.json", data_for(stig))])
-    assert [rule.rule_id.rsplit("_", 1)[-1] for rule in rules] == ["a", "b", "c"]
-    first = rules[0]
-    assert first.outcome is OC.FAIL
-    assert first.severity is SV.HIGH
-    assert [(source.artifact, source.benchmark_id) for source in first.sources] == [
-        ("cis.json", kit.BENCHMARK + "_cis"),
-        ("stig.json", kit.BENCHMARK + "_stig"),
+    other_profile = dataclasses.replace(cis, profile_id=kit.PROFILE + "_stig")
+    entries = [
+        ("cis.json", data_for(cis)),
+        ("stig.json", data_for(stig)),
+        ("profile.json", data_for(other_profile)),
     ]
-    assert len(rules[1].sources) == 1
+    rules = compliance.rollup(entries)
+    assert len(rules) == 6
+    for rule in rules:
+        assert len(rule.sources) == 1
+        assert rule.sources[0].benchmark_id == rule.benchmark_id
+        assert rule.sources[0].profile_id == rule.profile_id
 
 
 def test_rollup_keeps_different_hosts_and_content_versions_apart(kit: Any) -> None:
@@ -347,8 +365,8 @@ def test_same_hostname_with_different_machine_ids_is_not_merged(kit: Any) -> Non
 
 
 def test_rollup_records_the_outcome_of_every_source(kit: Any) -> None:
-    first = kit.scan_run((kit.finding("a", OC.ERROR),), benchmark_id=kit.BENCHMARK + "_x")
-    second = kit.scan_run((kit.expired("a"),), benchmark_id=kit.BENCHMARK + "_y")
+    first = kit.scan_run((kit.finding("a", OC.ERROR),))
+    second = kit.scan_run((kit.expired("a"),))
     rule = compliance.rollup([("1.json", data_for(first)), ("2.json", data_for(second))])[0]
     assert rule.outcome is OC.ERROR
     assert not rule.expired_waiver
@@ -395,7 +413,18 @@ def test_aggregates_never_pool_benchmarks_or_versions(kit: Any) -> None:
         ("1.0", 2, "fleet", 75.0),
         ("2.0", 1, "fleet", 0.0),
     ]
-    assert set(compliance.pairs(entries)) == {(kit.BENCHMARK, "1.0"), (kit.BENCHMARK, "2.0")}
+    assert set(compliance.figured(entries)) == {
+        (kit.BENCHMARK, "1.0", kit.PROFILE),
+        (kit.BENCHMARK, "2.0", kit.PROFILE),
+    }
+    stig = dataclasses.replace(
+        kit.scan_run((kit.finding("a", OC.FAIL),)), profile_id=kit.PROFILE + "_stig"
+    )
+    pooled = compliance.aggregate_figures([*entries[:1], ("4", data_for(stig))], "fleet")
+    assert [(a.profile_id, a.summary.compliance_percent) for a in pooled] == [
+        (kit.PROFILE, 100.0),
+        (kit.PROFILE + "_stig", 0.0),
+    ]
 
 
 def test_compliance_data_serializes_scan_runs_without_duplicating_findings(kit: Any) -> None:

@@ -42,7 +42,7 @@ FORBIDDEN_ASSET_SEQUENCES: Final[tuple[str, ...]] = ("</script", "</style", "<!-
 _ESCAPE_TABLE: Final[dict[int, str]] = str.maketrans(JSON_ESCAPES)
 
 type HostTuple = tuple[str, str, str]
-type GroupTuple = tuple[str, str, HostTuple]
+type GroupTuple = tuple[str, str, str, HostTuple]
 
 
 class DashboardError(ValueError):
@@ -144,7 +144,12 @@ def _group_sources(items: Sequence[Json]) -> dict[GroupTuple, list[Json]]:
         data = _mapping(item.get("data"))
         if item.get("status") != "available" or not data:
             continue
-        key = (_text(data.get("benchmark_id")), _text(data.get("content_version")), item_host(data))
+        key = (
+            _text(data.get("benchmark_id")),
+            _text(data.get("content_version")),
+            _text(data.get("profile_id")),
+            item_host(data),
+        )
         artifact = _mapping(item.get("artifact"))
         sources.setdefault(key, []).append(
             {
@@ -161,6 +166,7 @@ def group_key(fields: Mapping[str, Json]) -> GroupTuple:
     return (
         _text(fields.get("benchmark_id")),
         _text(fields.get("content_version")),
+        _text(fields.get("profile_id")),
         key_of(fields.get("host")),
     )
 
@@ -219,7 +225,8 @@ def dashboard_views(report: Mapping[str, Json]) -> dict[str, Json]:
 
     ``groups[i]`` lists the input files (format, path, SHA-256) of
     ``sections.compliance.groups[i]`` and ``note``, the index in ``notes`` of the
-    ``merged_inputs`` note whose group key equals the key of that group, or ``None``.
+    ``merged_inputs`` note whose group key (benchmark, content version, profile and host)
+    equals the key of that group, or ``None``.
     The report writes such a note for every group built from more than one input, so
     nothing is inferred here. ``hosts`` lists every host key of the groups and rules
     once, with whether a machine ID identifies it or the name is self-asserted, and a

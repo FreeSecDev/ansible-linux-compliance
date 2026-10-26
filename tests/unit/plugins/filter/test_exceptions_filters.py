@@ -176,7 +176,7 @@ def test_removal_candidates_across_hosts() -> None:
 
 def test_the_evaluation_of_the_filter_loads_back_unchanged() -> None:
     result = apply_exceptions.apply_exceptions(scan_run().to_dict(), exceptions_text(), "web01", [])
-    assert exceptions.load_evaluation(result).to_dict() == result
+    assert exceptions.verify_evaluation(result, exceptions_text()).to_dict() == result
 
 
 def test_the_filter_uses_the_controller_clock() -> None:

@@ -77,6 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--html", type=Path, default=None)
     parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
     parser.add_argument(
+        "--exceptions-file",
+        type=Path,
+        default=None,
+        help="the exceptions file that every --exceptions-evaluation was made from; required "
+        "with --exceptions-evaluation",
+    )
+    parser.add_argument(
         "--allow-repeated-scans",
         action="store_true",
         help="merge several completed scan runs of one host, benchmark version and profile "
@@ -153,6 +160,7 @@ def main(argv: Sequence[str]) -> int:
         metadata=metadata,
         max_bytes=arguments["max_bytes"],
         allow_repeated_scans=arguments["allow_repeated_scans"],
+        exceptions_file=arguments["exceptions_file"],
         **{name: tuple(arguments[name]) for name in INPUT_OPTIONS},
     )
     try:

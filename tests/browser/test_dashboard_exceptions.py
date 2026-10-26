@@ -86,6 +86,9 @@ def test_every_exception_is_listed_with_its_review_and_details(
     assert "superseded" in details
     panel = view.page.locator("#panel-exceptions").inner_text()
     assert "Nothing on this tab changes a compliance figure" in panel
+    assert "every evaluation verified against this file" in panel
+    assert section["exceptions_file"]["path"] in panel
+    assert section["exceptions_file"]["sha256"] in panel
     assert "inventory names" in panel
     assert "web01.example" not in table.inner_text()
     view.assert_clean()

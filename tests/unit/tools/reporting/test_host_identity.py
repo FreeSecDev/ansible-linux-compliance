@@ -68,7 +68,12 @@ def test_an_allowed_repeated_scan_is_merged_and_always_noted(
     host = {"hostname": "web01", "input_sha256": None, "machine_id": MACHINE}
     assert section["notes"] == [
         {
-            "group": {"benchmark_id": kit.BENCHMARK, "content_version": "1.0", "host": host},
+            "group": {
+                "benchmark_id": kit.BENCHMARK,
+                "content_version": "1.0",
+                "host": host,
+                "profile_id": kit.PROFILE,
+            },
             "kind": "merged_inputs",
             "repeated_profile": True,
             "sources": sorted([sha(victim), sha(forged)]),
@@ -93,19 +98,59 @@ def test_the_cli_refuses_repeated_scans_unless_allowed(
     assert [note["kind"] for note in notes] == ["merged_inputs"]
 
 
-def test_runs_of_different_profiles_are_merged_with_a_note_without_the_flag(
+def profile_run(kit: Any, outcome: model.Outcome, profile: str, count: int = 10) -> Any:
+    findings = tuple(kit.finding(f"r{index}", outcome) for index in range(count))
+    return dataclasses.replace(kit.scan_run(findings, host=identified()), profile_id=profile)
+
+
+def test_the_reviewers_other_profile_forgery_cannot_raise_the_victims_figure(
     kit: Any, write_run: Callable[..., Path]
 ) -> None:
-    cis = kit.scan_run((kit.finding("a"),), host=identified())
-    stig = kit.scan_run((kit.finding("b", model.Outcome.FAIL),), host=identified())
-    stig = dataclasses.replace(stig, profile_id=OTHER_PROFILE)
-    paths = (write_run("cis.json", cis), write_run("stig.json", stig))
-    document = build(scope=Scope.SINGLE_HOST, scan_run=paths)
-    notes = document["sections"]["compliance"]["notes"]
-    assert [(note["kind"], note["repeated_profile"]) for note in notes] == [
-        ("merged_inputs", False)
-    ]
-    assert notes[0]["sources"] == sorted(sha(path) for path in paths)
+    victim, _ = victim_and_forgery(kit, write_run)
+    forged = kit.scan_run(
+        (kit.finding("a"), *(kit.finding(f"extra{index:02d}") for index in range(99))),
+        host=identified(),
+    )
+    other = write_run("other-profile.json", dataclasses.replace(forged, profile_id=OTHER_PROFILE))
+    document = build(scope=Scope.SINGLE_HOST, scan_run=(victim, other))
+    section = document["sections"]["compliance"]
+    figures = {group["profile_id"]: group["summary"] for group in section["groups"]}
+    assert figures[kit.PROFILE]["compliance_percent"] == 0.0
+    assert figures[kit.PROFILE]["counts"]["fail"] == 1
+    assert figures[OTHER_PROFILE]["compliance_percent"] == 100.0
+    assert section["summary"] is None
+    assert [note["kind"] for note in section["notes"]] == ["same_host_across_groups"]
+    victims = [rule for rule in section["rules"] if rule["profile_id"] == kit.PROFILE]
+    assert [(rule["outcome"], len(rule["sources"])) for rule in victims] == [("fail", 1)]
+
+
+def test_cis_and_stig_runs_of_one_host_are_never_pooled(
+    kit: Any, write_run: Callable[..., Path]
+) -> None:
+    cis = write_run("cis.json", profile_run(kit, model.Outcome.PASS, kit.PROFILE))
+    stig = write_run("stig.json", profile_run(kit, model.Outcome.FAIL, OTHER_PROFILE))
+    document = build(scope=Scope.SINGLE_HOST, scan_run=(cis, stig))
+    section = document["sections"]["compliance"]
+    figures = sorted(
+        (group["profile_id"], group["summary"]["compliance_percent"]) for group in section["groups"]
+    )
+    assert figures == [(kit.PROFILE, 100.0), (OTHER_PROFILE, 0.0)]
+    assert section["summary"] is None
+    assert section["aggregates"] == []
+    assert '"compliance_percent": 50.0' not in json.dumps(document)
+    notes = section["notes"]
+    assert [note["kind"] for note in notes] == ["same_host_across_groups"]
+    assert [group["profile_id"] for group in notes[0]["groups"]] == [kit.PROFILE, OTHER_PROFILE]
+    fleet = build(scope=Scope.FLEET, scan_run=(cis, stig))
+    pooled = sorted(
+        (a["profile_id"], a["summary"]["compliance_percent"])
+        for a in fleet["sections"]["compliance"]["aggregates"]
+    )
+    assert pooled == [(kit.PROFILE, 100.0), (OTHER_PROFILE, 0.0)]
+    with pytest.raises(ReportError, match="2 benchmark, content version and profile"):
+        report.build_report(ReportInputs(scope=Scope.BENCHMARK, scan_run=(cis, stig)))
+    one = build(scope=Scope.BENCHMARK, scan_run=(cis,))
+    assert one["sections"]["compliance"]["summary"]["compliance_percent"] == 100.0
 
 
 def test_an_unfinished_run_is_never_refused_and_withholds_the_figure(
@@ -158,7 +203,8 @@ def test_every_group_built_from_several_inputs_carries_a_note(
     multi = 0
     for group, view in zip(section["groups"], views["groups"], strict=True):
         key = json.dumps(
-            {k: group[k] for k in ("benchmark_id", "content_version", "host")}, sort_keys=True
+            {k: group[k] for k in ("benchmark_id", "content_version", "host", "profile_id")},
+            sort_keys=True,
         )
         sources = sorted(source["sha256"] for source in view["sources"])
         if len(sources) > 1:
@@ -188,8 +234,8 @@ def test_a_host_counted_once_across_groups_has_one_host_level_note(
     ]
     assert [note["host"]["hostname"] for note in notes] == ["web01"]
     assert notes[0]["groups"] == [
-        {"benchmark_id": kit.BENCHMARK, "content_version": "1.0"},
-        {"benchmark_id": kit.BENCHMARK, "content_version": "2.0"},
+        {"benchmark_id": kit.BENCHMARK, "content_version": "1.0", "profile_id": kit.PROFILE},
+        {"benchmark_id": kit.BENCHMARK, "content_version": "2.0", "profile_id": kit.PROFILE},
     ]
     assert len(notes[0]["sources"]) == 4
     assert all("group" not in note for note in notes)

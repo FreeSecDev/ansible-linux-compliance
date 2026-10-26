@@ -60,6 +60,7 @@ def full_inputs(kit: Any, **changes: Any) -> ReportInputs:
         "codebuild": (fixtures / "codebuild.json",),
         "molecule": (fixtures / "molecule-summary.json",),
         "exceptions_evaluation": (kit.EVALUATION_FILE,),
+        "exceptions_file": kit.EXCEPTIONS_FILE,
     }
     base.update(changes)
     return ReportInputs(**base)
@@ -130,7 +131,7 @@ def test_no_timestamp_is_generated_when_none_is_supplied(kit: Any) -> None:
 def test_raw_artifact_references_keep_path_and_checksum(kit: Any) -> None:
     document = build(full_inputs(kit))
     references: list[dict[str, Any]] = document["raw_artifacts"]
-    assert len(references) == 14
+    assert len(references) == 15
     assert [ref["format"] for ref in references].count("exceptions_evaluation") == 1
     paths = [reference["path"] for reference in references]
     assert paths == sorted(paths)
@@ -208,10 +209,12 @@ def test_error_outweighs_unavailable(write: Callable[..., Path], tmp_path: Path)
 
 
 def test_oversized_inputs_are_errors(kit: Any) -> None:
-    document = build(full_inputs(kit, max_bytes=50))
+    document = build(full_inputs(kit, max_bytes=50, exceptions_evaluation=(), exceptions_file=None))
     assert errors(document) == []
     assert document["overview"]["available"] == []
-    assert document["overview"]["error"] == sorted(SECTIONS)
+    assert document["overview"]["error"] == sorted(SECTIONS - {"exceptions"})
+    with pytest.raises(ReportError, match="exceptions file cannot be used: input is larger"):
+        report.build_report(full_inputs(kit, max_bytes=50))
 
 
 def test_section_summaries(kit: Any) -> None:
@@ -277,10 +280,14 @@ def test_compliance_summary_with_waived_expired_and_dedup(
     assert groups["cis"]["compliance_percent"] == 20.0
     assert groups["cis"]["expired_waivers"] == 1
     assert groups["tig"]["compliance_percent"] == 0.0
-    rules = {rule["rule_id"].rsplit("_", 1)[-1]: rule for rule in section["rules"]}
-    assert len(section["rules"]) == 7
-    assert rules["a"]["outcome"] == "fail"
-    assert [source["outcome"] for source in rules["a"]["sources"]] == ["pass", "fail"]
+    rules = {
+        (rule["benchmark_id"][-3:], rule["rule_id"].rsplit("_", 1)[-1]): rule
+        for rule in section["rules"]
+    }
+    assert len(section["rules"]) == 8
+    assert rules["cis", "a"]["outcome"] == "pass"
+    assert rules["tig", "a"]["outcome"] == "fail"
+    assert [source["outcome"] for source in rules["cis", "a"]["sources"]] == ["pass"]
     assert section["items"][0]["data"]["findings"] == []
     assert section["items"][0]["data"]["scan_run"]["run_id"] == "run-1"
 
@@ -472,7 +479,7 @@ def test_scope_benchmark_rejects_several_benchmark_versions(
         kit.scan_run((kit.finding("a"),)),
         kit.scan_run((kit.finding("a"),), content_version="2.0"),
     )
-    with pytest.raises(ReportError, match="2 benchmark versions"):
+    with pytest.raises(ReportError, match="2 benchmark, content version and profile"):
         report.build_report(ReportInputs(scope=Scope.BENCHMARK, scan_run=paths))
     document = build(ReportInputs(scope=Scope.SINGLE_HOST, scan_run=paths))
     assert errors(document) == []
@@ -692,7 +699,12 @@ def test_files_claiming_the_same_host_are_merged_with_a_note(
     host = {"hostname": "web01", "input_sha256": None, "machine_id": None}
     assert section["notes"] == [
         {
-            "group": {"benchmark_id": kit.BENCHMARK, "content_version": "1.0", "host": host},
+            "group": {
+                "benchmark_id": kit.BENCHMARK,
+                "content_version": "1.0",
+                "host": host,
+                "profile_id": kit.PROFILE,
+            },
             "kind": "merged_inputs",
             "repeated_profile": True,
             "sources": digests,
@@ -784,7 +796,7 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/\$defs/date/pattern$", anchored_text(exceptions.DATE_PATTERN)),
     (
         r"/\$defs/exceptionScope/properties/benchmark/.*/version/pattern$",
-        anchored_text(exceptions.TRIMMED_PATTERN),
+        anchored_text(exceptions.VERSION_PATTERN),
     ),
     (
         r"/\$defs/exceptionScope/properties/benchmark/.*/id/pattern$",

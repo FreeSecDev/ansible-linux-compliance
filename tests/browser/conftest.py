@@ -165,6 +165,7 @@ def typical_report(directory: Path) -> dict[str, Any]:
         codebuild=(REPORTING / "codebuild.json",),
         molecule=(REPORTING / "molecule-summary.json",),
         exceptions_evaluation=(REPORTING / "exceptions-evaluation.json",),
+        exceptions_file=REPORTING / "exceptions.yml",
     )
     return as_json(build_report(inputs))
 
@@ -378,7 +379,9 @@ def exceptions_text(count: int) -> str:
 
 def full_exceptions_report(directory: Path) -> dict[str, Any]:
     now = NOW
-    parsed = exceptions.parse_exceptions(exceptions_text(exceptions.MAX_EXCEPTIONS), now)
+    text = exceptions_text(exceptions.MAX_EXCEPTIONS)
+    source = write(directory, "exceptions.yml", text)
+    parsed = exceptions.parse_exceptions(text, now)
     paths: list[Path] = []
     for index, host in enumerate(("web01", "web02")):
         findings = tuple(
@@ -391,7 +394,11 @@ def full_exceptions_report(directory: Path) -> dict[str, Any]:
         path.write_text(json.dumps(evaluation.to_dict()), encoding="utf-8")
         paths.append(path)
     return as_json(
-        build_report(ReportInputs(scope=Scope.FLEET, exceptions_evaluation=tuple(paths)))
+        build_report(
+            ReportInputs(
+                scope=Scope.FLEET, exceptions_evaluation=tuple(paths), exceptions_file=source
+            )
+        )
     )
 
 

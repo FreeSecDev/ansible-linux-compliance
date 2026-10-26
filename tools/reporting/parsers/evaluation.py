@@ -3,8 +3,16 @@
 An evaluation document holds one scan run with waived and expired findings marked,
 the status of every exception of the exceptions file for that run, the inventory
 host it was matched against and the times that were used. The document is verified
-by :func:`exceptions.load_evaluation`, which evaluates the scan run again and accepts
-the document only when the result is identical, so no status or mark can be edited.
+against the exceptions file (``--exceptions-file``) by
+:func:`exceptions.verify_evaluation`: the file's SHA-256 must be the document's
+``source_sha256``, the file must be valid, and the scan run evaluated again with that
+file must give exactly the document. No status, mark or record can be edited, and an
+evaluation made from another exceptions file is refused.
+
+The Ansible ``file`` lookup removes trailing whitespace by default, so the filter may
+have hashed the file without its final newline. The digest is therefore compared with
+the file as read and with the file without trailing whitespace; the matching text is
+the one that is parsed.
 
 The scan run feeds the compliance section like a ScanRun JSON file, with one
 addition: rules whose exception lapsed between the scan start and the controller
@@ -13,6 +21,7 @@ time are counted in ``expired_waivers``. The exception statuses feed the
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -25,6 +34,8 @@ from tools.reporting.common import (
     InvalidInputError,
     ParseResult,
     clean_text,
+    decode_text,
+    dig,
     load_json,
     run_parser,
     sha256_hex,
@@ -32,11 +43,12 @@ from tools.reporting.common import (
 from tools.reporting.compliance import KIND_EVALUATION, ComplianceData, summarize, tally_findings
 
 FORMAT: Final[str] = "exceptions_evaluation"
+EXCEPTIONS_FILE_FORMAT: Final[str] = "exceptions_file"
 
 
 @dataclass(frozen=True)
 class EvaluationData:
-    """A verified exceptions evaluation and the compliance input it contributes."""
+    """An exceptions evaluation verified against the exceptions file, and its compliance input."""
 
     compliance: ComplianceData
     evaluation: exceptions.Evaluation
@@ -64,9 +76,28 @@ class EvaluationData:
         return document
 
 
-def _build(data: bytes) -> EvaluationData:
+def exceptions_texts(text: str) -> tuple[str, ...]:
+    """Return the forms of an exceptions file that an evaluation may have been made from."""
+    stripped = text.rstrip()
+    return (text,) if stripped == text else (text, stripped)
+
+
+def _matching_text(document: object, texts: Sequence[str]) -> str:
+    digest = dig(document, "source_sha256")
+    for text in texts:
+        if sha256_hex(text.encode("utf-8")) == digest:
+            return text
+    message = (
+        "exceptions evaluation rejected: it was not made from the supplied exceptions file "
+        "(source_sha256 differs)"
+    )
+    raise InvalidInputError(message)
+
+
+def _build(data: bytes, texts: Sequence[str]) -> EvaluationData:
+    document = load_json(data)
     try:
-        evaluation = exceptions.load_evaluation(load_json(data))
+        evaluation = exceptions.verify_evaluation(document, _matching_text(document, texts))
     except exceptions.ExceptionsError as error:
         message = f"exceptions evaluation rejected: {clean_text(str(error), 200)}"
         raise InvalidInputError(message) from None
@@ -99,9 +130,16 @@ def _build(data: bytes) -> EvaluationData:
     return EvaluationData(compliance, evaluation)
 
 
-def parse_evaluation(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[EvaluationData]:
-    """Parse and verify an exceptions evaluation document."""
-    return run_parser(path, FORMAT, max_bytes, _build)
+def parse_evaluation(
+    path: Path, texts: Sequence[str], max_bytes: int = DEFAULT_MAX_BYTES
+) -> ParseResult[EvaluationData]:
+    """Parse an exceptions evaluation and verify it against the exceptions file ``texts``."""
+    return run_parser(path, FORMAT, max_bytes, lambda data: _build(data, texts))
+
+
+def parse_exceptions_file(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[str]:
+    """Read the exceptions file as UTF-8 text, bounded like every input."""
+    return run_parser(path, EXCEPTIONS_FILE_FORMAT, max_bytes, decode_text)
 
 
 def compliance_result(result: ParseResult[EvaluationData]) -> ParseResult[ComplianceData]:

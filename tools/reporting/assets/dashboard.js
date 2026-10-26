@@ -807,7 +807,7 @@
   }
 
   function groupLabel(fields) {
-    return [val(fields.benchmark_id), " version ", val(fields.content_version)];
+    return [val(fields.benchmark_id), " version ", val(fields.content_version), " profile ", val(fields.profile_id)];
   }
 
   function noteText(note) {
@@ -816,7 +816,7 @@
       return [
         "Counted as one host: these inputs name the host ", hostCell(fields.host),
         ". They belong to ", String(list(fields.groups).length),
-        " groups, one per benchmark and content version, whose figures stay separate; "
+        " groups, one per benchmark, content version and profile, whose figures stay separate; "
           + "nothing is combined across them. Groups: ",
         el("ul", { class: "plain" }, list(fields.groups).map(function (group) {
           return el("li", null, groupLabel(obj(group)));
@@ -886,11 +886,12 @@
       + "ISO 27001, PCI DSS, NIST, NIS2 or any other framework."));
     if (isObject(section.summary)) {
       parts.push(el("h3", null, "Summary"));
-      parts.push(el("p", null, "One benchmark and content version, pooled over the " + scopeLabel() + " scope."));
+      parts.push(el("p", null, "One benchmark, content version and profile, pooled over the " + scopeLabel()
+        + " scope."));
       parts.push(complianceSummary(section.summary, "Summary"));
     } else if (section.status === "available") {
       parts.push(callout("neutral", "No single summary.",
-        el("p", null, "The report covers several benchmarks or content versions, which are never pooled. "
+        el("p", null, "The report covers several benchmarks, content versions or profiles, which are never pooled. "
           + "See the figures per benchmark and per host below.")));
     }
     const notes = list(section.notes).filter(function (note) {
@@ -902,7 +903,7 @@
         return el("li", null, noteText(note));
       })));
     }
-    parts.push(el("h3", null, "Figures per benchmark and content version"));
+    parts.push(el("h3", null, "Figures per benchmark, content version and profile"));
     if (SCOPE === "single_host") {
       parts.push(el("p", null, "Not produced for the single host scope; see the per-host figures."));
     } else {
@@ -919,6 +920,9 @@
           { label: "Content version", value: function (row) {
             return row.content_version;
           } },
+          { label: "Profile", value: function (row) {
+            return row.profile_id;
+          }, filter: true },
           { label: "Scope", value: function (row) {
             return SCOPE_TEXT[row.scope] || row.scope;
           } },
@@ -944,7 +948,7 @@
       }));
     }
     parts.push(el("h3", null, "Figures per host"));
-    parts.push(el("p", null, "Each row is one benchmark and content version on one host. A host is identified "
+    parts.push(el("p", null, "Each row is one benchmark, content version and profile on one host. A host is identified "
       + "by its machine ID when a scan run supplies one; otherwise its name is self-asserted by the input file."));
     parts.push(dataTable({
       caption: "Host groups",
@@ -971,6 +975,9 @@
         { label: "Content version", value: function (row) {
           return row.group.content_version;
         } },
+        { label: "Profile", value: function (row) {
+          return row.group.profile_id;
+        }, filter: true },
         { label: "Run status", value: function (row) {
           return obj(row.group.summary).run_status;
         }, cell: function (row) {
@@ -1002,7 +1009,7 @@
       ]
     }));
     parts.push(el("h3", null, "Rules"));
-    parts.push(el("p", null, "One row per rule, host and content version. When several scans evaluated a rule, "
+    parts.push(el("p", null, "One row per rule, host, benchmark, content version and profile. When several scans evaluated a rule, "
       + "the worst outcome is shown and every source keeps its own outcome."));
     parts.push(dataTable({
       caption: "Rules",
@@ -1030,8 +1037,14 @@
         }, cell: function (row) {
           return hostCell(row.host);
         }, filter: true },
+        { label: "Benchmark", value: function (row) {
+          return row.benchmark_id;
+        }, filter: true },
         { label: "Content version", value: function (row) {
           return row.content_version;
+        }, filter: true },
+        { label: "Profile", value: function (row) {
+          return row.profile_id;
         }, filter: true },
         { label: "Outcome", value: function (row) {
           return row.outcome;
@@ -1231,15 +1244,20 @@
     ];
   }
 
-  function exceptionsSummary(summary) {
+  function exceptionsSummary(summary, file) {
     const fields = obj(summary);
+    const source = obj(file);
     return el("div", { class: "figure" }, [
       pairs([
+        ["Exceptions file", [mono(source.path), " ", source.verified === true
+          ? badge("available", "every evaluation verified against this file")
+          : badge("error", "not verified")]],
+        ["SHA-256 of the file as read", mono(source.sha256)],
         ["Exceptions in the file", val(fields.total)],
         ["Scan runs evaluated", val(fields.evaluations)],
         ["Removal candidates (stale, superseded or not failing everywhere)", val(fields.removal_candidates)],
         ["Expiry passed at an evaluation", val(fields.lapsed)],
-        ["Exceptions file SHA-256", mono(fields.source_sha256)]
+        ["SHA-256 the evaluations record", mono(fields.source_sha256)]
       ]),
       simpleTable("Exceptions per review", ["Review", "Exceptions"], REVIEW_ORDER.map(function (key) {
         return [reviewBadge(key), val(obj(fields.by_status)[key])];
@@ -1255,7 +1273,7 @@
       + "Hosts are the controller's inventory names, not names that the scanned hosts report."));
     if (isObject(section.summary)) {
       parts.push(el("h3", null, "Summary"));
-      parts.push(exceptionsSummary(section.summary));
+      parts.push(exceptionsSummary(section.summary, section.exceptions_file));
     }
     parts.push(el("h3", null, "Exceptions"));
     parts.push(dataTable({

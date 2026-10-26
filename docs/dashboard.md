@@ -37,7 +37,7 @@ The tabs are:
 | Tab | Content |
 |---|---|
 | Overview | The scope, the run metadata, the compliance summary, the stale, expired and removal-candidate exception counts, and the status of every section, plus the report types that were not supplied |
-| Compliance | Summary, hosts counted as one, figures per benchmark and content version, figures per host, rules, inputs and findings |
+| Compliance | Summary, hosts counted as one, figures per benchmark, content version and profile, figures per host, rules, inputs and findings |
 | Exceptions | Every exception of the exceptions file with its review, removal candidacy, expiry, scope and matched inventory hosts, and the evaluation inputs |
 | Tests, Coverage, Ansible lint, Vulnerabilities, SBOM, Molecule, Packer images, AWS CodeBuild | The section status, its summary when the report has one, its inputs and the entries of each input |
 | Raw artifacts | Every input file as supplied, with its format, status, SHA-256 and size |
@@ -67,7 +67,7 @@ The dashboard shows figures only as the report gives them. It does not compute, 
 
 ### Host groups
 
-Each row of "Figures per host" is one benchmark and content version on one host, and shows:
+Each row of "Figures per host" is one benchmark, content version and profile on one host, and shows:
 
 - the host name, or "unnamed input" when the input file names no host;
 - its identity: "machine ID reported by the scan run" with the ID when a scan run supplied one, otherwise
@@ -79,7 +79,8 @@ Each row of "Figures per host" is one benchmark and content version on one host,
   type (two scan runs with the same host name and machine ID included). A "repeated scan" badge appears when two
   completed inputs report the same profile, which the report allows only with `--allow-repeated-scans`.
 
-When inputs of one host fall into several groups (for example two benchmarks), the report writes one host-level note.
+When inputs of one host fall into several groups (for example a CIS and a STIG profile, or two benchmarks), the report
+writes one host-level note.
 The Compliance tab lists these under "Hosts counted as one": the inputs are counted as one host, but every group keeps
 its own figure and nothing is combined across them, so such a note never appears inside a group.
 
@@ -89,7 +90,9 @@ their identity differs, so they can be told apart. The rules table uses the same
 
 ### Exceptions
 
-The Exceptions tab appears when exceptions evaluations were supplied (`--exceptions-evaluation`). Nothing on it changes
+The Exceptions tab appears when exceptions evaluations were supplied (`--exceptions-evaluation` with
+`--exceptions-file`). It names the exceptions file and its SHA-256 as "every evaluation verified against this file",
+which the report states only when every evaluation passed the check against that file. Nothing on it changes
 a figure: a waived finding is counted as waived and never as a pass, and an expired waiver as its evaluated outcome.
 
 - The summary counts the exceptions per review (in effect, expired, not yet in effect, superseded, not failing, stale),
@@ -141,8 +144,8 @@ the theme button. Each table prints its current page.
   exit status is 3. Split such a report by benchmark or host.
 - This cap is below some schema maxima: a report with the schema's maximum of 1,000,000 rules, each with its findings,
   is several hundred megabytes and above the string size a browser can parse. The browser tests use a report at the
-  cap, with 1000 inputs in every section, 9000 raw artifacts, detail lists past their 1000-entry cap and about
-  165,000 rules.
+  cap, with 1000 inputs in every section except Exceptions (whose evaluations share the compliance inputs), 9000 raw artifacts, detail lists past their 1000-entry cap and about
+  145,000 rules (each rule entry names its host, benchmark, content version and profile).
 
 ## Security
 

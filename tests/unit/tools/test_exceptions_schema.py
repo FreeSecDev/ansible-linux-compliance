@@ -137,7 +137,7 @@ def test_the_schema_matches_the_validator() -> None:
         assert scope[name]["uniqueItems"] is True
         assert scope[name]["minItems"] == 1
     version = scope["benchmark"]["properties"]["version"]
-    assert version["pattern"] == f"^{exceptions.TRIMMED_PATTERN}$"
+    assert version["pattern"] == f"^{exceptions.VERSION_PATTERN}$"
     assert version["minLength"] == 1
     assert scope["hosts"]["items"]["pattern"] == f"^{exceptions.HOST_PATTERN}$"
     assert scope["hosts"]["items"]["maxLength"] == exceptions.MAX_HOST_LENGTH

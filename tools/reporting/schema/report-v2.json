@@ -15,6 +15,10 @@
           "minimum": 1,
           "type": "integer"
         },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
         "scope": {
           "enum": [
             "multi_host",
@@ -30,6 +34,7 @@
         "benchmark_id",
         "content_version",
         "host_count",
+        "profile_id",
         "scope",
         "summary"
       ],
@@ -2247,7 +2252,7 @@
                 },
                 "version": {
                   "maxLength": 64,
-                  "pattern": "^\\S(?:.*\\S)?$",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._+~:-]*$",
                   "type": "string"
                 }
               },
@@ -2524,6 +2529,9 @@
               "exceptions": {
                 "maxItems": 0
               },
+              "exceptions_file": {
+                "type": "null"
+              },
               "gaps": {
                 "minItems": 0
               },
@@ -2550,6 +2558,9 @@
           },
           "then": {
             "properties": {
+              "exceptions_file": {
+                "type": "object"
+              },
               "gaps": {
                 "maxItems": 0
               },
@@ -2725,6 +2736,35 @@
           "maxItems": 1000,
           "type": "array"
         },
+        "exceptions_file": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "verified": {
+                  "const": true
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "verified"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "gaps": {
           "items": {
             "$ref": "#/$defs/gap"
@@ -2781,6 +2821,7 @@
       },
       "required": [
         "exceptions",
+        "exceptions_file",
         "gaps",
         "items",
         "reason",
@@ -3049,6 +3090,10 @@
         "host": {
           "$ref": "#/$defs/hostKey"
         },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
         "summary": {
           "$ref": "#/$defs/complianceSummary"
         }
@@ -3057,6 +3102,7 @@
         "benchmark_id",
         "content_version",
         "host",
+        "profile_id",
         "summary"
       ],
       "type": "object"
@@ -3715,12 +3761,17 @@
             },
             "host": {
               "$ref": "#/$defs/hostKey"
+            },
+            "profile_id": {
+              "maxLength": 8192,
+              "type": "string"
             }
           },
           "required": [
             "benchmark_id",
             "content_version",
-            "host"
+            "host",
+            "profile_id"
           ],
           "type": "object"
         },
@@ -4800,7 +4851,8 @@
             "packer_manifest",
             "codebuild",
             "molecule_summary",
-            "exceptions_evaluation"
+            "exceptions_evaluation",
+            "exceptions_file"
           ]
         },
         "path": {
@@ -4886,6 +4938,10 @@
     "rule": {
       "additionalProperties": false,
       "properties": {
+        "benchmark_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
         "content_version": {
           "maxLength": 8192,
           "type": "string"
@@ -4906,6 +4962,10 @@
             "waived",
             "disabled"
           ]
+        },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
         },
         "rule_id": {
           "maxLength": 8192,
@@ -4966,10 +5026,12 @@
         }
       },
       "required": [
+        "benchmark_id",
         "content_version",
         "expired_waiver",
         "host",
         "outcome",
+        "profile_id",
         "rule_id",
         "severity",
         "sources"
@@ -4990,11 +5052,16 @@
               "content_version": {
                 "maxLength": 8192,
                 "type": "string"
+              },
+              "profile_id": {
+                "maxLength": 8192,
+                "type": "string"
               }
             },
             "required": [
               "benchmark_id",
-              "content_version"
+              "content_version",
+              "profile_id"
             ],
             "type": "object"
           },
@@ -9218,7 +9285,7 @@
       "items": {
         "$ref": "#/$defs/rawArtifact"
       },
-      "maxItems": 9000,
+      "maxItems": 9001,
       "type": "array"
     },
     "schema_version": {

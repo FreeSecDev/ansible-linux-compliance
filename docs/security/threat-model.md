@@ -95,21 +95,27 @@ part of FREES-25.
 
 - **Attacker:** anyone who can add a file to the report inputs, for example a ScanRun JSON with the host name and
   machine ID of a real host (a machine ID is not a secret).
-- **Failure:** two runs of one host, benchmark version and profile were merged rule by rule; the forgery adds passing
-  rules that the real run did not evaluate (0.0 to 99.0 percent in the FREES-130 probe).
-- **Mitigation (FREES-130):** a second completed ScanRun for the same host, benchmark, content version and profile is
-  refused unless `--allow-repeated-scans` is given, and every group built from more than one input carries a
-  `merged_inputs` note that the dashboard shows. An XCCDF target and fqdn fact that disagree are an input error.
-- **Residual:** a forged run with another profile, or a self-asserted XCCDF file, is merged with a visible note but not
-  detected. Signed evidence bundles ([ADR 0018](../adr/0018-evidence-bundle-provenance.md), proposed) are the fix.
+- **Failure:** runs of one host and benchmark version were merged rule by rule; the forgery adds passing rules that
+  the real run did not evaluate (0.0 to 99.0 percent in the FREES-130 probe). With the profile outside the key, a
+  forgery that only changed `profile_id` did the same, and an honest CIS and STIG run were pooled into one number.
+- **Mitigation (FREES-130):** every figure key includes the profile, so a run of another profile is its own group
+  and cannot change the real run's figure. A second completed ScanRun in the same group (host, benchmark, content
+  version, profile) is refused unless `--allow-repeated-scans` is given, and every group built from more than one
+  input carries a `merged_inputs` note that the dashboard shows. An XCCDF target and fqdn fact that disagree are an
+  input error.
+- **Residual:** a forged run with another profile appears as an extra group for the host, and a self-asserted XCCDF
+  file of the same profile is merged with a visible note; neither is detected as forged. Signed evidence bundles
+  ([ADR 0018](../adr/0018-evidence-bundle-provenance.md), proposed) are the fix.
 
 ### T-REPORT-2: an edited exceptions evaluation hides a failure
 
 - **Attacker:** anyone who can change an evaluation document between the `apply_exceptions` filter and the report.
 - **Failure:** a status, mark or count is changed so that a failure reads as waived or an expired waiver as in effect.
-- **Mitigation (FREES-132):** `exceptions.load_evaluation` evaluates the scan run again from the exceptions, target and
-  times in the document and accepts it only when the result is identical; anything else is an input error, never a
-  waiver. Justification text is rendered with DOM text APIs only.
-- **Residual:** the SHA-256 of the exceptions file and the exception records themselves are taken as given, so a
-  document rebuilt consistently from a different exceptions file is accepted with that file's digest. ADR 0018 proposes
-  binding the file and the evaluation in a signed bundle.
+- **Mitigation (FREES-132):** the report requires the exceptions file (`--exceptions-file`) and
+  `exceptions.verify_evaluation` checks every evaluation against it: same SHA-256, a valid file, and a new evaluation
+  of the scan run with that file equal to the document. Anything else, including an evaluation built consistently
+  from a made-up exceptions file, is an input error, never a waiver. Justification text is rendered with DOM text
+  APIs only.
+- **Residual:** the exceptions file is trusted because it is reviewed in Git; whoever can merge it can waive failures.
+  A waived finding inside a plain ScanRun JSON has no exceptions file to check against. ADR 0018 proposes signed
+  evidence for both.

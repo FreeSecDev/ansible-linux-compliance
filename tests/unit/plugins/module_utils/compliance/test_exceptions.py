@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -1234,32 +1234,44 @@ def round_trip(evaluation: exceptions.Evaluation) -> dict[str, object]:
     return loaded
 
 
-def overlapping() -> exceptions.Evaluation:
-    return evaluate(entry(id="EXC-LATE"), entry(id="EXC-SOON", expires="2026-12-31"))
+Built = tuple[exceptions.Evaluation, str]
 
 
-def expired_at_scan_start() -> exceptions.Evaluation:
-    return evaluate(entry(), run=scan_run(started="2027-03-31T00:00:00Z"), now=NOW)
+def built(*entries: dict[str, object], **options: Any) -> Built:
+    evaluation = evaluate(*entries, **options)
+    return evaluation, document(*entries)
 
 
-def before_approval() -> exceptions.Evaluation:
-    return evaluate(
+def overlapping() -> Built:
+    return built(entry(id="EXC-LATE"), entry(id="EXC-SOON", expires="2026-12-31"))
+
+
+def expired_at_scan_start() -> Built:
+    return built(entry(), run=scan_run(started="2027-03-31T00:00:00Z"), now=NOW)
+
+
+def before_approval() -> Built:
+    return built(
         entry(created="2026-10-01", approval={"approver": "ciso", "date": "2026-10-05"}),
         run=scan_run(started="2026-10-04T23:59:59Z"),
         controller=NOW,
     )
 
 
-def failed_run() -> exceptions.Evaluation:
-    return evaluate(entry(), run=scan_run({RULE: model.Outcome.ERROR}, status=FAILED))
+def failed_run() -> Built:
+    return built(entry(), run=scan_run({RULE: model.Outcome.ERROR}, status=FAILED))
 
 
-def two_rules() -> exceptions.Evaluation:
-    return evaluate(entry(), entry(id="EXC-002", rule=OTHER_RULE))
+def two_rules() -> Built:
+    return built(entry(), entry(id="EXC-002", rule=OTHER_RULE))
 
 
-def no_exceptions() -> exceptions.Evaluation:
-    return evaluate()
+def no_exceptions() -> Built:
+    return built()
+
+
+def lapsed_built() -> Built:
+    return lapsed_mid_scan(), document(entry())
 
 
 FAILED = model.ScanStatus.FAILED
@@ -1267,7 +1279,7 @@ BUILDERS = (
     two_rules,
     overlapping,
     expired_at_scan_start,
-    lapsed_mid_scan,
+    lapsed_built,
     before_approval,
     failed_run,
     no_exceptions,
@@ -1275,13 +1287,13 @@ BUILDERS = (
 
 
 @pytest.mark.parametrize("build", BUILDERS)
-def test_load_evaluation_accepts_every_document_evaluate_run_writes(
-    build: Callable[[], exceptions.Evaluation],
+def test_verify_evaluation_accepts_every_document_evaluate_run_writes(
+    build: Callable[[], Built],
 ) -> None:
-    evaluation = build()
-    loaded = exceptions.load_evaluation(round_trip(evaluation))
-    assert loaded == evaluation
-    assert loaded.lapsed_rule_ids() == evaluation.lapsed_rule_ids()
+    evaluation, text = build()
+    verified = exceptions.verify_evaluation(round_trip(evaluation), text)
+    assert verified == evaluation
+    assert verified.lapsed_rule_ids() == evaluation.lapsed_rule_ids()
 
 
 def edit(document: dict[str, object], path: tuple[str | int, ...], value: object) -> object:
@@ -1303,6 +1315,8 @@ TAMPERING: list[tuple[tuple[str | int, ...], object]] = [
     (("exceptions", 0, "justification"), "A different justification."),
     (("exceptions", 0, "risk"), "low"),
     (("exceptions", 0, "scope"), {"hosts": ["web02"]}),
+    (("exceptions", 0, "note"), "x"),
+    (("exceptions",), []),
     (("summary", "waived"), 0),
     (("summary", "unmatched"), 5),
     (("scan_run", "findings", 1, "outcome"), "fail"),
@@ -1311,7 +1325,6 @@ TAMPERING: list[tuple[tuple[str | int, ...], object]] = [
     (("scan_run", "findings", 1, "exception", "exception_id"), "EXC-002"),
     (("scan_run", "findings", 0, "outcome"), "waived"),
     (("scan_run", "findings", 0, "outcome"), "fail"),
-    (("controller_time",), "2027-04-01T00:00:00Z"),
     (("evaluated_at",), "2026-10-25T09:00:00Z"),
     (("scan_started_at",), "2026-10-25T09:00:00Z"),
     (("scan_lag_seconds",), 7),
@@ -1323,16 +1336,47 @@ TAMPERING: list[tuple[tuple[str | int, ...], object]] = [
 
 
 @pytest.mark.parametrize(("path", "value"), TAMPERING)
-def test_load_evaluation_detects_every_edit(path: tuple[str | int, ...], value: object) -> None:
-    document = round_trip(evaluate(entry(), entry(id="EXC-002", rule=OTHER_RULE)))
+def test_verify_evaluation_detects_every_edit(path: tuple[str | int, ...], value: object) -> None:
+    evaluation, text = two_rules()
     with pytest.raises(exceptions.ExceptionsError):
-        exceptions.load_evaluation(edit(document, path, value))
+        exceptions.verify_evaluation(edit(round_trip(evaluation), path, value), text)
 
 
-def test_load_evaluation_takes_the_file_digest_as_given() -> None:
-    document = round_trip(evaluate(entry()))
-    loaded = exceptions.load_evaluation(edit(document, ("source_sha256",), "b" * 64))
-    assert loaded.source_sha256 == "b" * 64
+def test_verify_evaluation_needs_the_exceptions_file_it_names() -> None:
+    evaluation, text = two_rules()
+    data = round_trip(evaluation)
+    for other in (text + "\n", document_text_without_second_entry(), document()):
+        with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
+            exceptions.verify_evaluation(data, other)
+    with pytest.raises(exceptions.ExceptionsError, match="exceptions file: line 1"):
+        exceptions.verify_evaluation(data, "not yaml")
+    with pytest.raises(exceptions.ExceptionsError, match="exceptions file must be text"):
+        exceptions.verify_evaluation(data, None)
+    forged = edit(data, ("source_sha256",), "b" * 64)
+    with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
+        exceptions.verify_evaluation(forged, text)
+
+
+def document_text_without_second_entry() -> str:
+    return document(entry())
+
+
+def test_an_evaluation_rebuilt_from_a_made_up_file_is_refused() -> None:
+    made_up = document(
+        entry(owner="mallory", approval={"approver": "trent", "date": "2026-10-02"}),
+        entry(id="EXC-002", rule=OTHER_RULE, owner="mallory"),
+    )
+    real = document(entry())
+    parsed = exceptions.parse_exceptions(made_up, NOW)
+    forged = exceptions.evaluate_run(scan_run(), parsed, target(), instant(STARTED))
+    assert exceptions.verify_evaluation(round_trip(forged), made_up) == forged
+    with pytest.raises(exceptions.ExceptionsError, match="not made from this exceptions file"):
+        exceptions.verify_evaluation(round_trip(forged), real)
+    relabelled = edit(
+        round_trip(forged), ("source_sha256",), hashlib.sha256(real.encode()).hexdigest()
+    )
+    with pytest.raises(exceptions.ExceptionsError, match="does not match a new evaluation"):
+        exceptions.verify_evaluation(relabelled, real)
 
 
 @pytest.mark.parametrize(
@@ -1340,46 +1384,48 @@ def test_load_evaluation_takes_the_file_digest_as_given() -> None:
     [
         (("schema_version",), "2.0", "unsupported schema_version '2.0'"),
         (("schema_version",), 1, "unsupported schema_version '1'"),
-        (("source_sha256",), "x", "source_sha256 has an invalid format"),
         (("controller_time",), "yesterday", "controller_time is not a UTC timestamp"),
+        (("controller_time",), 5, "controller_time must be a string"),
+        (("controller_time",), "2020-01-01T00:00:00Z", "created is in the future"),
         (("max_scan_lag_seconds",), True, "max_scan_lag_seconds must be an integer"),
         (("max_scan_lag_seconds",), "60", "max_scan_lag_seconds must be an integer"),
         (("max_scan_lag_seconds",), 0, "maximum scan lag must be positive"),
         (("target",), {"host": "web01"}, "target is missing keys: groups"),
         (("target", "host"), "", "target.host must not be empty"),
-        (("exceptions",), {}, "exceptions must be a list"),
-        (("exceptions", 0), "x", r"exceptions\[0\] must be a mapping"),
-        (("exceptions", 0, "note"), "x", r"exceptions\[0\] has unknown keys: 'note'"),
-        (("exceptions", 0, "owner"), "security-lead", "approver must not be the owner"),
         (("scan_run",), 5, "the scan run must be a mapping"),
         (("extra",), "x", "evaluation has unknown keys: 'extra'"),
         (("target",), None, "target must not be null"),
     ],
 )
-def test_load_evaluation_rejects_malformed_documents(
+def test_verify_evaluation_rejects_malformed_documents(
     path: tuple[str | int, ...], value: object, message: str
 ) -> None:
-    document = round_trip(evaluate(entry()))
+    evaluation, text = built(entry())
     with pytest.raises(exceptions.ExceptionsError, match=message):
-        exceptions.load_evaluation(edit(document, path, value))
+        exceptions.verify_evaluation(edit(round_trip(evaluation), path, value), text)
 
 
-def test_load_evaluation_rejects_values_that_are_not_json() -> None:
-    document = round_trip(evaluate(entry()))
+def test_a_benchmark_scope_version_must_be_a_version_token() -> None:
+    for version in ("0.1 82", "all controls compliant", "-1", "1/2"):
+        scope = {"benchmark": {"id": BENCHMARK, "version": version}, "profiles": [PROFILE]}
+        invalid_entry(r"scope\.benchmark\.version has an invalid format", scope=scope)
+    for version in ("0.1.82", "v1.2+build~rc1", "2:1.0-3"):
+        scope = {"benchmark": {"id": BENCHMARK, "version": version}, "profiles": [PROFILE]}
+        assert parse(entry(scope=scope)).records[0].scope.benchmark is not None
+
+
+def test_verify_evaluation_rejects_values_that_are_not_json() -> None:
+    evaluation, text = built(entry())
     with pytest.raises(exceptions.ExceptionsError, match="not JSON data"):
-        exceptions.load_evaluation({**document, "summary": {1, 2}})
+        exceptions.verify_evaluation({**round_trip(evaluation), "summary": {1, 2}}, text)
 
 
-def test_load_evaluation_needs_every_key_and_a_bounded_list(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    document = round_trip(evaluate(entry(), entry(id="EXC-002", rule=OTHER_RULE)))
+def test_verify_evaluation_needs_every_key() -> None:
+    evaluation, text = two_rules()
+    document = round_trip(evaluation)
     for key in exceptions.EVALUATION_KEYS:
         partial = {name: value for name, value in document.items() if name != key}
         with pytest.raises(exceptions.ExceptionsError, match=f"missing keys: {key}"):
-            exceptions.load_evaluation(partial)
+            exceptions.verify_evaluation(partial, text)
     with pytest.raises(exceptions.ExceptionsError, match="evaluation must be a mapping"):
-        exceptions.load_evaluation([document])
-    monkeypatch.setattr(exceptions, "MAX_EXCEPTIONS", 1)
-    with pytest.raises(exceptions.ExceptionsError, match="more than 1 entries"):
-        exceptions.load_evaluation(document)
+        exceptions.verify_evaluation([document], text)
