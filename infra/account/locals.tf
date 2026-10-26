@@ -3,7 +3,8 @@ locals {
   state_key         = "account/terraform.tfstate"
   state_lock_key    = "account/terraform.tfstate.tflock"
 
-  oidc_host = "token.actions.githubusercontent.com"
+  oidc_host         = "token.actions.githubusercontent.com"
+  oidc_provider_arn = "arn:aws:iam::${var.account_id}:oidc-provider/${local.oidc_host}"
 
   plan_role_name = "freesecdev-gha-ansible-linux-compliance-plan"
   plan_role_arn  = "arn:aws:iam::${var.account_id}:role/${local.plan_role_name}"

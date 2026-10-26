@@ -50,7 +50,9 @@ bucket and key come from a generated, gitignored `backend.hcl` whose shape is th
 
 One OIDC provider `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. An account holds at most one
 provider per URL and this account already has it, shared with other projects, so `infra/account` reads it as a data
-source and never creates, changes or destroys it. AWS no longer needs thumbprints for this provider. The role `freesecdev-gha-ansible-linux-compliance-plan` trusts
+source by ARN and never creates, changes or destroys it. A lookup by ARN needs only `iam:GetOpenIDConnectProvider`
+on that ARN, so the plan role needs no list permission. A postcondition requires the audience `sts.amazonaws.com`.
+AWS no longer needs thumbprints for this provider. The role `freesecdev-gha-ansible-linux-compliance-plan` trusts
 only tokens with:
 
 - `aud` equal to `sts.amazonaws.com`,
@@ -101,6 +103,13 @@ reviewed trust change. The plan role cannot write state, only the lock object, s
 
 Reviewed against the IAM and bootstrap checklist of the `aws-infrastructure` skill. The deviation from the "refuse
 root" item is recorded above. Trust policy changes require `security-review` before apply.
+
+`infra/.checkov.baseline` exempts exactly one finding: CKV_AWS_358 on `aws_iam_policy_document.plan_trust`. The
+check only recognises the `repo:<owner>/<repo>:...` subject and fails the stricter immutable subject
+`repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/main` that the trust policy pins, together with the
+`repository_id`, `repository_owner_id`, `aud` and `job_workflow_ref` conditions. The product owner accepted the
+exemption on 2026-10-26. Every other check, and CKV_AWS_358 on any other resource, still applies; a change to the trust
+policy needs the baseline reviewed again.
 
 ## Operational consequences
 
