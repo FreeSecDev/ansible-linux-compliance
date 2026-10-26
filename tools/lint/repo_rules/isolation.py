@@ -1,4 +1,4 @@
-"""Deny-by-default process isolation of Python files under ``plugins/`` (ADR 0004)."""
+"""Deny-by-default process isolation of Python files that Ansible loads (ADR 0004)."""
 
 from __future__ import annotations
 
@@ -34,7 +34,10 @@ if TYPE_CHECKING:
 
 
 def is_process_scope(path: Path, root: Path) -> bool:
-    """Return whether ``path`` is plugin code that may not run processes itself."""
+    """Return whether ``path`` is plugin code that may not run processes itself.
+
+    ``check_file`` also applies the rules to every Python file in a load location.
+    """
     try:
         relative = path.resolve().relative_to(root.resolve())
     except ValueError:

@@ -517,3 +517,115 @@ rule; none adds an exemption, and no lint limit was raised.
   directory, but was not guarded. It is now in `GUARDED_ROLES`, and its entry points `main.yml` and `summary.yml`
   import the generated guard. `tools/roles/generate_role_guards.py` fails when a role below `roles/` names an internal
   variable of its own and is not guarded, and a unit test checks the same against the repository.
+
+## Amendment 2026-10-26: every location from which Ansible loads code (FREES-156)
+
+The independent review of FREES-153 showed that the deny-by-default rules saw only Python under `plugins/`. A
+`roles/remediate/library/sneaky.py` that calls `getattr(__import__("o"+"s"), "sys"+"tem")("true")` passed the guard,
+Ruff, Bandit, ansible-lint and the unit tests, and so did an executable shell module in `plugins/modules` or
+`roles/*/library`. The guard now knows where Ansible loads code from and what may live there.
+
+**Load locations, checked against ansible-core 2.21.5.** For every playbook directory (`ansible/cli/playbook.py`,
+`ansible/playbook/__init__.py`) and every role (`ansible/playbook/role/__init__.py`) Ansible calls
+`add_all_plugin_dirs`, which adds the `subdir` of every plugin loader: `library`, `module_utils`, `doc_fragments`
+and `action_plugins`, `become_plugins`, `cache_plugins`, `callback_plugins`, `cliconf_plugins`, `connection_plugins`,
+`filter_plugins`, `httpapi_plugins`, `inventory_plugins`, `lookup_plugins`, `netconf_plugins`, `shell_plugins`,
+`strategy_plugins`, `terminal_plugins`, `test_plugins` and `vars_plugins`. The shell loader also searches the
+relative path `shell_plugins` from the working directory. The collection finder searches `collections/` next to every
+playbook and every configured collection path for `ansible_collections/`, and the default plugin paths are
+`plugins/<type>` below `ANSIBLE_HOME`. Molecule 26.10 adds no module or plugin path of its own; its scenario playbooks
+are ordinary playbook directories. `ansible.cfg` and `ANSIBLE_*` variables add `library`, `module_utils`, the
+`*_plugins` paths, `roles_path`, `collections_path`, `home` and `playbook_dir`. No `ansible.cfg` is tracked, and
+the `Makefile` sets only `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH`, both below the untracked `build/`.
+`tests/unit/tools/test_check_repo_rules_load_inventory.py` reads these facts from the installed ansible-core, so a
+release that adds a loader or a search-path setting fails the tests.
+
+**Policy.** The collection's code lives in the repository's own `plugins/`, as Python source, under the strict
+rules. Nothing tracked had to live in another load location, so no file there needed the full rules as an exemption.
+
+- A directory named like a load location (`LOAD_DIRECTORY_NAMES`, or ending in `PLUGIN_DIRECTORY_SUFFIX`, in
+  `tools/lint/repo_rules/load_locations.py`) anywhere outside the root `plugins/` is a load location, wherever it is:
+  a role, `playbooks/`, a Molecule scenario or `shared/`, `tests/playbooks/`, an integration target or the repository
+  root. Every file in it is refused, and a Python file there also gets the full deny-by-default rules, so the reviewed
+  module reports `use of __import__` and the computed `getattr` as well. `importlib.import_module` with a computed
+  name and `getattr` on a module with a computed name were already refused by those rules, which a test shows in
+  every location.
+- The unit tests and stubs that mirror the collection layout are not load locations (`NON_LOADING_DIRECTORIES` in
+  `tools/lint/repo_rules/load_locations.py`), because no playbook or role can sit next to them: their trees
+  (`PYTHON_ONLY_TREES` in `tools/lint/repo_rules/load_locations.py`) may hold only `.py` and `.pyi` files. A load
+  directory nested deeper inside them is still refused.
+- Every file under `plugins/` must end in `.py`, so an extensionless module, a `.sh`, `.ps1`, `.psm1` or `.cs` file
+  and a module documentation sidecar are refused. Ansible runs a module as new-style Python only if it matches its
+  `NEW_STYLE_PYTHON_MODULE_RE` and has no control byte in its header; otherwise it runs the file as a binary or through
+  its shebang, and a file without a shebang through the shell. A `.py` file that is both valid Python and a shell
+  script therefore passed every rule. A file in `plugins/modules` must now match the same pattern
+  (`NEW_STYLE_MODULE` in `tools/lint/repo_rules/load_locations.py`, compared with ansible-core's by a test) and contain
+  no control byte (`TEXT_BYTES` in `tools/lint/repo_rules/load_locations.py`), and a Python file anywhere may only
+  have a Python shebang (`PYTHON_SHEBANGS` in `tools/lint/repo_rules/load_locations.py`).
+- A symbolic link is refused unless it is listed (`SYMLINK_ALLOW_LIST` in `tools/lint/repo_rules/load_locations.py`:
+  `.claude/skills` and the remediation test fixture). The guard placed a file by its resolved path, so a
+  `plugins/modules/x.py` link to `tools/x.py` was checked as tools code; a link named like a load directory would load
+  a whole directory that no rule sees. Neither the guard nor Ansible now follows a link that is not listed.
+- An executable file is refused outside `tools/**/*.sh` (`EXECUTABLE_ALLOW_LIST` in
+  `tools/lint/repo_rules/load_locations.py`), because Ansible runs an executable inventory, vault password file or
+  module directly.
+- `ansible.cfg` may not set any of the search-path settings (`CONFIG_PATH_SETTINGS` in
+  `tools/lint/repo_rules/load_config.py`), and a file in a directory that a module or plugin setting names is refused as
+  a load location; the guard reads the `ansible.cfg` at the root, every one passed to it and every one in a directory
+  between the root and a checked file. The same settings are refused as keys of `molecule.yml`. The matching
+  environment variables and `ANSIBLE_CONFIG` (`PATH_ENVIRONMENT_VARIABLES` in `tools/lint/repo_rules/load_config.py`)
+  are refused as YAML keys anywhere, in the values of workflows, actions and `molecule.yml`, in makefiles and in shell
+  scripts, and so are `--module-path` and `-M`. Only a makefile may set `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH`
+  (`MAKE_ENVIRONMENT_VARIABLES` in `tools/lint/repo_rules/load_config.py`), which an existing test pins to `build/`.
+
+**Wiring.** `make lint-repo` passes every tracked and new file to the guard, without a suffix pathspec, so
+extensionless files, symbolic links and executables are seen; the case-insensitive compiled-module pathspecs of
+FREES-153 are no longer needed and were removed. The pre-commit hook passes every file and symbolic link
+(`types: []` to clear the default `[file]`, which would drop symbolic links, `types_or: [file, symlink]` and no
+`files` filter). Unit tests pin both.
+
+**Changed tests.** The generic plugin file of the existing guard tests moved from `plugins/modules/other.py` to
+`plugins/module_utils/other.py`, because a module now must import `module_utils`; the deny-by-default rules are the
+same in both. `test_code_outside_plugins_is_out_of_scope` no longer lists `tests/plugins/x.py`, which is now a load
+location, and `test_a_plugins_directory_below_the_root_is_a_load_location` shows it. The expat test imports
+`ansible.module_utils.basic` so that its two `plugins/modules` cases stay new-style modules.
+
+**Residuals.** The guard does not interpret Python that starts Ansible itself, such as a test that runs
+`ansible-playbook` with its own environment; such code is controller-side test or tool code and is reviewed as such.
+It reads `ansible.cfg` only inside the repository; a configuration outside it, or an `ANSIBLE_CONFIG` set by the
+operator, is outside the repository's control. Ansible reads `ansible.cfg` only from the working directory,
+`ANSIBLE_CONFIG`, `~/.ansible.cfg` and `/etc/ansible`; the guard's search of the directories between the root and a
+checked file is a superset of the first.
+
+**Review of PR #42.** The independent review requested these changes, which are part of the same amendment:
+
+- **Case-insensitive filesystems.** `add_all_plugin_dirs` joins the loader's `subdir` to the path and calls
+  `os.path.isdir`, which ignores case on APFS, the macOS default, and on Windows. So `roles/remediate/Library/`,
+  `Filter_Plugins/` and `playbooks/LIBRARY/` are load directories on such a controller, and `roles/` ships in the
+  collection. The guard now compares case-folded names: `is_load_directory_name`, the directories that an
+  `ansible.cfg` names, the root `plugins` component for the `.py`-only rule, `plugins/modules` for the new-style rule,
+  the trees that may hold only Python (`folded` in `tools/lint/repo_rules/load_locations.py`), and the file names
+  `ansible.cfg`, `molecule.yml`, the makefiles and the navigator settings files. A case variant of the root `plugins`
+  directory (`Plugins/`) is not the collection's own and is refused as a load location. The exemptions match exactly,
+  so `tests/unit/plugins/Module_Utils/` and a case variant of a listed symbolic link or of `tools/` are not exempt.
+- **Index modes.** A file whose Git index mode is executable (`100755`) or a symbolic link (`120000`) is refused even
+  if the working tree disagrees, for example after a `--no-verify` commit or on a checkout with `core.fileMode=false`
+  or `core.symlinks=false` (`GIT_EXECUTABLE_MODE` and `GIT_SYMLINK_MODE` in `tools/lint/repo_rules/load_locations.py`).
+  `make lint-repo` writes `git ls-files -s -z` to `build/lint-repo-index-modes` and passes it to the guard with
+  `--index-modes`, because the guard itself runs no process. The pre-commit hook needs no listing, because pre-commit
+  stashes unstaged changes, so the working tree matches the index.
+- **Deny-by-default in load directories.** The claim stands and is now tested. The second copy of the check in
+  `is_process_scope` was redundant, which is why removing it failed no test. It was removed, so
+  `is_process_scope` again means plugin code only, and `check_file` applies the rules to every Python file in a load
+  location. Disabling that branch fails 256 tests, which assert the `__import__`, `getattr` and `os.system` findings
+  in every location.
+- **Search paths in other configuration files.** Environment files (`.env`, `.envrc`, `.env.*`, `*.env`) and `.ini`,
+  `.toml` and `.cfg` files, such as `tox.ini` with `setenv` or `pyproject.toml`, are scanned for the search-path
+  environment variables and `--module-path`, as makefiles and shell scripts are (`ENVIRONMENT_TEXT_SUFFIXES` in
+  `tools/lint/repo_rules/load_config.py`). An ansible-navigator settings file (`NAVIGATOR_FILE_NAMES` in
+  `tools/lint/repo_rules/load_config.py`) may set `ansible.config.path` only to a file named `ansible.cfg`, which the
+  guard parses.
+- **Ticketed separately, out of scope here:** the `ansible.builtin.expect` module and the `pipe` and `lines` lookups,
+  the interpreter and SSH argument variables, pinning of `galaxy.yml` dependencies and `requirements.yml`, and
+  configuration settings that run code without adding a search path (`jinja2_extensions`, `vault_password_file`,
+  `become_exe`, `ssh_executable`, `ssh_args`, `interpreter_python`).

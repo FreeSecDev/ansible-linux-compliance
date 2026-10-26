@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import importlib.machinery
-import re
-import shlex
 from pathlib import Path
 
 import pytest
@@ -68,15 +66,13 @@ def test_every_suffix_that_the_import_system_loads_without_source_is_refused() -
 
 def test_make_lint_repo_passes_every_compiled_suffix_to_the_guard() -> None:
     makefile = (rules.REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    match = re.search(r"^COMPILED_MODULE_PATHSPECS := (.+)$", makefile, re.MULTILINE)
-    assert match is not None
-    pathspecs = shlex.split(match.group(1))
-    assert {spec.removeprefix(":(icase)*") for spec in pathspecs} == (
-        rules.COMPILED_MODULE_SUFFIXES
-    )
-    assert all(spec.startswith(":(icase)*.") for spec in pathspecs)
+    assert "COMPILED_MODULE_PATHSPECS" not in makefile
     lint_repo = makefile.split("\nlint-repo:", 1)[1].split("\n\n", 1)[0]
-    assert "'*.py' $(COMPILED_MODULE_PATHSPECS) | xargs" in lint_repo
+    guard = (
+        "\t$(TRACKED) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py "
+        "--index-modes $(INDEX_MODES)"
+    )
+    assert guard in lint_repo.splitlines()
 
 
 def test_the_pre_commit_hook_passes_every_compiled_suffix_to_the_guard() -> None:
@@ -86,9 +82,7 @@ def test_the_pre_commit_hook_passes_every_compiled_suffix_to_the_guard() -> None
     hook = next(
         hook for repo in config["repos"] for hook in repo["hooks"] if hook["id"] == "repo-rules"
     )
-    assert "types_or" not in hook
-    pattern = re.compile(hook["files"])
-    for name in (*COMPILED_NAMES, "a.yml", "a.yaml", "a.py", "A.YML"):
-        assert pattern.search(name), name
-    for name in ("a.pyi", "a.md", "a.json", "a.so.1", "a.txt"):
-        assert pattern.search(name) is None, name
+    assert hook["types_or"] == ["file", "symlink"]
+    assert hook["types"] == []
+    assert "files" not in hook
+    assert "exclude" not in hook

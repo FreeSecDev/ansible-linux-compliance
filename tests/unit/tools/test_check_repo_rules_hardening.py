@@ -10,14 +10,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def plugin_file(root: Path, source: str, name: str = "plugins/modules/other.py") -> Path:
+def plugin_file(root: Path, source: str, name: str = "plugins/module_utils/other.py") -> Path:
     target = root / name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(source, encoding="utf-8")
     return target
 
 
-def process_messages(root: Path, source: str, name: str = "plugins/modules/other.py") -> list[str]:
+def process_messages(
+    root: Path, source: str, name: str = "plugins/module_utils/other.py"
+) -> list[str]:
     target = plugin_file(root, source, name)
     return [violation.message for violation in rules.check_file(target, root)]
 

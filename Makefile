@@ -180,7 +180,7 @@ SHELL_SCRIPTS := build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/bro
 	tools/lint/fetch-hadolint.sh tools/scc/fetch-scc.sh tools/scc/smoke-test.sh tools/scc/check-expiry.sh \
 	tools/scc/needs-smoke.sh
 
-COMPILED_MODULE_PATHSPECS := ':(icase)*.so' ':(icase)*.pyd' ':(icase)*.pyc' ':(icase)*.pyo' ':(icase)*.fwork'
+INDEX_MODES := build/lint-repo-index-modes
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
 PYLINT_MODULE_DIRECTORIES := plugins/modules
 PYLINT_MODULE_IGNORES := $(subst $(space),|,$(patsubst %,^%/,$(PYLINT_MODULE_DIRECTORIES)))
@@ -365,7 +365,9 @@ lint-containerfile:
 
 lint-repo: require-uv
 	@if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$$'; then printf 'error: compiled Python files are tracked\n' >&2; exit 1; fi
-	$(TRACKED) -- '*.yml' '*.yaml' '*.py' $(COMPILED_MODULE_PATHSPECS) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py
+	mkdir -p build
+	git ls-files -s -z > $(INDEX_MODES)
+	$(TRACKED) | xargs -0 -r $(RUN) python tools/lint/check_repo_rules.py --index-modes $(INDEX_MODES)
 
 lint-skills: require-uv
 	$(RUN) python tools/skills/validate_skills.py

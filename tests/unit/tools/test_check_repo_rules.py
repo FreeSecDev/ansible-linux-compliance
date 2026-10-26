@@ -430,14 +430,16 @@ def test_comment_hidden_by_malformed_block_scalar_still_fails_the_file(tmp_path:
     assert any(message.startswith("invalid YAML") for message in messages)
 
 
-def plugin_file(root: Path, source: str, name: str = "plugins/modules/other.py") -> Path:
+def plugin_file(root: Path, source: str, name: str = "plugins/module_utils/other.py") -> Path:
     target = root / name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(source, encoding="utf-8")
     return target
 
 
-def process_messages(root: Path, source: str, name: str = "plugins/modules/other.py") -> list[str]:
+def process_messages(
+    root: Path, source: str, name: str = "plugins/module_utils/other.py"
+) -> list[str]:
     target = plugin_file(root, source, name)
     return [violation.message for violation in rules.check_file(target, root)]
 
@@ -684,7 +686,8 @@ def test_expat_is_no_longer_allowed_in_the_openscap_backend(tmp_path: Path, sour
     ],
 )
 def test_expat_is_denied_in_every_other_plugin_file(tmp_path: Path, name: str) -> None:
-    messages = process_messages(tmp_path, "import xml.parsers.expat\n", name)
+    source = "from ansible.module_utils.basic import AnsibleModule\nimport xml.parsers.expat\n"
+    messages = process_messages(tmp_path, source, name)
     expected = (
         "import of 'xml.parsers.expat' is not allowed in plugins outside "
         "plugins/module_utils/compliance/process.py"
@@ -763,11 +766,22 @@ def test_nested_plugin_directories_are_in_scope(tmp_path: Path) -> None:
     assert process_messages(tmp_path, "import subprocess\n", "plugins/a/b/c/mod.py") != []
 
 
-@pytest.mark.parametrize(
-    "name", ["tools/lint/helper.py", "tests/unit/plugins/test_x.py", "tests/plugins/x.py", "x.py"]
-)
+@pytest.mark.parametrize("name", ["tools/lint/helper.py", "tests/unit/plugins/test_x.py", "x.py"])
 def test_code_outside_plugins_is_out_of_scope(tmp_path: Path, name: str) -> None:
     assert process_messages(tmp_path, "import subprocess\nimport os\nos.system('x')\n", name) == []
+
+
+def test_a_plugins_directory_below_the_root_is_a_load_location(tmp_path: Path) -> None:
+    messages = process_messages(tmp_path, "import subprocess\n", "tests/plugins/x.py")
+    location = (
+        "file in the Ansible load location tests/plugins/ is not allowed: the collection's code "
+        "belongs in plugins/ (ADR 0004)"
+    )
+    process = (
+        "import of 'subprocess' is not allowed in plugins outside "
+        "plugins/module_utils/compliance/process.py"
+    )
+    assert messages == [location, process]
 
 
 def test_path_outside_the_root_is_out_of_scope(tmp_path: Path) -> None:

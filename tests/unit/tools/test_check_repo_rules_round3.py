@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 AUDIT = "plugins/module_utils/compliance/audit.py"
 LEDGER = "plugins/module_utils/compliance/ledger.py"
 OPENSCAP = "plugins/module_utils/compliance/openscap.py"
-OTHER = "plugins/modules/other.py"
+OTHER = "plugins/module_utils/other.py"
 COMPLIANCE = "ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance"
 
 

@@ -5,6 +5,20 @@ Rules:
 * No compiled module file (``.so``, ``.pyd``, ``.pyc``, ``.pyo``, ``.fwork``, in any
   case) is tracked: the import system loads an extension module or bytecode before, or
   instead of, a ``.py`` source of the same name (FREES-153).
+* Only the repository's ``plugins/`` may hold code that Ansible loads (FREES-156). A file
+  in a ``library``, ``module_utils``, ``doc_fragments``, ``*_plugins``, ``collections``,
+  ``ansible_collections`` or ``plugins`` directory anywhere else, or in a directory that an
+  ``ansible.cfg`` names as a module or plugin path, is refused, and Python there also gets the
+  deny-by-default rules below. The mirrored ``tests/unit/plugins`` and
+  ``typings/ansible/module_utils`` are not load locations; ``tests/unit/`` and ``typings/``
+  hold only Python source and stubs. Every file under ``plugins/`` ends in ``.py``, a module
+  in ``plugins/modules`` matches Ansible's new-style Python pattern and has no control byte,
+  a Python shebang names Python, a symbolic link or an executable file outside its
+  allow-list is refused, and ``ansible.cfg``, ``molecule.yml``, YAML keys, workflow values,
+  makefiles, shell scripts, environment files and ``.ini``, ``.toml`` and ``.cfg`` files may not
+  set a search path for modules, plugins, roles or collections. Names are compared
+  case-folded, because macOS and Windows controllers ignore case, and ``--index-modes``
+  takes a ``git ls-files -s -z`` listing so that modes only the index records count too.
 * Every YAML file starts with ``---`` followed by a newline.
 * YAML files contain no comments, except a trailing ``# vX.Y.Z`` version
   annotation on a ``uses: owner/repo@<40-hex>`` or ``rev: <40-hex>`` line.
@@ -95,6 +109,7 @@ from tools.lint.repo_rules.common import (
     Violation,
 )
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
+from tools.lint.repo_rules.load_locations import index_modes
 from tools.lint.repo_rules.names import (
     ALLOWED_IMPORTS,
     BANNED_KEYWORDS,
@@ -159,6 +174,7 @@ __all__ = [
     "check_process_isolation",
     "check_python_comments",
     "check_yaml_comments",
+    "index_modes",
     "is_allowed_annotation",
     "is_process_scope",
     "main",
@@ -170,8 +186,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point; returns the process exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", type=Path, help="Files to check.")
+    parser.add_argument(
+        "--index-modes",
+        type=Path,
+        help="A `git ls-files -s -z` listing, so modes that only the Git index records count.",
+    )
     arguments = parser.parse_args(argv)
-    violations = check_paths(arguments.paths)
+    modes = (
+        None if arguments.index_modes is None else index_modes(arguments.index_modes.read_bytes())
+    )
+    violations = check_paths(arguments.paths, index=modes)
     for violation in violations:
         print(violation, file=sys.stderr)
     if violations:
