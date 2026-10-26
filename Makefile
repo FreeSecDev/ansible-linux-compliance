@@ -37,6 +37,19 @@ AUDIT_EXCEPTIONS_DIR := build/test-audit-exceptions
 AUDIT_EXCEPTIONS_INVENTORY := tests/playbooks/inventory/audit-exceptions.yml
 AUDIT_EXCEPTIONS_FORBIDDEN := Apply the exceptions file to the scan run|AUDIT-EXCEPTIONS-NOT-REACHED
 AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
+EVIDENCE_DIR := build/test-evidence
+EVIDENCE_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(AUDIT_EXCEPTIONS_INVENTORY) \
+	-e evidence_test_dir='$(CURDIR)/$(EVIDENCE_DIR)' -e audit_exceptions_dir='$(CURDIR)/$(EVIDENCE_DIR)/exceptions'
+EVIDENCE_REPORT := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.reporting
+EVIDENCE_BUNDLES := --evidence-bundle '$(EVIDENCE_DIR)/bundles/web01/synthetic-web01' \
+	--evidence-bundle '$(EVIDENCE_DIR)/bundles/db01/synthetic-db01'
+EVIDENCE_REPORT_CHECK := .sections.compliance.status == "available" and .sections.exceptions.status == "available" \
+	and ([.sections.compliance.items[].format] | unique) == ["exceptions_evaluation"] \
+	and ([.sections.compliance.groups[].summary.counts.waived] | add) == 2 \
+	and .sections.exceptions.summary.by_status.stale == 1 and .sections.exceptions.summary.by_status.in_effect == 2 \
+	and .sections.exceptions.exceptions_file.verified and (.overview.error | length) == 0
+EVIDENCE_TAMPERED_CHECK := .sections.compliance.status == "error" \
+	and (.sections.compliance.gaps[0].reason | test("checksum mismatch for raw/scan/results.xml"))
 ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' env HOME='$(ANSIBLE_TEST_HOME)' ansible-test
 
 space := $(subst ,, )
@@ -98,6 +111,7 @@ Tests
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
+  test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
   test-role-guards      Check in check mode that forged internal role variables are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
@@ -133,7 +147,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-remediate-check test-role-guards test-verify \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -291,6 +305,20 @@ test-audit-exceptions: require-uv collection-link
 	$(call audit_exceptions_expect_failure,invalid,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-invalid.yml,missing keys: risk,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
+
+test-evidence: require-uv collection-link
+	rm -rf '$(EVIDENCE_DIR)'
+	mkdir -p '$(EVIDENCE_DIR)'
+	$(EVIDENCE_PLAYBOOK) tests/playbooks/evidence.yml | tee '$(EVIDENCE_DIR)/playbook.log'
+	if grep -q 'FREESECDEV-PLANTED' '$(EVIDENCE_DIR)/playbook.log'; then printf 'error: a planted secret was printed\n' >&2; exit 1; fi
+	$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/report.json' $(EVIDENCE_BUNDLES)
+	jq -e '$(EVIDENCE_REPORT_CHECK)' '$(EVIDENCE_DIR)/report.json' > /dev/null
+	cp -a '$(EVIDENCE_DIR)/bundles/web01/synthetic-web01' '$(EVIDENCE_DIR)/tampered'
+	printf ' ' >> '$(EVIDENCE_DIR)/tampered/raw/scan/results.xml'
+	status=0; $(EVIDENCE_REPORT) --scope single_host --output '$(EVIDENCE_DIR)/tampered.json' \
+		--evidence-bundle '$(EVIDENCE_DIR)/tampered' || status=$$?; \
+		test "$$status" -eq 1 || { printf 'error: a tampered bundle gave exit status %s\n' "$$status" >&2; exit 1; }
+	jq -e '$(EVIDENCE_TAMPERED_CHECK)' '$(EVIDENCE_DIR)/tampered.json' > /dev/null
 
 REMEDIATE_CHECK = $(RUN) ansible-playbook -i localhost, --check
 
@@ -466,4 +494,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check

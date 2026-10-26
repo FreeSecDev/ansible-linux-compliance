@@ -40,8 +40,8 @@ longer shadow the working tree (FREES-127). The `Makefile` sets and exports thes
 The defaults are absolute paths below the checkout. A value from the environment or the command line wins, for
 example `make lint-ansible ANSIBLE_HOME=/var/tmp/ansible-home`. `make collection-link` and `make collection-tree`
 create the directories through `ansible-home`, so every target that runs Ansible tooling has them: `lint-ansible`,
-`test-sanity`, `test-ansible-units`, `package`, `package-check`, `test-audit-exceptions`, `test-remediate-check`,
-`test-role-guards`, and
+`test-sanity`, `test-ansible-units`, `package`, `package-check`, `test-audit-exceptions`, `test-evidence`,
+`test-remediate-check`, `test-role-guards`, and
 the Molecule targets once they are implemented. The ansible-lint pre-commit hook runs `make lint-ansible`, so it uses
 the same paths and needs no manual `ANSIBLE_HOME`. `make clean` removes `build/`, and with it the default Ansible home
 and the `ansible-test` home; it never removes a directory given as an override.
@@ -89,7 +89,8 @@ overriding them.
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches, coverage output and `build/`, including the per-checkout Ansible home |
 | `test-role-guards` | implemented | Runs `tests/playbooks/internal-variables-include.yml`, `internal-variables-extra.yml` (twice, with a forged plan and a forged family as extra variables) and `internal-variables-role-param.yml` (per host) against localhost with `--check`, and fails unless every forged internal role variable is refused before the remediate role reads the ledger |
-| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check` |
+| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check` |
+| `test-evidence` | implemented | Runs the evidence role against two local inventory hosts with synthetic audit results and fixture files: bundle content, provenance, permissions, planted secrets, a refused second collection, and fail-closed checksum, path and exceptions-file mismatches; then reports on both bundles and on a tampered copy ([evidence bundles](evidence.md#tests)) |
 | `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with the per-checkout `ANSIBLE_HOME`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play ([audit guide](audit.md#tests)) |
 | `test-verify` | implemented | Runs the verify role (`baseline.yml` and `main`) on the local inventory host `web01` with synthetic baseline and later audits, without `oscap`, with the per-checkout `ANSIBLE_HOME`; requires the printed regression and applicability warnings, then that baselines not recorded by `baseline.yml` (extra, play, host and inventory variables, a pre-set marker, none at all) are refused and that `--skip-tags always` fails the role ([verify guide](verify.md#tests)) |
 | `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
@@ -304,7 +305,7 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-remediate-check`, `make test-role-guards`, `make test-verify`, `make test-content-golden`, `make test-browser` |
+| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-evidence`, `make test-remediate-check`, `make test-role-guards`, `make test-verify`, `make test-content-golden`, `make test-browser` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |

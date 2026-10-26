@@ -1,3 +1,5 @@
 ---
 linux_compliance_evidence_output_dir: "evidence"
-linux_compliance_evidence_include_host_facts: false
+linux_compliance_evidence_include_arf: false
+linux_compliance_evidence_become: true
+linux_compliance_evidence_stale_exceptions: {}

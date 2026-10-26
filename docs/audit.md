@@ -46,7 +46,8 @@ pinned content.
     `linux_compliance_audit_fail_on_noncompliant_after_waivers` ([the gate](#the-failure-gate-and-waivers)). The
     decision is recorded as `linux_compliance_audited.gate`.
 
-The variables are listed in the [role README](../roles/audit/README.md).
+The variables are listed in the [role README](../roles/audit/README.md). The `evidence` role collects the evidence
+of each run, with the waived evaluation, into a bundle on the controller ([evidence bundles](evidence.md)).
 
 ## What the module does
 

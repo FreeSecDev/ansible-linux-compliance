@@ -112,6 +112,19 @@ def _read_bytes(path: Path, max_bytes: int) -> bytes:
         message = OPEN_FAILED
         raise InvalidInputError(message) from None
     try:
+        return read_descriptor(descriptor, max_bytes)
+    finally:
+        os.close(descriptor)
+
+
+def read_descriptor(descriptor: int, max_bytes: int) -> bytes:
+    """Read an open regular file of at most ``max_bytes`` bytes; the caller closes it.
+
+    Raises:
+        InvalidInputError: If the descriptor is not a regular file, cannot be read, is
+            empty or is larger than ``max_bytes``.
+    """
+    try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             message = "input path is not a regular file"
             raise InvalidInputError(message)
@@ -126,8 +139,6 @@ def _read_bytes(path: Path, max_bytes: int) -> bytes:
     except OSError:
         message = "input file cannot be read"
         raise InvalidInputError(message) from None
-    finally:
-        os.close(descriptor)
     if total > max_bytes:
         message = f"input is larger than {max_bytes} bytes"
         raise InvalidInputError(message)
@@ -156,6 +167,17 @@ def run_parser[T](
     except InvalidInputError as error:
         unread = ArtifactRef(display, None, None)
         return ParseResult(format_name, SectionStatus.ERROR, str(error), unread, None)
+    return parse_bytes(display, format_name, data, build)
+
+
+def parse_bytes[T](
+    display: str, format_name: str, data: bytes, build: Callable[[bytes], T]
+) -> ParseResult[T]:
+    """Turn bytes that were already read into typed data, like :func:`run_parser`.
+
+    ``display`` is the path shown in the artifact reference; the SHA-256 is that of
+    exactly ``data``.
+    """
     reference = ArtifactRef(display, sha256_hex(data), len(data))
     try:
         payload = build(data)

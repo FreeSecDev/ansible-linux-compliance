@@ -1,0 +1,14 @@
+---
+- name: Audit hosts before collecting their evidence
+  ansible.builtin.import_playbook: audit.yml
+
+- name: Collect the evidence of every audited host into bundles on the controller
+  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
+  gather_facts: false
+  tasks:
+    - name: Collect the evidence bundle of this host
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.evidence
+      vars:
+        linux_compliance_evidence_stale_exceptions: >-
+          {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}

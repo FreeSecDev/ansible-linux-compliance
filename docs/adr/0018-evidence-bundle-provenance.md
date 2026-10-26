@@ -3,9 +3,10 @@
 - **Status:** proposed
 - **Date:** 2026-10-26
 - **Deciders:** lead architect
-- **Jira:** FREES-130 (design), FREES-51 (evidence bundles, implementation)
-- **Pull requests:** design only; introduced by the pull request for FREES-130 and FREES-132. Nothing in this ADR is
-  implemented yet.
+- **Jira:** FREES-130 (design), FREES-51 (evidence bundles, implementation), FREES-140 (signing)
+- **Pull requests:** design introduced by the pull request for FREES-130 and FREES-132. The pull request for FREES-51
+  implements the unsigned bundle of section 1 and nothing else; signing, verification and the `provenance` label are
+  not implemented (see the [status update](#status-update-2026-10-26-frees-51)).
 - **Related:** [ADR 0007](0007-registry-build-and-signing.md), [ADR 0012](0012-github-native-releases-and-packages.md),
   [ADR 0013](0013-normalized-findings-model.md), [ADR 0016](0016-report-schema-and-summary-semantics.md)
 
@@ -130,6 +131,63 @@ host, benchmark, profile, versions, digests); file contents stay out of the log.
   `self_asserted`, like the machine ID today.
 - This ADR becomes accepted with the first implementation pull request; until then the report labels nothing as
   verified.
+
+## Status update 2026-10-26 (FREES-51)
+
+The status stays **proposed**. FREES-51 implements the evidence bundle without a signature
+([evidence bundles](../evidence.md)); signing was evaluated for that pull request and is not feasible yet.
+
+### What is implemented
+
+- **The bundle of section 1, unsigned.** One directory per audit run and host, `<output>/<inventory host>/<run_id>`,
+  with `bundle.json` (format `1.0`), `SHA256SUMS`, the raw scan run, the XCCDF results and the tailoring file and,
+  when exceptions were applied, the evaluation, the exceptions file and the stale result (section 4). The manifest
+  lists every file with its path, kind, size, SHA-256 and source and records the run ID, the inventory host, the
+  machine ID of the facts, the host identity the scan run reports, the benchmark, profile, scanner, content source,
+  version and digest, the exceptions file digest and the collection version: the identity that section 1 asks the
+  predicate to repeat. The ARF results are excluded by default because they can hold credential material.
+- **Checks when collecting.** Every fetched file must have the digest the audit recorded on the host, the evaluation
+  must verify against the byte-exact exceptions file and must have been made from the raw scan run; a mismatch fails
+  closed and leaves no bundle.
+- **Report input.** `--evidence-bundle DIR` reads a bundle without following links and verifies the manifest, every
+  digest, `SHA256SUMS`, the scan run against the manifest and the evaluation against the bundled exceptions file and
+  the raw scan run. A bundle that fails is an input `error`.
+- **No label.** The report schema is unchanged (2.0) and has no `provenance` field, so no input is labelled
+  `verified`. A file in a bundle that looks like a signature (`*.sigstore.json`, `*.sig`, `*.pem`, `*.intoto.jsonl`,
+  ...) is refused as an input error, so a signature that cannot be verified never reads as an unsigned bundle (the
+  rule of section 3).
+
+A verified bundle is consistent, not authentic: whoever can write the directory can rewrite every file and every
+digest consistently. The bundle detects accidental change and partial edits, not deliberate forgery.
+
+### What blocks signing
+
+1. **No pinned signer where audits run.** `cosign` (or `sigstore-python`) is not part of the locked development
+   environment or of any controller requirement. The role cannot run it: `ansible.builtin.command` is banned
+   (AGENTS.md rule 1), so signing needs a new controller-side module or action plugin that runs a pinned, hash-verified
+   `cosign` through the audited process helper (ADR 0004, a resolved absolute path in a trusted root-owned directory),
+   and a way to install that binary on operator controllers. Action plugins import `ansible.plugins`, which the
+   repository guard does not allow in `plugins/` today. Each of these is its own reviewed change.
+2. **No signing identity for the runs that matter.** Keyless signing needs an OIDC token at collection time. Audits of
+   real hosts run on operator controllers, which have no workflow identity. The only runs of the role in CI collect
+   synthetic fixtures on the runner (`make test-evidence`), so a keyless CI signature would attest synthetic data and
+   prove nothing about a host. Key-based signing needs a managed key (an AWS KMS key reached through the OIDC role of
+   ADR 0014, or a hardware token), and none is provisioned: `infra/account` has no signing key.
+3. **The public log would publish inventory names.** Section 1 puts the inventory host and run ID in the predicate,
+   and keyless signatures are logged in the public Rekor instance. Publishing inventory host names and run times needs
+   a decision (a private transparency log, or key-based signatures without a log entry, which loses the inclusion proof
+   that section 2 verifies). The security implications above only cover file contents.
+4. **No reviewed verifier and no report field.** Verification needs `sigstore-python` or a pinned `cosign` after a
+   dependency review, a pinned `trusted_root.json`, the trust policy format of section 2, the `provenance` field
+   (report schema 2.1 under ADR 0016) and the dashboard label. Adding the field before a verifier exists would only
+   ever say `self_asserted`.
+
+### What signing will add
+
+The bundle layout does not change: the signature is one more file next to `bundle.json`, over the manifest (which
+already lists every file's SHA-256), with the in-toto subject set of section 1. Readers of format `1.0` refuse that
+file today; the version that verifies it accepts it. This ADR becomes accepted with that pull request. Follow-up:
+FREES-140 (signing and verification).
 
 ## References
 

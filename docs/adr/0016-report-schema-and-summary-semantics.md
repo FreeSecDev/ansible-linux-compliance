@@ -325,3 +325,19 @@ silently won.
   9001.
 - **Residual.** Waived findings carried directly in a ScanRun JSON (`--scan-run`) have no exceptions file to check
   against. They are shown as the scan run records them. This predates schema 2.0 and is covered by ADR 0018.
+
+## Note 2026-10-26: evidence bundles as an input route (FREES-51)
+
+The schema is unchanged (`report-v2.json`, `schema_version` `"2.0"`). `--evidence-bundle DIR` is a new way to supply
+existing input kinds, not a new kind:
+
+- A bundle ([evidence bundles](../evidence.md)) is read without following links and verified before use. It then
+  contributes its evaluation as an `exceptions_evaluation` item (compliance and exceptions sections) when exceptions
+  were applied, otherwise its raw scan run as a `scan_run` item. The artifact path is the file inside the bundle.
+- The bundle's copy of the exceptions file is the report's exceptions file when `--exceptions-file` is not given. All
+  copies and `--exceptions-file` must be the same bytes; otherwise the CLI exits with status 2.
+- A bundle that does not verify is an input `error`. Unless its manifest is readable and records that no exceptions
+  were applied, it is an `exceptions_evaluation` item, so the exceptions section is in error too and cannot call an
+  exception stale on the strength of the bundles that did verify.
+- Nothing is labelled `verified`: bundles are not signed and the schema has no `provenance` field
+  ([ADR 0018](0018-evidence-bundle-provenance.md), proposed). `exceptions_file.verified` keeps its 2.0 meaning.

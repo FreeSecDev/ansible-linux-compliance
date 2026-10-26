@@ -1,7 +1,8 @@
 # Threat model
 
 Scope: the `freesecdev.linux_compliance` collection on managed hosts. Audience: reviewers using the `security-review`
-skill, and authors of changes that add an asset, trust boundary or entry point. Jira: FREES-134, FREES-138 and FREES-139 (audit content). The
+skill, and authors of changes that add an asset, trust boundary or entry point. Jira: FREES-134, FREES-138 and
+FREES-139 (audit content), FREES-51 (evidence bundles). The
 platform-wide threat model (CI, AWS OIDC, supply chain, reporting) is FREES-25; it extends this file and does not
 replace these entries.
 
@@ -127,3 +128,49 @@ part of FREES-25.
 - **Residual:** the exceptions file is trusted because it is reviewed in Git; whoever can merge it can waive failures.
   A waived finding inside a plain ScanRun JSON has no exceptions file to check against. ADR 0018 proposes signed
   evidence for both.
+
+## Evidence bundles on the controller
+
+The `evidence` role fetches the audit evidence of each host into a bundle on the controller, and the report reads
+bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
+
+### T-EVIDENCE-1: secrets leak into a bundle
+
+- **Asset:** credentials and other secrets on the host, in the play and on the controller.
+- **Attacker:** anyone who later receives the bundle (an auditor, a ticket, an artifact store).
+- **Failure:** the bundle copies the environment, facts, `no_log` values, the state ledger with its sensitive prior
+  values, or scanner output that holds collected file contents.
+- **Mitigation (FREES-51):** the documents are built only from the fetched files, the re-verified evaluation, the
+  exceptions file and the stale result; no fact or variable is dumped, only the machine ID is taken from facts, and the
+  skeleton option to include host facts is removed. Only four file names directly inside the run directory are
+  fetched; a recorded path outside it fails the host. The ARF results, which hold OVAL system characteristics such as
+  matched lines of `/etc/shadow`, are excluded unless `linux_compliance_evidence_include_arf` is set. `make
+  test-evidence` plants an environment variable, a `no_log` fact, a ledger with a sensitive value, an unlisted file and
+  a shadow-like ARF line and checks that none reaches a bundle or the output.
+- **Residual:** the XCCDF results and the scan run are host evidence (host names, addresses, rule results), and the
+  exceptions file names owners and approvers. With the ARF opt-in a bundle can hold password hashes. Bundles are
+  `0600` in `0700` directories of the controller user; share them like the report.
+
+### T-EVIDENCE-2: a host or a file on the way changes the evidence
+
+- **Attacker:** a local user on the host between the audit and the fetch, the transport, or a compromised host.
+- **Failure:** the controller collects different bytes than the audit recorded, or a different file.
+- **Mitigation (FREES-51):** every fetched file must have the SHA-256 and size that the audit module recorded, the
+  fetched `scan-run.json` must be the scan run of the fact, and the evaluation must verify against the byte-exact
+  exceptions file and must have been made from the raw scan run. Any mismatch fails the host and removes the bundle.
+  The audit evidence is root-owned `0600` in a root-only `0700` run directory, so only root can change it on the host.
+- **Residual:** the recorded digests come from the host. A compromised host can return consistent lies; the checks
+  bind the bundle to what the audit module reported, not to the truth about the host. This is out of scope for any
+  controller-side check (ADR 0018 states the same for signatures).
+
+### T-EVIDENCE-3: a bundle is edited after it was written
+
+- **Attacker:** anyone who can write the bundle directory or a copy of it before it reaches the report.
+- **Failure:** a finding, waiver or digest is changed so that the report shows a better result.
+- **Mitigation (FREES-51):** the report reads the bundle without following links, refuses unlisted files, special
+  files and unexpected directories, and verifies every size and SHA-256, `SHA256SUMS`, the scan run against the
+  manifest and the evaluation against the bundled exceptions file and the raw scan run. A partial edit is an input
+  error. A file that looks like a signature is refused, never ignored.
+- **Residual:** the bundle is not signed. Whoever can rewrite every file and digest consistently, including the
+  exceptions file, can forge a bundle that verifies; the report labels nothing as verified. Signed bundles are
+  FREES-140 ([ADR 0018](../adr/0018-evidence-bundle-provenance.md), proposed).

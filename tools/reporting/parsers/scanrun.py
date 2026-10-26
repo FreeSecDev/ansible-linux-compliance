@@ -15,7 +15,8 @@ from tools.reporting.common import (
 from tools.reporting.compliance import ComplianceData, summarize, tally_findings
 
 
-def _build(data: bytes) -> ComplianceData:
+def scan_run_data(data: bytes) -> ComplianceData:
+    """Build the compliance input of the ScanRun JSON ``data``."""
     try:
         run = model.loads(decode_text(data))
     except model.ModelError as error:
@@ -45,4 +46,4 @@ def _build(data: bytes) -> ComplianceData:
 
 def parse_scan_run(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[ComplianceData]:
     """Parse a ScanRun JSON file with the validating findings model loader."""
-    return run_parser(path, "scan_run", max_bytes, _build)
+    return run_parser(path, "scan_run", max_bytes, scan_run_data)

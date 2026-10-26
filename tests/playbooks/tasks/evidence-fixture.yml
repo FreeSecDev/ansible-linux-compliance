@@ -1,0 +1,94 @@
+---
+- name: Name the run of the fixture
+  ansible.builtin.set_fact:
+    evidence_fixture_base: >-
+      {{ audit_exceptions_run_base | ansible.builtin.combine({'run_id': evidence_fixture_run_id}) }}
+    evidence_fixture_files: []
+
+- name: Build the synthetic scan run of the fixture
+  ansible.builtin.include_tasks: audit-exceptions-synthetic.yml
+  vars:
+    audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+    audit_exceptions_run_base: "{{ evidence_fixture_base }}"
+
+- name: Name the run directory of the fixture
+  ansible.builtin.set_fact:
+    evidence_fixture_root: "{{ evidence_hosts_dir }}/{{ inventory_hostname }}"
+    evidence_fixture_dir: "{{ evidence_hosts_dir }}/{{ inventory_hostname }}/evidence/{{ evidence_fixture_run_id }}"
+
+- name: Create the run directory of the fixture as the audit module would
+  ansible.builtin.file:
+    path: "{{ evidence_fixture_dir }}/scan"
+    state: directory
+    mode: "0700"
+
+- name: Write the scan run of the fixture
+  ansible.builtin.copy:
+    dest: "{{ evidence_fixture_dir }}/scan-run.json"
+    content: "{{ audit_exceptions_scan_run | ansible.builtin.to_json }}"
+    mode: "0600"
+
+- name: Write the XCCDF results of the fixture
+  ansible.builtin.copy:
+    src: "{{ evidence_xccdf_fixture }}"
+    dest: "{{ evidence_fixture_dir }}/scan/results.xml"
+    mode: "0600"
+
+- name: Write ARF results that carry a planted shadow line
+  ansible.builtin.copy:
+    dest: "{{ evidence_fixture_dir }}/scan/results-arf.xml"
+    content: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <arf:asset-report-collection xmlns:arf="http://scap.nist.gov/schema/asset-reporting-format/1.1">
+        <ind-sys:text xmlns:ind-sys="urn:freesecdev:test:oval-system-characteristics">
+          root:{{ evidence_secret_arf }}:19000:0:99999:7:::
+        </ind-sys:text>
+      </arf:asset-report-collection>
+    mode: "0600"
+
+- name: Write a planted file in the scanner output directory
+  ansible.builtin.copy:
+    dest: "{{ evidence_fixture_dir }}/scan/notes.txt"
+    content: "{{ evidence_secret_notes }}\n"
+    mode: "0600"
+
+- name: Write a state ledger with a sensitive prior value above the evidence directory
+  ansible.builtin.copy:
+    dest: "{{ evidence_fixture_root }}/state.json"
+    content: >-
+      {{ {'schema_version': 1, 'entries': [{'rule_id': 'xccdf_org.ssgproject.content_rule_demo',
+          'prior_values': [{'name': 'password', 'sensitive': true, 'value': evidence_secret_ledger}]}]}
+         | ansible.builtin.to_json }}
+    mode: "0600"
+
+- name: Hash the files of the fixture as the audit module would record them
+  ansible.builtin.stat:
+    path: "{{ evidence_fixture_dir }}/{{ item }}"
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  loop:
+    - scan-run.json
+    - scan/notes.txt
+    - scan/results-arf.xml
+    - scan/results.xml
+  register: evidence_fixture_stats
+
+- name: List the files of the fixture as the audit module would
+  ansible.builtin.set_fact:
+    evidence_fixture_files: >-
+      {{ evidence_fixture_files + [{
+           'kind': 'scan_run' if item.item == 'scan-run.json' else 'scanner_output',
+           'path': evidence_fixture_dir ~ '/' ~ item.item,
+           'sha256': item.stat.checksum,
+           'size': item.stat.size}] }}
+  loop: "{{ evidence_fixture_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Publish the audit result of the fixture with its evidence
+  ansible.builtin.set_fact:
+    linux_compliance_audited: >-
+      {{ linux_compliance_audited | ansible.builtin.combine({
+           'evidence_written': true,
+           'evidence': {'directory': evidence_fixture_dir, 'skipped': [], 'files': evidence_fixture_files}}) }}

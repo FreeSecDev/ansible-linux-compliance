@@ -1,0 +1,33 @@
+---
+minor_changes:
+  - >-
+    evidence role - implemented. It fetches the evidence files that the audit recorded on each host
+    (``ansible.builtin.fetch``, ``become`` on that task only) into a versioned bundle
+    ``<output_dir>/<inventory host>/<run_id>`` on the controller, checks every file against the SHA-256 and size the
+    audit recorded and fails closed on a mismatch, removing the incomplete bundle. A bundle holds the raw
+    ``scan-run.json``, the XCCDF results, the tailoring file, ``SHA256SUMS`` and the manifest ``bundle.json`` with
+    provenance (collection version, collection time, inventory host and machine ID, the host identity the scan run
+    reports, scanner, content source, version and SHA-256, and the SHA-256 of the exceptions file). With exceptions
+    applied it also holds the verified evaluation, the byte-exact exceptions file and the stale result. Files are
+    ``0600`` in ``0700`` directories, owned by the controller user, and the manifest is written last. Nothing from
+    facts, the environment, the inventory or the state ledger is written. The ARF results are excluded unless
+    ``linux_compliance_evidence_include_arf`` is true, because they can hold credential material such as matched
+    lines of ``/etc/shadow``. The format is documented in ``docs/evidence.md``.
+  - >-
+    evidence role - the skeleton option ``linux_compliance_evidence_include_host_facts`` is removed; host facts are
+    never written to a bundle. New options are ``linux_compliance_evidence_include_arf`` (default ``false``),
+    ``linux_compliance_evidence_become`` (default ``true``) and ``linux_compliance_evidence_stale_exceptions``
+    (default ``{}``).
+  - >-
+    Add the playbook ``freesecdev.linux_compliance.evidence``, which runs the audit playbook and then collects a
+    bundle for every audited host, including the stale result of the run.
+  - >-
+    Add the controller filters ``freesecdev.linux_compliance.evidence_plan``,
+    ``freesecdev.linux_compliance.evidence_documents`` and ``freesecdev.linux_compliance.evidence_written``.
+trivial:
+  - >-
+    Reporting - ``--evidence-bundle DIR`` reads an evidence bundle directly. The bundle is read without following
+    symbolic links and verified (manifest, every SHA-256 and size, ``SHA256SUMS``, the scan run against the manifest,
+    the evaluation against the bundled exceptions file and the raw scan run) before its evaluation, or its raw scan
+    run, becomes a report input; a bundle that does not verify is an input error. The report schema is unchanged and
+    nothing is labelled verified, because bundles are not signed (ADR 0018 stays proposed).

@@ -1,0 +1,23 @@
+---
+evidence_hosts_dir: "{{ evidence_test_dir }}/hosts"
+evidence_bundles_dir: "{{ evidence_test_dir }}/bundles"
+evidence_secret_env: FREESECDEV-PLANTED-ENVIRONMENT-SECRET-5f2c
+evidence_secret_no_log: FREESECDEV-PLANTED-NO-LOG-SECRET-91ab
+evidence_secret_ledger: FREESECDEV-PLANTED-LEDGER-SECRET-3d7e
+evidence_secret_notes: FREESECDEV-PLANTED-UNLISTED-FILE-SECRET-c40f
+evidence_secret_arf: FREESECDEV-PLANTED-ARF-SHADOW-HASH-$6$rounds=5000$8b21
+evidence_secrets:
+  - "{{ evidence_secret_env }}"
+  - "{{ evidence_secret_no_log }}"
+  - "{{ evidence_secret_ledger }}"
+  - "{{ evidence_secret_notes }}"
+  - "{{ evidence_secret_arf }}"
+evidence_xccdf_fixture: "{{ playbook_dir }}/../fixtures/xccdf/oscap-like-fail.xml"
+evidence_expected_files:
+  - SHA256SUMS
+  - bundle.json
+  - exceptions/evaluation.json
+  - exceptions/exceptions.yml
+  - exceptions/stale.json
+  - raw/scan-run.json
+  - raw/scan/results.xml

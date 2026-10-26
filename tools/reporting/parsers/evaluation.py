@@ -81,6 +81,15 @@ def _build(data: bytes, text: str) -> EvaluationData:
     except exceptions.ExceptionsError as error:
         message = f"exceptions evaluation rejected: {clean_text(str(error), 200)}"
         raise InvalidInputError(message) from None
+    return evaluation_data(data, evaluation)
+
+
+def evaluation_data(data: bytes, evaluation: exceptions.Evaluation) -> EvaluationData:
+    """Build the inputs of an evaluation that was verified against its exceptions file.
+
+    Raises:
+        InvalidInputError: If the inventory host of the evaluation is not a valid host name.
+    """
     if re.fullmatch(exceptions.HOST_PATTERN, evaluation.target.host) is None:
         message = "the inventory host of the evaluation is not a valid host name"
         raise InvalidInputError(message)
