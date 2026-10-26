@@ -1192,3 +1192,44 @@ def test_free_text_fields_allow_tabs_newlines_and_ordinary_unicode() -> None:
     text = "tab\tnewline\nreturn\r caf\u00e9 \u2603 \U0001f468\u200d\U0001f469"
     assert evidence(content=text).content == text
     assert rule(description=text).description == text
+
+
+@pytest.mark.parametrize("kind", ["rule", "profile", "benchmark"])
+def test_validate_xccdf_id_accepts_each_kind(kind: str) -> None:
+    value = f"xccdf_org.ssgproject.content_{kind}_example"
+    assert model.validate_xccdf_id(value, "field", kind) == value
+
+
+@pytest.mark.parametrize(
+    ("value", "kind", "message"),
+    [
+        (RULE, "group", "unknown XCCDF identifier kind"),
+        ("sshd_disable_root_login", "rule", "field has an invalid format"),
+        (PROFILE, "rule", "field has an invalid format"),
+        (None, "rule", "field must be a string"),
+    ],
+)
+def test_validate_xccdf_id_rejects(value: object, kind: str, message: str) -> None:
+    with pytest.raises(model.ModelError, match=message):
+        model.validate_xccdf_id(value, "field", kind)
+
+
+def test_validate_text_accepts_identifiers_free_text_and_patterns() -> None:
+    assert model.validate_text("Owner Name", "owner", max_length=20) == "Owner Name"
+    assert model.validate_text("a\nb", "note", max_length=5, multiline=True) == "a\nb"
+    assert model.validate_text("abc", "slug", max_length=5, pattern=r"[a-z]+") == "abc"
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (" padded", "must not have surrounding whitespace"),
+        ("x" * 6, "exceeds 5 characters"),
+        ("a\u200bb", "control or formatting characters"),
+        ("", "must not be empty"),
+        ("ABC", "invalid format"),
+    ],
+)
+def test_validate_text_rejects(value: str, message: str) -> None:
+    with pytest.raises(model.ModelError, match=message):
+        model.validate_text(value, "field", max_length=5, pattern=r"[^A-Z]*")

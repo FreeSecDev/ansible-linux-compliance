@@ -5,7 +5,7 @@ its tooling works. The component responsibilities are in the
 [component map](../.agents/skills/architecture/references/component-map.md); the findings model is recorded in
 [ADR 0013](adr/0013-normalized-findings-model.md).
 
-Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role).
+Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSCAP backend), FREES-69 (ansible-lint hook), FREES-40 (role skeletons), FREES-41 (playbooks), FREES-42 and FREES-43 (content manifest, discovery), FREES-49 (audit module and role), FREES-50 (exceptions).
 
 ## Layout
 
@@ -13,12 +13,14 @@ Jira: FREES-39 (skeleton, metadata), FREES-26 (findings model), FREES-48 (OpenSC
 |---|---|
 | `galaxy.yml` | Namespace `freesecdev`, name `linux_compliance`, Apache-2.0, repository links, tags and `build_ignore` |
 | `meta/runtime.yml` | `requires_ansible: ">=2.20.0"` |
-| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root), `audit.py` (audit orchestration behind `compliance_scan`) |
+| `plugins/module_utils/compliance/` | Shared target-side code: `model.py` (findings model), `process.py` (process helper), `scanner.py` (backend interface and registry), `openscap.py` (OpenSCAP backend and XCCDF results extraction), `xmlsafe.py` (the only hardened streaming XML parser), `catalog.py` (benchmark and profile discovery), `backends.py` (composition root), `audit.py` (audit orchestration behind `compliance_scan`), `exceptions.py` (exceptions file and waivers), `yamlsubset.py` (strict YAML subset loader) |
 | `plugins/modules/` | `control_state.py` (ledger), the read-only discovery modules `benchmark_info.py` and `profile_info.py`, and the audit module `compliance_scan.py` |
+| `plugins/filter/` | Controller filters `apply_exceptions` and `stale_exceptions` ([exceptions](exceptions.md)) |
+| `docs/schemas/`, `docs/examples/` | JSON Schema and example of the exceptions file |
 | `content/manifest.yml` | Pinned ComplianceAsCode release, archive SHA-512, datastream SHA-256 and profiles ([ADR 0015](adr/0015-content-acquisition-and-pinning.md)); the only file in `content/` |
 | `tools/content/fetch_content.py` | Controller-side tool that downloads or reads the pinned archive and extracts only the listed datastreams |
 | `typings/` | Minimal type stubs for the two `ansible.module_utils` modules that the plugins and tests import, because ansible-core ships no stubs |
-| `plugins/{action,filter,lookup}/` | Created together with the first plugin of each kind; Git cannot track empty directories and Galaxy does not need placeholders |
+| `plugins/{action,lookup}/` | Created together with the first plugin of each kind; Git cannot track empty directories and Galaxy does not need placeholders |
 | `changelogs/` | antsibull-changelog `config.yaml`, `changelog.yaml` and `fragments/`; one fragment per Jira issue |
 | `tests/unit/plugins/` | Unit tests that run under pytest and `ansible-test units` |
 | `tests/fixtures/` | Synthetic XCCDF results and hostile samples used by the unit tests; inert data, shipped with the tests in the tarball |
@@ -283,6 +285,25 @@ the fetch tool build tiny synthetic zips and mock the network. A golden file, `t
 every profile of the two pinned datastreams (25 profiles). `make test-content-golden` fetches the pinned content with
 `fetch_content.py` and compares the catalog with it; the CI `test` job runs it and fails when the fetch fails. Without
 fetched content the comparison is skipped locally.
+
+## Exceptions
+
+Jira: FREES-50. Policy, file format and filter usage: [Exceptions and waivers](exceptions.md); decision: the FREES-50
+amendment of [ADR 0013](adr/0013-normalized-findings-model.md). `exceptions.py` validates an exceptions file read by
+`yamlsubset.py` and applies it to a `ScanRun`; only `fail` findings of completed runs become `waived`, expired
+exceptions leave the finding `fail`, and every exception gets a status per run. A benchmark scope must name its
+profiles, and expiry is judged at the later of the scan start and the controller time, so neither a shared benchmark
+identifier nor a host clock that runs behind widens a waiver. The filters
+`freesecdev.linux_compliance.apply_exceptions` and `freesecdev.linux_compliance.stale_exceptions` wrap it for roles;
+the implemented `audit` role (FREES-49) does not call them yet, and neither does the `verify` skeleton (FREES-54);
+a play can apply them to `linux_compliance_audited.scan_run` after the `audit` role (see
+[exceptions](exceptions.md#using-the-filters-from-a-role)). Both filter files pass the deny-by-default
+plugin guard without an exemption. Unit tests cover the loader, every required field, the expiry boundaries, scope
+matching and the filters; `tests/unit/tools/test_exceptions_schema.py` compares the JSON Schema with the
+validator's constants and validates the example with `jsonschema`, so the two cannot drift, and
+`tests/unit/tools/test_yamlsubset_differential.py` compares the loader with PyYAML on a seeded generated corpus.
+`tests/unit/tools/reporting/test_exceptions_report.py` feeds an evaluated scan run through `tools/reporting`; stale
+exceptions are not yet part of the report (see [exceptions](exceptions.md#reporting)).
 
 ## Adding plugins
 

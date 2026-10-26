@@ -58,6 +58,7 @@ _XCCDF_PATTERNS: Final[Mapping[str, str]] = MappingProxyType(
         for kind in ("rule", "profile", "benchmark")
     }
 )
+XCCDF_ID_PATTERNS: Final[Mapping[str, str]] = _XCCDF_PATTERNS
 
 T = TypeVar("T")
 E = TypeVar("E", bound=Enum)
@@ -363,6 +364,56 @@ def _instant(text: str) -> datetime:
 
 def _xccdf_id(value: object, name: str, kind: str) -> str:
     return _text(value, name, max_length=MAX_ID_LENGTH, pattern=_XCCDF_PATTERNS[kind])
+
+
+def validate_xccdf_id(value: object, name: str, kind: str) -> str:
+    """Validate a full XCCDF identifier with the rules the model applies.
+
+    Args:
+        value: The candidate identifier.
+        name: The field name used in error messages.
+        kind: ``rule``, ``profile`` or ``benchmark``.
+
+    Returns:
+        The identifier, unchanged.
+
+    Raises:
+        ModelError: If the kind is unknown or the value is not a valid identifier.
+    """
+    if kind not in _XCCDF_PATTERNS:
+        _fail(f"unknown XCCDF identifier kind {_safe(kind)}")
+    return _xccdf_id(value, name, kind)
+
+
+def validate_text(
+    value: object,
+    name: str,
+    *,
+    max_length: int,
+    pattern: str | None = None,
+    multiline: bool = False,
+) -> str:
+    """Validate a text field with the rules the model applies to its own fields.
+
+    Identifier-like text (``multiline`` false) rejects surrounding whitespace and
+    every character of Unicode category Cc, Cf, Zl or Zp. Free text allows tab,
+    newline and carriage return and rejects other control characters and the
+    bidi controls. Blank text is always rejected.
+
+    Args:
+        value: The candidate text.
+        name: The field name used in error messages.
+        max_length: The maximum number of characters.
+        pattern: An optional anchored regular expression the text must match.
+        multiline: Whether the text is free text rather than an identifier.
+
+    Returns:
+        The text, unchanged.
+
+    Raises:
+        ModelError: If the value violates the rules.
+    """
+    return _text(value, name, max_length=max_length, pattern=pattern, multiline=multiline)
 
 
 class _Reader:

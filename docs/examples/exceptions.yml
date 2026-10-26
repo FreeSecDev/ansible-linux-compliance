@@ -1,0 +1,39 @@
+---
+schema_version: "1.0"
+exceptions:
+  - id: EXC-2026-001
+    rule: xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+    framework: cis
+    scope:
+      hosts:
+        - bastion01
+    justification: >-
+      The legacy deployment tool on bastion01 can only log in as root. Access is limited to the
+      management VLAN and every session is recorded. The tool is replaced in OPS-1234.
+    owner: platform-team@example.com
+    approval:
+      approver: security-lead@example.com
+      date: 2026-10-02
+    created: 2026-10-01
+    expires: 2027-03-31
+    risk: medium
+  - id: EXC-2026-002
+    rule: xccdf_org.ssgproject.content_rule_package_telnet_removed
+    framework: stig
+    scope:
+      groups: [legacy_lab]
+      benchmark:
+        id: xccdf_org.ssgproject.content_benchmark_RHEL-9
+        version: 0.1.82
+      profiles:
+        - xccdf_org.ssgproject.content_profile_stig
+    justification: |
+      Lab hosts run a vendor test harness that needs the telnet client.
+      They have no route to production networks.
+    owner: lab-team@example.com
+    approval:
+      approver: ciso@example.com
+      date: 2026-10-10
+    created: 2026-10-10
+    expires: 2026-12-31
+    risk: low
