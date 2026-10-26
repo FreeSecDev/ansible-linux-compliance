@@ -1,0 +1,157 @@
+---
+- name: Prepare real bypass attempts against the guard
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    selftest_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    selftest_instances: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml }}"
+    selftest_probe: "{{ selftest_instances | selectattr('instance', 'equalto', 'probe') | first }}"
+    selftest_prefix: "fsd-mol-{{ selftest_scenario }}-{{ selftest_probe.run_id }}"
+    selftest_mounted_address: "{{ selftest_prefix }}-mounted"
+    selftest_docker: community.docker.docker
+    selftest_decoys:
+      - name: mounted
+        volumes:
+          - "{{ molecule_selftest_dir }}/host-directory:/host:ro"
+        security_opts:
+          - no-new-privileges:true
+      - name: unmasked
+        compose: true
+        volumes: []
+        security_opts:
+          - no-new-privileges:true
+          - systempaths=unconfined
+      - name: seccomp
+        volumes: []
+        security_opts:
+          - no-new-privileges:true
+          - 'seccomp={"defaultAction": "SCMP_ACT_ALLOW"}'
+    selftest_inventories:
+      good:
+        probe:
+          ansible_host: "{{ selftest_probe.address }}"
+          ansible_connection: "{{ selftest_docker }}"
+      docker_host:
+        probe:
+          ansible_host: "{{ selftest_probe.address }}"
+          ansible_connection: "{{ selftest_docker }}"
+          ansible_docker_host: "{{ selftest_mounted_address }}"
+      extra_args:
+        probe:
+          ansible_host: "{{ selftest_probe.address }}"
+          ansible_connection: "{{ selftest_docker }}"
+          ansible_docker_extra_args: "--host tcp://192.0.2.1:2375"
+      privileged:
+        probe:
+          ansible_host: "{{ selftest_probe.address }}"
+          ansible_connection: "{{ selftest_docker }}"
+          ansible_docker_privileged: true
+      local:
+        probe:
+          ansible_host: localhost
+          ansible_connection: local
+      localhost:
+        localhost:
+          ansible_connection: "{{ selftest_docker }}"
+      loopback:
+        probe:
+          ansible_host: 127.0.0.1
+          ansible_connection: "{{ selftest_docker }}"
+      unknown:
+        probe:
+          ansible_host: "{{ selftest_prefix }}-stranger"
+          ansible_connection: "{{ selftest_docker }}"
+  tasks:
+    - name: Inspect the probe instance that the create step started
+      community.docker.docker_container_info:
+        name: "{{ selftest_probe.address }}"
+      register: selftest_probe_info
+
+    - name: Start containers of this run that carry its labels and marker but are not isolated
+      community.docker.docker_container:
+        name: "{{ selftest_prefix }}-{{ item.name }}"
+        image: "{{ selftest_probe_info.container.Config.Image }}"
+        pull: never
+        state: started
+        entrypoint:
+          - sleep
+          - infinity
+        init: true
+        cap_drop:
+          - ALL
+        security_opts: "{{ item.security_opts }}"
+        network_mode: none
+        volumes: "{{ item.volumes }}"
+        labels: "{{ selftest_probe_info.container.Config.Labels }}"
+        env:
+          FREESECDEV_MOLECULE_MARKER: "{{ selftest_probe.marker }}"
+      loop: "{{ selftest_decoys | rejectattr('compose', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Start the decoy with unconfined system paths, which only the Compose and CLI front ends can request
+      community.docker.docker_compose_v2:
+        project_name: "{{ selftest_prefix }}-unmasked"
+        state: present
+        pull: never
+        definition:
+          services:
+            unmasked:
+              container_name: "{{ selftest_prefix }}-unmasked"
+              image: "{{ selftest_probe_info.container.Config.Image }}"
+              entrypoint:
+                - sleep
+                - infinity
+              init: true
+              cap_drop:
+                - ALL
+              security_opt: "{{ (selftest_decoys | selectattr('name', 'equalto', 'unmasked') | first).security_opts }}"
+              network_mode: none
+              labels: "{{ selftest_probe_info.container.Config.Labels }}"
+              environment:
+                FREESECDEV_MOLECULE_MARKER: "{{ selftest_probe.marker }}"
+
+    - name: Inspect the decoy that runs with unconfined system paths
+      community.docker.docker_container_info:
+        name: "{{ selftest_prefix }}-unmasked"
+      register: selftest_unmasked_info
+
+    - name: Check that the daemon really unmasked the system paths of the decoy
+      ansible.builtin.assert:
+        that:
+          - selftest_unmasked_info.container.HostConfig.MaskedPaths | default([], true) | length == 0
+          - selftest_unmasked_info.container.HostConfig.ReadonlyPaths | default([], true) | length == 0
+        fail_msg: "The decoy kept masked paths, so this bypass attempt would test nothing."
+        quiet: true
+
+    - name: Write one instance config per decoy, recording it like the create step would
+      ansible.builtin.copy:
+        content: >-
+          {{ (selftest_instances + [selftest_probe | combine({'instance': item.name,
+          'address': selftest_prefix ~ '-' ~ item.name})]) | to_nice_yaml }}
+        dest: "{{ molecule_selftest_dir }}/instance_config_{{ item.name }}.yml"
+        mode: "0600"
+      loop: "{{ selftest_decoys }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Write one inventory per bypass attempt
+      ansible.builtin.copy:
+        content: "{{ {'all': {'hosts': item.value}} | to_nice_yaml }}"
+        dest: "{{ molecule_selftest_dir }}/{{ item.key }}.yml"
+        mode: "0600"
+      loop: "{{ selftest_inventories | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Write one inventory per decoy
+      ansible.builtin.copy:
+        content: >-
+          {{ {'all': {'hosts': {item.name: {'ansible_host': selftest_prefix ~ '-' ~ item.name,
+          'ansible_connection': selftest_docker}}}} | to_nice_yaml }}
+        dest: "{{ molecule_selftest_dir }}/{{ item.name }}.yml"
+        mode: "0600"
+      loop: "{{ selftest_decoys }}"
+      loop_control:
+        label: "{{ item.name }}"

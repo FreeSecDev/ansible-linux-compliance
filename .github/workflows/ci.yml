@@ -210,10 +210,39 @@ jobs:
       - name: Run lint-iac
         run: make lint-iac
 
+  molecule-docker:
+    name: molecule-docker (${{ matrix.scenario }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [docker-ubuntu, docker-rhel-compatible, docker-selftest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Run Molecule scenario
+        if: matrix.scenario != 'docker-selftest'
+        env:
+          MOLECULE_SCENARIO: ${{ matrix.scenario }}
+        run: make test-molecule-docker MOLECULE_DOCKER_SCENARIOS="$MOLECULE_SCENARIO" MOLECULE_DOCKER_SELFTEST=false
+      - name: Run the guard and destroy self-test
+        if: matrix.scenario == 'docker-selftest'
+        run: make test-molecule-docker-selftest
+
   ci-gate:
     name: ci-gate
     if: always()
-    needs: [lint, typecheck, test, oscap-integration, name-sets, security, collection, iac]
+    needs: [lint, typecheck, test, oscap-integration, name-sets, security, collection, iac, molecule-docker]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}

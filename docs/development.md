@@ -6,7 +6,8 @@ credential-free stage locally and is what the pull request workflow runs, split 
 Jira: FREES-68 (Makefile), FREES-69 (pre-commit), FREES-70 (Python tooling),
 FREES-71 (pull request workflow), FREES-91 (skill validator tests), FREES-39 (collection skeleton and
 ansible tooling), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons),
-FREES-30, FREES-31, FREES-33, FREES-34 (AWS bootstrap, OpenTofu, Checkov), FREES-127 (per-checkout Ansible home).
+FREES-30, FREES-31, FREES-33, FREES-34 (AWS bootstrap, OpenTofu, Checkov), FREES-127 (per-checkout Ansible home),
+FREES-59 (Docker Molecule scenarios).
 
 ## Bootstrap
 
@@ -60,7 +61,7 @@ overriding them.
 | `install` | implemented | `uv sync --frozen`, installs both git hook types |
 | `format` | implemented | `ruff check --fix` and `ruff format` |
 | `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible`, `lint-toggles`, `lint-role-guards` |
-| `lint-ansible` | implemented | `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
+| `lint-ansible` | implemented | `molecule-dependencies`, then `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-toggles` | implemented | `tools/roles/generate_toggles.py --check`: fails with a diff when the generated toggle defaults, argument specs or `docs/remediation-variables.md` differ from the rule catalogue ([remediation guide](remediation.md#generated-toggles)) |
 | `toggles` | implemented | Regenerates the toggle defaults and argument specs of the `remediate` role and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
 | `lint-role-guards` | implemented | `tools/roles/generate_role_guards.py --check`: fails with a diff when `roles/remediate/tasks/dispatch.yml` or a `tasks/internal_variables.yml` of the audit, remediate or verify role differs from what the family registry and the role files give (FREES-137) |
@@ -80,6 +81,10 @@ overriding them.
 | `name-sets` | implemented | Probes Python 3.9 to 3.15 (`uv python find`) and regenerates `tools/lint/name_sets.json` and the name-set constants of the guard |
 | `test-sanity` | implemented | `ansible-test sanity --local` on the temporary collection tree, no Docker; installs Python 3.9 to 3.14 with `uv python install` |
 | `test-ansible-units` | implemented | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
+| `molecule-dependencies` | implemented | Installs the pinned `extensions/molecule/requirements.yml` collections into `build/collections` |
+| `molecule-content` | implemented | Fetches and verifies the pinned `ubuntu2404` and `rhel9` datastreams into `build/content` for the Molecule scenarios |
+| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, then `molecule test` for `docker-ubuntu` and `docker-rhel-compatible` (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`; needs a running Docker daemon, see [Molecule](molecule.md) |
+| `test-molecule-docker-selftest` | implemented | Real guard bypass attempts and the label-based destroy fallback against containers of the `docker-selftest` scenario, see [Molecule](molecule.md#self-test-against-real-containers) |
 | `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
 | `package-check` | implemented | Builds twice from differently ordered trees and fails unless the SHA-256 values match |
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
@@ -100,7 +105,6 @@ overriding them.
 | `test-integration` | pending FREES-60 | Integration tests |
 | `test-idempotency` | pending FREES-60 | Idempotency checks |
 | `test-compliance` | pending FREES-62 | Compliance scan scenarios |
-| `test-molecule-docker` | pending FREES-59 | Docker Molecule scenarios |
 | `test-molecule-libvirt` | pending FREES-61 | libvirt Molecule scenarios |
 | `test-molecule-golden` | pending FREES-63 | Golden image scenarios |
 | `packer-validate` | pending FREES-64 | Packer template validation |
@@ -310,6 +314,7 @@ Configuration relaxations, each with its reason:
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
 | `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |
+| `molecule-docker` | `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` for `docker-ubuntu` and `docker-rhel-compatible`, and `make test-molecule-docker-selftest` for `docker-selftest`, one matrix entry each |
 | `ci-gate` | none; fails unless every needed job succeeded |
 
 `ci-gate` needs every job above, runs with `if: always()` and is the only check that branch protection should require. Job names
@@ -328,6 +333,11 @@ follow-up work tracked with the runner image issue (FREES-35); it is not simulat
 - The release-age policy (at least seven days) applies to direct and transitive version updates through the
   Dependabot cooldown and review; the lock is not filtered by age, because a security fix is exempt from the policy
   ([dependency management](dependency-management.md)).
+- Molecule and `requests` are pinned to exact versions in `pyproject.toml` and `uv.lock` like the other Python tools.
+  The `community.docker` collection is pinned in `extensions/molecule/requirements.yml` (Renovate owns Galaxy
+  collections) and the container image digests live in `extensions/molecule/shared/vars/versions.yml`. The
+  distribution packages of the instance images are pinned to exact versions in the Dockerfiles under
+  `extensions/molecule/shared/images/` and updated by hand.
 - GitHub Actions are pinned to full commit SHAs with a `# vX.Y.Z` annotation.
 - The `uv` version used in CI is pinned in `.github/workflows/ci.yml`.
 - OpenTofu `1.13.2` (a security release, exempt from the seven-day rule) is pinned in `infra/account/versions.tf` and

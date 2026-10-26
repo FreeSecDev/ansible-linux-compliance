@@ -1,0 +1,65 @@
+---
+- name: Refuse to run against the developer host
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  vars_files:
+    - vars/versions.yml
+  vars:
+    guard_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    guard_instances: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml | default([], true) }}"
+    guard_connection_variable_pattern: '^(ansible_(host|connection|docker_.*)|docker_.*)$'
+    guard_marker_variable: FREESECDEV_MOLECULE_MARKER
+  tasks:
+    - name: Check the connection of every target
+      ansible.builtin.include_tasks:
+        file: tasks/guard.yml
+      vars:
+        guard_hostname: "{{ inventory_hostname }}"
+        guard_connection_vars: >-
+          {{ hostvars[inventory_hostname] | dict2items
+          | selectattr('key', 'match', guard_connection_variable_pattern) | items2dict }}
+        guard_allowed_connections: "{{ molecule_allowed_connections | default(['community.docker.docker']) }}"
+        guard_environment:
+          ANSIBLE_DOCKER_PRIVILEGED: "{{ lookup('ansible.builtin.env', 'ANSIBLE_DOCKER_PRIVILEGED', default='') }}"
+
+    - name: Remember the instance that the create step recorded for this target
+      ansible.builtin.set_fact:
+        molecule_target: "{{ guard_instances | selectattr('instance', 'equalto', inventory_hostname) | first }}"
+
+    - name: Inspect the target container from the controller
+      community.docker.docker_container_info:
+        name: "{{ molecule_target.address }}"
+      delegate_to: localhost
+      register: guard_inspect
+
+    - name: Read the version of the Docker daemon that runs the target
+      community.docker.docker_host_info:
+      delegate_to: localhost
+      register: guard_daemon
+
+    - name: Check the isolation of every target before anything runs on it
+      ansible.builtin.include_tasks:
+        file: tasks/guard_isolation.yml
+      vars:
+        guard_container: "{{ guard_inspect.container | default({}, true) }}"
+        guard_instance: "{{ molecule_target }}"
+        guard_daemon_version: "{{ guard_daemon.host_info.ServerVersion | default('unknown') }}"
+
+    - name: Read the environment of the init process over the real connection
+      ansible.builtin.slurp:
+        src: /proc/1/environ
+      register: guard_init_environ
+
+    - name: Read the status of the process that the connection runs
+      ansible.builtin.slurp:
+        src: /proc/self/status
+      register: guard_self_status
+
+    - name: Check that the connection reaches the inspected container without privileges
+      ansible.builtin.include_tasks:
+        file: tasks/guard_connection.yml
+      vars:
+        guard_instance: "{{ molecule_target }}"
+        guard_environ: "{{ guard_init_environ.content | b64decode }}"
+        guard_status: "{{ guard_self_status.content | b64decode }}"

@@ -1,0 +1,23 @@
+---
+- name: Defaults | Read the remediate role defaults and argument spec
+  ansible.builtin.set_fact:
+    remediate_defaults: >-
+      {{ lookup('ansible.builtin.file', defaults_role_directory ~ '/defaults/main.yml') | from_yaml }}
+    remediate_options: >-
+      {{ (lookup('ansible.builtin.file', defaults_role_directory ~ '/meta/argument_specs.yml') | from_yaml)
+      .argument_specs.main.options }}
+  vars:
+    defaults_role_directory: "{{ playbook_dir }}/../../../roles/remediate"
+
+- name: Defaults | Assert that remediation is disabled by default and no disruptive family is allowed
+  ansible.builtin.assert:
+    that:
+      - remediate_defaults.linux_compliance_remediate_enabled is boolean
+      - not remediate_defaults.linux_compliance_remediate_enabled
+      - remediate_options.linux_compliance_remediate_enabled.default is boolean
+      - not remediate_options.linux_compliance_remediate_enabled.default
+      - remediate_defaults.linux_compliance_remediate_allow_disruptive == []
+      - remediate_options.linux_compliance_remediate_allow_disruptive.default == []
+    fail_msg: >-
+      linux_compliance_remediate_enabled must default to false and no disruptive family may be allowed by default.
+    quiet: true

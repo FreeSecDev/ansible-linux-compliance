@@ -15,6 +15,13 @@ ANSIBLE_HOME ?= $(CURDIR)/build/ansible-home
 ANSIBLE_COLLECTIONS_PATH ?= $(CURDIR)/build/collections
 ANSIBLE_TEST_HOME ?= $(CURDIR)/build/ansible-test-home
 export ANSIBLE_HOME ANSIBLE_COLLECTIONS_PATH
+MOLECULE_DOCKER_SCENARIOS := docker-ubuntu docker-rhel-compatible
+MOLECULE_DOCKER_SELFTEST ?= true
+MOLECULE_SELFTEST_DIR := $(CURDIR)/build/molecule-selftest
+MOLECULE_SELFTEST = MOLECULE_SCENARIO_NAME=docker-selftest $(RUN) ansible-playbook \
+	-e molecule_instance_config='$(MOLECULE_SELFTEST_DIR)/instance_config.yml' -e molecule_no_log=false \
+	-e molecule_selftest_dir='$(MOLECULE_SELFTEST_DIR)' -e @extensions/molecule/selftest/vars/platforms.yml
+MOLECULE_SELFTEST_REFUSED := docker_host extra_args privileged local localhost loopback unknown mounted unmasked seccomp
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
 	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
 TREE_SORT := sort -z
@@ -146,7 +153,8 @@ Tests
   test-role-guards      Check in check mode that forged internal role variables are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
-  test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
+  test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
+  test-molecule-docker-selftest Guard bypass attempts and the destroy fallback against real containers
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
   test-molecule-golden  [pending FREES-63] Molecule golden image scenarios
   test-idempotency      [pending FREES-60] Idempotency checks
@@ -179,7 +187,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-python lint-yaml lint-actions \
 	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
-	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
 	require-uv ansible-home
@@ -252,7 +260,7 @@ lint-repo: require-uv
 lint-skills: require-uv
 	$(RUN) python tools/skills/validate_skills.py
 
-lint-ansible: require-uv collection-link
+lint-ansible: require-uv collection-link molecule-dependencies
 	$(RUN) ansible-lint
 	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.check_role_specs roles
 	$(RUN) antsibull-changelog lint
@@ -445,8 +453,56 @@ test-ansible-units: require-uv collection-tree sanity-pythons
 test-integration:
 	$(call NOT_IMPLEMENTED,test-integration,FREES-60)
 
-test-molecule-docker:
-	$(call NOT_IMPLEMENTED,test-molecule-docker,FREES-59)
+molecule-dependencies: require-uv collection-link
+	$(RUN) ansible-galaxy collection install -r extensions/molecule/requirements.yml -p '$(ANSIBLE_COLLECTIONS_PATH)'
+
+molecule-content: require-uv
+	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404 --datastream rhel9
+
+test-molecule-docker: require-uv molecule-dependencies molecule-content
+	@docker info >/dev/null 2>&1 || { printf 'error: a running Docker daemon is required\n' >&2; exit 1; }
+	for scenario in $(MOLECULE_DOCKER_SCENARIOS); do \
+		$(RUN) molecule test -s "$$scenario" || exit 1; \
+	done
+	if [ '$(MOLECULE_DOCKER_SELFTEST)' = true ]; then $(MAKE) --no-print-directory test-molecule-docker-selftest; fi
+
+test-molecule-docker-selftest: require-uv molecule-dependencies
+	@docker info >/dev/null 2>&1 || { printf 'error: a running Docker daemon is required\n' >&2; exit 1; }
+	rm -rf '$(MOLECULE_SELFTEST_DIR)'
+	mkdir -p '$(MOLECULE_SELFTEST_DIR)/host-directory'
+	status=0; \
+	$(MOLECULE_SELFTEST) extensions/molecule/shared/create.yml || status=1; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_SELFTEST) extensions/molecule/shared/create.yml || status=1; fi; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_SELFTEST) extensions/molecule/selftest/assert_created.yml || status=1; fi; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_SELFTEST) extensions/molecule/selftest/bypass.yml || status=1; fi; \
+	if [ $$status -eq 0 ]; then \
+		$(MOLECULE_SELFTEST) -i '$(MOLECULE_SELFTEST_DIR)/good.yml' extensions/molecule/shared/guard.yml \
+			> '$(MOLECULE_SELFTEST_DIR)/good.log' 2>&1 || { cat '$(MOLECULE_SELFTEST_DIR)/good.log'; status=1; }; \
+	fi; \
+	for case in $(MOLECULE_SELFTEST_REFUSED); do \
+		[ $$status -eq 0 ] || break; \
+		config='$(MOLECULE_SELFTEST_DIR)/instance_config.yml'; \
+		if [ -f "$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml" ]; then config="$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml"; fi; \
+		if $(MOLECULE_SELFTEST) -e "molecule_instance_config=$$config" -i "$(MOLECULE_SELFTEST_DIR)/$$case.yml" \
+			extensions/molecule/shared/guard.yml > "$(MOLECULE_SELFTEST_DIR)/$$case.log" 2>&1; then \
+			printf 'error: the guard accepted the bypass attempt %s\n' "$$case" >&2; status=1; \
+		elif ! grep -q 'Refusing to run' "$(MOLECULE_SELFTEST_DIR)/$$case.log"; then \
+			cat "$(MOLECULE_SELFTEST_DIR)/$$case.log"; \
+			printf 'error: the bypass attempt %s failed for another reason than the guard\n' "$$case" >&2; status=1; \
+		elif [ -f "$(MOLECULE_SELFTEST_DIR)/instance_config_$$case.yml" ] \
+			&& ! grep -q 'is not isolated' "$(MOLECULE_SELFTEST_DIR)/$$case.log"; then \
+			cat "$(MOLECULE_SELFTEST_DIR)/$$case.log"; \
+			printf 'error: the decoy %s was not refused by the isolation check\n' "$$case" >&2; status=1; \
+		else printf 'guard refused the bypass attempt %s\n' "$$case"; fi; \
+	done; \
+	printf '[]\n' > '$(MOLECULE_SELFTEST_DIR)/instance_config.yml'; \
+	$(MOLECULE_SELFTEST) extensions/molecule/shared/destroy.yml || status=1; \
+	$(MOLECULE_SELFTEST) extensions/molecule/selftest/assert_destroyed.yml || status=1; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_SELFTEST) extensions/molecule/shared/create.yml || status=1; fi; \
+	rm -f '$(MOLECULE_SELFTEST_DIR)/instance_config.yml'; \
+	$(MOLECULE_SELFTEST) extensions/molecule/shared/destroy.yml || status=1; \
+	$(MOLECULE_SELFTEST) extensions/molecule/selftest/assert_destroyed.yml || status=1; \
+	exit $$status
 
 test-molecule-libvirt:
 	$(call NOT_IMPLEMENTED,test-molecule-libvirt,FREES-61)

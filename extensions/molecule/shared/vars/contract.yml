@@ -1,0 +1,146 @@
+---
+contract_roles:
+  - name: discover
+    fqcn: freesecdev.linux_compliance.discover
+    invalid_inputs:
+      - name: empty profile
+        expect: The discover role received an invalid input
+        vars:
+          linux_compliance_discover_profile: ""
+      - name: profile that the datastream does not contain
+        expect: "profile .xccdf_org.ssgproject.content_profile_does_not_exist. is not in benchmark"
+        vars:
+          linux_compliance_discover_profile: does_not_exist
+      - name: content SHA-256 that does not match the datastream
+        expect: content digest mismatch
+        vars:
+          linux_compliance_discover_content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: content SHA-256 that is not a SHA-256
+        expect: The discover role received an invalid input
+        vars:
+          linux_compliance_discover_content_sha256: not-a-digest
+      - name: content path that does not exist
+        expect: "the content path cannot be read: .*/nonexistent.* does not exist"
+        vars:
+          linux_compliance_discover_content_path: /nonexistent/content.xml
+  - name: audit
+    fqcn: freesecdev.linux_compliance.audit
+    invalid_inputs:
+      - name: empty profile
+        expect: The audit role received an invalid input
+        vars:
+          linux_compliance_audit_profile: ""
+      - name: profile with path characters
+        expect: The audit role received an invalid input
+        vars:
+          linux_compliance_audit_profile: ../cis_level1_server
+      - name: profile that discover did not verify
+        expect: Run the freesecdev.linux_compliance.discover role first, for the same profile
+        vars:
+          linux_compliance_audit_profile: stig
+      - name: fail_on_noncompliant that is not a boolean
+        expect: "(?s)Validation of arguments failed.*linux_compliance_audit_fail_on_noncompliant"
+        vars:
+          linux_compliance_audit_fail_on_noncompliant: maybe
+      - name: fail_on_noncompliant that is the string true
+        expect: The audit role received an invalid input
+        vars:
+          linux_compliance_audit_fail_on_noncompliant: "true"
+      - name: unknown backend
+        expect: "(?s)Validation of arguments failed.*linux_compliance_audit_backend"
+        vars:
+          linux_compliance_audit_backend: other
+      - name: relative output directory
+        expect: The audit role received an invalid input
+        vars:
+          linux_compliance_audit_output_dir: evidence
+      - name: scan timeout of zero
+        expect: The audit role received an invalid input
+        vars:
+          linux_compliance_audit_scan_timeout: 0
+  - name: remediate
+    fqcn: freesecdev.linux_compliance.remediate
+    invalid_inputs:
+      - name: empty profile
+        expect: The remediate role received an invalid input
+        vars:
+          linux_compliance_remediate_profile: ""
+      - name: enabled that is not a boolean
+        expect: "(?s)Validation of arguments failed.*linux_compliance_remediate_enabled"
+        vars:
+          linux_compliance_remediate_enabled: maybe
+      - name: enabled that is the string true
+        expect: The remediate role received an invalid input
+        vars:
+          linux_compliance_remediate_enabled: "true"
+      - name: unknown disruptive family
+        expect: "(?s)Validation of arguments failed.*unknown_family"
+        vars:
+          linux_compliance_remediate_allow_disruptive:
+            - unknown_family
+      - name: unknown disruptive family next to a known one
+        expect: "(?s)Validation of arguments failed.*kernel_modules"
+        vars:
+          linux_compliance_remediate_allow_disruptive:
+            - ssh
+            - kernel_modules
+      - name: disruptive families as a string
+        expect: "(?s)(Validation of arguments failed|The remediate role received an invalid input)"
+        vars:
+          linux_compliance_remediate_allow_disruptive: ssh
+      - name: opt-in for a profile that discover did not verify
+        expect: Run the freesecdev.linux_compliance.discover role first, for the same profile
+        vars:
+          linux_compliance_remediate_enabled: true
+          linux_compliance_remediate_profile: stig
+  - name: verify
+    fqcn: freesecdev.linux_compliance.verify
+    invalid_inputs:
+      - name: empty profile
+        expect: The verify role received an invalid input
+        vars:
+          linux_compliance_verify_profile: ""
+      - name: fail_on_regression that is not a boolean
+        expect: "(?s)Validation of arguments failed.*linux_compliance_verify_fail_on_regression"
+        vars:
+          linux_compliance_verify_fail_on_regression: maybe
+      - name: unknown comparison mode
+        expect: "(?s)Validation of arguments failed.*linux_compliance_verify_mode"
+        vars:
+          linux_compliance_verify_mode: other
+      - name: waived mode without an exceptions file
+        expect: linux_compliance_verify_mode waived needs linux_compliance_exceptions_file
+        vars:
+          linux_compliance_verify_mode: waived
+
+contract_input_names:
+  - linux_compliance_discover_profile
+  - linux_compliance_discover_content_path
+  - linux_compliance_discover_content_sha256
+  - linux_compliance_audit_profile
+  - linux_compliance_audit_fail_on_noncompliant
+  - linux_compliance_audit_backend
+  - linux_compliance_audit_output_dir
+  - linux_compliance_audit_scan_timeout
+  - linux_compliance_remediate_enabled
+  - linux_compliance_remediate_allow_disruptive
+  - linux_compliance_remediate_profile
+  - linux_compliance_verify_profile
+  - linux_compliance_verify_fail_on_regression
+  - linux_compliance_verify_mode
+
+contract_snapshot_paths:
+  - /etc
+  - /usr
+  - /root
+  - /home
+  - /var/spool
+  - /var/log
+  - /opt
+  - /srv
+  - /var/lib/dpkg
+  - /var/lib/rpm
+  - /var/lib/linux_compliance
+  - /var/lib/freesecdev
+
+contract_snapshot_volatile_times: '^/var/lib/rpm/rpmdb\.sqlite-(shm|wal)$'

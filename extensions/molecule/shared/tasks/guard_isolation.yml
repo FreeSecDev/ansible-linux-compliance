@@ -1,0 +1,48 @@
+---
+- name: Guard isolation | Refuse containers that are not isolated from the host
+  ansible.builtin.assert:
+    that:
+      - guard_container.Name | default('') == '/' ~ guard_instance.address
+      - guard_host_config.Privileged | default(true) is false
+      - guard_host_config.Binds | default([], true) | length == 0
+      - guard_container.Mounts | default([], true) | length == 0
+      - guard_host_config.Devices | default([], true) | length == 0
+      - guard_host_config.DeviceRequests | default([], true) | length == 0
+      - "'ALL' in (guard_host_config.CapDrop | default([], true) | map('upper') | list)"
+      - >-
+        guard_host_config.CapAdd | default([], true) | sort
+        == guard_instance.capabilities_add | default([]) | sort
+      - guard_host_config.NetworkMode | default('host') is not match(guard_shared_namespace_pattern)
+      - guard_host_config.PidMode | default('') is not match(guard_shared_namespace_pattern)
+      - guard_host_config.IpcMode | default('') is not match(guard_shared_namespace_pattern)
+      - guard_host_config.UTSMode | default('') is not match(guard_shared_namespace_pattern)
+      - guard_host_config.UsernsMode | default('') is not match(guard_shared_namespace_pattern)
+      - guard_host_config.CgroupnsMode | default('private') is not match(guard_shared_namespace_pattern)
+      - guard_host_config.DeviceCgroupRules | default([], true) | length == 0
+      - guard_host_config.SecurityOpt | default([], true) | length == 1
+      - guard_host_config.SecurityOpt | default([], true) | first | default('') is match('^no-new-privileges(:true)?$')
+      - guard_default_paths is mapping
+      - guard_default_paths.masked | default([]) | length > 0
+      - guard_default_paths.readonly | default([]) | length > 0
+      - >-
+        guard_default_paths.masked | default([])
+        | difference(guard_host_config.MaskedPaths | default([], true)) | length == 0
+      - >-
+        guard_default_paths.readonly | default([])
+        | difference(guard_host_config.ReadonlyPaths | default([], true)) | length == 0
+      - guard_labels[guard_label_prefix ~ '.scenario'] | default('') == guard_instance.scenario
+      - guard_labels[guard_label_prefix ~ '.run'] | default('') == guard_instance.run_id
+    fail_msg: >-
+      Refusing to run: container {{ guard_instance.address }} is not isolated. It must be unprivileged, drop all
+      capabilities, have no bind mounts, mounts, devices or device cgroup rules, share no host namespace, set no
+      security option except no-new-privileges, keep the default masked and read-only paths that
+      vars/versions.yml pins for Docker {{ guard_daemon_major }} (daemon {{ guard_daemon_version }},
+      {{ 'pinned' if guard_default_paths is mapping else 'not pinned' }}) and carry this run's labels.
+    success_msg: Container {{ guard_instance.address }} is isolated from the host.
+  vars:
+    guard_label_prefix: org.freesecdev.molecule
+    guard_shared_namespace_pattern: '^(host|container:.*)$'
+    guard_host_config: "{{ guard_container.HostConfig | default({}, true) }}"
+    guard_labels: "{{ (guard_container.Config | default({}, true)).Labels | default({}, true) }}"
+    guard_daemon_major: "{{ guard_daemon_version | string | regex_replace('^([0-9]+)\\..*$', '\\1') }}"
+    guard_default_paths: "{{ molecule_docker_default_paths[guard_daemon_major] | default(none) }}"

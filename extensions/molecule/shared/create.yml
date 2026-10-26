@@ -1,0 +1,200 @@
+---
+- name: Create unprivileged Docker instances
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ molecule_no_log }}"
+  vars:
+    molecule_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    molecule_label_prefix: org.freesecdev.molecule
+    molecule_marker_variable: FREESECDEV_MOLECULE_MARKER
+  tasks:
+    - name: Refuse a scenario name that cannot form an instance name
+      ansible.builtin.assert:
+        that:
+          - molecule_scenario is match('^[a-z0-9][a-z0-9-]{0,40}$')
+        fail_msg: MOLECULE_SCENARIO_NAME must be lower case letters, digits and hyphens.
+        quiet: true
+
+    - name: Check for an instance config of an earlier create
+      ansible.builtin.stat:
+        path: "{{ molecule_instance_config }}"
+      register: create_config_stat
+
+    - name: Read the instance config of an earlier create
+      ansible.builtin.set_fact:
+        create_recorded_instances: >-
+          {{ (lookup('ansible.builtin.file', molecule_instance_config) | from_yaml | default([], true))
+          if create_config_stat.stat.exists else [] }}
+
+    - name: Reuse the recorded run id, or generate it once
+      ansible.builtin.set_fact:
+        molecule_run_id: >-
+          {{ create_recorded_instances | map(attribute='run_id') | first
+          if create_recorded_instances | length > 0
+          else lookup('ansible.builtin.password', '/dev/null chars=ascii_lowercase,digits length=8') }}
+
+    - name: Refuse a recorded config of another scenario or with mixed run ids
+      ansible.builtin.assert:
+        that:
+          - molecule_run_id is match('^[a-z0-9]{8}$')
+          - create_recorded_instances | map(attribute='run_id') | unique | list | length <= 1
+          - create_recorded_instances | rejectattr('scenario', 'equalto', molecule_scenario) | list | length == 0
+        fail_msg: >-
+          The instance config {{ molecule_instance_config }} belongs to another scenario or mixes runs.
+          Run molecule destroy first.
+        quiet: true
+
+    - name: Load pinned image versions
+      ansible.builtin.include_vars:
+        file: vars/versions.yml
+
+    - name: Validate platform definitions
+      ansible.builtin.assert:
+        that:
+          - molecule_yml.platforms | length > 0
+          - item.name is match('^[a-z0-9][a-z0-9-]{0,30}$')
+          - item.image in molecule_images
+          - not (item.privileged | default(false))
+          - item.network_mode | default('none') is string
+          - item.network_mode | default('none') is not match('^(host|container:.*)$')
+          - item.volumes is not defined
+          - item.mounts is not defined
+          - item.devices is not defined
+          - (item.capabilities_add | default([]) | length == 0) or (item.capabilities_reason | default('') | length > 0)
+        fail_msg: >-
+          Every platform needs a lower-case name and an image key from vars/versions.yml, must not be privileged,
+          must not use the host or a container network, must not declare volumes, mounts or devices and must
+          document capabilities_reason when it adds capabilities.
+        quiet: true
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Compute the image tags from a hash of every build input
+      ansible.builtin.set_fact:
+        create_image_tags: >-
+          {{ create_image_tags | default({}) | combine({item.image:
+          (molecule_images[item.image].digest | regex_replace('^sha256:', '') | truncate(12, true, ''))
+          ~ '-' ~ ((
+            molecule_images[item.image].reference ~ ':' ~ molecule_images[item.image].tag ~ '@'
+            ~ molecule_images[item.image].digest ~ '\n'
+            ~ lookup('ansible.builtin.file', playbook_dir ~ '/images/' ~ molecule_images[item.image].dockerfile)
+          ) | hash('sha256') | truncate(12, true, ''))}) }}
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Compute unique instance names, markers and labels
+      ansible.builtin.set_fact:
+        instance_conf: >-
+          {{ instance_conf | default([]) + [{
+            'instance': item.name,
+            'address': 'fsd-mol-' ~ molecule_scenario ~ '-' ~ molecule_run_id ~ '-' ~ item.name,
+            'connection': 'community.docker.docker',
+            'scenario': molecule_scenario,
+            'run_id': molecule_run_id,
+            'image': item.image,
+            'marker': (create_recorded_instances | selectattr('instance', 'equalto', item.name)
+                       | map(attribute='marker') | first
+                       | default(lookup('ansible.builtin.password',
+                                      '/dev/null chars=ascii_lowercase,digits length=32'))),
+            'capabilities_add': item.capabilities_add | default([])
+          }] }}
+        instance_labels: >-
+          {{ {
+            molecule_label_prefix ~ '.scenario': molecule_scenario,
+            molecule_label_prefix ~ '.run': molecule_run_id
+          } }}
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Build and start instances
+      block:
+        - name: Write the instance config before any container exists
+          ansible.builtin.copy:
+            content: "{{ instance_conf | to_nice_yaml }}"
+            dest: "{{ molecule_instance_config }}"
+            mode: "0600"
+
+        - name: Build instance images from digest-pinned bases
+          community.docker.docker_image:
+            name: "freesecdev-molecule/{{ item.image }}"
+            tag: "{{ create_image_tags[item.image] }}"
+            source: build
+            state: present
+            build:
+              path: "{{ playbook_dir }}/images"
+              dockerfile: "{{ molecule_images[item.image].dockerfile }}"
+              pull: false
+              args:
+                BASE_IMAGE: >-
+                  {{ molecule_images[item.image].reference }}:{{ molecule_images[item.image].tag }}@{{
+                  molecule_images[item.image].digest }}
+          loop: "{{ molecule_yml.platforms }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        - name: Start instances without privileges and without capabilities
+          community.docker.docker_container:
+            name: "{{ instance_conf[idx].address }}"
+            image: "freesecdev-molecule/{{ item.image }}:{{ create_image_tags[item.image] }}"
+            pull: never
+            state: started
+            entrypoint:
+              - sleep
+              - infinity
+            init: true
+            privileged: false
+            cgroupns_mode: private
+            cap_drop:
+              - ALL
+            capabilities: "{{ item.capabilities_add | default([]) }}"
+            security_opts:
+              - no-new-privileges:true
+            network_mode: "{{ item.network_mode | default('none') }}"
+            pids_limit: 512
+            memory: 1g
+            restart_policy: "no"
+            labels: "{{ instance_labels }}"
+            env: "{{ {molecule_marker_variable: instance_conf[idx].marker} }}"
+          loop: "{{ molecule_yml.platforms }}"
+          loop_control:
+            label: "{{ item.name }}"
+            index_var: idx
+
+        - name: Inspect the started instances
+          community.docker.docker_container_info:
+            name: "{{ item.address }}"
+          register: created_instances
+          loop: "{{ instance_conf }}"
+          loop_control:
+            label: "{{ item.address }}"
+
+        - name: Assert the labels and the marker are on the started instances
+          ansible.builtin.assert:
+            that:
+              - item.exists
+              - item.container.Name == '/' ~ item.item.address
+              - item.container.Config.Labels[molecule_label_prefix ~ '.scenario'] == molecule_scenario
+              - item.container.Config.Labels[molecule_label_prefix ~ '.run'] == molecule_run_id
+              - (molecule_marker_variable ~ '=' ~ item.item.marker) in item.container.Config.Env
+            fail_msg: "{{ item.item.address }} does not carry the expected scenario and run labels and marker."
+            quiet: true
+          loop: "{{ created_instances.results }}"
+          loop_control:
+            label: "{{ item.item.address }}"
+      rescue:
+        - name: Remove partially created instances
+          community.docker.docker_container:
+            name: "{{ item.address }}"
+            state: absent
+            force_kill: true
+          loop: "{{ instance_conf }}"
+          loop_control:
+            label: "{{ item.address }}"
+
+        - name: Fail because instance creation failed
+          ansible.builtin.fail:
+            msg: Instance creation failed and the partial instances were removed.

@@ -1,0 +1,366 @@
+---
+guard_simulation:
+  scenario: sim
+  instances:
+    - instance: instance
+      address: fsd-mol-sim-abcd1234-instance
+      connection: community.docker.docker
+      scenario: sim
+      run_id: abcd1234
+      image: ubuntu
+      marker: simulatedmarkersimulatedmarker00
+      capabilities_add: []
+  good_connection_vars:
+    ansible_host: fsd-mol-sim-abcd1234-instance
+    ansible_connection: community.docker.docker
+  good_environ: "PATH=/usr/bin\u0000FREESECDEV_MOLECULE_MARKER=simulatedmarkersimulatedmarker00\u0000HOME=/root\u0000"
+  good_status: |
+    Name:    python3
+    CapInh:    0000000000000000
+    CapPrm:    0000000000000000
+    CapEff:    0000000000000000
+    CapBnd:    0000000000000000
+    CapAmb:    0000000000000000
+    NoNewPrivs:    1
+  good_container:
+    Name: /fsd-mol-sim-abcd1234-instance
+    Mounts: []
+    HostConfig:
+      Privileged: false
+      Binds:
+      CapDrop:
+        - ALL
+      CapAdd:
+      Devices: []
+      NetworkMode: none
+      PidMode: ""
+      IpcMode: private
+      UTSMode: ""
+      UsernsMode: ""
+      CgroupnsMode: private
+      SecurityOpt:
+        - no-new-privileges:true
+    Config:
+      Labels:
+        org.freesecdev.molecule.scenario: sim
+        org.freesecdev.molecule.run: abcd1234
+
+guard_cases:
+  - name: disposable container over the docker connection
+    refused: false
+  - name: localhost over a local connection
+    hostname: localhost
+    connection_vars:
+      ansible_host: localhost
+      ansible_connection: local
+    refused: true
+  - name: loopback address over the docker connection
+    connection_vars:
+      ansible_host: 127.0.0.1
+    refused: true
+  - name: address in the rest of 127.0.0.0/8
+    connection_vars:
+      ansible_host: 127.1.2.3
+    refused: true
+  - name: IPv6 loopback address
+    connection_vars:
+      ansible_host: ::1
+    refused: true
+  - name: expanded IPv6 loopback address
+    connection_vars:
+      ansible_host: 0:0:0:0:0:0:0:1
+    refused: true
+  - name: IPv4-mapped loopback address
+    connection_vars:
+      ansible_host: ::ffff:127.0.0.1
+    refused: true
+  - name: bracketed IPv6 loopback address
+    connection_vars:
+      ansible_host: "[::1]"
+    refused: true
+  - name: localhost with a trailing dot
+    connection_vars:
+      ansible_host: localhost.
+    refused: true
+  - name: localhost.localdomain
+    connection_vars:
+      ansible_host: localhost.localdomain
+    refused: true
+  - name: ip6-localhost
+    connection_vars:
+      ansible_host: ip6-localhost
+    refused: true
+  - name: ansible.builtin.local connection
+    connection_vars:
+      ansible_connection: ansible.builtin.local
+    refused: true
+  - name: ansible.legacy.local connection
+    connection_vars:
+      ansible_connection: ansible.legacy.local
+    refused: true
+  - name: ssh connection
+    connection_vars:
+      ansible_connection: ssh
+    refused: true
+  - name: upper-case localhost
+    connection_vars:
+      ansible_host: LOCALHOST
+    refused: true
+  - name: localhost with several trailing dots and spaces
+    connection_vars:
+      ansible_host: " localhost.. "
+    refused: true
+  - name: IPv6 loopback with a zone index
+    connection_vars:
+      ansible_host: "::1%lo"
+    refused: true
+  - name: IPv4-mapped loopback in hexadecimal
+    connection_vars:
+      ansible_host: ::ffff:7f00:1
+    refused: true
+  - name: fully expanded IPv4-mapped loopback
+    connection_vars:
+      ansible_host: 0:0:0:0:0:ffff:127.0.0.1
+    refused: true
+  - name: loopback as one decimal number
+    connection_vars:
+      ansible_host: "2130706433"
+    refused: true
+  - name: loopback as one hexadecimal number
+    connection_vars:
+      ansible_host: "0x7f000001"
+    refused: true
+  - name: loopback in octal notation
+    connection_vars:
+      ansible_host: 0177.0.0.1
+    refused: true
+  - name: unspecified IPv6 address
+    connection_vars:
+      ansible_host: "::"
+    refused: true
+  - name: docker connection that runs every command privileged
+    connection_vars:
+      ansible_docker_privileged: true
+    refused: true
+  - name: docker connection privileged through the environment
+    environment:
+      ANSIBLE_DOCKER_PRIVILEGED: "true"
+    refused: true
+  - name: docker connection with extra environment
+    connection_vars:
+      ansible_docker_extra_env:
+        DOCKER_HOST: tcp://192.0.2.1:2375
+    refused: true
+  - name: docker connection steered by ansible_docker_host to another container
+    connection_vars:
+      ansible_docker_host: container-with-a-host-bind-mount
+    refused: true
+  - name: docker connection with extra arguments for another daemon
+    connection_vars:
+      ansible_docker_extra_args: -H tcp://192.0.2.1:2375
+    refused: true
+  - name: docker connection with the generic extra arguments variable
+    connection_vars:
+      docker_extra_args: -H tcp://192.0.2.1:2375
+    refused: true
+  - name: container that this scenario did not create
+    connection_vars:
+      ansible_host: fsd-mol-other-abcd1234-instance
+    refused: true
+  - name: arbitrary container name
+    connection_vars:
+      ansible_host: some-other-container
+    refused: true
+  - name: host name without a recorded instance
+    hostname: stranger
+    connection_vars:
+      ansible_host: fsd-mol-sim-abcd1234-stranger
+    refused: true
+  - name: container with a host bind mount
+    container:
+      HostConfig:
+        Binds:
+          - /:/host
+      Mounts:
+        - Type: bind
+          Source: /
+          Destination: /host
+    refused: true
+  - name: privileged container
+    container:
+      HostConfig:
+        Privileged: true
+    refused: true
+  - name: container that does not drop all capabilities
+    container:
+      HostConfig:
+        CapDrop: []
+    refused: true
+  - name: container with an undeclared added capability
+    container:
+      HostConfig:
+        CapAdd:
+          - NET_ADMIN
+    refused: true
+  - name: container on the host network
+    container:
+      HostConfig:
+        NetworkMode: host
+    refused: true
+  - name: container sharing the network of another container
+    container:
+      HostConfig:
+        NetworkMode: container:other
+    refused: true
+  - name: container sharing the host pid namespace
+    container:
+      HostConfig:
+        PidMode: host
+    refused: true
+  - name: container sharing the host ipc namespace
+    container:
+      HostConfig:
+        IpcMode: host
+    refused: true
+  - name: container with a host device
+    container:
+      HostConfig:
+        Devices:
+          - PathOnHost: /dev/mem
+    refused: true
+  - name: container without no-new-privileges
+    container:
+      HostConfig:
+        SecurityOpt: []
+    refused: true
+  - name: container that does not exist
+    container:
+      Name: ""
+      HostConfig: {}
+      Config: {}
+    refused: true
+  - name: container in the host cgroup namespace
+    container:
+      HostConfig:
+        CgroupnsMode: host
+    refused: true
+  - name: container sharing the host uts namespace
+    container:
+      HostConfig:
+        UTSMode: host
+    refused: true
+  - name: container sharing the host user namespace
+    container:
+      HostConfig:
+        UsernsMode: host
+    refused: true
+  - name: container with a GPU or other device request
+    container:
+      HostConfig:
+        DeviceRequests:
+          - Driver: nvidia
+    refused: true
+  - name: container without a seccomp profile
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - seccomp=unconfined
+    refused: true
+  - name: container with unmasked system paths, as with --security-opt systempaths=unconfined
+    container:
+      HostConfig:
+        MaskedPaths: []
+        ReadonlyPaths: []
+    refused: true
+  - name: container whose /proc/sysrq-trigger and /proc/sys are writable
+    container:
+      HostConfig:
+        ReadonlyPaths:
+          - /proc/bus
+          - /proc/fs
+          - /proc/irq
+    refused: true
+  - name: container whose /proc/kcore is not masked
+    container:
+      HostConfig:
+        MaskedPaths:
+          - /proc/acpi
+          - /proc/keys
+    refused: true
+  - name: container with systempaths=unconfined listed as a security option
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - systempaths=unconfined
+    refused: true
+  - name: container with a custom allow-all seccomp profile
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - 'seccomp={"defaultAction":"SCMP_ACT_ALLOW"}'
+    refused: true
+  - name: container with an AppArmor profile chosen by name
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - apparmor=docker-default
+    refused: true
+  - name: container with an SELinux label option
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:true
+          - label=disable
+    refused: true
+  - name: container with no-new-privileges set to false
+    container:
+      HostConfig:
+        SecurityOpt:
+          - no-new-privileges:false
+    refused: true
+  - name: container with a device cgroup rule
+    container:
+      HostConfig:
+        DeviceCgroupRules:
+          - "a *:* rwm"
+    refused: true
+  - name: Docker daemon whose default paths are not pinned
+    daemon_version: 99.0.0
+    refused: true
+  - name: container with a named volume
+    container:
+      Mounts:
+        - Type: volume
+          Name: shared
+          Destination: /data
+    refused: true
+  - name: connection that reaches a container without this run's marker
+    environ: "PATH=/usr/bin\u0000HOME=/root\u0000"
+    refused: true
+  - name: connection that reaches a container with another marker
+    environ: "FREESECDEV_MOLECULE_MARKER=othermarkerothermarkerothermark0\u0000"
+    refused: true
+  - name: connection process with effective capabilities, as with docker exec --privileged
+    status: |
+      CapPrm:    000001ffffffffff
+      CapEff:    000001ffffffffff
+      CapBnd:    000001ffffffffff
+      NoNewPrivs:    1
+    refused: true
+  - name: connection process that may gain privileges
+    status: |
+      CapPrm:    0000000000000000
+      CapEff:    0000000000000000
+      CapBnd:    0000000000000000
+      NoNewPrivs:    0
+    refused: true
+  - name: container with labels of another run
+    container:
+      Config:
+        Labels:
+          org.freesecdev.molecule.run: zzzzzzzz
+    refused: true

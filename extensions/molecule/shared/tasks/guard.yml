@@ -1,0 +1,46 @@
+---
+- name: Guard | Refuse the controller, unexpected connections and unknown targets
+  ansible.builtin.assert:
+    that:
+      - guard_normalised_hostname is not match(guard_loopback_pattern)
+      - guard_normalised_address is not match(guard_loopback_pattern)
+      - guard_connection not in ['local', 'ansible.builtin.local', 'ansible.legacy.local']
+      - guard_connection in guard_allowed_connections
+      - guard_forbidden_variables | length == 0
+      - guard_environment.ANSIBLE_DOCKER_PRIVILEGED | default('') | length == 0
+      - guard_matches | length == 1
+      - guard_address is match(guard_name_pattern)
+    fail_msg: >-
+      Refusing to run: host {{ guard_hostname }}, address {{ guard_address }}, connection {{ guard_connection }},
+      forbidden connection variables {{ guard_forbidden_variables }},
+      ANSIBLE_DOCKER_PRIVILEGED '{{ guard_environment.ANSIBLE_DOCKER_PRIVILEGED | default('') }}'.
+      A target must be a disposable instance recorded by this scenario's create step, reached over
+      {{ guard_allowed_connections | join(', ') }} with no Docker connection overrides.
+    success_msg: Target {{ guard_hostname }} is a disposable instance recorded by this scenario.
+  vars:
+    guard_loopback_alternatives:
+      - 'localhost[0-9]*(\.localdomain[0-9]*)?'
+      - 'ip6-(localhost|loopback)'
+      - '0\.0\.0\.0'
+      - '(::ffff:|0{0,4}(:0{0,4}){0,4}:ffff:)?(127|0+177|0x0*7f)\..*'
+      - '(::ffff:|0{0,4}(:0{0,4}){0,4}:ffff:)7f[0-9a-f]{2}:[0-9a-f]{1,4}'
+      - '(0{0,4}:){2,7}0{0,4}1?'
+      - '::1?'
+      - '[0-9]+'
+      - '0x[0-9a-f]+'
+    guard_loopback_pattern: "^({{ guard_loopback_alternatives | join('|') }})$"
+    guard_normalised_hostname: >-
+      {{ guard_hostname | string | trim | lower | regex_replace('^\\[|\\]$', '') | regex_replace('%.*$', '')
+      | regex_replace('\\.+$', '') }}
+    guard_normalised_address: >-
+      {{ guard_address | string | trim | lower | regex_replace('^\\[|\\]$', '') | regex_replace('%.*$', '')
+      | regex_replace('\\.+$', '') }}
+    guard_address: "{{ guard_connection_vars.ansible_host | default(guard_hostname) }}"
+    guard_connection: "{{ guard_connection_vars.ansible_connection | default('ssh') }}"
+    guard_forbidden_variables: >-
+      {{ guard_connection_vars | dict2items | map(attribute='key')
+      | select('match', '^(ansible_docker_|docker_)') | list }}
+    guard_matches: >-
+      {{ guard_instances | selectattr('instance', 'equalto', guard_hostname)
+      | selectattr('address', 'equalto', guard_address) | selectattr('scenario', 'equalto', guard_scenario) | list }}
+    guard_name_pattern: "^fsd-mol-{{ guard_scenario | regex_escape }}-[a-z0-9]{8}-{{ guard_hostname | regex_escape }}$"

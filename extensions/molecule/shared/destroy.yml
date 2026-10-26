@@ -1,0 +1,68 @@
+---
+- name: Destroy Docker instances
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ molecule_no_log }}"
+  vars:
+    molecule_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    scenario_label_key: org.freesecdev.molecule.scenario
+    run_label_key: org.freesecdev.molecule.run
+  tasks:
+    - name: Remove instances and reset the instance config
+      block:
+        - name: Check for an instance config
+          ansible.builtin.stat:
+            path: "{{ molecule_instance_config }}"
+          register: instance_config_stat
+
+        - name: Read the recorded instances
+          ansible.builtin.set_fact:
+            recorded_instances: >-
+              {{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml | default([], true) }}
+          when: instance_config_stat.stat.exists
+
+        - name: List labelled instances of this scenario
+          community.docker.docker_host_info:
+            containers: true
+            containers_all: true
+            containers_filters:
+              label:
+                - "{{ scenario_label_key }}={{ molecule_scenario }}"
+          register: labelled_instances
+
+        - name: Inspect the labelled instances
+          community.docker.docker_container_info:
+            name: "{{ item.Names[0] | regex_replace('^/', '') }}"
+          register: inspected_instances
+          loop: "{{ labelled_instances.containers | default([]) }}"
+          loop_control:
+            label: "{{ item.Names[0] }}"
+
+        - name: Select instances whose labels were verified
+          ansible.builtin.set_fact:
+            doomed_names: "{{ doomed_names | default([]) + [item.container.Name | regex_replace('^/', '')] }}"
+          vars:
+            recorded_runs: "{{ recorded_instances | default([]) | map(attribute='run_id') | list }}"
+            container_labels: "{{ item.container.Config.Labels | default({}) }}"
+          when:
+            - item.exists
+            - item.container.Name is match('^/fsd-mol-' ~ (molecule_scenario | regex_escape) ~ '-[a-z0-9]{8}-')
+            - container_labels[scenario_label_key] | default('') == molecule_scenario
+            - recorded_runs | length == 0 or container_labels[run_label_key] | default('') in recorded_runs
+          loop: "{{ inspected_instances.results }}"
+          loop_control:
+            label: "{{ item.item.Names[0] }}"
+
+        - name: Remove instances
+          community.docker.docker_container:
+            name: "{{ item }}"
+            state: absent
+            force_kill: true
+          loop: "{{ doomed_names | default([]) }}"
+      always:
+        - name: Reset the instance config
+          ansible.builtin.copy:
+            content: "[]\n"
+            dest: "{{ molecule_instance_config }}"
+            mode: "0600"
