@@ -455,3 +455,32 @@ and runs the real remediate role against the copy in check mode. With the defaul
 `skip` with the reason `disruptive_not_allowed` and one notice, and no family is dispatched. With `ssh` on the
 allow-list the rule is planned for `apply`; the copy has no `ssh` task file, so the role fails closed at the
 completeness check and nothing runs for the family. The precedence of `audit_only` over the allow-list is unchanged.
+
+## Amendment 2026-10-26: toggle lifecycle in Molecule (FREES-60)
+
+The "toggle-and-cleanup scenario for every family" of the operational consequences is implemented as one data-driven
+harness, `extensions/molecule/shared/lifecycle.yml`, rather than one scenario per family
+([Molecule guide](../molecule.md#toggle-lifecycle-of-every-native-topic)). These refinements apply.
+
+- **A step of the existing scenarios.** The harness is the `side_effect` step of `docker-ubuntu` and
+  `docker-rhel-compatible`, after `verify` and before `destroy`, so it runs in the same disposable, guarded container
+  and adds no image build or container to CI. It runs the real remediate role with public inputs only; the toggles are
+  set as facts under the names the catalogue gives, which both roles find through `varnames` like inventory values.
+- **Native topics, not every family.** Only families with a native rule (`generate_toggles.native_families`) get a
+  lifecycle; an `audit_only` rule changes nothing and has nothing to clean up. Each needs one declaration,
+  `extensions/molecule/shared/vars/topics/<family>.yml`, that names the files, packages, services, kernel parameters,
+  users and groups to record, the expectations after apply and the pre-states. `make lint-lifecycle` and the harness
+  itself fail when a native family has no declaration or a declaration has no native family.
+- **What is proven.** Per topic, with the topic toggle and with the rule toggles, from every declared pre-state: check
+  mode plans and reports the work and changes nothing; apply sets exactly the declared controls and records the prior
+  state in the ledger; a second apply changes nothing; switching off plans the cleanup in check mode with the
+  controlling `disabled_by`, restores the declared state and the ledger exactly and is reported as `disabled` by the
+  audit; a further run changes nothing. A customised pre-state proves that cleanup restores the recorded value rather
+  than a distribution default. The step's own self-check proves that the comparison detects a missing control, an
+  undeclared change and a file left behind or removed.
+- **Disruptive families** opt in through their declaration (`disruptive: true` and a `containment` note) and get the
+  allow-list for their own family and runs only. They run after every non-disruptive topic, the first failure ends the
+  play, and the guard's connection test runs after every remediate run, so a topic that breaks the container fails
+  there and cannot reach the host. A family whose controls need a real kernel, boot loader or init system cannot be
+  proven in a container; it needs the libvirt scenarios (FREES-61) and a decision on where its lifecycle runs before
+  its first native rule ships.

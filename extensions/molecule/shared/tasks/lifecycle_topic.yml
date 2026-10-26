@@ -1,0 +1,112 @@
+---
+- name: Lifecycle topic | Load the declaration of the topic
+  ansible.builtin.set_fact:
+    lifecycle_topic: >-
+      {{ lookup('ansible.builtin.file', lifecycle_topics_directory ~ '/' ~ lifecycle_family ~ '.yml') | from_yaml }}
+    lifecycle_registry_entry: >-
+      {{ lifecycle_catalogue.__linux_compliance_remediate_families | selectattr('name', 'equalto', lifecycle_family)
+      | first }}
+
+- name: Lifecycle topic | Select the rules of the topic that the profile of this platform selects
+  ansible.builtin.set_fact:
+    lifecycle_rules: >-
+      {{ lifecycle_native_rules | selectattr('family', 'equalto', lifecycle_family)
+      | selectattr('rule_id', 'in', linux_compliance_discovered.rule_ids) | sort(attribute='rule_id') }}
+    lifecycle_family_toggle: "linux_compliance_{{ lifecycle_family }}_enabled"
+    lifecycle_allow_disruptive: "{{ [lifecycle_family] if lifecycle_registry_entry.disruptive else [] }}"
+    lifecycle_pre_states: "{{ lifecycle_topic.pre_states | default([{'name': 'as built', 'audit': true}], true) }}"
+    lifecycle_items: {}
+    lifecycle_applied: {}
+
+- name: Lifecycle topic | Keep the declared items and expectations for every platform and for this one
+  ansible.builtin.set_fact:
+    lifecycle_items: >-
+      {{ lifecycle_items | combine({item: (lifecycle_declared_items | rejectattr('platforms', 'defined') | list)
+      + (lifecycle_declared_items | selectattr('platforms', 'defined')
+      | selectattr('platforms', 'contains', lifecycle_platform) | list)}) }}
+    lifecycle_applied: >-
+      {{ lifecycle_applied | combine({item: (lifecycle_declared_applied | rejectattr('platforms', 'defined') | list)
+      + (lifecycle_declared_applied | selectattr('platforms', 'defined')
+      | selectattr('platforms', 'contains', lifecycle_platform) | list)}) }}
+  vars:
+    lifecycle_declared_items: "{{ (lifecycle_topic.state | default({}, true))[item] | default([], true) }}"
+    lifecycle_declared_applied: "{{ (lifecycle_topic.applied | default({}, true))[item] | default([], true) }}"
+  loop: "{{ lifecycle_state_keys.keys() | list }}"
+
+- name: Lifecycle topic | Name the rules of the topic and those whose prior state the ledger records
+  ansible.builtin.set_fact:
+    lifecycle_rule_ids: "{{ lifecycle_rules | map(attribute='rule_id') | list }}"
+    lifecycle_recorded_rule_ids: >-
+      {{ lifecycle_rules | selectattr('revert_strategy', 'in', lifecycle_recorded_strategies)
+      | map(attribute='rule_id') | list }}
+
+- name: Lifecycle topic | Check the declaration against the catalogue and the registry
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic is mapping
+      - lifecycle_topic.family == lifecycle_family
+      - lifecycle_topic.disruptive is boolean
+      - lifecycle_topic.disruptive == lifecycle_registry_entry.disruptive
+      - not lifecycle_topic.disruptive or (lifecycle_topic.containment | default('') | length > 0)
+      - lifecycle_items.values() | map('length') | sum > 0
+      - lifecycle_pre_states | map(attribute='name') | unique | list | length == lifecycle_pre_states | length
+    fail_msg: >-
+      The lifecycle declaration of {{ lifecycle_family }} does not match the catalogue: its family must be
+      {{ lifecycle_family }}, disruptive must be {{ lifecycle_registry_entry.disruptive }} as in the registry, a
+      disruptive topic must describe its containment, at least one item must be declared for this platform and
+      every pre-state needs a distinct name. tools/roles/check_lifecycle_topics.py checks the full format.
+    quiet: true
+
+- name: Lifecycle topic | Report a topic that the profile of this platform does not select
+  ansible.builtin.debug:
+    msg: >-
+      {{ lifecycle_family }} has no native rule in {{ molecule_profile_id }} on {{ molecule_target.instance }}; its
+      lifecycle is not run on this platform.
+  when: lifecycle_rules | length == 0
+
+- name: Lifecycle topic | Take the state of the topic before any cycle
+  ansible.builtin.include_tasks:
+    file: lifecycle_state.yml
+
+- name: Lifecycle topic | Remember the state before any cycle
+  ansible.builtin.set_fact:
+    lifecycle_pristine: "{{ lifecycle_state }}"
+
+- name: Lifecycle topic | Refuse a topic that the ledger already records
+  ansible.builtin.assert:
+    that:
+      - lifecycle_pristine.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids) | list | length == 0
+    fail_msg: >-
+      The state ledger already records rules of {{ lifecycle_family }}, so the state before the collection is not
+      known: {{ lifecycle_pristine.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids) | list }}.
+    quiet: true
+
+- name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state
+  ansible.builtin.include_tasks:
+    file: lifecycle_cycle.yml
+  loop: "{{ lifecycle_toggle_modes | product(lifecycle_pre_states) | list }}"
+  loop_control:
+    loop_var: lifecycle_cycle
+    label: "{{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state"
+  when: lifecycle_rules | length > 0
+
+- name: Lifecycle topic | Take the state of the topic after every cycle
+  ansible.builtin.include_tasks:
+    file: lifecycle_state.yml
+
+- name: Lifecycle topic | Assert that the topic left exactly the state before any cycle
+  ansible.builtin.include_tasks:
+    file: lifecycle_compare.yml
+  vars:
+    lifecycle_label: "{{ lifecycle_family }}"
+    lifecycle_compare_step: after every cycle
+    lifecycle_compare_before: "{{ lifecycle_pristine }}"
+    lifecycle_compare_after: "{{ lifecycle_state }}"
+    lifecycle_compare_expected: {}
+
+- name: Lifecycle topic | Assert that the ledger is back to its entries before any cycle
+  ansible.builtin.assert:
+    that:
+      - lifecycle_state.ledger == lifecycle_pristine.ledger
+    fail_msg: "{{ lifecycle_family }} left the ledger at {{ lifecycle_state.ledger }}."
+    quiet: true

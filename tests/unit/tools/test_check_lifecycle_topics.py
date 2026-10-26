@@ -1,0 +1,389 @@
+from __future__ import annotations
+
+import copy
+import runpy
+import shutil
+import sys
+from pathlib import Path
+from typing import cast
+
+import pytest
+import yaml
+
+from tools.roles import check_lifecycle_topics as lifecycle
+from tools.roles import generate_toggles
+from tools.roles import promote_native_rule as promote
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+SSH_RULE = "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+REMOVE = object()
+NO_ITEMS: list[object] = []
+NO_KEYS: dict[str, object] = {}
+
+VALID: dict[str, object] = {
+    "family": "file_permissions",
+    "disruptive": False,
+    "audit": {"applied_outcomes": ["notapplicable"], "reason": "Containers are not machines."},
+    "state": {
+        "files": [{"path": "/etc/crontab"}, {"path": "/etc/cron.d/x", "platforms": ["ubuntu"]}],
+        "packages": [{"name": "cron", "platforms": ["ubuntu"]}],
+        "services": [{"name": "cron"}],
+        "sysctl": [{"name": "kernel.dmesg_restrict"}],
+        "users": [{"name": "root"}],
+        "groups": [{"name": "root"}],
+    },
+    "applied": {
+        "files": [
+            {"path": "/etc/crontab", "mode": "0600"},
+            {"path": "/etc/cron.d/x", "changes": ["checksum"], "platforms": ["ubuntu"]},
+        ],
+        "packages": [{"name": "cron", "installed": True}],
+    },
+    "pre_states": [
+        {"name": "as built", "audit": True},
+        {
+            "name": "customised",
+            "audit": False,
+            "files": [{"path": "/etc/crontab", "mode": "0640", "owner": "root", "group": "root"}],
+        },
+    ],
+}
+
+
+def make_root(
+    tmp_path: Path, declarations: dict[str, object], *, catalogue: Path | None = None
+) -> Path:
+    root = tmp_path / "repository"
+    rules = root / generate_toggles.CATALOGUE
+    rules.parent.mkdir(parents=True)
+    shutil.copyfile(catalogue or REPOSITORY_ROOT / generate_toggles.CATALOGUE, rules)
+    versions = root / lifecycle.VERSIONS
+    versions.parent.mkdir(parents=True)
+    shutil.copyfile(REPOSITORY_ROOT / lifecycle.VERSIONS, versions)
+    topics = root / lifecycle.TOPICS
+    topics.mkdir(parents=True)
+    for family, content in declarations.items():
+        text = content if isinstance(content, str) else "---\n" + yaml.safe_dump(content)
+        (topics / f"{family}.yml").write_text(text, encoding="utf-8")
+    return root
+
+
+def changed(**updates: object) -> dict[str, object]:
+    declaration = copy.deepcopy(VALID)
+    for key, value in updates.items():
+        if value is REMOVE:
+            declaration.pop(key)
+        else:
+            declaration[key] = value
+    return declaration
+
+
+def errors_for(tmp_path: Path, declaration: object) -> list[str]:
+    root = make_root(tmp_path, {"file_permissions": declaration})
+    return lifecycle.check(root)[1]
+
+
+def test_the_repository_declares_every_native_topic(capsys: pytest.CaptureFixture[str]) -> None:
+    assert lifecycle.main(["--root", str(REPOSITORY_ROOT)]) == 0
+    assert "file_permissions" in capsys.readouterr().out
+
+
+def test_a_complete_declaration_passes(tmp_path: Path) -> None:
+    assert errors_for(tmp_path, VALID) == []
+
+
+def test_a_native_topic_without_a_declaration_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = make_root(tmp_path, {})
+    assert lifecycle.main(["--root", str(root)]) == 1
+    error = capsys.readouterr().err
+    assert "the native topic file_permissions has no lifecycle declaration" in error
+    assert "every native topic needs a valid lifecycle declaration" in error
+
+
+def test_a_missing_topic_directory_counts_as_no_declaration(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {})
+    (root / lifecycle.TOPICS).rmdir()
+    assert lifecycle.check(root)[1] == [
+        (
+            f"{lifecycle.TOPICS / 'file_permissions.yml'}: the native topic file_permissions "
+            "has no lifecycle declaration"
+        )
+    ]
+
+
+def test_a_declaration_for_a_topic_without_a_native_rule_fails(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": VALID, "sysctl": changed(family="sysctl")})
+    assert lifecycle.check(root)[1] == [
+        (
+            f"{lifecycle.TOPICS / 'sysctl.yml'}: sysctl has no native rule in "
+            f"{generate_toggles.CATALOGUE}, so it must not have a lifecycle declaration"
+        )
+    ]
+
+
+def test_a_new_native_topic_needs_its_own_declaration(tmp_path: Path) -> None:
+    catalogue = tmp_path / "rules.yml"
+    shutil.copyfile(REPOSITORY_ROOT / generate_toggles.CATALOGUE, catalogue)
+    assert promote.main(["--catalogue", str(catalogue), "--rule", SSH_RULE]) == 0
+    root = make_root(tmp_path, {"file_permissions": VALID}, catalogue=catalogue)
+    native, errors = lifecycle.check(root)
+    assert native == ["file_permissions", "ssh"]
+    assert errors == [
+        f"{lifecycle.TOPICS / 'ssh.yml'}: the native topic ssh has no lifecycle declaration"
+    ]
+
+
+def test_a_disruptive_topic_must_describe_its_containment(tmp_path: Path) -> None:
+    catalogue = tmp_path / "rules.yml"
+    shutil.copyfile(REPOSITORY_ROOT / generate_toggles.CATALOGUE, catalogue)
+    assert promote.main(["--catalogue", str(catalogue), "--rule", SSH_RULE]) == 0
+    ssh = {"family": "ssh", "disruptive": True, "state": {"files": [{"path": "/etc/ssh/x"}]}}
+    root = make_root(tmp_path, {"file_permissions": VALID, "ssh": ssh}, catalogue=catalogue)
+    assert lifecycle.check(root)[1] == [
+        f"{root / lifecycle.TOPICS / 'ssh.yml'}: a disruptive topic must describe its containment"
+    ]
+    ssh["containment"] = "The connection is docker exec, which does not use sshd."
+    root = make_root(
+        tmp_path / "again", {"file_permissions": VALID, "ssh": ssh}, catalogue=catalogue
+    )
+    assert lifecycle.check(root)[1] == []
+
+
+@pytest.mark.parametrize(
+    ("declaration", "message"),
+    [
+        ([], "the declaration must be a mapping"),
+        (changed(extra=1), "the declaration has the unknown key 'extra'"),
+        (changed(state=REMOVE), "the declaration needs 'state'"),
+        (changed(family="sysctl"), "family must be 'file_permissions', the name of the file"),
+        (changed(disruptive="no"), "disruptive must be false, as in the registry"),
+        (changed(disruptive=True), "disruptive must be false, as in the registry"),
+        (changed(containment="text"), "containment is only for a disruptive topic"),
+        (changed(state=[]), "state must be a mapping"),
+        (changed(state={"files": [], "mounts": []}), "state has the unknown key 'mounts'"),
+        (changed(state={"files": [], "applied": None}), "state has the unknown key 'applied'"),
+        (changed(state={"files": {}}, applied=REMOVE), "state.files must be a list"),
+        (changed(state={"files": ["x"]}, applied=REMOVE), "state.files[0] must be a mapping"),
+        (
+            changed(state={"files": [{"path": "/x", "mode": "0600"}]}, applied=REMOVE),
+            "state.files[0] has the unknown key 'mode'",
+        ),
+        (
+            changed(state={"files": [{"path": "relative"}]}, applied=REMOVE),
+            "state.files[0] needs a valid path",
+        ),
+        (
+            changed(state={"users": [{"name": "bad name"}]}, applied=REMOVE, pre_states=REMOVE),
+            "state.users[0] needs a valid name",
+        ),
+        (
+            changed(state={"files": [{"path": "/x"}, {"path": "/x"}]}, applied=REMOVE),
+            "state.files[1] declares /x twice",
+        ),
+        (
+            changed(state={"files": [{"path": "/x", "platforms": "ubuntu"}]}, applied=REMOVE),
+            "state.files[0] needs a non-empty list of platforms",
+        ),
+        (
+            changed(state={"files": [{"path": "/x", "platforms": NO_ITEMS}]}, applied=REMOVE),
+            "state.files[0] needs a non-empty list of platforms",
+        ),
+        (
+            changed(state={"files": [{"path": "/x", "platforms": ["debian"]}]}, applied=REMOVE),
+            "state.files[0] names the unknown platform 'debian'",
+        ),
+        (changed(state={}, applied=REMOVE, pre_states=REMOVE), "state declares no item"),
+        (changed(applied=[]), "applied must be a mapping"),
+        (changed(applied={"mounts": []}), "applied has the unknown key 'mounts'"),
+        (changed(applied={"files": {}}), "applied.files must be a list"),
+        (changed(applied={"files": [1]}), "applied.files[0] must be a mapping"),
+        (
+            changed(applied={"files": [{"path": "/etc/crontab", "mode": "0600", "size": 1}]}),
+            "applied.files[0] has the unknown key 'size'",
+        ),
+        (
+            changed(applied={"files": [{"path": "/etc/crontab"}]}),
+            "applied.files[0] expects nothing",
+        ),
+        (
+            changed(applied={"files": [{"path": "/etc/crontab", "mode": 600}]}),
+            "applied.files[0] needs a four-digit octal mode string",
+        ),
+        (
+            changed(applied={"files": [{"path": "/etc/crontab", "mode": "600"}]}),
+            "applied.files[0] needs a four-digit octal mode string",
+        ),
+        (
+            changed(applied={"files": [{"path": "/etc/crontab", "changes": "mode"}]}),
+            "applied.files[0] needs a non-empty list of changes",
+        ),
+        (
+            changed(applied={"files": [{"path": "/etc/crontab", "changes": ["size"]}]}),
+            "applied.files[0] cannot require a change of 'size'",
+        ),
+        (
+            changed(
+                applied={"files": [{"path": "/etc/crontab", "mode": "0600", "changes": ["mode"]}]}
+            ),
+            "applied.files[0] both sets and requires a change of 'mode'",
+        ),
+        (
+            changed(applied={"files": [{"mode": "0600"}]}),
+            "applied.files[0] needs a valid path",
+        ),
+        (
+            changed(applied={"files": [{"path": "/etc/passwd", "mode": "0600"}]}),
+            "applied.files[0] expects /etc/passwd, which state.files does not declare",
+        ),
+        (
+            changed(
+                applied={
+                    "files": [
+                        {"path": "/etc/crontab", "mode": "0600"},
+                        {"path": "/etc/crontab", "owner": "root"},
+                    ]
+                }
+            ),
+            "applied.files[1] expects /etc/crontab twice",
+        ),
+        (
+            changed(
+                applied={"files": [{"path": "/etc/crontab", "mode": "0600", "platforms": ["x"]}]}
+            ),
+            "applied.files[0] names the unknown platform 'x'",
+        ),
+        (changed(audit=[]), "audit must be a mapping"),
+        (
+            changed(audit={"applied_outcomes": ["notapplicable"], "reason": "r", "x": 1}),
+            "unknown key 'x'",
+        ),
+        (changed(audit={"reason": "r"}), "audit.applied_outcomes must be a non-empty list"),
+        (changed(audit={"applied_outcomes": [""], "reason": "r"}), "must be a non-empty list"),
+        (
+            changed(audit={"applied_outcomes": ["fail"], "reason": "r"}),
+            "audit.applied_outcomes cannot add 'fail'",
+        ),
+        (
+            changed(audit={"applied_outcomes": ["notapplicable"], "reason": " "}),
+            "audit.reason must explain why the audit cannot show pass or fixed",
+        ),
+        (changed(pre_states={}), "pre_states must be a list"),
+        (changed(pre_states=[]), "pre_states must not be empty"),
+        (changed(pre_states=["x"]), "pre_states[0] must be a mapping"),
+        (
+            changed(pre_states=[{"name": "a", "extra": 1}]),
+            "pre_states[0] has the unknown key 'extra'",
+        ),
+        (changed(pre_states=[{"audit": True}]), "pre_states[0] needs a name"),
+        (changed(pre_states=[{"name": "a"}, {"name": "a"}]), "pre_states[1] repeats the name 'a'"),
+        (
+            changed(pre_states=[{"name": "a", "audit": "yes"}]),
+            "pre_states[0].audit must be a boolean",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "files": NO_KEYS}]),
+            "pre_states[0].files must be a list",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "files": [1]}]),
+            "pre_states[0].files[0] must be a mapping",
+        ),
+        (
+            changed(
+                pre_states=[
+                    {"name": "a", "files": [{"path": "/etc/crontab", "mode": "0640", "x": 1}]}
+                ]
+            ),
+            "pre_states[0].files[0] has the unknown key 'x'",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "files": [{"path": "/etc/passwd", "mode": "0640"}]}]),
+            "pre_states[0].files[0] sets /etc/passwd, which state.files does not declare",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "files": [{"path": "x", "mode": "0640"}]}]),
+            "pre_states[0].files[0] needs a valid path",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "files": [{"path": "/etc/crontab"}]}]),
+            "pre_states[0].files[0] sets no mode, owner or group",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "files": [{"path": "/etc/crontab", "mode": "64"}]}]),
+            "pre_states[0].files[0] needs a four-digit octal mode string",
+        ),
+        (
+            changed(
+                pre_states=[{"name": "a", "files": [{"path": "/etc/crontab", "owner": "a b"}]}]
+            ),
+            "pre_states[0].files[0] needs a valid owner",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "files": [{"path": "/etc/crontab", "group": 0}]}]),
+            "pre_states[0].files[0] needs a valid group",
+        ),
+    ],
+)
+def test_an_invalid_declaration_is_reported(
+    tmp_path: Path, declaration: object, message: str
+) -> None:
+    errors = errors_for(tmp_path, declaration)
+    assert any(message in error for error in errors), errors
+
+
+def test_a_minimal_declaration_needs_only_family_disruptive_and_state(tmp_path: Path) -> None:
+    minimal = {
+        "family": "file_permissions",
+        "disruptive": False,
+        "state": {"users": [{"name": "root"}]},
+    }
+    assert errors_for(tmp_path, minimal) == []
+
+
+def test_an_unreadable_declaration_stops_the_check(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = make_root(tmp_path, {"file_permissions": "---\nfamily: [\n"})
+    assert lifecycle.main(["--root", str(root)]) == 2
+    assert "cannot be read as YAML" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "versions", ["---\n[]\n", "---\nother: {}\n", "---\nmolecule_images: {}\n"]
+)
+def test_the_platforms_come_from_the_molecule_versions(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], versions: str
+) -> None:
+    root = make_root(tmp_path, {"file_permissions": VALID})
+    (root / lifecycle.VERSIONS).write_text(versions, encoding="utf-8")
+    assert lifecycle.main(["--root", str(root)]) == 2
+    assert "has no molecule_images mapping" in capsys.readouterr().err
+
+
+def test_the_platforms_are_the_image_keys_of_the_repository() -> None:
+    assert lifecycle.platforms(REPOSITORY_ROOT) == frozenset({"ubuntu", "rhel_compatible"})
+
+
+def test_the_check_categories_match_the_harness() -> None:
+    harness = cast(
+        "dict[str, object]",
+        yaml.safe_load(
+            (REPOSITORY_ROOT / "extensions/molecule/shared/vars/lifecycle.yml").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+    assert harness["lifecycle_state_keys"] == lifecycle.CATEGORY_KEYS
+
+
+def test_the_module_runs_as_a_script(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["check_lifecycle_topics", "--root", str(REPOSITORY_ROOT)])
+    sys.modules.pop("tools.roles.check_lifecycle_topics", None)
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_module("tools.roles.check_lifecycle_topics", run_name="__main__")
+    assert exit_info.value.code == 0
+    assert "file_permissions" in capsys.readouterr().out

@@ -1,0 +1,116 @@
+---
+lifecycle_catalogue_path: "{{ molecule_repository }}/roles/remediate/vars/rules.yml"
+lifecycle_topics_directory: "{{ playbook_dir }}/vars/topics"
+lifecycle_platform: "{{ molecule_target.image }}"
+lifecycle_state_keys:
+  files: path
+  packages: name
+  services: name
+  sysctl: name
+  users: name
+  groups: name
+lifecycle_applied_outcomes:
+  - pass
+  - fixed
+lifecycle_recorded_strategies:
+  - recorded_value
+  - recorded_state
+lifecycle_toggle_modes:
+  - topic
+  - rule
+lifecycle_marker_variable: FREESECDEV_MOLECULE_MARKER
+lifecycle_selfcheck_file:
+  exists: true
+  type: file
+  mode: "0644"
+  owner: root
+  group: root
+  checksum: a
+lifecycle_selfcheck_cases:
+  - name: unchanged state
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    expected: {}
+    mismatch: ""
+  - name: change that nothing declares
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'mode': '0600'}) }}"
+    expected: {}
+    mismatch: "files /etc/selfcheck: mode changed from 0644 to 0600;"
+  - name: declared control in place
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'mode': '0600'}) }}"
+    expected:
+      files:
+        - path: /etc/selfcheck
+          mode: "0600"
+    mismatch: ""
+  - name: declared control missing
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    expected:
+      files:
+        - path: /etc/selfcheck
+          mode: "0600"
+    mismatch: "files /etc/selfcheck: mode is 0644, expected 0600;"
+  - name: file absent before and left behind by the cleanup
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'exists': false}) }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    expected: {}
+    mismatch: "files /etc/selfcheck: exists changed from False to True;"
+  - name: file present before and removed by the cleanup
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'exists': false}) }}"
+    expected: {}
+    mismatch: "files /etc/selfcheck: exists changed from True to False;"
+  - name: declared change that did not happen
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file }}"
+    expected:
+      files:
+        - path: /etc/selfcheck
+          changes:
+            - checksum
+    mismatch: "files /etc/selfcheck: checksum stayed a, expected a change;"
+  - name: package installed by a step that declares nothing
+    before:
+      packages:
+        selfcheck:
+          installed: false
+          versions: []
+    after:
+      packages:
+        selfcheck:
+          installed: true
+          versions:
+            - "1.0"
+    expected: {}
+    mismatch: "packages selfcheck: installed changed from False to True;"

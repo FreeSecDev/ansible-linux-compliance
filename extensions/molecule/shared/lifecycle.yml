@@ -1,0 +1,75 @@
+---
+- name: Guard the scenario targets
+  ansible.builtin.import_playbook: guard.yml
+
+- name: Prove that every native topic applies, stays idempotent and cleans up to the state before it
+  hosts: all
+  gather_facts: true
+  any_errors_fatal: true
+  vars_files:
+    - vars/versions.yml
+    - vars/target.yml
+    - vars/contract.yml
+    - vars/lifecycle.yml
+  vars:
+    snapshot_volatile_directories:
+      - "{{ molecule_evidence_directory }}"
+  tasks:
+    - name: Discover the pinned datastream and the profile of this platform
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+
+    - name: Load the rule catalogue and the topic declarations
+      ansible.builtin.set_fact:
+        lifecycle_catalogue: "{{ lookup('ansible.builtin.file', lifecycle_catalogue_path) | from_yaml }}"
+        lifecycle_declared_families: >-
+          {{ lookup('ansible.builtin.fileglob', lifecycle_topics_directory ~ '/*.yml', wantlist=True)
+          | map('basename') | map('regex_replace', '\.yml$', '') | sort }}
+
+    - name: Derive the native topics from the catalogue, non-disruptive ones first
+      ansible.builtin.set_fact:
+        lifecycle_native_rules: "{{ lifecycle_native_rules_found }}"
+        lifecycle_native_families: >-
+          {{ ((lifecycle_registry | rejectattr('disruptive') | list)
+          + (lifecycle_registry | selectattr('disruptive') | list))
+          | selectattr('name', 'in', lifecycle_native_rules_found | map(attribute='family') | list)
+          | map(attribute='name') | list }}
+      vars:
+        lifecycle_registry: "{{ lifecycle_catalogue.__linux_compliance_remediate_families }}"
+        lifecycle_native_rules_found: >-
+          {{ lifecycle_catalogue.__linux_compliance_remediate_rules
+          | rejectattr('revert_strategy', 'equalto', 'audit_only') | list }}
+
+    - name: Refuse a native topic without a declaration and a declaration without a native topic
+      ansible.builtin.assert:
+        that:
+          - lifecycle_native_families | length > 0
+          - lifecycle_native_families | difference(lifecycle_declared_families) | length == 0
+          - lifecycle_declared_families | difference(lifecycle_native_families) | length == 0
+        fail_msg: >-
+          Every topic with a native rule in roles/remediate/vars/rules.yml needs a lifecycle declaration in
+          extensions/molecule/shared/vars/topics/<topic>.yml, and every declaration needs a native topic (see
+          docs/molecule.md, toggle lifecycle). Native topics {{ lifecycle_native_families }}, declarations
+          {{ lifecycle_declared_families }}.
+        quiet: true
+
+    - name: Check that the state comparison finds missing controls, stray changes and leftovers
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_selfcheck.yml
+      loop: "{{ lifecycle_selfcheck_cases }}"
+      loop_control:
+        loop_var: lifecycle_selfcheck_case
+        label: "{{ lifecycle_selfcheck_case.name }}"
+
+    - name: Run the toggle lifecycle of every native topic
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_topic.yml
+      loop: "{{ lifecycle_native_families }}"
+      loop_control:
+        loop_var: lifecycle_family
+
+    - name: Report the topics whose lifecycle was proven
+      ansible.builtin.debug:
+        msg: >-
+          Toggle lifecycle proven on {{ molecule_target.instance }} for {{ lifecycle_native_families | join(', ') }}:
+          topic and rule toggles, every declared pre-state, idempotence, check mode and cleanup.

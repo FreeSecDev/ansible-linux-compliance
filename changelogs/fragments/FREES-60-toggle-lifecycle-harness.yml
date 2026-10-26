@@ -1,0 +1,10 @@
+---
+trivial:
+  - >-
+    Test tooling: the docker-ubuntu and docker-rhel-compatible Molecule scenarios gain a side_effect step,
+    extensions/molecule/shared/lifecycle.yml, that runs the real remediate role for every topic with a native rule:
+    check mode, apply, idempotence, cleanup with the topic toggle and with the rule toggles, from every declared
+    pre-state, and asserts that the declared files, packages, services, kernel parameters, users, groups and the
+    state ledger are restored exactly. Each topic declares what to inspect in
+    extensions/molecule/shared/vars/topics/<topic>.yml; make lint-lifecycle fails when a native topic has no
+    valid declaration.

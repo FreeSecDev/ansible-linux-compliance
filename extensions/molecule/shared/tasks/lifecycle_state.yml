@@ -1,0 +1,152 @@
+---
+- name: Lifecycle state | Start an empty record
+  ansible.builtin.set_fact:
+    lifecycle_state:
+      files: {}
+      packages: {}
+      services: {}
+      sysctl: {}
+      users: {}
+      groups: {}
+      ledger: []
+
+- name: Lifecycle state | Inspect the declared files without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  loop: "{{ lifecycle_items.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: lifecycle_state_files
+
+- name: Lifecycle state | Record existence, type, mode, owner, group, content hash and link target of each file
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'files': {item.item.path: {
+           'exists': item.stat.exists,
+           'type': ('link' if item.stat.islnk else 'file' if item.stat.isreg else 'directory' if item.stat.isdir
+                    else 'other') if item.stat.exists else 'absent',
+           'mode': item.stat.mode | default(none),
+           'owner': item.stat.pw_name | default(none),
+           'group': item.stat.gr_name | default(none),
+           'uid': item.stat.uid | default(none),
+           'gid': item.stat.gid | default(none),
+           'checksum': item.stat.checksum | default(none),
+           'link_target': item.stat.lnk_target | default(none)}}}, recursive=true) }}
+  loop: "{{ lifecycle_state_files.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+
+- name: Lifecycle state | Read the installed packages
+  ansible.builtin.package_facts:
+  when: lifecycle_items.packages | length > 0
+
+- name: Lifecycle state | Record whether each declared package is installed and in which versions
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'packages': {item.name: {
+           'installed': item.name in ansible_facts.packages,
+           'versions': ansible_facts.packages[item.name] | default([])
+                       | map(attribute='version') | sort}}}, recursive=true) }}
+  loop: "{{ lifecycle_items.packages }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Lifecycle state | Read the services
+  ansible.builtin.service_facts:
+  register: lifecycle_state_service_facts
+  when: lifecycle_items.services | length > 0
+
+- name: Lifecycle state | Refuse declared services on an instance without a service manager
+  ansible.builtin.assert:
+    that:
+      - lifecycle_state_service_facts is not skipped
+      - ansible_facts.services is defined
+    fail_msg: >-
+      {{ lifecycle_family }} declares services, but service_facts finds no service manager on
+      {{ molecule_target.instance }} (the containers have no systemd as PID 1). Declare services only for a
+      platform that runs one; see docs/molecule.md, toggle lifecycle.
+    quiet: true
+  when: lifecycle_items.services | length > 0
+
+- name: Lifecycle state | Record whether each declared service exists, runs and is enabled
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'services': {item.name: {
+           'exists': item.name in ansible_facts.services,
+           'state': (ansible_facts.services[item.name] | default({})).state | default(none),
+           'status': (ansible_facts.services[item.name] | default({})).status | default(none)}}}, recursive=true) }}
+  loop: "{{ lifecycle_items.services }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Lifecycle state | Read the declared kernel parameters
+  ansible.builtin.slurp:
+    src: "/proc/sys/{{ item.name | replace('.', '/') }}"
+  loop: "{{ lifecycle_items.sysctl }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: lifecycle_state_sysctl
+
+- name: Lifecycle state | Record the value of each declared kernel parameter
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'sysctl': {item.item.name: {
+           'value': item.content | b64decode | trim}}}, recursive=true) }}
+  loop: "{{ lifecycle_state_sysctl.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Lifecycle state | Look up the declared users
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ item.name }}"
+    fail_key: false
+  loop: "{{ lifecycle_items.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: lifecycle_state_users
+
+- name: Lifecycle state | Record whether each declared user exists and its passwd entry
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'users': {item.item.name: {
+           'exists': item.ansible_facts.getent_passwd[item.item.name] is not none,
+           'entry': item.ansible_facts.getent_passwd[item.item.name]}}}, recursive=true) }}
+  loop: "{{ lifecycle_state_users.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Lifecycle state | Look up the declared groups
+  ansible.builtin.getent:
+    database: group
+    key: "{{ item.name }}"
+    fail_key: false
+  loop: "{{ lifecycle_items.groups }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: lifecycle_state_groups
+
+- name: Lifecycle state | Record whether each declared group exists and its group entry
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'groups': {item.item.name: {
+           'exists': item.ansible_facts.getent_group[item.item.name] is not none,
+           'entry': item.ansible_facts.getent_group[item.item.name]}}}, recursive=true) }}
+  loop: "{{ lifecycle_state_groups.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Lifecycle state | Read the state ledger
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: lifecycle_state_ledger
+
+- name: Lifecycle state | Record the ledger entries, sorted by rule
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'ledger': lifecycle_state_ledger.entries | sort(attribute='rule_id')}) }}

@@ -219,6 +219,7 @@ Formatting and linting
   toggles               Regenerate the toggle defaults, argument specs and docs/remediation-variables.md
   lint-role-guards      Fail when the generated family dispatch or internal-variable guards drift from the roles
   role-guards           Regenerate the family dispatch and the internal-variable guards of the roles
+  lint-lifecycle        Fail when a native topic has no valid Molecule toggle lifecycle declaration
   content               Fetch and verify the pinned SCAP content into build/content
   catalogue             Regenerate the rule catalogue and docs/control-families.md from build/content, then the toggles and role guards
   lint-iac              tofu fmt check, tofu validate per root module and shellcheck of the rendered bootstrap script
@@ -283,7 +284,7 @@ Housekeeping
 endef
 export HELP_TEXT
 
-.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards content catalogue lint-python lint-yaml lint-actions \
+.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue lint-python lint-yaml lint-actions \
 	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
@@ -316,7 +317,7 @@ format: require-uv
 	$(RUN) ruff check --fix .
 	$(RUN) ruff format .
 
-lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-containerfile lint-ansible lint-toggles lint-role-guards
+lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-containerfile lint-ansible lint-toggles lint-role-guards lint-lifecycle
 
 GENERATE_TOGGLES := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_toggles
 GENERATE_CATALOGUE := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_catalogue
@@ -342,6 +343,9 @@ role-guards: require-uv collection-link
 
 lint-role-guards: require-uv collection-link
 	$(GENERATE_ROLE_GUARDS) --check
+
+lint-lifecycle: require-uv collection-link
+	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.check_lifecycle_topics
 
 lock-check: require-uv
 	uv lock --check

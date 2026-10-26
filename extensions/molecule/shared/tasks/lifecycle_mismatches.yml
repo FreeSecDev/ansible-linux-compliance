@@ -1,0 +1,25 @@
+---
+- name: Lifecycle mismatches | List every declared attribute that differs from what the step must leave
+  ansible.builtin.set_fact:
+    lifecycle_mismatches: >-
+      {%- for category, entries in lifecycle_compare_after.items() if category != 'ledger' -%}
+      {%- set key_field = lifecycle_state_keys[category] -%}
+      {%- for key, attributes in entries.items() -%}
+      {%- set wanted = lifecycle_compare_expected[category] | default([]) | selectattr(key_field, 'equalto', key)
+      | first | default({}) -%}
+      {%- set before = lifecycle_compare_before[category][key] -%}
+      {%- for attribute, value in attributes.items() -%}
+      {%- if attribute in wanted -%}
+      {%- if value != wanted[attribute] -%}
+      {{ category }} {{ key }}: {{ attribute }} is {{ value }}, expected {{ wanted[attribute] }};{{ ' ' }}
+      {%- endif -%}
+      {%- elif attribute in wanted.changes | default([]) -%}
+      {%- if value == before[attribute] -%}
+      {{ category }} {{ key }}: {{ attribute }} stayed {{ value }}, expected a change;{{ ' ' }}
+      {%- endif -%}
+      {%- elif value != before[attribute] -%}
+      {{ category }} {{ key }}: {{ attribute }} changed from {{ before[attribute] }} to {{ value }};{{ ' ' }}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- endfor -%}

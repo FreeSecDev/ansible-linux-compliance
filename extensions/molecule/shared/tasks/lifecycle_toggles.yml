@@ -1,0 +1,12 @@
+---
+- name: Lifecycle toggles | Set the topic toggle, which only the topic-toggle cycle switches off
+  ansible.builtin.set_fact:
+    "{{ lifecycle_family_toggle }}": "{{ lifecycle_switch | bool if lifecycle_mode == 'topic' else true }}"
+
+- name: Lifecycle toggles | Set the rule toggles of the topic in the rule-toggle cycle
+  ansible.builtin.set_fact:
+    "{{ item.toggle }}": "{{ lifecycle_switch | bool }}"
+  loop: "{{ lifecycle_rules }}"
+  loop_control:
+    label: "{{ item.toggle }}"
+  when: lifecycle_mode == 'rule'

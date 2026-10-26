@@ -1,0 +1,331 @@
+---
+- name: Lifecycle cycle | Name the cycle and the toggle that switches the topic off
+  ansible.builtin.set_fact:
+    lifecycle_mode: "{{ lifecycle_cycle.0 }}"
+    lifecycle_pre_state: "{{ lifecycle_cycle.1 }}"
+    lifecycle_label: >-
+      {{ lifecycle_family }} with the {{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state
+    lifecycle_disabled_by: >-
+      {{ dict(lifecycle_rule_ids | zip(lifecycle_rules | map(attribute='toggle')))
+      if lifecycle_cycle.0 == 'rule'
+      else dict(lifecycle_rule_ids | zip([lifecycle_family_toggle] * lifecycle_rules | length)) }}
+
+- name: Lifecycle cycle | Refuse a rule toggle that an earlier cycle left set before a topic-toggle cycle
+  ansible.builtin.assert:
+    that:
+      - >-
+        lookup('ansible.builtin.varnames', '^(' ~ lifecycle_rules | map(attribute='toggle') | join('|') ~ ')$',
+        wantlist=True) | length == 0
+    fail_msg: >-
+      {{ lifecycle_label }}: a rule toggle of the topic is already set, so the topic toggle would not decide.
+      The topic-toggle cycles must run before the rule-toggle cycles.
+    quiet: true
+  when: lifecycle_mode == 'topic'
+
+- name: Lifecycle cycle | Give the declared files the mode and ownership of the pre-state
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: file
+    follow: false
+    mode: "{{ item.mode | default(omit) }}"
+    owner: "{{ item.owner | default(omit) }}"
+    group: "{{ item.group | default(omit) }}"
+  loop: "{{ lifecycle_pre_state.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Lifecycle cycle | Switch the topic on
+  ansible.builtin.include_tasks:
+    file: lifecycle_toggles.yml
+  vars:
+    lifecycle_switch: true
+
+- name: Lifecycle cycle | Take the declared state before the topic is applied
+  ansible.builtin.include_tasks:
+    file: lifecycle_state.yml
+
+- name: Lifecycle cycle | Remember the declared state before the topic is applied
+  ansible.builtin.set_fact:
+    lifecycle_before: "{{ lifecycle_state }}"
+
+- name: Lifecycle cycle | Refuse a pre-state that the ledger already records
+  ansible.builtin.assert:
+    that:
+      - lifecycle_before.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids) | list | length == 0
+    fail_msg: "{{ lifecycle_label }}: the ledger already records {{ lifecycle_before.ledger }}."
+    quiet: true
+
+- name: Lifecycle cycle | Take the no-change snapshot before check mode
+  ansible.builtin.include_tasks:
+    file: snapshot.yml
+
+- name: Lifecycle cycle | Remember the no-change snapshot before check mode
+  ansible.builtin.set_fact:
+    lifecycle_reference:
+      digest: "{{ snapshot_digest }}"
+      lines: "{{ snapshot_lines }}"
+
+- name: Lifecycle cycle | Apply the topic in check mode
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: true
+
+- name: Lifecycle cycle | Check that check mode planned and reported every rule of the topic as applied
+  ansible.builtin.assert:
+    that:
+      - lifecycle_planned | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_planned | map(attribute='action') | unique | list == ['apply']
+      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_results | map(attribute='action') | unique | list == ['apply']
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - lifecycle_results | rejectattr('changed') | list | length == 0
+    fail_msg: "{{ lifecycle_label }}, check mode on: plan {{ lifecycle_planned }}, results {{ lifecycle_results }}"
+    quiet: true
+
+- name: Lifecycle cycle | Assert that check mode changed nothing
+  ansible.builtin.include_tasks:
+    file: lifecycle_unchanged.yml
+  vars:
+    lifecycle_unchanged_step: check mode with the topic on
+
+- name: Lifecycle cycle | Apply the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Lifecycle cycle | Check that every rule of the topic was applied
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_results | map(attribute='action') | unique | list == ['apply']
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - lifecycle_results | rejectattr('changed') | list | length == 0
+    fail_msg: "{{ lifecycle_label }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Lifecycle cycle | Take the declared state after the topic is applied
+  ansible.builtin.include_tasks:
+    file: lifecycle_state.yml
+
+- name: Lifecycle cycle | Remember the declared state after the topic is applied
+  ansible.builtin.set_fact:
+    lifecycle_applied_state: "{{ lifecycle_state }}"
+
+- name: Lifecycle cycle | Assert that the controls are in place and nothing else declared changed
+  ansible.builtin.include_tasks:
+    file: lifecycle_compare.yml
+  vars:
+    lifecycle_compare_step: apply
+    lifecycle_compare_before: "{{ lifecycle_before }}"
+    lifecycle_compare_after: "{{ lifecycle_applied_state }}"
+    lifecycle_compare_expected: "{{ lifecycle_applied }}"
+
+- name: Lifecycle cycle | Assert that the ledger records the prior state of the topic and nothing else changed
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_applied_state.ledger | rejectattr('rule_id', 'in', lifecycle_rule_ids) | list
+        == lifecycle_before.ledger | rejectattr('rule_id', 'in', lifecycle_rule_ids) | list
+      - >-
+        lifecycle_applied_state.ledger | selectattr('rule_id', 'in', lifecycle_recorded_rule_ids)
+        | map(attribute='rule_id') | list == lifecycle_recorded_rule_ids
+      - >-
+        lifecycle_applied_state.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='family') | unique | list == [lifecycle_family]
+    fail_msg: "{{ lifecycle_label }}, apply: ledger {{ lifecycle_applied_state.ledger }}"
+    quiet: true
+
+- name: Lifecycle cycle | Audit the applied topic with a real scan
+  ansible.builtin.include_tasks:
+    file: audit.yml
+  vars:
+    audit_check_mode: false
+  when: lifecycle_pre_state.audit | default(false) | bool
+
+- name: Lifecycle cycle | Check the audit outcome of every applied rule
+  ansible.builtin.assert:
+    that:
+      - lifecycle_findings | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - >-
+        lifecycle_findings | map(attribute='outcome') | difference(lifecycle_applied_outcomes
+        + (lifecycle_topic.audit | default({})).applied_outcomes | default([])) | length == 0
+    fail_msg: >-
+      {{ lifecycle_label }}: the audit after apply reported
+      {{ lifecycle_findings | items2dict(key_name='rule_id', value_name='outcome') }}; expected
+      {{ lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes | default([]) }}.
+    quiet: true
+  vars:
+    lifecycle_findings: >-
+      {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
+      | sort(attribute='rule_id') }}
+  when: lifecycle_pre_state.audit | default(false) | bool
+
+- name: Lifecycle cycle | Take the no-change snapshot of the applied topic
+  ansible.builtin.include_tasks:
+    file: snapshot.yml
+
+- name: Lifecycle cycle | Remember the no-change snapshot of the applied topic
+  ansible.builtin.set_fact:
+    lifecycle_reference:
+      digest: "{{ snapshot_digest }}"
+      lines: "{{ snapshot_lines }}"
+
+- name: Lifecycle cycle | Apply the topic again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Lifecycle cycle | Check that the second apply found every rule compliant and changed nothing
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_results | map(attribute='status') | unique | list == ['compliant']
+      - lifecycle_results | selectattr('changed') | list | length == 0
+    fail_msg: "{{ lifecycle_label }}, second apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Lifecycle cycle | Assert that the second apply is idempotent
+  ansible.builtin.include_tasks:
+    file: lifecycle_unchanged.yml
+  vars:
+    lifecycle_unchanged_step: the second apply
+
+- name: Lifecycle cycle | Switch the topic off
+  ansible.builtin.include_tasks:
+    file: lifecycle_toggles.yml
+  vars:
+    lifecycle_switch: false
+
+- name: Lifecycle cycle | Clean up the topic in check mode
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: true
+
+- name: Lifecycle cycle | Check that check mode planned and reported the cleanup of every rule of the topic
+  ansible.builtin.assert:
+    that:
+      - lifecycle_planned | map(attribute='action') | unique | list == ['cleanup']
+      - lifecycle_planned | items2dict(key_name='rule_id', value_name='disabled_by') == lifecycle_disabled_by
+      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_results | map(attribute='action') | unique | list == ['cleanup']
+      - lifecycle_results | selectattr('status', 'equalto', 'cleanup_incomplete') | list | length == 0
+      - lifecycle_results | rejectattr('changed') | list | length == 0
+    fail_msg: "{{ lifecycle_label }}, check mode off: plan {{ lifecycle_planned }}, results {{ lifecycle_results }}"
+    quiet: true
+
+- name: Lifecycle cycle | Assert that the check-mode cleanup changed nothing
+  ansible.builtin.include_tasks:
+    file: lifecycle_unchanged.yml
+  vars:
+    lifecycle_unchanged_step: check mode with the topic off
+
+- name: Lifecycle cycle | Clean up the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Lifecycle cycle | Check that every rule of the topic was cleaned up
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_results | map(attribute='action') | unique | list == ['cleanup']
+      - lifecycle_results | selectattr('status', 'equalto', 'cleanup_incomplete') | list | length == 0
+      - lifecycle_results | rejectattr('changed') | list | length == 0
+    fail_msg: "{{ lifecycle_label }}, cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Lifecycle cycle | Take the declared state after the cleanup
+  ansible.builtin.include_tasks:
+    file: lifecycle_state.yml
+
+- name: Lifecycle cycle | Assert that the cleanup restored exactly the declared state before the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_compare.yml
+  vars:
+    lifecycle_compare_step: cleanup
+    lifecycle_compare_before: "{{ lifecycle_before }}"
+    lifecycle_compare_after: "{{ lifecycle_state }}"
+    lifecycle_compare_expected: {}
+
+- name: Lifecycle cycle | Assert that the cleanup restored the ledger
+  ansible.builtin.assert:
+    that:
+      - lifecycle_state.ledger == lifecycle_before.ledger
+    fail_msg: >-
+      {{ lifecycle_label }}, cleanup: ledger {{ lifecycle_state.ledger }}, before {{ lifecycle_before.ledger }}
+    quiet: true
+
+- name: Lifecycle cycle | Audit the switched-off topic with a real scan
+  ansible.builtin.include_tasks:
+    file: audit.yml
+  vars:
+    audit_check_mode: false
+  when: lifecycle_pre_state.audit | default(false) | bool
+
+- name: Lifecycle cycle | Check that the audit reports every switched-off rule as disabled by its toggle
+  ansible.builtin.assert:
+    that:
+      - lifecycle_findings | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_findings | map(attribute='outcome') | unique | list == ['disabled']
+      - lifecycle_findings | items2dict(key_name='rule_id', value_name='disabled_by') == lifecycle_disabled_by
+    fail_msg: "{{ lifecycle_label }}: the audit after cleanup reported {{ lifecycle_findings }}."
+    quiet: true
+  vars:
+    lifecycle_findings: >-
+      {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
+      | sort(attribute='rule_id') }}
+  when: lifecycle_pre_state.audit | default(false) | bool
+
+- name: Lifecycle cycle | Take the no-change snapshot of the switched-off topic
+  ansible.builtin.include_tasks:
+    file: snapshot.yml
+
+- name: Lifecycle cycle | Remember the no-change snapshot of the switched-off topic
+  ansible.builtin.set_fact:
+    lifecycle_reference:
+      digest: "{{ snapshot_digest }}"
+      lines: "{{ snapshot_lines }}"
+
+- name: Lifecycle cycle | Run the switched-off topic again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Lifecycle cycle | Check that the second run with the topic off planned nothing for it
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results == []
+      - lifecycle_planned | map(attribute='action') | unique | list == ['none']
+      - lifecycle_planned | items2dict(key_name='rule_id', value_name='disabled_by') == lifecycle_disabled_by
+    fail_msg: "{{ lifecycle_label }}, second run off: plan {{ lifecycle_planned }}, results {{ lifecycle_results }}"
+    quiet: true
+
+- name: Lifecycle cycle | Assert that the second run with the topic off is idempotent
+  ansible.builtin.include_tasks:
+    file: lifecycle_unchanged.yml
+  vars:
+    lifecycle_unchanged_step: the second run with the topic off
+
+- name: Lifecycle cycle | Switch the topic back on for the next cycle
+  ansible.builtin.include_tasks:
+    file: lifecycle_toggles.yml
+  vars:
+    lifecycle_switch: true
+
+- name: Lifecycle cycle | Give the declared files back the mode and ownership they had before any cycle
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: file
+    follow: false
+    mode: "{{ lifecycle_pristine.files[item.path].mode }}"
+    owner: "{{ lifecycle_pristine.files[item.path].owner }}"
+    group: "{{ lifecycle_pristine.files[item.path].group }}"
+  loop: "{{ lifecycle_pre_state.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
