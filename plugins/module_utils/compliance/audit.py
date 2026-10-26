@@ -93,6 +93,7 @@ RULE_TOGGLE_SUFFIX: Final[str] = "_enabled"
 _CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
 _LONG_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,128}"
 LONG_CONTENT_NAME_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+OFF_PLATFORM_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 _BACKEND: Final[str] = r"[a-z][a-z0-9_-]{0,63}"
 _TOGGLE: Final[str] = r"linux_compliance_[a-z0-9_]{1,100}_enabled"
@@ -410,6 +411,16 @@ def _check_size(value: object) -> None:
         _invalid(f"max_result_bytes must be between 1 and {scanner.MAX_RESULT_BYTES_LIMIT}")
 
 
+def _check_off_platform(value: object, backend: str) -> None:
+    if not isinstance(value, bool):
+        _invalid("allow_off_platform_benchmark must be a boolean")
+    if value and backend not in OFF_PLATFORM_BACKENDS:
+        _invalid(
+            "allow_off_platform_benchmark applies only to the backend "
+            f"{', '.join(sorted(OFF_PLATFORM_BACKENDS))}, not to {_safe(backend)}"
+        )
+
+
 @dataclass(frozen=True)
 class AuditJob:
     """The validated arguments of one audit.
@@ -425,6 +436,9 @@ class AuditJob:
         timeout_seconds: Wall-clock limit of the scan.
         max_result_bytes: Largest results document that is parsed.
         disabled_rules: Rules that operator toggles exclude.
+        allow_off_platform_benchmark: Explicit opt-in to the off-platform pairs
+            of the backend (ADR 0019, amendment of FREES-161). Only the backends
+            in :data:`OFF_PLATFORM_BACKENDS` accept it.
     """
 
     backend: str
@@ -437,11 +451,13 @@ class AuditJob:
     timeout_seconds: float
     max_result_bytes: int
     disabled_rules: tuple[DisabledRule, ...]
+    allow_off_platform_benchmark: bool = False
 
     def __post_init__(self) -> None:
         """Validate the fields that do not need the file system."""
         if not _matches(_BACKEND, self.backend):
             _invalid(f"backend must match {_BACKEND}: {_safe(self.backend)}")
+        _check_off_platform(self.allow_off_platform_benchmark, self.backend)
         try:
             scanner.check_xccdf_id(self.profile_id, "profile", "profile_id")
         except scanner.ScanRequestError as error:
@@ -491,6 +507,9 @@ def build_job(params: Mapping[str, object], moment: datetime) -> AuditJob:
         timeout_seconds=cast("float", timeout),
         max_result_bytes=cast("int", size),
         disabled_rules=parse_disabled_rules(params.get("disabled_rules")),
+        allow_off_platform_benchmark=cast(
+            "bool", params.get("allow_off_platform_benchmark", False)
+        ),
     )
 
 
@@ -527,6 +546,7 @@ class AuditPlan:
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible description of the planned scan."""
         return {
+            "allow_off_platform_benchmark": self.job.allow_off_platform_benchmark,
             "backend": self.job.backend,
             "benchmark_id": self.benchmark.benchmark_id,
             "benchmark_version": self.benchmark.version,
@@ -970,6 +990,7 @@ def _run_backend(
             output_dir=SCAN_DIRECTORY_NAME,
             expected_rule_ids=audit_plan.expected_rule_ids,
             tailoring_path=tailoring,
+            allow_off_platform_benchmark=audit_plan.job.allow_off_platform_benchmark,
         )
         return backend.audit(request)
     except scanner.UnknownBackendError as error:

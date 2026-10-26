@@ -47,7 +47,8 @@
     run_not_completed: "run not completed: no figure is given",
     nothing_evaluated: "nothing evaluated: no figure is given",
     all_evaluated_passed: "all evaluated rules passed",
-    findings_open: "findings open"
+    findings_open: "findings open",
+    off_platform_benchmark: "off-platform benchmark: no figure is given"
   };
   const OUTCOME_ORDER = ["error", "fail", "notchecked", "waived", "pass", "notapplicable", "disabled"];
   const IN_DENOMINATOR = {
@@ -107,7 +108,7 @@
     warn: [
       "partial", "notchecked", "waived", "findings_open", "skipped", "STOPPED", "IN_PROGRESS", "medium",
       "self_asserted", "unnamed", "truncated", "active", "notselected", "informational", "in_effect",
-      "not_yet_effective", "stale", "removal_candidate"
+      "not_yet_effective", "stale", "removal_candidate", "off_platform", "off_platform_benchmark"
     ],
     neutral: [
       "unavailable", "notapplicable", "disabled", "nothing_evaluated", "none", "low", "info", "unknown",
@@ -1009,6 +1010,91 @@
     });
   }
 
+  function platformText(platform) {
+    const fields = obj(platform);
+    return el("bdi", { class: "v" }, plain(fields.distribution_id) + " " + plain(fields.distribution_version));
+  }
+
+  function offPlatformEntries(section) {
+    return list(section.off_platform).map(obj);
+  }
+
+  function offPlatformLine(entry) {
+    return [
+      hostCell(entry.host, false), ": the ", platformText(entry.benchmark_platform), " benchmark ",
+      mono(entry.benchmark_id), " on a ", platformText(entry.target_platform), " host, ",
+      badge(entry.run_status, RUN_STATUS_TEXT[entry.run_status] || plain(entry.run_status))
+    ];
+  }
+
+  function offPlatformCallout(entries) {
+    return callout("warn", "Off-platform results: never compliance with the host's own release.", [
+      el("p", null, [
+        String(entries.length), entries.length === 1 ? " input was" : " inputs were",
+        " scanned with a benchmark made for another platform than the host, by explicit opt-in. "
+          + "No benchmark for the host's own release was used, so these results are never compliance "
+          + "with a baseline of that release."
+      ]),
+      el("p", null, "They are excluded from every figure, pooled figure and summary of this report, have no "
+        + "pass percentage, and are listed separately under Off-platform results on the Compliance tab."),
+      el("ul", null, entries.map(function (entry) {
+        return el("li", null, offPlatformLine(entry));
+      }))
+    ]);
+  }
+
+  function offPlatformTable(entries) {
+    return dataTable({
+      caption: "Off-platform results (never in a figure)",
+      rows: entries,
+      detail: function (row, context) {
+        return [
+          pairs([
+            ["Input", mono(row.artifact)],
+            ["Input SHA-256", mono(row.input_sha256)],
+            ["Content version", val(row.content_version)],
+            ["Profile", val(row.profile_id)]
+          ]),
+          simpleTable("Rules per outcome (not a figure)", ["Outcome", "Rules"], OUTCOME_ORDER.map(function (outcome) {
+            return [badge(outcome), val(obj(row.counts)[outcome])];
+          }), context ? context + ": rules per outcome" : null)
+        ];
+      },
+      columns: [
+        { label: "Host", value: function (row) {
+          return hostLabel(row.host);
+        }, cell: function (row) {
+          return hostCell(row.host, false);
+        } },
+        { label: "Benchmark", value: function (row) {
+          return row.benchmark_id;
+        } },
+        { label: "Benchmark made for", value: function (row) {
+          const fields = obj(row.benchmark_platform);
+          return plain(fields.distribution_id) + " " + plain(fields.distribution_version);
+        }, cell: function (row) {
+          return platformText(row.benchmark_platform);
+        }, filter: true },
+        { label: "Host platform", value: function (row) {
+          const fields = obj(row.target_platform);
+          return plain(fields.distribution_id) + " " + plain(fields.distribution_version);
+        }, cell: function (row) {
+          return platformText(row.target_platform);
+        }, filter: true },
+        { label: "Run status", value: function (row) {
+          return row.run_status;
+        }, cell: function (row) {
+          return badge(row.run_status, RUN_STATUS_TEXT[row.run_status] || plain(row.run_status));
+        }, filter: true },
+        { label: "Label", sortable: false, value: function () {
+          return "off-platform";
+        }, cell: function () {
+          return badge("off_platform", "off-platform: not a figure");
+        } }
+      ]
+    });
+  }
+
   function compliancePanel() {
     const section = obj(SECTIONS.compliance);
     const parts = sectionHeader("compliance", section);
@@ -1019,6 +1105,12 @@
     parts.push(coverageCallout(coverage));
     parts.push(coveragePairs(coverage));
     parts.push(coverageTable(coverage));
+    const offPlatform = offPlatformEntries(section);
+    if (offPlatform.length > 0) {
+      parts.push(el("h3", null, "Off-platform results"));
+      parts.push(offPlatformCallout(offPlatform));
+      parts.push(offPlatformTable(offPlatform));
+    }
     if (isObject(section.summary)) {
       parts.push(el("h3", null, "Summary"));
       parts.push(el("p", null, "One benchmark, content version and profile, pooled over the " + scopeLabel()
@@ -1229,6 +1321,9 @@
       { label: "Per-input figure", value: function (row) {
         return obj(row.entry.summary).compliance_percent;
       }, cell: function (row) {
+        if (isObject(row.entry.off_platform)) {
+          return badge("off_platform", "off-platform: no figure");
+        }
         return isObject(row.entry.summary) ? figureCell(row.entry.summary) : missing("not parsed");
       } }
     ]));
@@ -1288,12 +1383,23 @@
         entryColumn("Outcome", "outcome", { cell: badgeCell, filter: true, rank: rankIn(OUTCOME_ORDER) }),
         entryColumn("Severity", "severity", { cell: badgeCell, filter: true, rank: rankIn(SEVERITY_ORDER) }),
         { label: "Flags", value: function (row) {
-          return list(row.entry.flags).join(" ");
+          const flags = list(row.entry.flags).slice();
+          if (isObject(row.entry.off_platform)) {
+            flags.push("off-platform");
+          }
+          return flags.join(" ");
         }, cell: function (row) {
-          const flags = list(row.entry.flags);
-          return flags.length === 0 ? missing() : el("span", null, flags.map(function (flag) {
+          const flags = list(row.entry.flags).map(function (flag) {
             return badge(flag);
-          }));
+          });
+          if (isObject(row.entry.off_platform)) {
+            const marker = obj(row.entry.off_platform);
+            flags.push(el("span", null, [
+              badge("off_platform", "off-platform"), " ", platformText(marker.benchmark_platform),
+              " benchmark on ", platformText(marker.target_platform)
+            ]));
+          }
+          return flags.length === 0 ? missing() : el("span", null, flags);
         }, filter: true },
         { label: "Exception", value: function (row) {
           return lapsedAfterStart(row) ? "lapsed" : obj(row.entry.exception).state;
@@ -1746,9 +1852,14 @@
         ["Generated", val(metadata.generated_at, "not supplied")]
       ]),
       el("h3", null, "Target hosts"),
-      coverageCallout(coverageOf(compliance)),
-      el("h3", null, "Compliance result")
+      coverageCallout(coverageOf(compliance))
     ];
+    const offPlatform = offPlatformEntries(compliance);
+    if (offPlatform.length > 0) {
+      parts.push(el("h3", null, "Off-platform results"));
+      parts.push(offPlatformCallout(offPlatform));
+    }
+    parts.push(el("h3", null, "Compliance result"));
     if (isObject(compliance.summary)) {
       parts.push(complianceSummary(compliance.summary, "Compliance summary"));
     } else {

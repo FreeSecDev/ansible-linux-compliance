@@ -10,6 +10,11 @@ convert to and from JSON-compatible mappings; ``from_dict`` rejects unknown and
 missing keys. Collections of keyed items are stored sorted so that equal
 entities serialize identically. :func:`dumps` and :func:`loads` write and read
 the deterministic JSON document of a :class:`ScanRun`.
+
+A scan run that evaluated a benchmark made for another platform than the scanned
+host (ADR 0019, FREES-161) carries an :class:`OffPlatform` marker, and so does
+every one of its findings. Such a run serializes as schema version ``1.1``; every
+other run serializes as ``1.0``, exactly as before, and readers accept both.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from types import MappingProxyType
@@ -27,7 +32,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
 SCHEMA_VERSION: Final[str] = "1.0"
-SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({SCHEMA_VERSION})
+OFF_PLATFORM_SCHEMA_VERSION: Final[str] = "1.1"
+SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
+    {SCHEMA_VERSION, OFF_PLATFORM_SCHEMA_VERSION}
+)
+OFF_PLATFORM_KEY: Final[str] = "off_platform"
 
 MAX_ID_LENGTH: Final[int] = 256
 MAX_TITLE_LENGTH: Final[int] = 512
@@ -909,6 +918,80 @@ class HostIdentity:
 
 
 @dataclass(frozen=True)
+class Platform:
+    """An operating system release: a distribution and one of its versions."""
+
+    distribution_id: str
+    distribution_version: str
+
+    def __post_init__(self) -> None:
+        """Validate the platform with the rules of :class:`HostIdentity`."""
+        _text(self.distribution_id, "platform.distribution_id", max_length=64, pattern=_SLUG)
+        _text(
+            self.distribution_version,
+            "platform.distribution_version",
+            max_length=32,
+            pattern=_IDENTIFIER_PATTERN,
+        )
+
+    @classmethod
+    def of_host(cls, host: HostIdentity) -> Platform:
+        """Return the platform that ``host`` reports."""
+        return cls(host.distribution_id, host.distribution_version)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible mapping."""
+        return {
+            "distribution_id": self.distribution_id,
+            "distribution_version": self.distribution_version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: object) -> Platform:
+        """Build a platform from a mapping, rejecting unknown and missing keys."""
+        reader = _Reader(data, "platform", ("distribution_id", "distribution_version"))
+        return cls(reader.text("distribution_id"), reader.text("distribution_version"))
+
+
+@dataclass(frozen=True)
+class OffPlatform:
+    """Marker of a scan that evaluated a benchmark made for another platform.
+
+    ``benchmark_platform`` is the platform the benchmark is made for and
+    ``target_platform`` the platform of the scanned host. The two always differ.
+    Results that carry the marker are evidence about the host under the
+    benchmark of another release, never compliance with a baseline of the
+    host's own release (ADR 0019, amendment of FREES-161).
+    """
+
+    benchmark_platform: Platform
+    target_platform: Platform
+
+    def __post_init__(self) -> None:
+        """Validate the marker."""
+        _instance(self.benchmark_platform, "off_platform.benchmark_platform", Platform)
+        _instance(self.target_platform, "off_platform.target_platform", Platform)
+        if self.benchmark_platform == self.target_platform:
+            _fail("off_platform requires a benchmark platform that differs from the target")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible mapping."""
+        return {
+            "benchmark_platform": self.benchmark_platform.to_dict(),
+            "target_platform": self.target_platform.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: object) -> OffPlatform:
+        """Build a marker from a mapping, rejecting unknown and missing keys."""
+        reader = _Reader(data, OFF_PLATFORM_KEY, ("benchmark_platform", "target_platform"))
+        return cls(
+            reader.nested("benchmark_platform", Platform.from_dict),
+            reader.nested("target_platform", Platform.from_dict),
+        )
+
+
+@dataclass(frozen=True)
 class Evidence:
     """A bounded piece of host evidence that supports a finding."""
 
@@ -1035,6 +1118,7 @@ class Finding:
     remediation: RemediationResult | None
     disabled_by: str | None
     flags: tuple[ResultFlag, ...]
+    off_platform: OffPlatform | None = None
 
     def __post_init__(self) -> None:
         """Validate and canonically order the finding."""
@@ -1050,6 +1134,7 @@ class Finding:
             _text(self.disabled_by, "finding.disabled_by", max_length=128, pattern=_VARIABLE)
         flags = _items(self.flags, "finding.flags", ResultFlag, len(ResultFlag))
         _unique(flags, "finding.flags")
+        _optional_instance(self.off_platform, "finding.off_platform", OffPlatform)
         self._check_links()
         object.__setattr__(self, "flags", tuple(sorted(flags, key=lambda flag: flag.value)))
 
@@ -1073,8 +1158,11 @@ class Finding:
                 _fail(f"finding.flags {flag.value} does not match outcome {self.outcome.value}")
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-compatible mapping."""
-        return {
+        """Return a JSON-compatible mapping.
+
+        ``off_platform`` is present exactly when the finding carries the marker.
+        """
+        result: dict[str, object] = {
             "disabled_by": self.disabled_by,
             "evaluated_outcome": self.evaluated_outcome.value,
             "evidence": [item.to_dict() for item in self.evidence],
@@ -1086,26 +1174,30 @@ class Finding:
             "rule_id": self.rule_id,
             "severity": self.severity.value,
         }
+        if self.off_platform is not None:
+            result[OFF_PLATFORM_KEY] = self.off_platform.to_dict()
+        return result
 
     @classmethod
-    def from_dict(cls, data: object) -> Finding:
-        """Build a finding from a mapping, rejecting unknown and missing keys."""
-        reader = _Reader(
-            data,
-            "finding",
-            (
-                "rule_id",
-                "outcome",
-                "evaluated_outcome",
-                "severity",
-                "message",
-                "evidence",
-                "exception",
-                "remediation",
-                "disabled_by",
-                "flags",
-            ),
+    def from_dict(cls, data: object, *, marked: bool = False) -> Finding:
+        """Build a finding from a mapping, rejecting unknown and missing keys.
+
+        With ``marked`` the mapping must hold ``off_platform``, the marker of a
+        finding of a schema 1.1 scan run; without it the key is refused.
+        """
+        keys = (
+            "rule_id",
+            "outcome",
+            "evaluated_outcome",
+            "severity",
+            "message",
+            "evidence",
+            "exception",
+            "remediation",
+            "disabled_by",
+            "flags",
         )
+        reader = _Reader(data, "finding", (*keys, OFF_PLATFORM_KEY) if marked else keys)
         return cls(
             rule_id=reader.text("rule_id"),
             outcome=reader.enum("outcome", Outcome),
@@ -1117,7 +1209,14 @@ class Finding:
             remediation=reader.optional_nested("remediation", RemediationResult.from_dict),
             disabled_by=reader.optional_text("disabled_by"),
             flags=reader.enums("flags", ResultFlag),
+            off_platform=reader.nested(OFF_PLATFORM_KEY, OffPlatform.from_dict) if marked else None,
         )
+
+
+def _declared_version(data: object) -> object:
+    if not isinstance(data, dict):
+        return None
+    return cast("dict[str, object]", data).get("schema_version")
 
 
 @dataclass(frozen=True)
@@ -1135,9 +1234,16 @@ class ScanRun:
     status: ScanStatus
     error_message: str | None
     findings: tuple[Finding, ...]
+    off_platform: OffPlatform | None = None
 
     def __post_init__(self) -> None:
-        """Validate and canonically order the scan run."""
+        """Validate and canonically order the scan run.
+
+        An off-platform marker must name the platform of ``host`` as its target.
+        Every finding of a marked run carries the run's marker: a finding without
+        one is given it, and a finding with another one, or with a marker in a
+        run without one, is refused.
+        """
         _text(self.run_id, "scan_run.run_id", max_length=128, pattern=_IDENTIFIER_PATTERN)
         started = _timestamp(self.started_at, "scan_run.started_at")
         finished = _timestamp(self.finished_at, "scan_run.finished_at")
@@ -1152,11 +1258,28 @@ class ScanRun:
         _optional_text(self.error_message, "scan_run.error_message", max_length=4096)
         findings = _items(self.findings, "scan_run.findings", Finding, MAX_FINDINGS)
         _unique(tuple(finding.rule_id for finding in findings), "scan_run.findings")
+        findings = self._marked(findings)
         self._check_status(findings)
         self._check_exceptions(findings)
         object.__setattr__(
             self, "findings", tuple(sorted(findings, key=lambda finding: finding.rule_id))
         )
+
+    def _marked(self, findings: tuple[Finding, ...]) -> tuple[Finding, ...]:
+        marker = _optional_instance(self.off_platform, "scan_run.off_platform", OffPlatform)
+        if marker is not None and marker.target_platform != Platform.of_host(self.host):
+            _fail("scan_run.off_platform.target_platform must be the platform of scan_run.host")
+        marked: list[Finding] = []
+        for finding in findings:
+            stamped = (
+                replace(finding, off_platform=marker)
+                if marker is not None and finding.off_platform is None
+                else finding
+            )
+            if stamped.off_platform != marker:
+                _fail(f"finding {stamped.rule_id} carries another off-platform marker than its run")
+            marked.append(stamped)
+        return tuple(marked)
 
     def _check_exceptions(self, findings: tuple[Finding, ...]) -> None:
         started = _instant(self.started_at)
@@ -1179,9 +1302,18 @@ class ScanRun:
         if not_completed and any(finding.outcome is not Outcome.ERROR for finding in findings):
             _fail("a failed scanner execution may only produce error findings")
 
+    @property
+    def schema_version(self) -> str:
+        """Return ``1.1`` for a run with an off-platform marker, otherwise ``1.0``."""
+        return SCHEMA_VERSION if self.off_platform is None else OFF_PLATFORM_SCHEMA_VERSION
+
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-compatible mapping that includes the schema version."""
-        return {
+        """Return a JSON-compatible mapping that includes the schema version.
+
+        ``off_platform`` is present exactly when the run carries the marker, which
+        makes the document schema version ``1.1``.
+        """
+        result: dict[str, object] = {
             "benchmark_id": self.benchmark_id,
             "content": self.content.to_dict(),
             "error_message": self.error_message,
@@ -1191,32 +1323,38 @@ class ScanRun:
             "profile_id": self.profile_id,
             "run_id": self.run_id,
             "scanner": self.scanner.to_dict(),
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": self.schema_version,
             "started_at": self.started_at,
             "status": self.status.value,
         }
+        if self.off_platform is not None:
+            result[OFF_PLATFORM_KEY] = self.off_platform.to_dict()
+        return result
 
     @classmethod
     def from_dict(cls, data: object) -> ScanRun:
-        """Build a scan run from a mapping, rejecting unknown and missing keys."""
-        reader = _Reader(
-            data,
-            "scan_run",
-            (
-                "schema_version",
-                "run_id",
-                "started_at",
-                "finished_at",
-                "host",
-                "scanner",
-                "content",
-                "benchmark_id",
-                "profile_id",
-                "status",
-                "error_message",
-                "findings",
-            ),
+        """Build a scan run from a mapping, rejecting unknown and missing keys.
+
+        Schema version ``1.0`` documents never hold ``off_platform``. Version
+        ``1.1`` documents must hold it, as an object, on the run and on every
+        finding.
+        """
+        marked = _declared_version(data) == OFF_PLATFORM_SCHEMA_VERSION
+        keys = (
+            "schema_version",
+            "run_id",
+            "started_at",
+            "finished_at",
+            "host",
+            "scanner",
+            "content",
+            "benchmark_id",
+            "profile_id",
+            "status",
+            "error_message",
+            "findings",
         )
+        reader = _Reader(data, "scan_run", (*keys, OFF_PLATFORM_KEY) if marked else keys)
         version = reader.text("schema_version")
         if version not in SUPPORTED_SCHEMA_VERSIONS:
             _fail(f"unsupported schema_version {_safe(version)}")
@@ -1231,7 +1369,10 @@ class ScanRun:
             profile_id=reader.text("profile_id"),
             status=reader.enum("status", ScanStatus),
             error_message=reader.optional_text("error_message"),
-            findings=reader.objects("findings", Finding.from_dict),
+            findings=reader.objects(
+                "findings", lambda item: Finding.from_dict(item, marked=marked)
+            ),
+            off_platform=reader.nested(OFF_PLATFORM_KEY, OffPlatform.from_dict) if marked else None,
         )
 
 

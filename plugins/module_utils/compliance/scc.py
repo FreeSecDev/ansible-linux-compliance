@@ -59,6 +59,24 @@ and every unlisted value become ``error``, ``fixed`` becomes ``error`` too
 ``notchecked`` stays
 ``notchecked``; nothing that SCC could not evaluate becomes ``pass``.
 
+Off-platform opt-in
+-------------------
+
+A host is scanned only with a benchmark made for its own platform
+(:data:`SUPPORTED_BENCHMARKS`). With the explicit opt-in
+``allow_off_platform_benchmark`` a request may also use a benchmark of another
+platform, but only for the exact pairs in :data:`OFF_PLATFORM_BENCHMARKS`: the
+Ubuntu 24.04 STIG benchmark on an Ubuntu 26.04 host. Every other combination is
+still refused. Such a run carries a :class:`model.OffPlatform` marker that names
+the benchmark's platform and the host's, and so does every finding. Its per-run
+options keep SCC's results for content that SCC judges not applicable
+(``saveResultsForNotApplicableContent``), so that SCC writes results even when the
+benchmark's platform test does not match. A completed off-platform run in which
+more than :data:`OFF_PLATFORM_NOTAPPLICABLE_PERCENT` percent of the expected
+rules are ``notapplicable`` is turned into a ``failed`` run with every expected
+rule ``error``, so that it can never read as clean (ADR 0019, amendment of
+FREES-161).
+
 The XCCDF and ARF results are copied to ``results.xml`` and ``results-arf.xml``
 in the output directory, where the audit records them as evidence. SCC's own
 tree, with its debug logs and the rewritten options file, stays in the root-only
@@ -121,6 +139,7 @@ CONFIRMED_ZERO: Final[tuple[str, ...]] = (
     "contentCheckForUpdates",
 )
 DEFAULT_CONFIGURATION_PROFILE: Final[str] = "default"
+NOT_APPLICABLE_RESULTS: Final[str] = "saveResultsForNotApplicableContent"
 
 
 @dataclass(frozen=True)
@@ -150,6 +169,10 @@ SUPPORTED_RELEASES: Final[Mapping[str, Release]] = MappingProxyType(
 SUPPORTED_BENCHMARKS: Final[Mapping[str, tuple[str, str]]] = MappingProxyType(
     {"xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG": ("ubuntu", "24.04")}
 )
+OFF_PLATFORM_BENCHMARKS: Final[frozenset[tuple[str, str, str]]] = frozenset(
+    {("xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG", "ubuntu", "26.04")}
+)
+OFF_PLATFORM_NOTAPPLICABLE_PERCENT: Final[int] = 50
 OPTIONS_TEMPLATE: Final[tuple[tuple[str, str], ...]] = (
     ("sccConfigProfile", DEFAULT_CONFIGURATION_PROFILE),
     ("sccConfigProfileMetaData", "freesecdev.linux_compliance per-run options"),
@@ -511,15 +534,25 @@ def read_installed_content(options_path: str, file_name: str) -> InstalledConten
     return InstalledContent(matches[0][0], matches[0][1])
 
 
-def options_document(content: InstalledContent, profile_id: str) -> str:
+def options_document(
+    content: InstalledContent, profile_id: str, *, keep_not_applicable: bool = False
+) -> str:
     """Return the per-run options document for ``content`` and ``profile_id``.
 
     Every value is escaped, although every value is either a reviewed constant or
-    a field that matched a pattern without markup characters.
+    a field that matched a pattern without markup characters. With
+    ``keep_not_applicable`` (off-platform runs only) the one setting
+    ``saveResultsForNotApplicableContent`` is ``1``, so that SCC writes results
+    for a stream whose platform test does not match the host; every other value
+    is the template's.
     """
     scanner.check_xccdf_id(profile_id, "profile", "profile_id")
+    overrides = {NOT_APPLICABLE_RESULTS: "1"} if keep_not_applicable else {}
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<options>"]
-    lines.extend(f"  <{name}>{xml_escape(value)}</{name}>" for name, value in OPTIONS_TEMPLATE)
+    lines.extend(
+        f"  <{name}>{xml_escape(overrides.get(name, value))}</{name}>"
+        for name, value in OPTIONS_TEMPLATE
+    )
     entry = [
         ("stream", content.fields["stream"]),
         ("family", content.fields["family"]),
@@ -745,6 +778,13 @@ def _single(entries: list[Path], what: str) -> Path | str:
     return entries[0]
 
 
+def _unchanged(prepared: _Prepared) -> bool:
+    return (
+        _sha256(prepared.installed) == prepared.digest
+        and _sha256(prepared.content) == prepared.digest
+    )
+
+
 class SccBackend:
     """Backend that evaluates a profile with ``cscc`` (SCC 5.15).
 
@@ -775,9 +815,10 @@ class SccBackend:
         Raises:
             ScanRequestError: If the request asks for something the backend
                 never does: tailoring, a benchmark without an SCC pin, a host
-                for which the benchmark is not made, or an unsafe path.
+                for which the benchmark is not made (unless the request opts
+                into one of :data:`OFF_PLATFORM_BENCHMARKS`), or an unsafe path.
         """
-        self._check_request(request)
+        marker = self._check_request(request)
         content = _confine(self._settings.content_root, request.content_path)
         try:
             digest = _sha256(content)
@@ -791,15 +832,17 @@ class SccBackend:
         version = UNKNOWN_VERSION
         if isinstance(prepared, _Prepared):
             version = prepared.release.version
-            outcome = self._scan(request, prepared, output, started)
+            outcome = self._scan(request, prepared, output, started, marker)
         else:
             outcome = prepared
+        if marker is not None and isinstance(outcome, openscap.ParsedResults):
+            outcome = _applicable(request, outcome, marker)
         finished = max(started, self._clock())
         facts = _Facts(version, Path(content).name, digest, started, finished)
-        return _build_run(request, outcome, facts)
+        return _build_run(request, outcome, facts, marker)
 
     @staticmethod
-    def _check_request(request: scanner.ScanRequest) -> None:
+    def _check_request(request: scanner.ScanRequest) -> model.OffPlatform | None:
         if request.tailoring_path is not None:
             message = (
                 "the scc backend does not support disabled rules yet; SCC tailoring is FREES-146"
@@ -810,13 +853,24 @@ class SccBackend:
             message = f"no SCC benchmark is pinned for {_clip(request.benchmark_id)}"
             raise scanner.ScanRequestError(message)
         host = (request.host.distribution_id, request.host.distribution_version)
-        if host != platform:
-            message = (
-                f"the pinned SCC benchmark is for {platform[0]} {platform[1]}, not for "
-                f"{_clip(host[0])} {_clip(host[1])}; no SCC benchmark is pinned for that "
-                "release, and a host is never scanned with the content of another release"
+        if host == platform:
+            return None
+        allowed = (request.benchmark_id, *host) in OFF_PLATFORM_BENCHMARKS
+        if allowed and request.allow_off_platform_benchmark:
+            return model.OffPlatform(model.Platform(*platform), model.Platform(*host))
+        message = (
+            f"the pinned SCC benchmark is for {platform[0]} {platform[1]}, not for "
+            f"{_clip(host[0])} {_clip(host[1])}; no SCC benchmark is pinned for that "
+            "release, and a host is never scanned with the content of another release"
+        )
+        if allowed:
+            message += (
+                " unless allow_off_platform_benchmark is true, which labels every result "
+                "off-platform"
             )
-            raise scanner.ScanRequestError(message)
+        elif request.allow_off_platform_benchmark:
+            message += f"; allow_off_platform_benchmark permits only {_off_platform_pairs()}"
+        raise scanner.ScanRequestError(message)
 
     def _prepare(self, content: str, digest: str) -> _Prepared | _Failure:
         root = self._install_root
@@ -871,6 +925,7 @@ class SccBackend:
         prepared: _Prepared,
         output: Path,
         started: datetime,
+        marker: model.OffPlatform | None,
     ) -> openscap.ParsedResults | _Failure:
         probe = self._probe_version(prepared.release)
         if probe is not None:
@@ -880,7 +935,12 @@ class SccBackend:
         options = work / OPTIONS_FILE_NAME
         _new_directory(work, "SCC work directory")
         _new_directory(user, "SCC user directory")
-        _write_new_file(options, options_document(prepared.record, request.profile_id))
+        _write_new_file(
+            options,
+            options_document(
+                prepared.record, request.profile_id, keep_not_applicable=marker is not None
+            ),
+        )
         spec = process.CommandSpec(
             EXECUTABLE,
             ("-o", str(options), "-u", str(user), "-q", "-d"),
@@ -896,11 +956,7 @@ class SccBackend:
         if result.returncode != 0:
             return _Failure(model.ScanStatus.FAILED, f"cscc exited with status {result.returncode}")
         outcome = self._collect(request, user, str(options), output, started)
-        unchanged = (
-            _sha256(prepared.installed) == prepared.digest
-            and _sha256(prepared.content) == prepared.digest
-        )
-        if isinstance(outcome, openscap.ParsedResults) and not unchanged:
+        if not _unchanged(prepared) and isinstance(outcome, openscap.ParsedResults):
             return _Failure(model.ScanStatus.FAILED, "the content changed during the scan")
         return outcome
 
@@ -969,8 +1025,46 @@ class SccBackend:
         return _verify(request, parsed, _format(started))
 
 
+def _off_platform_pairs() -> str:
+    return "; ".join(
+        sorted(
+            f"{benchmark} on {distribution} {version} hosts"
+            for benchmark, distribution, version in OFF_PLATFORM_BENCHMARKS
+        )
+    )
+
+
+def _applicable(
+    request: scanner.ScanRequest, parsed: openscap.ParsedResults, marker: model.OffPlatform
+) -> openscap.ParsedResults | _Failure:
+    """Fail an off-platform run in which most expected rules are ``notapplicable``.
+
+    The run is failed when ``notapplicable`` findings exceed
+    :data:`OFF_PLATFORM_NOTAPPLICABLE_PERCENT` percent of the expected rules, so
+    that the benchmark's applicability checks rejecting the host never read as a
+    clean result.
+    """
+    expected = len(request.expected_rule_ids)
+    skipped = sum(1 for item in parsed.findings if item.outcome is model.Outcome.NOTAPPLICABLE)
+    if skipped * 100 <= OFF_PLATFORM_NOTAPPLICABLE_PERCENT * expected:
+        return parsed
+    benchmark = marker.benchmark_platform
+    target = marker.target_platform
+    message = (
+        f"SCC reported {skipped} of {expected} expected rules as notapplicable, more than "
+        f"{OFF_PLATFORM_NOTAPPLICABLE_PERCENT} %: the applicability checks of the "
+        f"{benchmark.distribution_id} {benchmark.distribution_version} benchmark do not fit "
+        f"this {target.distribution_id} {target.distribution_version} host, so the "
+        "off-platform run is failed; SCC's results stay in the evidence"
+    )
+    return _Failure(model.ScanStatus.FAILED, message)
+
+
 def _build_run(
-    request: scanner.ScanRequest, outcome: openscap.ParsedResults | _Failure, facts: _Facts
+    request: scanner.ScanRequest,
+    outcome: openscap.ParsedResults | _Failure,
+    facts: _Facts,
+    marker: model.OffPlatform | None = None,
 ) -> model.ScanRun:
     info = model.ScannerInfo(BACKEND_NAME, facts.version)
     if isinstance(outcome, openscap.ParsedResults):
@@ -987,6 +1081,7 @@ def _build_run(
                 status=model.ScanStatus.COMPLETED,
                 error_message=None,
                 findings=outcome.findings,
+                off_platform=marker,
             )
         except model.ModelError as error:
             outcome = _Failure(
@@ -1006,6 +1101,7 @@ def _build_run(
         findings=tuple(
             _error_finding(rule_id, outcome.message) for rule_id in request.expected_rule_ids
         ),
+        off_platform=marker,
     )
 
 

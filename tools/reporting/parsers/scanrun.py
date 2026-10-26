@@ -12,7 +12,7 @@ from tools.reporting.common import (
     run_parser,
     sha256_hex,
 )
-from tools.reporting.compliance import ComplianceData, summarize, tally_findings
+from tools.reporting.compliance import ComplianceData, scan_run_summary, summarize, tally_findings
 
 
 def scan_run_data(data: bytes) -> ComplianceData:
@@ -40,7 +40,10 @@ def scan_run_data(data: bytes) -> ComplianceData:
         findings=run.findings,
         not_selected=0,
         scan_run=run,
-        summary=summarize(tally_findings(run.findings), status, 1, unfinished),
+        summary=scan_run_summary(
+            summarize(tally_findings(run.findings), status, 1, unfinished), run.off_platform
+        ),
+        off_platform=run.off_platform,
     )
 
 

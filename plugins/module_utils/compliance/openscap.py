@@ -503,6 +503,15 @@ def _existing_file(base: str, candidate: str, name: str) -> str:
     return path
 
 
+def _refuse_off_platform(request: scanner.ScanRequest) -> None:
+    if request.allow_off_platform_benchmark:
+        message = (
+            "the openscap backend never evaluates the benchmark of another platform; "
+            "allow_off_platform_benchmark applies only to the scc backend"
+        )
+        raise scanner.ScanRequestError(message)
+
+
 class OpenScapBackend:
     """Backend that evaluates a profile with ``oscap xccdf eval``.
 
@@ -529,9 +538,12 @@ class OpenScapBackend:
         """Evaluate ``request.profile_id`` and return the normalized scan run.
 
         Raises:
-            ScanRequestError: If a path is unsafe or missing or the output
-                directory cannot be created fresh; nothing ran.
+            ScanRequestError: If a path is unsafe or missing, the output
+                directory cannot be created fresh, or the request opts into an
+                off-platform benchmark, which this backend never evaluates;
+                nothing ran.
         """
+        _refuse_off_platform(request)
         content = _existing_file(self._settings.content_root, request.content_path, "content")
         tailoring = (
             None

@@ -16,6 +16,11 @@ Commands:
   options with the backend's own functions, sets ``downloadExternalFiles`` to
   ``1``, runs ``cscc`` in the backend's scan form and reports whether the
   backend's confirmation accepts SCC's debug log (it must not).
+- ``off-platform``: in the Ubuntu 26.04 image (FREES-161), run the module for a
+  26.04 host without the opt-in (it must be refused) and with
+  ``allow_off_platform_benchmark``, and report both results, the outcomes that
+  SCC wrote into the kept XCCDF results, the ``VERSION_ID`` of the image and the
+  state changes below ``/opt/scc`` and ``/root``.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ from pathlib import Path
 from typing import cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    openscap,
     scc,
 )
 
@@ -45,6 +51,8 @@ INSTALLED_OPTIONS = "/opt/scc/options.xml"
 DOWNLOAD_OFF = "<downloadExternalFiles>0</downloadExternalFiles>"
 DOWNLOAD_ON = "<downloadExternalFiles>1</downloadExternalFiles>"
 PROFILE = "xccdf_mil.disa.stig_profile_MAC-1_Classified"
+OS_RELEASE = Path("/etc/os-release")
+MAX_RESULTS_BYTES = 128 * 1024 * 1024
 
 
 def _digest(path: Path) -> str:
@@ -194,7 +202,58 @@ def egress_scan(options: argparse.Namespace) -> dict[str, object]:
     return run_module(module, {**module_arguments(options), "run_id": "egress"}, python_path)
 
 
-COMMANDS = {"scan": scan, "install": install, "positive": positive, "egress-scan": egress_scan}
+def version_id() -> str:
+    """Return ``VERSION_ID`` of ``/etc/os-release``."""
+    for line in OS_RELEASE.read_text(encoding="utf-8").splitlines():
+        key, _, value = line.partition("=")
+        if key == "VERSION_ID":
+            return value.strip('"')
+    return ""
+
+
+def kept_outcomes(results: Path) -> dict[str, int]:
+    """Return the count per outcome of SCC's kept XCCDF results, read with the hardened parser."""
+    if not results.is_file():
+        return {}
+    parsed = openscap.read_results(str(results), MAX_RESULTS_BYTES, assume_utc=True)
+    counts: dict[str, int] = {}
+    for finding in parsed.findings:
+        counts[finding.outcome.value] = counts.get(finding.outcome.value, 0) + 1
+    return counts
+
+
+def off_platform(options: argparse.Namespace) -> dict[str, object]:
+    """Scan this Ubuntu 26.04 container with the 24.04 benchmark, refused and then opted in."""
+    module = options.repository / "plugins" / "modules" / "compliance_scan.py"
+    python_path = f"{options.repository / 'build' / 'collections'}:{options.site_packages}"
+    arguments = module_arguments(options)
+    host = cast("dict[str, object]", arguments["host"])
+    arguments["host"] = {**host, "hostname": "scc-off-platform", "distribution_version": "26.04"}
+    refused = run_module(module, {**arguments, "run_id": "refused"}, python_path)
+    before = snapshot(WATCHED)
+    marked = run_module(
+        module,
+        {**arguments, "allow_off_platform_benchmark": True, "run_id": "off-platform"},
+        python_path,
+    )
+    after = snapshot(WATCHED)
+    results = Path(options.output_dir) / "off-platform" / "scan" / "results.xml"
+    return {
+        "refused": refused,
+        "scan": marked,
+        "kept_outcomes": kept_outcomes(results),
+        "version_id": version_id(),
+        "state": difference(before, after),
+    }
+
+
+COMMANDS = {
+    "scan": scan,
+    "install": install,
+    "positive": positive,
+    "egress-scan": egress_scan,
+    "off-platform": off_platform,
+}
 
 
 def main(argv: list[str]) -> int:

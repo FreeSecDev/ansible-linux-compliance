@@ -183,6 +183,46 @@ this run holds one XCCDF and one ARF results file for the requested benchmark an
 on failure and is never taken as completion. Anything else is `failed` with every rule `error`. The backend refuses
 `disabled_rules` (FREES-146) and hosts for which no SCC benchmark is pinned, such as Ubuntu 26.04.
 
+### Off-platform scans of Ubuntu 26.04 (FREES-161)
+
+No DISA benchmark for Ubuntu 26.04 exists yet. `allow_off_platform_benchmark: true` is an explicit opt-in that lets
+`backend: scc` scan an Ubuntu 26.04 host with the pinned Ubuntu 24.04 STIG benchmark
+([ADR 0019](adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161)).
+
+- **Off by default and exact.** The only allowed pair is the benchmark
+  `xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG` on a host whose `distribution_id` is `ubuntu` and whose
+  `distribution_version` is `26.04`. Every other combination is refused, with or without the opt-in. Without it a 26.04
+  host is refused as before. `backend: openscap` refuses the option.
+- **Labelled.** The scan run and every finding carry `off_platform` with `benchmark_platform` and `target_platform`,
+  and the scan run has findings model schema 1.1. The results are scan evidence about the host under the 24.04
+  benchmark, never compliance with an Ubuntu 26.04 baseline. Reports keep them out of every figure and list them
+  separately ([reporting data model](reporting-data-model.md#off-platform-results)).
+- **Mostly not applicable means failed.** A completed off-platform run in which more than 50 % of the profile's rules
+  are `notapplicable` becomes `failed` with every rule `error`. SCC's own results stay in the evidence directory.
+  With SCC 5.15 the 24.04 stream's platform test does not match an Ubuntu 26.04 container, and SCC reports every
+  rule as `notapplicable`, so such a scan fails. `make scc-integration` checks this against a pinned Ubuntu 26.04
+  image.
+
+```yaml
+- name: Scan an Ubuntu 26.04 host with the Ubuntu 24.04 STIG benchmark, labelled off-platform
+  freesecdev.linux_compliance.compliance_scan:
+    backend: scc
+    allow_off_platform_benchmark: true
+    content_path: /opt/scc/Resources/Content/SCAP12_Content/U_CAN_Ubuntu_24-04_LTS_V1R5_STIG_SCAP_1-4_Benchmark-enhancedV7-signed.xml
+    expected_sha256: eac6f7a6a1e80c52d02c508d939eb09aa09b7fe6eaeb060b8aa21e095719c940
+    profile_id: xccdf_mil.disa.stig_profile_MAC-1_Classified
+    host:
+      hostname: "{{ ansible_facts['hostname'] }}"
+      distribution_id: ubuntu
+      distribution_version: "26.04"
+      architecture: x86_64
+    fail_on_incomplete: false
+  become: true
+  register: off_platform_audit
+```
+
+Report such runs through `scan-run.json` or evidence bundles: the raw `results.xml` carries no marker.
+
 ### SCE check scripts run as root
 
 The pinned datastreams embed Script Check Engine (SCE) check scripts: the Ubuntu 24.04 datastream has 81 `sce:script`

@@ -476,3 +476,52 @@ Rejected alternatives: classifying on the reported `outcome` (a new waiver would
 `waived` to `pass` would need special cases), treating `error` to `pass` as an improvement (a repaired check proves
 nothing about the host), reporting partial figures for an incomplete run (they would read as "no regressions"), and
 comparing scans of different content versions rule by rule (rule semantics can change between releases).
+
+## Amendment 2026-10-26: off-platform marker (FREES-161)
+
+[ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161)
+lets the SCC backend scan an Ubuntu 26.04 host with the Ubuntu 24.04 STIG benchmark, by explicit opt-in. Such results
+must never pass for results of a benchmark made for the host, so the model marks them.
+
+### Entities
+
+| Entity | Fields |
+|---|---|
+| Platform | `distribution_id`, `distribution_version`, validated like the same fields of HostIdentity |
+| OffPlatform | `benchmark_platform` (the platform the benchmark is made for), `target_platform` (the platform of the host); the two must differ |
+
+`ScanRun` and `Finding` gain an optional `off_platform`, the default `None`. The invariants:
+
+- **The target is the host.** A marked run's `target_platform` equals the distribution and version of `host`.
+- **Every finding of a marked run carries the run's marker.**
+  - `ScanRun` gives the marker to every finding that has none, so findings that are added later (disabled rules,
+    `error` findings of a failed run or of a digest mismatch) are marked too.
+  - A finding with another marker is refused.
+- **An unmarked run has no marked finding.**
+- **The marker survives every rebuild.** It is kept on failed and timed-out runs, and through waivers, because
+  exceptions rebuild findings with `dataclasses.replace`.
+
+### Schema version 1.1
+
+Adding a field bumps the minor version, as the serialization rules above require.
+
+- **Which version is written.** A run with a marker serializes as `schema_version` `"1.1"`, with `off_platform` on the
+  run and on every finding. Every other run still serializes as `"1.0"`, byte for byte as before. Evidence bundles,
+  exceptions evaluations and their digest checks, which compare serializations, are therefore unchanged for
+  on-platform runs.
+- **What readers accept.** `SUPPORTED_SCHEMA_VERSIONS` is `{"1.0", "1.1"}`. A `1.0` document must not hold
+  `off_platform` at any level. A `1.1` document must hold it, as an object, on the run and on every finding. Every
+  other key rule is unchanged.
+- **Readers come first.** Readers were updated in the same change as the only writer. A reader that knows only 1.0
+  refuses a 1.1 document instead of reading it as on-platform.
+- **Older documents.** 1.0 documents are read exactly as before. The model has no conversion: a 1.0 run is
+  unmarked by definition, because no marked run could be produced before this amendment.
+
+Rejected alternatives:
+
+| Alternative | Reason rejected |
+|---|---|
+| A field in `Provenance` | `Provenance` also describes benchmarks and references, which never have a target host |
+| Always writing 1.1 with `off_platform: null` | Changes the bytes and digests of every on-platform run, evaluation and bundle for no information |
+| Marking only the run | A finding copied out of its run, for example into a checklist, would lose the label |
+| A new outcome such as `offplatform` | The outcome is what the scanner decided; the marker says under which benchmark it decided it, and every outcome needs it |

@@ -1,7 +1,9 @@
 """Shared helpers of the SCC integration and egress tests (ADR 0019, FREES-145).
 
-The tests run only against a local image whose tag starts with ``localhost/``,
-given in ``FREESECDEV_SCC_IMAGE`` (``make scc-integration`` sets it). They never
+The tests run only against local images whose tags start with ``localhost/``,
+given in ``FREESECDEV_SCC_IMAGE`` and, for the Ubuntu 26.04 off-platform case
+(FREES-161), ``FREESECDEV_SCC_IMAGE_UBUNTU2604`` (``make scc-integration`` sets
+both). They never
 build, tag or transfer an image; ``make scc-image`` builds it and
 ``make scc-image-clean`` removes it. Without the variable the tests skip, and with
 ``FREESECDEV_REQUIRE_SCC=1`` (CI) a skip is a failure.
@@ -27,6 +29,7 @@ import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 IMAGE_VARIABLE = "FREESECDEV_SCC_IMAGE"
+IMAGE_UBUNTU2604_VARIABLE = "FREESECDEV_SCC_IMAGE_UBUNTU2604"
 REQUIRE_VARIABLE = "FREESECDEV_REQUIRE_SCC"
 LOCAL_TAG = re.compile(r"localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+")
 PYTHON_MOUNT = "/opt/py"
@@ -40,15 +43,15 @@ CONTENT_DIRECTORY = "/opt/scc/Resources/Content/SCAP12_Content"
 PINS = REPOSITORY_ROOT / "extensions" / "ci" / "scc" / "scc.pins"
 
 
-def image() -> str:
-    """Return the local SCC image, or skip (fail in CI) when none is given."""
-    value = os.environ.get(IMAGE_VARIABLE, "")
+def image(variable: str = IMAGE_VARIABLE) -> str:
+    """Return the local SCC image named by ``variable``, or skip (fail in CI) without one."""
+    value = os.environ.get(variable, "")
     if not value:
         if os.environ.get(REQUIRE_VARIABLE) == "1":
-            pytest.fail(f"{IMAGE_VARIABLE} is required in CI")
-        pytest.skip(f"{IMAGE_VARIABLE} is not set; run make scc-integration")
+            pytest.fail(f"{variable} is required in CI")
+        pytest.skip(f"{variable} is not set; run make scc-integration")
     if LOCAL_TAG.fullmatch(value) is None:
-        pytest.fail(f"{IMAGE_VARIABLE} must be a localhost/ tag")
+        pytest.fail(f"{variable} must be a localhost/ tag")
     return value
 
 

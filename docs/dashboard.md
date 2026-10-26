@@ -82,6 +82,17 @@ the Compliance tab:
 The Compliance tab also shows the counts per status, the path, SHA-256 and ID of the collection summary, and a table
 of every target host with whether it is in the report, its status, run and manifest SHA-256.
 
+### Off-platform results
+
+A scan run made with `allow_off_platform_benchmark` evaluated a benchmark made for another platform than the host, for
+example the Ubuntu 24.04 STIG benchmark on an Ubuntu 26.04 host
+([off-platform results](reporting-data-model.md#off-platform-results)). When the report has such inputs, the Overview
+and the Compliance tab show the callout **Off-platform results: never compliance with the host's own release.** It
+gives the number of inputs, says that they are excluded from every figure, pooled figure and summary, and lists each
+with its host, benchmark, both platforms and run status. The Compliance tab adds the table "Off-platform results
+(never in a figure)" with the rules per outcome in its details, the inputs table shows "off-platform: no figure", and
+the findings table flags each marked finding "off-platform". A report without off-platform inputs shows none of this.
+
 ### Host groups
 
 Each row of "Figures per host" is one benchmark, content version and profile on one host, and shows:

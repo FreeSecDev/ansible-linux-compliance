@@ -1,0 +1,14 @@
+---
+minor_changes:
+  - >-
+    compliance_scan - add ``allow_off_platform_benchmark`` (default ``false``), an explicit opt-in for ``backend: scc``
+    to scan an Ubuntu 26.04 host with the pinned Ubuntu 24.04 STIG benchmark, the only allowed pair; every other
+    combination is still refused and ``backend: openscap`` refuses the option. The scan run and every finding carry an
+    ``off_platform`` marker that names the benchmark's platform and the host's (findings model schema 1.1, 1.0
+    documents are still read), and a completed off-platform run with more than 50 % ``notapplicable`` rules is
+    failed (FREES-161).
+  - >-
+    reporting - report schema 2.2 keeps off-platform scan runs out of every rule list, group, pooled figure and
+    summary, gives them no per-input percentage (assessment ``off_platform_benchmark``) and lists them in
+    ``sections.compliance.off_platform``; the dashboard labels them on the Overview and the Compliance tab and still
+    reads 2.0 and 2.1 reports (FREES-161).

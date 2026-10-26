@@ -27,7 +27,20 @@
           ]
         },
         "summary": {
-          "$ref": "#/$defs/complianceSummary"
+          "allOf": [
+            {
+              "$ref": "#/$defs/complianceSummary"
+            },
+            {
+              "properties": {
+                "assessment": {
+                  "not": {
+                    "const": "off_platform_benchmark"
+                  }
+                }
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -713,6 +726,64 @@
               "kind"
             ]
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "off_platform": {
+                "$ref": "#/$defs/offPlatform"
+              }
+            },
+            "required": [
+              "off_platform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "summary": {
+                "properties": {
+                  "assessment": {
+                    "enum": [
+                      "off_platform_benchmark",
+                      "run_not_completed"
+                    ]
+                  },
+                  "compliance_percent": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "summary": {
+                "properties": {
+                  "assessment": {
+                    "const": "off_platform_benchmark"
+                  }
+                },
+                "required": [
+                  "assessment"
+                ]
+              }
+            },
+            "required": [
+              "summary"
+            ]
+          },
+          "then": {
+            "properties": {
+              "off_platform": {
+                "$ref": "#/$defs/offPlatform"
+              }
+            },
+            "required": [
+              "off_platform"
+            ]
+          }
         }
       ],
       "properties": {
@@ -790,6 +861,16 @@
         "not_selected": {
           "minimum": 0,
           "type": "integer"
+        },
+        "off_platform": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/offPlatform"
+            }
+          ]
         },
         "profile_id": {
           "maxLength": 8192,
@@ -1250,6 +1331,13 @@
           "maxItems": 1000,
           "type": "array"
         },
+        "off_platform": {
+          "items": {
+            "$ref": "#/$defs/offPlatformInput"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
         "reason": {
           "oneOf": [
             {
@@ -1282,7 +1370,20 @@
               "type": "null"
             },
             {
-              "$ref": "#/$defs/complianceSummary"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/complianceSummary"
+                },
+                {
+                  "properties": {
+                    "assessment": {
+                      "not": {
+                        "const": "off_platform_benchmark"
+                      }
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -1447,6 +1548,28 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "assessment": {
+                "const": "off_platform_benchmark"
+              }
+            },
+            "required": [
+              "assessment"
+            ]
+          },
+          "then": {
+            "properties": {
+              "compliance_percent": {
+                "type": "null"
+              },
+              "run_status": {
+                "const": "completed"
+              }
+            }
+          }
         }
       ],
       "properties": {
@@ -1455,7 +1578,8 @@
             "run_not_completed",
             "nothing_evaluated",
             "all_evaluated_passed",
-            "findings_open"
+            "findings_open",
+            "off_platform_benchmark"
           ]
         },
         "compliance_percent": {
@@ -3121,6 +3245,9 @@
             }
           ]
         },
+        "off_platform": {
+          "$ref": "#/$defs/offPlatform"
+        },
         "outcome": {
           "enum": [
             "pass",
@@ -3215,7 +3342,20 @@
           "type": "string"
         },
         "summary": {
-          "$ref": "#/$defs/complianceSummary"
+          "allOf": [
+            {
+              "$ref": "#/$defs/complianceSummary"
+            },
+            {
+              "properties": {
+                "assessment": {
+                  "not": {
+                    "const": "off_platform_benchmark"
+                  }
+                }
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -4662,6 +4802,87 @@
         }
       ]
     },
+    "offPlatform": {
+      "additionalProperties": false,
+      "description": "A scan run that evaluated a benchmark made for another platform than the host (ADR 0019 and ADR 0016, amendments of FREES-161). Never a compliance figure.",
+      "properties": {
+        "benchmark_platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "target_platform": {
+          "$ref": "#/$defs/platform"
+        }
+      },
+      "required": [
+        "benchmark_platform",
+        "target_platform"
+      ],
+      "type": "object"
+    },
+    "offPlatformInput": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "benchmark_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "benchmark_platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "content_version": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/outcomeCounts"
+        },
+        "host": {
+          "$ref": "#/$defs/hostKey"
+        },
+        "input_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "kind": {
+          "enum": [
+            "scan_run",
+            "exceptions_evaluation"
+          ]
+        },
+        "profile_id": {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        "run_status": {
+          "enum": [
+            "completed",
+            "failed",
+            "timed_out"
+          ]
+        },
+        "target_platform": {
+          "$ref": "#/$defs/platform"
+        }
+      },
+      "required": [
+        "artifact",
+        "benchmark_id",
+        "benchmark_platform",
+        "content_version",
+        "counts",
+        "host",
+        "input_sha256",
+        "kind",
+        "profile_id",
+        "run_status",
+        "target_platform"
+      ],
+      "type": "object"
+    },
     "outcomeCounts": {
       "additionalProperties": false,
       "properties": {
@@ -5182,6 +5403,26 @@
       "maxLength": 254,
       "pattern": "^(?:(?:[a-z0-9][a-z0-9._-]{0,63}|[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+))$",
       "type": "string"
+    },
+    "platform": {
+      "additionalProperties": false,
+      "properties": {
+        "distribution_id": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "type": "string"
+        },
+        "distribution_version": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "distribution_id",
+        "distribution_version"
+      ],
+      "type": "object"
     },
     "platformSeverityCounts": {
       "additionalProperties": false,
@@ -5914,6 +6155,52 @@
     },
     "scanRun": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "not": {
+              "required": [
+                "off_platform"
+              ]
+            },
+            "properties": {
+              "findings": {
+                "items": {
+                  "not": {
+                    "required": [
+                      "off_platform"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "schema_version": {
+                "const": "1.1"
+              }
+            },
+            "required": [
+              "schema_version"
+            ]
+          },
+          "then": {
+            "properties": {
+              "findings": {
+                "items": {
+                  "required": [
+                    "off_platform"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "off_platform"
+            ]
+          }
+        }
+      ],
       "properties": {
         "benchmark_id": {
           "maxLength": 8192,
@@ -5965,6 +6252,9 @@
         "host": {
           "$ref": "#/$defs/hostIdentity"
         },
+        "off_platform": {
+          "$ref": "#/$defs/offPlatform"
+        },
         "profile_id": {
           "maxLength": 8192,
           "type": "string"
@@ -5992,7 +6282,10 @@
           "type": "object"
         },
         "schema_version": {
-          "const": "1.0"
+          "enum": [
+            "1.0",
+            "1.1"
+          ]
         },
         "started_at": {
           "$ref": "#/$defs/timestamp"
@@ -9556,6 +9849,103 @@
           }
         }
       }
+    },
+    {
+      "else": {
+        "properties": {
+          "overview": {
+            "required": [
+              "off_platform"
+            ]
+          },
+          "sections": {
+            "properties": {
+              "compliance": {
+                "properties": {
+                  "items": {
+                    "items": {
+                      "properties": {
+                        "data": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "required": [
+                                "off_platform"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "off_platform"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "schema_version": {
+            "enum": [
+              "2.0",
+              "2.1"
+            ]
+          }
+        },
+        "required": [
+          "schema_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "overview": {
+            "not": {
+              "required": [
+                "off_platform"
+              ]
+            }
+          },
+          "sections": {
+            "properties": {
+              "compliance": {
+                "not": {
+                  "required": [
+                    "off_platform"
+                  ]
+                },
+                "properties": {
+                  "items": {
+                    "items": {
+                      "properties": {
+                        "data": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "not": {
+                                "required": [
+                                  "off_platform"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "description": "Normalized report built from heterogeneous inputs. Every section has an explicit status; missing or invalid input is never a pass. Timestamps are supplied by the caller and never generated. Version 2.1 adds sections.compliance.host_coverage, which accounts for every target host of an evidence collection; a 2.0 document has no such key.",
@@ -9667,6 +10057,11 @@
             }
           ]
         },
+        "off_platform": {
+          "maximum": 1000,
+          "minimum": 0,
+          "type": "integer"
+        },
         "partial": {
           "items": {
             "enum": [
@@ -9725,7 +10120,8 @@
     "schema_version": {
       "enum": [
         "2.0",
-        "2.1"
+        "2.1",
+        "2.2"
       ]
     },
     "scope": {

@@ -169,7 +169,9 @@ DOCKER ?= docker
 SCC_PINS := extensions/ci/scc/scc.pins
 include $(SCC_PINS)
 SCC_IMAGE ?= localhost/freesecdev-scc:local
+SCC_IMAGE_UBUNTU2604 ?= $(SCC_IMAGE)-ubuntu2604
 SCC_CONTAINERFILE := extensions/ci/scc/Containerfile
+SCC_CONTAINERFILE_UBUNTU2604 := extensions/ci/scc/Containerfile.ubuntu2604
 SCC_DOWNLOAD_DIR := build/scc/download
 SCC_CONTEXT_DIR := build/scc/context
 SCC_FETCH_ENV := SCC_VERSION='$(SCC_VERSION)' SCC_BUNDLE='$(SCC_BUNDLE)' SCC_BUNDLE_URL='$(SCC_BUNDLE_URL)' \
@@ -263,8 +265,9 @@ Images and AWS
   scc-fetch             Download the pinned SCC bundle from DISA, verify it and stage its Debian package in build/scc
   scc-image             Build the CI-only SCC image locally as SCC_IMAGE (a localhost/ tag); it is never pushed
   scc-smoke             Build the SCC image and check that cscc starts and reports the pinned version
-  scc-integration       Run a real SCC scan through compliance_scan and the egress test in SCC_IMAGE
-  scc-image-clean       Remove the local SCC_IMAGE
+  scc-image-ubuntu2604  Build SCC_IMAGE_UBUNTU2604, the same SCC on an Ubuntu 26.04 base, locally; never pushed
+  scc-integration       Run real SCC scans through compliance_scan, the egress test and the 26.04 case
+  scc-image-clean       Remove the local SCC_IMAGE and SCC_IMAGE_UBUNTU2604
 
 Reporting, docs and release
   report                Write the normalized report JSON and the HTML dashboard from REPORT_ARGS
@@ -284,7 +287,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards content catalogue lint-python lint-yaml lint-actions \
-	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
+	lint-containerfile scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -362,7 +365,7 @@ lint-actions: require-uv
 
 lint-containerfile:
 	tools/lint/fetch-hadolint.sh '$(HADOLINT)'
-	'$(HADOLINT)' --failure-threshold info $(SCC_CONTAINERFILE)
+	'$(HADOLINT)' --failure-threshold info $(SCC_CONTAINERFILE) $(SCC_CONTAINERFILE_UBUNTU2604)
 
 lint-repo: require-uv
 	@if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$$'; then printf 'error: compiled Python files are tracked\n' >&2; exit 1; fi
@@ -739,16 +742,24 @@ scc-image: scc-expiry-check lint-containerfile scc-fetch
 		--build-arg SCC_VERSION='$(SCC_VERSION)' --build-arg SCC_DEB_SHA256='$(SCC_DEB_SHA256)' \
 		--build-arg SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)' '$(SCC_CONTEXT_DIR)'
 
+scc-image-ubuntu2604: scc-image
+	@printf '%s' '$(SCC_IMAGE_UBUNTU2604)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE_UBUNTU2604 must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) build --network none --file $(SCC_CONTAINERFILE_UBUNTU2604) --tag '$(SCC_IMAGE_UBUNTU2604)' \
+		--build-arg SCC_VERSION='$(SCC_VERSION)' --build-arg SCC_DEB_SHA256='$(SCC_DEB_SHA256)' \
+		--build-arg SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)' '$(SCC_CONTEXT_DIR)'
+
 scc-smoke: scc-image
 	tools/scc/smoke-test.sh '$(SCC_IMAGE)' '$(SCC_VERSION)'
 
-scc-integration: scc-image require-uv collection-link
+scc-integration: scc-image scc-image-ubuntu2604 require-uv collection-link
 	uv python install
-	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_REQUIRE_SCC=1 $(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
+	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_SCC_IMAGE_UBUNTU2604='$(SCC_IMAGE_UBUNTU2604)' FREESECDEV_REQUIRE_SCC=1 \
+		$(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
 
 scc-image-clean:
 	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
-	$(DOCKER) image rm --force '$(SCC_IMAGE)'
+	@printf '%s' '$(SCC_IMAGE_UBUNTU2604)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE_UBUNTU2604 must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) image rm --force '$(SCC_IMAGE)' '$(SCC_IMAGE_UBUNTU2604)'
 
 REPORT_SCOPE ?=
 REPORT_ARGS ?=
