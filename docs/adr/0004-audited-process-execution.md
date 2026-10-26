@@ -490,8 +490,8 @@ rule; none adds an exemption, and no lint limit was raised.
 - Seam storage (`tools/lint/repo_rules/seams.py`): an owner file may store or delete its seam attribute only directly
   in the body of `__init__`. A store from a function or `async` function nested in `__init__`, at any depth, is
   refused with the existing message, because such a function can run after construction and replace the seam.
-- Compiled modules (`COMPILED_MODULE_SUFFIXES` in `tools/lint/repo_rules/common.py`, checked first in
-  `tools/lint/repo_rules/repository.py`): a file ending in `.so`, `.pyd`, `.pyc`, `.pyo` or `.fwork`, in any case and
+- Compiled modules (`COMPILED_MODULE_SUFFIXES` in `tools/lint/repo_rules/common.py`, which `check_file` in
+  `repository.py` tests first): a file ending in `.so`, `.pyd`, `.pyc`, `.pyo` or `.fwork`, in any case and
   with any ABI tag (`.cpython-312-x86_64-linux-gnu.so`, `.abi3.so`, `.cp312-win_amd64.pyd`), is refused anywhere in
   the repository without being read. The import system loads an extension module or bytecode before, or instead of,
   a `.py` source of the same name, so such a file would run code that no rule has seen. The suffixes cover every
