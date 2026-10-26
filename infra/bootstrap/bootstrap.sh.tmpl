@@ -175,7 +175,7 @@ expect_value() {
 verify_bucket() {
   expect_value 'versioning' 'Enabled' \
     "$(aws s3api get-bucket-versioning --bucket "${STATE_BUCKET}" --query Status --output text)"
-  expect_value 'public access block' 'True True True True' \
+  expect_value 'public access block' $'True\tTrue\tTrue\tTrue' \
     "$(aws s3api get-public-access-block --bucket "${STATE_BUCKET}" \
       --query 'PublicAccessBlockConfiguration.[BlockPublicAcls,IgnorePublicAcls,BlockPublicPolicy,RestrictPublicBuckets]' \
       --output text)"
@@ -216,7 +216,7 @@ apply_account_stack() {
   tofu -chdir="${ACCOUNT_STACK_DIR}" init -input=false -lockfile=readonly -backend-config="${BACKEND_FILE}"
   tofu -chdir="${ACCOUNT_STACK_DIR}" plan -input=false -var-file="${TFVARS_FILE}" -out="${PLAN_FILE}"
   tofu -chdir="${ACCOUNT_STACK_DIR}" show "${PLAN_FILE}"
-  printf '\nReview the plan above. Applying creates the OIDC provider, the budget and the plan role.\n'
+  printf '\nReview the plan above. Applying creates the budget and the plan role and uses the existing OIDC provider.\n'
   confirm "${APPLY_CONFIRMATION}"
   tofu -chdir="${ACCOUNT_STACK_DIR}" apply -input=false "${PLAN_FILE}"
 }

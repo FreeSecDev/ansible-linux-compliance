@@ -48,8 +48,9 @@ bucket and key come from a generated, gitignored `backend.hcl` whose shape is th
 
 ### OIDC trust
 
-One OIDC provider `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. AWS no longer needs
-thumbprints for this provider, so none is configured. The role `freesecdev-gha-ansible-linux-compliance-plan` trusts
+One OIDC provider `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. An account holds at most one
+provider per URL and this account already has it, shared with other projects, so `infra/account` reads it as a data
+source and never creates, changes or destroys it. AWS no longer needs thumbprints for this provider. The role `freesecdev-gha-ansible-linux-compliance-plan` trusts
 only tokens with:
 
 - `aud` equal to `sts.amazonaws.com`,
