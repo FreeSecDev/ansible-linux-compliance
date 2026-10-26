@@ -62,6 +62,13 @@ from tools.reporting.parsers.scanrun import scan_run_data
 SCAN_RUN_FORMAT: Final[str] = "scan_run"
 MAX_ENTRIES: Final[int] = 64
 DIRECTORIES: Final[frozenset[str]] = evidence_check.bundle_directory_paths()
+RESULTS_PATHS: Final[tuple[str, ...]] = tuple(
+    sorted(
+        source.path
+        for source in evidence.HOST_SOURCES.values()
+        if source.kind == evidence.KIND_XCCDF
+    )
+)
 _DIRECTORY_FLAGS: Final[int] = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
 _FILE_FLAGS: Final[int] = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 
@@ -94,12 +101,15 @@ class BundleInput:
         evaluation: The evaluation input of the ``exceptions`` section, or ``None``.
         exceptions_file: The exceptions file of the bundle, or ``None``.
         identity: The identity of a bundle that verified, or ``None``.
+        scanner_results: The verified XCCDF results of a bundle that verified and holds
+            them, which a checklist export reads its benchmark text and target facts from.
     """
 
     compliance: ParseResult[ComplianceData]
     evaluation: ParseResult[EvaluationData] | None
     exceptions_file: ParseResult[str] | None
     identity: BundleIdentity | None = None
+    scanner_results: bytes | None = None
 
 
 def _open_directory(path: Path) -> int:
@@ -289,6 +299,7 @@ def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
         return _rejected(display, contents, SectionStatus.ERROR, reason)
     checked = verified.evaluation
     manifest = contents[evidence.MANIFEST_NAME]
+    results = [contents[path] for path in RESULTS_PATHS if path in contents]
     identity = BundleIdentity(
         display=display,
         inventory_host=verified.manifest.inventory_host,
@@ -305,7 +316,7 @@ def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
             contents[evidence.SCAN_RUN_PATH],
             scan_run_data,
         )
-        return BundleInput(compliance, None, None, identity)
+        return BundleInput(compliance, None, None, identity, next(iter(results), None))
     evaluation = parse_bytes(
         f"{display}/{evidence.EVALUATION_PATH}",
         EVALUATION_FORMAT,
@@ -318,4 +329,10 @@ def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
         contents[evidence.EXCEPTIONS_FILE_PATH],
         decode_text,
     )
-    return BundleInput(compliance_result(evaluation), evaluation, exceptions_file, identity)
+    return BundleInput(
+        compliance_result(evaluation),
+        evaluation,
+        exceptions_file,
+        identity,
+        next(iter(results), None),
+    )

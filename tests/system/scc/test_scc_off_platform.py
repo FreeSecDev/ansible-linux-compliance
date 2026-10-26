@@ -22,7 +22,9 @@ itself for a host self-asserted as 24.04. This test asserts:
   results that stay in the evidence;
 - the run and every finding carry the off-platform marker and the scan run has
   schema 1.1 (ADR 0019, amendments of FREES-161);
-- SCC's state changes stay within the accepted residual of ADR 0019.
+- SCC's state changes stay within the accepted residual of ADR 0019;
+- the checklists that the reporting command exports for the marked run read back
+  with every entry Not Reviewed, whatever SCC's outcome (FREES-147, ADR 0020).
 """
 
 from __future__ import annotations
@@ -33,7 +35,12 @@ from typing import cast
 import pytest
 
 from tests.system.scc import harness
-from tests.system.scc.test_scc_integration import HONEST, PROFILE_RULES, RESIDUAL
+from tests.system.scc.test_scc_integration import (
+    HONEST,
+    PROFILE_RULES,
+    RESIDUAL,
+    check_checklists,
+)
 
 MARKER = {
     "benchmark_platform": {"distribution_id": "ubuntu", "distribution_version": "24.04"},
@@ -150,3 +157,12 @@ def test_the_off_platform_scan_changes_only_the_accepted_residual(
     assert state["removed"] == []
     for path in state["added"] + state["changed"]:
         assert any(re.fullmatch(pattern, path) for pattern in RESIDUAL), path
+
+
+def test_the_marked_run_exports_only_not_reviewed_checklists(
+    off_platform_report: dict[str, object],
+) -> None:
+    report = cast("dict[str, object]", off_platform_report["checklists"])
+    statuses = check_checklists(report, "scc-off-platform")
+    harness.report_line("off-platform checklist statuses", statuses)
+    assert statuses == {"Not_Reviewed": PROFILE_RULES}

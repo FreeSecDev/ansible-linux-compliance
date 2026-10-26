@@ -525,6 +525,7 @@ class ScanInputs:
     compliance: list[ParseResult[ComplianceData]]
     collection: ParseResult[object] | None
     coverage: dict[str, Json]
+    bundles: list[BundleInput] = field(default_factory=list[BundleInput])
 
 
 def _coverage(
@@ -570,7 +571,7 @@ def _scan_inputs(inputs: ReportInputs) -> ScanInputs:
     if max(len(compliance), len(evaluations)) > MAX_INPUTS:
         message = f"more than {MAX_INPUTS} inputs for one section, counting the missing hosts"
         raise ReportError(message)
-    return ScanInputs(source, evaluations, compliance, collection, coverage.document)
+    return ScanInputs(source, evaluations, compliance, collection, coverage.document, bundles)
 
 
 def build_report(inputs: ReportInputs) -> dict[str, Json]:
@@ -578,6 +579,18 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
 
     The result is plain JSON data that validates against ``schema/report-v2.json``.
     Equal inputs give equal documents.
+
+    Raises:
+        ReportError: If the declared scope contradicts the data or a limit is exceeded.
+    """
+    return build_report_and_inputs(inputs)[0]
+
+
+def build_report_and_inputs(inputs: ReportInputs) -> tuple[dict[str, Json], ScanInputs]:
+    """Return the report document of :func:`build_report` and the scan inputs it was built from.
+
+    The checklist export (FREES-147) reads the same parsed and verified scan inputs as the
+    report, so nothing is read twice.
 
     Raises:
         ReportError: If the declared scope contradicts the data or a limit is exceeded.
@@ -624,7 +637,7 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
         "exceptions": [] if scan.exceptions_file is None else [scan.exceptions_file],
         "host_coverage": [] if scan.collection is None else [scan.collection],
     }
-    return {
+    document: dict[str, Json] = {
         "metadata": _metadata(inputs.metadata),
         "overview": _overview(sections),
         "raw_artifacts": _raw_artifacts(every_result),
@@ -632,6 +645,7 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
         "scope": inputs.scope.value,
         "sections": dict(sections),
     }
+    return document, scan
 
 
 def has_error(report: dict[str, Json]) -> bool:

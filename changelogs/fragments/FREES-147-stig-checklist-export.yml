@@ -1,0 +1,14 @@
+---
+minor_changes:
+  - >-
+    reporting - new options ``--export-ckl DIR`` and ``--export-cklb DIR`` write one DISA STIG Viewer checklist per
+    host and DISA STIG benchmark, CKL (STIG Viewer 2, XML) and CKLB (STIG Viewer 3, JSON), from the scan runs,
+    exceptions evaluations and evidence bundles of the report. Only a plain ``pass`` of a completed on-platform run is
+    Not a Finding; ``fail`` and ``waived`` are Open, with the waiver's exception ID, expiry and reason in the comments;
+    ``notapplicable`` is Not Applicable; everything else, every off-platform finding and every finding of a run that
+    did not complete is Not Reviewed, with the reason in the finding details (ADR 0020). Rule titles and other DISA
+    text come at export time from the bundle's own XCCDF results or from ``--checklist-content`` (an XCCDF benchmark
+    or results file or a SCAP source data stream); asset IP and FQDN come only from the run's own results. Findings
+    with ComplianceAsCode rule IDs are refused until the mapping of FREES-146 exists, and so are XCCDF and ARF inputs;
+    a refusal writes nothing and exits with status 2. Checklists are read back before they are written, written
+    atomically with mode 0600 and deterministic (FREES-147).
