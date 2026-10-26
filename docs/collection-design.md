@@ -317,8 +317,9 @@ exceptions are not yet part of the report (see [exceptions](exceptions.md#report
 ## Audit module
 
 Jira: FREES-49. Guide: [audit](audit.md). `compliance_scan` (`plugins/modules/compliance_scan.py`) is a thin wrapper
-around `plugins/module_utils/compliance/audit.py`, which plans the audit (argument validation, digest and profile
-verification through `catalog.py`, disabled rules, output directory inspection) and executes it (run directory,
+around `plugins/module_utils/compliance/audit.py`, which plans the audit (argument validation, content directory
+vetting before root opens the datastream, digest and profile verification through `catalog.py`, disabled rules, output
+directory inspection) and executes it (run directory,
 tailoring file, backend from `backends.default_registry()`, evidence). The module returns the `ScanRun` of ADR 0013, a
 summary per outcome, the provenance and the evidence paths, always with `changed: false`; evidence writes are reported
 as `evidence_written`. The scanner reads only a private, digest-verified copy of the datastream in the run directory,

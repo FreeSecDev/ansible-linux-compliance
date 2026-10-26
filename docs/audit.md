@@ -42,7 +42,8 @@ The variables are listed in the [role README](../roles/audit/README.md).
 
 `compliance_scan` is a thin wrapper around `plugins/module_utils/compliance/audit.py`.
 
-1. **Plan**. Validate every argument; resolve the content path; verify the datastream SHA-256 and
+1. **Plan**. Validate every argument; resolve the content path; vet the datastream and every directory above it
+   ([content directory rules](#content-directory-rules)) before the file is opened; verify the datastream SHA-256 and
    parse it with the hardened catalog parser; find the profile (a missing profile is `profile_not_found`, never
    replaced); check that the datastream file name fits the provenance label (`[A-Za-z0-9._+-]{1,64}`); check that every
    disabled rule is selected by the profile and that at least one rule stays enabled; inspect the output directory
@@ -74,11 +75,52 @@ the scan runs and restore it afterwards. The module therefore never lets the sca
    run whose recorded digest is not the pinned one becomes `failed`.
 
 Only root can change the copy, so a swap of `content_path` after verification cannot change what is scanned; the
-regression tests swap the source during the scan and show that the scanner read the pinned bytes. Because the bytes
-are verified while they are copied, symlinks in the directories above `content_path` no longer matter for integrity
-and are accepted; the file itself must not be a symlink. The earlier rule that refused a symlink anywhere in the content
-path (because the backend's content root was the common path of the datastream and the run directory, often `/`) is
-gone, because the content root is now the run directory.
+regression tests swap the source during the scan and show that the scanner read the pinned bytes. The copy settles
+integrity, but not availability: root still opens `content_path` (to verify it in the plan and to copy it), so the
+directories above it must not let another user replace the file. The next section has the rules.
+
+### Content directory rules
+
+The audit runs as root and opens the datastream twice: once in the plan to verify and parse it, once to make the
+private copy. `xmlsafe.open_regular` checks with `lstat` that the path is a regular file, then opens it. It cannot use
+`O_NOFOLLOW` or `O_NONBLOCK`, because the repository guard allows `os` only as `os.path` in plugins. A user who can write
+the directory that holds the datastream could therefore swap the file between the `lstat` and the `open`:
+
+- for a FIFO: root's `open` blocks until a writer appears, so the audit hangs (until Ansible's own timeout, if any);
+- for a symlink: root copies the link's target, the digest does not match, the copy is deleted and the audit stops with
+  `digest_mismatch`.
+
+Neither gives a wrong result or discloses anything, but the hang is a denial of service by any local user. So before the
+datastream is opened at all, the plan (`audit.inspect_content_path`) resolves it (a directory `content_path` resolves to
+its single `*-ds.xml` file) and walks the directory that holds it from `/` with `lstat`, applying the rules for the
+ancestors of the output directory:
+
+- no component may be a symbolic link (also not a dangling one), and every component must be a directory;
+- every directory, including the one that holds the datastream, must be owned by root and must not be writable by group
+  or others unless its sticky bit is set;
+- the datastream itself must be a regular file that is not a symlink, owned by root and not writable by group or others.
+
+A violation fails with `unsafe_content_dir` before the file is opened and before anything is created. Nothing is
+repaired. A sticky directory is accepted because no other user can rename or remove a root-owned file in it; the file
+must be root-owned for exactly that reason, because the owner of a file in a sticky directory can still replace it.
+Typical locations such as `/usr/share/xml/scap/ssg/content` (`root:root`, `0755`) or `/opt/freesecdev/content` pass;
+content fetched into a user's home directory or a group-writable share does not and must be moved first.
+
+This replaces the FREES-49 rule that accepted symlinks in the directories above `content_path` because they no longer
+mattered for integrity. They matter for the hang: a symlink in a directory that another user controls can be pointed
+anywhere, so they are refused like in the output directory.
+
+Residual risk:
+
+- The checks use paths, not descriptors, for the same reason as the output directory rules below. A component can only
+  be changed between the check and the `open` by root or by the owner of a vetted directory, which is root.
+- Root itself, or a compromised root-owned service, can still plant a FIFO. That is outside this threat model: such an
+  attacker controls the host and the audit.
+- A file on a network or FUSE file system can block in `open` or `read` regardless of its type and permissions, and its
+  server can report any owner and mode. Keep the content on a local file system.
+- The `discover` modules (`benchmark_info`, `profile_info`) read the same path and do not vet the directories. They run
+  as the connecting user unless the play sets `become`; under `become` the same hang is possible there. Follow-up:
+  FREES-138.
 
 ### Scanner invocation
 
@@ -87,6 +129,33 @@ The scan runs through the backend registry (`backends.default_registry()`). The 
 --results <run>/scan/results.xml <run>/content/<datastream>` through `process.run`: an argument list, `shell=False`, a binary from a
 trusted root-owned directory, a minimal environment, a timeout and bounded output. `--remediate` and remote resources
 are refused by the process policy.
+
+### SCE check scripts run as root
+
+The pinned datastreams embed Script Check Engine (SCE) check scripts: the Ubuntu 24.04 datastream has 81 `sce:script`
+components, one per rule that has an SCE check. `oscap` writes them (mode `0700`, opened with `O_NOFOLLOW`) into a new
+`mkdtemp` directory `/tmp/oscap.XXXXXX` and runs them as root during the audit, with `PATH=/bin:/sbin:/usr/bin:/usr/local/bin:/usr/sbin` and the `XCCDF_*` result variables as
+their environment. They are shell scripts that only read the host, but nothing enforces that: they are trusted only
+because the datastream's SHA-256 is pinned and the scanner reads only the verified private copy. They are audit checks,
+not remediation, so [ADR 0003](adr/0003-native-module-remediation.md) still holds; `--remediate` stays refused.
+
+Of those 81 rules, 63 also have an OVAL check, listed after the SCE check. OpenSCAP 1.3.9 takes the last check of a
+rule whose system it supports, so it evaluates those 63 with OVAL and runs SCE only for the 18 rules that have no other
+check; 16 of them are in `cis_level1_server`. The CI job `oscap-integration` asserts that no rule with an OVAL check is
+reported with an SCE check.
+
+The pinned `oscap` 1.3.9 has no option to turn SCE off: `oscap xccdf eval --help`, `oscap(8)` and the option table in
+`utils/oscap-xccdf.c` have none. SCE is a plugin, `libopenscap_sce.so.25`, which `oscap` loads automatically
+(`oscap --version` lists it under "Capabilities added by auto-loaded plugins"). On Ubuntu it ships in the same package
+as the library itself (`libopenscap25t64`), so it cannot be uninstalled separately. The undocumented environment
+variable `OSCAP_CHECK_ENGINE_PLUGIN_DIR` changes where it is loaded from, but the process helper passes only `PATH`,
+`LC_ALL`, `LANG` and optionally `TZ` and `TMPDIR` ([ADR 0004](adr/0004-audited-process-execution.md)), and pointing
+root's `dlopen` elsewhere would add a code-loading path, so it is not used. Without SCE, the 63 dual-check rules give the
+same results through OVAL and the SCE-only rules become `notchecked`: in `cis_level1_server` that is 16 of 408 rules,
+the iptables, ip6tables, nftables and ufw firewall rules and the file-system-wide checks for world-writable files and
+for files without a known owner or group. To skip them today, list them in `disabled_rules`: the tailoring file
+deselects them, `oscap` does not run their scripts, and they are reported as `disabled`. The threat model records this
+as [T-AUDIT-2](security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).
 
 ### Exit status and failures
 
@@ -188,6 +257,7 @@ an error, and disabling every rule is `nothing_to_scan`.
 | `error_type` | Meaning |
 |---|---|
 | `invalid_argument` | A malformed profile, rule, toggle, run identifier, host, timeout or size, or a disabled rule outside the profile |
+| `unsafe_content_dir` | The datastream or a directory above it violates the [content directory rules](#content-directory-rules) |
 | `unsafe_output_dir` | The output directory violates the rules above, or cannot be created |
 | `output_exists` | The run directory already exists |
 | `nothing_to_scan` | Every rule of the profile is disabled |
@@ -210,7 +280,12 @@ directory creation, tailoring, check mode (real findings, and nothing left behin
 a missing scanner, malformed results, planted symlinks and nested directories, a backend refusal and a write failure,
 and no `evidence_dir` for errors after the temporary directory is gone), skipped non-regular scanner entries, XML
 escaping of the tailoring file
-and repeated runs. `audit.py` and the module have 100% line and branch coverage.
+and repeated runs. For the content directory rules they cover world- and group-writable content directories (with a
+file and a directory as `content_path`), writable ancestors, sticky ancestors and a sticky content directory (accepted),
+a content directory, an ancestor and a datastream with a non-root owner, a group- or world-writable datastream, a
+symlinked content directory, production (root) ownership, components that vanish or cannot be inspected, and that a
+refused datastream is never opened and nothing is created. `audit.py` and the module have 100% line and branch
+coverage.
 
 `make test-oscap-integration` (CI job `oscap-integration`) runs a real `oscap`. It fetches the pinned Ubuntu 24.04
 datastream through `tools/content/fetch_content.py` (archive SHA-512 and datastream SHA-256 verified) and runs
@@ -222,7 +297,13 @@ datastream through `tools/content/fetch_content.py` (archive SHA-512 and datastr
   `file_permissions_ungroupowned` and `no_files_unowned_by_user`) must complete; the raw `results.xml` must report the
   tailored profile and `notselected` for exactly those rules and a result for every other selected rule; the normalized
   findings must show them as `disabled` with their toggle variable; the reported `profile_id` must be the original
-  one; and `content.source` must carry the SHA-256 of the tailoring file that the evidence lists.
+  one; and `content.source` must carry the SHA-256 of the tailoring file that the evidence lists;
+- the datastream must have 81 SCE scripts and 81 rules with an SCE check, 16 of the profile's rules must have only an
+  SCE check, and no rule-result in `results.xml` may report an SCE check for a rule that also has an OVAL check (the
+  rules evaluated through SCE are printed).
+
+The tests copy the fetched datastream into a fresh temporary directory (`0755`, file `0644`) and vet it with
+`audit.inspect_content_path`, so the content directory rules hold regardless of how the CI checkout is laid out.
 
 CI installs `openscap-scanner` from the Ubuntu 24.04 archive at the exact version `1.3.9+dfsg-1.1ubuntu2`, checks the
 installed version and prints `oscap --version`, and sets `FREESECDEV_REQUIRE_OSCAP=1`, so the tests fail instead of

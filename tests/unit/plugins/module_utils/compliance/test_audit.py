@@ -126,8 +126,10 @@ class Harness:
         self.root = root
         self.content_dir = root / "content"
         self.content_dir.mkdir()
+        self.content_dir.chmod(0o755)
         self.datastream = self.content_dir / "synthetic-ds.xml"
         shutil.copyfile(SYNTHETIC, self.datastream)
+        self.datastream.chmod(0o644)
         self.output_root = root / "evidence"
         self.runner = FakeRunner()
         self.registry = scanner.BackendRegistry()
@@ -750,16 +752,6 @@ def test_a_datastream_name_that_cannot_label_the_provenance_is_refused_early(
     assert not harness.output_root.exists()
 
 
-def test_a_symlinked_content_directory_no_longer_matters(harness: Harness) -> None:
-    link = harness.root / "linked"
-    link.symlink_to(harness.content_dir)
-    result = harness.run(content_path=str(link / "synthetic-ds.xml"))
-    assert result["run_status"] == "completed"
-    assert result["content"]["source_path"] == str(link / "synthetic-ds.xml")
-    ((scanned_path, _digest),) = harness.runner.scanned
-    assert scanned_path.startswith(str(harness.run_dir))
-
-
 def test_a_digest_mismatch_stops_before_anything_runs(harness: Harness) -> None:
     with pytest.raises(audit.AuditError) as raised:
         harness.run(expected_sha256="0" * 64)
@@ -990,14 +982,14 @@ def test_an_output_root_with_open_permissions_is_never_repaired(
 def test_an_output_root_owned_by_someone_else_is_rejected(harness: Harness) -> None:
     harness.output_root.mkdir(mode=0o700)
     with pytest.raises(audit.AuditError, match="owner") as raised:
-        harness.auditor(owner_uid=UID + 1).run(harness.job(), check_mode=True)
+        audit.inspect_output_root(str(harness.output_root), UID + 1, create=False)
     assert raised.value.error_type == "unsafe_output_dir"
 
 
 def test_production_requires_root_ownership(harness: Harness) -> None:
     harness.output_root.mkdir(mode=0o700)
     with pytest.raises(audit.AuditError) as raised:
-        audit.Auditor(registry=harness.registry).run(harness.job(), check_mode=True)
+        audit.inspect_output_root(str(harness.output_root), audit.ROOT_UID, create=False)
     assert raised.value.error_type == "unsafe_output_dir"
 
 

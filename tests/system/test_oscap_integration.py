@@ -12,6 +12,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -45,6 +47,19 @@ SCAN_TIMEOUT_SECONDS = 3600.0
 MISSING_RESULT = "the results contain no rule-result for this rule"
 HOST = model.HostIdentity("oscap-integration", "ubuntu", "24.04", "x86_64", None)
 UID = os.getuid()
+SCE = "http://open-scap.org/page/SCE"
+OVAL = "http://oval.mitre.org/XMLSchema/oval-definitions-5"
+SCE_SCRIPT_COUNT = 81
+SCE_ONLY_PROFILE_RULES = 16
+DATASTREAM_RULE = re.compile(
+    r"<xccdf-1\.2:Rule\b[^>]*?\bid=\"([^\"]+)\".*?</xccdf-1\.2:Rule>", re.DOTALL
+)
+RESULT_RULE = re.compile(
+    r"<(?:[\w.-]+:)?rule-result\b[^>]*?\bidref=\"([^\"]+)\".*?</(?:[\w.-]+:)?rule-result>",
+    re.DOTALL,
+)
+CHECK_SYSTEM = re.compile(r"<(?:[\w.-]+:)?check\b[^>]*?\bsystem=\"([^\"]+)\"")
+SCE_SCRIPT = re.compile(r"<sce:script\b")
 
 
 def report(label: str, data: object) -> None:
@@ -77,7 +92,7 @@ def pinned_datastream() -> tuple[Path, str]:
 
 
 @pytest.fixture(scope="module")
-def datastream() -> tuple[Path, str]:
+def datastream(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
     if not OSCAP.is_file():
         if REQUIRE_OSCAP:
             pytest.fail(f"{OSCAP} is missing but FREESECDEV_REQUIRE_OSCAP=1")
@@ -85,7 +100,13 @@ def datastream() -> tuple[Path, str]:
     path, digest = pinned_datastream()
     if not path.is_file():
         pytest.fail(f"pinned content {path} is missing; run make test-oscap-integration")
-    return path, digest
+    directory = tmp_path_factory.mktemp("content")
+    directory.chmod(0o755)
+    vetted = directory / path.name
+    shutil.copyfile(path, vetted)
+    vetted.chmod(0o644)
+    audit.inspect_content_path(str(vetted), UID)
+    return vetted, digest
 
 
 @pytest.fixture
@@ -166,6 +187,38 @@ def test_a_check_mode_scan_without_tailoring_evaluates_the_whole_profile(
     assert sorted(output_root.rglob("*")) == []
 
 
+def check_systems(text: str, element: re.Pattern[str]) -> dict[str, set[str]]:
+    return {
+        match.group(1): set(CHECK_SYSTEM.findall(match.group(0)))
+        for match in element.finditer(text)
+    }
+
+
+def sce_only_rules(path: Path) -> set[str]:
+    text = path.read_text(encoding="utf-8")
+    assert len(SCE_SCRIPT.findall(text)) == SCE_SCRIPT_COUNT
+    systems = check_systems(text, DATASTREAM_RULE)
+    assert sum(1 for found in systems.values() if SCE in found) == SCE_SCRIPT_COUNT
+    return {rule_id for rule_id, found in systems.items() if SCE in found and OVAL not in found}
+
+
+def check_sce_usage(results: Path, datastream: Path, profile_rules: set[str]) -> None:
+    sce_only = sce_only_rules(datastream) & profile_rules
+    assert len(sce_only) == SCE_ONLY_PROFILE_RULES
+    used = check_systems(results.read_text(encoding="utf-8"), RESULT_RULE)
+    assert any(OVAL in found for found in used.values())
+    evaluated_with_sce = {rule_id for rule_id, found in used.items() if SCE in found}
+    assert evaluated_with_sce <= sce_only - set(DISABLED)
+    report(
+        "sce",
+        {
+            "datastream_sce_scripts": SCE_SCRIPT_COUNT,
+            "profile_sce_only_rules": len(sce_only),
+            "evaluated_with_sce": sorted(evaluated_with_sce),
+        },
+    )
+
+
 def check_raw_results(path: Path, enabled: set[str]) -> None:
     raw = openscap.read_results(str(path), 512 * 1024 * 1024)
     assert raw.profile_id == PROFILE + audit.TAILORED_PROFILE_SUFFIX
@@ -212,6 +265,7 @@ def test_a_tailored_scan_excludes_the_disabled_rules(
     assert all(item["outcome"] != "disabled" for item in enabled.values())
     assert [key for key, item in enabled.items() if item["message"] == MISSING_RESULT] == []
     check_raw_results(run_dir / "scan" / "results.xml", set(enabled))
+    check_sce_usage(run_dir / "scan" / "results.xml", datastream[0], set(findings))
     report(
         "raw results",
         {

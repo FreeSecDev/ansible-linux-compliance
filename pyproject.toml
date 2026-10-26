@@ -75,7 +75,7 @@ convention = "google"
 max-complexity = 10
 
 [tool.ruff.lint.isort]
-known-first-party = ["tools", "ansible_collections"]
+known-first-party = ["tools", "tests", "ansible_collections"]
 
 [tool.freesecdev.lint-justifications]
 "bandit B404 and B603 (plugins/module_utils/compliance/process.py)" = "Bandit has no per-file skip and inline nosec comments are banned, so make security runs Bandit twice: once on everything except the process helper with no skips, and once on the helper alone with only B404 and B603 skipped. A subprocess use anywhere else is still reported (ADR 0004)."
