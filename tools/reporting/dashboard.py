@@ -25,7 +25,7 @@ from tools.reporting.common import Json
 ASSET_DIRECTORY: Final[Path] = Path(__file__).parent / "assets"
 SCRIPT_ASSET: Final[str] = "dashboard.js"
 STYLE_ASSET: Final[str] = "dashboard.css"
-SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({"2.0"})
+SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({"2.0", "2.1"})
 MERGED_INPUTS_NOTE: Final[str] = "merged_inputs"
 MAX_EMBEDDED_BYTES: Final[int] = 128 * 1024 * 1024
 MACHINE_ID: Final[str] = "machine_id"

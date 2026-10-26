@@ -51,9 +51,12 @@ EVIDENCE_REPORT := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m too
 EVIDENCE_EXCEPTIONS := $(EVIDENCE_DIR)/exceptions/exceptions-valid.yml
 EVIDENCE_BUNDLES := --evidence-bundle '$(EVIDENCE_DIR)/bundles/web01/synthetic-web01' \
 	--evidence-bundle '$(EVIDENCE_DIR)/bundles/db01/synthetic-db01'
-EVIDENCE_GATE_BUNDLES := --evidence-bundle '$(EVIDENCE_DIR)/bundles-gate/web01/gate-web01' \
-	--evidence-bundle '$(EVIDENCE_DIR)/bundles-gate/db01/gate-db01' \
+EVIDENCE_GATE_BUNDLES := --evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-all/web01/gate-web01' \
+	--evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-all/db01/gate-db01' \
 	--exceptions-file '$(EVIDENCE_DIR)/exceptions-gate/exceptions-valid.yml'
+EVIDENCE_GATE_COLLECTION = --evidence-collection "$$(cat '$(EVIDENCE_DIR)/collection-gate-$(1).path')"
+EVIDENCE_LIMITED_BUNDLES := --evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-every_host_fails/web01/gate-web01' \
+	--exceptions-file '$(EVIDENCE_DIR)/exceptions-gate-limited/exceptions-valid.yml'
 EVIDENCE_REPORT_CHECK := .sections.compliance.status == "available" and .sections.exceptions.status == "available" \
 	and ([.sections.compliance.items[].format] | unique) == ["exceptions_evaluation"] \
 	and ([.sections.compliance.groups[].summary.counts.waived] | add) == 2 \
@@ -64,7 +67,26 @@ EVIDENCE_REPORT_CHECK := .sections.compliance.status == "available" and .section
 EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
 	and ([.sections.compliance.items[].format] | sort) == ["exceptions_evaluation", "scan_run"] \
 	and ([.sections.compliance.groups[].summary.run_status] | sort) == ["completed", "failed"] \
-	and ([.sections.compliance.groups[].host.hostname] | sort) == ["db01", "web01"]
+	and ([.sections.compliance.groups[].host.hostname] | sort) == ["db01", "web01"] \
+	and .sections.compliance.host_coverage.status == "unknown" and .schema_version == "2.1"
+EVIDENCE_MISSING_CHECK := .sections.compliance.status == "partial" and .sections.compliance.summary == null \
+	and .sections.compliance.groups == [] and .sections.compliance.aggregates == [] \
+	and .sections.exceptions.status == "partial" \
+	and .sections.compliance.host_coverage.status == "incomplete" \
+	and .sections.compliance.host_coverage.summary.missing == 2 \
+	and ([.sections.compliance.host_coverage.hosts[] | select(.in_report | not) | [.host, .status]]) \
+		== [["app01", "no_evidence_written"], ["lost01", "unreachable"]] \
+	and ([.sections.compliance.gaps[].reason] | sort) == [ \
+		"target host app01 has no evidence bundle: its audit wrote no evidence (check mode or no scan)", \
+		"target host lost01 has no evidence bundle: it was unreachable (it did not complete fact gathering)"]
+EVIDENCE_LIMITED_CHECK := .sections.compliance.status == "partial" and .sections.compliance.summary == null \
+	and .sections.compliance.host_coverage.status == "incomplete" \
+	and ([.sections.compliance.host_coverage.hosts[] | [.host, .status, .in_report]]) == [ \
+		["app01", "limited_out", false], ["db01", "limited_out", false], \
+		["lost01", "unreachable", false], ["web01", "collected", true]]
+EVIDENCE_UNLISTED_CHECK := .sections.compliance.status == "error" \
+	and ([.sections.compliance.gaps[].reason] | any(test("does not list run gate-web01 of web01"))) \
+	and .sections.compliance.host_coverage.status == "incomplete"
 EVIDENCE_TAMPERED_CHECK := .sections.compliance.status == "error" \
 	and (.sections.compliance.gaps[0].reason | test("checksum mismatch for raw/scan/results.xml"))
 
@@ -375,11 +397,12 @@ test-evidence: require-uv collection-link
 	printf ' ' >> '$(EVIDENCE_DIR)/tampered/raw/scan/results.xml'
 	$(call evidence_expect_status,tampered,$(EVIDENCE_REPORT) --scope single_host --output '$(EVIDENCE_DIR)/tampered.json' --evidence-bundle '$(EVIDENCE_DIR)/tampered' --exceptions-file '$(EVIDENCE_EXCEPTIONS)',1,report written)
 	jq -e '$(EVIDENCE_TAMPERED_CHECK)' '$(EVIDENCE_DIR)/tampered.json' > /dev/null
-	status=0; $(EVIDENCE_PLAYBOOK) -i tests/playbooks/inventory/evidence-gate.yml \
+	status=0; $(EVIDENCE_PLAYBOOK) -i tests/playbooks/inventory/evidence-gate.yml -e evidence_gate_case=all \
 		-e audit_exceptions_dir='$(CURDIR)/$(EVIDENCE_DIR)/exceptions-gate' tests/playbooks/evidence-gate.yml \
 		> '$(EVIDENCE_DIR)/gate.log' 2>&1 || status=$$?; cat '$(EVIDENCE_DIR)/gate.log'; \
 		test "$$status" -ne 0 || { printf 'error: the gated play did not fail\n' >&2; exit 1; }
-	grep -q 'WARNING: no evidence bundle for 2 of 4 target host(s): app01, lost01' '$(EVIDENCE_DIR)/gate.log'
+	grep -q 'WARNING: no evidence bundle for 2 of 4 target host(s): app01, lost01. Unreachable (did not complete fact gathering): lost01.' '$(EVIDENCE_DIR)/gate.log'
+	grep -q 'WARNING: the result gates of web01 are deferred' '$(EVIDENCE_DIR)/gate.log'
 	grep -q 'The audit reported 2 failed and 1 errored rule(s)' '$(EVIDENCE_DIR)/gate.log'
 	grep -q 'The scan did not complete (run_status failed)' '$(EVIDENCE_DIR)/gate.log'
 	grep -q 'EVIDENCE-GATE-PASSED app01' '$(EVIDENCE_DIR)/gate.log'
@@ -388,6 +411,23 @@ test-evidence: require-uv collection-link
 	grep -qE '^db01 +: .*failed=1' '$(EVIDENCE_DIR)/gate.log'
 	grep -qE '^lost01 +: .*unreachable=1' '$(EVIDENCE_DIR)/gate.log'
 	$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/gate.json' $(EVIDENCE_GATE_BUNDLES)
+	$(call evidence_expect_status,missing,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/missing.json' --html '$(EVIDENCE_DIR)/missing.html' $(EVIDENCE_GATE_BUNDLES) $(call EVIDENCE_GATE_COLLECTION,all),1,report written)
+	jq -e '$(EVIDENCE_MISSING_CHECK)' '$(EVIDENCE_DIR)/missing.json' > /dev/null
+	grep -q 'lost01' '$(EVIDENCE_DIR)/missing.html'
+	status=0; $(EVIDENCE_PLAYBOOK) -i tests/playbooks/inventory/evidence-gate.yml -e evidence_gate_case=every_host_fails \
+		--limit web01,lost01,localhost -e audit_exceptions_dir='$(CURDIR)/$(EVIDENCE_DIR)/exceptions-gate-limited' \
+		tests/playbooks/evidence-gate.yml > '$(EVIDENCE_DIR)/gate-limited.log' 2>&1 || status=$$?; \
+		cat '$(EVIDENCE_DIR)/gate-limited.log'; \
+		test "$$status" -ne 0 || { printf 'error: the play where every host fails did not fail\n' >&2; exit 1; }
+	grep -q 'WARNING: no evidence bundle for 3 of 4 target host(s): app01, db01, lost01. Unreachable (did not complete fact gathering): lost01. Limited out: app01, db01.' '$(EVIDENCE_DIR)/gate-limited.log'
+	grep -q 'The audit reported 2 failed and 1 errored rule(s)' '$(EVIDENCE_DIR)/gate-limited.log'
+	grep -qE '^web01 +: .*failed=1' '$(EVIDENCE_DIR)/gate-limited.log'
+	grep -qE '^lost01 +: .*unreachable=1' '$(EVIDENCE_DIR)/gate-limited.log'
+	if grep -q 'EVIDENCE-GATE-PASSED' '$(EVIDENCE_DIR)/gate-limited.log'; then printf 'error: a gated host passed\n' >&2; exit 1; fi
+	$(call evidence_expect_status,limited,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/limited.json' $(EVIDENCE_LIMITED_BUNDLES) $(call EVIDENCE_GATE_COLLECTION,every_host_fails),1,report written)
+	jq -e '$(EVIDENCE_LIMITED_CHECK)' '$(EVIDENCE_DIR)/limited.json' > /dev/null
+	$(call evidence_expect_status,unlisted,$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/unlisted.json' --evidence-bundle '$(EVIDENCE_DIR)/bundles-gate-all/web01/gate-web01' --exceptions-file '$(EVIDENCE_DIR)/exceptions-gate/exceptions-valid.yml' $(call EVIDENCE_GATE_COLLECTION,every_host_fails),1,report written)
+	jq -e '$(EVIDENCE_UNLISTED_CHECK)' '$(EVIDENCE_DIR)/unlisted.json' > /dev/null
 	$(call evidence_gate_route,baseline,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline)
 	$(call evidence_gate_route,extra,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline -e '$(EVIDENCE_FORGED_DEFERRAL)')
 	$(call evidence_gate_route,group_vars,-i tests/playbooks/inventory/gate-routes-group -e gate_route=baseline)

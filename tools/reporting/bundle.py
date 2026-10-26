@@ -20,6 +20,11 @@ manifest is readable and records that no exceptions were applied, the error is a
 and cannot make an exception look stale there. The
 bundle is not signed (ADR 0018 is proposed), so a verified bundle is consistent, not
 authentic, and the report labels nothing as verified.
+
+A verified bundle also carries its identity (inventory host, run ID and the SHA-256 of
+its manifest), which the collection summary of ``--evidence-collection`` must list
+(FREES-142); :func:`refuse` turns a verified bundle that it does not list into an input
+``error`` in the same way.
 """
 
 import os
@@ -62,6 +67,25 @@ _FILE_FLAGS: Final[int] = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLO
 
 
 @dataclass(frozen=True)
+class BundleIdentity:
+    """What a verified bundle says about itself, for the collection summary to confirm.
+
+    Attributes:
+        display: The bundle directory as shown in the report.
+        inventory_host: The inventory host of the manifest.
+        run_id: The audit run ID of the manifest.
+        manifest: The artifact reference of ``bundle.json``.
+        exceptions_applied: Whether the bundle carries an exceptions evaluation.
+    """
+
+    display: str
+    inventory_host: str
+    run_id: str
+    manifest: ArtifactRef
+    exceptions_applied: bool
+
+
+@dataclass(frozen=True)
 class BundleInput:
     """The report inputs of one evidence bundle.
 
@@ -69,11 +93,13 @@ class BundleInput:
         compliance: The compliance input: the evaluation's scan run or the raw scan run.
         evaluation: The evaluation input of the ``exceptions`` section, or ``None``.
         exceptions_file: The exceptions file of the bundle, or ``None``.
+        identity: The identity of a bundle that verified, or ``None``.
     """
 
     compliance: ParseResult[ComplianceData]
     evaluation: ParseResult[EvaluationData] | None
     exceptions_file: ParseResult[str] | None
+    identity: BundleIdentity | None = None
 
 
 def _open_directory(path: Path) -> int:
@@ -201,6 +227,26 @@ def may_hold_exceptions(contents: dict[str, bytes]) -> bool:
     return status == evidence.EXCEPTIONS_APPLIED
 
 
+def missing_input(
+    artifact: ArtifactRef, status: SectionStatus, reason: str, *, holds_exceptions: bool
+) -> BundleInput:
+    """Return the inputs of a bundle that is missing or refused: no data, only a reason.
+
+    With ``holds_exceptions`` the input is an ``exceptions_evaluation`` of both the
+    compliance and the exceptions section, otherwise a ``scan_run`` of the compliance
+    section only.
+    """
+    if not holds_exceptions:
+        rejected: ParseResult[ComplianceData] = ParseResult(
+            SCAN_RUN_FORMAT, status, reason, artifact, None
+        )
+        return BundleInput(rejected, None, None)
+    evaluation: ParseResult[EvaluationData] = ParseResult(
+        EVALUATION_FORMAT, status, reason, artifact, None
+    )
+    return BundleInput(compliance_result(evaluation), evaluation, None)
+
+
 def _rejected(
     display: str, contents: dict[str, bytes], status: SectionStatus, reason: str
 ) -> BundleInput:
@@ -210,15 +256,17 @@ def _rejected(
         None if manifest is None else sha256_hex(manifest),
         None if manifest is None else len(manifest),
     )
-    if not may_hold_exceptions(contents):
-        rejected: ParseResult[ComplianceData] = ParseResult(
-            SCAN_RUN_FORMAT, status, reason, artifact, None
-        )
-        return BundleInput(rejected, None, None)
-    evaluation: ParseResult[EvaluationData] = ParseResult(
-        EVALUATION_FORMAT, status, reason, artifact, None
+    return missing_input(artifact, status, reason, holds_exceptions=may_hold_exceptions(contents))
+
+
+def refuse(identity: BundleIdentity, reason: str) -> BundleInput:
+    """Return the inputs of a verified bundle that is refused after all, as an input ``error``."""
+    return missing_input(
+        identity.manifest,
+        SectionStatus.ERROR,
+        f"evidence bundle rejected: {reason}",
+        holds_exceptions=identity.exceptions_applied,
     )
-    return BundleInput(compliance_result(evaluation), evaluation, None)
 
 
 def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
@@ -240,6 +288,16 @@ def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
         reason = f"evidence bundle rejected: {clean_text(str(error), 300)}"
         return _rejected(display, contents, SectionStatus.ERROR, reason)
     checked = verified.evaluation
+    manifest = contents[evidence.MANIFEST_NAME]
+    identity = BundleIdentity(
+        display=display,
+        inventory_host=verified.manifest.inventory_host,
+        run_id=verified.manifest.run_id,
+        manifest=ArtifactRef(
+            f"{display}/{evidence.MANIFEST_NAME}", sha256_hex(manifest), len(manifest)
+        ),
+        exceptions_applied=checked is not None,
+    )
     if checked is None:
         compliance = parse_bytes(
             f"{display}/{evidence.SCAN_RUN_PATH}",
@@ -247,7 +305,7 @@ def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
             contents[evidence.SCAN_RUN_PATH],
             scan_run_data,
         )
-        return BundleInput(compliance, None, None)
+        return BundleInput(compliance, None, None, identity)
     evaluation = parse_bytes(
         f"{display}/{evidence.EVALUATION_PATH}",
         EVALUATION_FORMAT,
@@ -260,4 +318,4 @@ def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
         contents[evidence.EXCEPTIONS_FILE_PATH],
         decode_text,
     )
-    return BundleInput(compliance_result(evaluation), evaluation, exceptions_file)
+    return BundleInput(compliance_result(evaluation), evaluation, exceptions_file, identity)

@@ -11,6 +11,12 @@ in ``raw_artifacts``. An evidence bundle (``--evidence-bundle``) is verified fir
 contributes its evaluation, or its raw scan run when no exceptions were applied, and
 its exceptions file. More than one completed ScanRun for one host, benchmark, content
 version and profile is refused unless ``allow_repeated_scans`` is set.
+
+With an evidence collection summary (``--evidence-collection``) every target host of the
+run is accounted for in ``sections.compliance.host_coverage`` (schema 2.1): a bundle that
+the summary does not list is an input error, and a target host without a bundle in the
+report is a missing input, so the section cannot be ``available`` while a host is missing.
+Without a summary the coverage is ``unknown``.
 """
 
 import re
@@ -21,6 +27,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Final, cast
 
+from tools.reporting import host_coverage
 from tools.reporting.bundle import BundleInput, parse_bundle
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
@@ -61,7 +68,7 @@ from tools.reporting.parsers.scanrun import parse_scan_run
 from tools.reporting.parsers.xccdf import parse_arf, parse_xccdf
 from tools.reporting.waivers import exception_entries
 
-SCHEMA_VERSION: Final[str] = "2.0"
+SCHEMA_VERSION: Final[str] = "2.1"
 SECTION_NAMES: Final[tuple[str, ...]] = (
     "codebuild",
     "compliance",
@@ -88,7 +95,11 @@ SECTION_INPUTS: Final[dict[str, tuple[str, ...]]] = {
 }
 MAX_INPUTS: Final[int] = 1000
 SHARED_INPUT_SECTIONS: Final[frozenset[str]] = frozenset({"exceptions"})
-MAX_RAW_ARTIFACTS: Final[int] = (len(SECTION_NAMES) - len(SHARED_INPUT_SECTIONS)) * MAX_INPUTS + 1
+REFERENCE_FILES: Final[tuple[str, ...]] = ("exceptions_file", "evidence_collection")
+MAX_RAW_ARTIFACTS: Final[int] = (
+    len(SECTION_NAMES) - len(SHARED_INPUT_SECTIONS)
+) * MAX_INPUTS + len(REFERENCE_FILES)
+BUNDLE_ONLY_INPUTS: Final[tuple[str, ...]] = ("xccdf", "arf", "scan_run", "exceptions_evaluation")
 MAX_RULES: Final[int] = 1_000_000
 MAX_GROUPS: Final[int] = 100_000
 FAILED_BUILD_STATUSES: Final[frozenset[str]] = frozenset(
@@ -176,6 +187,7 @@ class ReportInputs:
     exceptions_evaluation: tuple[Path, ...] = ()
     evidence_bundle: tuple[Path, ...] = ()
     exceptions_file: Path | None = None
+    evidence_collection: Path | None = None
     max_bytes: int = DEFAULT_MAX_BYTES
     allow_repeated_scans: bool = False
 
@@ -310,13 +322,19 @@ def check_repeated_scans(entries: list[Entry], *, allowed: bool) -> None:
 
 
 def _compliance_section(
-    results: Sequence[ParseResult[ComplianceData]], scope: Scope, *, allow_repeated: bool
+    results: Sequence[ParseResult[ComplianceData]],
+    scope: Scope,
+    coverage: dict[str, Json],
+    *,
+    allow_repeated: bool,
 ) -> dict[str, Json]:
     section = _section(results)
     entries: list[Entry] = [(path, data) for path, data, _ in _unique(results)]
     check_scope(scope, entries)
     check_repeated_scans(entries, allowed=allow_repeated)
-    section.update({"aggregates": [], "groups": [], "notes": [], "rules": []})
+    section.update(
+        {"aggregates": [], "groups": [], "host_coverage": coverage, "notes": [], "rules": []}
+    )
     if section["status"] != SectionStatus.AVAILABLE.value:
         return section
     rules = rollup(entries)
@@ -482,16 +500,61 @@ def _compliance_inputs(
     )
 
 
-def _scan_inputs(
-    inputs: ReportInputs,
-) -> tuple[
-    ParseResult[str] | None,
-    list[ParseResult[EvaluationData]],
-    list[ParseResult[ComplianceData]],
-]:
-    bundles = [parse_bundle(path, inputs.max_bytes) for path in inputs.evidence_bundle]
+@dataclass(frozen=True)
+class ScanInputs:
+    """The scan inputs of a report after the exceptions file and the collection checks."""
+
+    exceptions_file: ParseResult[str] | None
+    evaluations: list[ParseResult[EvaluationData]]
+    compliance: list[ParseResult[ComplianceData]]
+    collection: ParseResult[object] | None
+    coverage: dict[str, Json]
+
+
+def _coverage(
+    inputs: ReportInputs, bundles: list[BundleInput]
+) -> tuple[host_coverage.Coverage, ParseResult[object] | None]:
+    """Account for the target hosts of ``--evidence-collection``, or label coverage unknown.
+
+    Raises:
+        ReportError: If the summary is supplied with inputs that are not evidence bundles,
+            cannot be read or used, or names more target hosts than a section can hold.
+    """
+    if inputs.evidence_collection is None:
+        return host_coverage.unknown(bundles), None
+    direct = [name for name in BUNDLE_ONLY_INPUTS if getattr(inputs, name)]
+    if direct:
+        message = (
+            "--evidence-collection accounts for evidence bundles only; supply the scans as "
+            f"--evidence-bundle, not --{direct[0].replace('_', '-')}"
+        )
+        raise ReportError(message)
+    source = host_coverage.parse_collection_file(inputs.evidence_collection, inputs.max_bytes)
+    if source.data is None:
+        message = f"the evidence collection summary cannot be used: {source.reason}"
+        raise ReportError(message)
+    if len(source.data.hosts) > MAX_INPUTS:
+        message = f"the evidence collection summary names more than {MAX_INPUTS} target hosts"
+        raise ReportError(message)
+    coverage = host_coverage.account(
+        bundles,
+        source.artifact,
+        source.data,
+        holds_exceptions=any(bundle.evaluation is not None for bundle in bundles),
+    )
+    return coverage, ParseResult(source.format, source.status, source.reason, source.artifact, None)
+
+
+def _scan_inputs(inputs: ReportInputs) -> ScanInputs:
+    parsed = [parse_bundle(path, inputs.max_bytes) for path in inputs.evidence_bundle]
+    coverage, collection = _coverage(inputs, parsed)
+    bundles = coverage.bundles + coverage.missing
     source, evaluations = _evaluations(inputs, bundles)
-    return source, evaluations, _compliance_inputs(inputs, evaluations, bundles)
+    compliance = _compliance_inputs(inputs, evaluations, bundles)
+    if max(len(compliance), len(evaluations)) > MAX_INPUTS:
+        message = f"more than {MAX_INPUTS} inputs for one section, counting the missing hosts"
+        raise ReportError(message)
+    return ScanInputs(source, evaluations, compliance, collection, coverage.document)
 
 
 def build_report(inputs: ReportInputs) -> dict[str, Json]:
@@ -505,7 +568,7 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
     """
     _check_input_counts(inputs)
     size = inputs.max_bytes
-    source, evaluations, compliance = _scan_inputs(inputs)
+    scan = _scan_inputs(inputs)
     tests = _parse_all(inputs.junit, parse_junit, size) + _parse_all(
         inputs.pytest_json, parse_pytest_json, size
     )
@@ -521,10 +584,10 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
     sections: dict[str, dict[str, Json]] = {
         "codebuild": _section(codebuild, _codebuild_summary),
         "compliance": _compliance_section(
-            compliance, inputs.scope, allow_repeated=inputs.allow_repeated_scans
+            scan.compliance, inputs.scope, scan.coverage, allow_repeated=inputs.allow_repeated_scans
         ),
         "coverage": _section(coverage),
-        "exceptions": _exceptions_section(evaluations, source),
+        "exceptions": _exceptions_section(scan.evaluations, scan.exceptions_file),
         "lint": _section(lint, _severity_summary),
         "molecule": _section(molecule, _molecule_summary),
         "packer": _section(packer),
@@ -533,7 +596,7 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
         "vulnerabilities": _section(vulnerabilities, _severity_summary),
     }
     every_result: dict[str, list[ParseResult[object]]] = {
-        "compliance": [*compliance],
+        "compliance": [*scan.compliance],
         "tests": [*tests],
         "coverage": [*coverage],
         "lint": [*lint],
@@ -542,7 +605,8 @@ def build_report(inputs: ReportInputs) -> dict[str, Json]:
         "packer": [*packer],
         "codebuild": [*codebuild],
         "molecule": [*molecule],
-        "exceptions": [] if source is None else [source],
+        "exceptions": [] if scan.exceptions_file is None else [scan.exceptions_file],
+        "host_coverage": [] if scan.collection is None else [scan.collection],
     }
     return {
         "metadata": _metadata(inputs.metadata),

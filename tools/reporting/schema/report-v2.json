@@ -1172,6 +1172,36 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "host_coverage": {
+                "properties": {
+                  "status": {
+                    "const": "incomplete"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "host_coverage"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "partial",
+                  "unavailable",
+                  "error"
+                ]
+              }
+            }
+          }
         }
       ],
       "properties": {
@@ -1195,6 +1225,9 @@
           },
           "maxItems": 100000,
           "type": "array"
+        },
+        "host_coverage": {
+          "$ref": "#/$defs/hostCoverage"
         },
         "items": {
           "items": {
@@ -1949,6 +1982,93 @@
         "reason",
         "status",
         "summary"
+      ],
+      "type": "object"
+    },
+    "coveredHost": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "in_report": {
+                "const": false
+              },
+              "manifest_sha256": {
+                "type": "null"
+              },
+              "run_id": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "collected"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "manifest_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "run_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "host": {
+          "$ref": "#/$defs/inventoryHost"
+        },
+        "in_report": {
+          "type": "boolean"
+        },
+        "manifest_sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "collected",
+            "unreachable",
+            "limited_out",
+            "no_audit_result",
+            "no_evidence_written",
+            "collection_failed"
+          ]
+        }
+      },
+      "required": [
+        "host",
+        "in_report",
+        "manifest_sha256",
+        "run_id",
+        "status"
       ],
       "type": "object"
     },
@@ -3111,6 +3231,268 @@
       "maxLength": 253,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]*$",
       "type": "string"
+    },
+    "hostCoverage": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "collection": {
+                "type": "object"
+              },
+              "hosts": {
+                "minItems": 1
+              },
+              "summary": {
+                "type": "object"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "unknown"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "collection": {
+                "type": "null"
+              },
+              "hosts": {
+                "maxItems": 0
+              },
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "complete"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "hosts": {
+                "items": {
+                  "properties": {
+                    "in_report": {
+                      "const": true
+                    }
+                  }
+                }
+              },
+              "reason": {
+                "type": "null"
+              },
+              "summary": {
+                "properties": {
+                  "missing": {
+                    "const": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "incomplete"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "hosts": {
+                "contains": {
+                  "properties": {
+                    "in_report": {
+                      "const": false
+                    }
+                  },
+                  "required": [
+                    "in_report"
+                  ]
+                }
+              },
+              "reason": {
+                "type": "string"
+              },
+              "summary": {
+                "properties": {
+                  "missing": {
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "collection": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "collected_at": {
+                  "$ref": "#/$defs/timestamp"
+                },
+                "collection_id": {
+                  "pattern": "^[0-9]{8}T[0-9]{6}\\.[0-9]{6}Z$",
+                  "type": "string"
+                },
+                "path": {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "size": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "collected_at",
+                "collection_id",
+                "path",
+                "sha256",
+                "size"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "hosts": {
+          "items": {
+            "$ref": "#/$defs/coveredHost"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "unknown",
+            "complete",
+            "incomplete"
+          ]
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "by_status": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "collected": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "collection_failed": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "limited_out": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "no_audit_result": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "no_evidence_written": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "unreachable": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "collected",
+                    "unreachable",
+                    "limited_out",
+                    "no_audit_result",
+                    "no_evidence_written",
+                    "collection_failed"
+                  ],
+                  "type": "object"
+                },
+                "in_report": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "missing": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "target_hosts": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "by_status",
+                "in_report",
+                "missing",
+                "target_hosts"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "required": [
+        "collection",
+        "hosts",
+        "reason",
+        "status",
+        "summary"
+      ],
+      "type": "object"
     },
     "hostIdentity": {
       "additionalProperties": false,
@@ -4852,7 +5234,8 @@
             "codebuild",
             "molecule_summary",
             "exceptions_evaluation",
-            "exceptions_file"
+            "exceptions_file",
+            "evidence_collection"
           ]
         },
         "path": {
@@ -9122,9 +9505,60 @@
           }
         }
       }
+    },
+    {
+      "else": {
+        "properties": {
+          "sections": {
+            "properties": {
+              "compliance": {
+                "required": [
+                  "host_coverage"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": "2.0"
+          }
+        },
+        "required": [
+          "schema_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "raw_artifacts": {
+            "items": {
+              "properties": {
+                "format": {
+                  "not": {
+                    "const": "evidence_collection"
+                  }
+                }
+              }
+            }
+          },
+          "sections": {
+            "properties": {
+              "compliance": {
+                "not": {
+                  "required": [
+                    "host_coverage"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
-  "description": "Normalized report built from heterogeneous inputs. Every section has an explicit status; missing or invalid input is never a pass. Timestamps are supplied by the caller and never generated.",
+  "description": "Normalized report built from heterogeneous inputs. Every section has an explicit status; missing or invalid input is never a pass. Timestamps are supplied by the caller and never generated. Version 2.1 adds sections.compliance.host_coverage, which accounts for every target host of an evidence collection; a 2.0 document has no such key.",
   "properties": {
     "metadata": {
       "additionalProperties": false,
@@ -9285,11 +9719,14 @@
       "items": {
         "$ref": "#/$defs/rawArtifact"
       },
-      "maxItems": 9001,
+      "maxItems": 9002,
       "type": "array"
     },
     "schema_version": {
-      "const": "2.0"
+      "enum": [
+        "2.0",
+        "2.1"
+      ]
     },
     "scope": {
       "enum": [

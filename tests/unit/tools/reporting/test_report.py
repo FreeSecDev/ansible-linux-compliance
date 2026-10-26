@@ -11,6 +11,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    collection,
     exceptions,
     model,
 )
@@ -74,7 +75,7 @@ def test_the_schema_is_a_valid_2020_12_schema() -> None:
 def test_full_report_validates_against_the_schema(kit: Any) -> None:
     document = build(full_inputs(kit))
     assert errors(document) == []
-    assert document["schema_version"] == "2.0"
+    assert document["schema_version"] == "2.1"
     exceptions_summary = document["sections"]["exceptions"]["summary"]
     assert document["overview"] == {
         "available": sorted(SECTIONS),
@@ -741,7 +742,10 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/properties/rules/maxItems$", report.MAX_RULES),
     (r"/properties/(groups|aggregates)/maxItems$", report.MAX_GROUPS),
     (r"/properties/(builds|scenarios)/maxItems$", common.MAX_ENTRIES),
-    (r"/properties/(items|gaps|sources|notes|matched_hosts)/maxItems$", report.MAX_INPUTS),
+    (
+        r"/properties/(items|gaps|sources|notes|matched_hosts|hosts)/maxItems$",
+        report.MAX_INPUTS,
+    ),
     (
         r"/properties/(issues|vulnerabilities|components|packages|failed_cases)/maxItems$",
         common.MAX_DETAIL_ITEMS,
@@ -809,6 +813,14 @@ LIMIT_RULES: list[tuple[str, Any]] = [
     (
         r"/\$defs/complianceData/properties/lapsed_waivers/items/pattern$",
         anchored_text(model.XCCDF_ID_PATTERNS["rule"]),
+    ),
+    (
+        r"/\$defs/coveredHost/properties/run_id/oneOf/\d+/pattern$",
+        anchored_text(collection.RUN_ID_PATTERN),
+    ),
+    (
+        r"/\$defs/hostCoverage/.*/collection_id/pattern$",
+        anchored_text(collection.COLLECTION_ID_PATTERN),
     ),
     (r"/properties/commit/oneOf/\d+/pattern$", anchored(report.COMMIT_PATTERN)),
     (
