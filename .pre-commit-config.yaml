@@ -51,7 +51,7 @@ repos:
         types: [yaml]
       - id: ansible-lint
         name: ansible-lint
-        entry: env ANSIBLE_COLLECTIONS_PATH=build/collections uv run --frozen ansible-lint
+        entry: make --no-print-directory lint-ansible
         language: system
         files: ^(galaxy\.yml|\.ansible-lint|tests/sanity/|meta/|plugins/|roles/|playbooks/|extensions/|changelogs/)
         pass_filenames: false

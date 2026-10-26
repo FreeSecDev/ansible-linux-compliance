@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    Developer tooling: the Makefile exports a per-checkout ANSIBLE_HOME (build/ansible-home) and
+    ANSIBLE_COLLECTIONS_PATH (build/collections) to every recipe, runs ansible-test with its own HOME
+    (build/ansible-test-home), and the ansible-lint pre-commit hook runs make lint-ansible, so a stale copy of the
+    collection under ~/.ansible/collections no longer shadows the working tree and make ci writes nothing to
+    ~/.ansible.

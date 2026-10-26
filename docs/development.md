@@ -6,7 +6,7 @@ credential-free stage locally and is what the pull request workflow runs, split 
 Jira: FREES-68 (Makefile), FREES-69 (pre-commit), FREES-70 (Python tooling),
 FREES-71 (pull request workflow), FREES-91 (skill validator tests), FREES-39 (collection skeleton and
 ansible tooling), FREES-26 (findings model), FREES-69 (ansible-lint hook), FREES-40 (role skeletons),
-FREES-30, FREES-31, FREES-33, FREES-34 (AWS bootstrap, OpenTofu, Checkov).
+FREES-30, FREES-31, FREES-33, FREES-34 (AWS bootstrap, OpenTofu, Checkov), FREES-127 (per-checkout Ansible home).
 
 ## Bootstrap
 
@@ -24,6 +24,31 @@ make help
 `jq` is on `PATH` and fails with an install hint when it is missing, because `make package` cannot run without it.
 `make bootstrap` also requires OpenTofu `1.13.2` on `PATH`; install the pinned, checksum-verified release with
 `tools/iac/install-tofu.sh`. Packer checks join with FREES-64.
+
+## Per-checkout Ansible home
+
+Every checkout, including each git worktree, has its own Ansible home, so parallel checkouts never share installed
+collections, caches or temporary files, and a stale copy of this collection under `~/.ansible/collections` can no
+longer shadow the working tree (FREES-127). The `Makefile` sets and exports these variables for every recipe:
+
+| Variable | Default | Used by |
+|---|---|---|
+| `ANSIBLE_HOME` | `build/ansible-home` | ansible-core (`ansible-playbook`, `ansible-galaxy`) and ansible-lint, which otherwise use `~/.ansible` for temporary files, the Galaxy cache, the lint mocks and the collections path that ansible-lint puts first |
+| `ANSIBLE_COLLECTIONS_PATH` | `build/collections` | Collection lookup: the links that `make collection-link` creates, never `~/.ansible/collections` |
+| `ANSIBLE_TEST_HOME` | `build/ansible-test-home` | `HOME` of `ansible-test` only, because it keeps its sanity virtual environments under a fixed `~/.ansible/test/venv` |
+
+The defaults are absolute paths below the checkout. A value from the environment or the command line wins, for
+example `make lint-ansible ANSIBLE_HOME=/var/tmp/ansible-home`. `make collection-link` and `make collection-tree`
+create the directories through `ansible-home`, so every target that runs Ansible tooling has them: `lint-ansible`,
+`test-sanity`, `test-ansible-units`, `package`, `package-check`, `test-audit-exceptions`, `test-remediate-check`, and
+the Molecule targets once they are implemented. The ansible-lint pre-commit hook runs `make lint-ansible`, so it uses
+the same paths and needs no manual `ANSIBLE_HOME`. `make clean` removes `build/`, and with it the default Ansible home
+and the `ansible-test` home; it never removes a directory given as an override.
+
+`make ci` writes nothing below `~/.ansible`. This was checked with an empty temporary `HOME`, and with a temporary
+`HOME` whose `~/.ansible/collections` held an old copy of this collection, in two worktrees running `make ci` at the
+same time. Molecule and other tools added later must keep that property: use the exported variables instead of
+overriding them.
 
 ## Makefile targets
 
@@ -54,11 +79,12 @@ make help
 | `package-check` | implemented | Builds twice from differently ordered trees and fails unless the SHA-256 values match |
 | `collection-tree` | implemented | Copies the collection files into `build/collection/ansible_collections/freesecdev/linux_compliance` |
 | `collection-link` | implemented | Links `plugins/` and `roles/` into `build/collections` for pytest, the type checkers, ansible-lint and `test-remediate-check` |
+| `ansible-home` | implemented | Creates `ANSIBLE_HOME` and `ANSIBLE_TEST_HOME` ([per-checkout Ansible home](#per-checkout-ansible-home)); a prerequisite of `collection-link` and `collection-tree` |
 | `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become` ([remediation guide](remediation.md#testing)) |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
-| `clean` | implemented | Removes caches and coverage output |
+| `clean` | implemented | Removes caches, coverage output and `build/`, including the per-checkout Ansible home |
 | `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check security docs test-sanity test-ansible-units package-check` |
-| `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with `ANSIBLE_HOME=build/ansible-home`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play ([audit guide](audit.md#tests)) |
+| `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with the per-checkout `ANSIBLE_HOME`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play ([audit guide](audit.md#tests)) |
 | `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
 | `lint-iac` | implemented | `tofu fmt -check -recursive infra/`, `tofu init -backend=false` and `tofu validate` per root module, shellcheck of the rendered bootstrap script; needs `tofu` on `PATH`, runs in the `iac` CI job and in `make ci`, not in `make lint` |
 | `aws-bootstrap-render` | implemented | Renders `infra/bootstrap/bootstrap.sh.tmpl` to the gitignored `infra/bootstrap/bootstrap.local.sh` |
@@ -99,8 +125,9 @@ uv run pre-commit run --all-files --hook-stage manual
 
 `pre-commit run` only sees files known to git; `git add` new files first.
 
-The ansible-lint hook (FREES-69) runs the whole project with the `production` profile whenever a collection
-file changes. The `tofu-fmt`, `tofu-validate` (system `tofu`) and `checkov` (`uv run --frozen`) hooks run when files
+The ansible-lint hook (FREES-69) runs `make lint-ansible` whenever a collection file changes: ansible-lint on the whole
+project with the `production` profile, the role argument spec check and the changelog lint, with the
+[per-checkout Ansible home](#per-checkout-ansible-home) (FREES-127). The `tofu-fmt`, `tofu-validate` (system `tofu`) and `checkov` (`uv run --frozen`) hooks run when files
 under `infra/` change (FREES-69). Packer hooks (FREES-64) are pending the issue that introduces their sources. They are
 intentionally absent rather than faked.
 
@@ -126,7 +153,7 @@ YAML comment form (ADR 0005, amendment 2026-10-25).
 | Bandit | `make security` runs Bandit on everything except the process helper, then on the helper with only B404 and B603 skipped |
 | Tests with coverage | `uv run pytest tests/unit --cov --cov-report=term-missing` |
 | yamllint | `uv run yamllint --strict .` |
-| ansible-lint | `uv run ansible-lint` |
+| ansible-lint | `make lint-ansible`; a bare `uv run ansible-lint` uses `~/.ansible` and can resolve a stale installed copy of this collection |
 | Changelog fragments | `uv run antsibull-changelog lint` |
 | Collection sanity | `make test-sanity` |
 | actionlint | `uv run actionlint` |
