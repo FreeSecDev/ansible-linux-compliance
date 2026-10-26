@@ -755,7 +755,7 @@ Scan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, prof
 				<FINDING_DETAILS>Scanner result: fail
 Reported outcome: waived
 Scan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified</FINDING_DETAILS>
-				<COMMENTS>Waiver: exception EXC-STIG-1 was in effect for this scan and expires 2026-12-31T00:00:00Z. The scanner's result is fail, so the status stays Open; a waiver is not a review that the requirement is met.
+				<COMMENTS>Waiver: exception EXC-STIG-1 was in effect for this scan and expires 2026-12-31T00:00:00Z. The scanner's result is fail. A waiver never changes the checklist status and is not a review that the requirement is met.
 Exception reason: Accepted risk: the synthetic service needs it</COMMENTS>
 				<SEVERITY_OVERRIDE></SEVERITY_OVERRIDE>
 				<SEVERITY_JUSTIFICATION></SEVERITY_JUSTIFICATION>
@@ -872,7 +872,7 @@ Exception reason: Accepted risk: the synthetic service needs it</COMMENTS>
 				<STATUS>Open</STATUS>
 				<FINDING_DETAILS>Scanner result: fail
 Scan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified</FINDING_DETAILS>
-				<COMMENTS>Exception EXC-STIG-2 expired at 2026-10-01T00:00:00Z and was not applied; the status is the scanner's result.
+				<COMMENTS>Exception EXC-STIG-2 expired at 2026-10-01T00:00:00Z and was not applied; it does not change the checklist status.
 Exception reason: Old risk acceptance</COMMENTS>
 				<SEVERITY_OVERRIDE></SEVERITY_OVERRIDE>
 				<SEVERITY_JUSTIFICATION></SEVERITY_JUSTIFICATION>

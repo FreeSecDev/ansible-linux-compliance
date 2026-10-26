@@ -330,7 +330,7 @@
           "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
           "status": "open",
           "overrides": {},
-          "comments": "Waiver: exception EXC-STIG-1 was in effect for this scan and expires 2026-12-31T00:00:00Z. The scanner's result is fail, so the status stays Open; a waiver is not a review that the requirement is met.\nException reason: Accepted risk: the synthetic service needs it",
+          "comments": "Waiver: exception EXC-STIG-1 was in effect for this scan and expires 2026-12-31T00:00:00Z. The scanner's result is fail. A waiver never changes the checklist status and is not a review that the requirement is met.\nException reason: Accepted risk: the synthetic service needs it",
           "finding_details": "Scanner result: fail\nReported outcome: waived\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
         },
         {
@@ -381,7 +381,7 @@
           "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
           "status": "open",
           "overrides": {},
-          "comments": "Exception EXC-STIG-2 expired at 2026-10-01T00:00:00Z and was not applied; the status is the scanner's result.\nException reason: Old risk acceptance",
+          "comments": "Exception EXC-STIG-2 expired at 2026-10-01T00:00:00Z and was not applied; it does not change the checklist status.\nException reason: Old risk acceptance",
           "finding_details": "Scanner result: fail\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
         },
         {

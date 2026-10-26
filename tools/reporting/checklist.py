@@ -196,20 +196,20 @@ def _comments(finding: model.Finding | None, *, lapsed: bool) -> str:
         lines.append(
             f"Waiver: exception {exception.exception_id} was in effect for this scan and "
             f"expires {exception.expires_at}. The scanner's result is "
-            f"{finding.evaluated_outcome.value}, so the status stays Open; a waiver is not a "
-            "review that the requirement is met."
+            f"{finding.evaluated_outcome.value}. A waiver never changes the checklist status and "
+            "is not a review that the requirement is met."
         )
     if exception.state is model.ExceptionState.EXPIRED:
         lines.append(
             f"Exception {exception.exception_id} expired at {exception.expires_at} and was not "
-            "applied; the status is the scanner's result."
+            "applied; it does not change the checklist status."
         )
     if exception.reason is not None:
         lines.append(f"Exception reason: {exception.reason}")
     if lapsed:
         lines.append(
-            "The waiver of this rule lapsed after the scan started and was not applied; the "
-            "status is the scanner's result."
+            "The waiver of this rule lapsed after the scan started and was not applied; it does "
+            "not change the checklist status."
         )
     return "\n".join(lines)
 

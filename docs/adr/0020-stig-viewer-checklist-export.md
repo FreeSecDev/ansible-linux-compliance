@@ -101,10 +101,11 @@ The first row that applies decides. Statuses are written as the CKL and CKLB str
 
 An `active` exception turns a `fail` into `waived` (ADR 0013). The exporter keeps the scanner's status, **Open**, and
 writes the waiver into `COMMENTS` (CKLB `comments`): the exception ID, that it was in effect for the scan, its expiry,
-that the status stays Open because a waiver is not a review that the requirement is met, and the exception's reason
-(justification, risk, framework, owner, approver and dates, as ADR 0013 builds it). An `expired` exception and a waiver
-that lapsed after the scan started (`lapsed_waivers` of the evaluation) leave the finding `fail`, Open, with a comment
-that says so.
+the scanner's result, that a waiver never changes the checklist status and is not a review that the requirement is
+met, and the exception's reason (justification, risk, framework, owner, approver and dates, as ADR 0013 builds it).
+An `expired` exception and a waiver that lapsed after the scan started (`lapsed_waivers` of the evaluation) leave the
+finding `fail`, Open, with a comment that says so. The comments never state the status, because rows 1 and 2 of the
+table can make a waived finding Not Reviewed (off-platform, or a run that did not complete).
 
 Why not Not Applicable for some waivers: the exceptions file has no waiver type. Every exception is a risk acceptance
 of a requirement that applies and fails (ADR 0013, FREES-50); none states that a requirement does not apply to the
