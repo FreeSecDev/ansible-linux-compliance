@@ -1,4 +1,32 @@
 ---
+- name: Verify | Refuse internal variables supplied from outside the role as parameters
+  ansible.builtin.assert:
+    that:
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_verify_baseline_recorded$') == [] or
+        '__linux_compliance_verify_baseline_recorded' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_verify_comparison$') == [] or
+        '__linux_compliance_verify_comparison' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_verify_dispatched$') == [] or
+        '__linux_compliance_verify_dispatched' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_verify_gate$') == [] or '__linux_compliance_verify_gate'
+        in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_verify_marker$') == [] or
+        '__linux_compliance_verify_marker' in (hostvars[inventory_hostname] | list)
+    fail_msg: >-
+      An internal variable of the verify role (__linux_compliance_verify_*) is set from outside the role as a parameter:
+      a role parameter, a variable of a roles entry, an include parameter (vars of include_role, import_role,
+      include_tasks or import_tasks) or a block or play variable. It is refused by its name, whatever its value, because
+      a template could evaluate to the value that a later check expects. The failed assertion names it. Remove it and
+      pass only the documented linux_compliance_* variables. Nothing was scanned, changed or compared.
+    quiet: true
+  tags:
+    - always
+
 - name: Verify | Reset the internal facts of the role
   ansible.builtin.set_fact:
     __linux_compliance_verify_baseline_recorded: __linux_compliance_unset__

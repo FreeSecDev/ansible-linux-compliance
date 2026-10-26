@@ -243,7 +243,7 @@ Tests
   test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
   test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check)
-  test-role-guards      Check in check mode that forged internal role variables are refused before any change
+  test-role-guards      Check in check mode that forged internal variables and role outputs are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
@@ -562,15 +562,37 @@ ROLE_GUARDS_SENTINEL_PLAN := {"__linux_compliance_remediate_plan": "__linux_comp
 ROLE_GUARDS_SENTINEL_FAMILY := {"__linux_compliance_remediate_family": "__linux_compliance_unset__"}
 
 ROLE_GUARDS_REFUSALS := is set from outside the role|Validation of arguments failed
+ROLE_GUARDS_PARAMETERS := Refuse internal variables supplied from outside the role as parameters
+ROLE_GUARDS_HOSTS := forged_plan,forged_family,forged_vars,forged_template,
 
 define role_guards_expect_refusal
-status=0; ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit $(1) --check \
+status=0; ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(ROLE_GUARDS_HOSTS) --limit $(1) --check \
 		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/$(1).log' 2>&1 || status=$$?; \
 	cat '$(ROLE_GUARDS_DIR)/$(1).log'; \
 	test "$$status" -eq 2 || { printf 'error: %s did not fail the play (status %s)\n' '$(1)' "$$status" >&2; exit 1; }; \
-	grep -qE '$(ROLE_GUARDS_REFUSALS)' '$(ROLE_GUARDS_DIR)/$(1).log' || { printf 'error: %s was not refused\n' '$(1)' >&2; exit 1; }; \
-	if grep -q 'Remediate | Read the state ledger' '$(ROLE_GUARDS_DIR)/$(1).log'; then \
-		printf 'error: the role went on after %s\n' '$(1)' >&2; exit 1; fi
+	grep -qE '$(2)' '$(ROLE_GUARDS_DIR)/$(1).log' || { printf 'error: %s was not refused\n' '$(1)' >&2; exit 1; }; \
+	if grep -qE 'Remediate \| Read the state ledger|tmp/forged|FORGED-PLAN-USED|PROBE-COMPLETED' \
+		'$(ROLE_GUARDS_DIR)/$(1).log'; then printf 'error: the role went on after %s\n' '$(1)' >&2; exit 1; fi
+endef
+
+RUN_START_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i localhost, --check \
+	-e linux_compliance_target_hosts=freesecdev_no_target_host
+RUN_START_REFUSAL := Refusing to run: internal variables or role outputs of the freesecdev.linux_compliance roles
+RUN_START_AUDITED := {"linux_compliance_audited": {"run_id": "forged", "run_status": "completed", "evidence_written": true}}
+
+define run_start_expect_refusal
+status=0; $(RUN_START_PLAYBOOK) $(3) playbooks/$(2).yml > '$(ROLE_GUARDS_DIR)/run-start-$(1).log' 2>&1 || status=$$?; \
+	cat '$(ROLE_GUARDS_DIR)/run-start-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: run start %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -qF '$(RUN_START_REFUSAL) ($(4))' '$(ROLE_GUARDS_DIR)/run-start-$(1).log' || \
+		{ printf 'error: run start %s was not refused by the first play\n' '$(1)' >&2; exit 1; }; \
+	test "$$(grep -c '^PLAY \[' '$(ROLE_GUARDS_DIR)/run-start-$(1).log')" -eq 1 || \
+		{ printf 'error: run start %s went on after the first play\n' '$(1)' >&2; exit 1; }
+endef
+
+define run_start_expect_success
+$(RUN_START_PLAYBOOK) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log' 2>&1 || \
+	{ cat '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log'; printf 'error: %s refused a plain run\n' '$(1)' >&2; exit 1; }
 endef
 
 test-role-guards: require-uv collection-link
@@ -585,13 +607,21 @@ test-role-guards: require-uv collection-link
 		tests/playbooks/internal-variables-extra.yml
 	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_SENTINEL_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
 		tests/playbooks/internal-variables-extra.yml
-	$(call role_guards_expect_refusal,forged_plan)
-	$(call role_guards_expect_refusal,forged_family)
-	ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit forged_vars --check \
-		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/forged_vars.log' 2>&1 || \
-		{ cat '$(ROLE_GUARDS_DIR)/forged_vars.log'; exit 1; }
-	if grep -q 'tmp/forged' '$(ROLE_GUARDS_DIR)/forged_vars.log'; then \
-		printf 'error: role variables of a roles entry replaced the plan\n' >&2; exit 1; fi
+	$(REMEDIATE_CHECK) tests/playbooks/internal-variables-templated.yml
+	$(call role_guards_expect_refusal,forged_plan,$(ROLE_GUARDS_REFUSALS))
+	$(call role_guards_expect_refusal,forged_family,$(ROLE_GUARDS_REFUSALS))
+	$(call role_guards_expect_refusal,forged_vars,$(ROLE_GUARDS_PARAMETERS))
+	$(call role_guards_expect_refusal,forged_template,$(ROLE_GUARDS_REFUSALS))
+	$(call run_start_expect_success,audit)
+	$(call run_start_expect_success,remediate)
+	$(call run_start_expect_success,verify)
+	$(call run_start_expect_refusal,templated_plan,remediate,-e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,audited_audit,audit,-e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,audited_evidence,evidence,-e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,audited_inventory,evidence,-i tests/playbooks/inventory/run-start-planted.yml,linux_compliance_audited)
+	$(call run_start_expect_refusal,comparison,verify,-e '{"__linux_compliance_verify_comparison": {}}',__linux_compliance_verify_comparison)
+	$(call run_start_expect_refusal,marker,remediate,-e linux_compliance_run_start_checked=true,linux_compliance_run_start_checked)
+	$(call run_start_expect_refusal,inventory_hostname,evidence,-e inventory_hostname=freesecdev_forged,none)
 
 VERIFY_DIR := build/test-verify
 VERIFY_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(AUDIT_EXCEPTIONS_INVENTORY) \

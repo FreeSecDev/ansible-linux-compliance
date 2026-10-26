@@ -1,4 +1,92 @@
 ---
+- name: Evidence | Refuse internal variables supplied from outside the role as parameters
+  ansible.builtin.assert:
+    that:
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_collected$') == [] or
+        '__linux_compliance_evidence_collected' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_dir$') == [] or
+        '__linux_compliance_evidence_dir' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_directories$') == [] or
+        '__linux_compliance_evidence_directories' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_documents$') == [] or
+        '__linux_compliance_evidence_documents' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_existing$') == [] or
+        '__linux_compliance_evidence_existing' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_fetched$') == [] or
+        '__linux_compliance_evidence_fetched' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_host_dir$') == [] or
+        '__linux_compliance_evidence_host_dir' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_host_observed$') == [] or
+        '__linux_compliance_evidence_host_observed' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_manifest$') == [] or
+        '__linux_compliance_evidence_manifest' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_marked$') == [] or
+        '__linux_compliance_evidence_marked' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_marker$') == [] or
+        '__linux_compliance_evidence_marker' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_observed$') == [] or
+        '__linux_compliance_evidence_observed' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_on_host$') == [] or
+        '__linux_compliance_evidence_on_host' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_plan$') == [] or
+        '__linux_compliance_evidence_plan' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_preview$') == [] or
+        '__linux_compliance_evidence_preview' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_published$') == [] or
+        '__linux_compliance_evidence_published' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_root$') == [] or
+        '__linux_compliance_evidence_root' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_summary$') == [] or
+        '__linux_compliance_evidence_summary' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_summary_existing$') == [] or
+        '__linux_compliance_evidence_summary_existing' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_summary_written$') == [] or
+        '__linux_compliance_evidence_summary_written' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_target_vars$') == [] or
+        '__linux_compliance_evidence_target_vars' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_targets$') == [] or
+        '__linux_compliance_evidence_targets' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_uid$') == [] or
+        '__linux_compliance_evidence_uid' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_unsafe$') == [] or
+        '__linux_compliance_evidence_unsafe' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_evidence_written$') == [] or
+        '__linux_compliance_evidence_written' in (hostvars[inventory_hostname] | list)
+    fail_msg: >-
+      An internal variable of the evidence role (__linux_compliance_evidence_*) is set from outside the role as a
+      parameter: a role parameter, a variable of a roles entry, an include parameter (vars of include_role, import_role,
+      include_tasks or import_tasks) or a block or play variable. It is refused by its name, whatever its value, because
+      a template could evaluate to the value that a later check expects. The failed assertion names it. Remove it and
+      pass only the documented linux_compliance_* variables. Nothing was scanned, changed or compared.
+    quiet: true
+  tags:
+    - always
+
 - name: Evidence | Reset the internal facts of the role
   ansible.builtin.set_fact:
     __linux_compliance_evidence_dir: __linux_compliance_unset__

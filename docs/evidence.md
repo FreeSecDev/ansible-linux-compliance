@@ -94,7 +94,9 @@ changes it.
 
 0. Refuse internal `__linux_compliance_evidence_*` variables supplied from outside the role, such as a forged
    output directory, with the generated `tasks/internal_variables.yml` (also the first task of `summary.yml`;
-   FREES-153).
+   FREES-153). A name passed as a parameter is refused whatever its value (FREES-157). The collection steps below
+   are a block of `main.yml`, not a task file of their own, so `tasks_from` cannot start them without this guard
+   and the output directory check.
 1. Validate the variables and check that `linux_compliance_audited` exists.
 2. Resolve the output directory (relative paths against the playbook directory) and require a normalised absolute path.
 3. Skip the host with a message when the audit wrote no evidence (`evidence_written: false`: check mode, or no scan).

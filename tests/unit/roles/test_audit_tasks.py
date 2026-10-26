@@ -104,3 +104,25 @@ def test_a_host_that_read_the_file_but_is_not_first_of_its_batch_fails() -> None
     )
     assert "does not support the free strategy" in str(assertion["fail_msg"])
     assert "run_once" not in check
+
+
+def test_the_published_audit_result_is_checked_against_the_scan_right_after_it_is_set() -> None:
+    main = tasks("scan.yml")
+    publish = next(
+        position
+        for position, task in enumerate(main)
+        if "linux_compliance_audited"
+        in cast("dict[str, object]", task.get("ansible.builtin.set_fact", {}))
+    )
+    check = main[publish + 1]
+    assertion = cast("dict[str, object]", check["ansible.builtin.assert"])
+    conditions = [" ".join(str(item).split()) for item in cast("list[str]", assertion["that"])]
+    run_id = "__linux_compliance_audit_scan.run_id"
+    assert f"linux_compliance_audited.run_id | default(none) == {run_id}" in conditions
+    assert (
+        "hostvars[inventory_hostname]['linux_compliance_audited'].run_id | default(none)"
+        f" == {run_id}" in conditions
+    )
+    assert "extra variable (-e)" in str(assertion["fail_msg"])
+    assert check["tags"] == ["always"]
+    assert "when" not in check

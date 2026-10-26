@@ -15,14 +15,17 @@ Two kinds of task file are derived from the repository and checked for drift in 
   roles: the first tasks of every entry point. A role parameter, an include parameter and an
   extra variable outrank every fact that a role sets, so an internal
   ``__linux_compliance_<role>_*`` variable supplied from outside would replace the role's own
-  value. The guard sets every fact and registered variable of the role to a sentinel and
-  asserts that each reads back as the sentinel; it gives every task and loop variable the
-  sentinel as a task variable of the assertion and asserts the same; and it asserts that every
-  constant of the role's variable files is either undefined or equal to the file. It then
-  repeats the reset and the read-back with a second sentinel and resets the facts to the first
-  one again: a value supplied from outside is fixed, so a forged value that equals the first
-  sentinel fails the second read-back (FREES-153). Any other value can only come from outside,
-  and the role stops before it changes anything.
+  value. The guard first refuses every internal fact, task variable and ``include_vars``
+  constant that the ``varnames`` lookup sees but ``hostvars`` does not: such a name was passed
+  as a role, include, block or play parameter, and it is refused whatever its value, because
+  a template can imitate the sentinels below (FREES-157). The guard then sets every fact and
+  registered variable of the role to a sentinel and asserts that each reads back as the
+  sentinel; it gives every task and loop variable the sentinel as a task variable of the
+  assertion and asserts the same; and it asserts that every constant of the role's variable
+  files is either undefined or equal to the file. It then repeats the reset and the read-back
+  with a second sentinel and resets the facts to the first one again: a fixed value supplied
+  from outside that equals the first sentinel fails the second read-back (FREES-153). Any
+  other value can only come from outside, and the role stops before it changes anything.
 
 A run output (``RUN_OUTPUTS``) is an internal fact that the role sets for a later play of the
 same run to read, such as the collection marker of the evidence role (FREES-154). Resetting it
@@ -30,6 +33,10 @@ to a sentinel at the start of an entry point would make a host whose collection 
 like a host with a marker, so it is neither reset nor read back; it is checked where it is set
 and read, and the play that starts the run refuses it when it is already set. Every run output
 must be a fact that the role sets.
+
+``playbooks/run_start.yml`` (``tools/roles/run_start.py``) is generated as well: the check that
+every shipped playbook runs first, which refuses an internal name or a role output, every public
+``linux_compliance_*`` fact that a role sets, that is already in ``hostvars`` when the run starts.
 
 The variables are found in the role's task and variable files. A variable that the tool
 cannot classify, or that is both a fact and a task variable, is an error, and so is a role
@@ -51,7 +58,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 import yaml
 
-from tools.roles import generate_toggles
+from tools.roles import generate_toggles, run_start
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -65,6 +72,7 @@ RUN_OUTPUTS: Final[dict[str, frozenset[str]]] = {
     "evidence": frozenset({"__linux_compliance_evidence_run_bundle"}),
 }
 ROLE_TASK_FILES: Final[frozenset[str]] = frozenset({"main", "dispatch", "internal_variables"})
+PUBLIC_PREFIX: Final[str] = "linux_compliance_"
 SENTINEL: Final[str] = "__linux_compliance_unset__"
 SECOND_SENTINEL: Final[str] = "__linux_compliance_unset_again__"
 NESTED: Final[tuple[str, ...]] = ("block", "rescue", "always")
@@ -89,6 +97,8 @@ class RoleVariables:
     locals: set[str] = field(default_factory=set[str])
     constants: dict[str, str] = field(default_factory=dict[str, str])
     outputs: set[str] = field(default_factory=set[str])
+    cacheable: set[str] = field(default_factory=set[str])
+    role_vars: set[str] = field(default_factory=set[str])
 
 
 def prefix(role: str) -> str:
@@ -195,7 +205,11 @@ def _include_vars(task: dict[str, object], role_dir: Path, found: RoleVariables)
 
 
 def _task_variables(task: dict[str, object], found: RoleVariables) -> None:
-    found.facts.update(key for key in _keys(task.get(SET_FACT)) if key not in FACT_OPTIONS)
+    options = task.get(SET_FACT)
+    facts = [key for key in _keys(options) if key not in FACT_OPTIONS]
+    found.facts.update(facts)
+    if isinstance(options, dict) and cast("dict[str, object]", options).get("cacheable") is True:
+        found.cacheable.update(facts)
     register = task.get("register")
     if isinstance(register, str):
         found.facts.add(register)
@@ -218,6 +232,7 @@ def role_variables(role_dir: Path, generated: dict[str, str]) -> RoleVariables:
     if (role_dir / "vars" / "main.yml").is_file():
         for key in _variables_file(role_dir, "/vars/main.yml"):
             found.constants[key] = f"{_file_value('/vars/main.yml')}[{_quote(key)}]"
+            found.role_vars.add(key)
     texts = {
         path.name: path.read_text(encoding="utf-8")
         for path in sorted((role_dir / "tasks").glob("*.yml"))
@@ -263,6 +278,8 @@ def _checked(role: str, found: RoleVariables, referenced: set[str]) -> RoleVaria
         raise GenerationError(message)
     owned.outputs = owned.facts & declared
     owned.facts -= declared
+    owned.cacheable = _own(role, found.cacheable)
+    owned.role_vars = _own(role, found.role_vars)
     return owned
 
 
@@ -313,10 +330,40 @@ def _read_back(
     return lines
 
 
+def _parameters(role: str, names: Sequence[str], name: str) -> list[str]:
+    """Return the assertion that no name in ``names`` is a parameter of the role.
+
+    A role parameter, an include parameter and a block or play variable are visible to the
+    ``varnames`` lookup but not in ``hostvars``, so a name that the lookup finds and that is
+    not a fact or an extra variable was passed as a parameter, whatever its value.
+    """
+    lines = [f"- name: {name}", "  ansible.builtin.assert:", "    that:"]
+    for variable in names:
+        lines.extend(
+            _that(
+                f"query('ansible.builtin.varnames', '^{variable}$') == [] "
+                f"or '{variable}' in (hostvars[inventory_hostname] | list)"
+            )
+        )
+    message = (
+        f"An internal variable of the {role} role ({prefix(role)}*) is set from outside the role "
+        "as a parameter: a role parameter, a variable of a roles entry, an include parameter "
+        "(vars of include_role, import_role, include_tasks or import_tasks) or a block or play "
+        "variable. "
+        "It is refused by its name, whatever its value, because a template could evaluate to the "
+        "value that a later check expects. The failed assertion names it. Remove it and pass only "
+        "the documented linux_compliance_* variables. Nothing was scanned, changed or compared."
+    )
+    lines.extend(["    fail_msg: >-", *_folded(message, 6), "    quiet: true"])
+    lines.extend(["  tags:", "    - always"])
+    return lines
+
+
 def guard(role: str, found: RoleVariables) -> str:
     """Return the internal-variable guard task file of ``role``.
 
-    The facts are reset to ``SENTINEL`` and read back with the task variables and the
+    A fact, task variable or ``include_vars`` constant passed as a parameter is refused by its
+    name first. The facts are reset to ``SENTINEL`` and read back with the task variables and the
     constants. When the role has facts or task variables, the reset and the read-back are
     repeated with ``SECOND_SENTINEL``, and the facts end as ``SENTINEL``: a value supplied
     from outside cannot equal both sentinels.
@@ -325,6 +372,9 @@ def guard(role: str, found: RoleVariables) -> str:
     facts = sorted(found.facts)
     refuse = f"{title} | Refuse internal variables supplied from outside the role"
     tasks: list[list[str]] = []
+    parameters = sorted(found.facts | found.locals | (set(found.constants) - found.role_vars))
+    if parameters:
+        tasks.append(_parameters(role, parameters, f"{refuse} as parameters"))
     if facts:
         tasks.append(_reset(title, facts, SENTINEL, "Reset the internal facts of the role"))
     tasks.append(_read_back(role, found, SENTINEL, refuse, constants=True))
@@ -371,6 +421,7 @@ def outputs(root: Path) -> dict[Path, str]:
         )
         raise GenerationError(message)
     generated: dict[Path, str] = {DISPATCH: dispatch(families, root / DISPATCH.parent)}
+    cacheable: set[str] = set()
     for role in GUARDED_ROLES:
         role_dir = root / ROLES / role
         own = {
@@ -378,8 +429,20 @@ def outputs(root: Path) -> dict[Path, str]:
             for path, text in generated.items()
             if path.parent == ROLES / role / "tasks"
         }
-        generated[ROLES / role / "tasks" / GUARD_FILE] = guard(role, role_variables(role_dir, own))
+        found = role_variables(role_dir, own)
+        cacheable |= found.cacheable
+        generated[ROLES / role / "tasks" / GUARD_FILE] = guard(role, found)
+    generated[run_start.RUN_START] = run_start.play(role_outputs(root / ROLES), cacheable)
     return generated
+
+
+def role_outputs(roles_dir: Path) -> set[str]:
+    """Return every public ``linux_compliance_*`` fact that a role below ``roles_dir`` sets."""
+    found: set[str] = set()
+    for path in sorted(roles_dir.glob("*/tasks/*.yml")):
+        for task in _tasks(yaml.safe_load(path.read_text(encoding="utf-8"))):
+            found.update(key for key in _keys(task.get(SET_FACT)) if key.startswith(PUBLIC_PREFIX))
+    return found
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -403,6 +466,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("role guards match the roles")
         return 0
     for relative, content in generated.items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
         (root / relative).write_text(content, encoding="utf-8")
     print(f"generated {', '.join(str(path) for path in generated)}")
     return 0

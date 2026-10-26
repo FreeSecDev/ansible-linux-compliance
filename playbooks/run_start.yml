@@ -1,0 +1,41 @@
+---
+- name: Refuse internal variables and role outputs that exist before the run starts
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Refuse internal variables and role outputs supplied from outside the run
+      ansible.builtin.assert:
+        that:
+          - >-
+            (((groups['all'] + ['localhost']) | unique | map('extract', hostvars) | map('list') | flatten |
+            select('match', '^__linux_compliance_') | reject('in', ['__linux_compliance_verify_baseline_recorded']) |
+            list) + ((groups['all'] + ['localhost']) | unique | map('extract', hostvars) | map('list') | flatten |
+            select('in', ['linux_compliance_audit_stale_exceptions', 'linux_compliance_audited',
+            'linux_compliance_baseline', 'linux_compliance_discovered', 'linux_compliance_evidence_bundle',
+            'linux_compliance_evidence_collection', 'linux_compliance_evidence_play_hosts',
+            'linux_compliance_evidence_reached', 'linux_compliance_remediated', 'linux_compliance_run_start_checked',
+            'linux_compliance_verified']) | list)) | length == 0
+          - >-
+            (groups['all'] + ['localhost']) | unique | map('extract', hostvars, 'inventory_hostname') | list ==
+            (groups['all'] + ['localhost']) | unique | list
+        fail_msg: >-
+          Refusing to run: internal variables or role outputs of the freesecdev.linux_compliance roles ({{
+          (((groups['all'] + ['localhost']) | unique | map('extract', hostvars) | map('list') | flatten |
+          select('match', '^__linux_compliance_') | reject('in', ['__linux_compliance_verify_baseline_recorded']) |
+          list) + ((groups['all'] + ['localhost']) | unique | map('extract', hostvars) | map('list') | flatten |
+          select('in', ['linux_compliance_audit_stale_exceptions', 'linux_compliance_audited',
+          'linux_compliance_baseline', 'linux_compliance_discovered', 'linux_compliance_evidence_bundle',
+          'linux_compliance_evidence_collection', 'linux_compliance_evidence_play_hosts',
+          'linux_compliance_evidence_reached', 'linux_compliance_remediated', 'linux_compliance_run_start_checked',
+          'linux_compliance_verified']) | list)) | unique | sort | join(', ') or 'none' }}) are set before the run
+          started, or inventory_hostname is an extra variable. Only the roles set them during the run; a value from an
+          extra variable (-e), the inventory, group_vars, host_vars or a fact cache would replace what a role computes
+          and another role trusts, and a template can imitate any value that a role checks. Remove it, and do not set
+          inventory_hostname as an extra variable. Nothing was audited, remediated, compared or collected.
+        quiet: true
+      when: >-
+        linux_compliance_run_start_checked is not defined or 'linux_compliance_run_start_checked' in
+        (hostvars['localhost'] | list)
+      run_once: true
+      tags:
+        - always

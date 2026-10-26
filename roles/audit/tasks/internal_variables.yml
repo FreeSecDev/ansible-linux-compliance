@@ -1,4 +1,113 @@
 ---
+- name: Audit | Refuse internal variables supplied from outside the role as parameters
+  ansible.builtin.assert:
+    that:
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_catalogue$') == [] or
+        '__linux_compliance_audit_catalogue' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_evaluation$') == [] or
+        '__linux_compliance_audit_evaluation' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_exceptions$') == [] or
+        '__linux_compliance_audit_exceptions' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_exceptions_overview$') == [] or
+        '__linux_compliance_audit_exceptions_overview' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_exceptions_paths$') == [] or
+        '__linux_compliance_audit_exceptions_paths' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_exceptions_read_here$') == [] or
+        '__linux_compliance_audit_exceptions_read_here' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_exceptions_unset$') == [] or
+        '__linux_compliance_audit_exceptions_unset' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_gate$') == [] or '__linux_compliance_audit_gate' in
+        (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_gate_basis$') == [] or
+        '__linux_compliance_audit_gate_basis' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_gate_counted$') == [] or
+        '__linux_compliance_audit_gate_counted' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_gate_summary$') == [] or
+        '__linux_compliance_audit_gate_summary' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_scan$') == [] or '__linux_compliance_audit_scan' in
+        (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_audited$') == [] or
+        '__linux_compliance_audit_stale_audited' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_complete$') == [] or
+        '__linux_compliance_audit_stale_complete' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_complete_message$') == [] or
+        '__linux_compliance_audit_stale_complete_message' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_count$') == [] or
+        '__linux_compliance_audit_stale_count' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_evaluated$') == [] or
+        '__linux_compliance_audit_stale_evaluated' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_evaluated_count$') == [] or
+        '__linux_compliance_audit_stale_evaluated_count' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_evaluations$') == [] or
+        '__linux_compliance_audit_stale_evaluations' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_ids$') == [] or
+        '__linux_compliance_audit_stale_ids' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_partial_message$') == [] or
+        '__linux_compliance_audit_stale_partial_message' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_report$') == [] or
+        '__linux_compliance_audit_stale_report' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_targets$') == [] or
+        '__linux_compliance_audit_stale_targets' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_unmatched$') == [] or
+        '__linux_compliance_audit_stale_unmatched' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_toggle_names$') == [] or
+        '__linux_compliance_audit_toggle_names' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_toggles$') == [] or
+        '__linux_compliance_audit_toggles' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_unprofiled$') == [] or
+        '__linux_compliance_audit_unprofiled' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_waivers$') == [] or
+        '__linux_compliance_audit_waivers' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_waivers_apply$') == [] or
+        '__linux_compliance_audit_waivers_apply' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_waivers_messages$') == [] or
+        '__linux_compliance_audit_waivers_messages' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_waivers_status$') == [] or
+        '__linux_compliance_audit_waivers_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_waivers_summary$') == [] or
+        '__linux_compliance_audit_waivers_summary' in (hostvars[inventory_hostname] | list)
+    fail_msg: >-
+      An internal variable of the audit role (__linux_compliance_audit_*) is set from outside the role as a parameter: a
+      role parameter, a variable of a roles entry, an include parameter (vars of include_role, import_role,
+      include_tasks or import_tasks) or a block or play variable. It is refused by its name, whatever its value, because
+      a template could evaluate to the value that a later check expects. The failed assertion names it. Remove it and
+      pass only the documented linux_compliance_* variables. Nothing was scanned, changed or compared.
+    quiet: true
+  tags:
+    - always
+
 - name: Audit | Reset the internal facts of the role
   ansible.builtin.set_fact:
     __linux_compliance_audit_evaluation: __linux_compliance_unset__

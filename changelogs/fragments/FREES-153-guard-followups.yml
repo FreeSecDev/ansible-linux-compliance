@@ -4,8 +4,9 @@ security_fixes:
     The internal-variable guard of the audit, evidence, remediate and verify roles reads every internal fact and task
     variable back with two different sentinels, so a value supplied from outside the role that equals the sentinel
     string is refused too, and the key facts of each role are checked for their type and shape right after the role
-    sets them. The evidence role now has the guard as well, at its main and summary entry points, so a role parameter,
-    an include parameter or an extra variable can no longer replace its controller output directory or its summary.
+    sets them. The evidence role now has the guard as well, at its main and summary entry points, so a fixed value of a
+    role parameter, an include parameter or an extra variable can no longer replace its controller output directory or
+    its summary. A templated value could still imitate the sentinels; FREES-157 refuses it by name.
 trivial:
   - >-
     Repository guard: a seam owner may store its seam attribute only directly in ``__init__``, not from a function

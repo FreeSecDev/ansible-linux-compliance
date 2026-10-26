@@ -1,0 +1,78 @@
+---
+- name: Internal variables | A templated include parameter cannot replace the plan of the remediate role
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    refused: Refuse internal variables supplied from outside the role as parameters
+    forged_plan:
+      enabled: true
+      errors: []
+      families: []
+      not_implemented: []
+      notices:
+        - FORGED-PLAN-USED
+      orphaned: []
+      report: []
+      rules: []
+      disabled_rules: []
+      summary: {}
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: A plan template that imitates the sentinels of the guard is refused by its name
+      block:
+        - name: Run the remediate role with a plan that copies the dispatched fact while it is a string
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            __linux_compliance_remediate_plan: >-
+              {{ __linux_compliance_remediate_dispatched
+                 if __linux_compliance_remediate_dispatched is string else forged_plan }}
+
+        - name: Fail because the forged plan was used
+          ansible.builtin.fail:
+            msg: >-
+              INTERNAL-VARIABLES-TEMPLATED-PLAN-NOT-REFUSED notices={{ linux_compliance_remediated.notices }}
+              rules={{ linux_compliance_remediated.rules }}
+      rescue:
+        - name: Check that the parameter check refused the plan before anything ran
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_remediate_plan' in ansible_failed_result.assertion"
+              - linux_compliance_remediated is not defined
+            quiet: true
+
+    - name: A plan template passed to a static role import is refused by its name
+      block:
+        - name: Import the remediate role with the same plan template
+          ansible.builtin.import_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            __linux_compliance_remediate_plan: >-
+              {{ __linux_compliance_remediate_dispatched
+                 if __linux_compliance_remediate_dispatched is string else forged_plan }}
+
+        - name: Fail because the forged plan was used by the static import
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-TEMPLATED-IMPORT-NOT-REFUSED
+      rescue:
+        - name: Check that the parameter check refused the plan of the static import
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search(refused)
+              - "'__linux_compliance_remediate_plan' in ansible_failed_result.assertion"
+              - linux_compliance_remediated is not defined
+            quiet: true

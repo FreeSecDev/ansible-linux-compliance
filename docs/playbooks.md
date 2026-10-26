@@ -1,8 +1,8 @@
 # Playbooks
 
 Scope: the orchestration playbooks shipped in `playbooks/`. Audience: operators and playbook authors.
-Jira: FREES-41, FREES-52, FREES-54, FREES-51. The playbooks contain no component logic; they only reference roles and
-other playbooks by FQCN. The `discover`, `audit` ([audit guide](audit.md)), `remediate`
+Jira: FREES-41, FREES-52, FREES-54, FREES-51, FREES-157. The playbooks contain no component logic; they only
+reference roles and other playbooks by FQCN, apart from the generated run-start check below. The `discover`, `audit` ([audit guide](audit.md)), `remediate`
 ([remediation guide](remediation.md)), `verify` ([verify guide](verify.md)) and `evidence`
 ([evidence bundles](evidence.md)) roles are implemented.
 
@@ -12,6 +12,18 @@ other playbooks by FQCN. The `discover`, `audit` ([audit guide](audit.md)), `rem
 | `playbooks/remediate.yml` | the `verify` role's `preflight.yml` entry point; `audit.yml` (`discover`, `audit`, then the read-only stale-exceptions report on `localhost`); the `verify` role's `baseline.yml` entry point; `remediate`; then `verify.yml` | `audit`, `remediate` |
 | `playbooks/verify.yml` | the `verify` role's `preflight.yml` entry point, `audit.yml` again (`discover`, `audit`, stale-exceptions report), then `verify` | `audit` |
 | `playbooks/evidence.yml` | `discover` and the `audit` role's `deferred.yml`, after the `evidence` role's `reached.yml`; the stale-exceptions report on `localhost`; on every target host the `audit` role's `enforce.yml` with the `evidence` role in its `always` section (with the stale result of the run), failing no host; the `evidence` role's `summary.yml` on `localhost`, which writes the collection summary; then `enforce.yml` and the `evidence` role's `collected.yml` on every target host, which fail the gated hosts and the hosts whose collection failed | `audit`; the `evidence` role's host `stat` and fetch only |
+
+Every one of these playbooks first imports `playbooks/run_start.yml`, which `make role-guards` generates (ADR 0004,
+FREES-157). Its one play on `localhost` refuses the run before anything else when an inventory host or `localhost`
+already has an internal `__linux_compliance_*` variable or a role output (`linux_compliance_audited`,
+`linux_compliance_discovered`, `linux_compliance_audit_stale_exceptions`, `linux_compliance_baseline` and every other
+`linux_compliance_*` fact that a role sets) in `hostvars`, that is from an extra variable (`-e`), the inventory,
+`group_vars`, `host_vars` or a fact cache, or when `inventory_hostname` is an extra variable. An extra variable
+outranks every fact a role sets and a template can imitate any value a role checks, so these names are refused
+whatever their value. The cacheable baseline marker of the `verify` role is exempt; `baseline.yml` and the `verify`
+role check it where they read it. When `remediate.yml` imports `audit.yml` and `verify.yml`, and `verify.yml` imports
+`audit.yml`, they pass the play variable `linux_compliance_run_start_checked: true`, so the imported check does not
+refuse the facts of the earlier plays; the marker itself is refused as an extra or inventory variable.
 
 `remediate.yml` imports `audit.yml` first, by relative path so that the repository guard can scan the imported
 playbook. Every remediation therefore starts from a verified profile and a recorded baseline audit, and the
