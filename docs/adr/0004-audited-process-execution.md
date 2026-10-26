@@ -969,7 +969,7 @@ adds an exemption, and no lint limit was raised.
   with and without `--limit web01`, and requires the refusal.
 - Residual, explicit operator options: `--skip-tags always` and `--start-at-task <a later task>` skip the run-start
   check like any task. The check already carries the `always` tag, so `--tags` alone cannot skip it; no other tag
-  would survive `--skip-tags always`. With `--skip-tags always` the roles fail closed: every task that scans, changes
+  would survive `--skip-tags always`. With `--skip-tags always` the roles do nothing, and `remediate` and `verify` fail: every task that scans, changes
   or compares is tagged `always`, and the dispatched guards of the `remediate` and `verify` roles (tagged
   `linux_compliance_<role>_guard`) fail the host. `--start-at-task` also skips the internal-variable guards and does
   not fail closed. Both are choices on the command line with the trust of `-e` in a custom playbook, and

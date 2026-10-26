@@ -8,4 +8,3 @@ all:
         lost01:
           ansible_host: 192.0.2.10
           ansible_connection: ansible.builtin.ssh
-          ansible_ssh_common_args: -o ConnectTimeout=2

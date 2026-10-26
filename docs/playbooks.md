@@ -32,8 +32,8 @@ the inventory, `group_vars`, `host_vars` or a fact cache, on any host, is refuse
 
 Two operator options still skip the run-start check, as they skip any task: `--skip-tags always` and
 `--start-at-task <a later task>`. The check is tagged `always` already, so `--tags` alone never skips it. With
-`--skip-tags always` the roles fail closed, because every task that scans, changes or compares is tagged `always` and
-the dispatched guards of the `remediate` and `verify` roles then fail the host. `--start-at-task` also skips the
+`--skip-tags always` the roles do nothing, and `remediate` and `verify` fail: every task that scans, changes or
+compares is tagged `always`, and the dispatched guards of the `remediate` and `verify` roles then fail the host. `--start-at-task` also skips the
 internal-variable guards of the roles and does not fail closed. Both are explicit choices on the command line, the same
 trust as `-e` in a custom playbook; do not use them with the shipped playbooks.
 
