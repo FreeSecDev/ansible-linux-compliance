@@ -192,6 +192,7 @@ Tests
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
+  test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check)
   test-role-guards      Check in check mode that forged internal role variables are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
@@ -232,7 +233,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards content catalogue lint-python lint-yaml lint-actions \
-	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-role-guards test-verify \
+	lint-containerfile scc-expiry-check scc-fetch scc-image scc-smoke scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -463,7 +464,23 @@ test-evidence: require-uv collection-link
 
 REMEDIATE_CHECK = $(RUN) ansible-playbook -i localhost, --check
 
-test-remediate-check: require-uv collection-link
+REMEDIATE_DISRUPTIVE_DIR := build/test-remediate-disruptive
+REMEDIATE_DISRUPTIVE_TREE := $(REMEDIATE_DISRUPTIVE_DIR)/collections/$(COLLECTION_PATH)
+REMEDIATE_DISRUPTIVE_RULE := xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+REMEDIATE_DISRUPTIVE_FAMILY := ssh
+
+test-remediate-disruptive: ANSIBLE_COLLECTIONS_PATH = $(CURDIR)/$(REMEDIATE_DISRUPTIVE_DIR)/collections
+test-remediate-disruptive: require-uv collection-link
+	rm -rf '$(REMEDIATE_DISRUPTIVE_DIR)'
+	mkdir -p '$(REMEDIATE_DISRUPTIVE_TREE)'
+	cp -R roles '$(REMEDIATE_DISRUPTIVE_TREE)/roles'
+	ln -s '$(CURDIR)/plugins' '$(REMEDIATE_DISRUPTIVE_TREE)/plugins'
+	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.promote_native_rule \
+		--catalogue '$(REMEDIATE_DISRUPTIVE_TREE)/roles/remediate/vars/rules.yml' --rule '$(REMEDIATE_DISRUPTIVE_RULE)'
+	$(REMEDIATE_CHECK) -e disruptive_rule='$(REMEDIATE_DISRUPTIVE_RULE)' -e disruptive_family='$(REMEDIATE_DISRUPTIVE_FAMILY)' \
+		tests/playbooks/remediate-disruptive.yml
+
+test-remediate-check: require-uv collection-link test-remediate-disruptive
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml

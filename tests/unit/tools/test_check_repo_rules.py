@@ -1141,6 +1141,13 @@ def test_make_exports_a_per_checkout_ansible_home() -> None:
         if "ANSIBLE_HOME=" in line or "ANSIBLE_COLLECTIONS_PATH=" in line
     ]
     assert inline == []
+    overrides = [line for line in makefile.splitlines() if "ANSIBLE_COLLECTIONS_PATH =" in line]
+    override = (
+        "test-remediate-disruptive: ANSIBLE_COLLECTIONS_PATH = "
+        "$(CURDIR)/$(REMEDIATE_DISRUPTIVE_DIR)/collections"
+    )
+    assert overrides == [override]
+    assert "REMEDIATE_DISRUPTIVE_DIR := build/" in makefile
     hooks = yaml.safe_load(
         (rules.REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     )
