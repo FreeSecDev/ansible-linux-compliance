@@ -1,4 +1,119 @@
 ---
+- name: Remediate | Refuse internal variables supplied from outside the role as parameters
+  ansible.builtin.assert:
+    that:
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_audit_only$') == [] or
+        '__linux_compliance_remediate_audit_only' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_discover_check$') == [] or
+        '__linux_compliance_remediate_discover_check' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_dispatched$') == [] or
+        '__linux_compliance_remediate_dispatched' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_families$') == [] or
+        '__linux_compliance_remediate_families' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_family$') == [] or
+        '__linux_compliance_remediate_family' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_absent$') == [] or
+        '__linux_compliance_remediate_fp_absent' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_apply$') == [] or
+        '__linux_compliance_remediate_fp_apply' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_forget$') == [] or
+        '__linux_compliance_remediate_fp_forget' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_mode$') == [] or
+        '__linux_compliance_remediate_fp_mode' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_needed$') == [] or
+        '__linux_compliance_remediate_fp_needed' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_prior$') == [] or
+        '__linux_compliance_remediate_fp_prior' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_reason$') == [] or
+        '__linux_compliance_remediate_fp_reason' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_record$') == [] or
+        '__linux_compliance_remediate_fp_record' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_restorable$') == [] or
+        '__linux_compliance_remediate_fp_restorable' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_restore$') == [] or
+        '__linux_compliance_remediate_fp_restore' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_stat$') == [] or
+        '__linux_compliance_remediate_fp_stat' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_status$') == [] or
+        '__linux_compliance_remediate_fp_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_target$') == [] or
+        '__linux_compliance_remediate_fp_target' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_valid_prior$') == [] or
+        '__linux_compliance_remediate_fp_valid_prior' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_host_nonce$') == [] or
+        '__linux_compliance_remediate_host_nonce' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ledger$') == [] or
+        '__linux_compliance_remediate_ledger' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_plan$') == [] or
+        '__linux_compliance_remediate_plan' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_results$') == [] or
+        '__linux_compliance_remediate_results' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_rule$') == [] or
+        '__linux_compliance_remediate_rule' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_rules$') == [] or
+        '__linux_compliance_remediate_rules' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_toggle_names$') == [] or
+        '__linux_compliance_remediate_toggle_names' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_unaccounted$') == [] or
+        '__linux_compliance_remediate_unaccounted' in (hostvars[inventory_hostname] | list)
+    fail_msg: >-
+      An internal variable of the remediate role (__linux_compliance_remediate_*) is set from outside the role as a
+      parameter: a role parameter, a variable of a roles entry, an include parameter (vars of include_role, import_role,
+      include_tasks or import_tasks) or a block or play variable. It is refused by its name, whatever its value, because
+      a template could evaluate to the value that a later check expects. The failed assertion names it. Remove it and
+      pass only the documented linux_compliance_* variables. Nothing was scanned, changed or compared.
+    quiet: true
+  tags:
+    - always
+
+- name: Remediate | Record a random nonce in the facts of this host
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_host_nonce: "{{ 1000000000000 | ansible.builtin.random }}"
+  tags:
+    - always
+
+- name: Remediate | Refuse an inventory_hostname that names another host
+  ansible.builtin.assert:
+    that:
+      - >-
+        (hostvars[inventory_hostname] | default({}))['__linux_compliance_remediate_host_nonce'] | default(none) ==
+        __linux_compliance_remediate_host_nonce
+    fail_msg: >-
+      inventory_hostname is {{ inventory_hostname }}, but the nonce that the previous task recorded in the facts of this
+      host is not __linux_compliance_remediate_host_nonce of hostvars[inventory_hostname]: a role parameter, an include
+      parameter or an extra variable named inventory_hostname points the remediate role at another host. Remove it.
+      Nothing was scanned, changed or compared.
+    quiet: true
+  tags:
+    - always
+
 - name: Remediate | Reset the internal facts of the role
   ansible.builtin.set_fact:
     __linux_compliance_remediate_discover_check: __linux_compliance_unset__

@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
-- **Jira:** FREES-75, FREES-76 (amended by FREES-130, FREES-132, FREES-142 and FREES-154)
+- **Jira:** FREES-75, FREES-76 (amended by FREES-130, FREES-132, FREES-142, FREES-154 and FREES-161)
 - **Pull requests:** introduced by the pull request that adds `tools/reporting/`
 - **Related:** [ADR 0013](0013-normalized-findings-model.md), [reporting data model](../reporting-data-model.md)
 
@@ -23,8 +23,9 @@ assurance ([AGENTS.md](../../AGENTS.md) rule 13).
 The reporting package (`tools/reporting/`, controller side, Python 3.12 or newer) writes one JSON document that
 validates against `tools/reporting/schema/report-v1.json` (JSON Schema 2020-12). `schema_version` is `"1.0"`
 (superseded by `report-v2.json` and `"2.0"`, see the [amendment of FREES-130 and
-FREES-132](#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132), and `"2.1"`, see the
-[amendment of FREES-142](#amendment-2026-10-26-schema-21-host-coverage-frees-142)).
+FREES-132](#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132), `"2.1"`, see the
+[amendment of FREES-142](#amendment-2026-10-26-schema-21-host-coverage-frees-142), and `"2.2"`, see the
+[amendment of FREES-161](#amendment-2026-10-26-schema-22-off-platform-results-frees-161)).
 The document has `metadata`, one `scope`, nine `sections`, an `overview` and `raw_artifacts`.
 
 Every item and section has a `status`:
@@ -474,3 +475,79 @@ Revisit when ADR 0018 is implemented: with a signed summary, option B (with an e
 `--allow-unknown-host-coverage`) becomes the better default. That change alters the exit status of existing
 callers, so it is a breaking change and needs a `breaking_changes` changelog fragment and a new amendment here. This
 amendment changes no default, so its changelog fragment is a `minor_changes` entry.
+
+## Amendment 2026-10-26: schema 2.2, off-platform results (FREES-161)
+
+### Context
+
+Since [ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161),
+a scan run can evaluate the Ubuntu 24.04 STIG benchmark on an Ubuntu 26.04 host, by explicit opt-in. Such a run
+carries an off-platform marker (findings model schema 1.1,
+[ADR 0013](0013-normalized-findings-model.md#amendment-2026-10-26-off-platform-marker-frees-161)). The results describe
+the host under the benchmark of another release. A figure built from them would read as compliance with a baseline of
+the host's own release, and no such baseline exists.
+
+### Decision
+
+- **Never in a figure.** A scan run or exceptions evaluation whose scan run carries the marker is a compliance input
+  like any other: it is an item, counts for the section status, the scope check and the repeated-run check, and is
+  listed in `raw_artifacts`. It never enters `rules`, `groups`, `aggregates` or the section `summary`. A report whose
+  only compliance inputs are off-platform has no summary and no figure.
+- **No per-input figure.** The item's own `summary` keeps every count. A completed run gets
+  `compliance_percent: null` and the new assessment `off_platform_benchmark` (`compliance.scan_run_summary`). A run that
+  did not complete keeps `run_not_completed`, as before.
+- **Listed separately.** `sections.compliance.off_platform` lists each such input once, sorted by artifact path and
+  digest, at most 1000. Each entry has these fields, and no percentage and no assessment:
+  - `artifact`, `input_sha256`, `kind` (`scan_run` or `exceptions_evaluation`);
+  - the structured `host` key;
+  - `benchmark_id`, `content_version`, `profile_id`;
+  - `benchmark_platform` and `target_platform`;
+  - `run_status`;
+  - `counts`, the count per outcome.
+- **Listed whatever the section status.** The list is filled when the section is `partial` or `error` too, so a
+  partial report still names its off-platform inputs.
+- **Counted.** `overview.off_platform` is the number of those entries.
+- **Host coverage (PR #47 review).** With `--evidence-collection`, a target host whose accepted bundles all carry
+  the marker is not covered:
+  - its `hosts` entry has `off_platform: true`, and `summary.off_platform` counts such hosts;
+  - it gets a missing compliance input of its own, so the compliance section is `partial` and has no summary,
+    groups or aggregates;
+  - the coverage is `incomplete`, with a reason that names the hosts, so `--require-host-coverage` fails.
+
+  `complete` requires `summary.off_platform` to be `0`, which the schema enforces. In a 2.2 document every `hosts`
+  entry has `off_platform` and the summary, when present, has `off_platform`.
+- **Raw results.** The XCCDF and ARF parsers refuse `*.off-platform.xml` files, and files next to a marked or
+  unreadable `scan-run.json`
+  ([ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161),
+  decision 9).
+- **Item data.** `complianceData` has `off_platform`: the marker, or `null`. XCCDF and ARF inputs carry no marker
+  ([ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161),
+  residual 9).
+- **The schema enforces it.**
+  - An item whose `off_platform` is set has `compliance_percent: null` and an assessment of `off_platform_benchmark`
+    or `run_not_completed`.
+  - `off_platform_benchmark` requires the marker and a completed run.
+  - Groups, aggregates and the section summary may never have that assessment.
+  - The embedded `scanRun` accepts `schema_version` `"1.0"` and `"1.1"`, and requires `off_platform` on the run and
+    on every finding exactly for `"1.1"`.
+
+### Versioning
+
+The change adds fields and an assessment value and changes no meaning, so it is a minor version: `schema_version`
+`"2.2"` in the same `report-v2.json`.
+
+- **2.2 documents.** A 2.2 document must have `sections.compliance.off_platform`, `overview.off_platform` and
+  `off_platform` in every item's data.
+- **2.0 and 2.1 documents.** They must have none of these, and still validate.
+- **Readers.** The dashboard reads 2.0, 2.1 and 2.2. A 2.1 reader that rejects unknown keys must accept `"2.2"`, the
+  three keys and the assessment `off_platform_benchmark`.
+- **Figures.** The figures of a report without off-platform inputs are unchanged.
+
+Rejected alternatives:
+
+| Alternative | Reason rejected |
+|---|---|
+| Count off-platform runs in their own groups and aggregates | A percentage per group would still read as compliance of those hosts; the counts are enough and stay visible |
+| Keep the per-input percentage with a warning | A percentage next to a warning still reads as a compliance figure (as in the FREES-142 amendment) |
+| Refuse off-platform inputs | The operator opted in to collect the evidence; refusing it would hide it instead of labelling it |
+| A major version | No field changes meaning, and 2.0 and 2.1 documents stay valid |

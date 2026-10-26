@@ -148,6 +148,16 @@ def read_descriptor(descriptor: int, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
+def read_input(path: Path, max_bytes: int) -> bytes:
+    """Read ``path`` with the bounds and checks of every input.
+
+    Raises:
+        MissingInputError: If the file does not exist.
+        InvalidInputError: If it is not a safe regular file within ``max_bytes``.
+    """
+    return _read_bytes(path, max_bytes)
+
+
 def run_parser[T](
     path: Path, format_name: str, max_bytes: int, build: Callable[[bytes], T]
 ) -> ParseResult[T]:

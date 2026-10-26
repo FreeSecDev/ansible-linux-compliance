@@ -11,8 +11,15 @@ they are only counted. The host name in the file (XCCDF ``target`` or fqdn fact,
 asset) is self-asserted and is only used to group files of the same host. Every
 ``target`` and fqdn fact must name the same host (compared lower-cased); a file whose
 names disagree is an input error, because no name could be preferred safely.
+
+XCCDF and ARF files carry no off-platform marker (FREES-161). A file named
+``*.off-platform.xml``, which is how the SCC backend names the raw copies of an
+off-platform run, is refused, and so is a file whose own directory or the directory
+above it holds a ``scan-run.json`` that carries the marker, or one that cannot be read.
+Such a run is reported through its ``scan-run.json``, which carries the marker.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
@@ -25,10 +32,12 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 from tools.reporting.common import (
     DEFAULT_MAX_BYTES,
     InvalidInputError,
+    MissingInputError,
     ParseResult,
     bounded,
     clean_text,
     decode_text,
+    read_input,
     run_parser,
     sha256_hex,
 )
@@ -40,6 +49,12 @@ ARF_ROOT_TAG: Final[str] = (
 )
 TEST_RESULT_TAG: Final[str] = "{http://checklists.nist.gov/xccdf/1.2}TestResult"
 FQDN_FACT: Final[str] = "urn:xccdf:fact:asset:identifier:fqdn"
+OFF_PLATFORM_SUFFIX: Final[str] = ".off-platform.xml"
+SCAN_RUN_NAME: Final[str] = "scan-run.json"
+OFF_PLATFORM_REFUSAL: Final[str] = (
+    "these are the raw results of an off-platform scan run, which carry no off-platform "
+    "marker and are never figured; report the run's scan-run.json instead"
+)
 
 
 def _name(text: str) -> str | None:
@@ -139,11 +154,57 @@ def _build_arf(data: bytes) -> ComplianceData:
     )
 
 
+def _neighbour_is_off_platform(candidate: Path, max_bytes: int) -> bool:
+    try:
+        data = read_input(candidate, max_bytes)
+    except MissingInputError:
+        return False
+    except InvalidInputError:
+        message = (
+            f"{SCAN_RUN_NAME} next to these results cannot be read, so the report cannot tell "
+            "whether they are off-platform"
+        )
+        raise InvalidInputError(message) from None
+    try:
+        return model.loads(decode_text(data)).off_platform is not None
+    except (model.ModelError, InvalidInputError):
+        message = (
+            f"{SCAN_RUN_NAME} next to these results is not a valid scan run, so the report "
+            "cannot tell whether they are off-platform"
+        )
+        raise InvalidInputError(message) from None
+
+
+def refuse_off_platform(path: Path, max_bytes: int) -> None:
+    """Refuse raw results of an off-platform run.
+
+    Raises:
+        InvalidInputError: If the file name ends with ``.off-platform.xml``, or a
+            ``scan-run.json`` in its directory or the one above carries the
+            off-platform marker or cannot be read as a scan run.
+    """
+    if path.name.endswith(OFF_PLATFORM_SUFFIX):
+        raise InvalidInputError(OFF_PLATFORM_REFUSAL)
+    for directory in (path.parent, path.parent.parent):
+        if _neighbour_is_off_platform(directory / SCAN_RUN_NAME, max_bytes):
+            raise InvalidInputError(OFF_PLATFORM_REFUSAL)
+
+
+def _guarded(
+    path: Path, max_bytes: int, build: Callable[[bytes], ComplianceData]
+) -> Callable[[bytes], ComplianceData]:
+    def run(data: bytes) -> ComplianceData:
+        refuse_off_platform(path, max_bytes)
+        return build(data)
+
+    return run
+
+
 def parse_xccdf(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[ComplianceData]:
     """Parse an XCCDF 1.2 results file (Benchmark or TestResult root)."""
-    return run_parser(path, "xccdf", max_bytes, _build_xccdf)
+    return run_parser(path, "xccdf", max_bytes, _guarded(path, max_bytes, _build_xccdf))
 
 
 def parse_arf(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> ParseResult[ComplianceData]:
     """Parse an ARF 1.1 asset report collection that embeds one XCCDF TestResult."""
-    return run_parser(path, "arf", max_bytes, _build_arf)
+    return run_parser(path, "arf", max_bytes, _guarded(path, max_bytes, _build_arf))

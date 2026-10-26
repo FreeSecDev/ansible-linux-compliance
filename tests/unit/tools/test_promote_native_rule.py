@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import runpy
 import shutil
 import sys
@@ -62,6 +63,28 @@ def test_the_repository_catalogue_is_never_rewritten(
     assert promote.main(["--catalogue", str(CATALOGUE), "--rule", SSH_RULE]) == 2
     assert "promote only in a copy" in capsys.readouterr().err
     assert CATALOGUE.read_bytes() == before
+
+
+def test_a_hard_link_to_the_repository_catalogue_is_never_rewritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    roles = tmp_path / "repository" / "roles"
+    repository = roles / "remediate" / "vars" / "rules.yml"
+    repository.parent.mkdir(parents=True)
+    shutil.copyfile(CATALOGUE, repository)
+    monkeypatch.setattr(promote, "REPOSITORY_ROLES", roles)
+    monkeypatch.setattr(promote, "REPOSITORY_CATALOGUE", repository, raising=False)
+    link = tmp_path / "copy" / "rules.yml"
+    link.parent.mkdir()
+    os.link(repository, link)
+    before = repository.read_bytes()
+    assert promote.main(["--catalogue", str(link), "--rule", SSH_RULE]) == 2
+    assert "promote only in a copy" in capsys.readouterr().err
+    assert repository.read_bytes() == before
+    copy = tmp_path / "copy" / "separate.yml"
+    shutil.copyfile(repository, copy)
+    assert promote.main(["--catalogue", str(copy), "--rule", SSH_RULE]) == 0
+    assert repository.read_bytes() == before
 
 
 @pytest.mark.parametrize(

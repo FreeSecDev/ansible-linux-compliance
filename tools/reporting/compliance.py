@@ -22,9 +22,14 @@ Counting rules:
 * Every group built from more than one input gets a ``merged_inputs`` note with its
   key, and every host that is counted as one host in several groups gets a
   ``same_host_across_groups`` note. Both are structured; consumers word them.
+* A scan run with an off-platform marker (ADR 0019, amendment of FREES-161) evaluated
+  a benchmark made for another platform than the host. Its own summary has no
+  percentage and the assessment ``off_platform_benchmark``, and it never enters a
+  rule list, a group, a pooled figure or a section summary; the report lists it
+  separately (:func:`off_platform_inputs`).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_DOWN, Decimal
 from typing import Final, NamedTuple
 
@@ -37,6 +42,7 @@ ASSESSMENT_RUN_NOT_COMPLETED: Final[str] = "run_not_completed"
 ASSESSMENT_NOTHING_EVALUATED: Final[str] = "nothing_evaluated"
 ASSESSMENT_ALL_PASSED: Final[str] = "all_evaluated_passed"
 ASSESSMENT_FINDINGS_OPEN: Final[str] = "findings_open"
+ASSESSMENT_OFF_PLATFORM: Final[str] = "off_platform_benchmark"
 KIND_SCAN_RUN: Final[str] = "scan_run"
 KIND_EVALUATION: Final[str] = "exceptions_evaluation"
 SCAN_RUN_KINDS: Final[frozenset[str]] = frozenset({KIND_SCAN_RUN, KIND_EVALUATION})
@@ -85,9 +91,11 @@ class Summary:
         run_status: ``completed``, ``failed``, ``timed_out`` or, for several runs,
             ``not_completed``. It is shown before any count.
         assessment: ``run_not_completed``, ``nothing_evaluated``,
-            ``all_evaluated_passed`` or ``findings_open``. Never a compliance claim.
+            ``all_evaluated_passed``, ``findings_open`` or, for a completed
+            off-platform run, ``off_platform_benchmark``. Never a compliance claim.
         compliance_percent: ``pass`` divided by ``evaluated``, rounded down to one
-            decimal, or ``None`` when the run did not complete or nothing was evaluated.
+            decimal, or ``None`` when the run did not complete, nothing was evaluated
+            or the run is off-platform.
         evaluated: The denominator: all outcomes except ``notapplicable`` and ``disabled``.
         counts: Number of rules per outcome, every outcome present.
         not_selected: Rule results the profile did not select. Informational only.
@@ -162,6 +170,18 @@ def summarize(
     )
 
 
+def scan_run_summary(summary: Summary, marker: model.OffPlatform | None) -> Summary:
+    """Return the summary of one scan run, withheld when the run is off-platform.
+
+    A completed run with an off-platform marker keeps its counts but gets no
+    percentage and the assessment ``off_platform_benchmark``: its counts describe
+    the host under the benchmark of another platform, never a compliance figure.
+    """
+    if marker is None or summary.run_status != COMPLETED:
+        return summary
+    return replace(summary, assessment=ASSESSMENT_OFF_PLATFORM, compliance_percent=None)
+
+
 def is_expired_waiver(finding: model.Finding, lapsed: frozenset[str]) -> bool:
     """Return whether the waiver of ``finding`` expired, at the scan start or after it.
 
@@ -190,7 +210,9 @@ class ComplianceData:
     that no finding appears twice. ``lapsed_waivers`` lists the rules whose exception
     lapsed between the scan start and the controller time, which only an exceptions
     evaluation records. XCCDF and ARF files may name a host (``reported_host``); that
-    name is self-asserted by the file.
+    name is self-asserted by the file. ``off_platform`` is the marker of a scan run
+    that evaluated a benchmark made for another platform; XCCDF and ARF files carry
+    none.
     """
 
     kind: str
@@ -210,6 +232,7 @@ class ComplianceData:
     scan_run: model.ScanRun | None
     summary: Summary
     lapsed_waivers: tuple[str, ...] = ()
+    off_platform: model.OffPlatform | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping."""
@@ -226,6 +249,7 @@ class ComplianceData:
             "kind": self.kind,
             "lapsed_waivers": list(self.lapsed_waivers),
             "not_selected": self.not_selected,
+            "off_platform": None if self.off_platform is None else self.off_platform.to_dict(),
             "profile_id": self.profile_id,
             "reported_host": self.reported_host,
             "scan_run": None if self.scan_run is None else self.scan_run.to_dict(),
@@ -530,6 +554,44 @@ def figured(entries: list[Entry]) -> dict[Figured, list[Entry]]:
         key = (data.benchmark_id, data.content_version, data.profile_id)
         result.setdefault(key, []).append(entry)
     return result
+
+
+def is_off_platform(entry: Entry) -> bool:
+    """Return whether ``entry`` is a scan run with an off-platform marker."""
+    return entry[1].off_platform is not None
+
+
+def off_platform_inputs(entries: list[Entry]) -> list[dict[str, object]]:
+    """Return one structured entry per off-platform input, sorted by artifact and digest.
+
+    Each entry names the input, its host key, benchmark, content version and profile,
+    the platform of the benchmark and of the host, the run status and the count per
+    outcome. It holds no percentage and no assessment: these inputs are never figures.
+    """
+    marked = sorted(
+        (
+            (artifact, data, data.off_platform)
+            for artifact, data in entries
+            if data.off_platform is not None
+        ),
+        key=lambda item: (item[0], item[1].input_sha256),
+    )
+    return [
+        {
+            "artifact": artifact,
+            "benchmark_id": data.benchmark_id,
+            "benchmark_platform": marker.benchmark_platform.to_dict(),
+            "content_version": data.content_version,
+            "counts": dict(data.summary.counts),
+            "host": host_key(data).to_dict(),
+            "input_sha256": data.input_sha256,
+            "kind": data.kind,
+            "profile_id": data.profile_id,
+            "run_status": data.scan_status,
+            "target_platform": marker.target_platform.to_dict(),
+        }
+        for artifact, data, marker in marked
+    ]
 
 
 def aggregate_figures(entries: list[Entry], scope: str) -> list[AggregateFigure]:

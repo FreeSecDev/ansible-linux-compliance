@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -12,6 +13,7 @@ from jsonschema import Draft202012Validator
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     collection,
     evidence,
+    model,
 )
 from tests.unit.tools.reporting.test_bundle import write_bundle
 from tools.reporting import cli, dashboard, report
@@ -74,7 +76,7 @@ def test_a_report_without_a_collection_summary_labels_its_coverage_unknown(
         scope=Scope.FLEET, evidence_bundle=(web, db), exceptions_file=kit.EXCEPTIONS_FILE
     )
     compliance = document["sections"]["compliance"]
-    assert document["schema_version"] == "2.1"
+    assert document["schema_version"] == "2.2"
     assert compliance["status"] == "available"
     assert compliance["host_coverage"] == {
         "collection": None,
@@ -118,6 +120,7 @@ def test_a_complete_collection_keeps_every_figure(kit: Any, tmp_path: Path) -> N
         },
         "in_report": 2,
         "missing": 0,
+        "off_platform": 0,
         "target_hosts": 2,
     }
     assert coverage["collection"] == {
@@ -377,6 +380,7 @@ def test_the_schema_couples_coverage_with_the_section_and_the_version(
     assert not VALIDATOR.is_valid(forged)
     older = copy.deepcopy(forged)
     older["schema_version"] = "2.0"
+    without_off_platform(older)
     older["raw_artifacts"] = [
         artifact
         for artifact in older["raw_artifacts"]
@@ -390,6 +394,16 @@ def test_the_schema_couples_coverage_with_the_section_and_the_version(
     assert not VALIDATOR.is_valid(unknown)
 
 
+def without_off_platform(document: dict[str, Any]) -> None:
+    """Strip the schema 2.2 off-platform keys, which a 2.0 or 2.1 document never has."""
+    del document["overview"]["off_platform"]
+    compliance = document["sections"]["compliance"]
+    del compliance["off_platform"]
+    for item in compliance["items"]:
+        if isinstance(item["data"], dict):
+            del item["data"]["off_platform"]
+
+
 def test_the_dashboard_reads_2_0_and_2_1_reports(kit: Any, tmp_path: Path) -> None:
     web, _ = two_bundles(kit, tmp_path, applied=False)
     summary = write_collection(
@@ -400,6 +414,7 @@ def test_the_dashboard_reads_2_0_and_2_1_reports(kit: Any, tmp_path: Path) -> No
     older = build(scope=Scope.FLEET, evidence_bundle=(web,))
     older["schema_version"] = "2.0"
     del older["sections"]["compliance"]["host_coverage"]
+    without_off_platform(older)
     assert VALIDATOR.is_valid(older)
     assert dashboard.render_dashboard(older).startswith("<!DOCTYPE html>")
 
@@ -467,3 +482,90 @@ def test_a_skipped_dashboard_keeps_precedence_over_require_host_coverage(
     assert output.exists()
     assert not html.exists()
     assert "the host coverage is unknown, not complete" in capsys.readouterr().err
+
+
+OFF_PLATFORM = model.OffPlatform(
+    model.Platform("ubuntu", "24.04"), model.Platform("ubuntu", "26.04")
+)
+
+
+def marked_kit(kit: Any) -> Any:
+    """Return the test kit with scan runs moved to Ubuntu 26.04 and marked off-platform."""
+
+    def evaluation_run(*args: Any, **kwargs: Any) -> model.ScanRun:
+        run: model.ScanRun = kit.evaluation_run(*args, **kwargs)
+        host = dataclasses.replace(run.host, distribution_id="ubuntu", distribution_version="26.04")
+        return dataclasses.replace(run, host=host, off_platform=OFF_PLATFORM)
+
+    return type("MarkedKit", (kit,), {"evaluation_run": staticmethod(evaluation_run)})
+
+
+def off_platform_fleet(kit: Any, tmp_path: Path, *, applied: bool) -> dict[str, Any]:
+    web = write_bundle(kit, tmp_path / "bundles", "web01", applied=applied)
+    db = write_bundle(marked_kit(kit), tmp_path / "bundles", "db01", applied=applied)
+    summary = write_collection(
+        tmp_path,
+        {"web01": ("collected", manifest_sha(web)), "db01": ("collected", manifest_sha(db))},
+    )
+    inputs: dict[str, Any] = {
+        "scope": Scope.FLEET,
+        "evidence_bundle": (web, db),
+        "evidence_collection": summary,
+    }
+    if applied:
+        inputs["exceptions_file"] = kit.EXCEPTIONS_FILE
+    return build(**inputs)
+
+
+@pytest.mark.parametrize("mode", ["applied", "plain"])
+def test_a_host_with_only_an_off_platform_scan_is_not_covered(
+    kit: Any, tmp_path: Path, mode: str
+) -> None:
+    applied = mode == "applied"
+    document = off_platform_fleet(kit, tmp_path, applied=applied)
+    compliance = document["sections"]["compliance"]
+    coverage = compliance["host_coverage"]
+    assert coverage["status"] == "incomplete"
+    assert coverage["summary"]["off_platform"] == 1
+    assert coverage["summary"]["missing"] == 0
+    assert coverage["summary"]["in_report"] == 2
+    assert {host["host"]: host["off_platform"] for host in coverage["hosts"]} == {
+        "db01": True,
+        "web01": False,
+    }
+    assert "only an off-platform scan (db01)" in coverage["reason"]
+    assert compliance["status"] == "partial"
+    assert compliance["summary"] is None
+    assert compliance["aggregates"] == []
+    assert compliance["groups"] == []
+    assert [entry["host"]["hostname"] for entry in compliance["off_platform"]] == ["db01.example"]
+    gaps = [gap["reason"] for gap in compliance["gaps"]]
+    assert any("db01 has only an off-platform scan" in reason for reason in gaps)
+    shortfall = cli.coverage_shortfall(document)
+    assert shortfall is not None
+    assert "only an off-platform scan (db01)" in shortfall
+    if applied:
+        assert document["sections"]["exceptions"]["status"] == "available"
+
+
+def test_the_schema_never_lets_an_off_platform_host_count_as_covered(
+    kit: Any, tmp_path: Path
+) -> None:
+    document = off_platform_fleet(kit, tmp_path, applied=False)
+    forged = copy.deepcopy(document)
+    coverage = forged["sections"]["compliance"]["host_coverage"]
+    coverage["status"] = "complete"
+    coverage["reason"] = None
+    assert not VALIDATOR.is_valid(forged)
+    forged = copy.deepcopy(document)
+    for host in forged["sections"]["compliance"]["host_coverage"]["hosts"]:
+        host["off_platform"] = False
+    assert not VALIDATOR.is_valid(forged)
+    forged = copy.deepcopy(document)
+    del forged["sections"]["compliance"]["host_coverage"]["summary"]["off_platform"]
+    assert not VALIDATOR.is_valid(forged)
+
+
+def test_the_dashboard_names_the_off_platform_only_host(kit: Any, tmp_path: Path) -> None:
+    page = dashboard.render_dashboard(off_platform_fleet(kit, tmp_path, applied=False))
+    assert page.startswith("<!DOCTYPE html>")

@@ -36,7 +36,8 @@ are intentions, not tested support. Bundles are not signed;
 1. Validate the inputs and check that `linux_compliance_audited` exists.
 2. Resolve `linux_compliance_evidence_output_dir` and require a normalised absolute path.
 3. Skip the host when the audit wrote no evidence; in check mode print the planned bundle and write nothing.
-4. `tasks/collect.yml`: plan the bundle (`freesecdev.linux_compliance.evidence_plan`), refuse an existing bundle and
+4. The collection block at the end of `tasks/main.yml` (FREES-157 merged the former `tasks/collect.yml` into it, so
+   `tasks_from` cannot skip steps 0 to 2): plan the bundle (`freesecdev.linux_compliance.evidence_plan`), refuse an existing bundle and
    unsafe directories, create the directories, inspect the host files without following links
    (`freesecdev.linux_compliance.evidence_host_files`), fetch, set modes, hash, check and build the documents
    (`freesecdev.linux_compliance.evidence_documents`), write them, check every file

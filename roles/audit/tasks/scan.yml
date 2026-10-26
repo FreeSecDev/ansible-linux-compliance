@@ -108,6 +108,24 @@
   tags:
     - always
 
+- name: Audit | Check that the published audit result is the scan that just ran
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.run_id | default(none) == __linux_compliance_audit_scan.run_id
+      - hostvars[inventory_hostname]['linux_compliance_audited'] is mapping
+      - >-
+        hostvars[inventory_hostname]['linux_compliance_audited'].run_id | default(none)
+        == __linux_compliance_audit_scan.run_id
+    fail_msg: >-
+      linux_compliance_audited is not the audit {{ __linux_compliance_audit_scan.run_id }} that just ran. An extra
+      variable (-e), a role parameter or an include parameter named linux_compliance_audited wins over the fact that
+      the audit role publishes, and the evidence and verify roles would trust it; remove it. Nothing was gated,
+      collected or compared.
+    quiet: true
+  tags:
+    - always
+
 - name: Audit | Apply the exceptions file and publish the waived result
   ansible.builtin.import_tasks: exceptions_apply.yml
   tags:

@@ -10,6 +10,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     collection,
     evidence,
     openscap,
+    scc,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -31,11 +32,18 @@ def load(path: Path) -> object:
 
 def tasks(path: Path) -> list[dict[str, object]]:
     found: list[dict[str, object]] = []
-    for task in cast("list[dict[str, object]]", load(path)):
-        found.append(task)
-        for key in ("block", "rescue", "always"):
-            found.extend(cast("list[dict[str, object]]", task.get(key, [])))
-    return [task for task in found if not {"block", "rescue", "always"} & set(task)]
+    pending = list(cast("list[dict[str, object]]", load(path)))
+    while pending:
+        task = pending.pop(0)
+        nested = [
+            item
+            for key in ("block", "rescue", "always")
+            for item in cast("list[dict[str, object]]", task.get(key, []))
+        ]
+        pending[:0] = nested
+        if not {"block", "rescue", "always"} & set(task):
+            found.append(task)
+    return found
 
 
 def module_of(task: dict[str, object]) -> str:
@@ -54,6 +62,8 @@ def test_the_bundle_vocabulary_uses_the_file_names_of_the_audit() -> None:
         audit.TAILORING_FILE_NAME,
         f"{audit.SCAN_DIRECTORY_NAME}/{openscap.RESULTS_FILE_NAME}",
         f"{audit.SCAN_DIRECTORY_NAME}/{openscap.ARF_FILE_NAME}",
+        f"{audit.SCAN_DIRECTORY_NAME}/{scc.OFF_PLATFORM_RESULTS_FILE_NAME}",
+        f"{audit.SCAN_DIRECTORY_NAME}/{scc.OFF_PLATFORM_ARF_FILE_NAME}",
     }
 
 
@@ -79,7 +89,7 @@ def test_only_the_host_stat_and_fetch_reach_the_host_and_only_they_may_become() 
 
 
 def test_bundle_files_are_written_with_mode_0600_and_directories_with_0700() -> None:
-    for task in tasks(ROLE / "tasks" / "collect.yml"):
+    for task in tasks(ROLE / "tasks" / "main.yml"):
         module = module_of(task)
         arguments = cast("dict[str, object]", task[module])
         if module == "ansible.builtin.copy":
@@ -104,8 +114,10 @@ def role_of(task: dict[str, object]) -> object:
 
 
 def test_the_playbook_writes_the_summary_before_any_gate_or_collection_fails_a_host() -> None:
-    plays = cast("list[dict[str, object]]", load(REPOSITORY_ROOT / "playbooks" / "evidence.yml"))
-    assert len(plays) == 5
+    entries = cast("list[dict[str, object]]", load(REPOSITORY_ROOT / "playbooks" / "evidence.yml"))
+    assert len(entries) == 6
+    assert entries[0]["ansible.builtin.import_playbook"] == "run_start.yml"
+    plays = entries[1:]
     reached = cast("list[dict[str, object]]", plays[0]["pre_tasks"])
     assert [role_of(task) for task in reached] == [
         {"name": "freesecdev.linux_compliance.evidence", "tasks_from": "reached.yml"}
@@ -153,7 +165,7 @@ MARKER = "__linux_compliance_evidence_run_bundle"
 
 def test_the_summary_reads_the_run_marker_that_the_role_publishes_with_the_bundle_fact() -> None:
     name = "Evidence | Publish the collected bundle and mark it as collected in this run"
-    published = next(task for task in tasks(ROLE / "tasks" / "collect.yml") if task["name"] == name)
+    published = next(task for task in tasks(ROLE / "tasks" / "main.yml") if task["name"] == name)
     fact = cast("dict[str, object]", published["ansible.builtin.set_fact"])
     source = "{{ __linux_compliance_evidence_published }}"
     assert fact == {"linux_compliance_evidence_bundle": source, MARKER: source}
@@ -244,3 +256,39 @@ def test_only_the_deferred_entry_points_skip_the_gates_and_no_variable_does() ->
         "dict[str, object]", load(REPOSITORY_ROOT / "roles" / "audit" / "defaults" / "main.yml")
     )
     assert not [name for name in defaults if "defer" in name]
+
+
+ENTRY_POINTS = {"main.yml", "summary.yml", "reached.yml", "collected.yml", "internal_variables.yml"}
+UNGUARDED_REFERENCES = (
+    f"hostvars[inventory_hostname]['{MARKER}']",
+    "'__linux_compliance_evidence_'",
+)
+
+
+def expressions(value: object) -> list[str]:
+    if isinstance(value, dict):
+        mapping = cast("dict[str, object]", value)
+        that = mapping.get("that")
+        found = [str(item) for item in cast("list[object]", that)] if isinstance(that, list) else []
+        return found + [item for inner in mapping.values() for item in expressions(inner)]
+    if isinstance(value, list):
+        return [item for inner in cast("list[object]", value) for item in expressions(inner)]
+    if isinstance(value, str):
+        return [part.split("}}")[0] for part in value.split("{{")[1:]]
+    return []
+
+
+def test_every_task_file_of_the_evidence_role_is_a_guarded_or_hostvars_only_entry_point() -> None:
+    assert {path.name for path in (ROLE / "tasks").rglob("*") if path.is_file()} == ENTRY_POINTS
+    for name in ("main.yml", "summary.yml"):
+        entries = cast("list[dict[str, object]]", load(ROLE / "tasks" / name))
+        assert entries[0]["ansible.builtin.import_tasks"] == "internal_variables.yml", name
+        assert [task for task in entries[1:] if "ansible.builtin.import_tasks" in task] == [], name
+    for name in ("reached.yml", "collected.yml"):
+        found = expressions(load(ROLE / "tasks" / name))
+        assert found, name
+        for expression in found:
+            remainder = expression
+            for reference in UNGUARDED_REFERENCES:
+                remainder = remainder.replace(reference, "")
+            assert "__linux_compliance_evidence_" not in remainder, (name, expression)

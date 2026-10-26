@@ -325,9 +325,14 @@ which holds one module per rule group; the name sets and allow-lists live in `to
   - Every entry point of the audit, evidence, remediate and verify roles starts with the generated
     `tasks/internal_variables.yml`, which refuses an internal `__linux_compliance_<role>_*` variable supplied from
     outside the role (a role parameter, an include parameter, an extra variable, or a play `set_fact` of a constant
-    the role loads). It reads every fact and task variable back with two different sentinels, so a value forged
-    as the sentinel string is refused too, and the key facts are type-checked right after the role sets them
-    (FREES-153). Regenerate it with `make role-guards` after adding an internal variable; the generator fails on a
+    the role loads). It first refuses, by name and whatever the value, every internal name that the `varnames`
+    lookup sees but `hostvars` does not, which is a role, include, block or play parameter, so a template that
+    imitates the sentinels cannot pass (FREES-157). It then reads every fact and task variable back with two
+    different sentinels, so a fixed value forged as the sentinel string is refused too, and the key facts are
+    type-checked right after the role sets them (FREES-153). The generator also writes `playbooks/run_start.yml`,
+    which every shipped playbook imports first: it refuses an internal `__linux_compliance_*` name or a role output
+    such as `linux_compliance_audited` that is already in `hostvars` when the run starts, from `-e`, the inventory or
+    a fact cache (ADR 0004, FREES-157). Regenerate it with `make role-guards` after adding an internal variable; the generator fails on a
     variable it cannot classify and on a role with internal variables that is not in `GUARDED_ROLES`.
     `make test-role-guards` checks the refusals in check mode.
   - A run output (`RUN_OUTPUTS` in `tools/roles/generate_role_guards.py`) is an internal fact that a role sets for a

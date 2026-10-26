@@ -1,0 +1,5 @@
+---
+__linux_compliance_remediate_plan: >-
+  {{ __linux_compliance_remediate_dispatched if __linux_compliance_remediate_dispatched is string
+     else {'enabled': true, 'errors': [], 'families': [], 'not_implemented': [], 'notices': ['FORGED-PLAN-USED'],
+           'orphaned': [], 'report': [], 'rules': [], 'disabled_rules': [], 'summary': {}} }}

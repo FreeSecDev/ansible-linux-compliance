@@ -67,3 +67,36 @@
               disruptive: false
               apply: []
               cleanup: []
+
+- name: Internal variables | A templated role parameter that imitates the sentinels cannot replace the plan
+  hosts: forged_template
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+    forged_plan:
+      enabled: true
+      errors: []
+      families: []
+      not_implemented: []
+      notices:
+        - FORGED-PLAN-USED
+      orphaned: []
+      report: []
+      rules: []
+      disabled_rules: []
+      summary: {}
+  roles:
+    - role: freesecdev.linux_compliance.remediate
+      __linux_compliance_remediate_plan: >-
+        {{ __linux_compliance_remediate_dispatched | default('__linux_compliance_unset__')
+           if __linux_compliance_remediate_dispatched | default('') is string else forged_plan }}
+  tasks:
+    - name: Report that the forged plan was used
+      ansible.builtin.debug:
+        msg: "PROBE-COMPLETED notices={{ linux_compliance_remediated.notices }}"

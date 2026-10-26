@@ -186,6 +186,38 @@ by the `scc-smoke` job and never published.
   pull request controls. Editing them is a change to a workflow, which is an SCC path, and is caught by review.
   The first push run on `main` after the merge runs the smoke test regardless.
 
+### T-SCC-4: off-platform checks run on another release
+
+- **Asset:** root execution on an Ubuntu 26.04 managed host, and the meaning of its results.
+- **Fact:** with `allow_off_platform_benchmark`, the per-run options set SCC's `ignoreCPEOVALResults`. SCC then
+  evaluates the pinned Ubuntu 24.04 stream on a 26.04 host although the stream's CPE-OVAL platform test does not
+  match ([ADR 0019](../adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-26-off-platform-opt-in-for-ubuntu-2604-frees-161)).
+  The stream includes NIWC shell-command checks, which SCC runs as root. SCC warns that results may be incomplete or
+  false positives.
+- **Attacker:** whoever can change the pinned stream, as in T-AUDIT-2. The setting adds no content and no network
+  path. It also opens no way to switch it on for another host: it is written only for the one allowed pair, and the
+  confirmation refuses it on every other run.
+- **Failure:** a 24.04 check misreads a 26.04 host. Or a run with the platform test ignored is read as compliance of
+  the host.
+- **Mitigation:**
+  - The setting is written only for the allowed pair.
+  - The confirmation requires SCC's options dump to show it as `1` exactly then and as `0` for every other run, and
+    `saveResultsForNotApplicableContent` as `0` for every run.
+  - The module compares the asserted release with the host's `/etc/os-release` (`host_mismatch`). Below that, SCC's
+    own CPE platform test still stops an unmarked scan of a 26.04 host claimed as 24.04, which the integration case
+    proves.
+  - Raw copies are named `*.off-platform.xml`. The report refuses them and any XCCDF or ARF next to a marked
+    `scan-run.json`, and a host with only an off-platform scan is not covered in a fleet report.
+  - Retrieval stays confirmed off, and the egress test covers it.
+  - Every result carries the off-platform marker. Reports keep marked results out of every figure, and FREES-147
+    maps them to Not Reviewed.
+  - A run that is mostly `notapplicable` is failed.
+- **Residual:**
+  - The same signed checks that run as root on 24.04 run on 26.04. A check that behaves differently on 26.04 can
+    report a wrong outcome, which the marker and the exclusion from figures contain but do not prevent.
+  - `/etc/os-release` is written by the host itself, so the release check binds the caller's claim to the host's own
+    claim, not to an independent fact.
+
 ## Report inputs on the controller
 
 `tools/reporting` turns operator-supplied files into the normalized report and the dashboard

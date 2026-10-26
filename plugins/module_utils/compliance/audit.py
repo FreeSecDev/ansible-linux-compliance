@@ -93,7 +93,13 @@ RULE_TOGGLE_SUFFIX: Final[str] = "_enabled"
 _CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
 _LONG_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,128}"
 LONG_CONTENT_NAME_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+OFF_PLATFORM_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+OS_RELEASE_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+OS_RELEASE_PATH: Final[str] = "/etc/os-release"
+MAX_OS_RELEASE_BYTES: Final[int] = 64 * 1024
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+_OS_RELEASE_KEY: Final[str] = r"[A-Z][A-Z0-9_]*"
+_QUOTES: Final[tuple[str, ...]] = ('"', "'")
 _BACKEND: Final[str] = r"[a-z][a-z0-9_-]{0,63}"
 _TOGGLE: Final[str] = r"linux_compliance_[a-z0-9_]{1,100}_enabled"
 _SHORT_RULE: Final[str] = r"[a-z0-9_]{1,100}"
@@ -115,6 +121,7 @@ ERROR_EVIDENCE: Final[str] = "evidence_write_failed"
 ERROR_CLEANUP: Final[str] = "cleanup_failed"
 ERROR_DIGEST_MISMATCH: Final[str] = "digest_mismatch"
 ERROR_INVALID_CONTENT: Final[str] = "invalid_content"
+ERROR_HOST_MISMATCH: Final[str] = "host_mismatch"
 CONTENT_DIRECTORY_NAME: Final[str] = "content"
 PREVIEW_PREFIX: Final[str] = ".check-"
 MAX_DISCARD_DEPTH: Final[int] = 10
@@ -410,6 +417,16 @@ def _check_size(value: object) -> None:
         _invalid(f"max_result_bytes must be between 1 and {scanner.MAX_RESULT_BYTES_LIMIT}")
 
 
+def _check_off_platform(value: object, backend: str) -> None:
+    if not isinstance(value, bool):
+        _invalid("allow_off_platform_benchmark must be a boolean")
+    if value and backend not in OFF_PLATFORM_BACKENDS:
+        _invalid(
+            "allow_off_platform_benchmark applies only to the backend "
+            f"{', '.join(sorted(OFF_PLATFORM_BACKENDS))}, not to {_safe(backend)}"
+        )
+
+
 @dataclass(frozen=True)
 class AuditJob:
     """The validated arguments of one audit.
@@ -425,6 +442,9 @@ class AuditJob:
         timeout_seconds: Wall-clock limit of the scan.
         max_result_bytes: Largest results document that is parsed.
         disabled_rules: Rules that operator toggles exclude.
+        allow_off_platform_benchmark: Explicit opt-in to the off-platform pairs
+            of the backend (ADR 0019, amendment of FREES-161). Only the backends
+            in :data:`OFF_PLATFORM_BACKENDS` accept it.
     """
 
     backend: str
@@ -437,11 +457,13 @@ class AuditJob:
     timeout_seconds: float
     max_result_bytes: int
     disabled_rules: tuple[DisabledRule, ...]
+    allow_off_platform_benchmark: bool = False
 
     def __post_init__(self) -> None:
         """Validate the fields that do not need the file system."""
         if not _matches(_BACKEND, self.backend):
             _invalid(f"backend must match {_BACKEND}: {_safe(self.backend)}")
+        _check_off_platform(self.allow_off_platform_benchmark, self.backend)
         try:
             scanner.check_xccdf_id(self.profile_id, "profile", "profile_id")
         except scanner.ScanRequestError as error:
@@ -491,6 +513,9 @@ def build_job(params: Mapping[str, object], moment: datetime) -> AuditJob:
         timeout_seconds=cast("float", timeout),
         max_result_bytes=cast("int", size),
         disabled_rules=parse_disabled_rules(params.get("disabled_rules")),
+        allow_off_platform_benchmark=cast(
+            "bool", params.get("allow_off_platform_benchmark", False)
+        ),
     )
 
 
@@ -527,6 +552,7 @@ class AuditPlan:
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible description of the planned scan."""
         return {
+            "allow_off_platform_benchmark": self.job.allow_off_platform_benchmark,
             "backend": self.job.backend,
             "benchmark_id": self.benchmark.benchmark_id,
             "benchmark_version": self.benchmark.version,
@@ -544,6 +570,56 @@ class AuditPlan:
             "scan_timeout": self.job.timeout_seconds,
             "tailoring": self.tailored,
         }
+
+
+def _mismatch(message: str) -> NoReturn:
+    raise AuditError(ERROR_HOST_MISMATCH, message)
+
+
+def read_os_release(path: str) -> dict[str, str]:
+    """Return the ``KEY=VALUE`` assignments of an os-release file, unquoted.
+
+    Raises:
+        AuditError: With ``host_mismatch`` if the file cannot be read or is too large.
+    """
+    try:
+        with Path(path).open("rb") as handle:
+            data = handle.read(MAX_OS_RELEASE_BYTES + 1)
+    except OSError as error:
+        _mismatch(
+            f"the release of the host cannot be read from {path}: {error.strerror or 'error'}"
+        )
+    if len(data) > MAX_OS_RELEASE_BYTES:
+        _mismatch(f"{path} exceeds {MAX_OS_RELEASE_BYTES} bytes")
+    values: dict[str, str] = {}
+    for line in data.decode("utf-8", "replace").splitlines():
+        key, separator, value = line.strip().partition("=")
+        if separator and re.fullmatch(_OS_RELEASE_KEY, key) is not None:
+            text = value.strip()
+            quoted = len(text) > 1 and text[0] in _QUOTES and text[-1] == text[0]
+            values[key] = text[1:-1] if quoted else text
+    return values
+
+
+def check_host_release(host: model.HostIdentity, path: str) -> None:
+    """Refuse a host whose ``ID`` and ``VERSION_ID`` in ``path`` differ from ``host``.
+
+    The SCC backend chooses between its on-platform and off-platform rules by the
+    asserted distribution and version, so the module compares them with what the
+    managed host itself reports before anything is created.
+
+    Raises:
+        AuditError: With ``host_mismatch``.
+    """
+    values = read_os_release(path)
+    reported = (values.get("ID", ""), values.get("VERSION_ID", ""))
+    asserted = (host.distribution_id, host.distribution_version)
+    if reported != asserted:
+        _mismatch(
+            f"the host reports ID {_safe(reported[0])} and VERSION_ID {_safe(reported[1])} in "
+            f"{path}, but host.distribution_id and host.distribution_version are "
+            f"{_safe(asserted[0])} and {_safe(asserted[1])}"
+        )
 
 
 def _verified_profile(
@@ -584,8 +660,12 @@ def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
             and root by default; only tests change it.
 
     Raises:
-        AuditError: For every problem, with a stable ``error_type``.
+        AuditError: For every problem, with a stable ``error_type``. A backend in
+            :data:`OS_RELEASE_BACKENDS` also needs the host's ``/etc/os-release``
+            to report the asserted distribution and version (``host_mismatch``).
     """
+    if job.backend in OS_RELEASE_BACKENDS:
+        check_host_release(job.host, OS_RELEASE_PATH)
     content, benchmark, rules = _verified_profile(job, owner_uid=owner_uid)
     pattern = _LONG_CONTENT_NAME if job.backend in LONG_CONTENT_NAME_BACKENDS else _CONTENT_NAME
     if re.fullmatch(pattern, Path(content).name) is None:
@@ -970,6 +1050,7 @@ def _run_backend(
             output_dir=SCAN_DIRECTORY_NAME,
             expected_rule_ids=audit_plan.expected_rule_ids,
             tailoring_path=tailoring,
+            allow_off_platform_benchmark=audit_plan.job.allow_off_platform_benchmark,
         )
         return backend.audit(request)
     except scanner.UnknownBackendError as error:
@@ -982,8 +1063,9 @@ def summarize(run: model.ScanRun | None) -> dict[str, object] | None:
     """Count the findings of a run by outcome, with the run status first.
 
     The summary never states compliance (AGENTS.md rule 9): it holds ``run_status``, the
-    number of findings per outcome and the total. A run that did not complete has
-    only ``error`` findings, so it can never look compliant.
+    number of findings per outcome, the total and ``off_platform``, the off-platform
+    marker of the run or ``None``. A run that did not complete has only ``error``
+    findings, so it can never look compliant.
     """
     if run is None:
         return None
@@ -993,6 +1075,7 @@ def summarize(run: model.ScanRun | None) -> dict[str, object] | None:
         counts[key] = cast("int", counts[key]) + 1
     counts["total"] = len(run.findings)
     counts["run_status"] = run.status.value
+    counts["off_platform"] = None if run.off_platform is None else run.off_platform.to_dict()
     return counts
 
 

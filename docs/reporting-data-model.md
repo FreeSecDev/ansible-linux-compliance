@@ -3,8 +3,8 @@
 The reporting package `tools/reporting/` turns heterogeneous reports into one versioned JSON document. The decision
 record is [ADR 0016](adr/0016-report-schema-and-summary-semantics.md); the findings model is
 [ADR 0013](adr/0013-normalized-findings-model.md). The schema is
-`tools/reporting/schema/report-v2.json` (JSON Schema 2020-12, `schema_version` `"2.1"`); see
-[schema version notes](#schema-version-notes) for what changed from 1.0 and 2.0.
+`tools/reporting/schema/report-v2.json` (JSON Schema 2020-12, `schema_version` `"2.2"`); see
+[schema version notes](#schema-version-notes) for what changed from 1.0, 2.0 and 2.1.
 
 ## Running it
 
@@ -78,15 +78,15 @@ At most 1000 input files per section are accepted.
 
 | Key | Content |
 |---|---|
-| `schema_version` | `"2.1"` |
+| `schema_version` | `"2.2"` |
 | `scope` | `single_host`, `multi_host`, `benchmark` or `fleet`; applies to every statistic |
 | `metadata` | `commit`, `pull_request`, `workflow_run`, `started_at`, `finished_at`, `generated_at`; all nullable |
 | `sections` | `codebuild`, `compliance`, `coverage`, `exceptions`, `lint`, `molecule`, `packer`, `sbom`, `tests`, `vulnerabilities` |
-| `overview` | Section names grouped by `available`, `partial`, `unavailable` and `error`, and `exceptions`: the exception counts of the [exceptions section](#exceptions-section) or `null` |
+| `overview` | Section names grouped by `available`, `partial`, `unavailable` and `error`, `exceptions`: the exception counts of the [exceptions section](#exceptions-section) or `null`, and `off_platform`: the number of [off-platform inputs](#off-platform-results) |
 | `raw_artifacts` | One reference per input: `format`, `path` as supplied, `sha256`, `size`, `status`; the collection summary has the format `evidence_collection` |
 
 Each section has `status`, `reason`, `items`, `gaps` and `summary`; `compliance` also has `rules`, `groups` and
-`aggregates`, `notes` and `host_coverage`, and `exceptions` also has `exceptions` and `source_sha256`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
+`aggregates`, `notes`, `host_coverage` and `off_platform`, and `exceptions` also has `exceptions` and `source_sha256`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
 lists every item that is not `available` with its path, status and reason.
 
 | Section | Item formats | Summary |
@@ -217,6 +217,27 @@ worst `outcome`, the highest `severity`,
 `benchmark_id`, `profile_id`, `outcome`, `expired_waiver`), so the outcome of each file stays visible. Two inputs of
 one host with the same benchmark, version and profile are merged, worst outcome first.
 
+## Off-platform results
+
+A scan run with an off-platform marker (findings model schema 1.1) evaluated a benchmark made for another platform
+than the host, by the explicit opt-in `allow_off_platform_benchmark` of `compliance_scan` (FREES-161,
+[ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-22-off-platform-results-frees-161)).
+Today that can only be the Ubuntu 24.04 STIG benchmark on an Ubuntu 26.04 host. Its results are never compliance with
+a baseline of the host's own release.
+
+- It is an item of the compliance section like any other input, and counts for the section status, the scope and the
+  repeated-run checks.
+- It never enters `rules`, `groups`, `aggregates` or the section `summary`. A report of off-platform inputs only has
+  no summary.
+- Its item `data.off_platform` holds the marker (`benchmark_platform`, `target_platform`), and its own `summary` has
+  `compliance_percent: null` and the assessment `off_platform_benchmark` when it completed.
+- `sections.compliance.off_platform` lists every such input, whatever the section status, with `artifact`,
+  `input_sha256`, `kind`, `host`, `benchmark_id`, `content_version`, `profile_id`, `benchmark_platform`,
+  `target_platform`, `run_status` and `counts`. `overview.off_platform` counts them.
+- A target host whose bundles all carry the marker is not covered: see [host coverage](#host-coverage).
+- XCCDF and ARF files named `*.off-platform.xml`, and files next to a marked or unreadable `scan-run.json` (in the
+  same directory or the one above), are refused as input errors: they carry no marker.
+
 ## Host coverage
 
 `sections.compliance.host_coverage` (schema 2.1, FREES-142) says whether the report accounts for every target host.
@@ -227,11 +248,11 @@ can account for each one.
 
 | Field | Content |
 |---|---|
-| `status` | `unknown` without `--evidence-collection`; `complete` when every target host has a bundle in the report; `incomplete` when at least one has not |
+| `status` | `unknown` without `--evidence-collection`; `complete` when every target host has a bundle in the report with an on-platform scan; `incomplete` when at least one has no bundle or only an off-platform scan |
 | `reason` | Why the coverage is `unknown` or `incomplete` (`2 of 4 target host(s) have no evidence bundle in this report`); `null` when `complete` |
 | `collection` | `path`, `sha256` and `size` of the summary as read, its `collection_id` and `collected_at`; `null` when `unknown` |
-| `summary` | `target_hosts`, `in_report`, `missing` and `by_status` (one count per collection status); `null` when `unknown` |
-| `hosts` | One entry per target host, sorted by name: inventory `host`, collection `status`, `in_report`, and the `run_id` and `manifest_sha256` of a collected bundle (else `null`); empty when `unknown` |
+| `summary` | `target_hosts`, `in_report`, `missing`, `off_platform` (schema 2.2: target hosts with only an off-platform scan) and `by_status` (one count per collection status); `null` when `unknown` |
+| `hosts` | One entry per target host, sorted by name: inventory `host`, collection `status`, `in_report`, `off_platform` (schema 2.2: the host has only an off-platform scan, so it is not covered), and the `run_id` and `manifest_sha256` of a collected bundle (else `null`); empty when `unknown` |
 
 The collection statuses are `collected`, `unreachable`, `limited_out`, `no_audit_result`, `no_evidence_written` and
 `collection_failed` ([collection summary](evidence.md#the-collection-summary)).
@@ -362,7 +383,13 @@ scenario is required. Any other `format` or `version` is an error.
 - 1.0: first version (FREES-75), including the `partial` section status, `groups`, `aggregates` and `gaps`. A change that adds a field bumps the minor version; a breaking change bumps the major
   version, and `report-v<major>.json` is a new file. The version, this page and ADR 0016 change together.
 - The HTML dashboard (FREES-77, ADR 0017) adds no field to the document and refuses every version it does not
-  know; it reads 2.0 and 2.1.
+  know; it reads 2.0, 2.1 and 2.2.
+- 2.2 (FREES-161, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-22-off-platform-results-frees-161)):
+  a field addition, so a minor version in the same `report-v2.json`. `sections.compliance.off_platform`,
+  `overview.off_platform` and `off_platform` in every compliance item's data are new and required in a 2.2 document,
+  the assessment `off_platform_benchmark` is new, and an embedded scan run may have findings model schema 1.1. A 2.0
+  or 2.1 document has none of them and still validates. A 2.1 consumer migrates by accepting `"2.2"`, the three keys
+  and the assessment; the figures of a report without off-platform inputs are unchanged.
 - 2.1 (FREES-142, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-21-host-coverage-frees-142)):
   a field addition, so a minor version in the same `report-v2.json`. `sections.compliance.host_coverage` is new and
   required in a 2.1 document, `raw_artifacts` gains the format `evidence_collection` and its bound grows to 9002.

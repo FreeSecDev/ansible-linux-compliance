@@ -278,13 +278,22 @@ def reseal(
 
 def test_the_bundle_vocabulary_matches_the_audit_module() -> None:
     names = set(evidence.HOST_SOURCES)
-    assert names == {"scan-run.json", "tailoring.xml", "scan/results.xml", "scan/results-arf.xml"}
+    assert names == {
+        "scan-run.json",
+        "tailoring.xml",
+        "scan/results.xml",
+        "scan/results-arf.xml",
+        "scan/results.off-platform.xml",
+        "scan/results-arf.off-platform.xml",
+    }
     assert evidence_check.bundle_directory_paths() == {"raw", "raw/scan", "exceptions"}
     assert set(evidence.BUNDLE_PATHS) == {
         "raw/scan-run.json",
         "raw/tailoring.xml",
         "raw/scan/results.xml",
         "raw/scan/results-arf.xml",
+        "raw/scan/results.off-platform.xml",
+        "raw/scan/results-arf.off-platform.xml",
         "exceptions/evaluation.json",
         "exceptions/exceptions.yml",
         "exceptions/stale.json",

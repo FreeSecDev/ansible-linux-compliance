@@ -33,8 +33,11 @@ description:
     external downloads and update checks off, and completes only when SCC's own debug log confirms
     that it used that file and those values, and when exactly one fresh results file of this run
     matches the request. SCC's exit status is never taken as evidence of completion. The C(scc)
-    backend scans only Ubuntu 24.04 hosts with the pinned DISA benchmark, refuses other releases
-    such as Ubuntu 26.04, and does not support O(disabled_rules) yet.
+    backend scans Ubuntu 24.04 hosts with the pinned DISA benchmark and refuses other releases
+    such as Ubuntu 26.04, unless O(allow_off_platform_benchmark) opts into the one allowed
+    off-platform pair. It does not support O(disabled_rules) yet. Before anything is created
+    it reads C(/etc/os-release) on the managed host and stops with C(host_mismatch) unless its
+    C(ID) and C(VERSION_ID) are O(host.distribution_id) and O(host.distribution_version).
   - The module never changes the configuration of the host and always returns C(changed=false).
     Outside check mode it writes evidence files below O(output_dir), which is reported separately in
     RV(evidence_written) and RV(evidence) and is not a change to the host.
@@ -164,6 +167,33 @@ options:
           - Defaults to C(linux_compliance_rule_<short id>_enabled), where the short identifier is
             the part of O(disabled_rules[].rule_id) after C(_rule_).
         type: str
+  allow_off_platform_benchmark:
+    description:
+      - Explicit opt-in to scan a host with a benchmark made for another platform (ADR 0019,
+        amendment of FREES-161). No DISA benchmark for Ubuntu 26.04 exists yet.
+      - Only with O(backend=scc), and only for the exact pair of the pinned Ubuntu 24.04 STIG
+        benchmark (C(xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG)) on a host whose
+        O(host.distribution_id) is C(ubuntu) and O(host.distribution_version) is C(26.04).
+        Every other combination is still refused, and the C(openscap) backend refuses the option.
+      - The scan run and every finding then carry C(off_platform), which names the platform of
+        the benchmark (C(benchmark_platform)) and of the host (C(target_platform)), and the scan
+        run has findings model schema C(1.1). The results are scan evidence about the host under
+        the Ubuntu 24.04 benchmark, never compliance with an Ubuntu 26.04 baseline. Reports keep
+        them out of every figure.
+      - The per-run options of such a scan set SCC's documented C(ignoreCPEOVALResults) ("Run all
+        content regardless of applicability"), so SCC evaluates the 24.04 benchmark although its
+        CPE-OVAL platform test does not match the 26.04 host, and the scan completes only when SCC's
+        debug log shows that setting as C(1). Every other scan requires it as C(0), and every scan
+        requires C(saveResultsForNotApplicableContent) as C(0). SCC warns that such results may be
+        incomplete or false positives.
+      - The raw copies of such a scan are named C(results.off-platform.xml) and
+        C(results-arf.off-platform.xml), and the report refuses them, and any XCCDF or ARF file
+        next to such a C(scan-run.json), as inputs, because they carry no marker.
+      - As a safety net, a completed off-platform run in which more than 50 % of the rules of the
+        profile are C(notapplicable) becomes C(failed) with every rule C(error), because the
+        benchmark's applicability checks do not fit the host; SCC's results stay in the evidence.
+    type: bool
+    default: false
   fail_on_incomplete:
     description:
       - Fail the task when the scan did not complete (RV(run_status) C(failed) or C(timed_out)).
@@ -194,11 +224,12 @@ notes:
   - Exit status 2 of C(oscap) means that rules failed; it is a completed scan. Any other non-zero
     status, a signal or a timeout is a scanner failure.
   - With the C(scc) backend, C(<output_dir>/<run_id>/scan/results.xml) and C(results-arf.xml) are
-    copies of SCC's XCCDF and ARF results, and SCC's own tree with its debug logs stays in the
-    root-only C(scan/scc) directory, which is listed as skipped and not recorded as evidence. SCC
-    itself updates its content databases below C(/opt/scc/Resources/Content/DB) and adds one
-    session database to C(/opt/scc/Local) per scan; its configuration, content and binaries stay
-    unchanged.
+    copies of SCC's XCCDF and ARF results (C(results.off-platform.xml) and
+    C(results-arf.off-platform.xml) for an off-platform scan), and SCC's own tree with its debug
+    logs stays in the root-only C(scan/scc) directory, which is listed as skipped and not
+    recorded as evidence. SCC itself updates its content databases below
+    C(/opt/scc/Resources/Content/DB) and adds one session database to C(/opt/scc/Local) per
+    scan; its configuration, content and binaries stay unchanged.
   - A scan result is evidence about one host, not a certification and not a claim of compliance
     with any framework.
 seealso:
@@ -241,6 +272,31 @@ EXAMPLES = r"""
   ansible.builtin.assert:
     that:
       - audit.run_status == 'completed'
+
+- name: Scan an Ubuntu 26.04 host with the Ubuntu 24.04 STIG benchmark, labelled off-platform
+  freesecdev.linux_compliance.compliance_scan:
+    backend: scc
+    allow_off_platform_benchmark: true
+    content_path: "{{ scc_content_dir }}/{{ scc_stream }}"
+    expected_sha256: eac6f7a6a1e80c52d02c508d939eb09aa09b7fe6eaeb060b8aa21e095719c940
+    profile_id: xccdf_mil.disa.stig_profile_MAC-1_Classified
+    host:
+      hostname: "{{ ansible_facts['hostname'] }}"
+      distribution_id: ubuntu
+      distribution_version: "26.04"
+      architecture: x86_64
+    fail_on_incomplete: false
+  vars:
+    scc_content_dir: /opt/scc/Resources/Content/SCAP12_Content
+    scc_stream: U_CAN_Ubuntu_24-04_LTS_V1R5_STIG_SCAP_1-4_Benchmark-enhancedV7-signed.xml
+  become: true
+  register: off_platform_audit
+
+- name: Never read an off-platform scan as an Ubuntu 26.04 baseline
+  ansible.builtin.assert:
+    that:
+      - off_platform_audit.scan_run.off_platform.benchmark_platform.distribution_version == '24.04'
+      - off_platform_audit.scan_run.off_platform.target_platform.distribution_version == '26.04'
 """
 
 RETURN = r"""
@@ -274,7 +330,8 @@ run_status:
   sample: completed
 summary:
   description:
-    - Number of findings per outcome, the total and the run status. Null when no scan ran.
+    - Number of findings per outcome, the total, the run status and C(off_platform), the
+      off-platform marker of the scan run or null. Null when no scan ran.
     - It never states compliance. A run that did not complete has only C(error) findings.
   returned: success
   type: dict
@@ -288,10 +345,14 @@ summary:
     waived: 0
     disabled: 1
     total: 3
+    off_platform: null
 scan_run:
   description:
     - The normalized scan run (findings model schema 1.0, ADR 0013), with its provenance
       (C(scanner), C(content) with the verified SHA-256 and the tailoring digest, C(host), times).
+    - A scan run of O(allow_off_platform_benchmark) has schema 1.1 and an C(off_platform) marker,
+      with C(benchmark_platform) and C(target_platform) (each C(distribution_id) and
+      C(distribution_version)), on the run and on every finding.
     - Findings are sorted by rule identifier. Null when no scan ran.
   returned: success
   type: dict
@@ -386,6 +447,7 @@ planned:
   returned: success
   type: dict
   sample:
+    allow_off_platform_benchmark: false
     backend: openscap
     benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
     benchmark_version: 0.1.82
@@ -409,7 +471,8 @@ error_type:
       C(nothing_to_scan),
       C(unknown_backend), C(invalid_request), C(evidence_write_failed), C(cleanup_failed),
       C(scan_incomplete),
-      C(digest_mismatch), C(profile_not_found), C(unsupported_content) or C(invalid_content).
+      C(digest_mismatch), C(profile_not_found), C(unsupported_content), C(invalid_content) or
+      C(host_mismatch).
   returned: failure
   type: str
   sample: digest_mismatch
@@ -461,6 +524,7 @@ def argument_spec() -> dict[str, object]:
                 "disabled_by": {"type": "str"},
             },
         },
+        "allow_off_platform_benchmark": {"type": "bool", "default": False},
         "fail_on_incomplete": {"type": "bool", "default": True},
     }
 

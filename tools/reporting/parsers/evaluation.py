@@ -39,7 +39,13 @@ from tools.reporting.common import (
     run_parser,
     sha256_hex,
 )
-from tools.reporting.compliance import KIND_EVALUATION, ComplianceData, summarize, tally_findings
+from tools.reporting.compliance import (
+    KIND_EVALUATION,
+    ComplianceData,
+    scan_run_summary,
+    summarize,
+    tally_findings,
+)
 
 FORMAT: Final[str] = "exceptions_evaluation"
 EXCEPTIONS_FILE_FORMAT: Final[str] = "exceptions_file"
@@ -113,8 +119,12 @@ def evaluation_data(data: bytes, evaluation: exceptions.Evaluation) -> Evaluatio
         findings=run.findings,
         not_selected=0,
         scan_run=run,
-        summary=summarize(tally_findings(run.findings, frozenset(lapsed)), status, 1, unfinished),
+        summary=scan_run_summary(
+            summarize(tally_findings(run.findings, frozenset(lapsed)), status, 1, unfinished),
+            run.off_platform,
+        ),
         lapsed_waivers=lapsed,
+        off_platform=run.off_platform,
     )
     return EvaluationData(compliance, evaluation)
 

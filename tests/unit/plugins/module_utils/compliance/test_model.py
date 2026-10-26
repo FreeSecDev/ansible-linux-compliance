@@ -968,7 +968,7 @@ def test_serialized_keys_are_sorted_at_every_level() -> None:
 
 def test_loads_rejects_unsupported_schema_versions() -> None:
     data = scan_run().to_dict()
-    for bad in ("2.0", "1", "1.1", "", "1.0 "):
+    for bad in ("2.0", "1", "1.2", "", "1.0 ", "1.1 "):
         with pytest.raises(model.ModelError, match="unsupported schema_version"):
             model.ScanRun.from_dict({**data, "schema_version": bad})
     with pytest.raises(model.ModelError, match="must be a string"):

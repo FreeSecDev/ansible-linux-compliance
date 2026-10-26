@@ -505,9 +505,10 @@ rule; none adds an exemption, and no lint limit was raised.
   value equal to the sentinel string `__linux_compliance_unset__` passed the read-back of FREES-137. The generated
   guard now resets the facts to a second sentinel, `__linux_compliance_unset_again__`, reads every fact and task
   variable back again, and resets the facts to the first sentinel. A forged value cannot equal both, so the sentinel
-  string is refused by the second read-back, through `-e`, include parameters and the task variables alike.
-  Residual: an extra variable is templated, so an operator who writes a template for `-e` that evaluates differently
-  per task could still pass both; such an operator already controls the play.
+  string is refused by the second read-back, through `-e`, include parameters and the task variables alike, as long
+  as the value is fixed. Residual, widened by FREES-157: an extra variable, an include parameter and a role parameter
+  are all templated per task, so a template that evaluates differently per task could still pass both read-backs.
+  FREES-157 adds a name-based parameter check and a run-start check for the shipped playbooks; see its amendment.
 - Internal role variables, type checks: the key facts of each guarded role are checked for their type and shape in
   the task right after the role sets them, so a replaced value is refused before it is used even if a read-back were
   passed: remediate (toggle names, plan, results, the dispatched flag), audit (toggle names, toggle resolution, the
@@ -854,3 +855,137 @@ connection, become and shell plugins of other collections are refused only by th
 outside the repository (`~/.ansible.cfg`, `ANSIBLE_CONFIG`, the operator's environment) stay the documented
 residual of FREES-156. The change closes routes around AGENTS.md rule 1 and needs the independent review that the
 issue asks for.
+
+## Amendment 2026-10-26: templated parameters, the run-start check and the evidence entry points (FREES-157)
+
+The residuals that the reviews of PR #40 (FREES-153) and PR #41 (FREES-154) found. Each item tightens a rule; none
+adds an exemption, and no lint limit was raised.
+
+- Templated parameters: the second read-back of FREES-153 refuses a fixed forged value only. Ansible templates an
+  extra variable, an include parameter and a role parameter again for every task. The reviewer's probe passed the
+  plan template `{{ __linux_compliance_remediate_dispatched if __linux_compliance_remediate_dispatched is string else
+  <forged plan> }}` to the real remediate role on localhost in check mode, through `-e` and through the `vars` of
+  `include_role`. It copied the sentinel during both read-backs and returned a well-shaped plan once the dispatched
+  flag was a boolean, so it passed the plan type check, dropped the real crontab rule and published
+  `notices=['FORGED-PLAN-USED'] rules=[]` with `changed=0`. No check of values can close this: a lazy template sees
+  everything that the assertion sees, including the facts that were just reset.
+- Where a name is visible, measured on the pinned ansible-core 2.21.5 inside a role task (FREES-157 probe):
+
+  | Source of `__name` | `query('ansible.builtin.varnames', '^__name$')` | `hostvars[inventory_hostname]` |
+  |---|---|---|
+  | role parameter, `vars` of a `roles` entry | yes | no |
+  | include parameter: `vars` of `include_role`, `import_role` or `include_tasks`, fixed, templated or `omit` | yes | no |
+  | block variable or play variable, including the `vars` of `import_playbook` | yes | no |
+  | variable of the role's `vars/main.yml` | yes | no |
+  | extra variable (`-e`), inventory, `group_vars`, `host_vars` | yes | yes |
+  | fact (`set_fact`, `register`, `include_vars`), also from an earlier play | yes | yes |
+
+  `-e hostvars=...` and `-e groups=...` do not replace those magic variables. `-e inventory_hostname=...` and an
+  include parameter `inventory_hostname` do replace `inventory_hostname`.
+- Parameter check: the generated guard now starts with one assertion item per internal fact, task variable and
+  `include_vars` constant of the role: `query('ansible.builtin.varnames', '^<name>$') == [] or '<name>' in
+  (hostvars[inventory_hostname] | list)`. A name that the lookup sees and `hostvars` does not was passed as a
+  parameter, and it is refused whatever its value, a template or `omit` included. The check runs before the first
+  reset, because the reset makes every fact a `hostvars` name. Constants of `vars/main.yml` are role variables, seen
+  the same way as a parameter, so they are left out and keep their read-back. The read-backs stay for extra
+  variables and as defence in depth. A role parameter of a `roles` entry was already refused by the argument
+  validation, which also templates it; the `vars` of a `roles` entry, which ranked below the role's facts, are
+  refused now as well.
+- Run-start check: the generator also writes `playbooks/run_start.yml` (`tools/roles/run_start.py`), and every
+  shipped playbook imports it first. Its one play (on `all:localhost` since the `--limit` item below) refuses the run
+  when an inventory host or `localhost` already has, in `hostvars`, any `__linux_compliance_*` name or a role output: every public
+  `linux_compliance_*` fact that a role sets (`role_outputs`), among them `linux_compliance_audited`,
+  `linux_compliance_discovered`, `linux_compliance_audit_stale_exceptions` and `linux_compliance_baseline`. It also
+  refuses `inventory_hostname` and `group_names` as extra variables (see below). As in the FREES-150 Molecule guard it reads only the magic
+  variables `groups` and `hostvars` and literals, and it refuses by name, so a template cannot pass it. Two
+  exceptions keep legitimate runs working. A fact that a role sets with `cacheable: true`, today only
+  `__linux_compliance_verify_baseline_recorded`, survives in a persistent fact cache by design and is checked where
+  it is read, so it is exempt. A shipped playbook that imports another passes the play variable
+  `linux_compliance_run_start_checked: true` to it, because its own earlier plays have set facts by then; a play
+  variable is not in `hostvars`, so the marker skips the check only when it is neither an extra variable nor an
+  inventory variable, and the check refuses it in `hostvars` like any other name. Since the `--limit` item below the
+  condition is `<marker> is not defined or <every name in hostvars of the inventory hosts and localhost> |
+  select('equalto', '<marker>') | list | length > 0`, the same on every host; see the marker item below.
+- `linux_compliance_audited` (review of PR #41): the audit role accepted `-e linux_compliance_audited=...` as an
+  override of its own output, and the `run_id` check of the evidence role's `collected.yml` relies on that fact. The
+  run-start check now refuses it from `-e` and the inventory. In addition, `scan.yml` checks right after it publishes
+  the fact that both the resolved value and the value in `hostvars` carry the `run_id` of the scan that just ran, as
+  `baseline.yml` does for the baseline, so a fixed override through any route fails before a gate, a collection or a
+  comparison uses it.
+- Evidence entry points: `tasks_from: collect.yml` skipped the guard and the output directory validation of
+  `main.yml`. `collect.yml` is now a block at the end of `main.yml` with the same condition, so the file and the
+  entry point no longer exist. The role's task files are `main.yml` and `summary.yml`, which import the guard first,
+  `internal_variables.yml`, and `reached.yml` and `collected.yml`, which by design (FREES-154) read internal names
+  only through `hostvars[...]` and the `reached.yml` name pattern; a unit test pins this set. The run marker stays a
+  run output outside the reset.
+- `tools/roles/promote_native_rule.py` also refuses a hard link to `roles/remediate/vars/rules.yml`: it compares
+  `st_dev` and `st_ino` of the target with the repository catalogue before it writes.
+- Host nonce (review of PR #44): an include parameter `inventory_hostname: <other host>` pointed the parameter check
+  at the facts of that host, so a decoy fact of the forged name there let a templated parameter pass. After the
+  parameter check the guard now records `__linux_compliance_<role>_host_nonce: "{{ 1000000000000 |
+  ansible.builtin.random }}"` and asserts that `hostvars[inventory_hostname]` holds the same nonce. `set_fact` always
+  writes to the host that runs the task, so the assertion fails whenever `inventory_hostname` names another host,
+  through an include parameter, a role parameter or an extra variable. The nonce is a run output of the guard: it is
+  never reset to a sentinel and never read back, its name is in the parameter check, and the generator refuses a
+  role variable of that name.
+- `group_names` (review of PR #44): an extra variable replaces `group_names` in `vars` and in `hostvars`, and an
+  include parameter replaces it in `vars`; the `groups` magic variable cannot be replaced by either. The audit role
+  passed `group_names` to `apply_exceptions`, so `-e group_names=[<group>]` widened the hosts an exception scoped to
+  that group applied to. `exceptions_apply.yml` now derives the groups of the host from `groups` (every group except
+  `all` that lists `inventory_hostname`), and the run-start check compares the `<host> <group>` pairs of
+  `hostvars[*].group_names` with those of `groups` and refuses any difference.
+- `--limit` (review of PR #44 at 98d95ea): the run-start play targeted `localhost`, which a limit keeps only when it
+  names `localhost`, so `playbooks/remediate.yml --limit web01 -e '<plan template>'` skipped the check and published
+  the forged plan; the role guards cannot refuse an extra variable, because its name is in `hostvars` and both sides
+  of the nonce check read the same value. The play now targets `all:localhost` with `run_once: true` and
+  `gather_facts: false`, so it runs once whatever the limit selects. Its only task is an assertion, an action that
+  reads `hostvars` and `groups` on the controller and never connects, also for an unreachable host. A limit that
+  selects no host ends the run before any play. `make test-role-guards` refuses a forged `-e` with `--limit web01` for
+  `remediate.yml`, `audit.yml`, `evidence.yml` and `verify.yml` and with `--limit lost01`, an unreachable host, and
+  runs the plain playbooks with `--limit web01`, `lost01` and `localhost` without a connection. The other plays on
+  `localhost` stay there, because their results are facts of `localhost` that later plays and roles read, and
+  skipping them fails closed:
+  - The stale-exceptions play (`audit.yml`, so also `remediate.yml` and `verify.yml`, and `evidence.yml`) only
+    reports: no stale warning is printed, the bundles of `evidence.yml` get no `exceptions/stale.json` (the evidence
+    role passes an empty mapping), and the report computes the review of every exception from the evaluations itself.
+    No gate, waiver or comparison depends on it.
+  - The summary play of `evidence.yml`: no collection summary is written, so a report over the bundles has host
+    coverage `unknown` and `--require-host-coverage` exits 1; the last play still fails every host whose collection
+    failed. `docs/evidence.md` already tells operators to add `localhost` to a limit.
+  - The `run_once` tasks of the roles (the exceptions file read and validation, `reached.yml`, the stale and summary
+    tasks) run on the first host of their play, which is a selected host whenever the play runs at all.
+- The marker under `run_once` (review of PR #44 at c847afa): the skip condition used to be `<marker> is not defined
+  or '<marker>' in (hostvars['localhost'] | list)`. On `all:localhost` with `run_once` it is evaluated on the first
+  selected host, so an inventory variable `linux_compliance_run_start_checked: true` of that host made the marker
+  defined while `localhost` lacked it, and the whole check was skipped, with or without `--limit`. The check is now
+  skipped only when the marker is defined and no inventory host and not `localhost` has a `hostvars` name equal to it.
+  The only source left is a play variable, which only the importing shipped playbook sets: an extra variable, an
+  inventory, `group_vars` or `host_vars` value or a fact of that name on any host puts the name in `hostvars`, the
+  check runs and it refuses the marker. The condition reads only `groups`, `hostvars` and literals and is the same on
+  every host. The alternative, dropping the skip, would make an imported `audit.yml` refuse the facts of the plays
+  before it; a value that the importing playbook passes cannot be told from an inventory value by its content, only
+  by where it is defined, which is what the condition checks. `make test-role-guards` runs shipped `remediate.yml`
+  and `audit.yml` with the marker as a `host_vars` and as a `group_vars` value of web01, the first selected host,
+  with and without `--limit web01`, and requires the refusal.
+- Residual, explicit operator options: `--skip-tags always` and `--start-at-task <a later task>` skip the run-start
+  check like any task. The check already carries the `always` tag, so `--tags` alone cannot skip it; no other tag
+  would survive `--skip-tags always`. With `--skip-tags always` the roles do nothing, and `remediate` and `verify` fail: every task that scans, changes
+  or compares is tagged `always`, and the dispatched guards of the `remediate` and `verify` roles (tagged
+  `linux_compliance_<role>_guard`) fail the host. `--start-at-task` also skips the internal-variable guards and does
+  not fail closed. Both are choices on the command line with the trust of `-e` in a custom playbook, and
+  `docs/playbooks.md` tells operators not to use them with the shipped playbooks.
+- Two shipped playbooks in one `ansible-playbook` invocation are refused by the run-start check of the second, because
+  the first left role outputs and internal facts in `hostvars`. This fails closed and is intended: the shipped
+  playbooks that need another one import it with the marker, and facts of a finished playbook must not seed the next.
+- Residuals, each needing control of the playbook or the command line:
+  - The parameter check cannot tell a parameter from a fact of the same name, so when an earlier entry point of the
+    same role already ran on the host in this run (the verify role's `preflight.yml` before `baseline.yml` and
+    `main.yml`, the second audit of `playbooks/remediate.yml`, the `stale.yml` play on `localhost`), a templated
+    parameter of that name meets only the read-backs.
+  - An extra variable is in `hostvars`, so the parameter check passes it. The run-start check refuses it in the
+    shipped playbooks; a custom playbook that does not import `playbooks/run_start.yml` keeps the template residual
+    of FREES-153 for `-e`.
+  - The internal task files of the audit role (`scan.yml`, `gate.yml`, `toggles.yml`, `exceptions_file.yml`,
+    `exceptions_apply.yml`, `evaluation.yml`, `defer.yml`) and the remediate family files can still be included
+    directly with `tasks_from`, which skips the guard, the same residual as the remediate family files above: such a
+    caller can do no more than call the modules itself.

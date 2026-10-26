@@ -1,0 +1,9 @@
+---
+all:
+  hosts:
+    web01:
+      ansible_connection: local
+      linux_compliance_audited:
+        run_id: planted
+        run_status: completed
+        evidence_written: true

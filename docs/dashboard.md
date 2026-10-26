@@ -75,12 +75,24 @@ the Compliance tab:
   target host has no evidence bundle in it. The callout gives the count and lists every missing host with its status
   (unreachable, limited out, no audit result, no evidence written, collection failed, or collected but its bundle not
   in the report). The compliance section is then partial and shows no summary or pooled figure.
+  A target host that has only an off-platform scan is listed in the same callout as not covered.
 - **Every target host is accounted for.** Every target host of the collection has a bundle in the report.
 - **Host coverage unknown.** The report was built without a collection summary, so hosts without an input are not
   visible and the figures may not cover every host. A report with schema version 2.0 is always shown this way.
 
 The Compliance tab also shows the counts per status, the path, SHA-256 and ID of the collection summary, and a table
 of every target host with whether it is in the report, its status, run and manifest SHA-256.
+
+### Off-platform results
+
+A scan run made with `allow_off_platform_benchmark` evaluated a benchmark made for another platform than the host, for
+example the Ubuntu 24.04 STIG benchmark on an Ubuntu 26.04 host
+([off-platform results](reporting-data-model.md#off-platform-results)). When the report has such inputs, the Overview
+and the Compliance tab show the callout **Off-platform results: never compliance with the host's own release.** It
+gives the number of inputs, says that they are excluded from every figure, pooled figure and summary, and lists each
+with its host, benchmark, both platforms and run status. The Compliance tab adds the table "Off-platform results
+(never in a figure)" with the rules per outcome in its details, the inputs table shows "off-platform: no figure", and
+the findings table flags each marked finding "off-platform". A report without off-platform inputs shows none of this.
 
 ### Host groups
 
