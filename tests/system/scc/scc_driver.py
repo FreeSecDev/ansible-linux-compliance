@@ -1,0 +1,216 @@
+"""Drive SCC inside the CI-only SCC image for the integration and egress tests.
+
+The host-side tests start the image with the repository mounted read-only and
+run this script with a standalone Python that is mounted too, because the image
+has none. It prints one JSON document; the tests on the host decide.
+
+Commands:
+
+- ``scan``: record the SHA-256 of every file below ``/opt/scc`` and ``/root``,
+  run the real ``compliance_scan`` module file with ``backend: scc`` (for real,
+  then in check mode) exactly as Ansible runs it on a managed host, record the
+  state again and report both results and every added, removed or changed path.
+- ``install``: install a stream with SCC's own installer. This is test set-up
+  only, in a throwaway container: the backend never installs content.
+- ``positive``: the positive control of the egress test. It builds the per-run
+  options with the backend's own functions, sets ``downloadExternalFiles`` to
+  ``1``, runs ``cscc`` in the backend's scan form and reports whether the
+  backend's confirmation accepts SCC's debug log (it must not).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import cast
+
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    scc,
+)
+
+WATCHED = ("/opt/scc", "/root")
+MODULE_TIMEOUT_SECONDS = 3300
+SCC_TIMEOUT_SECONDS = 1800
+CHUNK = 1024 * 1024
+SAFE_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
+SCC = "/opt/scc/cscc"
+INSTALLED_OPTIONS = "/opt/scc/options.xml"
+DOWNLOAD_OFF = "<downloadExternalFiles>0</downloadExternalFiles>"
+DOWNLOAD_ON = "<downloadExternalFiles>1</downloadExternalFiles>"
+PROFILE = "xccdf_mil.disa.stig_profile_MAC-1_Classified"
+
+
+def _digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(CHUNK), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def snapshot(roots: tuple[str, ...]) -> dict[str, str]:
+    """Return a digest or a type marker for every path below ``roots``."""
+    state: dict[str, str] = {}
+    for root in roots:
+        for directory, names, files in os.walk(root):
+            state[directory] = "directory"
+            for name in [*names, *files]:
+                path = Path(directory) / name
+                mode = path.lstat().st_mode
+                if stat.S_ISLNK(mode):
+                    state[str(path)] = f"symlink:{path.readlink()}"
+                elif stat.S_ISREG(mode):
+                    state[str(path)] = _digest(path)
+    return state
+
+
+def difference(before: dict[str, str], after: dict[str, str]) -> dict[str, list[str]]:
+    """Return the added, removed and changed paths."""
+    common = before.keys() & after.keys()
+    return {
+        "added": sorted(set(after) - set(before)),
+        "removed": sorted(set(before) - set(after)),
+        "changed": sorted(path for path in common if before[path] != after[path]),
+    }
+
+
+def run_module(module: Path, arguments: dict[str, object], python_path: str) -> dict[str, object]:
+    """Run the module file with ``arguments`` and return its JSON result."""
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
+        json.dump({"ANSIBLE_MODULE_ARGS": arguments}, handle)
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(module), handle.name],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=MODULE_TIMEOUT_SECONDS,
+            env={"PATH": SAFE_PATH, "PYTHONPATH": python_path, "LANG": "C"},
+        )
+    finally:
+        Path(handle.name).unlink()
+    parsed: object = json.loads(completed.stdout)
+    if not isinstance(parsed, dict):
+        message = "the module did not print a JSON object"
+        raise TypeError(message)
+    result = cast("dict[str, object]", parsed)
+    result["_returncode"] = completed.returncode
+    return result
+
+
+def module_arguments(options: argparse.Namespace) -> dict[str, object]:
+    """Return the module arguments for a scan of ``options.content``."""
+    return {
+        "backend": "scc",
+        "content_path": options.content,
+        "expected_sha256": options.sha256,
+        "profile_id": PROFILE,
+        "host": {
+            "hostname": "scc-integration",
+            "distribution_id": "ubuntu",
+            "distribution_version": "24.04",
+            "architecture": "x86_64",
+        },
+        "output_dir": options.output_dir,
+        "fail_on_incomplete": False,
+    }
+
+
+def scan(options: argparse.Namespace) -> dict[str, object]:
+    """Run a real scan and a check-mode scan through the module."""
+    module = options.repository / "plugins" / "modules" / "compliance_scan.py"
+    python_path = f"{options.repository / 'build' / 'collections'}:{options.site_packages}"
+    arguments = module_arguments(options)
+    before = snapshot(WATCHED)
+    real = run_module(module, {**arguments, "run_id": "real"}, python_path)
+    preview = run_module(
+        module, {**arguments, "_ansible_check_mode": True, "run_id": "check"}, python_path
+    )
+    after = snapshot(WATCHED)
+    return {"scan": real, "check_mode": preview, "state": difference(before, after)}
+
+
+def install(options: argparse.Namespace) -> dict[str, object]:
+    """Install a stream with SCC's own installer (test set-up only)."""
+    completed = subprocess.run(
+        [SCC, "-is", options.content],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=SCC_TIMEOUT_SECONDS,
+        stdin=subprocess.DEVNULL,
+        cwd="/opt/scc",
+        env={"PATH": SAFE_PATH, "LANG": "C", "LC_ALL": "C", "TZ": "UTC0"},
+    )
+    return {"returncode": completed.returncode, "installed": Path(options.content).name}
+
+
+def positive(options: argparse.Namespace) -> dict[str, object]:
+    """Run the backend's scan form with ``downloadExternalFiles`` set to 1."""
+
+    record = scc.read_installed_content(INSTALLED_OPTIONS, Path(options.content).name)
+    document = scc.options_document(record, PROFILE)
+    if document.count(DOWNLOAD_OFF) != 1:
+        message = "the per-run options do not set downloadExternalFiles exactly once"
+        raise ValueError(message)
+    work = Path(tempfile.mkdtemp(prefix="positive-", dir="/root"))
+    user = work / "user"
+    user.mkdir(mode=0o700)
+    path = work / "options.xml"
+    path.write_text(document.replace(DOWNLOAD_OFF, DOWNLOAD_ON), encoding="utf-8")
+    path.chmod(0o600)
+    completed = subprocess.run(
+        [SCC, "-o", str(path), "-u", str(user), "-q", "-d"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=SCC_TIMEOUT_SECONDS,
+        stdin=subprocess.DEVNULL,
+        env={"PATH": SAFE_PATH, "LANG": "C", "LC_ALL": "C", "TZ": "UTC0"},
+    )
+    logs = sorted((user / "ApplicationLogs").glob("*_Debug_Log_001.txt"))
+    refusal = "no application debug log"
+    if len(logs) == 1:
+        try:
+            scc.confirm_options(logs[0].read_text(encoding="utf-8", errors="replace"), str(path))
+            refusal = ""
+        except scc.OptionsConfirmationError as error:
+            refusal = str(error)
+    results = sorted(user.glob("Sessions/*/Results/SCAP/XML/*_XCCDF-Results_*.xml"))
+    return {"returncode": completed.returncode, "refusal": refusal, "results": len(results)}
+
+
+def egress_scan(options: argparse.Namespace) -> dict[str, object]:
+    """Run one real scan of the probe stream through the module."""
+    module = options.repository / "plugins" / "modules" / "compliance_scan.py"
+    python_path = f"{options.repository / 'build' / 'collections'}:{options.site_packages}"
+    return run_module(module, {**module_arguments(options), "run_id": "egress"}, python_path)
+
+
+COMMANDS = {"scan": scan, "install": install, "positive": positive, "egress-scan": egress_scan}
+
+
+def main(argv: list[str]) -> int:
+    """Run one command and print its report."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=sorted(COMMANDS))
+    parser.add_argument("--repository", type=Path, required=True)
+    parser.add_argument("--site-packages", default="")
+    parser.add_argument("--content", required=True)
+    parser.add_argument("--sha256", default="")
+    parser.add_argument("--output-dir", default="/var/lib/freesecdev/linux_compliance/evidence")
+    options = parser.parse_args(argv)
+    report = COMMANDS[options.command](options)
+    sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

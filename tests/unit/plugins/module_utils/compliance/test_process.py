@@ -213,8 +213,9 @@ class TestCommandSpec:
 class TestPolicy:
     """Executable and option allow-list policy."""
 
-    def test_default_allow_list_is_only_oscap(self) -> None:
-        assert set(process.ALLOWED_EXECUTABLES) == {"oscap"}
+    def test_default_allow_list_is_only_oscap_and_the_scc_command_line(self) -> None:
+        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc"}
+        assert process.ALLOWED_EXECUTABLES["oscap"].fixed_path is None
         options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
         assert {
             "--profile",

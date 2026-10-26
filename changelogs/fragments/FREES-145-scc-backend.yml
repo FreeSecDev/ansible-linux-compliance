@@ -1,0 +1,7 @@
+---
+minor_changes:
+  - >-
+    compliance_scan - add ``backend: scc``, which runs the operator-installed SCAP Compliance Checker 5.15 from its
+    fixed path through the audited process helper with a per-run options file, confirms from SCC's own debug log
+    that external downloads and update checks were off, decides completion from the results of the run and never
+    from the exit status, and maps the results into normalized findings with ``scanner: scc`` (FREES-145).

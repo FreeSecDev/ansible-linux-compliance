@@ -90,7 +90,7 @@ RUN_STATUS_NOT_RUN: Final[str] = "not_run"
 RULE_TOGGLE_PREFIX: Final[str] = "linux_compliance_rule_"
 RULE_TOGGLE_SUFFIX: Final[str] = "_enabled"
 
-_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,64}"
+_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,128}"
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 _BACKEND: Final[str] = r"[a-z][a-z0-9_-]{0,63}"
 _TOGGLE: Final[str] = r"linux_compliance_[a-z0-9_]{1,100}_enabled"
@@ -115,7 +115,7 @@ ERROR_DIGEST_MISMATCH: Final[str] = "digest_mismatch"
 ERROR_INVALID_CONTENT: Final[str] = "invalid_content"
 CONTENT_DIRECTORY_NAME: Final[str] = "content"
 PREVIEW_PREFIX: Final[str] = ".check-"
-MAX_DISCARD_DEPTH: Final[int] = 4
+MAX_DISCARD_DEPTH: Final[int] = 10
 
 
 class AuditError(ValueError):

@@ -6,8 +6,9 @@
 - **Jira:** FREES-144 (this ADR and the CI image), FREES-145 (backend), FREES-146 (STIG to ComplianceAsCode
   mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard),
   FREES-155 (Markdown in the publishing check, no SCC cache for pull requests from forks)
-- **Pull requests:** introduced by the pull request for FREES-144. Only the CI image, its make targets, the
-  `scc-smoke` job and the repository tests are implemented. The backend, the mapping and the exporter are not.
+- **Pull requests:** introduced by the pull request for FREES-144 (the CI image, its make targets, the `scc-smoke`
+  job and the repository tests). The pull request for FREES-145 adds the backend, the SCC integration and egress
+  tests and the amendment at the end of this ADR. The mapping and the exporter are not implemented.
 - **Related:** [ADR 0003](0003-native-module-remediation.md), [ADR 0004](0004-audited-process-execution.md),
   [ADR 0013](0013-normalized-findings-model.md), [ADR 0015](0015-content-acquisition-and-pinning.md),
   [ADR 0018](0018-evidence-bundle-provenance.md)
@@ -630,6 +631,133 @@ depends on the FREES-146 mapping for `oscap` results.
       `cscc --version` still exited 0. It could not confirm that the faked time reached SCC's expiry check, so
       `scc-smoke` alone would not notice.
     - `expignore` is documented only for pre-release versions and is not used.
+
+## Amendment 2026-10-26: the backend (FREES-145)
+
+`plugins/module_utils/compliance/scc.py` implements `backend: scc`. Everything below was observed with SCC 5.15 in
+the CI image on 2026-10-26 and is exercised again by `make scc-integration` in the `scc-smoke` job.
+
+### What SCC 5.15 does with a per-run options file
+
+| Invocation | Observed |
+|---|---|
+| `-o FILE -u DIR -dn` (the form decision 2 expected) | Every stream skipped: "SCAP content has been modified since last options file was saved", "No Applicable Content", exit 0. The same happens with `-dn` alone, with a byte-identical copy of the installed `options.xml`, with `-o /opt/scc/options.xml` and after a saving run |
+| `-o FILE -u DIR` with `FILE` or `DIR` in a directory owned by another user (a bind mount) | Spins at 100 % CPU after "Gathering system information" with no log, also with input on stdin; killed after 4 and 11 minutes |
+| `-cd DIR -u DIR` | Ignores the options in `DIR`, loads and rewrites the installed `options.xml` |
+| No `-o` (the default scan) | Scans, and rewrites the installed `options.xml` |
+| `-o FILE -u DIR -q -d`, `FILE` mode 0600 in a root-only directory | Scans the stream that `FILE` enables, honours its settings (no checklists, no HTML reports, ARF kept), leaves the installed `options.xml` byte-identical and rewrites `FILE` itself during the run |
+
+The last form is the one the backend uses. It is built from the documented combinable options of decision 2 and
+drops `-dn`, which disables scanning, so no `-isr` amendment is needed.
+
+- **Content.** SCC scans only streams in its own content database: an entry for a file outside
+  `Resources/Content` is never evaluated, and SCC rescans that directory and updates its database on every run.
+  The backend therefore never points SCC at the private copy. `content_path` names the pinned stream as SCC
+  installed it (a stream bundled with the pinned release, or one the operator installed with SCC's installer), the
+  audit verifies and copies it as for `oscap`, and the backend requires the installed file to have exactly the bytes
+  of the private copy before and after the scan. The private copy remains what is hashed and recorded. This
+  replaces "SCC reads a private copy in the run directory" in decision 3 and the "bundled content" alternative: a
+  bundled stream is used only when it is pinned by its SHA-256, so a new SCC release cannot change it unseen. The CI
+  integration test uses the Ubuntu 24.04 stream bundled with 5.15, pinned as `SCC_CONTENT_FILE` and
+  `SCC_CONTENT_SHA256` in `scc.pins`.
+- **Template.** The options schema of 5.15 requires every global setting in a fixed order. `OPTIONS_TEMPLATE` lists
+  all 185, with `downloadExternalFiles`, `appCheckForUpdates` and `contentCheckForUpdates` at `0`, SSH transfer, SCC
+  checklists and reports, the summary viewer, deviations and OVAL, OCIL and CPE result files off, the update URLs
+  empty, and XCCDF and ARF results and signature checks on. A content entry needs `stream`, `family`,
+  `benchmarkID`, `scapVersion`, `filepath`, `checksumSCAP12`, `version`, `xccdf`, the OVAL components and `enabled`;
+  without SCC's own `checksumSCAP12` it disables the stream as modified. `checksumSCAP12` is not the SHA-256 of the
+  file and its algorithm is not documented, so the backend copies these identifying fields from SCC's record of the
+  stream in the installed `options.xml`, parsed through `xmlsafe`, each checked against a strict pattern, and
+  enables that one stream with the requested profile. The full XCCDF profile identifier is accepted (open item 3).
+- **Zone.** SCC writes `start-time` and `end-time` in the local time zone of its process: with `TZ=FST+05` a scan
+  at 12:55 UTC recorded 07:55. The process policy fixes `TZ=UTC0` for `cscc`, and the results parser reads zone-less
+  times as UTC only when the caller asks for it (`assume_utc`, used only by this backend). Open item 4 is closed.
+- **Environment.** No variable beyond the fixed `PATH`, `LC_ALL`, `LANG` and `TZ` is needed; without `HOME` SCC
+  creates no `/root/SCC` (open item 5).
+
+### Process policy (amends decision 2)
+
+`process.py` gains a policy for `cscc` (ADR 0004 amendment of FREES-145): the fixed path `/opt/scc/cscc`, vetted
+before every run with every directory on the way to it; `--version` alone; exactly one scan form,
+`-o <path> -u <path> -q -d`, with absolute normalised paths; and `TZ=UTC0`. `/opt/scc` is not a trusted directory.
+`-d` is used because the debug log is the confirmation. Those logs, and SCC's rewritten options file, stay in the
+root-only `scan/scc` directory of the run and are not recorded as evidence.
+
+### Confirmation and the egress test (decision 2)
+
+For every run the backend reads SCC's application debug log and requires that SCC loaded the per-run file and no
+other (`options file =`, `Loading options from:`), checked it for a configuration profile and found none
+(`selectedConfigProfile:` empty, configuration profile `default`), and dumped it once with the three values at `0`.
+Otherwise the run is `failed` with every rule `error`. Unit tests cover a missing confirmation, another options
+file, each value at `1` and an enabled configuration profile.
+
+The egress test (`tests/system/scc/test_scc_egress.py`) follows the primary control of decision 2: an internal
+network whose only peer is a sink that answers every DNS name with its own address and logs every query, TCP
+connection and datagram it receives (a packet socket sees connections to any port). The scanned stream is the pinned
+DISA Ubuntu 24.04 benchmark with a remote `component-ref` and a remote `check-content-ref` added, built in CI and
+never committed. The installed `options.xml` keeps `downloadExternalFiles=1`, so only the per-run file can turn it
+off. Result on 2026-10-26:
+
+- `compliance_scan` with `backend: scc`: `completed`, no query for any probe host, no connection and no datagram.
+  SCC did send two DNS queries for `<hostname>.localdomain`, the target's own name, which it resolves to describe
+  the host whatever the download setting. The test names that one name, and the bare host name, explicitly as SCC's
+  own; every other query fails it.
+- Positive control, the same scan form and per-run options with `downloadExternalFiles=1`: a DNS query for the
+  remote component host and a TCP connection to port 80 on the sink. The backend's confirmation refuses that run's
+  log ("SCC's options dump shows downloadExternalFiles as '1'").
+
+The evidence that the backend reads therefore matches SCC's behaviour, and open item 11 is closed for 5.15. strace
+is not in the image and is not used; `--network none` is not used as evidence.
+
+### Completion (decision 4)
+
+A run is `completed` only when the backend created the output and user directories fresh for the run, the
+confirmation holds, the user directory holds exactly one application debug log, one session, one XCCDF and one ARF
+results file, the results parse through the hardened parser and name the requested benchmark and profile, carry
+`start-time` and `end-time` with `start-time` no earlier than the start of the run and no later than `end-time`,
+`cscc --version` reported the pinned release, the SHA-256 of `/opt/scc/cscc` is the pinned one, the release has not
+expired (2026-11-25 for 5.15, and SCC's own "Software expires in N days" must be positive), and the installed stream
+and the private copy did not change. A non-zero exit, a start failure or a timeout is `failed` or `timed_out`; exit 0
+is never evidence. The outcomes map through ADR 0013: `unknown` and any unlisted value become `error` with a message,
+`notchecked` stays `notchecked`, and the integration test asserts that the 194 findings of a real MAC-1 scan are
+only `pass`, `fail`, `notapplicable`, `notchecked` and `error`.
+
+The audit accepts datastream file names of up to 128 characters, because SCC's stream names are longer than 64; the
+OpenSCAP backend keeps its own 64-character label rule.
+
+### Residual state writes (decision 2, open item 2)
+
+The integration test hashes every file below `/opt/scc` and `/root` before and after a real and a check-mode scan.
+`options.xml`, the installed content, the binaries and `/root` are byte-identical. The only changes are:
+
+- `/opt/scc/Resources/Content/DB/SCC_SCAP12_Content.db`, `SCC_SCAP12_Content.db.archive` and `ocil.db` (SCC's
+  content database, rebuilt from the installed content on every run);
+- a new `/opt/scc/Local` directory and one `<host>_<timestamp>-<number>.db` session database in it.
+
+These are SCC's own bookkeeping, like the temporary files of `oscap`. This amendment proposes to accept them as the
+residual of an SCC audit; merging it is the lead architect's acceptance. The test fails on any other change, so the
+residual cannot grow unseen.
+
+### Test tooling
+
+`make scc-integration` (an SCC target that builds the image first, run in the `scc-smoke` job after `scc-smoke`)
+runs `tests/system/scc` against `SCC_IMAGE`. The image has no Python, so the tests mount the uv-managed interpreter
+that runs them, the project's site packages and the repository read-only, and run the real `compliance_scan` module
+file inside the container. The integration container has no network (the egress containers only the internal
+one), all capabilities dropped except `CHOWN`,
+`DAC_OVERRIDE` and `FOWNER` (SCC sets owners and modes of its own files) and `no-new-privileges`. Ruff S603 and S104
+are ignored for `tests/system/scc/*.py` only: the tests run Docker and the interpreter with argument
+lists, and the sink binds every address of its isolated network.
+The tests skip without `FREESECDEV_SCC_IMAGE` and fail instead in CI (`FREESECDEV_REQUIRE_SCC=1`).
+
+### Not yet done
+
+- Disabled rules (`--installTailoringProfile` or a tailoring entry) and the STIG to ComplianceAsCode mapping:
+  FREES-146. The backend refuses `disabled_rules`.
+- A digest of the rest of `/opt/scc` (open item 6); only `cscc` and the scanned stream are pinned.
+- The audit role still offers only `openscap`.
+- Pinned DISA benchmarks in the content manifest: the backend accepts any installed stream whose SHA-256 the caller
+  pins, and only the benchmark `xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG` for Ubuntu 24.04 hosts.
 
 ## References
 

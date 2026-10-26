@@ -71,6 +71,7 @@ ignore = ["D203", "D213", "TRY003"]
 "tests/unit/tools/test_name_sets.py" = ["S603"]
 "tests/unit/tools/test_scc_image.py" = ["S603"]
 "tests/unit/tools/test_scc_ci_filter.py" = ["S603"]
+"tests/system/scc/*.py" = ["S603", "S104"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

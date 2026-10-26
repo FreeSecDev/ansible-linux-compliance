@@ -463,6 +463,12 @@ def test_the_seam_owners_are_pinned() -> None:
         Path("plugins/module_utils/compliance/fileio.py"): {"owner_uid"},
         Path(LEDGER): {"state_dir", "owner_uid", "lock_timeout"},
         Path(OPENSCAP): {"runner", "clock", "limits"},
+        Path("plugins/module_utils/compliance/scc.py"): {
+            "runner",
+            "clock",
+            "limits",
+            "install_root",
+        },
     }
     for seams in rules.SEAM_OWNERS.values():
         assert seams <= rules.BANNED_KEYWORDS

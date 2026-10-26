@@ -22,9 +22,19 @@ description:
     only that copy, so a file swapped at O(content_path) after verification cannot change what is
     scanned. The copy is removed after the scan; its source path and SHA-256 are returned in
     RV(content).
-  - The only backend is C(openscap). It runs C(oscap xccdf eval) through the audited process helper
+  - The default backend C(openscap) runs C(oscap xccdf eval) through the audited process helper
     of the collection, with an argument list, no shell, a minimal environment, a timeout and
     validated arguments. It never remediates and never fetches remote resources.
+  - The backend C(scc) runs the SCAP Compliance Checker 5.15 that the operator installed from DISA
+    under C(/opt/scc), through the same helper, from that one fixed path (ADR 0019). The collection
+    never downloads, installs or updates SCC. O(content_path) must be the pinned stream as SCC
+    installed it below C(/opt/scc/Resources/Content/SCAP12_Content); the scanned bytes must equal
+    the verified private copy before and after the scan. Each scan gets a per-run options file with
+    external downloads and update checks off, and completes only when SCC's own debug log confirms
+    that it used that file and those values, and when exactly one fresh results file of this run
+    matches the request. SCC's exit status is never taken as evidence of completion. The C(scc)
+    backend scans only Ubuntu 24.04 hosts with the pinned DISA benchmark, refuses other releases
+    such as Ubuntu 26.04, and does not support O(disabled_rules) yet.
   - The module never changes the configuration of the host and always returns C(changed=false).
     Outside check mode it writes evidence files below O(output_dir), which is reported separately in
     RV(evidence_written) and RV(evidence) and is not a change to the host.
@@ -44,6 +54,7 @@ options:
     default: openscap
     choices:
       - openscap
+      - scc
   content_path:
     description:
       - Absolute path of the datastream file, or of a directory that holds exactly one C(*-ds.xml)
@@ -58,7 +69,8 @@ options:
         writable by group or others. Otherwise the module fails with C(unsafe_content_dir) before
         anything is created, because another user could replace the file, for example with a FIFO
         that blocks the audit. The private copy is made from the resolved path.
-      - The file name must match C([A-Za-z0-9._+-]{1,64}), because it labels the provenance.
+      - The file name must match C([A-Za-z0-9._+-]{1,128}), because it labels the provenance. The
+        C(openscap) backend accepts at most 64 characters.
     type: str
     required: true
   expected_sha256:
@@ -181,6 +193,12 @@ notes:
     have mode C(0700), files C(0600).
   - Exit status 2 of C(oscap) means that rules failed; it is a completed scan. Any other non-zero
     status, a signal or a timeout is a scanner failure.
+  - With the C(scc) backend, C(<output_dir>/<run_id>/scan/results.xml) and C(results-arf.xml) are
+    copies of SCC's XCCDF and ARF results, and SCC's own tree with its debug logs stays in the
+    root-only C(scan/scc) directory, which is listed as skipped and not recorded as evidence. SCC
+    itself updates its content databases below C(/opt/scc/Resources/Content/DB) and adds one
+    session database to C(/opt/scc/Local) per scan; its configuration, content and binaries stay
+    unchanged.
   - A scan result is evidence about one host, not a certification and not a claim of compliance
     with any framework.
 seealso:
@@ -411,7 +429,11 @@ SCAN_INCOMPLETE = "scan_incomplete"
 def argument_spec() -> dict[str, object]:
     """Return the argument specification of the module."""
     return {
-        "backend": {"type": "str", "default": audit.DEFAULT_BACKEND, "choices": ["openscap"]},
+        "backend": {
+            "type": "str",
+            "default": audit.DEFAULT_BACKEND,
+            "choices": ["openscap", "scc"],
+        },
         "content_path": {"type": "str", "required": True},
         "expected_sha256": {"type": "str", "required": True},
         "profile_id": {"type": "str", "required": True},

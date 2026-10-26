@@ -12,6 +12,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     openscap,
     process,
     scanner,
+    scc,
 )
 
 BENCHMARK = "xccdf_org.example.synthetic_benchmark_demo"
@@ -225,11 +226,12 @@ class TestRegistry:
 class TestDefaultRegistry:
     """The composition root."""
 
-    def test_holds_the_openscap_backend(self) -> None:
+    def test_holds_the_openscap_and_scc_backends(self) -> None:
         registry = backends.default_registry()
-        assert registry.names() == ("openscap",)
+        assert registry.names() == ("openscap", "scc")
         backend = registry.create("openscap", scanner.ScanSettings("/a", "/b"))
         assert isinstance(backend, openscap.OpenScapBackend)
+        assert isinstance(registry.create("scc", scanner.ScanSettings("/a", "/b")), scc.SccBackend)
 
     def test_each_call_returns_a_new_registry(self) -> None:
         assert backends.default_registry() is not backends.default_registry()

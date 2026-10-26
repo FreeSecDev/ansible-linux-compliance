@@ -629,3 +629,35 @@ checked file is a superset of the first.
   the interpreter and SSH argument variables, pinning of `galaxy.yml` dependencies and `requirements.yml`, and
   configuration settings that run code without adding a search path (`jinja2_extensions`, `vault_password_file`,
   `become_exe`, `ssh_executable`, `ssh_args`, `interpreter_python`).
+
+## Amendment 2026-10-26: the SCC command line (FREES-145)
+
+The SCC backend of [ADR 0019](0019-scc-scanner-backend-and-ci-image.md) is the second caller of the helper. It runs
+an executable that is not in a trusted directory, so the policy model gains three fields. Every existing policy
+leaves them empty and behaves as before.
+
+- `ExecutablePolicy.fixed_path`: the one absolute path of the executable. `run` vets it before every run with
+  `vet_fixed_executable`: every directory from `/` to the one that holds the file must be a real directory (not a
+  symlink), owned by root and not writable by group or others; an ancestor above the holding directory may be
+  writable only with the sticky bit, as for the ancestors of an audit output root, and the holding directory never.
+  The file must be a regular, executable file that is not a symlink, owned by root and not writable by group or
+  others. The trusted directories are not searched and `/opt/scc` is not added to them, so a `cscc` elsewhere is
+  never run.
+- `ExecutablePolicy.argument_forms`: exact complete argument lists, token for token, where `<path>` stands for one
+  absolute, normalised path. When a policy has forms, command prefixes and options are not consulted. The forbidden
+  words and sequences are still checked first.
+- `ExecutablePolicy.environment`: fixed values added to the child environment, limited to `TZ` and `HOME` and to a
+  plain value alphabet, checked when the policy is bound and again in `run`.
+
+The shipped `cscc` policy is the fixed path `/opt/scc/cscc`, `--version` alone, the one scan form
+`-o <path> -u <path> -q -d` and `TZ=UTC0`. Every other SCC option, including the remote, update, install,
+`--getOpt`, `-dn` and `-isr` forms, is refused; unit tests in
+`tests/unit/plugins/module_utils/compliance/test_process_fixed.py` cover them.
+
+Repository guard: `install_root` (the SCC installation of the backend, `/opt/scc` in production) joins
+`BANNED_KEYWORDS`, and `scc.py` owns the seams `runner`, `clock`, `limits` and `install_root` in `SEAM_OWNERS`. The
+results parser of `openscap.py` gains the production keyword `assume_utc` and the helper the internal keyword
+`holds_executable`; both are classified in `tests/unit/tools/test_check_repo_rules_followups.py`. The SCC
+publishing guard of ADR 0019 allows the SCC identifiers in exactly two plugin files, `scc.py` and `process.py`
+(`ALLOWED_FILES` in `tests/unit/tools/test_scc_image.py`), which are still checked for publishing commands; any
+other plugin file that names them fails.

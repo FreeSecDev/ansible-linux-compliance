@@ -48,7 +48,10 @@ PR_18_KEYWORDS = frozenset(
     }
 )
 FREES_53_KEYWORDS = frozenset({"disruptive", "reason", "recorded", "wanted"})
-PRODUCTION_KEYWORDS = MERGED_PRODUCTION_KEYWORDS | PR_18_KEYWORDS | FREES_53_KEYWORDS
+FREES_145_KEYWORDS = frozenset({"assume_utc", "holds_executable"})
+PRODUCTION_KEYWORDS = (
+    MERGED_PRODUCTION_KEYWORDS | PR_18_KEYWORDS | FREES_53_KEYWORDS | FREES_145_KEYWORDS
+)
 
 
 def process_messages(
@@ -182,6 +185,7 @@ def test_the_banned_keywords_are_pinned() -> None:
         "clock",
         "limits",
         "registry",
+        "install_root",
     }
 
 
