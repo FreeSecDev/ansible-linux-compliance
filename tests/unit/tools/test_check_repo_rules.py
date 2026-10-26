@@ -1078,16 +1078,42 @@ def test_no_module_exceeds_the_module_line_limit() -> None:
     assert long_modules == {}
 
 
+GUARD_MODULE_LIMIT = 600
+
+
+def guard_module_sizes(package: Path) -> dict[str, int]:
+    return {
+        path.relative_to(package).as_posix(): len(path.read_text(encoding="utf-8").splitlines())
+        for path in package.rglob("*.py")
+    }
+
+
+def oversized_guard_modules(package: Path) -> dict[str, int]:
+    return {
+        name: lines
+        for name, lines in guard_module_sizes(package).items()
+        if lines >= GUARD_MODULE_LIMIT
+    }
+
+
 def test_the_repository_guard_is_a_package_of_small_modules() -> None:
     package = rules.REPO_ROOT / "tools" / "lint" / "repo_rules"
-    sizes = {
-        path.name: len(path.read_text(encoding="utf-8").splitlines())
-        for path in package.glob("*.py")
-    }
+    sizes = guard_module_sizes(package)
     assert set(sizes) >= {"__init__.py", "names.py", "isolation.py", "repository.py"}
-    assert all(lines < 600 for lines in sizes.values())
+    assert oversized_guard_modules(package) == {}
     entry = rules.REPO_ROOT / "tools" / "lint" / "check_repo_rules.py"
-    assert len(entry.read_text(encoding="utf-8").splitlines()) < 600
+    assert len(entry.read_text(encoding="utf-8").splitlines()) < GUARD_MODULE_LIMIT
+
+
+def test_the_guard_module_limit_covers_modules_in_subpackages(tmp_path: Path) -> None:
+    package = tmp_path / "repo_rules"
+    subpackage = package / "rule_group"
+    subpackage.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "small.py").write_text("VALUE = 1\n" * (GUARD_MODULE_LIMIT - 1), encoding="utf-8")
+    (subpackage / "__init__.py").write_text("", encoding="utf-8")
+    (subpackage / "large.py").write_text("VALUE = 1\n" * 601, encoding="utf-8")
+    assert oversized_guard_modules(package) == {"rule_group/large.py": 601}
 
 
 def test_make_lint_runs_pylint_in_two_passes() -> None:
