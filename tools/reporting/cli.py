@@ -19,6 +19,11 @@ benchmark version and profile are refused with status 2 unless
 without a bundle in the report is a missing input (status 1), a bundle that the summary
 does not list is an invalid input (status 1), and a summary that cannot be read, or one
 supplied with scan inputs that are not evidence bundles, is refused with status 2.
+
+``--require-host-coverage`` (FREES-154) turns a host coverage other than ``complete`` into
+status 1: ``incomplete`` already gives status 1, and ``unknown`` (no
+``--evidence-collection``) does too with the option. The report is still written, and the
+reason is printed on standard error. Status 3 still takes precedence.
 """
 
 import argparse
@@ -29,8 +34,9 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
-from tools.reporting.common import DEFAULT_MAX_BYTES, Json, dumps
+from tools.reporting.common import DEFAULT_MAX_BYTES, Json, dig, dumps
 from tools.reporting.dashboard import DashboardError, render_dashboard
+from tools.reporting.host_coverage import COMPLETE
 from tools.reporting.report import (
     ReportError,
     ReportInputs,
@@ -98,6 +104,13 @@ def build_parser() -> argparse.ArgumentParser:
         "summary does not list",
     )
     parser.add_argument(
+        "--require-host-coverage",
+        action="store_true",
+        help="exit with status 1 unless the report accounts for every target host, that is "
+        "unless sections.compliance.host_coverage.status is complete; without "
+        "--evidence-collection the coverage is unknown, so this also requires the summary",
+    )
+    parser.add_argument(
         "--allow-repeated-scans",
         action="store_true",
         help="merge several completed scan runs of one host, benchmark version and profile "
@@ -131,6 +144,18 @@ def write_atomic(path: Path, content: str) -> None:
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
+
+
+def coverage_shortfall(report: dict[str, Json]) -> str | None:
+    """Return why the host coverage of ``report`` is not ``complete``, or ``None`` if it is."""
+    status = dig(report, "sections", "compliance", "host_coverage", "status")
+    if status == COMPLETE:
+        return None
+    reason = dig(report, "sections", "compliance", "host_coverage", "reason")
+    return (
+        f"--require-host-coverage: the host coverage is {status}, not {COMPLETE}: {reason}; "
+        "the report was written, but it does not account for every target host"
+    )
 
 
 def _render(report: dict[str, Json], html: Path) -> str | None:
@@ -189,6 +214,10 @@ def main(argv: Sequence[str]) -> int:
         outputs.append((html, dashboard, "dashboard"))
     if not _write(outputs):
         return EXIT_USAGE
+    shortfall = coverage_shortfall(report) if arguments["require_host_coverage"] else None
+    if shortfall is not None:
+        print(f"error: {shortfall}", file=sys.stderr)
     if html is not None and dashboard is None:
         return EXIT_DASHBOARD_SKIPPED
-    return EXIT_SECTION_ERROR if has_error(report) or has_gap(report) else EXIT_OK
+    incomplete = has_error(report) or has_gap(report) or shortfall is not None
+    return EXIT_SECTION_ERROR if incomplete else EXIT_OK

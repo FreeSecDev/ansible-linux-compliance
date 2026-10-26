@@ -10,6 +10,9 @@ record is [ADR 0016](adr/0016-report-schema-and-summary-semantics.md); the findi
 
 ```bash
 make report REPORT_SCOPE=single_host REPORT_ARGS='--scan-run run.json --junit junit.xml'
+make report REPORT_SCOPE=fleet REPORT_ARGS='--require-host-coverage --exceptions-file exceptions.yml \
+  --evidence-collection evidence/collection-20261026T080002.123456Z.json \
+  --evidence-bundle evidence/web01/20261026T080000.000000Z --evidence-bundle evidence/db01/20261026T080001.000000Z'
 python -m tools.reporting --scope fleet --output build/report/report.json --html build/report/report.html \
   --xccdf results.xml
 ```
@@ -33,13 +36,15 @@ and `REPORT_HTML` override them). `--scope` and `--output` are required; `--html
 | `--exceptions-evaluation` | Exceptions evaluation JSON written by the `apply_exceptions` filter, one per scan run ([exceptions](exceptions.md#reporting)); requires `--exceptions-file` |
 | `--exceptions-file` | The reviewed exceptions file the evaluations were made from (one file, not repeatable); required with `--exceptions-evaluation` and with evidence bundles whose exceptions were applied |
 | `--evidence-bundle` | An evidence bundle directory written by the `evidence` role ([evidence bundles](evidence.md#in-the-report)); verified, then read as its evaluation or, without exceptions, its raw scan run |
-| `--evidence-collection` | The collection summary that `playbooks/evidence.yml` wrote next to the bundles ([collection summary](evidence.md#the-collection-summary)); one file, not repeatable. The report then accounts for every target host of the run ([host coverage](#host-coverage)) |
+| `--evidence-collection` | The collection summary that `playbooks/evidence.yml` wrote next to the bundles ([collection summary](evidence.md#the-collection-summary)); one file, not repeatable. The report then accounts for every target host of the run ([host coverage](#host-coverage)). At most 1000 target hosts; split a larger fleet ([evidence bundles](evidence.md#fleets-of-more-than-1000-hosts)) |
 
 Metadata options are `--commit`, `--pull-request`, `--workflow-run`, `--started-at`, `--finished-at` and
 `--generated-at`. They are validated and written as given; timestamps use `YYYY-MM-DDTHH:MM:SSZ`. Nothing is read
 from the clock, so a value that is not supplied is `null`. `--max-bytes` changes the size limit (default 64 MiB).
 `--allow-repeated-scans` merges several completed scan runs of one host, benchmark, content version and profile
-instead of refusing them (see [Repeated scan runs](#repeated-scan-runs)).
+instead of refusing them (see [Repeated scan runs](#repeated-scan-runs)). `--require-host-coverage` makes the
+command exit with status 1 unless `sections.compliance.host_coverage.status` is `complete` (see
+[host coverage](#host-coverage)); use it for every fleet report built from evidence bundles.
 
 Exit status:
 
@@ -47,7 +52,10 @@ Exit status:
   not an error, and it is never shown as passed.
 - 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`). With
   `--evidence-collection`, a target host without a bundle in the report is a missing input, and a bundle that the
-  summary does not list is an invalid one, so both give status 1.
+  summary does not list is an invalid one, so both give status 1. With `--require-host-coverage`, a host coverage
+  that is not `complete` also gives status 1: `incomplete` (which already does) and `unknown` (no
+  `--evidence-collection`), with `error: --require-host-coverage: the host coverage is <status>, not complete:
+  <reason>` on standard error. The report and the dashboard are still written.
 - 2: invalid arguments or metadata, `--html` naming the same file as `--output`, a scope that the data contradicts
   (below), repeated scan runs without `--allow-repeated-scans`, `--exceptions-evaluation` or an evidence bundle with
   applied exceptions without `--exceptions-file`, `--exceptions-file` without any evaluation, an evidence bundle whose
@@ -57,7 +65,8 @@ Exit status:
   or an output that cannot be written. No report is written in these cases.
 - 3: the JSON report was written, but the dashboard was not, because the report is above the dashboard size cap
   (128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)). A dashboard left at that path by an earlier
-  run is removed. Status 3 takes precedence over 1; the sections of the JSON still show any missing or invalid input.
+  run is removed. Status 3 takes precedence over 1; the sections of the JSON still show any missing or invalid input,
+  and `--require-host-coverage` still prints its message.
 
 Both files are written atomically (a temporary file in the target directory, synced, then renamed over the target),
 so a crash or a full disk never leaves a truncated file. They are created with mode 0600, because a report can hold
@@ -247,6 +256,11 @@ Rules:
 - Without `--evidence-collection` nothing else changes: the report is written as before, exits with status 0 when
   every input parsed, and labels its coverage `unknown`. A bundle report is not refused without a summary (the
   FREES-142 decision), because the label states the gap without blocking existing pipelines.
+- `--require-host-coverage` (FREES-154) is the gate for pipelines: with it the command exits with status 1 unless the
+  coverage is `complete`, so `unknown` fails as `incomplete` already does, and the reason is printed on standard
+  error. The report and the dashboard are still written, and status 3 (dashboard not written) still takes
+  precedence. It is opt-in; [ADR 0016](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-require-host-coverage-frees-154)
+  records why it is not the default yet.
 
 ## Exceptions section
 
