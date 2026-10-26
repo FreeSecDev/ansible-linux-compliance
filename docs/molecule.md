@@ -128,9 +128,9 @@ devices, device requests or device cgroup rules. It must share no host or contai
 or cgroup namespace. Its `SecurityOpt` must be exactly `no-new-privileges` (or `no-new-privileges:true`): any
 `seccomp=`, `apparmor=`, `label=` or `systempaths=` entry is refused, which covers a custom allow-all seccomp profile.
 Its `MaskedPaths` and `ReadonlyPaths` must contain every path that `molecule_docker_default_paths` in
-`shared/vars/versions.yml` pins for the major version of the Docker daemon (Docker 29 today: `/proc/kcore`,
-`/proc/keys`, `/sys/firmware` and the others masked, `/proc/sys`, `/proc/sysrq-trigger`, `/proc/bus`, `/proc/fs` and
-`/proc/irq` read-only). `--security-opt systempaths=unconfined` does not show up in `SecurityOpt`; it empties those two
+`shared/vars/versions.yml` pins for the major version of the Docker daemon. Docker 28 (28.0.4 on the GitHub
+runners) and Docker 29 (29.5.3 locally) are pinned with the same lists: `/proc/kcore`, `/proc/keys`, `/sys/firmware`
+and the others masked, and `/proc/sys`, `/proc/sysrq-trigger`, `/proc/bus`, `/proc/fs` and `/proc/irq` read-only. `--security-opt systempaths=unconfined` does not show up in `SecurityOpt`; it empties those two
 lists, which leaves `/proc/sysrq-trigger` and `/proc/sys/kernel/core_pattern` writable for root, so this check is
 what refuses it. A daemon whose major version has no pin is refused, so a Docker upgrade is noticed, and the self-test
 asserts that a default container gets exactly the pinned lists, which catches changed defaults within a major
