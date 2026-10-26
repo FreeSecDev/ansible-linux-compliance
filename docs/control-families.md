@@ -17,7 +17,15 @@ The catalogue holds every rule that at least one pinned profile selects. Each ha
 toggle, and each family a topic toggle
 ([remediation variable reference](remediation-variables.md)), so
 `linux_compliance_auditd_enabled: false` removes every auditd rule of the profile from the
-audit and from remediation. A rule without a native remediation has the strategy
+audit and from remediation. Each family is one subsystem, such as `sssd`, `time_sync`,
+`pwquality` or `firewalld`. Families that belong together are grouped by an umbrella
+toggle: `linux_compliance_services_enabled: false` switches off every family whose
+umbrella is `services`, whatever their own topic toggles say. An umbrella is either a name
+of its own, such as `services`, or a family that heads it, such as `pam` for `pwquality`,
+`pwhistory` and `faillock`. Every umbrella keeps the name of the family it was split from,
+so it switches off exactly the rules that family held before the split
+([ADR 0011](adr/0011-control-toggles-and-cleanup.md), amendment of the FREES-53 topic
+split). A rule without a native remediation has the strategy
 `audit_only`: the audit scans it, or excludes it and reports it as `disabled` when it is
 switched off, and remediation reports it as `not_implemented` and never changes anything
 for it ([remediation guide](remediation.md#effective-state-of-a-rule)).
@@ -30,8 +38,9 @@ family:
 
 1. **Topic groups**: a group that contains the rule at any depth. Every rule below it
    belongs to the family, whatever its identifier, so the `auditing` group takes the audit
-   log permissions and the `audit=1` boot argument to `auditd`. A rule below two topic
-   groups fails the generator.
+   log permissions and the `audit=1` boot argument to `auditd`. A rule below several topic
+   groups belongs to the innermost one when all of their families share an umbrella, so
+   `journald` refines `logging`; otherwise it fails the generator.
 2. **Rule prefixes**: the start of the short rule identifier, for rules whose mechanism
    defines the topic, such as `file_permissions_`, `sysctl_`, `kernel_module_`,
    `mount_option_` and `grub2_`. No prefix may be the start of another, so at most one
@@ -48,32 +57,88 @@ profile.
 The order is the dispatch order of the remediate role: non-disruptive families first, then
 the families in order of growing lock-out risk, with the boot loader last. Remediation
 applies and cleans up the rules of a disruptive family only when
-`linux_compliance_remediate_allow_disruptive` names it.
+`linux_compliance_remediate_allow_disruptive` names it or its umbrella. The why column
+justifies the disruptive flag of each family. A family split from another keeps the flag of
+the family it came from, so the split changes nothing that the allow-list gates.
 
-| Order | Family | Topic | Disruptive | Why | Catalogued rules | Native | `audit_only` |
-|---|---|---|---|---|---|---|---|
-| 1 | `file_permissions` | File permissions and ownership | no | Tightens modes and owners of system files; no service is restarted | 155 | 1 | 154 |
-| 2 | `sysctl` | Kernel parameters | no | Kernel hardening parameters that do not change routing or forwarding (those belong to network) | 31 | 0 | 31 |
-| 3 | `logging` | System logging (journald, rsyslog, logrotate) | no | Changes where and how logs are kept; no session or workload is stopped | 41 | 0 | 41 |
-| 4 | `banners` | Login banners | no | Changes the text of login banners and messages of the day | 18 | 0 | 18 |
-| 5 | `integrity` | Software integrity (AIDE, package verification, endpoint security) | no | Installs and schedules integrity checking; no session or workload is stopped | 21 | 0 | 21 |
-| 6 | `kernel_build_config` | Kernel build configuration | no | Checks the configuration the running kernel was built with; there is nothing to remediate on the host | 67 | 0 | 67 |
-| 7 | `auditd` | Audit daemon and audit rules | yes | Audit settings can halt the host or drop it to single-user mode when the audit log fills, and immutable rules need a reboot to change | 206 | 0 | 206 |
-| 8 | `services` | Services and service packages | yes | Disabling, masking or removing services can stop workloads the host exists for | 119 | 0 | 119 |
-| 9 | `packages` | Packages and updates | yes | Installing updates or changing repositories and package verification can restart or break software | 24 | 0 | 24 |
-| 10 | `desktop` | Graphical desktop (GNOME and the display manager) | yes | Removing the display manager or forcing screen locks ends graphical sessions | 21 | 0 | 21 |
-| 11 | `network` | Network parameters and network services | yes | Forwarding, redirects and IPv6 settings can cut routers, container hosts and VPN gateways off | 66 | 0 | 66 |
-| 12 | `kernel_modules` | Kernel modules | yes | Blacklisting modules such as overlay, squashfs, usb-storage or bluetooth breaks container runtimes, snaps and devices that depend on them | 21 | 0 | 21 |
-| 13 | `firewall` | Host firewall (firewalld, nftables, iptables, ufw) | yes | A default-deny policy can cut every remote session | 42 | 0 | 42 |
-| 14 | `ssh` | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 0 | 63 |
-| 15 | `pam` | PAM, password quality and lock-out | yes | Lock-out, password quality and module order can lock out every user, including root | 55 | 0 | 55 |
-| 16 | `accounts` | Accounts, password ageing, root access and sessions | yes | Password ageing, account expiry, root login restrictions and session time-outs can lock out operators or end their sessions | 88 | 0 | 88 |
-| 17 | `sudo` | sudo | yes | Can remove administrative access | 22 | 0 | 22 |
-| 18 | `mandatory_access_control` | Mandatory access control (SELinux, AppArmor) | yes | Enforcing SELinux or AppArmor policies can stop services and needs a relabel or reboot | 33 | 0 | 33 |
-| 19 | `crypto_policy` | Cryptographic policy and FIPS mode | yes | Can break TLS and SSH with older peers | 17 | 0 | 17 |
-| 20 | `mounts` | File systems, partitions and mount options | yes | Mount options can break running software; partitioning is irreversible | 48 | 0 | 48 |
-| 21 | `bootloader` | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  | 1203 | 1 | 1202 |
+| Order | Family | Umbrella | Topic | Disruptive | Why | Catalogued rules | Native | `audit_only` |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `file_permissions` | none | File permissions and ownership | no | Tightens modes and owners of system files; no service is restarted | 155 | 1 | 154 |
+| 2 | `sysctl` | none | Kernel parameters | no | Kernel hardening parameters that do not change routing or forwarding (those belong to the network umbrella) | 31 | 0 | 31 |
+| 3 | `journald` | `logging` | systemd-journald, its storage, forwarding and remote upload | no | Changes where and how the journal is kept and forwarded; no session or workload is stopped | 19 | 0 | 19 |
+| 4 | `rsyslog` | `logging` | rsyslog, its log files and remote logging, and the logging services in general | no | Changes where and how rsyslog writes and sends logs; no session or workload is stopped | 19 | 0 | 19 |
+| 5 | `logrotate` | `logging` | logrotate | no | Installs and schedules log rotation; no session or workload is stopped | 3 | 0 | 3 |
+| 6 | `banners` | none | Login banners | no | Changes the text of login banners and messages of the day | 18 | 0 | 18 |
+| 7 | `aide` | `integrity` | AIDE file integrity checking and the audit tool checks it covers | no | Installs AIDE, builds its database and schedules checks; no session or workload is stopped | 13 | 0 | 13 |
+| 8 | `software_integrity` | `integrity` | Package verification, prelink and a vendor-supported operating system | no | Verifies installed packages and removes prelink; no session or workload is stopped | 5 | 0 | 5 |
+| 9 | `endpoint_security` | `integrity` | Endpoint security software (antivirus, host intrusion detection) | no | Checks that endpoint security software is installed; no session or workload is stopped | 3 | 0 | 3 |
+| 10 | `kernel_build_config` | none | Kernel build configuration | no | Checks the configuration the running kernel was built with; there is nothing to remediate on the host | 67 | 0 | 67 |
+| 11 | `auditd` | none | Audit daemon and audit rules | yes | Audit settings can halt the host or drop it to single-user mode when the audit log fills, and immutable rules need a reboot to change | 206 | 0 | 206 |
+| 12 | `sssd` | `services` | SSSD, its LDAP and smart card authentication and cached credentials | yes | SSSD authenticates directory users; a wrong certificate, TLS or PAM service setting locks out every directory user, including administrators | 12 | 0 | 12 |
+| 13 | `time_sync` | `services` | Time synchronisation (chrony, ntpd, systemd-timesyncd) | yes | Switching the time service or its servers can leave the clock unsynchronised, which breaks Kerberos, TLS certificate checks and log correlation | 19 | 0 | 19 |
+| 14 | `mail` | `services` | Mail transfer agents (postfix, sendmail) and the mail client | yes | Removing an MTA or closing its network listener stops mail delivery that applications rely on | 8 | 0 | 8 |
+| 15 | `cron` | `services` | cron and at, and who may use them | yes | Restricting cron and at to allow-listed users stops the scheduled jobs of every other user | 7 | 0 | 7 |
+| 16 | `nfs` | `services` | NFS client and server and rpcbind | yes | Removing NFS or rpcbind, or changing exports, cuts off network file systems that workloads use | 6 | 0 | 6 |
+| 17 | `usbguard` | `services` | USBGuard device authorisation | yes | An enforced USB policy can block keyboards, smart card readers and storage that the host needs | 5 | 0 | 5 |
+| 18 | `fapolicyd` | `services` | fapolicyd application allow-listing | yes | A default-deny execution policy stops every program that the policy does not list | 3 | 0 | 3 |
+| 19 | `network_services` | `services` | Network and other services (telnet, tftp, rsh, NIS, FTP, HTTP, DNS, DHCP, Samba, SNMP, LDAP, IMAP, proxy, printing, Avahi, X11, kdump, apport) | yes | Disabling, masking or removing services can stop workloads the host exists for | 59 | 0 | 59 |
+| 20 | `package_updates` | `packages` | Package updates and automatic updates | yes | Installing updates can restart or break software | 6 | 0 | 6 |
+| 21 | `package_sources` | `packages` | Package repositories and signature checking (gpgcheck, EPEL, apt authentication) | yes | Disabling repositories or enforcing signatures stops installs from sources that the host relies on | 6 | 0 | 6 |
+| 22 | `system_packages` | `packages` | Required and unwanted system packages | yes | Installing or removing system packages such as tuned or gssproxy can change or break running software | 12 | 0 | 12 |
+| 23 | `desktop` | none | Graphical desktop (GNOME and the display manager) | yes | Removing the display manager or forcing screen locks ends graphical sessions | 21 | 0 | 21 |
+| 24 | `ipv4_parameters` | `network` | IPv4 kernel network parameters | yes | Forwarding, redirects and source routing settings can cut routers, container hosts and VPN gateways off | 26 | 0 | 26 |
+| 25 | `ipv6_parameters` | `network` | IPv6 kernel network parameters | yes | Router advertisement, autoconfiguration and forwarding settings can cut IPv6 hosts and routers off | 19 | 0 | 19 |
+| 26 | `ipsec` | `network` | IPsec (Libreswan) | yes | Changing IPsec configuration or approved tunnels can drop VPN connections | 11 | 0 | 11 |
+| 27 | `wireless` | `network` | Wireless interfaces and Bluetooth | yes | Disabling wireless interfaces or Bluetooth cuts hosts that are connected through them off | 3 | 0 | 3 |
+| 28 | `network_settings` | `network` | Network configuration (name resolution, NetworkManager, promiscuous mode, certificates) | yes | Name resolution, NetworkManager and certificate settings can cut the host off from its services | 7 | 0 | 7 |
+| 29 | `filesystem_modules` | `kernel_modules` | File system and USB storage kernel modules | yes | Blacklisting overlay, squashfs, udf or usb-storage breaks container runtimes, snaps, optical media and USB storage that depend on them | 9 | 0 | 9 |
+| 30 | `protocol_modules` | `kernel_modules` | Uncommon network protocol kernel modules (ATM, CAN, DCCP, FireWire, RDS, SCTP, TIPC) | yes | Blacklisting SCTP, CAN or RDS breaks telecom, automotive and cluster software that uses them | 7 | 0 | 7 |
+| 31 | `wireless_modules` | `kernel_modules` | Wireless and Bluetooth kernel modules | yes | Blacklisting wireless or Bluetooth modules disconnects hosts and devices that use them | 5 | 0 | 5 |
+| 32 | `firewalld` | `firewall` | firewalld | yes | A default-deny zone or removed services can cut every remote session | 10 | 0 | 10 |
+| 33 | `nftables` | `firewall` | nftables | yes | A default-deny base chain can cut every remote session | 11 | 0 | 11 |
+| 34 | `iptables` | `firewall` | iptables and ip6tables | yes | A default-drop policy can cut every remote session | 12 | 0 | 12 |
+| 35 | `ufw` | `firewall` | Uncomplicated Firewall (ufw) | yes | A default-deny policy can cut every remote session | 9 | 0 | 9 |
+| 36 | `ssh` | none | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 0 | 63 |
+| 37 | `pam` | none | PAM stack, pam_unix, password hashing and the PAM packages | yes | The module stack and the password hashing settings can lock out every user, including root | 15 | 0 | 15 |
+| 38 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 0 | 19 |
+| 39 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 0 | 7 |
+| 40 | `faillock` | `pam` | Account lock-out after failed logins (pam_faillock, pam_faildelay) | yes | Lock-out after failed logins can lock out every user, including root | 14 | 0 | 14 |
+| 41 | `password_aging` | `accounts` | Password ageing (login.defs and existing accounts) | yes | Maximum password ages and inactivity settings can expire the passwords of operators and service accounts | 9 | 0 | 9 |
+| 42 | `root_access` | `accounts` | Root logins, su, UID 0 accounts and the root PATH | yes | Restricting root logins, su and system account shells can lock out administrators and break services | 19 | 0 | 19 |
+| 43 | `umask` | `accounts` | Default umask of users and shells | yes | A stricter umask changes the modes of files that applications and users create and can break sharing | 6 | 0 | 6 |
+| 44 | `user_sessions` | `accounts` | Login sessions, shell time-outs, home directories and polyinstantiation | yes | Session time-outs and limits end sessions, and polyinstantiated directories change what processes see | 14 | 0 | 14 |
+| 45 | `smartcard` | `accounts` | Smart card login (pcscd, OpenSC, PAM smart card authentication) | yes | Requiring smart card authentication locks out every user without a working card and reader | 9 | 0 | 9 |
+| 46 | `console_access` | `accounts` | Physical console access (Ctrl-Alt-Del, single-user and emergency mode, console locking) | yes | Requiring authentication for single-user and emergency mode can leave a broken host unrecoverable | 7 | 0 | 7 |
+| 47 | `user_accounts` | `accounts` | User and group accounts (unique identifiers, expiry, password storage, authselect) | yes | Expiring accounts, locking accounts without passwords and switching to authselect can lock out operators | 24 | 0 | 24 |
+| 48 | `sudo` | none | sudo | yes | Can remove administrative access | 22 | 0 | 22 |
+| 49 | `selinux` | `mandatory_access_control` | SELinux | yes | Enforcing SELinux or changing its policy can stop services and needs a relabel or reboot | 27 | 0 | 27 |
+| 50 | `apparmor` | `mandatory_access_control` | AppArmor | yes | Enforcing AppArmor profiles can stop services that the profiles do not allow | 6 | 0 | 6 |
+| 51 | `crypto_policy` | none | Cryptographic policy and FIPS mode | yes | Can break TLS and SSH with older peers; FIPS mode needs a reboot | 17 | 0 | 17 |
+| 52 | `autofs` | `mounts` | autofs automounter | yes | Removing autofs stops the on-demand mounts, such as home directories, that users rely on | 2 | 0 | 2 |
+| 53 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
+| 54 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
+| 55 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
+|  | All |  |  |  |  | 1203 | 1 | 1202 |
+
+## Umbrellas
+
+An umbrella toggle that is `false` switches off every family it groups; a family
+toggle can only narrow it. A rule toggle that is set wins over both. An allow-list
+entry that names an umbrella allows every disruptive family it groups.
+
+| Umbrella toggle | Families | Catalogued rules |
+|---|---|---|
+| `linux_compliance_logging_enabled` | `journald`, `rsyslog`, `logrotate` | 41 |
+| `linux_compliance_integrity_enabled` | `aide`, `software_integrity`, `endpoint_security` | 21 |
+| `linux_compliance_services_enabled` | `sssd`, `time_sync`, `mail`, `cron`, `nfs`, `usbguard`, `fapolicyd`, `network_services` | 119 |
+| `linux_compliance_packages_enabled` | `package_updates`, `package_sources`, `system_packages` | 24 |
+| `linux_compliance_network_enabled` | `ipv4_parameters`, `ipv6_parameters`, `ipsec`, `wireless`, `network_settings` | 66 |
+| `linux_compliance_kernel_modules_enabled` | `filesystem_modules`, `protocol_modules`, `wireless_modules` | 21 |
+| `linux_compliance_firewall_enabled` | `firewalld`, `nftables`, `iptables`, `ufw` | 42 |
+| `linux_compliance_pam_enabled` | `pam`, `pwquality`, `pwhistory`, `faillock` | 55 |
+| `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | 88 |
+| `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | 33 |
+| `linux_compliance_mounts_enabled` | `autofs`, `mount_options`, `partitioning` | 48 |
 
 ## Rules per profile
 
@@ -86,24 +151,58 @@ or datastreams is one catalogue entry with one toggle.
 | --- | --- | --- | --- | --- | --- |
 | `file_permissions` | 114 | 114 | 114 | 114 | 19 |
 | `sysctl` | 4 | 4 | 4 | 4 | 2 |
-| `logging` | 15 | 15 | 15 | 15 | 12 |
+| `journald` | 10 | 10 | 10 | 10 | 9 |
+| `rsyslog` | 5 | 5 | 5 | 5 | 3 |
+| `logrotate` | 0 | 0 | 0 | 0 | 0 |
 | `banners` | 14 | 14 | 14 | 14 | 4 |
-| `integrity` | 4 | 4 | 5 | 5 | 7 |
+| `aide` | 3 | 3 | 4 | 4 | 6 |
+| `software_integrity` | 1 | 1 | 1 | 1 | 1 |
+| `endpoint_security` | 0 | 0 | 0 | 0 | 0 |
 | `kernel_build_config` | 0 | 0 | 0 | 0 | 0 |
 | `auditd` | 0 | 0 | 80 | 80 | 91 |
-| `services` | 66 | 62 | 67 | 66 | 19 |
-| `packages` | 0 | 0 | 0 | 0 | 2 |
+| `sssd` | 0 | 0 | 0 | 0 | 7 |
+| `time_sync` | 10 | 10 | 10 | 10 | 7 |
+| `mail` | 2 | 2 | 2 | 2 | 0 |
+| `cron` | 5 | 5 | 5 | 5 | 0 |
+| `nfs` | 4 | 4 | 4 | 4 | 2 |
+| `usbguard` | 0 | 0 | 0 | 0 | 0 |
+| `fapolicyd` | 0 | 0 | 0 | 0 | 0 |
+| `network_services` | 45 | 41 | 46 | 45 | 3 |
+| `package_updates` | 0 | 0 | 0 | 0 | 1 |
+| `package_sources` | 0 | 0 | 0 | 0 | 1 |
+| `system_packages` | 0 | 0 | 0 | 0 | 0 |
 | `desktop` | 8 | 6 | 9 | 8 | 8 |
-| `network` | 26 | 24 | 26 | 25 | 3 |
-| `kernel_modules` | 6 | 5 | 12 | 12 | 1 |
-| `firewall` | 24 | 24 | 24 | 24 | 4 |
+| `ipv4_parameters` | 16 | 16 | 16 | 16 | 1 |
+| `ipv6_parameters` | 7 | 7 | 7 | 7 | 0 |
+| `ipsec` | 0 | 0 | 0 | 0 | 0 |
+| `wireless` | 2 | 0 | 2 | 1 | 1 |
+| `network_settings` | 1 | 1 | 1 | 1 | 1 |
+| `filesystem_modules` | 6 | 5 | 8 | 8 | 1 |
+| `protocol_modules` | 0 | 0 | 4 | 4 | 0 |
+| `wireless_modules` | 0 | 0 | 0 | 0 | 0 |
+| `firewalld` | 0 | 0 | 0 | 0 | 0 |
+| `nftables` | 8 | 8 | 8 | 8 | 0 |
+| `iptables` | 9 | 9 | 9 | 9 | 0 |
+| `ufw` | 7 | 7 | 7 | 7 | 4 |
 | `ssh` | 26 | 28 | 28 | 28 | 16 |
-| `pam` | 27 | 27 | 28 | 28 | 20 |
-| `accounts` | 38 | 38 | 41 | 41 | 21 |
+| `pam` | 6 | 6 | 6 | 6 | 4 |
+| `pwquality` | 14 | 14 | 14 | 14 | 10 |
+| `pwhistory` | 4 | 4 | 4 | 4 | 0 |
+| `faillock` | 3 | 3 | 4 | 4 | 6 |
+| `password_aging` | 4 | 4 | 6 | 6 | 2 |
+| `root_access` | 12 | 12 | 12 | 12 | 1 |
+| `umask` | 4 | 4 | 4 | 4 | 1 |
+| `user_sessions` | 4 | 4 | 4 | 4 | 2 |
+| `smartcard` | 0 | 0 | 0 | 0 | 6 |
+| `console_access` | 0 | 0 | 0 | 0 | 2 |
+| `user_accounts` | 14 | 14 | 15 | 15 | 7 |
 | `sudo` | 5 | 5 | 6 | 6 | 3 |
-| `mandatory_access_control` | 4 | 4 | 5 | 5 | 2 |
+| `selinux` | 0 | 0 | 0 | 0 | 0 |
+| `apparmor` | 4 | 4 | 5 | 5 | 2 |
 | `crypto_policy` | 0 | 0 | 0 | 0 | 1 |
-| `mounts` | 23 | 21 | 28 | 28 | 1 |
+| `autofs` | 2 | 0 | 2 | 2 | 0 |
+| `mount_options` | 19 | 19 | 19 | 19 | 0 |
+| `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
 | Native remediation | 1 | 1 | 1 | 1 | 0 |
@@ -114,24 +213,58 @@ or datastreams is one catalogue entry with one toggle.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `file_permissions` | 40 | 40 | 37 | 7 | 58 | 0 | 0 | 0 | 57 | 57 | 57 | 57 | 0 | 8 | 0 | 8 | 0 | 45 | 62 | 62 |
 | `sysctl` | 19 | 19 | 18 | 0 | 0 | 1 | 1 | 1 | 4 | 4 | 4 | 4 | 10 | 8 | 4 | 8 | 10 | 6 | 17 | 17 |
-| `logging` | 11 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 10 | 10 | 10 | 0 | 2 | 1 | 11 | 0 | 5 | 11 | 11 |
+| `journald` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 1 |
+| `rsyslog` | 8 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 | 5 | 5 | 0 | 2 | 1 | 11 | 0 | 3 | 10 | 10 |
+| `logrotate` | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `banners` | 0 | 0 | 0 | 0 | 9 | 5 | 5 | 5 | 14 | 14 | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 3 |
-| `integrity` | 2 | 6 | 2 | 0 | 9 | 0 | 0 | 0 | 4 | 4 | 4 | 4 | 0 | 3 | 2 | 4 | 0 | 5 | 11 | 11 |
+| `aide` | 2 | 6 | 2 | 0 | 4 | 0 | 0 | 0 | 4 | 4 | 4 | 4 | 0 | 0 | 0 | 1 | 0 | 3 | 10 | 10 |
+| `software_integrity` | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 2 | 3 | 0 | 2 | 1 | 1 |
+| `endpoint_security` | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `kernel_build_config` | 0 | 67 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `auditd` | 52 | 52 | 3 | 0 | 42 | 39 | 26 | 34 | 83 | 0 | 0 | 83 | 51 | 32 | 72 | 38 | 51 | 55 | 99 | 99 |
-| `services` | 15 | 15 | 13 | 6 | 7 | 15 | 3 | 15 | 37 | 33 | 31 | 34 | 9 | 9 | 9 | 17 | 9 | 18 | 35 | 32 |
-| `packages` | 10 | 10 | 9 | 9 | 0 | 1 | 0 | 0 | 3 | 3 | 3 | 3 | 11 | 7 | 4 | 7 | 11 | 5 | 14 | 14 |
+| `sssd` | 5 | 5 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 |
+| `time_sync` | 2 | 2 | 0 | 0 | 0 | 3 | 0 | 3 | 3 | 3 | 3 | 3 | 2 | 0 | 0 | 3 | 2 | 3 | 8 | 8 |
+| `mail` | 3 | 3 | 3 | 1 | 0 | 0 | 0 | 0 | 3 | 2 | 2 | 3 | 0 | 0 | 1 | 0 | 0 | 2 | 6 | 6 |
+| `cron` | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 6 | 6 | 6 | 6 | 0 | 0 | 2 | 0 | 0 | 3 | 0 | 0 |
+| `nfs` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 2 | 2 | 2 | 0 | 0 | 1 | 0 | 0 | 1 | 1 | 0 |
+| `usbguard` | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 3 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 3 | 4 | 0 | 4 | 4 |
+| `fapolicyd` | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 2 | 0 | 2 | 2 | 0 | 3 | 3 |
+| `network_services` | 5 | 5 | 5 | 5 | 3 | 9 | 0 | 9 | 23 | 20 | 18 | 20 | 1 | 7 | 5 | 9 | 1 | 9 | 8 | 6 |
+| `package_updates` | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 2 | 0 | 2 | 3 | 1 | 2 | 2 |
+| `package_sources` | 4 | 4 | 4 | 4 | 0 | 0 | 0 | 0 | 3 | 3 | 3 | 3 | 4 | 4 | 4 | 4 | 4 | 3 | 5 | 5 |
+| `system_packages` | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 1 | 0 | 1 | 4 | 1 | 7 | 7 |
 | `desktop` | 0 | 0 | 0 | 0 | 0 | 7 | 1 | 7 | 11 | 10 | 8 | 10 | 0 | 0 | 3 | 0 | 0 | 11 | 14 | 14 |
-| `network` | 47 | 47 | 47 | 0 | 4 | 22 | 22 | 22 | 25 | 25 | 23 | 24 | 0 | 1 | 1 | 3 | 0 | 13 | 27 | 27 |
-| `kernel_modules` | 0 | 0 | 0 | 0 | 7 | 3 | 0 | 3 | 12 | 6 | 5 | 12 | 4 | 0 | 1 | 0 | 4 | 3 | 8 | 8 |
-| `firewall` | 6 | 6 | 6 | 0 | 5 | 6 | 6 | 6 | 6 | 6 | 6 | 6 | 2 | 2 | 0 | 4 | 2 | 9 | 4 | 4 |
+| `ipv4_parameters` | 22 | 22 | 22 | 0 | 0 | 16 | 16 | 16 | 16 | 16 | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 9 | 14 | 14 |
+| `ipv6_parameters` | 16 | 16 | 16 | 0 | 0 | 6 | 6 | 6 | 7 | 7 | 7 | 7 | 0 | 0 | 0 | 0 | 0 | 1 | 7 | 7 |
+| `ipsec` | 9 | 9 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 2 | 2 |
+| `wireless` | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 2 | 2 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | 1 | 1 | 1 |
+| `network_settings` | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 2 | 0 | 2 | 3 | 3 |
+| `filesystem_modules` | 0 | 0 | 0 | 0 | 1 | 3 | 0 | 3 | 8 | 6 | 5 | 8 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 2 |
+| `protocol_modules` | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 4 | 0 | 0 | 4 | 3 | 0 | 0 | 0 | 3 | 2 | 5 | 5 |
+| `wireless_modules` | 0 | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | 1 | 1 |
+| `firewalld` | 0 | 0 | 0 | 0 | 5 | 5 | 5 | 5 | 4 | 4 | 4 | 4 | 2 | 2 | 0 | 4 | 2 | 6 | 4 | 4 |
+| `nftables` | 3 | 3 | 3 | 0 | 0 | 1 | 1 | 1 | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
+| `iptables` | 3 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 |
+| `ufw` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ssh` | 10 | 10 | 10 | 0 | 15 | 4 | 4 | 4 | 26 | 24 | 26 | 26 | 11 | 10 | 11 | 18 | 11 | 19 | 37 | 37 |
-| `pam` | 13 | 13 | 13 | 13 | 0 | 13 | 11 | 11 | 21 | 20 | 20 | 21 | 8 | 0 | 0 | 5 | 8 | 12 | 27 | 27 |
-| `accounts` | 18 | 18 | 15 | 5 | 5 | 17 | 8 | 13 | 40 | 38 | 38 | 40 | 8 | 3 | 9 | 10 | 8 | 25 | 42 | 41 |
+| `pam` | 2 | 2 | 2 | 2 | 0 | 3 | 3 | 3 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 | 0 | 5 | 4 | 4 |
+| `pwquality` | 7 | 7 | 7 | 7 | 0 | 6 | 6 | 6 | 8 | 8 | 8 | 8 | 5 | 0 | 0 | 1 | 5 | 3 | 14 | 14 |
+| `pwhistory` | 0 | 0 | 0 | 0 | 0 | 2 | 2 | 2 | 3 | 3 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
+| `faillock` | 4 | 4 | 4 | 4 | 0 | 2 | 0 | 0 | 5 | 4 | 4 | 5 | 3 | 0 | 0 | 4 | 3 | 2 | 9 | 9 |
+| `password_aging` | 2 | 2 | 2 | 2 | 0 | 7 | 7 | 7 | 7 | 5 | 5 | 7 | 0 | 0 | 0 | 3 | 0 | 5 | 4 | 4 |
+| `root_access` | 1 | 1 | 1 | 0 | 0 | 4 | 0 | 4 | 13 | 13 | 13 | 13 | 1 | 1 | 3 | 2 | 1 | 9 | 3 | 3 |
+| `umask` | 3 | 3 | 0 | 0 | 0 | 3 | 0 | 0 | 3 | 3 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 |
+| `user_sessions` | 8 | 8 | 8 | 0 | 0 | 1 | 0 | 0 | 4 | 4 | 4 | 4 | 0 | 0 | 0 | 0 | 0 | 1 | 7 | 7 |
+| `smartcard` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 |
+| `console_access` | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 | 4 | 2 | 5 | 0 | 6 | 5 |
+| `user_accounts` | 3 | 3 | 3 | 3 | 5 | 2 | 1 | 2 | 13 | 13 | 13 | 13 | 2 | 2 | 2 | 3 | 2 | 10 | 12 | 12 |
 | `sudo` | 15 | 15 | 13 | 0 | 0 | 3 | 2 | 3 | 6 | 5 | 5 | 6 | 1 | 3 | 0 | 4 | 1 | 5 | 6 | 6 |
-| `mandatory_access_control` | 9 | 16 | 8 | 0 | 6 | 4 | 0 | 4 | 7 | 6 | 5 | 6 | 2 | 2 | 7 | 3 | 2 | 5 | 6 | 6 |
+| `selinux` | 9 | 16 | 8 | 0 | 6 | 4 | 0 | 4 | 7 | 6 | 5 | 6 | 2 | 2 | 7 | 3 | 2 | 5 | 6 | 6 |
+| `apparmor` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `crypto_policy` | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 5 | 1 | 1 | 3 | 5 | 1 | 12 | 12 |
-| `mounts` | 22 | 22 | 21 | 0 | 9 | 5 | 4 | 4 | 27 | 22 | 21 | 27 | 4 | 3 | 2 | 3 | 4 | 0 | 37 | 37 |
+| `autofs` | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 1 | 1 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 1 | 1 |
+| `mount_options` | 15 | 15 | 15 | 0 | 0 | 4 | 4 | 4 | 19 | 19 | 19 | 19 | 3 | 3 | 0 | 3 | 3 | 0 | 29 | 29 |
+| `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
 | Native remediation | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 |
@@ -142,22 +275,56 @@ or datastreams is one catalogue entry with one toggle.
 |---|---|---|---|
 | `file_permissions` | none | `dir_group_ownership_`, `dir_groupownership_`, `dir_ownership_`, `dir_permissions_`, `dir_perms_`, `dir_system_commands_`, `directory_groupowner_`, `directory_owner_`, `directory_permissions_`, `file_groupowner_`, `file_groupownership_`, `file_groupownerships_`, `file_owner_`, `file_ownership_`, `file_ownerships_`, `file_permission_user_`, `file_permissions_`, `root_permissions_` | `files` |
 | `sysctl` | none | `sysctl_` | `restrictions` |
-| `logging` | `logging` | none | none |
+| `journald` | `journald` | none | none |
+| `rsyslog` | `logging` | none | none |
+| `logrotate` | `log_rotation` | none | none |
 | `banners` | `accounts-banners` | none | none |
-| `integrity` | `software-integrity` | none | `integrity` |
+| `aide` | `aide` | none | none |
+| `software_integrity` | `software-integrity` | none | `integrity` |
+| `endpoint_security` | none | none | `endpoint_security_software` |
 | `kernel_build_config` | `kernel_build_config` | none | none |
 | `auditd` | `auditing` | none | none |
-| `services` | none | none | `services` |
-| `packages` | none | `apt_` | `software`, `system-tools`, `updating` |
+| `sssd` | none | none | `sssd` |
+| `time_sync` | none | none | `ntp` |
+| `mail` | none | none | `mail` |
+| `cron` | none | none | `cron_and_at` |
+| `nfs` | none | none | `nfs_and_rpc` |
+| `usbguard` | none | none | `usbguard` |
+| `fapolicyd` | none | none | `fapolicyd` |
+| `network_services` | none | none | `services` |
+| `package_updates` | none | none | `updating` |
+| `package_sources` | none | `apt_`, `ensure_epel_`, `ensure_gpgcheck_`, `ensure_redhat_gpgkey_` | none |
+| `system_packages` | none | none | `software`, `system-tools` |
 | `desktop` | `gnome` | none | none |
-| `network` | `network-ipsec`, `network-ipv6`, `network-kernel` | none | `network` |
-| `kernel_modules` | none | `kernel_module_` | none |
-| `firewall` | `network-firewalld`, `network-iptables`, `network-nftables`, `network-ufw` | none | none |
+| `ipv4_parameters` | `network-kernel` | none | none |
+| `ipv6_parameters` | `network-ipv6` | none | none |
+| `ipsec` | `network-ipsec` | none | none |
+| `wireless` | none | none | `network-wireless` |
+| `network_settings` | none | none | `network` |
+| `filesystem_modules` | none | `kernel_module_cramfs_`, `kernel_module_freevxfs_`, `kernel_module_hfs_`, `kernel_module_hfsplus_`, `kernel_module_jffs2_`, `kernel_module_overlayfs_`, `kernel_module_squashfs_`, `kernel_module_udf_`, `kernel_module_usb-storage_` | none |
+| `protocol_modules` | none | `kernel_module_atm_`, `kernel_module_can_`, `kernel_module_dccp_`, `kernel_module_firewire-core_`, `kernel_module_rds_`, `kernel_module_sctp_`, `kernel_module_tipc_` | none |
+| `wireless_modules` | none | `kernel_module_bluetooth_`, `kernel_module_cfg80211_`, `kernel_module_iwlmvm_`, `kernel_module_iwlwifi_`, `kernel_module_mac80211_` | none |
+| `firewalld` | `network-firewalld` | none | none |
+| `nftables` | `network-nftables` | none | none |
+| `iptables` | `network-iptables` | none | none |
+| `ufw` | `network-ufw` | none | none |
 | `ssh` | `ssh` | none | none |
-| `pam` | `accounts-pam` | none | none |
-| `accounts` | none | none | `accounts` |
+| `pam` | none | none | `accounts-pam` |
+| `pwquality` | none | `package_pam_pwquality_` | `password_quality` |
+| `pwhistory` | none | `accounts_password_pam_pwhistory_` | none |
+| `faillock` | none | `account_password_pam_faillock_`, `account_password_selinux_faillock_`, `accounts_passwords_pam_faildelay_`, `accounts_passwords_pam_faillock_` | none |
+| `password_aging` | none | none | `password_expiration` |
+| `root_access` | none | none | `root_logins`, `root_paths` |
+| `umask` | none | none | `user_umask` |
+| `user_sessions` | none | none | `accounts-session` |
+| `smartcard` | none | none | `smart_card_login` |
+| `console_access` | none | none | `accounts-physical` |
+| `user_accounts` | none | none | `accounts` |
 | `sudo` | `sudo` | none | none |
-| `mandatory_access_control` | `apparmor`, `selinux` | none | none |
+| `selinux` | `selinux` | none | none |
+| `apparmor` | `apparmor` | none | none |
 | `crypto_policy` | `crypto`, `fips` | none | none |
-| `mounts` | none | `mount_option_` | `disk_partitioning`, `mounting` |
+| `autofs` | none | none | `mounting` |
+| `mount_options` | none | `mount_option_` | none |
+| `partitioning` | none | none | `disk_partitioning` |
 | `bootloader` | `bootloader-grub2`, `bootloader-zipl` | `bios_`, `grub2_` | none |

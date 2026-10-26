@@ -210,7 +210,7 @@ def test_an_audit_only_rule_gets_a_reference_row_with_its_strategy(tmp_path: Pat
         "`sysctl_kernel_dmesg_restrict` | `audit_only` |"
     ) in generated[gen.REFERENCE]
     assert (
-        "| `linux_compliance_sysctl_enabled` | `sysctl` | no | `true` | 1 | 0 | 1 |"
+        "| `linux_compliance_sysctl_enabled` | `sysctl` | none | no | `true` | 1 | 0 | 1 |"
         in (generated[gen.REFERENCE])
     )
     specs = cast("dict[str, object]", yaml.safe_load(generated[gen.SPECS]))
@@ -220,7 +220,7 @@ def test_an_audit_only_rule_gets_a_reference_row_with_its_strategy(tmp_path: Pat
     description = cast(
         "list[str]", options["main"]["options"]["linux_compliance_sysctl_enabled"]["description"]
     )
-    assert "Catalogued rules: 1, with a native remediation: 0." in description
+    assert "Rules: 1, native: 0. Generated; see docs/remediation-variables.md." in description
 
 
 def test_a_catalogue_without_rules_says_so(tmp_path: Path) -> None:
@@ -228,7 +228,10 @@ def test_a_catalogue_without_rules_says_so(tmp_path: Path) -> None:
     write_catalogue(root, [{"name": "sysctl", "disruptive": False}], [])
     reference = gen.outputs(root)[gen.REFERENCE]
     assert "No rule of the pinned profiles belongs to this family." in reference
-    assert "| `linux_compliance_sysctl_enabled` | `sysctl` | no | `true` | 0 | 0 | 0 |" in reference
+    assert (
+        "| `linux_compliance_sysctl_enabled` | `sysctl` | none | no | `true` | 0 | 0 | 0 |"
+        in reference
+    )
 
 
 @pytest.mark.parametrize(

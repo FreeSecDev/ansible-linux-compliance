@@ -69,14 +69,14 @@ def test_names_follow_adr_0011() -> None:
 def test_the_rule_toggle_falls_back_to_the_family_toggle_and_then_to_on(
     given: dict[str, bool], expected: toggles.Toggle
 ) -> None:
-    assert toggles.resolve_toggle(rule(CRONTAB), given) == expected
+    assert toggles.resolve_toggle(rule(CRONTAB), given, umbrellas={}) == expected
 
 
 def test_a_generated_default_that_follows_its_family_names_the_family() -> None:
     family_off = {FAMILY: False}
     generated = {FAMILY: False, toggles.rule_toggle_name(CRONTAB): False}
-    assert toggles.resolve_toggle(rule(CRONTAB), family_off) == toggles.resolve_toggle(
-        rule(CRONTAB), generated
+    assert toggles.resolve_toggle(rule(CRONTAB), family_off, umbrellas={}) == (
+        toggles.resolve_toggle(rule(CRONTAB), generated, umbrellas={})
     )
 
 
@@ -84,7 +84,7 @@ def test_a_family_toggle_switches_off_only_its_own_rules() -> None:
     errors = toggles.Errors()
     loaded = toggles.load_catalogue(catalogue(), {}, FAMILIES, {FAMILY: False}, errors)
     assert errors.items == []
-    assert toggles.disabled_rules(loaded.rules, loaded.toggles, None) == [
+    assert toggles.disabled_rules(loaded.rules, loaded.toggles, None, umbrellas={}) == [
         {"rule_id": CRONTAB, "disabled_by": FAMILY},
         {"rule_id": PASSWD, "disabled_by": FAMILY},
     ]
@@ -95,7 +95,8 @@ def test_disabled_rules_can_be_restricted_to_a_profile() -> None:
     loaded = toggles.load_catalogue(
         catalogue(), {}, FAMILIES, {"linux_compliance_ssh_enabled": False, FAMILY: False}, errors
     )
-    assert toggles.disabled_rules(loaded.rules, loaded.toggles, frozenset({ROOT_LOGIN})) == [
+    profile = frozenset({ROOT_LOGIN})
+    assert toggles.disabled_rules(loaded.rules, loaded.toggles, profile, umbrellas={}) == [
         {"rule_id": ROOT_LOGIN, "disabled_by": "linux_compliance_ssh_enabled"}
     ]
 

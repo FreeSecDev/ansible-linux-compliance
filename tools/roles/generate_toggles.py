@@ -4,7 +4,8 @@ ADR 0011 gives every control family a topic toggle ``linux_compliance_<family>_e
 catalogued rule a rule toggle ``linux_compliance_rule_<rule_short_id>_enabled`` that follows its
 family toggle unless it is set. This tool derives, from ``roles/remediate/vars/rules.yml``:
 
-* the topic toggles in ``defaults/main.yml`` of the ``remediate`` and the ``audit`` role, every one
+* the topic toggles of the families and of the umbrellas that group them (ADR 0011, topic split
+  of FREES-53) in ``defaults/main.yml`` of the ``remediate`` and the ``audit`` role, every one
   ``true``;
 * their entries in the ``main`` entry point of ``meta/argument_specs.yml`` of both roles, typed
   ``bool`` with descriptions;
@@ -31,6 +32,7 @@ import difflib
 import json
 import re
 import sys
+import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
@@ -60,15 +62,15 @@ AUDIT_ONLY_KEY: Final[str] = "__linux_compliance_remediate_audit_only"
 ENTRY_POINT: Final[str] = "main"
 ALLOW_LIST: Final[str] = "linux_compliance_remediate_allow_disruptive"
 MAX_LINE: Final[int] = 120
+DESCRIPTION_WIDTH: Final[int] = 88
 PLAIN_KEY: Final[re.Pattern[str]] = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
 PLAIN_VALUE: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]*")
 PLAIN_VALUE_KEYS: Final[frozenset[str]] = frozenset({"elements", "type"})
 RESERVED_WORDS: Final[frozenset[str]] = frozenset(
     {"y", "n", "yes", "no", "on", "off", "true", "false", "null"}
 )
-GENERATED_NOTE: Final[str] = (
-    "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
-)
+GENERATED_NOTE: Final[str] = "Generated; see docs/remediation-variables.md."
+DISRUPTIVE_NOTE: Final[str] = "Disruptive: needs linux_compliance_remediate_allow_disruptive."
 REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "# Remediation variables",
     "",
@@ -109,12 +111,33 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "outside the catalogue, such as user-supplied content, have no toggle; disable them with",
     "`linux_compliance_audit_disabled_rules`.",
     "",
+    "## Umbrellas",
+    "",
+    "Families that belong together are grouped by an umbrella toggle, for example",
+    "`linux_compliance_services_enabled` for `sssd`, `time_sync`, `mail` and the other service",
+    "families. An umbrella is either a name of its own, such as `services`, or a family that",
+    "heads it, such as `pam` for `pwquality`, `pwhistory` and `faillock`. There is one level.",
+    "Precedence, from the most specific toggle:",
+    "",
+    "1. A rule toggle that is set wins, in both directions, as before the split.",
+    "2. Otherwise the rule is on only when both its umbrella toggle and its family toggle are",
+    "   on. An umbrella toggle that is `false` switches off every family it groups, and a family",
+    "   toggle that is `true`, such as its default, cannot switch one back on: a family toggle",
+    "   only narrows its umbrella.",
+    "",
+    "Every umbrella keeps the name of the family that it was split from (FREES-53), so",
+    "`linux_compliance_services_enabled: false`, `linux_compliance_pam_enabled: false` or",
+    "`linux_compliance_firewall_enabled: false` switch off exactly the rules that the family",
+    "held before the split, and an allow-list entry that names an umbrella still allows every",
+    "disruptive family it groups. No toggle was renamed or dropped.",
+    "",
     "## Controlling variable",
     "",
-    "When a rule is off, `disabled_by` names the family toggle whenever the family toggle is",
-    "`false`, and the rule toggle otherwise. So when a rule toggle and its family toggle are",
-    "both `false`, `disabled_by` names the family toggle. If the family toggle is later set back",
-    "to `true`, the rule stays off and `disabled_by` changes to the rule toggle.",
+    "When a rule is off, `disabled_by` names the most general toggle that is `false`: the",
+    "umbrella toggle, else the family toggle, else the rule toggle. So when a rule toggle and",
+    "its family toggle are both `false`, `disabled_by` names the family toggle. If the family",
+    "toggle is later set back to `true`, the rule stays off and `disabled_by` changes to the",
+    "rule toggle.",
     "",
     "## Rule toggle names and declarations",
     "",
@@ -144,8 +167,14 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "",
     "## Topic toggles",
     "",
-    "| Variable | Family | Disruptive | Default | Catalogued rules | Native | `audit_only` |",
-    "|---|---|---|---|---|---|---|",
+    "An umbrella row lists the families that it groups; the disruptive flag of an umbrella is",
+    "`yes` when it groups a disruptive family.",
+    "",
+    (
+        "| Variable | Family | Umbrella | Disruptive | Default | Catalogued rules | Native | "
+        "`audit_only` |"
+    ),
+    "|---|---|---|---|---|---|---|---|",
 )
 
 
@@ -200,13 +229,29 @@ def native_families(catalogue: toggles.Catalogue) -> list[str]:
     return [family for family in catalogue.families if family in native]
 
 
+def topics(catalogue: toggles.Catalogue) -> list[str]:
+    """Return the families and the umbrellas that have a topic toggle, in registry order."""
+    return toggles.topics(catalogue.families, catalogue.umbrellas)
+
+
+def governed(catalogue: toggles.Catalogue, topic: str) -> list[str]:
+    """Return the families that the topic toggle of ``topic`` switches off."""
+    return toggles.governed(topic, catalogue.families, catalogue.umbrellas)
+
+
+def is_disruptive(catalogue: toggles.Catalogue, topic: str) -> bool:
+    """Return whether ``topic`` is a disruptive family or an umbrella that groups one."""
+    return any(catalogue.families[family] for family in governed(catalogue, topic))
+
+
 def toggle_defaults(catalogue: toggles.Catalogue) -> dict[str, object]:
-    """Return the generated topic toggle defaults, in registry order."""
-    return {toggles.toggle_name(name): True for name in catalogue.families}
+    """Return the generated topic and umbrella toggle defaults, in registry order."""
+    return {toggles.toggle_name(name): True for name in topics(catalogue)}
 
 
-def _members(catalogue: toggles.Catalogue, family: str) -> list[toggles.Rule]:
-    return [rule for rule in catalogue.rules if rule["family"] == family]
+def _members(catalogue: toggles.Catalogue, topic: str) -> list[toggles.Rule]:
+    families = governed(catalogue, topic)
+    return [rule for rule in catalogue.rules if rule["family"] in families]
 
 
 def _rule_count(catalogue: toggles.Catalogue, family: str) -> int:
@@ -217,39 +262,64 @@ def _native_count(catalogue: toggles.Catalogue, family: str) -> int:
     return sum(toggles.is_native(rule) for rule in _members(catalogue, family))
 
 
+def _grouping(catalogue: toggles.Catalogue, family: str) -> list[str]:
+    umbrella = catalogue.umbrellas.get(family)
+    if umbrella is not None:
+        return [f"Only narrows its umbrella {toggles.toggle_name(umbrella)}."]
+    members = [member for member in governed(catalogue, family) if member != family]
+    if members:
+        return textwrap.wrap(
+            f"Also the umbrella of {', '.join(members)}, which it switches off too.",
+            DESCRIPTION_WIDTH,
+        )
+    return []
+
+
+def _counts(catalogue: toggles.Catalogue, topic: str) -> str:
+    return (
+        f"Rules: {_rule_count(catalogue, topic)}, native: {_native_count(catalogue, topic)}. "
+        f"{GENERATED_NOTE}"
+    )
+
+
 def family_spec(catalogue: toggles.Catalogue, family: str) -> dict[str, object]:
-    """Return the argument spec of the topic toggle of ``family``."""
+    """Return the argument spec of the topic toggle of ``family``.
+
+    The description is short on purpose: the role argument validation reads every option of
+    the specification on every run, and the semantics are in the variable reference.
+    """
     description = [
-        f"Topic toggle of the {family} control family (ADR 0011).",
-        "When false, every rule of the family whose rule toggle is not set is off.",
-        "Remediation cleans such a rule up when the state ledger records it as applied.",
-        "The audit excludes it and reports it as disabled, naming this variable.",
+        f"Topic toggle of the {family} family (ADR 0011); false switches its rules off.",
+        *_grouping(catalogue, family),
     ]
     if catalogue.families[family]:
-        description.extend(
-            [
-                "The family is disruptive: remediation applies and cleans up its rules only",
-                "when linux_compliance_remediate_allow_disruptive names it.",
-            ]
-        )
-    description.extend(
-        [
-            (
-                f"Catalogued rules: {_rule_count(catalogue, family)}, "
-                f"with a native remediation: {_native_count(catalogue, family)}."
-            ),
-            "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see",
-            "docs/remediation-variables.md.",
-            GENERATED_NOTE,
-        ]
+        description.append(DISRUPTIVE_NOTE)
+    description.append(_counts(catalogue, family))
+    return {"type": "bool", "default": True, "description": description}
+
+
+def umbrella_spec(catalogue: toggles.Catalogue, umbrella: str) -> dict[str, object]:
+    """Return the argument spec of the toggle of ``umbrella``, an umbrella that is not a family."""
+    members = governed(catalogue, umbrella)
+    description = textwrap.wrap(
+        f"Umbrella toggle (ADR 0011); false switches off {', '.join(members)}.",
+        DESCRIPTION_WIDTH,
     )
+    if is_disruptive(catalogue, umbrella):
+        description.append(DISRUPTIVE_NOTE)
+    description.append(_counts(catalogue, umbrella))
     return {"type": "bool", "default": True, "description": description}
 
 
 def toggle_specs(catalogue: toggles.Catalogue) -> dict[str, dict[str, object]]:
     """Return the generated argument spec of every topic toggle, in the order of the defaults."""
     return {
-        toggles.toggle_name(family): family_spec(catalogue, family) for family in catalogue.families
+        toggles.toggle_name(topic): (
+            family_spec(catalogue, topic)
+            if topic in catalogue.families
+            else umbrella_spec(catalogue, topic)
+        )
+        for topic in topics(catalogue)
     }
 
 
@@ -261,8 +331,11 @@ def defaults(catalogue: toggles.Catalogue, current: dict[str, object]) -> dict[s
 
 
 def allow_list_choices(catalogue: toggles.Catalogue) -> list[str]:
-    """Return the choices of the disruptive allow-list: every disruptive family, sorted."""
-    return sorted(name for name, disruptive in catalogue.families.items() if disruptive)
+    """Return the choices of the disruptive allow-list, sorted.
+
+    These are every disruptive family and every umbrella that groups one.
+    """
+    return sorted(topic for topic in topics(catalogue) if is_disruptive(catalogue, topic))
 
 
 def specs(catalogue: toggles.Catalogue, current: dict[str, object]) -> dict[str, object]:
@@ -290,7 +363,7 @@ def specs(catalogue: toggles.Catalogue, current: dict[str, object]) -> dict[str,
 
 
 def _rule_rows(catalogue: toggles.Catalogue, family: str) -> list[str]:
-    members = _members(catalogue, family)
+    members = [rule for rule in catalogue.rules if rule["family"] == family]
     lines = [f"### `{family}`", ""]
     if not members:
         return [*lines, "No rule of the pinned profiles belongs to this family.", ""]
@@ -306,11 +379,19 @@ def _rule_rows(catalogue: toggles.Catalogue, family: str) -> list[str]:
 def reference(catalogue: toggles.Catalogue) -> str:
     """Return the Markdown variable reference of every toggle."""
     lines: list[str] = list(REFERENCE_INTRO)
-    for family, disruptive in catalogue.families.items():
-        count = _rule_count(catalogue, family)
-        native = _native_count(catalogue, family)
+    for topic in topics(catalogue):
+        count = _rule_count(catalogue, topic)
+        native = _native_count(catalogue, topic)
+        if topic in catalogue.families:
+            named = f"`{topic}`"
+            umbrella = catalogue.umbrellas.get(topic)
+            grouping = "none" if umbrella is None else f"`{umbrella}`"
+        else:
+            named = ", ".join(f"`{member}`" for member in governed(catalogue, topic))
+            grouping = "umbrella"
+        flag = "yes" if is_disruptive(catalogue, topic) else "no"
         lines.append(
-            f"| `{toggles.toggle_name(family)}` | `{family}` | {'yes' if disruptive else 'no'} | "
+            f"| `{toggles.toggle_name(topic)}` | {named} | {grouping} | {flag} | "
             f"`true` | {count} | {native} | {count - native} |"
         )
     lines.extend(

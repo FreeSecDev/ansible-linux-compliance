@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 from typing import cast
@@ -45,11 +46,26 @@ def audit_only() -> dict[str, list[str]]:
     )
 
 
-def rules() -> list[dict[str, object]]:
+@functools.cache
+def loaded() -> toggles.Catalogue:
     errors = toggles.Errors()
-    loaded = toggles.load_catalogue(native(), audit_only(), registry(), {}, errors)
+    catalogue = toggles.load_catalogue(native(), audit_only(), registry(), {}, errors)
     assert errors.items == []
-    return loaded.rules
+    return catalogue
+
+
+def rules() -> list[dict[str, object]]:
+    return loaded().rules
+
+
+def topics() -> list[str]:
+    catalogue = loaded()
+    return toggles.topics(catalogue.families, catalogue.umbrellas)
+
+
+def governed(topic: str) -> list[str]:
+    catalogue = loaded()
+    return toggles.governed(topic, catalogue.families, catalogue.umbrellas)
 
 
 def plan(**overrides: object) -> dict[str, object]:
@@ -97,21 +113,24 @@ def test_the_audit_only_rules_are_listed_per_family_in_registry_order_and_sorted
     assert sum(not toggles.is_native(rule) for rule in rules()) == len(rules()) - len(native())
 
 
-def test_the_allow_list_choices_are_exactly_the_disruptive_families() -> None:
+def test_the_allow_list_choices_are_the_disruptive_families_and_their_umbrellas() -> None:
     specs = load(ROLE / "meta" / "argument_specs.yml")
     main = cast("dict[str, dict[str, dict[str, object]]]", specs["argument_specs"])["main"]
     option = cast(
         "dict[str, object]", main["options"]["linux_compliance_remediate_allow_disruptive"]
     )
+    flags = loaded().families
     disruptive = sorted(
-        str(family["name"]) for family in registry() if family["disruptive"] is True
+        topic for topic in topics() if any(flags[family] for family in governed(topic))
     )
     assert option["choices"] == disruptive
+    assert {"services", "firewall", "accounts", "pam", "sssd"} <= set(disruptive)
+    assert "logging" not in disruptive
 
 
-def test_every_disruptive_family_of_the_skill_is_disruptive() -> None:
-    disruptive = {str(family["name"]) for family in registry() if family["disruptive"] is True}
-    assert {
+def test_every_disruptive_topic_of_the_skill_is_disruptive_in_every_family() -> None:
+    flags = loaded().families
+    for topic in (
         "ssh",
         "pam",
         "sudo",
@@ -122,7 +141,10 @@ def test_every_disruptive_family_of_the_skill_is_disruptive() -> None:
         "mounts",
         "crypto_policy",
         "auditd",
-    } <= disruptive
+    ):
+        members = governed(topic)
+        assert members, topic
+        assert all(flags[family] for family in members), topic
 
 
 def test_non_disruptive_families_come_first_in_the_dispatch_order() -> None:
@@ -194,7 +216,8 @@ def test_every_family_has_its_topic_toggle_default_and_no_rule_toggle_is_declare
     defaults = load(ROLE / "defaults" / "main.yml")
     for family in registry():
         assert defaults[toggles.toggle_name(str(family["name"]))] is True
-    expected = {toggles.toggle_name(str(family["name"])) for family in registry()}
+    expected = {toggles.toggle_name(topic) for topic in topics()}
+    assert len(expected) > len(registry())
     assert {name for name in defaults if generate_toggles.is_generated(name)} == expected
     assert not any(name.startswith("linux_compliance_rule_") for name in defaults)
 
