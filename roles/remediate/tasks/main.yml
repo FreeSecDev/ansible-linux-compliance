@@ -100,7 +100,7 @@
 
 - name: Remediate | Dispatch every family with work, in registry order
   ansible.builtin.include_tasks:
-    file: "{{ __linux_compliance_remediate_family.name }}.yml"
+    file: "{{ role_path }}/tasks/{{ __linux_compliance_remediate_family.name }}.yml"
     apply:
       tags:
         - always

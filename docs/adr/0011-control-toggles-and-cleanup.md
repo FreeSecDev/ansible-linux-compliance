@@ -276,12 +276,21 @@ refinements apply.
 - **Tags do not select rules.** Every task of the role and of its family files carries the tag `always` and no other
   tag; toggles are the only selection mechanism, as decided above. After the dispatch the role fails unless every rule
   planned for `apply` or `cleanup` has exactly one result, so a task skipped by any means cannot be reported as done.
-  `--skip-tags always` fails the role through two guard tasks tagged only `linux_compliance_remediate_guard`, which
-  `tools/roles/check_role_specs.py` permits as the one exception to "every task in `tasks/main.yml` is tagged
-  `always`". Combining `--tags <tag>` with `--skip-tags always` skips the guard too and remains unsupported.
-- **Family files refuse direct use.** Each family file and helper first asserts the opt-in and the dispatcher context
-  for its family and rule, so `include_role` with `tasks_from` cannot change a host without
+  `--skip-tags always` fails the role through two guard tasks tagged only `linux_compliance_remediate_guard`.
+  `tools/roles/check_role_specs.py` permits them as the one exception to "every task in `tasks/main.yml` is tagged
+  `always`". The exception is narrow: the guard tag is accepted only as the sole tag of a top-level
+  `ansible.builtin.assert` or `ansible.builtin.fail`, or of the single `ansible.builtin.set_fact` that sets exactly
+  `__linux_compliance_<role>_dispatched: false`. Such a task may have no other keys, and must be in the `tasks/main.yml`
+  of the role the tag names. Anywhere else, including blocks, includes and `apply`, it is a finding. Combining
+  `--tags <tag>` with `--skip-tags always` skips the guard too and remains unsupported. The role cannot close this
+  gap, because every task that touches the host shares its tags with the completeness check.
+- **Family files refuse direct use.** Each family file and helper first asserts the opt-in and checks its family and
+  rule against the dispatcher's own plan (`__linux_compliance_remediate_plan`); the caller-supplied family context only
+  selects work. `include_role` with `tasks_from` therefore cannot change a host without
   `linux_compliance_remediate_enabled: true`.
+- **Family files load from the role.** The dispatcher includes `{{ role_path }}/tasks/<family>.yml`, and family files
+  include their helpers the same way. A registered family without a task file therefore fails the run, instead of
+  loading a file of the same name from the playbook directory.
 - **Incomplete cleanup keeps the record.** A cleanup that cannot restore the prior state (target absent, not a regular
   file, unusable record) keeps the ledger entry and reports `cleanup_incomplete` with the reason, and is retried on the
   next run. The record is never dropped silently.

@@ -1,7 +1,11 @@
 ---
-- name: "Family case | Start without results | {{ case.name }}"
+- name: "Family case | Start without results and with a plan that holds the case | {{ case.name }}"
   ansible.builtin.set_fact:
     __linux_compliance_remediate_results: []
+    __linux_compliance_remediate_plan:
+      enabled: true
+      families:
+        - "{{ case_family }}"
 
 - name: "Family case | Run the helper with a synthetic planned rule | {{ case.name }}"
   ansible.builtin.include_role:
@@ -9,11 +13,7 @@
     tasks_from: "file_permissions_{{ case.helper }}.yml"
   vars:
     __linux_compliance_remediate_rule: "{{ case_rule }}"
-    __linux_compliance_remediate_family:
-      name: file_permissions
-      disruptive: false
-      apply: "{{ [case_rule] if case.helper == 'apply' else [] }}"
-      cleanup: "{{ [case_rule] if case.helper == 'cleanup' else [] }}"
+    __linux_compliance_remediate_family: "{{ case_family }}"
 
 - name: "Family case | Check the result and which tasks ran | {{ case.name }}"
   vars:

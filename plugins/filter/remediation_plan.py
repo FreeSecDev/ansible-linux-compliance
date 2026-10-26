@@ -427,10 +427,8 @@ def check_ledger(
     return entries, sorted(orphaned)
 
 
-def check_profile(raw: object, *, enabled: bool, errors: Errors) -> frozenset[str]:
-    """Validate the rules of the selected profile, which are needed only when enabled."""
-    if not enabled:
-        return frozenset()
+def check_profile(raw: object, errors: Errors) -> frozenset[str]:
+    """Validate the rules of the selected profile; the caller checks them only when enabled."""
     items = _sequence(raw)
     if items is None or not all(isinstance(item, str) for item in items):
         errors.add("profile_rule_ids must list the rule identifiers of the discovered profile")
@@ -517,10 +515,10 @@ def _notice(rule: Rule) -> str | None:
     return None
 
 
-def notices(rules: Sequence[Rule], orphaned: Sequence[str], *, enabled: bool) -> list[str]:
+def notices(rules: Sequence[Rule], orphaned: Sequence[str], context: Context) -> list[str]:
     """Return the operator messages for skipped, manual and orphaned rules."""
     messages: list[str] = []
-    if not enabled:
+    if not context.enabled:
         messages.append(
             f"remediation is disabled (linux_compliance_remediate_enabled is false): "
             f"{len(rules)} rule(s) skipped, the host was neither read nor changed"
@@ -534,10 +532,10 @@ def notices(rules: Sequence[Rule], orphaned: Sequence[str], *, enabled: bool) ->
     return messages
 
 
-def _plan(errors: list[str], *, enabled: bool) -> dict[str, object]:
+def _plan(errors: list[str]) -> dict[str, object]:
     return {
         "errors": errors,
-        "enabled": enabled,
+        "enabled": False,
         "rules": [],
         "families": [],
         "disabled_rules": [],
@@ -562,7 +560,9 @@ def _context(
     context = Context(
         enabled=switched_on,
         allowed=check_allow_list(options["allow_disruptive"], registry, errors),
-        profile=check_profile(options["profile_rule_ids"], enabled=switched_on, errors=errors),
+        profile=(
+            check_profile(options["profile_rule_ids"], errors) if switched_on else frozenset()
+        ),
         toggles=check_toggles(options["toggles"], rule_toggles, registry, errors),
         ledger=ledger,
     )
@@ -576,14 +576,17 @@ def remediation_plan(catalogue: object, options: object) -> dict[str, object]:
     if given is None or frozenset(given) != OPTION_KEYS:
         keys = [] if given is None else sorted(given)[:10]
         errors.add(f"options must be a mapping with exactly {sorted(OPTION_KEYS)}, got {keys}")
-        return _plan(errors.items, enabled=False)
+        return _plan(errors.items)
     rules, registry, context, orphaned = _context(catalogue, given, errors)
     if errors.items:
-        return _plan(errors.items, enabled=context.enabled)
+        failed = _plan(errors.items)
+        failed["enabled"] = context.enabled
+        return failed
     planned = [plan_rule(rule, context) for rule in rules]
-    plan = _plan([], enabled=context.enabled)
+    plan = _plan([])
     plan.update(
         {
+            "enabled": context.enabled,
             "rules": planned,
             "families": family_plans(planned, registry),
             "disabled_rules": [
@@ -594,7 +597,7 @@ def remediation_plan(catalogue: object, options: object) -> dict[str, object]:
             ],
             "orphaned": orphaned,
             "report": [{key: rule[key] for key in REPORT_KEYS} for rule in planned],
-            "notices": notices(planned, orphaned, enabled=context.enabled),
+            "notices": notices(planned, orphaned, context),
             "summary": {
                 action: sum(rule["action"] == action for rule in planned) for action in ACTIONS
             },

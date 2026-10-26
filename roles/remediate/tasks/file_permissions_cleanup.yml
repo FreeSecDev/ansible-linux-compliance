@@ -9,9 +9,13 @@
       - __linux_compliance_remediate_rule is mapping
       - __linux_compliance_remediate_rule.family == 'file_permissions'
       - __linux_compliance_remediate_rule.ledger_entry is mapping
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
       - >-
-        __linux_compliance_remediate_rule.rule_id in
-        (__linux_compliance_remediate_family.cleanup | map(attribute='rule_id') | list)
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'file_permissions') | list | first | default({}))).cleanup | default([])
     fail_msg: >-
       file_permissions_cleanup.yml runs only for a rule that the remediate dispatcher planned to clean
       up from its ledger entry, with linux_compliance_remediate_enabled true. No change was made to the host.

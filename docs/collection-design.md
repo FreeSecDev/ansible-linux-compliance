@@ -91,8 +91,8 @@ gap:
   import `ansible_collections.freesecdev.linux_compliance.plugins...`, the same name `ansible-test` uses. Coverage
   resolves the symlink, so measured files are the real ones.
 
-The link directory also links `roles/` and `playbooks/`, so ansible-lint can resolve the role and playbook
-references in the playbooks and `make test-remediate-check` can run the `remediate` role. `make lint-ansible` and the ansible-lint hook set
+The link directory also links `roles/`, so ansible-lint can resolve the role references in the playbooks and
+`make test-remediate-check` can run the `remediate` role. `make lint-ansible` and the ansible-lint hook set
 `ANSIBLE_COLLECTIONS_PATH` to `build/collections` for that one invocation only; the repository has no `ansible.cfg`,
 which would override users' own Ansible configuration, and `ansible.cfg` is listed in `build_ignore`.
 `make install` creates the links; the targets that need them depend on it.

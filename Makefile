@@ -367,7 +367,6 @@ collection-link:
 	mkdir -p $(COLLECTION_LINK)
 	ln -sfn ../../../../../plugins $(COLLECTION_LINK)/plugins
 	ln -sfn ../../../../../roles $(COLLECTION_LINK)/roles
-	ln -sfn ../../../../../playbooks $(COLLECTION_LINK)/playbooks
 
 collection-tree:
 	rm -rf build/collection

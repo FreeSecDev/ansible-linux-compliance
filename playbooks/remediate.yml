@@ -1,6 +1,6 @@
 ---
 - name: Audit hosts before remediation
-  ansible.builtin.import_playbook: freesecdev.linux_compliance.audit
+  ansible.builtin.import_playbook: audit.yml
 
 - name: Remediate hosts against a compliance profile
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
@@ -10,4 +10,4 @@
       become: true
 
 - name: Verify hosts after remediation
-  ansible.builtin.import_playbook: freesecdev.linux_compliance.verify
+  ansible.builtin.import_playbook: verify.yml

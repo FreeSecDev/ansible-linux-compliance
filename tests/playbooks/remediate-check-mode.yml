@@ -422,10 +422,25 @@
         file: tasks/remediate-family-case.yml
       vars:
         case_rule: "{{ base_rule | combine(case.rule, recursive=True) }}"
+        case_family:
+          name: file_permissions
+          disruptive: false
+          apply: "{{ [case_rule] if case.helper == 'apply' else [] }}"
+          cleanup: "{{ [case_rule] if case.helper == 'cleanup' else [] }}"
       loop: "{{ cases }}"
       loop_control:
         loop_var: case
         label: "{{ case.name }}"
+
+    - name: Plan the base rule as the dispatcher would
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_plan:
+          enabled: true
+          families:
+            - name: file_permissions
+              disruptive: false
+              apply: ["{{ base_rule }}"]
+              cleanup: []
 
     - name: Try a helper without the opt-in
       block:
@@ -436,41 +451,13 @@
           vars:
             linux_compliance_remediate_enabled: false
             __linux_compliance_remediate_rule: "{{ base_rule }}"
-            __linux_compliance_remediate_family:
-              name: file_permissions
-              disruptive: false
-              apply: ["{{ base_rule }}"]
-              cleanup: []
+            __linux_compliance_remediate_family: "{{ __linux_compliance_remediate_plan.families[0] }}"
 
         - name: Fail because the helper ran without the opt-in
           ansible.builtin.fail:
             msg: The apply helper ran without the opt-in.
       rescue:
         - name: Check that the helper refused to run
-          ansible.builtin.assert:
-            that:
-              - "'runs only for a rule that the remediate dispatcher planned' in ansible_failed_result.msg"
-            quiet: true
-
-    - name: Try a helper for a rule the dispatcher did not plan
-      block:
-        - name: Run the apply helper with a rule outside the family plan
-          ansible.builtin.include_role:
-            name: freesecdev.linux_compliance.remediate
-            tasks_from: file_permissions_apply.yml
-          vars:
-            __linux_compliance_remediate_rule: "{{ base_rule }}"
-            __linux_compliance_remediate_family:
-              name: file_permissions
-              disruptive: false
-              apply: []
-              cleanup: []
-
-        - name: Fail because the helper ran for an unplanned rule
-          ansible.builtin.fail:
-            msg: The apply helper ran for a rule the dispatcher did not plan.
-      rescue:
-        - name: Check that the helper refused the unplanned rule
           ansible.builtin.assert:
             that:
               - "'runs only for a rule that the remediate dispatcher planned' in ansible_failed_result.msg"
@@ -484,11 +471,7 @@
             tasks_from: file_permissions.yml
           vars:
             linux_compliance_remediate_enabled: false
-            __linux_compliance_remediate_family:
-              name: file_permissions
-              disruptive: false
-              apply: ["{{ base_rule }}"]
-              cleanup: []
+            __linux_compliance_remediate_family: "{{ __linux_compliance_remediate_plan.families[0] }}"
 
         - name: Fail because the family file ran without the opt-in
           ansible.builtin.fail:
@@ -498,4 +481,111 @@
           ansible.builtin.assert:
             that:
               - "'runs only from the remediate dispatcher' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Plan nothing for the family, as a dispatcher run would that has no work for it
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_plan:
+          enabled: true
+          families:
+            - name: file_permissions
+              disruptive: false
+              apply: []
+              cleanup: []
+
+    - name: Try a helper whose caller claims a rule that the dispatcher did not plan
+      block:
+        - name: Run the apply helper with a family context that lists the unplanned rule
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+            tasks_from: file_permissions_apply.yml
+          vars:
+            __linux_compliance_remediate_rule: "{{ base_rule }}"
+            __linux_compliance_remediate_family:
+              name: file_permissions
+              disruptive: false
+              apply: ["{{ base_rule }}"]
+              cleanup: []
+
+        - name: Fail because the helper trusted the caller instead of the plan
+          ansible.builtin.fail:
+            msg: The apply helper ran for a rule that only the caller, not the dispatcher, planned.
+      rescue:
+        - name: Check that the helper refused the rule the plan does not hold
+          ansible.builtin.assert:
+            that:
+              - "'runs only for a rule that the remediate dispatcher planned' in ansible_failed_result.msg"
+            quiet: true
+
+    - name: Try the family entry file with a family context that differs from the plan
+      block:
+        - name: Run the family entry file with a forged family context
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+            tasks_from: file_permissions.yml
+          vars:
+            __linux_compliance_remediate_family:
+              name: file_permissions
+              disruptive: false
+              apply: ["{{ base_rule }}"]
+              cleanup: []
+
+        - name: Fail because the family file trusted the forged context
+          ansible.builtin.fail:
+            msg: The family file ran for a family context that the dispatcher did not plan.
+      rescue:
+        - name: Check that the family file refused the forged context
+          ansible.builtin.assert:
+            that:
+              - "'runs only from the remediate dispatcher' in ansible_failed_result.msg"
+            quiet: true
+
+- name: Remediate role in check mode | A registered family without a task file in the role fails closed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Catalogue a rule of the registered sysctl family, which has no task file yet
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_rules:
+          - rule_id: xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space
+            family: sysctl
+            disruptive: false
+            reversible: true
+            revert_strategy: owned_dropin
+            toggle: linux_compliance_rule_sysctl_kernel_randomize_va_space_enabled
+            runbook: null
+            parameters: {}
+
+    - name: Run the role for a family without a task file
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the role found a family file outside the role
+          ansible.builtin.fail:
+            msg: The dispatcher included a family file that the role does not contain.
+      rescue:
+        - name: Check that the run stopped at the dispatch of the family without a task file
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_remediate_plan.errors == []
+              - __linux_compliance_remediate_plan.families | map(attribute='name') | list == ['sysctl']
+              - __linux_compliance_remediate_results == []
+              - __linux_compliance_remediate_dispatched is false
             quiet: true

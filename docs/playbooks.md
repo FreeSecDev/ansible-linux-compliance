@@ -9,14 +9,15 @@ naming their tracking issue.
 | Playbook | Plays and roles in order | `become` |
 |---|---|---|
 | `playbooks/audit.yml` | `discover`, `audit`; then the `audit` role's `stale` entry point in a second play on `localhost` | `audit` only |
-| `playbooks/remediate.yml` | `audit.yml` (`discover`, `audit`), then `remediate`, then `verify.yml` (`verify`) | `audit`, `remediate`, `verify` |
+| `playbooks/remediate.yml` | `audit.yml` (`discover`, `audit`, then the read-only stale-exceptions report on `localhost`), then `remediate`, then `verify.yml` (`verify`) | `audit`, `remediate`, `verify` |
 | `playbooks/verify.yml` | `verify` | `verify` |
 
-`remediate.yml` imports `freesecdev.linux_compliance.audit` first, so every remediation starts from a verified profile
-and a recorded baseline audit, and the `remediate` role gets the `linux_compliance_discovered` fact it requires. A host
+`remediate.yml` imports `audit.yml` first, by relative path so that the repository guard can scan the imported
+playbook. Every remediation therefore starts from a verified profile and a recorded baseline audit, and the
+`remediate` role gets the `linux_compliance_discovered` fact it requires. A host
 whose baseline audit fails is removed from the later plays and is not remediated; keep
 `linux_compliance_audit_fail_on_noncompliant` at its default `false` with this playbook, or every non-compliant host is
-skipped. The playbook ends with `freesecdev.linux_compliance.verify`, which is still a skeleton (FREES-54): until it is
+skipped. The playbook ends with `verify.yml`, which is still a skeleton (FREES-54): until it is
 implemented, `remediate.yml` exits with the verify role's "not implemented yet" failure after the remediation has run,
 and `linux_compliance_remediated` holds what the remediation did. That exit status is not a remediation failure.
 

@@ -4,9 +4,16 @@
     that:
       - linux_compliance_remediate_enabled is boolean
       - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
       - __linux_compliance_remediate_family is defined
       - __linux_compliance_remediate_family is mapping
       - __linux_compliance_remediate_family.name == 'file_permissions'
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'file_permissions') | list | first | default({}))
     fail_msg: >-
       The file_permissions family file runs only from the remediate dispatcher with
       linux_compliance_remediate_enabled true. No change was made to the host.
@@ -16,7 +23,7 @@
 
 - name: File permissions | Restore the recorded mode of rules that are no longer effective
   ansible.builtin.include_tasks:
-    file: file_permissions_cleanup.yml
+    file: "{{ role_path }}/tasks/file_permissions_cleanup.yml"
     apply:
       tags:
         - always
@@ -29,7 +36,7 @@
 
 - name: File permissions | Apply the effective rules
   ansible.builtin.include_tasks:
-    file: file_permissions_apply.yml
+    file: "{{ role_path }}/tasks/file_permissions_apply.yml"
     apply:
       tags:
         - always

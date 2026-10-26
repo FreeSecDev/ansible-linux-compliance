@@ -28,7 +28,7 @@ Molecule scenario exists yet.
 | Fail closed | always | Unknown rule or family toggles, toggles that are not booleans, allow-list entries that are not disruptive families, an invalid catalogue and a ledger entry whose family contradicts the catalogue stop the role before anything changes. |
 | Check mode | `--check` | Every task runs in check mode: nothing is written, not even the ledger, and the role reports what would change. |
 | No silent skips | always | Every task runs with the tag `always`, so `--tags` and `--skip-tags <family>` cannot skip work. After the dispatch the role fails unless every rule planned for `apply` or `cleanup` has exactly one result (filter `remediation_unaccounted`). `--skip-tags always` fails the role through a guard task tagged `linux_compliance_remediate_guard`. |
-| Family files refuse direct use | always | Every family file and helper first asserts the opt-in and the dispatcher context for its family and rule, so `include_role` with `tasks_from` cannot change the host without the opt-in. |
+| Family files refuse direct use | always | Every family file and helper first asserts the opt-in and checks its family and rule against the dispatcher's own plan (`__linux_compliance_remediate_plan`), so `include_role` with `tasks_from` cannot change the host without the opt-in and a matching plan. |
 
 The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_remediate_enabled": true}'`.
 `-e linux_compliance_remediate_enabled=true` passes a string and fails the input validation.
@@ -139,7 +139,9 @@ trust this list: it applies a rule only when `linux_compliance_discovered.rule_i
 5. With the opt-in only: check `linux_compliance_discovered` (same profile, at least one rule) and read the ledger with
    `control_state` `list`.
 6. Resolve the plan with `remediation_plan` and stop on any error.
-7. Include `<family>.yml` once for every family that has work, in registry order, with the tag `always` applied to it.
+7. Include `{{ role_path }}/tasks/<family>.yml` once for every family that has work, in registry order, with the tag
+   `always` applied to it. The path is inside the role, so a registered family without a task file fails the run
+   instead of loading a file of the same name from the playbook directory.
 8. Publish the fact `linux_compliance_remediated` and print the notices (skipped disruptive rules, manual actions,
    orphaned ledger entries, incomplete cleanups).
 9. Fail unless every rule planned for `apply` or `cleanup` has exactly one result, and no other result exists
@@ -184,11 +186,18 @@ must:
    incomplete), `changed` and `message`. The dispatcher fails when a planned rule has no result or more than one.
 9. **Stay narrow.** One family per file; no rule logic in `tasks/main.yml`.
 10. **Tag every task `always` and nothing else.** A family tag would let `--skip-tags <family>` skip planned work.
-11. **Refuse direct use.** The entry file and every helper start with one `ansible.builtin.assert` that
-    `linux_compliance_remediate_enabled` is `true`, that `__linux_compliance_remediate_family.name` is the family, and,
-    in a helper, that the rule belongs to the family and is in its `apply` or `cleanup` list. This is defence in depth
-    against `include_role` with `tasks_from`; the real decisions (opt-in, allow-list, toggles, profile) are made by the
-    dispatcher before the file is included, and a family file acts only on the lists it receives.
+11. **Refuse direct use.** The entry file and every helper start with one `ansible.builtin.assert`:
+    - `linux_compliance_remediate_enabled` is `true` and `__linux_compliance_remediate_plan.enabled` is `true`;
+    - in the entry file, `__linux_compliance_remediate_family` equals the entry for the family in
+      `__linux_compliance_remediate_plan.families`;
+    - in a helper, `__linux_compliance_remediate_rule` is one of the rules in that entry's `apply` or `cleanup` list.
+
+    The family context and the rule only select work; the dispatcher's own plan authorises it. This is defence in
+    depth against `include_role` with `tasks_from`. The real decisions (opt-in, allow-list, toggles, profile) are made
+    by the dispatcher before the file is included. A playbook author who sets every private fact by hand can still
+    pass these checks, but cannot do so without the opt-in.
+12. **Include helpers from the role.** Use `file: "{{ role_path }}/tasks/<family>_<purpose>.yml"`, never a bare file
+    name, so a missing helper fails instead of resolving against the playbook directory.
 
 ### Reference family: `file_permissions`
 
@@ -266,6 +275,8 @@ already controls the host. A remediated rule is not proof that the control passe
 |---|---|---|
 | `tests/unit/plugins/filter/` | Effective-state resolution and validation (`remediation_plan`), result accounting (`remediation_unaccounted`) and `restricted_mode`, 100% line and branch coverage | `make test-coverage`, `ansible-test units` |
 | `tests/unit/roles/test_remediate_catalogue.py` | The catalogue is valid, the allow-list choices equal the disruptive families, every family with rules has a task file, the recorded collection version equals `galaxy.yml` | `make test-coverage` |
+| `tests/unit/roles/test_remediate_tasks.py` | Every task in `roles/remediate/tasks/*.yml`, including tasks in blocks, is tagged exactly `[always]`; the only exceptions are the two guard tasks of `main.yml`. Every include applies exactly `always` and loads a file below `{{ role_path }}/tasks/`. The completeness check asserts the `remediation_unaccounted` result of the plan and runs before the dispatch is marked complete | `make test-coverage` |
+| `tests/unit/tools/test_check_role_specs.py` | The guard tag is accepted only, and alone, on a top-level `assert`, `fail` or the `__linux_compliance_<role>_dispatched: false` `set_fact` of the role's `tasks/main.yml`. It is refused on other modules, a `set_fact` with other keys, includes, imports, blocks, conditions, loops, nested tasks, `apply`, other task files and another role's name | `make test-coverage` |
 | `tests/playbooks/remediate-check-mode.yml` | Against localhost, in check mode and without `become`. Nothing happens without the opt-in: the ledger read and the profile check are skipped. The reference rule is planned and the host is unchanged. Invalid toggles, allow-list entries, a profile mismatch and an empty profile fail. A disruptive family is skipped without the allow-list. The `file_permissions` helpers, called with synthetic planned rules against `tests/playbooks/fixtures/remediate/` (a regular file and a symbolic link): the prior mode is recorded only without a ledger entry, a symbolic link or an absent target is never changed, invalid recorded modes (`abc`, `06440`, a trailing newline, no mode) and absent or non-regular targets keep the entry as `cleanup_incomplete`, and the family file and helpers refuse to run without the opt-in or for a rule the dispatcher did not plan. Every play refuses to run without `--check`. The target runs it twice, the second time with `--skip-tags file_permissions` | `make test-remediate-check`, CI job `test` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
 
@@ -288,11 +299,23 @@ after the review of FREES-52 with these additional cases:
 
 These runs are evidence from the pull request, not a repeatable CI test.
 
-The check-mode suite was checked by mutation: each of these changes to the role makes `make test-remediate-check`
-fail at the assertion meant for it. The changes were reading the ledger without the opt-in; re-recording over an
-existing ledger entry; restoring without the strict mode check, and without only its length part; accepting an empty
-discovered profile; a family tag on the apply include; removing the result accounting together with that tag; a helper
-without the opt-in check; forgetting the entry of an absent target; and disabling the `--skip-tags always` guard.
+The tests were checked by mutation. Each of these changes to the role makes `make test-remediate-check` or the
+role unit tests fail, at the assertion meant for it:
+
+- reading the ledger without the opt-in;
+- re-recording over an existing ledger entry;
+- restoring without the strict mode check, and without only its length part;
+- accepting an empty discovered profile;
+- a family tag on the cleanup include, or on the apply include;
+- replacing the completeness assertion with `true`;
+- a helper without the opt-in check;
+- a helper or entry file that trusts the caller's family context instead of the plan;
+- forgetting the entry of an absent target;
+- including a family file without `role_path`;
+- disabling the `--skip-tags always` guard.
+
+A play in `remediate-check-mode.yml` also catalogues a rule of the registered `sysctl` family, which has no task file
+yet, and checks that the run stops at the dispatch.
 
 The Molecule scenario (nothing changes without the opt-in, disruptive families skipped without the allow-list, the
 reference rule applied, idempotent and cleaned up on disable, check mode changing nothing) waits for the Docker Molecule

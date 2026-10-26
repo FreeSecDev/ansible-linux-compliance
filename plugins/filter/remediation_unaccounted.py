@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Final, cast
 
@@ -83,7 +82,9 @@ def remediation_unaccounted(results: object, plan: object) -> list[str]:
     if reported is None:
         return ["the results must be a list of mappings with rule_id and action"]
     expected = {key for key in planned if key[1] in ACCOUNTED_ACTIONS}
-    counts = Counter(reported)
+    counts: dict[Key, int] = {}
+    for key in reported:
+        counts[key] = counts.get(key, 0) + 1
     messages = [
         f"{rule_id}: planned {action} but no family task reported a result; was a task skipped?"
         for rule_id, action in sorted(expected - set(counts))
