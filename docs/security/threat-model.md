@@ -83,3 +83,33 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
 - **Residual:** the pinned content and its 81 scripts are trusted as a whole, like the OVAL definitions, which
   `oscap` also evaluates as root. A content update is therefore a change to code that runs as root: its review covers
   the SCE scripts that changed, not only the digest.
+
+## Report inputs on the controller
+
+`tools/reporting` turns operator-supplied files into the normalized report and the dashboard
+([reporting data model](../reporting-data-model.md), [ADR 0016](../adr/0016-report-schema-and-summary-semantics.md)).
+This section covers the two entries that FREES-130 and FREES-132 changed; the rest of the reporting threat model is
+part of FREES-25.
+
+### T-REPORT-1: a forged scan run raises a host's figure
+
+- **Attacker:** anyone who can add a file to the report inputs, for example a ScanRun JSON with the host name and
+  machine ID of a real host (a machine ID is not a secret).
+- **Failure:** two runs of one host, benchmark version and profile were merged rule by rule; the forgery adds passing
+  rules that the real run did not evaluate (0.0 to 99.0 percent in the FREES-130 probe).
+- **Mitigation (FREES-130):** a second completed ScanRun for the same host, benchmark, content version and profile is
+  refused unless `--allow-repeated-scans` is given, and every group built from more than one input carries a
+  `merged_inputs` note that the dashboard shows. An XCCDF target and fqdn fact that disagree are an input error.
+- **Residual:** a forged run with another profile, or a self-asserted XCCDF file, is merged with a visible note but not
+  detected. Signed evidence bundles ([ADR 0018](../adr/0018-evidence-bundle-provenance.md), proposed) are the fix.
+
+### T-REPORT-2: an edited exceptions evaluation hides a failure
+
+- **Attacker:** anyone who can change an evaluation document between the `apply_exceptions` filter and the report.
+- **Failure:** a status, mark or count is changed so that a failure reads as waived or an expired waiver as in effect.
+- **Mitigation (FREES-132):** `exceptions.load_evaluation` evaluates the scan run again from the exceptions, target and
+  times in the document and accepts it only when the result is identical; anything else is an input error, never a
+  waiver. Justification text is rendered with DOM text APIs only.
+- **Residual:** the SHA-256 of the exceptions file and the exception records themselves are taken as given, so a
+  document rebuilt consistently from a different exceptions file is accepted with that file's digest. ADR 0018 proposes
+  binding the file and the evaluation in a signed bundle.
