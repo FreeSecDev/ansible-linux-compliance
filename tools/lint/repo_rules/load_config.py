@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Final
 import yaml
 
 from tools.lint.repo_rules.common import Violation
+from tools.lint.repo_rules.exec_config import CODE_ENVIRONMENT_VARIABLES
+from tools.lint.repo_rules.exec_config import text_findings as option_findings
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -79,7 +81,7 @@ NAVIGATOR_FILE_NAMES: Final[frozenset[str]] = frozenset(
     }
 )
 NAVIGATOR_CONFIG_PATH: Final[tuple[str, ...]] = ("ansible-navigator", "ansible", "config", "path")
-ENVIRONMENT_NAME: Final[re.Pattern[str]] = re.compile(r"\bANSIBLE_[A-Z0-9_]+\b")
+ENVIRONMENT_NAME: Final[re.Pattern[str]] = re.compile(r"(?<![A-Za-z0-9_])_?ANSIBLE_[A-Z0-9_]+\b")
 MODULE_PATH_OPTION: Final[re.Pattern[str]] = re.compile(r"(?<![\w-])(?:--module-path\b|-M)")
 EXECUTED_YAML_DIRECTORY: Final[str] = ".github"
 
@@ -139,19 +141,28 @@ def _config_findings(path: Path, text: str) -> list[Violation]:
     ]
 
 
+def environment_problem(name: str, allowed: frozenset[str] = frozenset()) -> str | None:
+    """Return why the environment variable ``name`` may not be set, or ``None``."""
+    if name in PATH_ENVIRONMENT_VARIABLES - allowed:
+        return (
+            f"environment variable {name} is not allowed: it adds a location from "
+            "which Ansible loads code (ADR 0004)"
+        )
+    if name in CODE_ENVIRONMENT_VARIABLES:
+        return (
+            f"environment variable {name} is not allowed: it names an executable, arguments, "
+            "a script or code that Ansible runs or loads (ADR 0004)"
+        )
+    return None
+
+
 def _text_findings(path: Path, text: str, allowed: frozenset[str] = frozenset()) -> list[Violation]:
     violations: list[Violation] = []
     for number, line in enumerate(text.splitlines(), 1):
-        violations.extend(
-            Violation(
-                path,
-                number,
-                f"environment variable {name} is not allowed: it adds a location from "
-                "which Ansible loads code (ADR 0004)",
-            )
-            for name in ENVIRONMENT_NAME.findall(line)
-            if name in PATH_ENVIRONMENT_VARIABLES - allowed
-        )
+        for name in ENVIRONMENT_NAME.findall(line):
+            problem = environment_problem(name, allowed)
+            if problem is not None:
+                violations.append(Violation(path, number, problem))
         violations.extend(
             Violation(
                 path,
@@ -161,6 +172,7 @@ def _text_findings(path: Path, text: str, allowed: frozenset[str] = frozenset())
             )
             for option in MODULE_PATH_OPTION.findall(line)
         )
+    violations.extend(Violation(path, number, message) for number, message in option_findings(text))
     return violations
 
 
@@ -198,15 +210,9 @@ def _scalars(documents: Iterable[yaml.Node]) -> Iterator[tuple[yaml.ScalarNode, 
 
 def _key_finding(path: Path, key: yaml.ScalarNode, *, molecule: bool) -> list[Violation]:
     line = key.start_mark.line + 1
-    if key.value in PATH_ENVIRONMENT_VARIABLES:
-        return [
-            Violation(
-                path,
-                line,
-                f"environment variable {key.value} is not allowed: it adds a location from "
-                "which Ansible loads code (ADR 0004)",
-            )
-        ]
+    problem = environment_problem(str(key.value))
+    if problem is not None:
+        return [Violation(path, line, problem)]
     if molecule and key.value in CONFIG_PATH_SETTINGS:
         return [
             Violation(

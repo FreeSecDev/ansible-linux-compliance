@@ -661,3 +661,196 @@ results parser of `openscap.py` gains the production keyword `assume_utc` and th
 publishing guard of ADR 0019 allows the SCC identifiers in exactly two plugin files, `scc.py` and `process.py`
 (`ALLOWED_FILES` in `tests/unit/tools/test_scc_image.py`), which are still checked for publishing commands; any
 other plugin file that names them fails.
+
+## Amendment 2026-10-26: command execution without the banned modules (FREES-159)
+
+The reviews of PR #42 showed that a role could still run a command without `shell`, `command`, `raw` or
+`script`: through `ansible.builtin.expect`, through the `pipe` and `lines` lookups on the controller, and through
+variables and settings that choose the interpreter, the executable or its arguments. Every list below was read
+from ansible-core 2.21.5, and `tests/unit/tools/test_check_repo_rules_exec_inventory.py` derives it from the
+installed ansible-core again, so a release that adds a lookup, a module, an option or a setting fails the tests
+until it is classified.
+
+**Lookups** (`tools/lint/repo_rules/jinja_calls.py`).
+
+- `pipe` and `lines` run their terms with `subprocess.Popen(term, ..., shell=True)` (`plugins/lookup/pipe.py`,
+  `plugins/lookup/lines.py`) and are refused. They are the only ansible-core lookups that start a process; the test
+  checks every `plugins/lookup/*.py` for `subprocess`, `Popen`, `os.system`, `os.popen`, `os.exec*` and
+  `run_command`. The other 23 (`REVIEWED_LOOKUPS`: `config`, `csvfile`, `dict`, `env`, `file`, `fileglob`,
+  `first_found`, `indexed_items`, `ini`, `inventory_hostnames`, `items`, `list`, `nested`, `password`,
+  `random_choice`, `sequence`, `subelements`, `template`, `together`, `unvault`, `url`, `varnames`, `vars`) are
+  allowed. `env` only reads `os.environ` of the controller.
+- A lookup may only be used as a call of `lookup`, `query` or `q` (the Jinja globals that `_jinja_bits.py` defines)
+  whose first argument is a string literal followed by `,` or `)`, and the literal must name a reviewed lookup,
+  bare or as `ansible.builtin.` or `ansible.legacy.`. Everything else is refused: `pipe` and `lines` in every form, a
+  computed name (`lookup(name)`, `query(var)`, `lookup('pi' 'pe')`, `lookup('pi' ~ 'pe')`), an indirect use
+  (`(lookup)(...)`, `{% set f = lookup %}`, `x.lookup`), and any other name, because a bare name that ansible-core
+  does not ship is redirected to a collection (`passwordstore` and `dig` run in `community.general`). A
+  `with_<name>` loop key follows the same rule.
+- The check reads Jinja with the Jinja 3.1.6 lexer, now a pinned direct development dependency, so escapes
+  (`'\x70ipe'`) and adjacent string literals are read as Jinja reads them. It covers every YAML scalar that Ansible
+  would template (one that contains `{{`, `{%` or `{#` or starts with `#jinja2:`) in every YAML file outside
+  `.github/` (role defaults and vars, plays, blocks, tasks, include and role `vars`, `set_fact`, `loop`,
+  inventories, `host_vars`, `group_vars` and Molecule files); the values of `when`, `changed_when`, `failed_when`,
+  `until`, `that` and `var`, which Ansible evaluates as bare expressions; and string constants inside a
+  template, which Ansible templates when it renders the outer one. Workflows hold GitHub expressions, not Jinja,
+  and `!unsafe` and `!vault` values are never templated. A template that does not lex is refused; a bare
+  expression that does not lex cannot be compiled by Ansible either and is ignored.
+- Every tracked file outside `.github/` is read as one template, whatever its suffix and location (independent
+  reviews of PR #45 at 403e751 and b5538dd, `tools/lint/repo_rules/rendered_files.py`), because the `template`
+  lookup and module render any file they are pointed at and `vars_files` loads any path. That covers a role's
+  `files/`, which `{% include %}` also renders, the values of an INI inventory, and vars files of any suffix.
+  `.github/` holds GitHub expressions, not Jinja, and GitHub runs it, not Ansible.
+  - A file is binary only when its content starts with the magic bytes of a known binary format and its suffix
+    names that format (`BINARY_FORMATS`: PNG, JPEG, GIF, ICO, WebP, gzip, bzip2, xz, zstd, zip, tar, PDF, WOFF,
+    WOFF2, OpenType, TrueType, qcow2). A binary is still checked when it holds a template marker, because the
+    template module would render it. A NUL byte in any other file is refused: ansible-core 2.21.5 renders a file
+    with a NUL and runs its lookups, so a NUL cannot mark a file as binary. Text that is not UTF-8 is refused.
+  - A file that Ansible may also load value by value (a file below `roles/`, `playbooks/`, `tests/playbooks/` or
+    `extensions/`, below a `templates`, `files`, `vars` or `defaults` directory, with a template suffix, inventory
+    text, or `.json`) is checked strictly: a template that does not lex is refused, because each value is
+    templated on its own. Any other file can only be rendered whole, and a template that does not lex fails to
+    compile before any lookup runs, so a lexer error there is not a finding; its lookups and other refused Jinja
+    are. YAML files are checked value by value by the YAML rules and whole by this rule.
+  - Every `.json` file, and an extensionless file in an inventory, `host_vars`, `group_vars`, `vars` or
+    `defaults` directory, is also composed as YAML, as `include_vars`, the `host_group_vars` plugin and the `yaml`
+    inventory plugin load it, so its keys and decoded values get the YAML lookup and variable rules. Reading an
+    INI inventory whole is a superset of what its parser passes to the templar: a value whose quoting or escapes
+    (`\x27`) would change the expression does not lex and is refused.
+  - No tracked file needed an exception or a rewrite.
+- Load and render targets (`tools/lint/repo_rules/exec_targets.py`): a `vars_files` entry, the `file`, free form
+  and `dir` of `include_vars`, the `src` of the `template` module and the first term of the `template` lookup must
+  be a literal relative path, without `..` except in `vars_files`, which Ansible resolves against the playbook,
+  and must resolve inside the repository and outside `.github/`. The one templated form is `{{ role_path }}/` in a
+  file of a role or `{{ playbook_dir }}/` in a playbook, followed by a literal path, resolved against the role or
+  the playbook directory (`roles/audit/tasks/toggles.yml` and `tests/playbooks/remediate-check-mode.yml` load
+  `roles/remediate/vars/rules.yml` that way). A vars file must be `.yml`, `.yaml` or `.json`, the files that the
+  guard reads value by value, and `extensions` of `include_vars` is refused, so `include_vars` with `dir` loads
+  only those suffixes. With every file scanned, the target rule is defence in depth: it keeps a target from
+  leaving the repository, where nothing is scanned, and keeps vars files to the suffixes whose values are checked
+  one by one.
+- An `include`, `import`, `extends` or `from` tag must name a literal relative template without `..` that is not
+  itself templated, followed by the end of the tag or a keyword (`as`, `import`, `ignore missing`,
+  `with context`); a computed name (`{% include name %}`, `'a' ~ x`, a list) could load any template and is
+  refused, like a computed lookup name.
+- A `#jinja2:` header (`JINJA2_OVERRIDE`) changes the delimiters of the rest of the template, so a lookup between
+  `[[` and `]]` would be invisible to the check. The header is refused in YAML values, string constants and template
+  files, and so are the delimiter options (the `*_string` and `*_prefix` fields of `TemplateOverrides`) as YAML keys,
+  for example as parameters of `ansible.builtin.template`, and as Jinja keyword arguments. `allow_unsafe` and
+  `allow_unsafe_lookups`, which made a lookup result templatable before data tagging, are refused as Jinja names;
+  ansible-core 2.21 no longer reads them, but `base.yml` still documents them.
+
+**Modules** (`tools/lint/repo_rules/ansible_tasks.py`, `tools/lint/repo_rules/exec_modules.py`). Every module in
+`ansible/modules/` is classified by the test.
+
+- `expect` runs its `command` and `cron` installs its `job` in a crontab, so both are refused like the four banned
+  modules, as tasks, `action` and `local_action` values and redirect targets, bare and with the `ansible.builtin.`
+  and `ansible.legacy.` prefixes (`TASK_ONLY_BANNED_MODULES`). They are not refused as keys of data documents, where
+  `expect` is a word of the Molecule contract cases and `cron` is the schedule of a workflow. Cron hardening in the
+  benchmarks (the cron daemon enabled, the permissions of `/etc/crontab` and `/etc/cron.*`, `cron.allow`) is
+  done with `file`, `copy`, `service` and `systemd`, so the collection does not need the `cron` module today. If a
+  remediation ever needs to remove a crontab entry, add a narrow `state: absent` allowance with tests.
+- These parameters name a command, an executable, its options or a file of code that the module runs, and are
+  refused in the mapping and free forms, through `args`, in `action` and `local_action` and in `module_defaults`
+  (`MODULE_PARAMETERS`): `validate` of `assemble`, `blockinfile`, `copy`, `lineinfile`, `replace` and `template`;
+  `dpkg_options` of `apt` (`--pre-invoke`); `conf_file` of `dnf` and `dnf5` (a plugin path); `executable` and
+  `ssh_opts` of `git` (`ProxyCommand`); `mount_binary` of `mount_facts`; `use` of `package` and `service` (the
+  action runs the module it names, which can be `ansible.builtin.command`); `executable`, `extra_args`,
+  `virtualenv_command` and `virtualenv_python` of `pip`; `boot_time_command`, `reboot_command`, `search_paths` and
+  `test_command` of `reboot`; `fact_path` of `setup` and `gather_facts` (executable fact files), also as a play
+  keyword; `executable` of `subversion`; `extra_opts` of `unarchive` (`tar --to-command`).
+- Reviewed and allowed: `user` `shell` (the login shell; hardening sets system accounts to `nologin`), `service`
+  and `sysvinit` `arguments` (passed to an installed init script), `hostname` `use` (a strategy name), the
+  `iptables` flag options, `rolespec_validate` and `provided_arguments`. Package managers run the maintainer scripts
+  of what they install; that is their purpose, not a command of the caller's choice.
+
+**Variables** (`tools/lint/repo_rules/exec_variables.py`).
+
+- Refused, from the `DOCUMENTATION` of the connection and become plugins (every option whose name ends in `args`,
+  `exe`, `executable`, `flags`, `command` or `cmd`, and `pkcs11_provider`): `ansible_ssh_args`,
+  `ansible_ssh_common_args`, `ansible_ssh_extra_args`, `ansible_scp_extra_args`, `ansible_sftp_extra_args`,
+  `ansible_ssh_executable`, `ansible_scp_executable`, `ansible_sftp_executable`, `ansible_ssh_pkcs11_provider`
+  (`plugins/connection/ssh.py`), `ansible_winrm_kinit_cmd`, `ansible_winrm_kinit_args`
+  (`plugins/connection/winrm.py`), `ansible_become_exe`, `ansible_sudo_exe`, `ansible_su_exe`,
+  `ansible_become_flags`, `ansible_sudo_flags`, `ansible_su_flags`, `ansible_runas_flags` (`plugins/become/`) and
+  the keywords `become_exe` and `become_flags`. From `MAGIC_VARIABLE_MAPPING` (`constants.py`):
+  `ansible_shell_executable` and `ansible_docker_extra_args`, and `docker_extra_args`, which the
+  `community.docker.docker` connection also reads. From `config/base.yml`: `ansible_python_interpreter`,
+  `ansible_interpreter_python_fallback`, `ansible_facts_modules` and the internal `_ansible_ansiballz_*_config`
+  and `_ansible_coverage_remote_output` (a debugger or coverage hook in every module). From
+  `executor/module_common.py`: every `ansible_<name>_interpreter` and `discovered_interpreter_<name>` (and
+  `ansible_discovered_interpreter_<name>`), which a cached fact can set. From the `package` and `service` actions:
+  `ansible_package_use`, `pkg_mgr`, `ansible_pkg_mgr`, `service_mgr` and `ansible_service_mgr`, which choose the
+  module they run. Also `ansible_playbook_python`, which the test plays use as their interpreter, every `_ansible_*`
+  name, and, for plugins of other collections, every `ansible_*` name ending in `_args`, `_exe`, `_executable`,
+  `_flags`, `_cmd` or `_command`.
+- Selectors may name only a plugin of ansible-core, bare or as `ansible.builtin.` or `ansible.legacy.`:
+  `ansible_connection` and the keyword `connection` (`local`, `psrp`, `ssh`, `winrm`), `ansible_become_method` and
+  `become_method` (`runas`, `su`, `sudo`) and `ansible_shell_type` (`cmd`, `powershell`, `sh`).
+- `PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`, `PYTHONPATH`, `PYTHONHOME`, `PYTHONSTARTUP`, `PYTHONUSERBASE`,
+  `BASH_ENV`, `ENV`, `PERL5LIB`, `PERL5OPT`, `RUBYOPT` and `NODE_OPTIONS` are refused as YAML keys, because as a
+  task `environment` they change which program or library a module runs.
+- A setting is found as a mapping key in any YAML file, at any depth; as `name=value` in a YAML value (`add_host`,
+  `set_fact` and include free forms, `--extra-vars`) and as a quoted Jinja dictionary key (`{'name': value}`); and as
+  `name=value` or `"name": value` in inventory text (files below `inventory`, `inventories`, `host_vars` and
+  `group_vars`, and files named `hosts` or `inventory`) and in configuration text (makefiles, shell scripts,
+  environment, `.ini`, `.toml` and `.cfg` files). Naming or reading a variable (`when: ansible_connection ==
+  'local'`, `hostvars[h].ansible_python_interpreter`, a list of names) is not setting it.
+- The reviewed exceptions (`ALLOWED_SETTINGS`) are keyed by file, name and exact value, and a test fails if one is
+  unused. The controller-local test plays and inventories in `tests/playbooks/` set `ansible_python_interpreter` to
+  `{{ ansible_playbook_python }}`, the interpreter of the running `ansible-playbook`, in 16 files, and
+  `tests/playbooks/inventory/evidence-gate.yml` sets `ansible_ssh_common_args` to
+  `-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes` for a host that must be unreachable. The
+  Molecule entries are the `community.docker.docker` connection of the instance records
+  (`extensions/molecule/shared/create.yml` writes it as the Jinja dictionary key `'connection'`, and
+  `shared/vars/guard_cases.yml` holds the simulated record and its `ansible_connection`) and the bypass cases that
+  the Molecule guard must refuse: `ansible_docker_extra_args` and `docker_extra_args` set to
+  `-H tcp://192.0.2.1:2375` in `shared/vars/guard_cases.yml`, and in `selftest/bypass.yml` `ansible_connection` set
+  to `{{ selftest_docker }}` (and to `selftest_docker` in a Jinja dictionary) and `ansible_docker_extra_args` set to
+  `--host tcp://192.0.2.1:2375`. Molecule needs no interpreter setting; the containers use interpreter discovery.
+
+**Configuration** (`tools/lint/repo_rules/exec_config.py`, `tools/lint/repo_rules/load_config.py`). Every setting of
+`config/base.yml` is classified by the test: refused, a plugin selector, a search path (FREES-156) or reviewed.
+
+- Refused in an `ansible.cfg` (any section, any case of the key) and in the `ansible.cfg` and `config_options`
+  mappings of `molecule.yml`: `allow_unsafe_lookups`, `become_exe`, `become_flags`, `become_password_file` and
+  `connection_password_file` (run when executable), `callbacks_enabled`, `collection_skeleton`, `cowpath` (the
+  cowsay executable), `editor`, `enable_plugins` (inventory plugins such as `script`), `executable`,
+  `fact_caching_connection` (cached facts can set `discovered_interpreter_python`), `facts_modules`,
+  `interpreter_python`, `inventory` (an executable inventory runs), `jinja2_extensions`, `module_args`,
+  `module_name`, `pager`, `role_skeleton`, `ssh_agent_executable`, `ssh_config` (netconf, `ProxyCommand`),
+  `vars_plugins_enabled`, `vault_identity_list` and `vault_password_file` (scripts); and, from the plugin
+  documentation, `ssh_args`, `ssh_common_args`, `ssh_extra_args`, `scp_extra_args`, `sftp_extra_args`,
+  `ssh_executable`, `scp_executable`, `sftp_executable`, `pkcs11_provider` and the become plugin keys `executable`
+  and `flags`.
+- Plugin selectors must name a plugin of ansible-core: `stdout_callback` (`default`, `junit`, `minimal`, `oneline`,
+  `tree`), `fact_caching` (`jsonfile`, `memory`), `strategy` (`free`, `host_pinned`, `linear`; not `debug`, which
+  evaluates Python typed at its prompt), `become_method` and `transport`. The Molecule scenarios use
+  `ansible.builtin.default` and `memory`.
+- The environment variables of all of these (`CODE_ENVIRONMENT_VARIABLES`, from `base.yml` and the plugin
+  documentation, plus `_ANSIBLE_TEMPLAR_SANDBOX_MODE`, which turns off the Jinja sandbox, and
+  `ANSIBLE_DOCKER_EXTRA_ARGS`) are refused wherever FREES-156 refuses the search-path variables, and the
+  command-line options that pass arguments or a script (`--ssh-common-args`, `--ssh-extra-args`,
+  `--scp-extra-args`, `--sftp-extra-args`, `--vault-id`, `--vault-password-file`, `--vault-pass-file`,
+  `--connection-password-file`, `--conn-pass-file`, `--become-password-file`, `--become-pass-file`, from
+  `cli/arguments/option_helpers.py`) wherever `--module-path` is refused. `EDITOR` and `PAGER` themselves are
+  left alone; only `ansible-vault edit` and `ansible-doc` read them, and neither runs in CI.
+
+**Review items carried over from PR #42.**
+
+- Non-ASCII path components are refused (`non_ascii_findings` in `tools/lint/repo_rules/load_locations.py`). This
+  was chosen over `upper().casefold()`: the filesystems fold with their own tables (NTFS with a per-volume upcase
+  table that maps the dotless `ı` to `I`, APFS with Unicode case folding and normalisation), so no single Python
+  folding equals all of them, and a second folding would only cover the one character the review found. No
+  tracked path has a non-ASCII component, and for ASCII names `casefold()` agrees with every filesystem.
+- An `--index-modes` listing that cannot be read ends the guard with a clear message and exit status 2 instead of a
+  traceback.
+
+**Residuals.** The guard reads the repository, not the run. Every file inside the repository outside `.github/` is
+scanned, and every load and render target and template name must be literal and resolve inside it, so what remains
+is a file from outside the repository that the run supplies (an inventory, extra variables or a vars file passed on
+the command line) and a dictionary key built at run time (`{'ansible_' ~ 'python_interpreter': x}`). Options of
+connection, become and shell plugins of other collections are refused only by the name patterns above. Settings
+outside the repository (`~/.ansible.cfg`, `ANSIBLE_CONFIG`, the operator's environment) stay the documented
+residual of FREES-156. The change closes routes around AGENTS.md rule 1 and needs the independent review that the
+issue asks for.
