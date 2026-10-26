@@ -1062,3 +1062,30 @@ def test_make_lint_runs_pylint_in_two_passes() -> None:
     assert "lint-python: require-uv collection-link lint-pylint" in makefile
     hooks = (rules.REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     assert "entry: make lint-pylint" in hooks
+
+
+def test_make_exports_a_per_checkout_ansible_home() -> None:
+    makefile = (rules.REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "ANSIBLE_HOME ?= $(CURDIR)/build/ansible-home" in makefile
+    assert "ANSIBLE_COLLECTIONS_PATH ?= $(CURDIR)/build/collections" in makefile
+    assert "ANSIBLE_TEST_HOME ?= $(CURDIR)/build/ansible-test-home" in makefile
+    assert "export ANSIBLE_HOME ANSIBLE_COLLECTIONS_PATH\n" in makefile
+    assert "env HOME='$(ANSIBLE_TEST_HOME)' ansible-test" in makefile
+    assert "collection-link: ansible-home" in makefile
+    assert "collection-tree: ansible-home" in makefile
+    inline = [
+        line
+        for line in makefile.splitlines()
+        if "ANSIBLE_HOME=" in line or "ANSIBLE_COLLECTIONS_PATH=" in line
+    ]
+    assert inline == []
+    hooks = yaml.safe_load(
+        (rules.REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    )
+    entries = {
+        hook["id"]: hook["entry"]
+        for repo in hooks["repos"]
+        for hook in repo["hooks"]
+        if "entry" in hook
+    }
+    assert entries["ansible-lint"] == "make --no-print-directory lint-ansible"

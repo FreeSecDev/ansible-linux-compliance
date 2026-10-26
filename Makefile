@@ -11,6 +11,10 @@ ZIZMOR_PERSONA := pedantic
 COLLECTION_PATH := ansible_collections/freesecdev/linux_compliance
 COLLECTION_TREE := build/collection/$(COLLECTION_PATH)
 COLLECTION_LINK := build/collections/$(COLLECTION_PATH)
+ANSIBLE_HOME ?= $(CURDIR)/build/ansible-home
+ANSIBLE_COLLECTIONS_PATH ?= $(CURDIR)/build/collections
+ANSIBLE_TEST_HOME ?= $(CURDIR)/build/ansible-test-home
+export ANSIBLE_HOME ANSIBLE_COLLECTIONS_PATH
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
 	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
 TREE_SORT := sort -z
@@ -32,10 +36,8 @@ NAME_SET_DIRECTORY := build/name-sets
 AUDIT_EXCEPTIONS_DIR := build/test-audit-exceptions
 AUDIT_EXCEPTIONS_INVENTORY := tests/playbooks/inventory/audit-exceptions.yml
 AUDIT_EXCEPTIONS_FORBIDDEN := Apply the exceptions file to the scan run|AUDIT-EXCEPTIONS-NOT-REACHED
-AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_HOME='$(CURDIR)/build/ansible-home' \
-	ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' ANSIBLE_NOCOLOR=1 \
-	$(RUN) ansible-playbook -e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
-ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' ansible-test
+AUDIT_EXCEPTIONS_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -e audit_exceptions_dir='$(CURDIR)/$(AUDIT_EXCEPTIONS_DIR)'
+ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project '$(CURDIR)' env HOME='$(ANSIBLE_TEST_HOME)' ansible-test
 
 space := $(subst ,, )
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
@@ -116,6 +118,7 @@ Reporting, docs and release
 Housekeeping
   collection-tree       Assemble the temporary collection tree under build/collection
   collection-link       Link plugins/ and roles/ into build/collections for pytest, type checkers and ansible-lint
+  ansible-home          Create the per-checkout ANSIBLE_HOME and ansible-test HOME under build/
   clean                 Remove caches and generated files
   ci                    Run the credential-free CI stages locally (needs tofu on PATH)
 endef
@@ -127,7 +130,7 @@ export HELP_TEXT
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
-	require-uv
+	require-uv ansible-home
 
 help:
 	@printf '%s\n' "$$HELP_TEXT"
@@ -181,7 +184,7 @@ lint-skills: require-uv
 	$(RUN) python tools/skills/validate_skills.py
 
 lint-ansible: require-uv collection-link
-	ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' $(RUN) ansible-lint
+	$(RUN) ansible-lint
 	$(RUN) python tools/roles/check_role_specs.py roles
 	$(RUN) antsibull-changelog lint
 
@@ -253,7 +256,7 @@ test-name-sets: require-uv collection-link
 
 test-audit-exceptions: require-uv collection-link
 	rm -rf '$(AUDIT_EXCEPTIONS_DIR)'
-	mkdir -p build/ansible-home '$(AUDIT_EXCEPTIONS_DIR)'
+	mkdir -p '$(AUDIT_EXCEPTIONS_DIR)'
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions.yml
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) --limit db01,localhost tests/playbooks/audit-exceptions-limit.yml \
 		| tee '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
@@ -263,11 +266,9 @@ test-audit-exceptions: require-uv collection-link
 	$(call audit_exceptions_expect_failure,serial,-i tests/playbooks/inventory/audit-exceptions-split.yml tests/playbooks/audit-exceptions-serial.yml,also across serial,$(AUDIT_EXCEPTIONS_FORBIDDEN))
 	$(call audit_exceptions_expect_failure,free,-i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions-free.yml,does not support the free strategy,AUDIT-EXCEPTIONS-NOT-REACHED)
 
-REMEDIATE_CHECK = ANSIBLE_HOME='$(CURDIR)/build/ansible-home' ANSIBLE_COLLECTIONS_PATH='$(CURDIR)/build/collections' \
-	$(RUN) ansible-playbook -i localhost, --check
+REMEDIATE_CHECK = $(RUN) ansible-playbook -i localhost, --check
 
 test-remediate-check: require-uv collection-link
-	mkdir -p build/ansible-home
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
@@ -363,12 +364,15 @@ package-check: require-uv
 	$(MAKE) package TREE_SORT='sort -z -r'
 	diff build/package-first.sums dist/SHA256SUMS
 
-collection-link:
+ansible-home:
+	mkdir -p '$(ANSIBLE_HOME)' '$(ANSIBLE_TEST_HOME)'
+
+collection-link: ansible-home
 	mkdir -p $(COLLECTION_LINK)
 	ln -sfn ../../../../../plugins $(COLLECTION_LINK)/plugins
 	ln -sfn ../../../../../roles $(COLLECTION_LINK)/roles
 
-collection-tree:
+collection-tree: ansible-home
 	rm -rf build/collection
 	mkdir -p $(COLLECTION_TREE)
 	git ls-files -z --cached --others --exclude-standard -- $(COLLECTION_SOURCES) | $(TREE_SORT) | tar --null -T - -cf - | tar -xf - -C $(COLLECTION_TREE)

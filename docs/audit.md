@@ -491,8 +491,8 @@ other results than on a managed host; the assertions are about the protocol, not
 `make test-audit-exceptions` (CI job `test`, part of `make ci`) runs the exceptions path of the role without
 `oscap`. It uses the `evaluate` and `stale` entry points against two local inventory hosts (`web01` in group `web`,
 `db01` in group `db`, both `ansible_connection: local`) with synthetic scan runs whose start time is the current time,
-and exceptions files written at run time with dates relative to today, so the test never ages out. Its private
-`ANSIBLE_HOME` is `build/ansible-home`. `tests/playbooks/audit-exceptions.yml` checks that:
+and exceptions files written at run time with dates relative to today, so the test never ages out. It uses the
+per-checkout `ANSIBLE_HOME` ([development guide](development.md#per-checkout-ansible-home)). `tests/playbooks/audit-exceptions.yml` checks that:
 
 - waived findings appear in `exceptions.evaluation.scan_run` with their exception, that `exceptions.summary` counts
   them, and that the recorded SHA-256 is the digest of the file;
