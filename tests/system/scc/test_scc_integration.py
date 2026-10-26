@@ -41,6 +41,7 @@ HONEST = {"pass", "fail", "notapplicable", "notchecked", "error"}
 
 @pytest.fixture(scope="module")
 def scan_report() -> dict[str, object]:
+    image = harness.image()
     output = harness.run(
         [
             "run",
@@ -51,7 +52,7 @@ def scan_report() -> dict[str, object]:
             *harness.python_mounts(),
             "--entrypoint",
             harness.interpreter(),
-            harness.image(),
+            image,
             "-s",
             harness.DRIVER,
             "scan",
