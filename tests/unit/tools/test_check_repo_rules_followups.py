@@ -47,7 +47,8 @@ PR_18_KEYWORDS = frozenset(
         "nested_sequence",
     }
 )
-PRODUCTION_KEYWORDS = MERGED_PRODUCTION_KEYWORDS | PR_18_KEYWORDS
+FREES_53_KEYWORDS = frozenset({"disruptive", "reason", "recorded", "wanted"})
+PRODUCTION_KEYWORDS = MERGED_PRODUCTION_KEYWORDS | PR_18_KEYWORDS | FREES_53_KEYWORDS
 
 
 def process_messages(root: Path, source: str, name: str = "plugins/modules/other.py") -> list[str]:
