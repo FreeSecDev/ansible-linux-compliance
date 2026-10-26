@@ -24,6 +24,14 @@ supplied with scan inputs that are not evidence bundles, is refused with status 
 status 1: ``incomplete`` already gives status 1, and ``unknown`` (no
 ``--evidence-collection``) does too with the option. The report is still written, and the
 reason is printed on standard error. Status 3 still takes precedence.
+
+``--export-ckl DIR`` and ``--export-cklb DIR`` (FREES-147) also write one STIG Viewer
+checklist per host and DISA STIG benchmark, from the same scan inputs, with the status
+mapping of ADR 0020. ``--checklist-content FILE`` names DISA content for runs whose
+evidence bundle holds no XCCDF results, and for ScanRun JSON and evaluations. When an
+input that parsed cannot be exported honestly (for example ComplianceAsCode findings
+before the mapping of FREES-146), nothing is written and the status is 2. Checklists
+are written atomically with mode 0600 into directories created with mode 0700.
 """
 
 import argparse
@@ -32,8 +40,11 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Final
+from typing import Any, Final, cast
 
+from tools.reporting.checklist import ChecklistError
+from tools.reporting.checklist_export import ExportRequest
+from tools.reporting.checklist_export import outputs as checklist_outputs
 from tools.reporting.common import DEFAULT_MAX_BYTES, Json, dig, dumps
 from tools.reporting.dashboard import DashboardError, render_dashboard
 from tools.reporting.host_coverage import COMPLETE
@@ -41,8 +52,9 @@ from tools.reporting.report import (
     ReportError,
     ReportInputs,
     RunMetadata,
+    ScanInputs,
     Scope,
-    build_report,
+    build_report_and_inputs,
     has_error,
     has_gap,
 )
@@ -116,6 +128,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="merge several completed scan runs of one host, benchmark version and profile "
         "rule by rule instead of refusing them; each merge is noted in the report",
     )
+    parser.add_argument(
+        "--export-ckl",
+        type=Path,
+        default=None,
+        help="also write one STIG Viewer 2 checklist (CKL) per host and DISA STIG benchmark "
+        "into this directory",
+    )
+    parser.add_argument(
+        "--export-cklb",
+        type=Path,
+        default=None,
+        help="also write one STIG Viewer 3 checklist (CKLB) per host and DISA STIG benchmark "
+        "into this directory",
+    )
+    parser.add_argument(
+        "--checklist-content",
+        action="append",
+        default=[],
+        type=Path,
+        help="DISA STIG content (XCCDF 1.2 benchmark or results, or a SCAP source data stream) "
+        "for the checklists of runs whose evidence bundle holds no XCCDF results",
+    )
     for name in INPUT_OPTIONS:
         parser.add_argument(
             f"--{name.replace('_', '-')}", dest=name, action="append", default=[], type=Path
@@ -170,9 +204,26 @@ def _render(report: dict[str, Json], html: Path) -> str | None:
     return None
 
 
+def _checklists(
+    arguments: dict[str, object], scan: ScanInputs, max_bytes: int
+) -> list[tuple[Path, str, str]] | None:
+    ckl = cast("Path | None", arguments["export_ckl"])
+    cklb = cast("Path | None", arguments["export_cklb"])
+    content = tuple(cast("list[Path]", arguments["checklist_content"]))
+    if ckl is None and cklb is None:
+        return []
+    try:
+        return checklist_outputs(ExportRequest(ckl, cklb, content, max_bytes), scan)
+    except ChecklistError as error:
+        print(f"error: no checklist was written: {error}", file=sys.stderr)
+        return None
+
+
 def _write(outputs: list[tuple[Path, str, str]]) -> bool:
     for path, content, name in outputs:
         try:
+            if name.endswith("checklist"):
+                path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             write_atomic(path, content)
         except OSError as error:
             print(f"error: cannot write the {name}: {error.strerror}", file=sys.stderr)
@@ -181,20 +232,19 @@ def _write(outputs: list[tuple[Path, str, str]]) -> bool:
     return True
 
 
-def main(argv: Sequence[str]) -> int:
-    """Run the command line and return the exit status."""
-    arguments = vars(build_parser().parse_args(argv))
+def _inputs(arguments: dict[str, Any]) -> ReportInputs | str:
     output: Path = arguments["output"]
     html: Path | None = arguments["html"]
     if html is not None and html.resolve() == output.resolve():
-        print("error: --html and --output must name different files", file=sys.stderr)
-        return EXIT_USAGE
+        return "--html and --output must name different files"
+    exporting = arguments["export_ckl"] is not None or arguments["export_cklb"] is not None
+    if arguments["checklist_content"] and not exporting:
+        return "--checklist-content needs --export-ckl or --export-cklb"
     try:
         metadata = RunMetadata(**{name: arguments[name] for name in METADATA_OPTIONS})
     except ReportError as error:
-        print(f"error: {error}", file=sys.stderr)
-        return EXIT_USAGE
-    inputs = ReportInputs(
+        return str(error)
+    return ReportInputs(
         scope=Scope(arguments["scope"]),
         metadata=metadata,
         max_bytes=arguments["max_bytes"],
@@ -203,12 +253,26 @@ def main(argv: Sequence[str]) -> int:
         evidence_collection=arguments["evidence_collection"],
         **{name: tuple(arguments[name]) for name in INPUT_OPTIONS},
     )
+
+
+def main(argv: Sequence[str]) -> int:
+    """Run the command line and return the exit status."""
+    arguments = vars(build_parser().parse_args(argv))
+    output: Path = arguments["output"]
+    html: Path | None = arguments["html"]
+    inputs = _inputs(arguments)
+    if isinstance(inputs, str):
+        print(f"error: {inputs}", file=sys.stderr)
+        return EXIT_USAGE
     try:
-        report = build_report(inputs)
+        report, scan = build_report_and_inputs(inputs)
     except ReportError as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_USAGE
-    outputs = [(output, dumps(report), "report")]
+    checklists = _checklists(arguments, scan, inputs.max_bytes)
+    if checklists is None:
+        return EXIT_USAGE
+    outputs = [(output, dumps(report), "report"), *checklists]
     dashboard = None if html is None else _render(report, html)
     if html is not None and dashboard is not None:
         outputs.append((html, dashboard, "dashboard"))
