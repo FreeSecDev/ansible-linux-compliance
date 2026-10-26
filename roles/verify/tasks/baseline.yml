@@ -1,0 +1,34 @@
+---
+- name: Verify | Validate the audit result that becomes the baseline
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited is defined
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.run_id is defined
+      - linux_compliance_audited.run_id is string
+      - linux_compliance_audited.run_status | default(none) in ['completed', 'failed', 'timed_out', 'not_run']
+    fail_msg: >-
+      The baseline.yml entry point of the verify role records linux_compliance_audited, the result of
+      the freesecdev.linux_compliance.audit role, as linux_compliance_baseline. Run the audit role
+      first.
+    quiet: true
+  tags:
+    - always
+
+- name: Verify | Record the audit result as the baseline before remediation
+  ansible.builtin.set_fact:
+    linux_compliance_baseline: "{{ linux_compliance_audited }}"
+  tags:
+    - always
+
+- name: Verify | Check that the baseline is the audit that just ran
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_baseline.run_id | default(none) == linux_compliance_audited.run_id
+    fail_msg: >-
+      linux_compliance_baseline is not the audit {{ linux_compliance_audited.run_id }} that just ran.
+      An extra variable (-e) named linux_compliance_baseline wins over the recorded fact; remove it.
+      Nothing was remediated yet.
+    quiet: true
+  tags:
+    - always

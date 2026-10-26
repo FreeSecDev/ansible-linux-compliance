@@ -1,0 +1,56 @@
+---
+verify_changing_file: "{{ audit_exceptions_dir }}/exceptions-changing.yml"
+verify_outcomes_baseline:
+  - rule_id: "{{ audit_exceptions_rule_root_login }}"
+    outcome: fail
+    evaluated_outcome: fail
+  - rule_id: "{{ audit_exceptions_rule_login_events }}"
+    outcome: fail
+    evaluated_outcome: fail
+  - rule_id: "{{ audit_exceptions_rule_broken }}"
+    outcome: error
+    evaluated_outcome: error
+  - rule_id: "{{ audit_exceptions_rule_passing }}"
+    outcome: pass
+    evaluated_outcome: pass
+verify_outcomes_improved:
+  - rule_id: "{{ audit_exceptions_rule_root_login }}"
+    outcome: pass
+    evaluated_outcome: pass
+  - rule_id: "{{ audit_exceptions_rule_login_events }}"
+    outcome: fail
+    evaluated_outcome: fail
+  - rule_id: "{{ audit_exceptions_rule_broken }}"
+    outcome: pass
+    evaluated_outcome: pass
+  - rule_id: "{{ audit_exceptions_rule_passing }}"
+    outcome: pass
+    evaluated_outcome: pass
+verify_outcomes_regressed:
+  - rule_id: "{{ audit_exceptions_rule_root_login }}"
+    outcome: pass
+    evaluated_outcome: pass
+  - rule_id: "{{ audit_exceptions_rule_login_events }}"
+    outcome: fail
+    evaluated_outcome: fail
+  - rule_id: "{{ audit_exceptions_rule_broken }}"
+    outcome: error
+    evaluated_outcome: error
+  - rule_id: "{{ audit_exceptions_rule_passing }}"
+    outcome: fail
+    evaluated_outcome: fail
+verify_outcomes_all_error: >-
+  {{ verify_outcomes_baseline
+     | map('ansible.builtin.combine', {'outcome': 'error', 'evaluated_outcome': 'error'}) | list }}
+verify_outcomes_waivable_baseline: >-
+  {{ verify_outcomes_baseline | rejectattr('outcome', 'equalto', 'error') | list }}
+verify_outcomes_waivable_post:
+  - rule_id: "{{ audit_exceptions_rule_root_login }}"
+    outcome: fail
+    evaluated_outcome: fail
+  - rule_id: "{{ audit_exceptions_rule_login_events }}"
+    outcome: pass
+    evaluated_outcome: pass
+  - rule_id: "{{ audit_exceptions_rule_passing }}"
+    outcome: pass
+    evaluated_outcome: pass

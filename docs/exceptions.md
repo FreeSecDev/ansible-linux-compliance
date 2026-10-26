@@ -298,8 +298,9 @@ ansible-playbook -i inventory.yml freesecdev.linux_compliance.audit \
   hosts) the report says `unmatched on N of M target hosts` and names the hosts it does not cover.
 - Only the linear strategy is supported, with or without `serial`; every host of the play must resolve the same file.
 
-The `verify` role (FREES-54) is still a skeleton. When it is implemented it must compare raw with raw or waived with
-waived, from the same exceptions file, and must never count a waived result as an improvement over a failed one.
+The `verify` role (FREES-54, [verify guide](verify.md)) compares raw with raw by default, or waived with waived when
+`linux_compliance_verify_mode` is `waived`, and only when both audits applied the same exceptions file (same SHA-256).
+It classifies rules on the evaluated outcome, so a waived result never counts as an improvement over a failed one.
 
 The filters remain usable on their own, for example on a scan run read from `scan-run.json`. They accept the scan run as
 a mapping or as its JSON text. An invalid file fails the task with a message that names the entry or line.

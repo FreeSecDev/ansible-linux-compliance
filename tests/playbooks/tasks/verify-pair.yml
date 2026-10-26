@@ -1,0 +1,56 @@
+---
+- name: Build the synthetic baseline audit
+  ansible.builtin.include_tasks: verify-synthetic.yml
+  vars:
+    verify_run_id: verify-baseline
+    verify_start_offset: -600
+    verify_outcomes: "{{ verify_baseline_outcomes }}"
+    verify_run_status: completed
+
+- name: Apply the exceptions file to the baseline with the audit role
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.audit
+    tasks_from: evaluate.yml
+  when: verify_evaluate_baseline | default(false)
+
+- name: Record the baseline with the verify role
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.verify
+    tasks_from: baseline.yml
+
+- name: Check that the baseline is the synthetic baseline audit
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_baseline.run_id == 'verify-baseline'
+      - linux_compliance_baseline == linux_compliance_audited
+    quiet: true
+
+- name: Change the exceptions file between the audits when requested
+  ansible.builtin.copy:
+    src: "{{ verify_exceptions_between }}"
+    dest: "{{ linux_compliance_exceptions_file }}"
+    mode: "0600"
+  delegate_to: localhost
+  when: verify_exceptions_between | default(none) is not none
+
+- name: Build the synthetic audit after remediation
+  ansible.builtin.include_tasks: verify-synthetic.yml
+  vars:
+    verify_run_id: "{{ verify_post_run_id | default('verify-post') }}"
+    verify_start_offset: 0
+    verify_outcomes: "{{ verify_post_outcomes }}"
+    verify_run_status: "{{ verify_post_run_status | default('completed') }}"
+    verify_run_overrides: "{{ verify_post_overrides | default({}) }}"
+
+- name: Apply the exceptions file to the later audit with the audit role
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.audit
+    tasks_from: evaluate.yml
+  when: verify_evaluate_post | default(false)
+
+- name: Check that the later audit did not replace the baseline
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_baseline.run_id == 'verify-baseline'
+      - linux_compliance_audited.run_id == (verify_post_run_id | default('verify-post'))
+    quiet: true

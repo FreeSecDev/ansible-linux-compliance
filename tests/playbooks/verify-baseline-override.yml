@@ -1,0 +1,38 @@
+---
+- name: Verify | A baseline fixed by an extra variable is refused
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  tasks:
+    - name: Refuse to run without the extra variable
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_baseline.run_id | default(none) == 'stale-baseline'
+        fail_msg: Run this playbook through make test-verify, which passes linux_compliance_baseline with -e.
+        quiet: true
+
+    - name: Record a baseline while an extra variable holds another one
+      block:
+        - name: Build a synthetic audit
+          ansible.builtin.include_tasks: tasks/verify-synthetic.yml
+          vars:
+            verify_run_id: verify-baseline
+            verify_outcomes: "{{ verify_outcomes_baseline }}"
+
+        - name: Record the baseline with the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+            tasks_from: baseline.yml
+
+        - name: Fail because the stale baseline was kept silently
+          ansible.builtin.fail:
+            msg: VERIFY-BASELINE-OVERRIDE-NOT-REFUSED
+      rescue:
+        - name: Check that the baseline entry point refused the extra variable
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Check that the baseline is the audit that just ran')
+              - ansible_failed_result.msg is search('An extra variable')
+            quiet: true

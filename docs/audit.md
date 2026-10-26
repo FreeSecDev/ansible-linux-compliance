@@ -238,8 +238,8 @@ Jira: FREES-136. The policy and the file format are in [Exceptions and waivers](
 applies it to every scanned host. With the default `null` nothing changes: no file is read, no waiver is applied and the
 gate counts the raw result as before.
 
-`linux_compliance_exceptions_file` has no role prefix on purpose: the `verify` role will read the same file with the
-same meaning (FREES-54), so it is a collection-wide variable like `linux_compliance_target_hosts`. It is the only
+`linux_compliance_exceptions_file` has no role prefix on purpose: the `verify` role uses it with the same meaning
+(FREES-54, waived mode), so it is a collection-wide variable like `linux_compliance_target_hosts`. It is the only
 unprefixed role variable; `tools/roles/check_role_specs.py` allows exactly the names in its `SHARED_VARIABLES`.
 
 ### Reading and validating the file
@@ -394,11 +394,12 @@ the literal `tasks_from` value.
 
 ### Verify compares like with like
 
-The `verify` role (FREES-54) is still a skeleton and is unchanged. When it is implemented it must compare raw with raw
-(`scan_run` of the baseline and the post-remediation audit) or waived with waived (`exceptions.evaluation.scan_run`
-of both, from the same exceptions file, `source_sha256` equal), never one with the other. A finding that is `fail` in
-the baseline and `waived` afterwards is not an improvement: the rule still fails, and a waiver must never count as
-a fix or as a pass. This rule is recorded on FREES-136 for FREES-54.
+The `verify` role (FREES-54, [verify guide](verify.md)) compares raw with raw (`scan_run` of the baseline and the
+post-remediation audit) by default, or waived with waived (`exceptions.evaluation.scan_run` of both, from the same
+exceptions file, `source_sha256` equal), never one with the other. It classifies rules on the evaluated outcome, so a
+finding that is `fail` in the baseline and `waived` afterwards is `unchanged`, not an improvement: the rule still
+fails, and a waiver never counts as a fix or as a pass. This rule was recorded on FREES-136 for FREES-54.
+`playbooks/remediate.yml` runs the audit role twice through `audit.yml`; the role itself is unchanged by FREES-54.
 
 ## Disabled rules (ADR 0011)
 

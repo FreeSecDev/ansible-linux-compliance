@@ -75,6 +75,8 @@ jobs:
         run: make test-audit-exceptions
       - name: Run test-remediate-check
         run: make test-remediate-check
+      - name: Run test-verify
+        run: make test-verify
       - name: Run test-content-golden
         run: make test-content-golden
       - name: Run test-browser

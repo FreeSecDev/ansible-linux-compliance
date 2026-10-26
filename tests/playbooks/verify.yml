@@ -1,0 +1,370 @@
+---
+- name: Verify | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Verify | An improvement without regressions passes and is published
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  tasks:
+    - name: Build the baseline and the later audit
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_improved }}"
+
+    - name: Compare them with the verify role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+
+    - name: Check the published comparison
+      vars:
+        verified: "{{ linux_compliance_verified }}"
+        categories: "{{ verified.rules | items2dict(key_name='rule_id', value_name='category') }}"
+      ansible.builtin.assert:
+        that:
+          - verified.status == 'complete'
+          - verified.complete
+          - verified.mode == 'raw'
+          - verified.exceptions_sha256 is none
+          - verified.baseline.run_id == 'verify-baseline'
+          - verified.post.run_id == 'verify-post'
+          - verified.identity.profile_id == audit_exceptions_profile
+          - verified.counts.improved == 1
+          - verified.counts.regressed == 0
+          - verified.counts.unchanged == 2
+          - verified.counts.error == 1
+          - categories[audit_exceptions_rule_root_login] == 'improved'
+          - categories[audit_exceptions_rule_broken] == 'error'
+          - categories[audit_exceptions_rule_login_events] == 'unchanged'
+          - categories[audit_exceptions_rule_passing] == 'unchanged'
+          - not verified.regression_detected
+          - verified.regressions == []
+          - verified.gate.fail_on_regression
+          - not verified.gate.failed
+          - verified.message is search('^No regression')
+          - verified.message is search('not a claim of compliance')
+        quiet: true
+
+- name: Verify | A regression fails the host by default and is always reported
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  tasks:
+    - name: Build a baseline and a later audit in which a passing rule fails
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_regressed }}"
+
+    - name: Compare them with the default settings
+      block:
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the regression did not fail the host
+          ansible.builtin.fail:
+            msg: VERIFY-REGRESSION-NOT-FAILED
+      rescue:
+        - name: Check that the regression gate failed the host
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Stop on regressions when requested')
+              - ansible_failed_result.msg is search('REGRESSION. 1 rule')
+              - ansible_failed_result.msg is search(audit_exceptions_rule_passing)
+              - linux_compliance_verified.regression_detected
+              - linux_compliance_verified.counts.regressed == 1
+              - linux_compliance_verified.counts.improved == 1
+              - >-
+                linux_compliance_verified.regressions | map(attribute='rule_id') | list
+                == [audit_exceptions_rule_passing]
+              - linux_compliance_verified.gate.failed
+            quiet: true
+
+    - name: Compare them again without failing on regressions
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+      vars:
+        linux_compliance_verify_fail_on_regression: false
+
+    - name: Check that the regression is still published
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_verified.regression_detected
+          - linux_compliance_verified.counts.regressed == 1
+          - not linux_compliance_verified.gate.fail_on_regression
+          - not linux_compliance_verified.gate.failed
+        quiet: true
+
+- name: Verify | A scan that did not complete fails the host even without the regression gate
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  tasks:
+    - name: Build a baseline and a later audit that did not complete
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_all_error }}"
+        verify_post_run_status: failed
+
+    - name: Compare them without the regression gate
+      block:
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+          vars:
+            linux_compliance_verify_fail_on_regression: false
+
+        - name: Fail because the incomplete comparison did not fail the host
+          ansible.builtin.fail:
+            msg: VERIFY-INCOMPLETE-NOT-FAILED
+      rescue:
+        - name: Check that the incomplete comparison failed the host without figures
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Stop when the comparison is incomplete')
+              - ansible_failed_result.msg is search('^Verification incomplete. the post scan did not complete')
+              - linux_compliance_verified.status == 'incomplete'
+              - linux_compliance_verified.counts is none
+              - linux_compliance_verified.regressions is none
+              - linux_compliance_verified.rules is none
+              - linux_compliance_verified.regression_detected is none
+              - linux_compliance_verified.gate.failed
+            quiet: true
+
+- name: Verify | Audits of another kind or the same run are refused
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  tasks:
+    - name: Refuse a later audit of another benchmark
+      block:
+        - name: Build a later audit of another benchmark
+          ansible.builtin.include_tasks: tasks/verify-pair.yml
+          vars:
+            verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+            verify_post_outcomes: "{{ verify_outcomes_improved }}"
+            verify_post_overrides:
+              benchmark_id: xccdf_org.ssgproject.content_benchmark_RHEL-9
+
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because another benchmark was compared
+          ansible.builtin.fail:
+            msg: VERIFY-MISMATCH-NOT-REFUSED
+      rescue:
+        - name: Check that the comparison was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Compare the audit after remediation with the baseline')
+              - ansible_failed_result.msg is search('differ in benchmark')
+            quiet: true
+
+    - name: Refuse audits of another profile than the verify profile
+      block:
+        - name: Build two audits of the CIS profile
+          ansible.builtin.include_tasks: tasks/verify-pair.yml
+          vars:
+            verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+            verify_post_outcomes: "{{ verify_outcomes_improved }}"
+
+        - name: Run the verify role for the STIG profile
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+          vars:
+            linux_compliance_verify_profile: stig
+
+        - name: Fail because another profile was compared
+          ansible.builtin.fail:
+            msg: VERIFY-PROFILE-NOT-REFUSED
+      rescue:
+        - name: Check that the profile was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('not xccdf_org.ssgproject.content_profile_stig')
+            quiet: true
+
+    - name: Refuse to compare the baseline with itself
+      block:
+        - name: Build a later audit with the run identifier of the baseline
+          ansible.builtin.include_tasks: tasks/verify-pair.yml
+          vars:
+            verify_baseline_outcomes: "{{ verify_outcomes_baseline }}"
+            verify_post_outcomes: "{{ verify_outcomes_baseline }}"
+            verify_post_run_id: verify-baseline
+
+        - name: Run the verify role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because the same run was compared
+          ansible.builtin.fail:
+            msg: VERIFY-SAME-RUN-NOT-REFUSED
+      rescue:
+        - name: Check that the same run was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('same run')
+            quiet: true
+
+- name: Verify | A waiver applied only after remediation is not an improvement
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+  tasks:
+    - name: Build a baseline without waivers and a later audit with them
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_waivable_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_waivable_baseline }}"
+        verify_evaluate_post: true
+
+    - name: Compare the raw results
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+
+    - name: Check that the waived failures are unchanged, not improved
+      vars:
+        categories: "{{ linux_compliance_verified.rules | items2dict(key_name='rule_id', value_name='category') }}"
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.exceptions.summary.waived == 2
+          - linux_compliance_verified.mode == 'raw'
+          - linux_compliance_verified.counts.improved == 0
+          - linux_compliance_verified.counts.unchanged == 3
+          - categories[audit_exceptions_rule_root_login] == 'unchanged'
+          - categories[audit_exceptions_rule_login_events] == 'unchanged'
+        quiet: true
+
+    - name: Refuse the waived comparison because the baseline applied no exceptions file
+      block:
+        - name: Run the verify role in waived mode
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+          vars:
+            linux_compliance_verify_mode: waived
+
+        - name: Fail because a raw baseline was compared in waived mode
+          ansible.builtin.fail:
+            msg: VERIFY-WAIVED-WITHOUT-FILE-NOT-REFUSED
+      rescue:
+        - name: Check that the waived comparison was refused
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Check that both audits applied the exceptions file')
+              - ansible_failed_result.msg is search('The baseline applied no file')
+            quiet: true
+
+- name: Verify | Waived mode compares the waived results of the same exceptions file
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+    linux_compliance_verify_mode: waived
+  tasks:
+    - name: Build a waived baseline and a waived later audit in which one waived rule passes
+      ansible.builtin.include_tasks: tasks/verify-pair.yml
+      vars:
+        verify_baseline_outcomes: "{{ verify_outcomes_waivable_baseline }}"
+        verify_post_outcomes: "{{ verify_outcomes_waivable_post }}"
+        verify_evaluate_baseline: true
+        verify_evaluate_post: true
+
+    - name: Compare the waived results
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.verify
+
+    - name: Check the waived comparison
+      vars:
+        verified: "{{ linux_compliance_verified }}"
+        records: "{{ verified.rules | items2dict(key_name='rule_id', value_name='category') }}"
+        root_login: "{{ verified.rules | selectattr('rule_id', 'equalto', audit_exceptions_rule_root_login) | first }}"
+        login_events: >-
+          {{ verified.rules | selectattr('rule_id', 'equalto', audit_exceptions_rule_login_events) | first }}
+      ansible.builtin.assert:
+        that:
+          - verified.mode == 'waived'
+          - verified.complete
+          - verified.exceptions_sha256 == linux_compliance_baseline.exceptions.source_sha256
+          - verified.exceptions_sha256 == linux_compliance_audited.exceptions.source_sha256
+          - verified.baseline.summary.waived == 2
+          - verified.post.summary.waived == 1
+          - verified.counts.improved == 1
+          - verified.counts.regressed == 0
+          - records[audit_exceptions_rule_root_login] == 'unchanged'
+          - root_login.baseline.outcome == 'waived'
+          - root_login.post.outcome == 'waived'
+          - root_login.post.evaluated_outcome == 'fail'
+          - records[audit_exceptions_rule_login_events] == 'improved'
+          - login_events.baseline.outcome == 'waived'
+          - login_events.post.outcome == 'pass'
+        quiet: true
+
+- name: Verify | Waived mode refuses audits that applied different contents of the file
+  hosts: web01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+    - vars/verify.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ verify_changing_file }}"
+    linux_compliance_verify_mode: waived
+  tasks:
+    - name: Start from the valid exceptions file
+      ansible.builtin.copy:
+        src: "{{ audit_exceptions_valid_file }}"
+        dest: "{{ verify_changing_file }}"
+        mode: "0600"
+      delegate_to: localhost
+
+    - name: Refuse the comparison after the file changed between the audits
+      block:
+        - name: Build waived audits with the file changed in between
+          ansible.builtin.include_tasks: tasks/verify-pair.yml
+          vars:
+            verify_baseline_outcomes: "{{ verify_outcomes_waivable_baseline }}"
+            verify_post_outcomes: "{{ verify_outcomes_waivable_baseline }}"
+            verify_evaluate_baseline: true
+            verify_evaluate_post: true
+            verify_exceptions_between: "{{ audit_exceptions_other_file }}"
+
+        - name: Check that the audits recorded different digests of one path
+          ansible.builtin.assert:
+            that:
+              - linux_compliance_baseline.exceptions.file == linux_compliance_audited.exceptions.file
+              - linux_compliance_baseline.exceptions.source_sha256 != linux_compliance_audited.exceptions.source_sha256
+            quiet: true
+
+        - name: Run the verify role in waived mode
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.verify
+
+        - name: Fail because different exceptions were compared
+          ansible.builtin.fail:
+            msg: VERIFY-DIFFERENT-FILE-NOT-REFUSED
+      rescue:
+        - name: Check that the waived comparison was refused by its digest
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Compare the audit after remediation with the baseline')
+              - ansible_failed_result.msg is search('same exceptions file')
+            quiet: true

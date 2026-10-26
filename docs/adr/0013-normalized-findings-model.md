@@ -405,3 +405,34 @@ The model entities and `schema_version` `"1.0"` of the ScanRun and of the evalua
   evaluation but had not expired at the scan start. Their findings stay `fail` without exception data, because the
   model only allows the state `expired` for an expiry at or before the scan start; the report counts them in
   `expired_waivers` (ADR 0016, amendment of FREES-130 and FREES-132).
+
+## Amendment 2026-10-26: comparing two scan runs (FREES-54)
+
+The `verify` role compares a baseline audit with a later audit of the same host through the controller filter
+`freesecdev.linux_compliance.compare_scans` ([verify guide](../verify.md)). The model and `schema_version` are
+unchanged; these are the consumer rules.
+
+- **Only like is compared with like.** Two scan runs are compared only when they are different runs of the same host
+  identity, benchmark, content version and datastream SHA-256, profile and scanner name and version, and the later run
+  started at or after the baseline finished. Anything else is refused, never compared approximately.
+- **Raw with raw, waived with waived.** The default compares the raw `scan_run` of both audits, which must carry no
+  exception data. Waived mode compares `exceptions.evaluation.scan_run` of both, only when both recorded the same
+  exceptions `source_sha256` and each waived run belongs to its raw run (same `run_id`, same evaluated outcome per
+  rule). This implements the FREES-136 rule above.
+- **Classification uses `evaluated_outcome`.** The scanner's verdict decides, so a waiver can never be an improvement:
+  `fail` to `waived` is unchanged, while `waived` to `pass` is an improvement because the evaluated outcome went from
+  `fail` to `pass`. Only an evaluated `fail` that becomes `pass` is improved.
+- **Regressions first.** A rule that passed in the baseline and is anything but `pass` or `notapplicable` afterwards
+  (including `error`, `notchecked` and `disabled`) is regressed. Any other transition from or to `error`, and a rule
+  missing from one run, is `error`, never improved. Transitions from or to `notchecked` or `disabled` that no rule
+  above covers are `not_comparable`, a seventh category next to improved, regressed, unchanged, newly applicable,
+  newly not applicable and error, because they say nothing about the host.
+- **A run that did not complete yields no figures.** If either run is not `completed` (or no scan ran in check mode),
+  the comparison is incomplete: no counts, no rules, no regressions and no statement that there are none. As in the
+  FREES-48 amendment, "0 regressions" is never derived from such a run, and the role fails the host.
+- A comparison is evidence about two scans of one host and never asserts compliance (AGENTS.md rule 9).
+
+Rejected alternatives: classifying on the reported `outcome` (a new waiver would turn a failure into a change, and
+`waived` to `pass` would need special cases), treating `error` to `pass` as an improvement (a repaired check proves
+nothing about the host), reporting partial figures for an incomplete run (they would read as "no regressions"), and
+comparing scans of different content versions rule by rule (rule semantics can change between releases).

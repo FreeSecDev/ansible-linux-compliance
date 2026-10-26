@@ -93,6 +93,7 @@ Tests
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-remediate-check  Run the remediate role against localhost in check mode only, without become
+  test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
@@ -125,7 +126,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-remediate-check \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-remediate-check test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -273,6 +274,19 @@ test-remediate-check: require-uv collection-link
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
 
+VERIFY_DIR := build/test-verify
+VERIFY_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(AUDIT_EXCEPTIONS_INVENTORY) \
+	-e audit_exceptions_dir='$(CURDIR)/$(VERIFY_DIR)'
+
+test-verify: require-uv collection-link
+	rm -rf '$(VERIFY_DIR)'
+	mkdir -p '$(VERIFY_DIR)'
+	$(VERIFY_PLAYBOOK) tests/playbooks/verify.yml | tee '$(VERIFY_DIR)/verify.log'
+	grep -q 'WARNING: REGRESSION on web01: 1 rule(s) passed in the baseline and no longer pass' '$(VERIFY_DIR)/verify.log'
+	if grep -qE 'VERIFY-[A-Z-]+-NOT-(FAILED|REFUSED)' '$(VERIFY_DIR)/verify.log'; then printf 'error: a verify check was not enforced\n' >&2; exit 1; fi
+	$(VERIFY_PLAYBOOK) -e '{"linux_compliance_baseline": {"run_id": "stale-baseline"}}' tests/playbooks/verify-baseline-override.yml
+	$(VERIFY_PLAYBOOK) --skip-tags always tests/playbooks/verify-skip-always.yml
+
 sanity-pythons: require-uv
 	uv python install $(MANAGED_NODE_PYTHONS)
 
@@ -387,4 +401,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-verify security docs test-sanity test-ansible-units package-check
