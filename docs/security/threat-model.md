@@ -199,8 +199,15 @@ bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
   incomplete scan collected, an unreachable and an empty host named, and the play failing;
   `tests/playbooks/audit-gate-routes.yml` shows that the removed variable and a forged internal one, set with `-e`,
   `group_vars`, `host_vars`, an include parameter or a role import parameter, do not defer the gate.
-- **Residual:** unreachable and limited-out hosts cannot be collected; the run output names them, the report does not
-  (a follow-up issue tracks a run-level collection record for the report). A custom playbook that deliberately calls `deferred.yml` or `evaluate_deferred.yml` and never runs `enforce.yml`,
+- **Mitigation (FREES-142):** the run writes a collection summary that names every target host with its status
+  (`collected`, `unreachable`, `limited_out`, `no_audit_result`, `no_evidence_written`, `collection_failed`) and the
+  manifest SHA-256 of every bundle, and no host fails before it is written, so a run in which every host fails still
+  names the unreachable one. The report built with `--evidence-collection` refuses a bundle that the summary does not
+  list, lists every target host without a bundle as a missing input, has no figure while a host is missing and exits
+  1. Without the summary the report labels its host coverage `unknown`.
+- **Residual:** unreachable and limited-out hosts cannot be collected; a report names them only when it is built with
+  `--evidence-collection`, and the summary is not signed (ADR 0018). A run whose plays on `localhost` are limited out,
+  or in which every host fails in the audit play, writes no summary. A custom playbook that deliberately calls `deferred.yml` or `evaluate_deferred.yml` and never runs `enforce.yml`,
   or that writes `linux_compliance_audited.gate` with its own `set_fact`, can still end without the gates. That is a
   deliberate act by whoever writes the playbook, the same class as the documented residual of the `verify` role's
   baseline marker; no variable from the inventory, `group_vars`, `host_vars`, `-e`, a role parameter or an include

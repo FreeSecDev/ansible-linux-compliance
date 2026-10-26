@@ -165,6 +165,15 @@ The status stays **proposed**. FREES-51 implements the evidence bundle without a
 A verified bundle is consistent, not authentic: whoever can write the directory can rewrite every file and every
 digest consistently. The bundle detects accidental change and partial edits, not deliberate forgery.
 
+### Collection summary (FREES-142)
+
+`playbooks/evidence.yml` also writes an unsigned collection summary per run that names every target host and the
+manifest SHA-256 of every collected bundle; the report reads it with `--evidence-collection`
+([ADR 0016 amendment](0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-21-host-coverage-frees-142)).
+It is controller output with the same integrity as a bundle and the same residual: it is consistent, not authentic.
+When signing is implemented, the summary is a natural subject of the run's statement, so that a forged summary
+cannot hide a missing host.
+
 ### What blocks signing
 
 1. **No pinned signer where audits run.** `cosign` (or `sigstore-python`) is not part of the locked development

@@ -3,8 +3,8 @@
 The reporting package `tools/reporting/` turns heterogeneous reports into one versioned JSON document. The decision
 record is [ADR 0016](adr/0016-report-schema-and-summary-semantics.md); the findings model is
 [ADR 0013](adr/0013-normalized-findings-model.md). The schema is
-`tools/reporting/schema/report-v2.json` (JSON Schema 2020-12, `schema_version` `"2.0"`); see
-[schema version notes](#schema-version-notes) for what changed from 1.0.
+`tools/reporting/schema/report-v2.json` (JSON Schema 2020-12, `schema_version` `"2.1"`); see
+[schema version notes](#schema-version-notes) for what changed from 1.0 and 2.0.
 
 ## Running it
 
@@ -33,6 +33,7 @@ and `REPORT_HTML` override them). `--scope` and `--output` are required; `--html
 | `--exceptions-evaluation` | Exceptions evaluation JSON written by the `apply_exceptions` filter, one per scan run ([exceptions](exceptions.md#reporting)); requires `--exceptions-file` |
 | `--exceptions-file` | The reviewed exceptions file the evaluations were made from (one file, not repeatable); required with `--exceptions-evaluation` and with evidence bundles whose exceptions were applied |
 | `--evidence-bundle` | An evidence bundle directory written by the `evidence` role ([evidence bundles](evidence.md#in-the-report)); verified, then read as its evaluation or, without exceptions, its raw scan run |
+| `--evidence-collection` | The collection summary that `playbooks/evidence.yml` wrote next to the bundles ([collection summary](evidence.md#the-collection-summary)); one file, not repeatable. The report then accounts for every target host of the run ([host coverage](#host-coverage)) |
 
 Metadata options are `--commit`, `--pull-request`, `--workflow-run`, `--started-at`, `--finished-at` and
 `--generated-at`. They are validated and written as given; timestamps use `YYYY-MM-DDTHH:MM:SSZ`. Nothing is read
@@ -44,12 +45,16 @@ Exit status:
 
 - 0: the report was written and every supplied input parsed. A section without any input is `unavailable`; that is
   not an error, and it is never shown as passed.
-- 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`).
+- 1: the report was written, but a supplied input is missing or invalid (a section is `partial` or `error`). With
+  `--evidence-collection`, a target host without a bundle in the report is a missing input, and a bundle that the
+  summary does not list is an invalid one, so both give status 1.
 - 2: invalid arguments or metadata, `--html` naming the same file as `--output`, a scope that the data contradicts
   (below), repeated scan runs without `--allow-repeated-scans`, `--exceptions-evaluation` or an evidence bundle with
   applied exceptions without `--exceptions-file`, `--exceptions-file` without any evaluation, an evidence bundle whose
-  copy of the exceptions file is not byte-identical to `--exceptions-file`, an exceptions file that cannot be read, or an output that cannot be
-  written. No report is written in these cases.
+  copy of the exceptions file is not byte-identical to `--exceptions-file`, an exceptions file that cannot be read,
+  an evidence collection summary that cannot be read or is not valid, `--evidence-collection` together with
+  `--scan-run`, `--xccdf`, `--arf` or `--exceptions-evaluation`, a collection summary of more than 1000 target hosts,
+  or an output that cannot be written. No report is written in these cases.
 - 3: the JSON report was written, but the dashboard was not, because the report is above the dashboard size cap
   (128 MiB embedded, see [ADR 0017](adr/0017-offline-html-dashboard.md)). A dashboard left at that path by an earlier
   run is removed. Status 3 takes precedence over 1; the sections of the JSON still show any missing or invalid input.
@@ -64,15 +69,15 @@ At most 1000 input files per section are accepted.
 
 | Key | Content |
 |---|---|
-| `schema_version` | `"2.0"` |
+| `schema_version` | `"2.1"` |
 | `scope` | `single_host`, `multi_host`, `benchmark` or `fleet`; applies to every statistic |
 | `metadata` | `commit`, `pull_request`, `workflow_run`, `started_at`, `finished_at`, `generated_at`; all nullable |
 | `sections` | `codebuild`, `compliance`, `coverage`, `exceptions`, `lint`, `molecule`, `packer`, `sbom`, `tests`, `vulnerabilities` |
 | `overview` | Section names grouped by `available`, `partial`, `unavailable` and `error`, and `exceptions`: the exception counts of the [exceptions section](#exceptions-section) or `null` |
-| `raw_artifacts` | One reference per input: `format`, `path` as supplied, `sha256`, `size`, `status` |
+| `raw_artifacts` | One reference per input: `format`, `path` as supplied, `sha256`, `size`, `status`; the collection summary has the format `evidence_collection` |
 
 Each section has `status`, `reason`, `items`, `gaps` and `summary`; `compliance` also has `rules`, `groups` and
-`aggregates` and `notes`, and `exceptions` also has `exceptions` and `source_sha256`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
+`aggregates`, `notes` and `host_coverage`, and `exceptions` also has `exceptions` and `source_sha256`. Each item has `format`, `status`, `reason`, `artifact` (`path`, `sha256`, `size`) and `data`. `gaps`
 lists every item that is not `available` with its path, status and reason.
 
 | Section | Item formats | Summary |
@@ -203,6 +208,46 @@ worst `outcome`, the highest `severity`,
 `benchmark_id`, `profile_id`, `outcome`, `expired_waiver`), so the outcome of each file stays visible. Two inputs of
 one host with the same benchmark, version and profile are merged, worst outcome first.
 
+## Host coverage
+
+`sections.compliance.host_coverage` (schema 2.1, FREES-142) says whether the report accounts for every target host.
+A report built from evidence bundles alone cannot see a host that has no bundle (unreachable, limited out, failed
+before the scan, check mode, collection failed), and a fleet figure over the hosts that are present reads as if it
+covered the fleet. The collection summary of the run (`--evidence-collection`) names every target host, so the report
+can account for each one.
+
+| Field | Content |
+|---|---|
+| `status` | `unknown` without `--evidence-collection`; `complete` when every target host has a bundle in the report; `incomplete` when at least one has not |
+| `reason` | Why the coverage is `unknown` or `incomplete` (`2 of 4 target host(s) have no evidence bundle in this report`); `null` when `complete` |
+| `collection` | `path`, `sha256` and `size` of the summary as read, its `collection_id` and `collected_at`; `null` when `unknown` |
+| `summary` | `target_hosts`, `in_report`, `missing` and `by_status` (one count per collection status); `null` when `unknown` |
+| `hosts` | One entry per target host, sorted by name: inventory `host`, collection `status`, `in_report`, and the `run_id` and `manifest_sha256` of a collected bundle (else `null`); empty when `unknown` |
+
+The collection statuses are `collected`, `unreachable`, `limited_out`, `no_audit_result`, `no_evidence_written` and
+`collection_failed` ([collection summary](evidence.md#the-collection-summary)).
+
+Rules:
+
+- A bundle that verified must be listed in the summary as `collected` with the same inventory host, run ID and SHA-256
+  of `bundle.json`. Otherwise it is an input `error` (format `exceptions_evaluation` when it carries an evaluation,
+  else `scan_run`, artifact `<bundle>/bundle.json`), and its host is not in the report.
+- Every target host without such a bundle is a missing input: an `unavailable` compliance item whose artifact is
+  where its bundle would be (`<summary directory>/<host>`, or `<summary directory>/<host>/<run_id>` for a collected
+  host whose bundle was not supplied) and whose reason names the host and its status. When the report has exceptions
+  evaluations, the same missing input is also an `exceptions_evaluation` item of the exceptions section, so the
+  section is `partial` and calls no exception stale because a host is missing.
+- The compliance section is therefore `partial` while a host is missing (`unavailable` when no bundle is present,
+  `error` when an input is invalid), so it has no `summary`, `groups`, `aggregates` or `rules`: **no figure is
+  presented as covering the fleet**. The figures of the hosts that are present stay visible in their items, and the
+  command exits with status 1. The schema forbids an `available` section with `incomplete` coverage.
+- Missing inputs are listed in `gaps` and `raw_artifacts` like any other missing input.
+- `--evidence-collection` accounts for evidence bundles only. A ScanRun, XCCDF, ARF or evaluation file names a
+  self-asserted host that the summary cannot bind to an inventory host, so supplying one with the summary is refused.
+- Without `--evidence-collection` nothing else changes: the report is written as before, exits with status 0 when
+  every input parsed, and labels its coverage `unknown`. A bundle report is not refused without a summary (the
+  FREES-142 decision), because the label states the gap without blocking existing pipelines.
+
 ## Exceptions section
 
 The `exceptions` section is built from exceptions evaluations (`--exceptions-evaluation`) and the exceptions file
@@ -303,7 +348,14 @@ scenario is required. Any other `format` or `version` is an error.
 - 1.0: first version (FREES-75), including the `partial` section status, `groups`, `aggregates` and `gaps`. A change that adds a field bumps the minor version; a breaking change bumps the major
   version, and `report-v<major>.json` is a new file. The version, this page and ADR 0016 change together.
 - The HTML dashboard (FREES-77, ADR 0017) adds no field to the document and refuses every version it does not
-  know; it reads 2.0 only.
+  know; it reads 2.0 and 2.1.
+- 2.1 (FREES-142, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-21-host-coverage-frees-142)):
+  a field addition, so a minor version in the same `report-v2.json`. `sections.compliance.host_coverage` is new and
+  required in a 2.1 document, `raw_artifacts` gains the format `evidence_collection` and its bound grows to 9002.
+  Nothing else changes; a 2.0 document (no `host_coverage`, no `evidence_collection` artifact) still validates against
+  `report-v2.json`, and the schema refuses `host_coverage` in a 2.0 document. A 2.0 consumer migrates by accepting
+  `"2.1"` and the `host_coverage` key; the dashboard reads 2.0 and 2.1 and shows a 2.0 report's coverage as unknown.
+  The command line still writes the same 2.1 document without `--evidence-collection`, with coverage `unknown`.
 - 2.0 (FREES-130, FREES-132, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132)):
   `report-v2.json`. Breaking: every figure key includes the profile (`groups`, `aggregates` and `rules` gain
   `profile_id`, `rules` also `benchmark_id`, and a CIS and a STIG run of one host are two figures); the 1.0 note

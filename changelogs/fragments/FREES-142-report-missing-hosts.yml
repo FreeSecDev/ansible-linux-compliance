@@ -1,0 +1,25 @@
+---
+minor_changes:
+  - >-
+    evidence role - the ``summary.yml`` entry point writes a collection summary ``collection-<collection_id>.json``
+    (mode ``0600``, never overwritten) next to the bundles. It names every target host of the run with one status
+    (``collected``, ``unreachable``, ``limited_out``, ``no_audit_result``, ``no_evidence_written`` or
+    ``collection_failed``), the run identity and, for each collected host, the run ID and the SHA-256 of its
+    ``bundle.json``. New entry points ``reached.yml`` (records the hosts of the audit play and which hosts completed
+    fact gathering) and ``collected.yml`` (fails a host whose evidence was written but not collected), and a new filter
+    ``freesecdev.linux_compliance.evidence_collection``. The format is documented in ``docs/evidence.md``.
+  - >-
+    playbook ``freesecdev.linux_compliance.evidence`` - no host fails before the collection summary is written. The
+    collection play decides the gates and collects the evidence with ``rescue`` sections, the summary is written, and
+    a last play fails the gated hosts (``enforce.yml`` again) and the hosts whose collection failed. A run in which
+    every host fails or is unreachable in the collection play therefore still names every missing host.
+  - >-
+    audit role - the deferral message of ``deferred.yml`` and ``evaluate_deferred.yml`` starts with ``WARNING:``.
+  - >-
+    reporting - new option ``--evidence-collection FILE``. Every evidence bundle must be listed in the collection
+    summary with its inventory host, run ID and manifest SHA-256, otherwise it is an input error; every target host
+    without a bundle in the report is a missing input named with its status, so the compliance section is
+    ``partial`` and has no figure while a host is missing, and the command exits 1. The report schema is 2.1
+    (``report-v2.json``): ``sections.compliance.host_coverage`` is new and labels the coverage ``unknown`` when no
+    summary is supplied. 2.0 documents still validate, and the dashboard reads 2.0 and 2.1 and shows the target hosts
+    on the Overview and the Compliance tab.

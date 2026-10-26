@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-10-25
 - **Deciders:** lead architect
-- **Jira:** FREES-75, FREES-76
+- **Jira:** FREES-75, FREES-76 (amended by FREES-130, FREES-132 and FREES-142)
 - **Pull requests:** introduced by the pull request that adds `tools/reporting/`
 - **Related:** [ADR 0013](0013-normalized-findings-model.md), [reporting data model](../reporting-data-model.md)
 
@@ -23,7 +23,8 @@ assurance ([AGENTS.md](../../AGENTS.md) rule 13).
 The reporting package (`tools/reporting/`, controller side, Python 3.12 or newer) writes one JSON document that
 validates against `tools/reporting/schema/report-v1.json` (JSON Schema 2020-12). `schema_version` is `"1.0"`
 (superseded by `report-v2.json` and `"2.0"`, see the [amendment of FREES-130 and
-FREES-132](#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132)).
+FREES-132](#amendment-2026-10-26-schema-20-host-identity-and-waivers-frees-130-frees-132), and `"2.1"`, see the
+[amendment of FREES-142](#amendment-2026-10-26-schema-21-host-coverage-frees-142)).
 The document has `metadata`, one `scope`, nine `sections`, an `overview` and `raw_artifacts`.
 
 Every item and section has a `status`:
@@ -344,3 +345,79 @@ existing input kinds, not a new kind:
   exception stale on the strength of the bundles that did verify.
 - Nothing is labelled `verified`: bundles are not signed and the schema has no `provenance` field
   ([ADR 0018](0018-evidence-bundle-provenance.md), proposed). `exceptions_file.verified` keeps its 2.0 meaning.
+
+## Amendment 2026-10-26: schema 2.1, host coverage (FREES-142)
+
+### Context
+
+A fleet report built from evidence bundles cannot see a target host that has no bundle: a host that was unreachable,
+limited out, failed before any evidence was written, or whose collection failed. The run names those hosts, but the
+report alone looks complete, and its pooled figure reads as if it covered the fleet (PR #31 review). That is a false
+assurance under rule 4 of the summary semantics and [ADR 0013](0013-normalized-findings-model.md).
+
+### Decision
+
+- **Input.** `--evidence-collection FILE` is the collection summary that `playbooks/evidence.yml` writes next to the
+  bundles ([evidence bundles](../evidence.md#the-collection-summary)). It names every target host of the run (the
+  inventory hosts of the run's host pattern, taken from the controller's inventory), the run identity
+  (`collection_id`, `collected_at`) and, for each collected host, its run ID and the SHA-256 of its `bundle.json`. The
+  expected host set therefore comes from this explicit, validated file; the report never infers it from the inputs.
+- **Untrusted input.** The file is read like every input (size bound, regular file without links, strict JSON) and
+  every field is validated (format version, kind, host names, statuses, digests, sorted unique hosts, one bundle
+  exactly for each collected host). A summary that cannot be read or is invalid refuses the report with exit status 2,
+  like an exceptions file that cannot be read. Host-produced data stays untrusted as before (ADR 0013 trust boundary):
+  a bundle is accepted only when its verified manifest names the inventory host, run ID and digest that the summary
+  lists.
+- **Binding.** Every bundle that verified must be listed in the summary as `collected` with the same inventory host,
+  run ID and manifest SHA-256. A bundle that is not is an input `error` in the same way as a bundle that does not
+  verify, so it is never counted.
+- **Missing hosts are missing inputs.** Every target host without an accepted bundle is an `unavailable` input, with
+  its status in the reason and the place its bundle would be as the artifact path. This uses the existing status
+  rules instead of a new one: the compliance section is `partial` (or `unavailable`), has no `summary`, `groups`,
+  `aggregates` or `rules`, so **no figure is presented as covering the whole fleet**, and the CLI exits with status 1
+  because a supplied input is missing. When the report has exceptions evaluations the missing input is also an
+  evaluation of the exceptions section, which is then `partial`, so no exception is called stale because a host is
+  missing.
+- **Counted and named.** `sections.compliance.host_coverage` has the `status` (`complete`, `incomplete`, `unknown`),
+  a `reason`, the summary reference, counts (`target_hosts`, `in_report`, `missing`, `by_status`) and one entry per
+  target host (`host`, `status`, `in_report`, `run_id`, `manifest_sha256`). The schema forbids an `available`
+  compliance section with `incomplete` coverage.
+- **Without a summary the coverage is labelled `unknown`.** The issue asked whether `--evidence-bundle` without
+  `--evidence-collection` is refused or labelled; it is labelled, with the reason that the report cannot tell whether
+  a target host without an input is missing. Refusing it would break every existing pipeline and every report of a
+  single bundle; the label keeps the gap visible in the JSON and on the dashboard.
+- **Bundles only.** `--evidence-collection` is refused together with `--scan-run`, `--xccdf`, `--arf` or
+  `--exceptions-evaluation`: those name self-asserted hosts that the summary cannot bind to an inventory host.
+- **Bounds.** At most 1000 target hosts per summary, and at most 1000 compliance or exceptions inputs counting the
+  missing hosts; more is refused with exit status 2. `raw_artifacts` lists the summary once (format
+  `evidence_collection`) and is bounded by 9002.
+
+### Versioning
+
+The change adds a field and a raw artifact format and changes no meaning, so it is a minor version under the rules of
+this ADR: `schema_version` `"2.1"` in the same `report-v2.json`.
+
+- A 2.1 document must have `sections.compliance.host_coverage`; a 2.0 document must not have it and has no
+  `evidence_collection` artifact. Both validate against `report-v2.json`, whose `schema_version` is `2.0` or `2.1`.
+- Readers keep reading 2.0. The dashboard accepts 2.0 and 2.1 and shows the host coverage of a 2.0 document as
+  unknown. A strict 2.0 reader that rejects unknown keys must accept `"2.1"` and `host_coverage`; nothing it reads
+  changes meaning.
+- Counting is unchanged. A report built without `--evidence-collection` has the same figures as before, plus the
+  `unknown` label.
+
+### Alternatives evaluated
+
+| Alternative | Reason rejected |
+|---|---|
+| Infer the expected hosts from the bundles or from the hosts named in scan runs | The hosts that matter are exactly the ones that left no input |
+| A new section status such as `incomplete` | Every consumer would need a new state; a missing host is a missing input, which `partial` already means |
+| Keep the figures and add a warning | A pooled figure next to a warning still reads as the fleet figure; withholding it follows rule 4 |
+| Refuse `--evidence-bundle` without `--evidence-collection` | Breaks existing reports; the `unknown` label states the gap |
+| Exit status 2 for a bundle that the summary does not list | It is a defect of one input, like a bundle that does not verify, so it is an input error and the report is still written |
+| A major version | No field changes meaning and 2.0 documents stay valid |
+
+### Consequences
+
+- The dashboard shows the coverage on the Overview and the Compliance tab ([ADR 0017 amendment](0017-offline-html-dashboard.md#amendment-2026-10-26-host-coverage-frees-142)).
+- The summary is not signed ([ADR 0018](0018-evidence-bundle-provenance.md)). It binds bundles to digests and names
+  the hosts a report must account for; whoever can write the evidence directory can rewrite both consistently.
