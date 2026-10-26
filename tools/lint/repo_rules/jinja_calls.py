@@ -13,6 +13,7 @@ are refused, and so is ``allow_unsafe``, which templates the result of a lookup 
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 import jinja2
@@ -22,7 +23,6 @@ from tools.lint.repo_rules.common import Violation
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-    from pathlib import Path
 
     from jinja2.lexer import Token
 
@@ -78,7 +78,16 @@ EXPRESSION_KEYS: Final[frozenset[str]] = frozenset(
 )
 UNTEMPLATED_TAGS: Final[frozenset[str]] = frozenset({"!unsafe", "!vault"})
 TEMPLATE_SUFFIXES: Final[frozenset[str]] = frozenset({".j2", ".jinja", ".jinja2"})
-TEMPLATE_DIRECTORY: Final[str] = "templates"
+RENDERED_DIRECTORIES: Final[frozenset[str]] = frozenset({"templates", "files", "vars", "defaults"})
+ANSIBLE_TREES: Final[tuple[Path, ...]] = (
+    Path("roles"),
+    Path("playbooks"),
+    Path("tests/playbooks"),
+    Path("extensions"),
+)
+INCLUDE_TAGS: Final[frozenset[str]] = frozenset({"include", "import", "extends", "from"})
+INCLUDE_FOLLOWERS: Final[frozenset[str]] = frozenset({"block_end", "name"})
+BINARY_MARKER: Final[bytes] = b"\0"
 MAX_DEPTH: Final[int] = 8
 CALL_END: Final[frozenset[str]] = frozenset({"comma", "rparen"})
 CALL_TOKENS: Final[int] = 3
@@ -86,9 +95,24 @@ _ENVIRONMENT: Final[jinja2.Environment] = jinja2.Environment(autoescape=True)
 
 
 def is_template_file(relative: Path) -> bool:
-    """Return whether Ansible may render ``relative`` as a template file."""
-    folded = [part.casefold() for part in relative.parts[:-1]]
-    return relative.suffix.lower() in TEMPLATE_SUFFIXES or TEMPLATE_DIRECTORY in folded
+    """Return whether Ansible may render ``relative`` as a template or load it as variables.
+
+    That is a file with a template suffix or below a ``templates``, ``files``, ``vars`` or
+    ``defaults`` directory anywhere, and every file below ``ANSIBLE_TREES``: the ``template``
+    lookup and module and ``{% include %}`` render a role's ``files/`` too, and
+    ``include_vars`` and the ``host_group_vars`` plugin load ``.json`` and extensionless
+    files (FREES-159).
+    """
+    folded = [part.casefold() for part in relative.parts]
+    in_tree = any(
+        folded[: len(tree.parts)] == list(tree.parts) and len(folded) > len(tree.parts)
+        for tree in ANSIBLE_TREES
+    )
+    return (
+        in_tree
+        or relative.suffix.lower() in TEMPLATE_SUFFIXES
+        or bool(RENDERED_DIRECTORIES.intersection(folded[:-1]))
+    )
 
 
 def is_possibly_template(text: str) -> bool:
@@ -140,9 +164,38 @@ def _call_problem(tokens: list[Token], index: int) -> str:
     )
 
 
+def _include_problem(tokens: list[Token], index: int) -> str:
+    """Return why an ``include``, ``import``, ``extends`` or ``from`` tag is refused, or ``""``.
+
+    The tag must name a literal relative template, so that the template it loads is one
+    the check scans; a computed name could load any template.
+    """
+    tag = tokens[index].value
+    following = tokens[index + 1 : index + 3]
+    if (
+        len(following) == len(INCLUDE_FOLLOWERS)
+        and following[0].type == "string"
+        and following[1].type in INCLUDE_FOLLOWERS
+    ):
+        name = str(following[0].value)
+        if name.startswith(("/", "~")) or ".." in name.split("/") or is_possibly_template(name):
+            return f"{tag} target {name!r} must be a relative path without '..'"
+        return ""
+    return f"{tag} must name a literal template; a computed name could load any template"
+
+
 def _token_findings(tokens: list[Token], depth: int) -> Iterator[tuple[int, str]]:
     for index, token in enumerate(tokens):
-        if token.type == "name" and token.value in LOOKUP_FUNCTIONS:
+        if (
+            token.type == "name"
+            and token.value in INCLUDE_TAGS
+            and index > 0
+            and tokens[index - 1].type == "block_begin"
+        ):
+            problem = _include_problem(tokens, index)
+            if problem:
+                yield token.lineno, problem
+        elif token.type == "name" and token.value in LOOKUP_FUNCTIONS:
             problem = _call_problem(tokens, index)
             if problem:
                 yield token.lineno, problem
@@ -237,7 +290,15 @@ def yaml_jinja_findings(path: Path, documents: Iterable[yaml.Node]) -> list[Viol
 
 
 def template_file_findings(path: Path, data: bytes) -> list[Violation]:
-    """Reject command lookups, computed lookups and delimiter overrides in a template file."""
+    """Reject command lookups, computed lookups and delimiter overrides in a template file.
+
+    The whole text is read as a template, as the ``template`` lookup and module read it, so
+    a lookup in an INI inventory value, a JSON vars file or a role's ``files/`` is found
+    too. A file with a NUL byte is binary and never rendered; text that is not UTF-8 is
+    refused, because the check cannot read it.
+    """
+    if BINARY_MARKER in data:
+        return []
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as error:

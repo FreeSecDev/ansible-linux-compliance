@@ -26,6 +26,7 @@ from tools.lint.repo_rules.exec_variables import (
 from tools.lint.repo_rules.imports import file_io_import_findings
 from tools.lint.repo_rules.isolation import check_process_isolation, is_process_scope
 from tools.lint.repo_rules.jinja_calls import (
+    BINARY_MARKER,
     is_template_file,
     template_file_findings,
     yaml_jinja_findings,
@@ -51,6 +52,9 @@ from tools.lint.repo_rules.yaml_text import check_document_start, check_yaml_com
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from pathlib import Path
+
+JSON_SUFFIX: str = ".json"
+VARIABLE_DIRECTORIES: frozenset[str] = frozenset({"vars", "defaults"})
 
 
 def check_python_comments(path: Path, data: bytes) -> list[Violation]:
@@ -111,7 +115,16 @@ def check_file(
     except OSError as error:
         return [*violations, Violation(path, 1, f"cannot read file: {error}")]
     if suffix in PYTHON_SUFFIXES:
-        return [*violations, *_python_violations(path, root, data, relative, configured)]
+        rendered = (
+            template_file_findings(path, data)
+            if relative is not None and is_template_file(relative)
+            else []
+        )
+        return [
+            *violations,
+            *_python_violations(path, root, data, relative, configured),
+            *rendered,
+        ]
     if suffix in YAML_SUFFIXES:
         return [*violations, *_yaml_violations(path, data, relative)]
     return [*violations, *_text_violations(path, data, relative)]
@@ -136,9 +149,41 @@ def _text_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
             violations.extend(text_setting_findings(path, relative, data))
     elif relative is not None and is_inventory_text(relative):
         violations.extend(text_setting_findings(path, relative, data))
-    if relative is not None and is_template_file(relative):
+    if relative is not None and (is_template_file(relative) or is_inventory_text(relative)):
         violations.extend(template_file_findings(path, data))
-    return violations
+        if _is_variable_file(relative):
+            violations.extend(_variable_file_violations(path, data, relative))
+    return sorted(set(violations))
+
+
+def _is_variable_file(relative: Path) -> bool:
+    """Return whether Ansible may load ``relative`` as YAML variables or inventory.
+
+    A ``.json`` file, and a file without a suffix in an inventory, ``host_vars``,
+    ``group_vars``, ``vars`` or ``defaults`` directory.
+    """
+    if relative.suffix.lower() == JSON_SUFFIX:
+        return True
+    parents = {part.casefold() for part in relative.parts[:-1]}
+    return not relative.suffix and (
+        is_inventory_text(relative) or bool(parents & VARIABLE_DIRECTORIES)
+    )
+
+
+def _variable_file_violations(path: Path, data: bytes, relative: Path) -> list[Violation]:
+    """Read a ``.json`` or extensionless file as the YAML that Ansible loads it as (FREES-159).
+
+    ``include_vars``, the ``host_group_vars`` plugin and the ``yaml`` inventory plugin load
+    such files as YAML, and JSON is YAML, so their values and keys get the YAML rules. A file
+    that is not YAML is still read as a template by ``template_file_findings``.
+    """
+    if BINARY_MARKER in data:
+        return []
+    documents = _documents(data.decode("utf-8", errors="replace"))
+    return [
+        *yaml_jinja_findings(path, documents),
+        *yaml_variable_findings(path, relative, documents),
+    ]
 
 
 def _documents(text: str) -> list[yaml.Node]:

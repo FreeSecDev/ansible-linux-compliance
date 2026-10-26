@@ -692,11 +692,26 @@ until it is classified.
   would template (one that contains `{{`, `{%` or `{#` or starts with `#jinja2:`) in every YAML file outside
   `.github/` (role defaults and vars, plays, blocks, tasks, include and role `vars`, `set_fact`, `loop`,
   inventories, `host_vars`, `group_vars` and Molecule files); the values of `when`, `changed_when`, `failed_when`,
-  `until`, `that` and `var`, which Ansible evaluates as bare expressions; string constants inside a template,
-  which Ansible templates when it renders the outer one; and template files (`*.j2`, `*.jinja`, `*.jinja2` and
-  every file below a `templates` directory). Workflows hold GitHub expressions, not Jinja, and `!unsafe` and
-  `!vault` values are never templated. A template that does not lex is refused; a bare expression that does not
-  lex cannot be compiled by Ansible either and is ignored.
+  `until`, `that` and `var`, which Ansible evaluates as bare expressions; and string constants inside a
+  template, which Ansible templates when it renders the outer one. Workflows hold GitHub expressions, not Jinja,
+  and `!unsafe` and `!vault` values are never templated. A template that does not lex is refused; a bare
+  expression that does not lex cannot be compiled by Ansible either and is ignored.
+- Every other text file that Ansible can render or load as variables is read as one template, whatever its
+  suffix (independent review of PR #45): every file below `roles/`, `playbooks/`, `tests/playbooks/` and
+  `extensions/`, every file below a `templates`, `files`, `vars` or `defaults` directory anywhere, every file with
+  a `.j2`, `.jinja` or `.jinja2` suffix, and inventory text (files below `inventory`, `inventories`, `host_vars`
+  and `group_vars`, and files named `hosts` or `inventory`). That covers a role's `files/`, which the `template`
+  lookup and module and `{% include %}` render, the values of an INI inventory, and `.json` and extensionless
+  vars files. A `.json` file and an extensionless file in an inventory, `host_vars`, `group_vars`, `vars` or
+  `defaults` directory are also composed as YAML, as `include_vars`, the `host_group_vars` plugin and the `yaml`
+  inventory plugin load them, so their keys and decoded values get the YAML lookup and variable rules. A file with
+  a NUL byte is binary and skipped; text that is not UTF-8 is refused. Reading the whole text as a template is a
+  superset of what an INI parser passes to the templar: an INI value whose quoting or escapes (`\x27`) would
+  change the expression does not lex as Jinja and is refused. No tracked file needed an exception.
+- An `include`, `import`, `extends` or `from` tag must name a literal relative template without `..` that is not
+  itself templated, followed by the end of the tag or a keyword (`as`, `import`, `ignore missing`,
+  `with context`); a computed name (`{% include name %}`, `'a' ~ x`, a list) could load any template and is
+  refused, like a computed lookup name.
 - A `#jinja2:` header (`JINJA2_OVERRIDE`) changes the delimiters of the rest of the template, so a lookup between
   `[[` and `]]` would be invisible to the check. The header is refused in YAML values, string constants and template
   files, and so are the delimiter options (the `*_string` and `*_prefix` fields of `TemplateOverrides`) as YAML keys,
@@ -811,8 +826,10 @@ until it is classified.
   traceback.
 
 **Residuals.** The guard reads the repository, not the run. A vars file, template or inventory loaded from outside
-the repository (an absolute `include_vars`, `vars_files` or `src`, a dynamic `{% include %}`) is outside its
-control, as is a dictionary key built at run time (`{'ansible_' ~ 'python_interpreter': x}`). Options of
+the repository (an absolute `include_vars`, `vars_files` or `src`) is outside its control, as is a dictionary key
+built at run time (`{'ansible_' ~ 'python_interpreter': x}`). Inside the repository every file that Ansible can
+render or load as variables is scanned, and template names in `include`, `import`, `extends` and `from` must be
+literal. Options of
 connection, become and shell plugins of other collections are refused only by the name patterns above. Settings
 outside the repository (`~/.ansible.cfg`, `ANSIBLE_CONFIG`, the operator's environment) stay the documented
 residual of FREES-156. The change closes routes around AGENTS.md rule 1 and needs the independent review that the

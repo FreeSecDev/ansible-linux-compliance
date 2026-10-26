@@ -285,8 +285,11 @@ which holds one module per rule group; the name sets and allow-lists live in `to
     `package` and `service`, and others).
   - The `pipe` and `lines` lookups in every form (`lookup`, `query`, `q`, `with_<name>`, bare, `ansible.builtin.`,
     `ansible.legacy.`) in any templated YAML value, bare conditional and template file; a lookup with a computed or
-    indirect name; any lookup that ansible-core does not ship; and the `#jinja2:` header and delimiter options,
-    which would hide a template from the check.
+    indirect name; any lookup that ansible-core does not ship; a computed `include`, `import`, `extends` or `from`
+    name; and the `#jinja2:` header and delimiter options, which would hide a template from the check. Every text
+    file below `roles/`, `playbooks/`, `tests/playbooks/` and `extensions/`, below a `templates`, `files`, `vars`
+    or `defaults` directory and in an inventory is read as a template whatever its suffix, and `.json` and
+    extensionless vars files are also read as YAML.
   - Variables and keywords that set an interpreter, an executable, arguments or flags (`ansible_*_interpreter`,
     `ansible_ssh_*_args`, `ansible_become_exe`, `ansible_shell_executable` and the others), wherever the repository
     sets them, a connection, become or shell plugin outside ansible-core, and `PATH` and the loader and interpreter
