@@ -422,6 +422,11 @@ how many have a native remediation. These refinements apply.
   changed, as before. Every rule toggle stays documented in the generated
   [variable reference](../remediation-variables.md), per family. `check_role_specs.py` reports a declared rule toggle as
   a finding. The flat toggles of this ADR are unchanged.
+- **Only families with native rules are dispatched.** A family whose rules are all `audit_only` gets no apply or cleanup
+  work in the plan, needs no task file and must not be included. `generate_toggles.native_families` returns the
+  families with at least one native rule, in registry order, using the same predicate as the plan
+  (`toggles.is_native`); a generator of static dispatch includes (FREES-137) must use it. Today that is only
+  `file_permissions`, and a unit test checks that exactly these families have task files and get planned work.
 - **Generated allow-list choices.** `make toggles` also writes the `choices` of
   `linux_compliance_remediate_allow_disruptive` from the registry, so they cannot fall behind it.
 - **Empty-topic warning.** The `WARNING:` of the FREES-55 amendment now fires only for a family that has no rule in the

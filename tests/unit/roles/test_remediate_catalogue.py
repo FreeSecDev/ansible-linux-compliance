@@ -274,3 +274,14 @@ def test_the_ignored_role_variables_are_the_enabled_options_of_the_role_specs() 
             if name.endswith("_enabled") and not generate_toggles.is_generated(name)
         }
     assert declared == set(toggles.ROLE_TOGGLE_VARIABLES)
+
+
+def test_only_families_with_native_rules_are_dispatched_and_have_task_files() -> None:
+    catalogue = generate_toggles.load_catalogue(ROLE / "vars" / "rules.yml")
+    assert generate_toggles.native_families(catalogue) == ["file_permissions"]
+    families_with_files = [
+        family for family in catalogue.families if (ROLE / "tasks" / f"{family}.yml").is_file()
+    ]
+    assert families_with_files == generate_toggles.native_families(catalogue)
+    planned = cast("list[dict[str, object]]", plan()["families"])
+    assert [family["name"] for family in planned] == generate_toggles.native_families(catalogue)

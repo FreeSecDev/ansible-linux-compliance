@@ -181,6 +181,18 @@ def load_catalogue(path: Path) -> toggles.Catalogue:
     return loaded
 
 
+def native_families(catalogue: toggles.Catalogue) -> list[str]:
+    """Return the families with at least one rule that has a native remediation, in registry order.
+
+    Only these families can get ``apply`` or ``cleanup`` work in the remediation plan, so only
+    they need a task file ``roles/remediate/tasks/<family>.yml`` and a dispatch entry. A family
+    whose rules are all ``audit_only`` is never dispatched. Generators of the dispatch use this
+    predicate, :func:`toggles.is_native`, so that they agree with the catalogue.
+    """
+    native = {str(rule["family"]) for rule in catalogue.rules if toggles.is_native(rule)}
+    return [family for family in catalogue.families if family in native]
+
+
 def toggle_defaults(catalogue: toggles.Catalogue) -> dict[str, object]:
     """Return the generated topic toggle defaults, in registry order."""
     return {toggles.toggle_name(name): True for name in catalogue.families}
