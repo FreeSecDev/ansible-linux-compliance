@@ -399,9 +399,13 @@ are stable, so the required check name `ci-gate` does not change. Runs for pull 
 runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
 added as a job together with the documentation pipeline (FREES-80).
 
-The toolbox runner image lives in the `linux-compliance-runner` repository and does not exist yet. Jobs
-currently run on `ubuntu-24.04` with a pinned `uv`. Moving the jobs into the image, consumed by digest, is
-follow-up work tracked with the runner image issue (FREES-35); it is not simulated here.
+The toolbox runner image is built in AWS by the `linux-compliance-runner` repository (FREES-36) and published as
+`ghcr.io/freesecdev/linux-compliance-runner`, signed with cosign and attested. This repository consumes it by digest
+only: `ghcr.io/freesecdev/linux-compliance-runner@sha256:<digest>`, never a tag.
+`tests/unit/tools/test_runner_image_pin.py` fails on any other reference in a workflow, Makefile, script or
+configuration file. Before adopting a new digest, verify its signature and attestations as described in the runner
+repository's `docs/image-build.md`. Jobs still run on `ubuntu-24.04` with a pinned `uv`; moving them into the image is
+follow-up work.
 
 ## Dependency pins
 

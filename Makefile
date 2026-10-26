@@ -30,12 +30,14 @@ TREE_SORT := sort -z
 AWS_ACCOUNT_ID := 910736812072
 AWS_REGION := eu-west-1
 GITHUB_REPOSITORY := FreeSecDev/ansible-linux-compliance
+RUNNER_REPOSITORY := FreeSecDev/linux-compliance-runner
 STATE_BUCKET := freesecdev-tfstate-$(AWS_ACCOUNT_ID)-$(AWS_REGION)
 IAC_ROOT_MODULES := infra/account
 BOOTSTRAP_TEMPLATE := infra/bootstrap/bootstrap.sh.tmpl
 BOOTSTRAP_SCRIPT := infra/bootstrap/bootstrap.local.sh
 BOOTSTRAP_RENDER_SED := -e 's|@@AWS_ACCOUNT_ID@@|$(AWS_ACCOUNT_ID)|g' -e 's|@@AWS_REGION@@|$(AWS_REGION)|g' \
-	-e 's|@@STATE_BUCKET@@|$(STATE_BUCKET)|g' -e 's|@@GITHUB_REPOSITORY@@|$(GITHUB_REPOSITORY)|g'
+	-e 's|@@STATE_BUCKET@@|$(STATE_BUCKET)|g' -e 's|@@GITHUB_REPOSITORY@@|$(GITHUB_REPOSITORY)|g' \
+	-e 's|@@RUNNER_REPOSITORY@@|$(RUNNER_REPOSITORY)|g'
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
 BROWSER_TEST_DIR := build/browser-test
@@ -261,7 +263,7 @@ Images and AWS
   packer-build          [pending FREES-64] Build images with Packer
   aws-bootstrap-render  Render the gitignored bootstrap script from its template
   aws-bootstrap         Render and run the one-time interactive AWS account bootstrap
-  image-build           [pending FREES-36] Build the runner image on AWS
+  image-build           Dispatch the runner repository's image-build workflow (CodeBuild in AWS, FREES-36)
   scc-expiry-check      Fail from seven days before SCC_EXPIRES, so an expiring SCC is never built or run
   scc-fetch             Download the pinned SCC bundle from DISA, verify it and stage its Debian package in build/scc
   scc-image             Build the CI-only SCC image locally as SCC_IMAGE (a localhost/ tag); it is never pushed
@@ -803,6 +805,7 @@ aws-bootstrap-render:
 	@printf '%s' '$(AWS_REGION)' | grep -Eq '^(eu-west-[123]|eu-central-1|eu-north-1)$$' || { printf 'error: AWS_REGION is not allow-listed\n' >&2; exit 1; }
 	@printf '%s' '$(STATE_BUCKET)' | grep -Eq '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$$' || { printf 'error: STATE_BUCKET is not a valid S3 bucket name\n' >&2; exit 1; }
 	@printf '%s' '$(GITHUB_REPOSITORY)' | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$$' || { printf 'error: GITHUB_REPOSITORY must be owner/name\n' >&2; exit 1; }
+	@printf '%s' '$(RUNNER_REPOSITORY)' | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$$' || { printf 'error: RUNNER_REPOSITORY must be owner/name\n' >&2; exit 1; }
 	@mkdir -p $(dir $(BOOTSTRAP_SCRIPT))
 	sed $(BOOTSTRAP_RENDER_SED) $(BOOTSTRAP_TEMPLATE) > $(BOOTSTRAP_SCRIPT)
 	chmod 0700 $(BOOTSTRAP_SCRIPT)
@@ -811,7 +814,8 @@ aws-bootstrap: aws-bootstrap-render
 	bash $(BOOTSTRAP_SCRIPT)
 
 image-build:
-	$(call NOT_IMPLEMENTED,image-build,FREES-36)
+	gh workflow run image-build.yml --repo $(RUNNER_REPOSITORY) --ref main
+	@printf 'dispatched; follow it with: gh run watch --repo %s\n' '$(RUNNER_REPOSITORY)'
 
 scc-expiry-check:
 	tools/scc/check-expiry.sh '$(SCC_EXPIRES)'

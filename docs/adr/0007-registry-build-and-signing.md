@@ -43,3 +43,7 @@ The copy step verifies the digest unchanged between ECR and GHCR. Publishing req
 ## Operational consequences
 
 ECR staging images expire through a lifecycle policy after 14 days.
+
+Implemented in FREES-36. The resources and roles are in `infra/account` (see [ADR 0014](0014-aws-account-bootstrap.md),
+"Runner image build"). The pipeline is in the runner repository: its `image-build.yml` workflow, `docs/image-build.md`
+and ADR 0002. That ADR records why the CodeBuild container is privileged: rootless Buildah needs user namespaces.

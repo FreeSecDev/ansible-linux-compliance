@@ -11,7 +11,8 @@ workstation. CI never uses root or access keys; it assumes the OIDC role created
 
 - A shell on a workstation with `aws` (CLI v2), `gh`, `git`, GNU `make` and `uv` installed.
 - OpenTofu `1.13.2` on `PATH`. Install the pinned, checksum-verified release with `tools/iac/install-tofu.sh`.
-- `gh auth status` succeeds with a token that may write repository variables on `FreeSecDev/ansible-linux-compliance`.
+- `gh auth status` succeeds with a token that may write repository variables on `FreeSecDev/ansible-linux-compliance`
+  and `FreeSecDev/linux-compliance-runner`.
 - AWS credentials for the account in the environment (the project owner's authorized root session for this one
   time; any administrator role works too and is preferred). `AWS_REGION` is `eu-west-1`.
 - MFA enabled on the root user, done before the bootstrap if you use the root session. The script warns about this and
@@ -43,8 +44,9 @@ workstation. CI never uses root or access keys; it assumes the OIDC role created
    `backend.hcl.example`.
 6. Runs `tofu -chdir=infra/account init`, then `plan -out`, shows the plan and requires the second typed confirmation
    `apply-910736812072` before `apply`. The plan file is deleted when the script exits.
-7. Sets the GitHub repository variables `AWS_REGION` and `AWS_PLAN_ROLE_ARN` with `gh variable set`. They are
-   variables, not secrets: an ARN is an identifier, and trust is enforced by the role's trust policy.
+7. Sets the GitHub repository variables `AWS_REGION` and `AWS_PLAN_ROLE_ARN` on this repository, and `AWS_REGION`
+   and `AWS_BUILD_ROLE_ARN` on `FreeSecDev/linux-compliance-runner`, with `gh variable set`. They are variables, not
+   secrets: an ARN is an identifier, and trust is enforced by the role's trust policy.
 8. Prints the commands that verify OIDC from a workflow.
 
 The script never writes access keys or secrets to disk. The state bucket is created by the script and not by OpenTofu
@@ -122,6 +124,65 @@ The role is read-only for `tofu plan` of `infra/account`:
 No action uses a wildcard and no resource is `*`. The role can read state but not write it; only the lock object is writable, which a plan needs for the native S3 lock
 (`use_lockfile = true`). `aws iam simulate-custom-policy` confirms `PutObject` and `DeleteObject` on the state object are
 implicitly denied. The role cannot change any AWS resource.
+
+## Runner image build resources (FREES-36)
+
+The stack also holds the AWS side of the runner image build. The trust, the permissions, the justification for each
+`*` and the Checkov baseline are in [ADR 0014](../adr/0014-aws-account-bootstrap.md), "Runner image build". The
+pipeline is documented in the runner repository's `docs/image-build.md`.
+
+| Resource | Name |
+|---|---|
+| CodeBuild project | `freesecdev-linux-compliance-runner` |
+| ECR repository (private staging) | `linux-compliance-runner-staging` |
+| CloudWatch log group | `/aws/codebuild/freesecdev-linux-compliance-runner` (365 days, CMK) |
+| KMS key | customer managed, yearly rotation, used by the log group and the project |
+| CodeBuild service role | `freesecdev-codebuild-linux-compliance-runner` |
+| GitHub build role | `freesecdev-gha-linux-compliance-runner-build` |
+| Plan role policy | `plan-read-image-build`, a new inline policy on the existing plan role |
+
+### Applying the build resources
+
+CI can only plan, so the owner applies them once from the logged-in administrator session, with the same idempotent
+command as the first bootstrap:
+
+```bash
+git switch main && git pull --ff-only
+tools/iac/install-tofu.sh
+export AWS_REGION=eu-west-1
+aws sts get-caller-identity
+make aws-bootstrap
+```
+
+Type `yes-910736812072` after the identity check. Review the plan, then type `apply-910736812072`. The expected plan
+on the applied 2026-10-26 state is `Plan: 10 to add, 0 to change, 0 to destroy.`, followed by three added
+outputs. It adds exactly these resources:
+
+- `aws_kms_key.image_build`
+- `aws_cloudwatch_log_group.image_build`
+- `aws_ecr_repository.runner_staging`
+- `aws_ecr_lifecycle_policy.runner_staging`
+- `aws_iam_role.codebuild_service`
+- `aws_iam_role_policy.codebuild_service`
+- `aws_codebuild_project.runner_image`
+- `aws_iam_role.image_build`
+- `aws_iam_role_policy.image_build`
+- `aws_iam_role_policy.plan_image_build`
+
+The added outputs are `image_build_role_arn`, `image_build_project_name` and `image_staging_repository_url`. Stop if the
+plan shows any change to `aws_iam_role.plan`, `aws_iam_role_policy.plan`, `aws_budgets_budget.monthly` or the OIDC
+provider. The provider is a data source and is never changed.
+
+Then the script sets `AWS_REGION` and `AWS_BUILD_ROLE_ARN` on the runner repository. A rerun shows `No changes`.
+Verify with:
+
+```bash
+gh workflow run image-build.yml --repo FreeSecDev/linux-compliance-runner --ref main
+gh run watch --repo FreeSecDev/linux-compliance-runner
+```
+
+A successful run prints the staged ECR digest and the GHCR release digest in its job summary and uploads them as the
+`image-build` and `image-release` artifacts.
 
 ## Workflow permissions
 

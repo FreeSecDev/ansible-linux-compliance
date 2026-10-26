@@ -10,6 +10,28 @@
                     ]
                 }
             ]
+        },
+        {
+            "file": "/account/iam_image_build_role.tf",
+            "findings": [
+                {
+                    "resource": "aws_iam_policy_document.image_build_trust",
+                    "check_ids": [
+                        "CKV_AWS_358"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/account/image_build.tf",
+            "findings": [
+                {
+                    "resource": "aws_codebuild_project.runner_image",
+                    "check_ids": [
+                        "CKV_AWS_316"
+                    ]
+                }
+            ]
         }
     ]
 }

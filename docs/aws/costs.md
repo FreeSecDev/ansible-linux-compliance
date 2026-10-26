@@ -23,4 +23,32 @@ Notes:
   covers the whole account, so it will also alert on the future builder, CodeBuild and ECR resources.
 - Additional monitoring budgets are also free. Only budgets with actions are charged, after a free allowance; none is
   created here.
-- Costs of resources added later (CodeBuild, ECR, EC2 builders) are estimated in the pull request that adds them.
+- Costs of resources added later are estimated in the pull request that adds them; the runner image build follows.
+
+## Runner image build (FREES-36)
+
+Prices from the AWS price list API offer files for `eu-west-1`: CodeBuild published 2026-09-11, ECR 2026-09-11,
+CloudWatch 2026-10-07 and KMS 2026-10-26. They were read on 2026-10-26. The usage assumes about 15 builds a month
+(pushes to `main` that change an image input, plus manual runs). Each build takes 8 to 10 minutes on
+`BUILD_GENERAL1_MEDIUM`; the build took 4.6 minutes on a 2026 workstation, plus queueing, builder image pull and
+push.
+
+| Resource | Pricing basis | Assumed usage | Monthly estimate |
+|---|---|---|---|
+| CodeBuild `BUILD_GENERAL1_MEDIUM` (Linux) | 0.010 per build minute; the free tier covers `general1.small` only | 15 builds x 10 minutes | 1.50 |
+| ECR private storage | 0.10 per GB-month | images of about 0.28 GB, kept 14 days: about 7 images, 2 GB on average | 0.20 |
+| ECR data transfer to GitHub runners | internet egress; the first 100 GB a month are free across the account | 4 pulls of 0.28 GB per run (pull, scan, SBOM, copy), about 17 GB | 0.00 |
+| ECR basic scan on push | no charge | 15 images | 0.00 |
+| CloudWatch Logs | 0.57 per GB ingested, 0.03 per GB-month stored | about 3 MB a build, kept 365 days | below 0.05 |
+| KMS customer-managed key | 1.00 per key version a month; requests 0.03 per 10,000 | 1 key with yearly rotation, a few hundred requests | 1.00 (2.00 after the first rotation, 3.00 at most) |
+| IAM roles, policies, STS | no charge | 2 roles, 3 inline policies | 0.00 |
+| **Total** | | | **about 2.75 in the first year, at most about 4.75** |
+
+Notes:
+
+- The cost scales with builds. The worst case for one build is the 45-minute timeout, 0.45. The concurrency limit
+  of 1 and the queue timeout stop parallel or piling builds.
+- Images expire from ECR after 14 days, so storage is bounded by the build rate. GHCR storage is free for public
+  packages.
+- There is no always-on compute and no EC2 builder.
+- The account budget (50 USD with alerts at 50, 80 and 100 percent) covers these resources.

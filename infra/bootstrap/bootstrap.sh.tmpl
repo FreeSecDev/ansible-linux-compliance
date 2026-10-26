@@ -5,6 +5,7 @@ readonly EXPECTED_ACCOUNT_ID='@@AWS_ACCOUNT_ID@@'
 readonly EXPECTED_REGION='@@AWS_REGION@@'
 readonly STATE_BUCKET='@@STATE_BUCKET@@'
 readonly TARGET_REPOSITORY='@@GITHUB_REPOSITORY@@'
+readonly RUNNER_REPOSITORY='@@RUNNER_REPOSITORY@@'
 readonly STATE_KEY='account/terraform.tfstate'
 readonly NONCURRENT_VERSION_RETENTION_DAYS=90
 readonly NONCURRENT_VERSIONS_KEPT=10
@@ -32,6 +33,7 @@ validate_rendered_values() {
   [[ "${STATE_BUCKET}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ && "${STATE_BUCKET}" != *..* ]] ||
     fail 'rendered state bucket name is not a valid S3 bucket name'
   [[ "${TARGET_REPOSITORY}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'rendered repository is not owner/name'
+  [[ "${RUNNER_REPOSITORY}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'rendered runner repository is not owner/name'
 }
 
 require_command() {
@@ -216,17 +218,23 @@ apply_account_stack() {
   tofu -chdir="${ACCOUNT_STACK_DIR}" init -input=false -lockfile=readonly -backend-config="${BACKEND_FILE}"
   tofu -chdir="${ACCOUNT_STACK_DIR}" plan -input=false -var-file="${TFVARS_FILE}" -out="${PLAN_FILE}"
   tofu -chdir="${ACCOUNT_STACK_DIR}" show "${PLAN_FILE}"
-  printf '\nReview the plan above. Applying creates the budget and the plan role and uses the existing OIDC provider.\n'
+  printf '\nReview the plan above. Applying creates or updates the budget, the plan role and the runner image build\n'
+  printf 'resources (CodeBuild project, ECR staging repository, log group, KMS key and the two image build roles).\n'
+  printf 'It uses the existing OIDC provider and never changes it. Once applied, a rerun shows no changes.\n'
   confirm "${APPLY_CONFIRMATION}"
   tofu -chdir="${ACCOUNT_STACK_DIR}" apply -input=false "${PLAN_FILE}"
 }
 
 set_repository_variables() {
-  local plan_role_arn
+  local plan_role_arn image_build_role_arn
   plan_role_arn="$(tofu -chdir="${ACCOUNT_STACK_DIR}" output -raw plan_role_arn)"
+  image_build_role_arn="$(tofu -chdir="${ACCOUNT_STACK_DIR}" output -raw image_build_role_arn)"
   gh variable set AWS_REGION --repo "${TARGET_REPOSITORY}" --body "${EXPECTED_REGION}"
   gh variable set AWS_PLAN_ROLE_ARN --repo "${TARGET_REPOSITORY}" --body "${plan_role_arn}"
   gh variable list --repo "${TARGET_REPOSITORY}" | grep -E '^(AWS_REGION|AWS_PLAN_ROLE_ARN)[[:space:]]'
+  gh variable set AWS_REGION --repo "${RUNNER_REPOSITORY}" --body "${EXPECTED_REGION}"
+  gh variable set AWS_BUILD_ROLE_ARN --repo "${RUNNER_REPOSITORY}" --body "${image_build_role_arn}"
+  gh variable list --repo "${RUNNER_REPOSITORY}" | grep -E '^(AWS_REGION|AWS_BUILD_ROLE_ARN)[[:space:]]'
 }
 
 print_verification_steps() {
@@ -235,6 +243,9 @@ print_verification_steps() {
   printf '  gh run watch --repo %s\n\n' "${TARGET_REPOSITORY}"
   printf 'Expect aws sts get-caller-identity to print an assumed-role ARN ending in\n'
   printf 'assumed-role/freesecdev-gha-ansible-linux-compliance-plan/<session>.\n\n'
+  printf 'Then build the runner image in AWS (it trusts the release environment on main only):\n\n'
+  printf '  gh workflow run image-build.yml --repo %s --ref main\n' "${RUNNER_REPOSITORY}"
+  printf '  gh run watch --repo %s\n\n' "${RUNNER_REPOSITORY}"
   printf 'Now stop using root: sign out of the root session.\n'
 }
 

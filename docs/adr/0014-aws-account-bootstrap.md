@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-10-25
 - **Deciders:** project owner, lead architect
-- **Jira:** FREES-30 (state backend), FREES-31 (OIDC provider and roles), FREES-33 (bootstrap template), FREES-34 (budget, tagging), FREES-69 (IaC hooks)
+- **Jira:** FREES-30 (state backend), FREES-31 (OIDC provider and roles), FREES-33 (bootstrap template), FREES-34 (budget, tagging), FREES-69 (IaC hooks), FREES-36 (runner image build role and resources)
 - **Pull requests:** pending
 - **Related:** [0006](0006-toolchain-selection.md), [0007](0007-registry-build-and-signing.md), [0008](0008-qcow2-builds-nested-virtualization.md), [0012](0012-github-native-releases-and-packages.md)
 
@@ -68,6 +68,86 @@ Build and release roles are added by later issues with their own trust: the rele
 environment of [ADR 0012](0012-github-native-releases-and-packages.md), which accepts `main` only and has no human
 reviewers, so the gate is automated and the trust must not depend on a reviewer.
 
+### Runner image build (FREES-36)
+
+The runner image is built by CodeBuild, as [ADR 0007](0007-registry-build-and-signing.md) decides. The resources
+live in this stack (`infra/account/image_build.tf` and `iam_image_build_role.tf`) because this repository owns the
+account IaC. They are:
+
+- the CodeBuild project `freesecdev-linux-compliance-runner`. It builds the public runner repository at the
+  requested commit with the digest-pinned builder `quay.io/buildah/stable@sha256:7c2b6052...`
+  (`image_builder_image`), and its settings are:
+  - `BUILD_GENERAL1_MEDIUM`;
+  - a concurrency limit of 1;
+  - a 45-minute build timeout and a 15-minute queue timeout;
+  - no artifacts;
+  - CloudWatch logs only;
+- the private ECR repository `linux-compliance-runner-staging`: immutable tags, scan on push, KMS encryption with
+  the AWS-managed key, and a lifecycle rule that expires images 14 days after the push;
+- the log group `/aws/codebuild/freesecdev-linux-compliance-runner`, kept 365 days and encrypted with a
+  customer-managed key;
+- the KMS key, with yearly rotation and a 30-day deletion window. Its key policy lets the account administer it
+  and lets CloudWatch Logs use it only for that log group (the `kms:EncryptionContext:aws:logs:arn` condition). It is
+  also the CodeBuild project's encryption key;
+- the CodeBuild service role `freesecdev-codebuild-linux-compliance-runner`, trusted only by `codebuild.amazonaws.com`
+  with `aws:SourceAccount` equal to this account and `aws:SourceArn` equal to the project ARN;
+- the GitHub build role `freesecdev-gha-linux-compliance-runner-build` (below);
+- a second inline policy on the plan role, `plan-read-image-build`. It lets `tofu plan` read the resources above
+  without changing the existing `plan-read-only` policy.
+
+Every resource carries the default tags plus `component = runner-image-build` and
+`consumer = FreeSecDev/linux-compliance-runner`. There is no EC2 builder, so no reaper is needed; the CodeBuild
+timeouts bound every build.
+
+The build role trusts only tokens where all of these hold, all compared with `StringEquals`:
+
+- `aud` is `sts.amazonaws.com`;
+- `sub` is `repo:FreeSecDev@347867179/linux-compliance-runner@1433323102:environment:release`. The runner
+  repository also uses immutable subjects, and `1433323102` is its repository ID
+  (`gh api repos/FreeSecDev/linux-compliance-runner --jq .id`);
+- `repository_id` is `1433323102`;
+- `repository_owner_id` is `347867179`;
+- `job_workflow_ref` is `FreeSecDev/linux-compliance-runner/.github/workflows/image-build.yml@refs/heads/main`.
+
+The `release` environment of the runner repository accepts `main` only and administrators cannot bypass it, so
+no pull request, fork or other branch can assume the role. The maximum session is 3600 seconds.
+
+The build role's permissions:
+
+| Statement | Actions | Resource |
+|---|---|---|
+| RunTheImageBuild | `codebuild:StartBuild`, `codebuild:BatchGetBuilds`, `codebuild:StopBuild` | the project ARN |
+| ReadTheBuildLogs | `logs:GetLogEvents` | the project's log streams |
+| GetRegistryToken | `ecr:GetAuthorizationToken` | `*` |
+| PullAndDescribeStagedImages | `ecr:BatchCheckLayerAvailability`, `ecr:BatchGetImage`, `ecr:DescribeImages`, `ecr:GetDownloadUrlForLayer` | the staging repository ARN |
+
+The CodeBuild service role's permissions:
+
+| Statement | Actions | Resource |
+|---|---|---|
+| WriteBuildLogs | `logs:CreateLogStream`, `logs:PutLogEvents` | the project's log streams |
+| GetRegistryToken | `ecr:GetAuthorizationToken` | `*` |
+| PushStagingImage | `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage` | the staging repository ARN |
+| UseBuildKey | `kms:Decrypt`, `kms:Encrypt`, `kms:GenerateDataKey`, `kms:DescribeKey` | the KMS key ARN |
+
+Wildcard resources, each required by AWS:
+
+- **`ecr:GetAuthorizationToken` on `*`:** the action has no resource type. It returns a registry login token, and
+  the repository-scoped statements decide what that token may pull or push. The GitHub role cannot push at all.
+- **`Resource: "*"` in the KMS key policy:** in a key policy, `*` means this key and no other.
+- **`logs:DescribeLogGroups` on `log-group:*` for the plan role:** the action lists log groups and cannot be limited
+  to one group. The grant is scoped to this account and region and is read-only.
+
+Neither role can pass a role (`iam:PassRole`) or call `sts:AssumeRole`. `codebuild:StartBuild` accepts overrides of
+the build specification, image and environment, and IAM offers no condition key to restrict them. The mitigation is
+that only reviewed workflow code on `main` can assume the role, and that the service role cannot be swapped without
+`iam:PassRole`.
+
+Rootless Buildah needs user namespaces, and an unprivileged container is denied them, so the CodeBuild project uses
+`privileged_mode = true`. Buildah still runs as a non-root user inside the build container. The build container is
+single-use, holds no secret, and its only credential is the service role above. The runner repository's ADR 0002
+records the tests and the alternatives.
+
 ### Tooling
 
 OpenTofu is pinned to `1.13.2`. It is four days old at the time of writing, but it is a security release that
@@ -104,12 +184,32 @@ reviewed trust change. The plan role cannot write state, only the lock object, s
 Reviewed against the IAM and bootstrap checklist of the `aws-infrastructure` skill. The deviation from the "refuse
 root" item is recorded above. Trust policy changes require `security-review` before apply.
 
-`infra/.checkov.baseline` exempts exactly one finding: CKV_AWS_358 on `aws_iam_policy_document.plan_trust`. The
-check only recognises the `repo:<owner>/<repo>:...` subject and fails the stricter immutable subject
-`repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/main` that the trust policy pins, together with the
-`repository_id`, `repository_owner_id`, `aud` and `job_workflow_ref` conditions. The product owner accepted the
-exemption on 2026-10-26. Every other check, and CKV_AWS_358 on any other resource, still applies; a change to the trust
-policy needs the baseline reviewed again.
+`infra/.checkov.baseline` exempts exactly three findings:
+
+- **CKV_AWS_358 on `aws_iam_policy_document.plan_trust`:** the check only recognises the `repo:<owner>/<repo>:...`
+  subject. It fails the stricter immutable subject `repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/main`
+  that the trust policy pins, together with the `repository_id`, `repository_owner_id`, `aud` and
+  `job_workflow_ref` conditions. The product owner accepted the exemption on 2026-10-26.
+- **CKV_AWS_358 on `aws_iam_policy_document.image_build_trust`:** the same immutable-subject false positive for the
+  runner build role. The subject is `...:environment:release`, with the same four extra conditions. This is the
+  pattern the owner accepted on 2026-10-26.
+- **CKV_AWS_316 on `aws_codebuild_project.runner_image`:** the privileged build container that rootless Buildah
+  needs (above).
+
+`tests/unit/infra/test_image_build_role.py` is the control that replaces the two build-related exemptions. It pins:
+
+- the single trust statement, its principal and its five exact `StringEquals` conditions, and fails on wildcards or
+  on a condition that is added or removed;
+- the subject and workflow expressions and their rendered values;
+- every permission statement of both build roles, with `*` allowed only for `ecr:GetAuthorizationToken`;
+- the CodeBuild service-role trust;
+- the CodeBuild guardrails: concurrency 1, timeouts, the digest-pinned builder, no artifacts, the GitHub source and
+  the CMK;
+- the ECR settings;
+- the exact content of the baseline.
+
+Every other check, and both check IDs on any other resource, still applies. A change to a trust policy or to the
+project needs the baseline and that test reviewed again.
 
 `tests/unit/infra/test_plan_role_trust.py` is the control that replaces CKV_AWS_358 for `plan_trust`. It parses the
 OpenTofu files with `hcl2` and pins exactly one statement, its effect, action and Federated principal, the five
