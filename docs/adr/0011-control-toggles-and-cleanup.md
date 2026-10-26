@@ -456,3 +456,110 @@ and runs the real remediate role against the copy in check mode. With the defaul
 `skip` with the reason `disruptive_not_allowed` and one notice, and no family is dispatched. With `ssh` on the
 allow-list the rule is planned for `apply`; the copy has no `ssh` task file, so the role fails closed at the
 completeness check and nothing runs for the family. The precedence of `audit_only` over the allow-list is unchanged.
+
+## Amendment 2026-10-26: subsystem topics and umbrella toggles (FREES-53, step 2)
+
+The 21 families of the FREES-53 amendment grouped unrelated subsystems: SSSD, chrony and postfix were all `services`,
+pam_pwquality and pam_faillock were both `pam`. The project owner requires a switch per subsystem, and the native
+remediations with cleanup will be built per topic, so the boundaries are fixed before any of them exists. The
+[control family reference](../control-families.md) lists every topic, its umbrella, its rules per profile and the
+reason for its disruptive flag. These refinements apply.
+
+- **Topics are families.** Each subsystem is a family of the registry, flat, with its own topic toggle
+  `linux_compliance_<family>_enabled`, its own `disruptive` flag and, later, its own task file. Nothing about a family
+  changes: the catalogue, the plan, the ledger and the dispatch still work per family. The registry grows from 21 to
+  55 families (the bound is 64); with the umbrellas there are 65 topic toggles.
+- **Boundaries, taken from the rule identifiers and groups of the pinned content.** `services` becomes `sssd` (12
+  rules), `time_sync` (chrony, ntpd, timesyncd, 19), `mail` (8), `cron` (cron and at, 7), `nfs` (NFS and rpcbind, 6),
+  `usbguard` (5), `fapolicyd` (3) and `network_services` (59: telnet, tftp, rsh, NIS, FTP, HTTP, DNS, DHCP, Samba,
+  SNMP, LDAP, IMAP, proxy, printing, Avahi, X11, kdump, apport). `accounts` becomes `password_aging` (9),
+  `root_access` (19), `umask` (6), `user_sessions` (14), `smartcard` (pcscd, OpenSC and PAM smart card login, 9),
+  `console_access` (7) and `user_accounts` (24). `pam` keeps the PAM stack, pam_unix, the hashing settings and the
+  PAM packages (15) and gains `pwquality` (19), `pwhistory` (7) and `faillock` (pam_faillock and pam_faildelay, 14).
+  `logging` becomes `journald` (19), `rsyslog` (rsyslog and the general logging rules, 19) and `logrotate` (3);
+  `integrity` becomes `aide` (13), `software_integrity` (package verification, prelink, vendor support, 5) and
+  `endpoint_security` (3); `packages` becomes `package_updates` (6), `package_sources` (repositories and signature
+  checks, 6) and `system_packages` (12); `network` becomes `ipv4_parameters` (26), `ipv6_parameters` (19), `ipsec`
+  (11), `wireless` (3) and `network_settings` (7); `kernel_modules` becomes `filesystem_modules` (9),
+  `protocol_modules` (7) and `wireless_modules` (5); `firewall` becomes `firewalld` (10), `nftables` (11), `iptables`
+  (12) and `ufw` (9), so a host that uses one firewall can switch the others off; `mandatory_access_control` becomes
+  `selinux` (27) and `apparmor` (6); `mounts` becomes `autofs` (2), `mount_options` (34) and `partitioning` (12, the
+  irreversible rules). `auditd`, `ssh`, `sudo` and `pam` stay topics; `file_permissions`, `sysctl`, `banners`,
+  `kernel_build_config`, `desktop`, `crypto_policy` (FIPS mode sets the crypto policy, so the two cannot be switched
+  independently) and `bootloader` (a host has one boot loader) are not split. The kernel parameter families are
+  named `ipv4_parameters` and `ipv6_parameters`, because `linux_compliance_ipv6_enabled: false` would read as
+  "disable IPv6".
+- **pwquality, pwhistory and faillock are families of their own under the `pam` umbrella.** Each is a separate PAM
+  module with its own configuration file (`/etc/security/pwquality.conf` and `pwquality.conf.d`, `pwhistory.conf`,
+  `faillock.conf`), its own failure mode (rejected password changes, broken password rotation, locked-out accounts)
+  and therefore its own remediation and cleanup. They are not topics of `accounts`: every one of them is a module in
+  the PAM stack and needs the stack that `pam` manages, and `linux_compliance_pam_enabled: false` switched all of them
+  off before the split and must keep doing so.
+- **Where the content puts a rule decides its umbrella.** autofs is in the `mounting` group, not in `services`, and
+  smart card login is in `accounts`, so `autofs` belongs to the `mounts` umbrella and `smartcard` to `accounts`
+  (`sssd_enable_smartcards` stays in `sssd`). Moving a rule across umbrellas would make a former toggle, for example
+  `linux_compliance_mounts_enabled: false`, stop switching off a rule it covered, which the next item forbids.
+- **One level of umbrellas.** A family may name an `umbrella` in the registry (an optional key of a registry entry).
+  The umbrella is either a name of its own (`services`, `accounts`, `logging`, `integrity`, `packages`, `network`,
+  `kernel_modules`, `firewall`, `mandatory_access_control`, `mounts`) or a family that heads it (`pam`). A family
+  that heads an umbrella cannot itself belong to one, and an umbrella name follows the rules of a family name. Each
+  umbrella has a generated toggle `linux_compliance_<umbrella>_enabled`, default `true`, declared in both roles like
+  a topic toggle; a heading family's topic toggle is its umbrella toggle. ADR 0011's semantics allow this cleanly,
+  because the umbrella toggle is another flat boolean and the resolution stays a pure function of the toggles.
+- **Precedence.** The rule toggle wins when it is set, in both directions, as before. Otherwise the rule is on only
+  when its umbrella toggle and its family toggle are both on, a toggle that is not set counting as on: an umbrella
+  toggle that is `false` switches off every family it groups, and a family toggle can only narrow its umbrella, never
+  widen it. A family toggle has to be unable to widen, because both default to `true` and a generated default cannot
+  be told apart from a value set by the operator. `disabled_by` names the most general toggle that is off: the
+  umbrella toggle, else the family toggle, else the rule toggle, which extends the FREES-55 rule. The resolution is in
+  `toggles.resolve_toggle`, shared by both roles as before.
+- **Backward compatibility without aliases.** Every former family name is now either an unchanged family or an
+  umbrella, and each switches off exactly the rules that it switched off before the split.
+  `tests/fixtures/catalog/legacy-families.yml` records the 21 former families with the number and a SHA-256 of their
+  sorted rule identifiers, taken from the catalogue of `main` before the split, and a test fails if a former toggle
+  switches off a different set or stops being a declared default of either role. No toggle is renamed, deprecated or
+  removed, so the change log has no `deprecated_features` entry; it records as a breaking change that the `family` of
+  a rule in the plan, the results and the report now names the subsystem.
+- **Allow-list.** An entry of `linux_compliance_remediate_allow_disruptive` may name a disruptive family or an
+  umbrella that groups one; an umbrella allows every disruptive family that it groups, so an allow-list that names
+  `services` or `pam` keeps its meaning. The generated `choices` are the disruptive families and these umbrellas. An
+  umbrella that groups no disruptive family, such as `logging`, is refused like a non-disruptive family.
+- **Disruptive flags.** A family split from another keeps the flag of the family it came from, so the split changes
+  nothing that the allow-list gates, and the why column of the reference justifies the flag of each subsystem: `sssd`
+  can lock out every directory user, `time_sync` can leave the clock unsynchronised, which breaks Kerberos and TLS,
+  `pwquality`, `pwhistory` and `faillock` can reject password changes or lock out root, and so on. The journald,
+  rsyslog, logrotate, AIDE and integrity topics stay non-disruptive. The pinned `DISRUPTIVE_FAMILIES` now hold the 45
+  disruptive families; the umbrellas are not families and are not pinned, because the pin of each grouped family
+  already prevents marking it non-disruptive.
+- **Mapping refinements in `content/catalogue.yml`.** A rule below several topic groups is assigned to the innermost
+  one when the families of all of them share an umbrella (`journald` inside `logging`, `aide` inside
+  `software-integrity`); below topic groups of different umbrellas it is still an error. A heading family shares the
+  umbrella it heads. `accounts-pam` moves from the topic groups to the fallback groups, so that rule prefixes can
+  carve `pwhistory` and `faillock` out of the `locking_out_password_attempts` group, which mixes them; it decides the
+  same rules as before, which the legacy fixture proves. The kernel module families use one prefix per module
+  instead of `kernel_module_`, because prefixes must not overlap. Every former generator check still applies: no rule
+  without a family, no rule in two families, no overlapping prefixes, no group mapped twice and no unused entry.
+- **Ledger.** Ledger entries record the family. The only native rule, `file_permissions_crontab`, keeps the family
+  `file_permissions`, so no ledger entry changes. A later split of a family that has native rules must migrate the
+  recorded family, because the plan refuses a ledger entry whose family contradicts the catalogue (FREES-52).
+- **Empty-topic warning.** The `WARNING:` of the FREES-55 amendment covers umbrellas: an umbrella or heading family
+  toggle that is `false` warns when no catalogued rule of any family it governs is in the profile, and names those
+  families. A family toggle still warns for its own family only.
+- **Measured cost.** On this workstation, with ansible-core 2.21.5 and the check-mode playbook of the FREES-53
+  amendment (the remediate role without and with the opt-in over all 1203 rules, then the audit toggle resolution
+  with `linux_compliance_auditd_enabled: false`), measured as wall time of `uv run ansible-playbook`, interleaved
+  with `main`: `main` took 3.77 to 4.03 s (median 3.91 s) and the first draft of this change 3.87 to 4.40 s (median
+  4.05 s). Replacing the argument specifications of the draft with those of `main` brought it back to 3.71 to 3.86 s,
+  so the cost was the size of the 65 topic toggle descriptions (71 KB instead of 21 KB in the remediate role). The
+  generated descriptions are therefore four short lines that point to the variable reference (29 KB). In two
+  further interleaved runs of ten, `main` took a median of 3.69 and 4.05 s and this change 3.97 and 4.12 s (fastest
+  run 3.64 against 3.73 s): about 0.1 s more, within the budget of about 4 s and the noise of this host.
+- **Testing.** `test_toggle_umbrellas.py` and `test_remediation_plan_umbrellas.py` cover the precedence table, the
+  heading family, the allow-list, invalid and nested umbrellas and the warnings with synthetic registries.
+  `tests/unit/roles/test_topic_toggles.py` checks on the real catalogue that every topic and umbrella toggle switches
+  off exactly its rules in both filters, that an umbrella cannot be widened and can be narrowed, and the legacy
+  fixture. `make test-content-golden` checks every topic and umbrella toggle against each of the 25 pinned profiles,
+  including that it warns exactly when it excludes nothing. `make test-remediate-check` runs a check-mode play in
+  which `linux_compliance_services_enabled: false` with `linux_compliance_sssd_enabled: true` switches off all 119
+  service rules in both roles and names the umbrella, and `linux_compliance_sssd_enabled: false` alone switches off
+  exactly the sssd rules.

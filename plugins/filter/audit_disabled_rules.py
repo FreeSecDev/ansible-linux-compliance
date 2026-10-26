@@ -18,8 +18,9 @@ short_description: Resolve the rules that the audit excludes and reports as disa
 version_added: "0.1.0"
 description:
   - Resolves, for every rule of the remediate role's catalogue that the discovered profile
-    selects, with or without a native remediation, its toggle state from its rule toggle and its
-    family toggle, exactly as the C(remediation_plan) filter does (ADR 0011). Both filters use
+    selects, with or without a native remediation, its toggle state from its rule toggle, its
+    family toggle and the toggle of the umbrella that groups the family, exactly as the
+    C(remediation_plan) filter does (ADR 0011). Both filters use
     the same module_utils code, so a rule or topic switched off once is cleaned up by remediation
     and reported as C(disabled) by the audit with the same controlling variable.
   - Adds the explicit entries of C(linux_compliance_audit_disabled_rules), which are for rules
@@ -46,7 +47,8 @@ options:
       - C(audit_only) maps each family to the full identifiers of its rules without a native
         remediation, C(__linux_compliance_remediate_audit_only) of the same file. They are
         toggled and disabled exactly like the native rules.
-      - C(families) is the family registry of C(roles/remediate/vars/rules.yml).
+      - C(families) is the family registry of C(roles/remediate/vars/rules.yml), with the
+        umbrella of each family that belongs to one.
       - C(toggles) maps every variable whose name matches C(^linux_compliance_.+_enabled$) to its
         value, validated as for C(remediation_plan).
       - C(profile_rule_ids) lists the full rule identifiers that the discovered profile selects;
@@ -85,8 +87,9 @@ _value:
       elements: dict
     warnings:
       description:
-        - One C(WARNING:) message per topic toggle that is false while no catalogued rule of its
-          family is selected by the profile, so that it excludes nothing.
+        - One C(WARNING:) message per topic or umbrella toggle that is false while no catalogued
+          rule of the families that it governs is selected by the profile, so that it excludes
+          nothing.
       type: list
       elements: str
 """
@@ -150,7 +153,9 @@ def audit_disabled_rules(catalogue: object, options: object) -> dict[str, object
     )
     profile = _profile(given["profile_rule_ids"], errors)
     explicit = _explicit(given["disabled_rules"], loaded, errors)
-    switched_off = toggles.disabled_rules(loaded.rules, loaded.toggles, profile)
+    switched_off = toggles.disabled_rules(
+        loaded.rules, loaded.toggles, profile, umbrellas=loaded.umbrellas
+    )
     combined = sorted(explicit + switched_off, key=lambda entry: str(entry["rule_id"]))
     return _result(errors.items, combined, toggles.topic_warnings(loaded, profile))
 

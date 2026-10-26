@@ -1,0 +1,27 @@
+---
+minor_changes:
+  - >-
+    The 21 control families are split into 55 subsystem topics, each with its own topic toggle and disruptive flag, for
+    example ``linux_compliance_sssd_enabled``, ``linux_compliance_time_sync_enabled``,
+    ``linux_compliance_pwquality_enabled``, ``linux_compliance_faillock_enabled``,
+    ``linux_compliance_journald_enabled``, ``linux_compliance_aide_enabled`` and
+    ``linux_compliance_firewalld_enabled``. The reference ``docs/control-families.md`` lists every topic, its
+    umbrella, its rules per profile and why it is or is not disruptive.
+  - >-
+    Umbrella toggles group the topics that a former family was split into, one level deep. ``services``, ``accounts``,
+    ``logging``, ``integrity``, ``packages``, ``network``, ``kernel_modules``, ``firewall``,
+    ``mandatory_access_control`` and ``mounts`` are umbrellas, and ``pam`` is both a topic and the umbrella of
+    ``pwquality``, ``pwhistory`` and ``faillock``. An umbrella toggle that is false switches off every topic it groups;
+    a topic toggle only narrows it and cannot switch a topic back on; a rule toggle that is set still wins over both.
+    ``disabled_by`` names the umbrella toggle when it is the cause.
+  - >-
+    Every toggle of the former families keeps working and switches off exactly the rules it switched off before, so
+    ``linux_compliance_services_enabled: false`` still disables all 119 service rules. No toggle is renamed, deprecated
+    or removed. ``linux_compliance_remediate_allow_disruptive`` accepts an umbrella, which allows every disruptive topic
+    it groups, so an allow-list that names ``services`` or ``pam`` keeps its meaning.
+breaking_changes:
+  - >-
+    The ``family`` of a rule in the remediation plan, results and report and in the catalogue now names its subsystem
+    topic, for example ``sssd`` instead of ``services`` or ``pwquality`` instead of ``pam``. Code that filters these
+    outputs by the former family names must use the new topic names or the umbrella of the registry entry. The state
+    ledger is not affected, because the only rule with a native remediation keeps the family ``file_permissions``.

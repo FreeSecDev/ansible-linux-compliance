@@ -1,0 +1,108 @@
+---
+schema_version: 1
+families:
+  - name: file_permissions
+    toggle: linux_compliance_file_permissions_enabled
+    disruptive: false
+    rule_count: 155
+    rule_ids_sha256: a859a426e788c5e68c44d80ef7427c8d784efb08fa31fc53b5b24057e5d873aa
+  - name: sysctl
+    toggle: linux_compliance_sysctl_enabled
+    disruptive: false
+    rule_count: 31
+    rule_ids_sha256: a29b6c3f1f34c9d1617a5cdd11d75339a39653ad353956c3171ce88c6f8a318c
+  - name: logging
+    toggle: linux_compliance_logging_enabled
+    disruptive: false
+    rule_count: 41
+    rule_ids_sha256: 8905d74be94dedddc161164f7d973543fc2dc07c493cee79f2ed425baacd7b15
+  - name: banners
+    toggle: linux_compliance_banners_enabled
+    disruptive: false
+    rule_count: 18
+    rule_ids_sha256: 4f99b0bf41cd602e7c56dce667a111d9f10aa169761cb1c7a374674a90e2fc50
+  - name: integrity
+    toggle: linux_compliance_integrity_enabled
+    disruptive: false
+    rule_count: 21
+    rule_ids_sha256: 4c4eeec46cec5e05a4eb62e5a406fa2c04c5026739f6c07a4334239ba2325c34
+  - name: kernel_build_config
+    toggle: linux_compliance_kernel_build_config_enabled
+    disruptive: false
+    rule_count: 67
+    rule_ids_sha256: ff7d34769638e509c3f97c1d08a69fb0cdf9c73dc2a957bebeb64d794c47bcca
+  - name: auditd
+    toggle: linux_compliance_auditd_enabled
+    disruptive: true
+    rule_count: 206
+    rule_ids_sha256: 5785fdacf7ae268018ec6dd1a2d6a59dde3f2f36a54e2c2b0e6077f0aabef847
+  - name: services
+    toggle: linux_compliance_services_enabled
+    disruptive: true
+    rule_count: 119
+    rule_ids_sha256: 9445c8ac8536d6b61f48c95cb330be0ec17a2e87af524d3c67c06e7d02ceb951
+  - name: packages
+    toggle: linux_compliance_packages_enabled
+    disruptive: true
+    rule_count: 24
+    rule_ids_sha256: 9e393a9f02407d43423ba1642a415e17033c48c55d2e3a8ce40b6831f2f5a5d9
+  - name: desktop
+    toggle: linux_compliance_desktop_enabled
+    disruptive: true
+    rule_count: 21
+    rule_ids_sha256: a4e3e3518f7bc131fb3f237362fb6db570bf207baff2c11d2697d4d602d56826
+  - name: network
+    toggle: linux_compliance_network_enabled
+    disruptive: true
+    rule_count: 66
+    rule_ids_sha256: f09bcd38f1e4d47cdb1ffebd6171ba3a17f1e28aa617c206b1dc6bb1d5a7f817
+  - name: kernel_modules
+    toggle: linux_compliance_kernel_modules_enabled
+    disruptive: true
+    rule_count: 21
+    rule_ids_sha256: 4fddfde364cd1d078423d085df507863c59a5b404e2a9b1e25579ea925d92429
+  - name: firewall
+    toggle: linux_compliance_firewall_enabled
+    disruptive: true
+    rule_count: 42
+    rule_ids_sha256: 6e872921e26fdb7949cb4e32f5f9b051bdaacdab0a8e107ecc5c78afa0e1122b
+  - name: ssh
+    toggle: linux_compliance_ssh_enabled
+    disruptive: true
+    rule_count: 63
+    rule_ids_sha256: 025b2ee2b95d14a1b2f564780f62cc8aca54dd2eb39b54a51debf2dea9394a6c
+  - name: pam
+    toggle: linux_compliance_pam_enabled
+    disruptive: true
+    rule_count: 55
+    rule_ids_sha256: 7ae7812b58bbe00be940b2796e7eda380eedd14c2fc4a7965bfbcd4be02aea95
+  - name: accounts
+    toggle: linux_compliance_accounts_enabled
+    disruptive: true
+    rule_count: 88
+    rule_ids_sha256: adda970874f002698954b0e41b9720fe2a239565449352a9e917ccbfdccb7366
+  - name: sudo
+    toggle: linux_compliance_sudo_enabled
+    disruptive: true
+    rule_count: 22
+    rule_ids_sha256: 3661b011216848f78c7fcb31a1c5d0911e01665af03a53022bb50b07bd5ac869
+  - name: mandatory_access_control
+    toggle: linux_compliance_mandatory_access_control_enabled
+    disruptive: true
+    rule_count: 33
+    rule_ids_sha256: 3279f7e0e482e26f26560df379080cc4f2d79ef8c41090d5ca0f42ea8f752dcb
+  - name: crypto_policy
+    toggle: linux_compliance_crypto_policy_enabled
+    disruptive: true
+    rule_count: 17
+    rule_ids_sha256: 35a39b4f5b62609a0f635626b7b5d4d271b2a881a5f3db5c31be871759f21daa
+  - name: mounts
+    toggle: linux_compliance_mounts_enabled
+    disruptive: true
+    rule_count: 48
+    rule_ids_sha256: 6a81624e5357d5aa82df038b05615d8f888c5dd15765d6092319f524bbc4625e
+  - name: bootloader
+    toggle: linux_compliance_bootloader_enabled
+    disruptive: true
+    rule_count: 45
+    rule_ids_sha256: 4327d2ade19a6b0ec27170b9fd8b07b472f95b9f5a7f0d07606108a9aedad792

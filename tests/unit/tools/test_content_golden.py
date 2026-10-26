@@ -8,9 +8,12 @@ from typing import cast
 import pytest
 import yaml
 
-from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import catalog
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    catalog,
+    toggles,
+)
 from tools.content import fetch_content as fetch
-from tools.roles import generate_catalogue
+from tools.roles import generate_catalogue, generate_toggles
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_PATH = REPOSITORY_ROOT / "tests" / "fixtures" / "catalog" / "golden-rules.yml"
@@ -96,3 +99,47 @@ def test_the_generated_catalogue_matches_the_pinned_content() -> None:
             rule_ids = stream.profiles[str(entry["id"])]
             assert len(rule_ids) == entry["rule_count"], entry["id"]
             assert set(rule_ids) <= catalogued, entry["id"]
+
+
+def test_every_topic_toggle_switches_off_exactly_its_rules_in_every_pinned_profile() -> None:
+    manifest = fetch.load_manifest(REPOSITORY_ROOT / "content" / "manifest.yml")
+    missing = [
+        stream.file_name
+        for stream in manifest.datastreams
+        if not (CONTENT_DIRECTORY / stream.file_name).is_file()
+    ]
+    if missing:
+        if REQUIRE_CONTENT:
+            pytest.fail(f"pinned content {missing} is missing but FREESECDEV_REQUIRE_CONTENT=1")
+        pytest.skip(f"pinned content {missing} is not present; run make test-content-golden")
+    loaded = generate_toggles.load_catalogue(REPOSITORY_ROOT / generate_toggles.CATALOGUE)
+    families = {str(rule["rule_id"]): str(rule["family"]) for rule in loaded.rules}
+    streams = [
+        generate_catalogue.read_stream(stream)
+        for stream in generate_catalogue.streams_of(manifest, CONTENT_DIRECTORY)
+    ]
+    for stream in streams:
+        for profile_id, rule_ids in stream.profiles.items():
+            profile = frozenset(rule_ids)
+            for topic in generate_toggles.topics(loaded):
+                toggle = toggles.toggle_name(topic)
+                members = generate_toggles.governed(loaded, topic)
+                expected = {rule_id for rule_id in profile if families[rule_id] in members}
+                switched_off = toggles.disabled_rules(
+                    loaded.rules, {toggle: False}, profile, umbrellas=loaded.umbrellas
+                )
+                assert {str(item["rule_id"]) for item in switched_off} == expected, (
+                    profile_id,
+                    topic,
+                )
+                assert {item["disabled_by"] for item in switched_off} <= {toggle}
+                warned = toggles.topic_warnings(
+                    toggles.Catalogue(
+                        rules=loaded.rules,
+                        families=loaded.families,
+                        toggles={toggle: False},
+                        umbrellas=loaded.umbrellas,
+                    ),
+                    profile,
+                )
+                assert bool(warned) is not bool(expected), (profile_id, topic)

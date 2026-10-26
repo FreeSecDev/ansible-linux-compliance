@@ -31,18 +31,37 @@ families:
     disruptive: false
     title: Kernel parameters
     why: >-
-      Kernel hardening parameters that do not change routing or forwarding (those belong to network)
+      Kernel hardening parameters that do not change routing or forwarding (those belong to the network umbrella)
     topic_groups: []
     rule_prefixes:
       - sysctl_
     fallback_groups:
       - restrictions
-  - name: logging
+  - name: journald
+    umbrella: logging
     disruptive: false
-    title: System logging (journald, rsyslog, logrotate)
-    why: Changes where and how logs are kept; no session or workload is stopped
+    title: systemd-journald, its storage, forwarding and remote upload
+    why: Changes where and how the journal is kept and forwarded; no session or workload is stopped
+    topic_groups:
+      - journald
+    rule_prefixes: []
+    fallback_groups: []
+  - name: rsyslog
+    umbrella: logging
+    disruptive: false
+    title: rsyslog, its log files and remote logging, and the logging services in general
+    why: Changes where and how rsyslog writes and sends logs; no session or workload is stopped
     topic_groups:
       - logging
+    rule_prefixes: []
+    fallback_groups: []
+  - name: logrotate
+    umbrella: logging
+    disruptive: false
+    title: logrotate
+    why: Installs and schedules log rotation; no session or workload is stopped
+    topic_groups:
+      - log_rotation
     rule_prefixes: []
     fallback_groups: []
   - name: banners
@@ -53,15 +72,34 @@ families:
       - accounts-banners
     rule_prefixes: []
     fallback_groups: []
-  - name: integrity
+  - name: aide
+    umbrella: integrity
     disruptive: false
-    title: Software integrity (AIDE, package verification, endpoint security)
-    why: Installs and schedules integrity checking; no session or workload is stopped
+    title: AIDE file integrity checking and the audit tool checks it covers
+    why: Installs AIDE, builds its database and schedules checks; no session or workload is stopped
+    topic_groups:
+      - aide
+    rule_prefixes: []
+    fallback_groups: []
+  - name: software_integrity
+    umbrella: integrity
+    disruptive: false
+    title: Package verification, prelink and a vendor-supported operating system
+    why: Verifies installed packages and removes prelink; no session or workload is stopped
     topic_groups:
       - software-integrity
     rule_prefixes: []
     fallback_groups:
       - integrity
+  - name: endpoint_security
+    umbrella: integrity
+    disruptive: false
+    title: Endpoint security software (antivirus, host intrusion detection)
+    why: Checks that endpoint security software is installed; no session or workload is stopped
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - endpoint_security_software
   - name: kernel_build_config
     disruptive: false
     title: Kernel build configuration
@@ -80,25 +118,115 @@ families:
       - auditing
     rule_prefixes: []
     fallback_groups: []
-  - name: services
+  - name: sssd
+    umbrella: services
     disruptive: true
-    title: Services and service packages
+    title: SSSD, its LDAP and smart card authentication and cached credentials
+    why: >-
+      SSSD authenticates directory users; a wrong certificate, TLS or PAM service setting locks out every
+      directory user, including administrators
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - sssd
+  - name: time_sync
+    umbrella: services
+    disruptive: true
+    title: Time synchronisation (chrony, ntpd, systemd-timesyncd)
+    why: >-
+      Switching the time service or its servers can leave the clock unsynchronised, which breaks Kerberos, TLS
+      certificate checks and log correlation
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - ntp
+  - name: mail
+    umbrella: services
+    disruptive: true
+    title: Mail transfer agents (postfix, sendmail) and the mail client
+    why: Removing an MTA or closing its network listener stops mail delivery that applications rely on
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - mail
+  - name: cron
+    umbrella: services
+    disruptive: true
+    title: cron and at, and who may use them
+    why: Restricting cron and at to allow-listed users stops the scheduled jobs of every other user
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - cron_and_at
+  - name: nfs
+    umbrella: services
+    disruptive: true
+    title: NFS client and server and rpcbind
+    why: Removing NFS or rpcbind, or changing exports, cuts off network file systems that workloads use
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - nfs_and_rpc
+  - name: usbguard
+    umbrella: services
+    disruptive: true
+    title: USBGuard device authorisation
+    why: An enforced USB policy can block keyboards, smart card readers and storage that the host needs
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - usbguard
+  - name: fapolicyd
+    umbrella: services
+    disruptive: true
+    title: fapolicyd application allow-listing
+    why: A default-deny execution policy stops every program that the policy does not list
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - fapolicyd
+  - name: network_services
+    umbrella: services
+    disruptive: true
+    title: >-
+      Network and other services (telnet, tftp, rsh, NIS, FTP, HTTP, DNS, DHCP, Samba, SNMP, LDAP, IMAP, proxy,
+      printing, Avahi, X11, kdump, apport)
     why: Disabling, masking or removing services can stop workloads the host exists for
     topic_groups: []
     rule_prefixes: []
     fallback_groups:
       - services
-  - name: packages
+  - name: package_updates
+    umbrella: packages
     disruptive: true
-    title: Packages and updates
-    why: Installing updates or changing repositories and package verification can restart or break software
+    title: Package updates and automatic updates
+    why: Installing updates can restart or break software
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - updating
+  - name: package_sources
+    umbrella: packages
+    disruptive: true
+    title: Package repositories and signature checking (gpgcheck, EPEL, apt authentication)
+    why: Disabling repositories or enforcing signatures stops installs from sources that the host relies on
     topic_groups: []
     rule_prefixes:
       - apt_
+      - ensure_epel_
+      - ensure_gpgcheck_
+      - ensure_redhat_gpgkey_
+    fallback_groups: []
+  - name: system_packages
+    umbrella: packages
+    disruptive: true
+    title: Required and unwanted system packages
+    why: Installing or removing system packages such as tuned or gssproxy can change or break running software
+    topic_groups: []
+    rule_prefixes: []
     fallback_groups:
       - software
       - system-tools
-      - updating
   - name: desktop
     disruptive: true
     title: Graphical desktop (GNOME and the display manager)
@@ -107,35 +235,131 @@ families:
       - gnome
     rule_prefixes: []
     fallback_groups: []
-  - name: network
+  - name: ipv4_parameters
+    umbrella: network
     disruptive: true
-    title: Network parameters and network services
-    why: Forwarding, redirects and IPv6 settings can cut routers, container hosts and VPN gateways off
+    title: IPv4 kernel network parameters
+    why: Forwarding, redirects and source routing settings can cut routers, container hosts and VPN gateways off
+    topic_groups:
+      - network-kernel
+    rule_prefixes: []
+    fallback_groups: []
+  - name: ipv6_parameters
+    umbrella: network
+    disruptive: true
+    title: IPv6 kernel network parameters
+    why: Router advertisement, autoconfiguration and forwarding settings can cut IPv6 hosts and routers off
+    topic_groups:
+      - network-ipv6
+    rule_prefixes: []
+    fallback_groups: []
+  - name: ipsec
+    umbrella: network
+    disruptive: true
+    title: IPsec (Libreswan)
+    why: Changing IPsec configuration or approved tunnels can drop VPN connections
     topic_groups:
       - network-ipsec
-      - network-ipv6
-      - network-kernel
+    rule_prefixes: []
+    fallback_groups: []
+  - name: wireless
+    umbrella: network
+    disruptive: true
+    title: Wireless interfaces and Bluetooth
+    why: Disabling wireless interfaces or Bluetooth cuts hosts that are connected through them off
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - network-wireless
+  - name: network_settings
+    umbrella: network
+    disruptive: true
+    title: Network configuration (name resolution, NetworkManager, promiscuous mode, certificates)
+    why: Name resolution, NetworkManager and certificate settings can cut the host off from its services
+    topic_groups: []
     rule_prefixes: []
     fallback_groups:
       - network
-  - name: kernel_modules
+  - name: filesystem_modules
+    umbrella: kernel_modules
     disruptive: true
-    title: Kernel modules
+    title: File system and USB storage kernel modules
     why: >-
-      Blacklisting modules such as overlay, squashfs, usb-storage or bluetooth breaks container runtimes, snaps and
-      devices that depend on them
+      Blacklisting overlay, squashfs, udf or usb-storage breaks container runtimes, snaps, optical media and USB
+      storage that depend on them
     topic_groups: []
     rule_prefixes:
-      - kernel_module_
+      - kernel_module_cramfs_
+      - kernel_module_freevxfs_
+      - kernel_module_hfs_
+      - kernel_module_hfsplus_
+      - kernel_module_jffs2_
+      - kernel_module_overlayfs_
+      - kernel_module_squashfs_
+      - kernel_module_udf_
+      - kernel_module_usb-storage_
     fallback_groups: []
-  - name: firewall
+  - name: protocol_modules
+    umbrella: kernel_modules
     disruptive: true
-    title: Host firewall (firewalld, nftables, iptables, ufw)
-    why: A default-deny policy can cut every remote session
+    title: Uncommon network protocol kernel modules (ATM, CAN, DCCP, FireWire, RDS, SCTP, TIPC)
+    why: Blacklisting SCTP, CAN or RDS breaks telecom, automotive and cluster software that uses them
+    topic_groups: []
+    rule_prefixes:
+      - kernel_module_atm_
+      - kernel_module_can_
+      - kernel_module_dccp_
+      - kernel_module_firewire-core_
+      - kernel_module_rds_
+      - kernel_module_sctp_
+      - kernel_module_tipc_
+    fallback_groups: []
+  - name: wireless_modules
+    umbrella: kernel_modules
+    disruptive: true
+    title: Wireless and Bluetooth kernel modules
+    why: Blacklisting wireless or Bluetooth modules disconnects hosts and devices that use them
+    topic_groups: []
+    rule_prefixes:
+      - kernel_module_bluetooth_
+      - kernel_module_cfg80211_
+      - kernel_module_iwlmvm_
+      - kernel_module_iwlwifi_
+      - kernel_module_mac80211_
+    fallback_groups: []
+  - name: firewalld
+    umbrella: firewall
+    disruptive: true
+    title: firewalld
+    why: A default-deny zone or removed services can cut every remote session
     topic_groups:
       - network-firewalld
-      - network-iptables
+    rule_prefixes: []
+    fallback_groups: []
+  - name: nftables
+    umbrella: firewall
+    disruptive: true
+    title: nftables
+    why: A default-deny base chain can cut every remote session
+    topic_groups:
       - network-nftables
+    rule_prefixes: []
+    fallback_groups: []
+  - name: iptables
+    umbrella: firewall
+    disruptive: true
+    title: iptables and ip6tables
+    why: A default-drop policy can cut every remote session
+    topic_groups:
+      - network-iptables
+    rule_prefixes: []
+    fallback_groups: []
+  - name: ufw
+    umbrella: firewall
+    disruptive: true
+    title: Uncomplicated Firewall (ufw)
+    why: A default-deny policy can cut every remote session
+    topic_groups:
       - network-ufw
     rule_prefixes: []
     fallback_groups: []
@@ -149,18 +373,103 @@ families:
     fallback_groups: []
   - name: pam
     disruptive: true
-    title: PAM, password quality and lock-out
-    why: Lock-out, password quality and module order can lock out every user, including root
-    topic_groups:
-      - accounts-pam
+    title: PAM stack, pam_unix, password hashing and the PAM packages
+    why: The module stack and the password hashing settings can lock out every user, including root
+    topic_groups: []
     rule_prefixes: []
-    fallback_groups: []
-  - name: accounts
+    fallback_groups:
+      - accounts-pam
+  - name: pwquality
+    umbrella: pam
     disruptive: true
-    title: Accounts, password ageing, root access and sessions
-    why: >-
-      Password ageing, account expiry, root login restrictions and session time-outs can lock out operators or end
-      their sessions
+    title: Password quality (pam_pwquality)
+    why: Password quality rules in the PAM stack can reject every password change, including root's
+    topic_groups: []
+    rule_prefixes:
+      - package_pam_pwquality_
+    fallback_groups:
+      - password_quality
+  - name: pwhistory
+    umbrella: pam
+    disruptive: true
+    title: Password reuse (pam_pwhistory)
+    why: Password history rules in the PAM stack can reject password changes and break automated rotation
+    topic_groups: []
+    rule_prefixes:
+      - accounts_password_pam_pwhistory_
+    fallback_groups: []
+  - name: faillock
+    umbrella: pam
+    disruptive: true
+    title: Account lock-out after failed logins (pam_faillock, pam_faildelay)
+    why: Lock-out after failed logins can lock out every user, including root
+    topic_groups: []
+    rule_prefixes:
+      - account_password_pam_faillock_
+      - account_password_selinux_faillock_
+      - accounts_passwords_pam_faildelay_
+      - accounts_passwords_pam_faillock_
+    fallback_groups: []
+  - name: password_aging
+    umbrella: accounts
+    disruptive: true
+    title: Password ageing (login.defs and existing accounts)
+    why: Maximum password ages and inactivity settings can expire the passwords of operators and service accounts
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - password_expiration
+  - name: root_access
+    umbrella: accounts
+    disruptive: true
+    title: Root logins, su, UID 0 accounts and the root PATH
+    why: Restricting root logins, su and system account shells can lock out administrators and break services
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - root_logins
+      - root_paths
+  - name: umask
+    umbrella: accounts
+    disruptive: true
+    title: Default umask of users and shells
+    why: A stricter umask changes the modes of files that applications and users create and can break sharing
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - user_umask
+  - name: user_sessions
+    umbrella: accounts
+    disruptive: true
+    title: Login sessions, shell time-outs, home directories and polyinstantiation
+    why: Session time-outs and limits end sessions, and polyinstantiated directories change what processes see
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - accounts-session
+  - name: smartcard
+    umbrella: accounts
+    disruptive: true
+    title: Smart card login (pcscd, OpenSC, PAM smart card authentication)
+    why: Requiring smart card authentication locks out every user without a working card and reader
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - smart_card_login
+  - name: console_access
+    umbrella: accounts
+    disruptive: true
+    title: Physical console access (Ctrl-Alt-Del, single-user and emergency mode, console locking)
+    why: Requiring authentication for single-user and emergency mode can leave a broken host unrecoverable
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - accounts-physical
+  - name: user_accounts
+    umbrella: accounts
+    disruptive: true
+    title: User and group accounts (unique identifiers, expiry, password storage, authselect)
+    why: Expiring accounts, locking accounts without passwords and switching to authselect can lock out operators
     topic_groups: []
     rule_prefixes: []
     fallback_groups:
@@ -173,34 +482,60 @@ families:
       - sudo
     rule_prefixes: []
     fallback_groups: []
-  - name: mandatory_access_control
+  - name: selinux
+    umbrella: mandatory_access_control
     disruptive: true
-    title: Mandatory access control (SELinux, AppArmor)
-    why: Enforcing SELinux or AppArmor policies can stop services and needs a relabel or reboot
+    title: SELinux
+    why: Enforcing SELinux or changing its policy can stop services and needs a relabel or reboot
+    topic_groups:
+      - selinux
+    rule_prefixes: []
+    fallback_groups: []
+  - name: apparmor
+    umbrella: mandatory_access_control
+    disruptive: true
+    title: AppArmor
+    why: Enforcing AppArmor profiles can stop services that the profiles do not allow
     topic_groups:
       - apparmor
-      - selinux
     rule_prefixes: []
     fallback_groups: []
   - name: crypto_policy
     disruptive: true
     title: Cryptographic policy and FIPS mode
-    why: Can break TLS and SSH with older peers
+    why: Can break TLS and SSH with older peers; FIPS mode needs a reboot
     topic_groups:
       - crypto
       - fips
     rule_prefixes: []
     fallback_groups: []
-  - name: mounts
+  - name: autofs
+    umbrella: mounts
     disruptive: true
-    title: File systems, partitions and mount options
-    why: Mount options can break running software; partitioning is irreversible
+    title: autofs automounter
+    why: Removing autofs stops the on-demand mounts, such as home directories, that users rely on
+    topic_groups: []
+    rule_prefixes: []
+    fallback_groups:
+      - mounting
+  - name: mount_options
+    umbrella: mounts
+    disruptive: true
+    title: Mount options (nodev, noexec, nosuid)
+    why: noexec and nosuid on shared, temporary or remote file systems can break running software
     topic_groups: []
     rule_prefixes:
       - mount_option_
+    fallback_groups: []
+  - name: partitioning
+    umbrella: mounts
+    disruptive: true
+    title: Separate partitions and disk encryption
+    why: Partitioning and encryption are irreversible and need a reinstall or a maintenance window
+    topic_groups: []
+    rule_prefixes: []
     fallback_groups:
       - disk_partitioning
-      - mounting
   - name: bootloader
     disruptive: true
     title: Boot loader and firmware

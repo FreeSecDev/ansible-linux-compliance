@@ -37,12 +37,33 @@ roles run in the same play, the warning is printed once by each role. Rules of c
 outside the catalogue, such as user-supplied content, have no toggle; disable them with
 `linux_compliance_audit_disabled_rules`.
 
+## Umbrellas
+
+Families that belong together are grouped by an umbrella toggle, for example
+`linux_compliance_services_enabled` for `sssd`, `time_sync`, `mail` and the other service
+families. An umbrella is either a name of its own, such as `services`, or a family that
+heads it, such as `pam` for `pwquality`, `pwhistory` and `faillock`. There is one level.
+Precedence, from the most specific toggle:
+
+1. A rule toggle that is set wins, in both directions, as before the split.
+2. Otherwise the rule is on only when both its umbrella toggle and its family toggle are
+   on. An umbrella toggle that is `false` switches off every family it groups, and a family
+   toggle that is `true`, such as its default, cannot switch one back on: a family toggle
+   only narrows its umbrella.
+
+Every umbrella keeps the name of the family that it was split from (FREES-53), so
+`linux_compliance_services_enabled: false`, `linux_compliance_pam_enabled: false` or
+`linux_compliance_firewall_enabled: false` switch off exactly the rules that the family
+held before the split, and an allow-list entry that names an umbrella still allows every
+disruptive family it groups. No toggle was renamed or dropped.
+
 ## Controlling variable
 
-When a rule is off, `disabled_by` names the family toggle whenever the family toggle is
-`false`, and the rule toggle otherwise. So when a rule toggle and its family toggle are
-both `false`, `disabled_by` names the family toggle. If the family toggle is later set back
-to `true`, the rule stays off and `disabled_by` changes to the rule toggle.
+When a rule is off, `disabled_by` names the most general toggle that is `false`: the
+umbrella toggle, else the family toggle, else the rule toggle. So when a rule toggle and
+its family toggle are both `false`, `disabled_by` names the family toggle. If the family
+toggle is later set back to `true`, the rule stays off and `disabled_by` changes to the
+rule toggle.
 
 ## Rule toggle names and declarations
 
@@ -72,29 +93,76 @@ role parameters too.
 
 ## Topic toggles
 
-| Variable | Family | Disruptive | Default | Catalogued rules | Native | `audit_only` |
-|---|---|---|---|---|---|---|
-| `linux_compliance_file_permissions_enabled` | `file_permissions` | no | `true` | 155 | 1 | 154 |
-| `linux_compliance_sysctl_enabled` | `sysctl` | no | `true` | 31 | 0 | 31 |
-| `linux_compliance_logging_enabled` | `logging` | no | `true` | 41 | 0 | 41 |
-| `linux_compliance_banners_enabled` | `banners` | no | `true` | 18 | 0 | 18 |
-| `linux_compliance_integrity_enabled` | `integrity` | no | `true` | 21 | 0 | 21 |
-| `linux_compliance_kernel_build_config_enabled` | `kernel_build_config` | no | `true` | 67 | 0 | 67 |
-| `linux_compliance_auditd_enabled` | `auditd` | yes | `true` | 206 | 0 | 206 |
-| `linux_compliance_services_enabled` | `services` | yes | `true` | 119 | 0 | 119 |
-| `linux_compliance_packages_enabled` | `packages` | yes | `true` | 24 | 0 | 24 |
-| `linux_compliance_desktop_enabled` | `desktop` | yes | `true` | 21 | 0 | 21 |
-| `linux_compliance_network_enabled` | `network` | yes | `true` | 66 | 0 | 66 |
-| `linux_compliance_kernel_modules_enabled` | `kernel_modules` | yes | `true` | 21 | 0 | 21 |
-| `linux_compliance_firewall_enabled` | `firewall` | yes | `true` | 42 | 0 | 42 |
-| `linux_compliance_ssh_enabled` | `ssh` | yes | `true` | 63 | 0 | 63 |
-| `linux_compliance_pam_enabled` | `pam` | yes | `true` | 55 | 0 | 55 |
-| `linux_compliance_accounts_enabled` | `accounts` | yes | `true` | 88 | 0 | 88 |
-| `linux_compliance_sudo_enabled` | `sudo` | yes | `true` | 22 | 0 | 22 |
-| `linux_compliance_mandatory_access_control_enabled` | `mandatory_access_control` | yes | `true` | 33 | 0 | 33 |
-| `linux_compliance_crypto_policy_enabled` | `crypto_policy` | yes | `true` | 17 | 0 | 17 |
-| `linux_compliance_mounts_enabled` | `mounts` | yes | `true` | 48 | 0 | 48 |
-| `linux_compliance_bootloader_enabled` | `bootloader` | yes | `true` | 45 | 0 | 45 |
+An umbrella row lists the families that it groups; the disruptive flag of an umbrella is
+`yes` when it groups a disruptive family.
+
+| Variable | Family | Umbrella | Disruptive | Default | Catalogued rules | Native | `audit_only` |
+|---|---|---|---|---|---|---|---|
+| `linux_compliance_file_permissions_enabled` | `file_permissions` | none | no | `true` | 155 | 1 | 154 |
+| `linux_compliance_sysctl_enabled` | `sysctl` | none | no | `true` | 31 | 0 | 31 |
+| `linux_compliance_logging_enabled` | `journald`, `rsyslog`, `logrotate` | umbrella | no | `true` | 41 | 0 | 41 |
+| `linux_compliance_journald_enabled` | `journald` | `logging` | no | `true` | 19 | 0 | 19 |
+| `linux_compliance_rsyslog_enabled` | `rsyslog` | `logging` | no | `true` | 19 | 0 | 19 |
+| `linux_compliance_logrotate_enabled` | `logrotate` | `logging` | no | `true` | 3 | 0 | 3 |
+| `linux_compliance_banners_enabled` | `banners` | none | no | `true` | 18 | 0 | 18 |
+| `linux_compliance_integrity_enabled` | `aide`, `software_integrity`, `endpoint_security` | umbrella | no | `true` | 21 | 0 | 21 |
+| `linux_compliance_aide_enabled` | `aide` | `integrity` | no | `true` | 13 | 0 | 13 |
+| `linux_compliance_software_integrity_enabled` | `software_integrity` | `integrity` | no | `true` | 5 | 0 | 5 |
+| `linux_compliance_endpoint_security_enabled` | `endpoint_security` | `integrity` | no | `true` | 3 | 0 | 3 |
+| `linux_compliance_kernel_build_config_enabled` | `kernel_build_config` | none | no | `true` | 67 | 0 | 67 |
+| `linux_compliance_auditd_enabled` | `auditd` | none | yes | `true` | 206 | 0 | 206 |
+| `linux_compliance_services_enabled` | `sssd`, `time_sync`, `mail`, `cron`, `nfs`, `usbguard`, `fapolicyd`, `network_services` | umbrella | yes | `true` | 119 | 0 | 119 |
+| `linux_compliance_sssd_enabled` | `sssd` | `services` | yes | `true` | 12 | 0 | 12 |
+| `linux_compliance_time_sync_enabled` | `time_sync` | `services` | yes | `true` | 19 | 0 | 19 |
+| `linux_compliance_mail_enabled` | `mail` | `services` | yes | `true` | 8 | 0 | 8 |
+| `linux_compliance_cron_enabled` | `cron` | `services` | yes | `true` | 7 | 0 | 7 |
+| `linux_compliance_nfs_enabled` | `nfs` | `services` | yes | `true` | 6 | 0 | 6 |
+| `linux_compliance_usbguard_enabled` | `usbguard` | `services` | yes | `true` | 5 | 0 | 5 |
+| `linux_compliance_fapolicyd_enabled` | `fapolicyd` | `services` | yes | `true` | 3 | 0 | 3 |
+| `linux_compliance_network_services_enabled` | `network_services` | `services` | yes | `true` | 59 | 0 | 59 |
+| `linux_compliance_packages_enabled` | `package_updates`, `package_sources`, `system_packages` | umbrella | yes | `true` | 24 | 0 | 24 |
+| `linux_compliance_package_updates_enabled` | `package_updates` | `packages` | yes | `true` | 6 | 0 | 6 |
+| `linux_compliance_package_sources_enabled` | `package_sources` | `packages` | yes | `true` | 6 | 0 | 6 |
+| `linux_compliance_system_packages_enabled` | `system_packages` | `packages` | yes | `true` | 12 | 0 | 12 |
+| `linux_compliance_desktop_enabled` | `desktop` | none | yes | `true` | 21 | 0 | 21 |
+| `linux_compliance_network_enabled` | `ipv4_parameters`, `ipv6_parameters`, `ipsec`, `wireless`, `network_settings` | umbrella | yes | `true` | 66 | 0 | 66 |
+| `linux_compliance_ipv4_parameters_enabled` | `ipv4_parameters` | `network` | yes | `true` | 26 | 0 | 26 |
+| `linux_compliance_ipv6_parameters_enabled` | `ipv6_parameters` | `network` | yes | `true` | 19 | 0 | 19 |
+| `linux_compliance_ipsec_enabled` | `ipsec` | `network` | yes | `true` | 11 | 0 | 11 |
+| `linux_compliance_wireless_enabled` | `wireless` | `network` | yes | `true` | 3 | 0 | 3 |
+| `linux_compliance_network_settings_enabled` | `network_settings` | `network` | yes | `true` | 7 | 0 | 7 |
+| `linux_compliance_kernel_modules_enabled` | `filesystem_modules`, `protocol_modules`, `wireless_modules` | umbrella | yes | `true` | 21 | 0 | 21 |
+| `linux_compliance_filesystem_modules_enabled` | `filesystem_modules` | `kernel_modules` | yes | `true` | 9 | 0 | 9 |
+| `linux_compliance_protocol_modules_enabled` | `protocol_modules` | `kernel_modules` | yes | `true` | 7 | 0 | 7 |
+| `linux_compliance_wireless_modules_enabled` | `wireless_modules` | `kernel_modules` | yes | `true` | 5 | 0 | 5 |
+| `linux_compliance_firewall_enabled` | `firewalld`, `nftables`, `iptables`, `ufw` | umbrella | yes | `true` | 42 | 0 | 42 |
+| `linux_compliance_firewalld_enabled` | `firewalld` | `firewall` | yes | `true` | 10 | 0 | 10 |
+| `linux_compliance_nftables_enabled` | `nftables` | `firewall` | yes | `true` | 11 | 0 | 11 |
+| `linux_compliance_iptables_enabled` | `iptables` | `firewall` | yes | `true` | 12 | 0 | 12 |
+| `linux_compliance_ufw_enabled` | `ufw` | `firewall` | yes | `true` | 9 | 0 | 9 |
+| `linux_compliance_ssh_enabled` | `ssh` | none | yes | `true` | 63 | 0 | 63 |
+| `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 0 | 55 |
+| `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 0 | 19 |
+| `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 0 | 7 |
+| `linux_compliance_faillock_enabled` | `faillock` | `pam` | yes | `true` | 14 | 0 | 14 |
+| `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | umbrella | yes | `true` | 88 | 0 | 88 |
+| `linux_compliance_password_aging_enabled` | `password_aging` | `accounts` | yes | `true` | 9 | 0 | 9 |
+| `linux_compliance_root_access_enabled` | `root_access` | `accounts` | yes | `true` | 19 | 0 | 19 |
+| `linux_compliance_umask_enabled` | `umask` | `accounts` | yes | `true` | 6 | 0 | 6 |
+| `linux_compliance_user_sessions_enabled` | `user_sessions` | `accounts` | yes | `true` | 14 | 0 | 14 |
+| `linux_compliance_smartcard_enabled` | `smartcard` | `accounts` | yes | `true` | 9 | 0 | 9 |
+| `linux_compliance_console_access_enabled` | `console_access` | `accounts` | yes | `true` | 7 | 0 | 7 |
+| `linux_compliance_user_accounts_enabled` | `user_accounts` | `accounts` | yes | `true` | 24 | 0 | 24 |
+| `linux_compliance_sudo_enabled` | `sudo` | none | yes | `true` | 22 | 0 | 22 |
+| `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | umbrella | yes | `true` | 33 | 0 | 33 |
+| `linux_compliance_selinux_enabled` | `selinux` | `mandatory_access_control` | yes | `true` | 27 | 0 | 27 |
+| `linux_compliance_apparmor_enabled` | `apparmor` | `mandatory_access_control` | yes | `true` | 6 | 0 | 6 |
+| `linux_compliance_crypto_policy_enabled` | `crypto_policy` | none | yes | `true` | 17 | 0 | 17 |
+| `linux_compliance_mounts_enabled` | `autofs`, `mount_options`, `partitioning` | umbrella | yes | `true` | 48 | 0 | 48 |
+| `linux_compliance_autofs_enabled` | `autofs` | `mounts` | yes | `true` | 2 | 0 | 2 |
+| `linux_compliance_mount_options_enabled` | `mount_options` | `mounts` | yes | `true` | 34 | 0 | 34 |
+| `linux_compliance_partitioning_enabled` | `partitioning` | `mounts` | yes | `true` | 12 | 0 | 12 |
+| `linux_compliance_bootloader_enabled` | `bootloader` | none | yes | `true` | 45 | 0 | 45 |
 
 ## Rule toggles
 
@@ -298,16 +366,13 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_sysctl_user_max_user_namespaces_no_remediation_enabled` | `sysctl_user_max_user_namespaces_no_remediation` | `audit_only` |
 | `linux_compliance_rule_sysctl_vm_mmap_min_addr_enabled` | `sysctl_vm_mmap_min_addr` | `audit_only` |
 
-### `logging`
+### `journald`
 
 | Variable | Rule | Strategy |
 |---|---|---|
 | `linux_compliance_rule_dir_groupowner_system_journal_enabled` | `dir_groupowner_system_journal` | `audit_only` |
 | `linux_compliance_rule_dir_owner_system_journal_enabled` | `dir_owner_system_journal` | `audit_only` |
 | `linux_compliance_rule_dir_permissions_system_journal_enabled` | `dir_permissions_system_journal` | `audit_only` |
-| `linux_compliance_rule_ensure_journald_and_rsyslog_not_active_together_enabled` | `ensure_journald_and_rsyslog_not_active_together` | `audit_only` |
-| `linux_compliance_rule_ensure_logrotate_activated_enabled` | `ensure_logrotate_activated` | `audit_only` |
-| `linux_compliance_rule_ensure_rtc_utc_configuration_enabled` | `ensure_rtc_utc_configuration` | `audit_only` |
 | `linux_compliance_rule_file_groupowner_journalctl_enabled` | `file_groupowner_journalctl` | `audit_only` |
 | `linux_compliance_rule_file_groupowner_system_journal_enabled` | `file_groupowner_system_journal` | `audit_only` |
 | `linux_compliance_rule_file_owner_journalctl_enabled` | `file_owner_journalctl` | `audit_only` |
@@ -318,11 +383,22 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_journald_disable_forward_to_syslog_enabled` | `journald_disable_forward_to_syslog` | `audit_only` |
 | `linux_compliance_rule_journald_forward_to_syslog_enabled` | `journald_forward_to_syslog` | `audit_only` |
 | `linux_compliance_rule_journald_storage_enabled` | `journald_storage` | `audit_only` |
+| `linux_compliance_rule_package_systemd_journal_remote_installed_enabled` | `package_systemd-journal-remote_installed` | `audit_only` |
+| `linux_compliance_rule_service_systemd_journal_upload_enabled_enabled` | `service_systemd-journal-upload_enabled` | `audit_only` |
+| `linux_compliance_rule_service_systemd_journald_enabled_enabled` | `service_systemd-journald_enabled` | `audit_only` |
+| `linux_compliance_rule_socket_systemd_journal_remote_disabled_enabled` | `socket_systemd-journal-remote_disabled` | `audit_only` |
+| `linux_compliance_rule_systemd_journal_upload_server_tls_enabled` | `systemd_journal_upload_server_tls` | `audit_only` |
+| `linux_compliance_rule_systemd_journal_upload_url_enabled` | `systemd_journal_upload_url` | `audit_only` |
+
+### `rsyslog`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_ensure_journald_and_rsyslog_not_active_together_enabled` | `ensure_journald_and_rsyslog_not_active_together` | `audit_only` |
+| `linux_compliance_rule_ensure_rtc_utc_configuration_enabled` | `ensure_rtc_utc_configuration` | `audit_only` |
 | `linux_compliance_rule_logging_services_active_enabled` | `logging_services_active` | `audit_only` |
-| `linux_compliance_rule_package_logrotate_installed_enabled` | `package_logrotate_installed` | `audit_only` |
 | `linux_compliance_rule_package_rsyslog_gnutls_installed_enabled` | `package_rsyslog-gnutls_installed` | `audit_only` |
 | `linux_compliance_rule_package_rsyslog_installed_enabled` | `package_rsyslog_installed` | `audit_only` |
-| `linux_compliance_rule_package_systemd_journal_remote_installed_enabled` | `package_systemd-journal-remote_installed` | `audit_only` |
 | `linux_compliance_rule_rsyslog_cron_logging_enabled` | `rsyslog_cron_logging` | `audit_only` |
 | `linux_compliance_rule_rsyslog_encrypt_offload_actionsendstreamdriverauthmode_enabled` | `rsyslog_encrypt_offload_actionsendstreamdriverauthmode` | `audit_only` |
 | `linux_compliance_rule_rsyslog_encrypt_offload_actionsendstreamdrivermode_enabled` | `rsyslog_encrypt_offload_actionsendstreamdrivermode` | `audit_only` |
@@ -337,11 +413,13 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_rsyslog_remote_tls_enabled` | `rsyslog_remote_tls` | `audit_only` |
 | `linux_compliance_rule_rsyslog_remote_tls_cacert_enabled` | `rsyslog_remote_tls_cacert` | `audit_only` |
 | `linux_compliance_rule_service_rsyslog_enabled_enabled` | `service_rsyslog_enabled` | `audit_only` |
-| `linux_compliance_rule_service_systemd_journal_upload_enabled_enabled` | `service_systemd-journal-upload_enabled` | `audit_only` |
-| `linux_compliance_rule_service_systemd_journald_enabled_enabled` | `service_systemd-journald_enabled` | `audit_only` |
-| `linux_compliance_rule_socket_systemd_journal_remote_disabled_enabled` | `socket_systemd-journal-remote_disabled` | `audit_only` |
-| `linux_compliance_rule_systemd_journal_upload_server_tls_enabled` | `systemd_journal_upload_server_tls` | `audit_only` |
-| `linux_compliance_rule_systemd_journal_upload_url_enabled` | `systemd_journal_upload_url` | `audit_only` |
+
+### `logrotate`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_ensure_logrotate_activated_enabled` | `ensure_logrotate_activated` | `audit_only` |
+| `linux_compliance_rule_package_logrotate_installed_enabled` | `package_logrotate_installed` | `audit_only` |
 | `linux_compliance_rule_timer_logrotate_enabled_enabled` | `timer_logrotate_enabled` | `audit_only` |
 
 ### `banners`
@@ -367,7 +445,7 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_file_permissions_etc_issue_net_enabled` | `file_permissions_etc_issue_net` | `audit_only` |
 | `linux_compliance_rule_file_permissions_etc_motd_enabled` | `file_permissions_etc_motd` | `audit_only` |
 
-### `integrity`
+### `aide`
 
 | Variable | Rule | Strategy |
 |---|---|---|
@@ -383,15 +461,25 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_file_audit_tools_group_ownership_enabled` | `file_audit_tools_group_ownership` | `audit_only` |
 | `linux_compliance_rule_file_audit_tools_ownership_enabled` | `file_audit_tools_ownership` | `audit_only` |
 | `linux_compliance_rule_file_audit_tools_permissions_enabled` | `file_audit_tools_permissions` | `audit_only` |
-| `linux_compliance_rule_install_antivirus_enabled` | `install_antivirus` | `audit_only` |
-| `linux_compliance_rule_install_endpoint_security_software_enabled` | `install_endpoint_security_software` | `audit_only` |
-| `linux_compliance_rule_install_hids_enabled` | `install_hids` | `audit_only` |
-| `linux_compliance_rule_installed_os_is_vendor_supported_enabled` | `installed_OS_is_vendor_supported` | `audit_only` |
 | `linux_compliance_rule_package_aide_installed_enabled` | `package_aide_installed` | `audit_only` |
+
+### `software_integrity`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_installed_os_is_vendor_supported_enabled` | `installed_OS_is_vendor_supported` | `audit_only` |
 | `linux_compliance_rule_package_prelink_removed_enabled` | `package_prelink_removed` | `audit_only` |
 | `linux_compliance_rule_rpm_verify_hashes_enabled` | `rpm_verify_hashes` | `audit_only` |
 | `linux_compliance_rule_rpm_verify_ownership_enabled` | `rpm_verify_ownership` | `audit_only` |
 | `linux_compliance_rule_rpm_verify_permissions_enabled` | `rpm_verify_permissions` | `audit_only` |
+
+### `endpoint_security`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_install_antivirus_enabled` | `install_antivirus` | `audit_only` |
+| `linux_compliance_rule_install_endpoint_security_software_enabled` | `install_endpoint_security_software` | `audit_only` |
+| `linux_compliance_rule_install_hids_enabled` | `install_hids` | `audit_only` |
 
 ### `kernel_build_config`
 
@@ -676,7 +764,24 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_package_audit_installed_enabled` | `package_audit_installed` | `audit_only` |
 | `linux_compliance_rule_service_auditd_enabled_enabled` | `service_auditd_enabled` | `audit_only` |
 
-### `services`
+### `sssd`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_package_sssd_installed_enabled` | `package_sssd_installed` | `audit_only` |
+| `linux_compliance_rule_service_sssd_enabled_enabled` | `service_sssd_enabled` | `audit_only` |
+| `linux_compliance_rule_sssd_certificate_verification_enabled` | `sssd_certificate_verification` | `audit_only` |
+| `linux_compliance_rule_sssd_certification_path_trust_anchor_enabled` | `sssd_certification_path_trust_anchor` | `audit_only` |
+| `linux_compliance_rule_sssd_enable_certmap_enabled` | `sssd_enable_certmap` | `audit_only` |
+| `linux_compliance_rule_sssd_enable_pam_services_enabled` | `sssd_enable_pam_services` | `audit_only` |
+| `linux_compliance_rule_sssd_enable_smartcards_enabled` | `sssd_enable_smartcards` | `audit_only` |
+| `linux_compliance_rule_sssd_enable_user_cert_enabled` | `sssd_enable_user_cert` | `audit_only` |
+| `linux_compliance_rule_sssd_has_trust_anchor_enabled` | `sssd_has_trust_anchor` | `audit_only` |
+| `linux_compliance_rule_sssd_ldap_configure_tls_reqcert_enabled` | `sssd_ldap_configure_tls_reqcert` | `audit_only` |
+| `linux_compliance_rule_sssd_ldap_start_tls_enabled` | `sssd_ldap_start_tls` | `audit_only` |
+| `linux_compliance_rule_sssd_offline_cred_expiration_enabled` | `sssd_offline_cred_expiration` | `audit_only` |
+
+### `time_sync`
 
 | Variable | Rule | Strategy |
 |---|---|---|
@@ -689,132 +794,162 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_chronyd_server_directive_enabled` | `chronyd_server_directive` | `audit_only` |
 | `linux_compliance_rule_chronyd_specify_remote_server_enabled` | `chronyd_specify_remote_server` | `audit_only` |
 | `linux_compliance_rule_chronyd_sync_clock_enabled` | `chronyd_sync_clock` | `audit_only` |
-| `linux_compliance_rule_configure_usbguard_auditbackend_enabled` | `configure_usbguard_auditbackend` | `audit_only` |
-| `linux_compliance_rule_fapolicy_default_deny_enabled` | `fapolicy_default_deny` | `audit_only` |
+| `linux_compliance_rule_ntp_single_service_active_enabled` | `ntp_single_service_active` | `audit_only` |
+| `linux_compliance_rule_package_chrony_installed_enabled` | `package_chrony_installed` | `audit_only` |
+| `linux_compliance_rule_package_ntp_removed_enabled` | `package_ntp_removed` | `audit_only` |
+| `linux_compliance_rule_package_timesyncd_installed_enabled` | `package_timesyncd_installed` | `audit_only` |
+| `linux_compliance_rule_package_timesyncd_removed_enabled` | `package_timesyncd_removed` | `audit_only` |
+| `linux_compliance_rule_service_chronyd_disabled_enabled` | `service_chronyd_disabled` | `audit_only` |
+| `linux_compliance_rule_service_chronyd_enabled_enabled` | `service_chronyd_enabled` | `audit_only` |
+| `linux_compliance_rule_service_timesyncd_configured_enabled` | `service_timesyncd_configured` | `audit_only` |
+| `linux_compliance_rule_service_timesyncd_disabled_enabled` | `service_timesyncd_disabled` | `audit_only` |
+| `linux_compliance_rule_service_timesyncd_enabled_enabled` | `service_timesyncd_enabled` | `audit_only` |
+
+### `mail`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_has_nonlocal_mta_enabled` | `has_nonlocal_mta` | `audit_only` |
+| `linux_compliance_rule_package_postfix_installed_enabled` | `package_postfix_installed` | `audit_only` |
+| `linux_compliance_rule_package_s_nail_installed_enabled` | `package_s-nail_installed` | `audit_only` |
+| `linux_compliance_rule_package_sendmail_removed_enabled` | `package_sendmail_removed` | `audit_only` |
+| `linux_compliance_rule_postfix_client_configure_mail_alias_enabled` | `postfix_client_configure_mail_alias` | `audit_only` |
+| `linux_compliance_rule_postfix_client_configure_mail_alias_postmaster_enabled` | `postfix_client_configure_mail_alias_postmaster` | `audit_only` |
+| `linux_compliance_rule_postfix_network_listening_disabled_enabled` | `postfix_network_listening_disabled` | `audit_only` |
+| `linux_compliance_rule_postfix_prevent_unrestricted_relay_enabled` | `postfix_prevent_unrestricted_relay` | `audit_only` |
+
+### `cron`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_file_at_allow_exists_enabled` | `file_at_allow_exists` | `audit_only` |
 | `linux_compliance_rule_file_at_deny_not_exist_enabled` | `file_at_deny_not_exist` | `audit_only` |
 | `linux_compliance_rule_file_cron_allow_exists_enabled` | `file_cron_allow_exists` | `audit_only` |
 | `linux_compliance_rule_file_cron_deny_not_exist_enabled` | `file_cron_deny_not_exist` | `audit_only` |
-| `linux_compliance_rule_has_nonlocal_mta_enabled` | `has_nonlocal_mta` | `audit_only` |
+| `linux_compliance_rule_package_cron_installed_enabled` | `package_cron_installed` | `audit_only` |
+| `linux_compliance_rule_service_cron_enabled_enabled` | `service_cron_enabled` | `audit_only` |
+| `linux_compliance_rule_service_crond_enabled_enabled` | `service_crond_enabled` | `audit_only` |
+
+### `nfs`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_package_nfs_kernel_server_removed_enabled` | `package_nfs-kernel-server_removed` | `audit_only` |
+| `linux_compliance_rule_package_nfs_utils_removed_enabled` | `package_nfs-utils_removed` | `audit_only` |
+| `linux_compliance_rule_package_rpcbind_removed_enabled` | `package_rpcbind_removed` | `audit_only` |
+| `linux_compliance_rule_service_nfs_disabled_enabled` | `service_nfs_disabled` | `audit_only` |
+| `linux_compliance_rule_service_rpcbind_disabled_enabled` | `service_rpcbind_disabled` | `audit_only` |
+| `linux_compliance_rule_use_kerberos_security_all_exports_enabled` | `use_kerberos_security_all_exports` | `audit_only` |
+
+### `usbguard`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_configure_usbguard_auditbackend_enabled` | `configure_usbguard_auditbackend` | `audit_only` |
+| `linux_compliance_rule_package_usbguard_installed_enabled` | `package_usbguard_installed` | `audit_only` |
+| `linux_compliance_rule_service_usbguard_enabled_enabled` | `service_usbguard_enabled` | `audit_only` |
+| `linux_compliance_rule_usbguard_allow_hid_and_hub_enabled` | `usbguard_allow_hid_and_hub` | `audit_only` |
+| `linux_compliance_rule_usbguard_generate_policy_enabled` | `usbguard_generate_policy` | `audit_only` |
+
+### `fapolicyd`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_fapolicy_default_deny_enabled` | `fapolicy_default_deny` | `audit_only` |
+| `linux_compliance_rule_package_fapolicyd_installed_enabled` | `package_fapolicyd_installed` | `audit_only` |
+| `linux_compliance_rule_service_fapolicyd_enabled_enabled` | `service_fapolicyd_enabled` | `audit_only` |
+
+### `network_services`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_mask_nonessential_services_enabled` | `mask_nonessential_services` | `audit_only` |
 | `linux_compliance_rule_no_host_based_files_enabled` | `no_host_based_files` | `audit_only` |
 | `linux_compliance_rule_no_rsh_trust_files_enabled` | `no_rsh_trust_files` | `audit_only` |
 | `linux_compliance_rule_no_user_host_based_files_enabled` | `no_user_host_based_files` | `audit_only` |
-| `linux_compliance_rule_ntp_single_service_active_enabled` | `ntp_single_service_active` | `audit_only` |
 | `linux_compliance_rule_package_avahi_removed_enabled` | `package_avahi_removed` | `audit_only` |
 | `linux_compliance_rule_package_bind_removed_enabled` | `package_bind_removed` | `audit_only` |
-| `linux_compliance_rule_package_chrony_installed_enabled` | `package_chrony_installed` | `audit_only` |
-| `linux_compliance_rule_package_cron_installed_enabled` | `package_cron_installed` | `audit_only` |
 | `linux_compliance_rule_package_cups_removed_enabled` | `package_cups_removed` | `audit_only` |
 | `linux_compliance_rule_package_cyrus_imapd_removed_enabled` | `package_cyrus-imapd_removed` | `audit_only` |
 | `linux_compliance_rule_package_dhcp_removed_enabled` | `package_dhcp_removed` | `audit_only` |
 | `linux_compliance_rule_package_dnsmasq_removed_enabled` | `package_dnsmasq_removed` | `audit_only` |
 | `linux_compliance_rule_package_dovecot_removed_enabled` | `package_dovecot_removed` | `audit_only` |
-| `linux_compliance_rule_package_fapolicyd_installed_enabled` | `package_fapolicyd_installed` | `audit_only` |
 | `linux_compliance_rule_package_ftp_removed_enabled` | `package_ftp_removed` | `audit_only` |
 | `linux_compliance_rule_package_httpd_removed_enabled` | `package_httpd_removed` | `audit_only` |
 | `linux_compliance_rule_package_inetutils_telnet_removed_enabled` | `package_inetutils-telnet_removed` | `audit_only` |
 | `linux_compliance_rule_package_net_snmp_removed_enabled` | `package_net-snmp_removed` | `audit_only` |
-| `linux_compliance_rule_package_nfs_kernel_server_removed_enabled` | `package_nfs-kernel-server_removed` | `audit_only` |
-| `linux_compliance_rule_package_nfs_utils_removed_enabled` | `package_nfs-utils_removed` | `audit_only` |
 | `linux_compliance_rule_package_nginx_removed_enabled` | `package_nginx_removed` | `audit_only` |
 | `linux_compliance_rule_package_nis_removed_enabled` | `package_nis_removed` | `audit_only` |
-| `linux_compliance_rule_package_ntp_removed_enabled` | `package_ntp_removed` | `audit_only` |
 | `linux_compliance_rule_package_openldap_clients_removed_enabled` | `package_openldap-clients_removed` | `audit_only` |
 | `linux_compliance_rule_package_openldap_servers_removed_enabled` | `package_openldap-servers_removed` | `audit_only` |
-| `linux_compliance_rule_package_postfix_installed_enabled` | `package_postfix_installed` | `audit_only` |
-| `linux_compliance_rule_package_rpcbind_removed_enabled` | `package_rpcbind_removed` | `audit_only` |
 | `linux_compliance_rule_package_rsh_server_removed_enabled` | `package_rsh-server_removed` | `audit_only` |
 | `linux_compliance_rule_package_rsh_removed_enabled` | `package_rsh_removed` | `audit_only` |
 | `linux_compliance_rule_package_rsync_removed_enabled` | `package_rsync_removed` | `audit_only` |
-| `linux_compliance_rule_package_s_nail_installed_enabled` | `package_s-nail_installed` | `audit_only` |
 | `linux_compliance_rule_package_samba_removed_enabled` | `package_samba_removed` | `audit_only` |
-| `linux_compliance_rule_package_sendmail_removed_enabled` | `package_sendmail_removed` | `audit_only` |
 | `linux_compliance_rule_package_squid_removed_enabled` | `package_squid_removed` | `audit_only` |
-| `linux_compliance_rule_package_sssd_installed_enabled` | `package_sssd_installed` | `audit_only` |
 | `linux_compliance_rule_package_talk_removed_enabled` | `package_talk_removed` | `audit_only` |
 | `linux_compliance_rule_package_telnet_server_removed_enabled` | `package_telnet-server_removed` | `audit_only` |
 | `linux_compliance_rule_package_telnet_removed_enabled` | `package_telnet_removed` | `audit_only` |
 | `linux_compliance_rule_package_telnetd_removed_enabled` | `package_telnetd_removed` | `audit_only` |
 | `linux_compliance_rule_package_tftp_server_removed_enabled` | `package_tftp-server_removed` | `audit_only` |
 | `linux_compliance_rule_package_tftp_removed_enabled` | `package_tftp_removed` | `audit_only` |
-| `linux_compliance_rule_package_timesyncd_installed_enabled` | `package_timesyncd_installed` | `audit_only` |
-| `linux_compliance_rule_package_timesyncd_removed_enabled` | `package_timesyncd_removed` | `audit_only` |
 | `linux_compliance_rule_package_tnftp_removed_enabled` | `package_tnftp_removed` | `audit_only` |
-| `linux_compliance_rule_package_usbguard_installed_enabled` | `package_usbguard_installed` | `audit_only` |
 | `linux_compliance_rule_package_vsftpd_removed_enabled` | `package_vsftpd_removed` | `audit_only` |
 | `linux_compliance_rule_package_xinetd_removed_enabled` | `package_xinetd_removed` | `audit_only` |
 | `linux_compliance_rule_package_xorg_x11_server_common_removed_enabled` | `package_xorg-x11-server-common_removed` | `audit_only` |
 | `linux_compliance_rule_package_ypserv_removed_enabled` | `package_ypserv_removed` | `audit_only` |
-| `linux_compliance_rule_postfix_client_configure_mail_alias_enabled` | `postfix_client_configure_mail_alias` | `audit_only` |
-| `linux_compliance_rule_postfix_client_configure_mail_alias_postmaster_enabled` | `postfix_client_configure_mail_alias_postmaster` | `audit_only` |
-| `linux_compliance_rule_postfix_network_listening_disabled_enabled` | `postfix_network_listening_disabled` | `audit_only` |
-| `linux_compliance_rule_postfix_prevent_unrestricted_relay_enabled` | `postfix_prevent_unrestricted_relay` | `audit_only` |
 | `linux_compliance_rule_service_apport_disabled_enabled` | `service_apport_disabled` | `audit_only` |
 | `linux_compliance_rule_service_avahi_daemon_disabled_enabled` | `service_avahi-daemon_disabled` | `audit_only` |
-| `linux_compliance_rule_service_chronyd_disabled_enabled` | `service_chronyd_disabled` | `audit_only` |
-| `linux_compliance_rule_service_chronyd_enabled_enabled` | `service_chronyd_enabled` | `audit_only` |
-| `linux_compliance_rule_service_cron_enabled_enabled` | `service_cron_enabled` | `audit_only` |
-| `linux_compliance_rule_service_crond_enabled_enabled` | `service_crond_enabled` | `audit_only` |
 | `linux_compliance_rule_service_cups_disabled_enabled` | `service_cups_disabled` | `audit_only` |
 | `linux_compliance_rule_service_dhcpd6_disabled_enabled` | `service_dhcpd6_disabled` | `audit_only` |
 | `linux_compliance_rule_service_dhcpd_disabled_enabled` | `service_dhcpd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_dnsmasq_disabled_enabled` | `service_dnsmasq_disabled` | `audit_only` |
 | `linux_compliance_rule_service_dovecot_disabled_enabled` | `service_dovecot_disabled` | `audit_only` |
-| `linux_compliance_rule_service_fapolicyd_enabled_enabled` | `service_fapolicyd_enabled` | `audit_only` |
 | `linux_compliance_rule_service_httpd_disabled_enabled` | `service_httpd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_kdump_disabled_enabled` | `service_kdump_disabled` | `audit_only` |
 | `linux_compliance_rule_service_named_disabled_enabled` | `service_named_disabled` | `audit_only` |
-| `linux_compliance_rule_service_nfs_disabled_enabled` | `service_nfs_disabled` | `audit_only` |
 | `linux_compliance_rule_service_nginx_disabled_enabled` | `service_nginx_disabled` | `audit_only` |
-| `linux_compliance_rule_service_rpcbind_disabled_enabled` | `service_rpcbind_disabled` | `audit_only` |
 | `linux_compliance_rule_service_rsyncd_disabled_enabled` | `service_rsyncd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_slapd_disabled_enabled` | `service_slapd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_smb_disabled_enabled` | `service_smb_disabled` | `audit_only` |
 | `linux_compliance_rule_service_snmpd_disabled_enabled` | `service_snmpd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_squid_disabled_enabled` | `service_squid_disabled` | `audit_only` |
-| `linux_compliance_rule_service_sssd_enabled_enabled` | `service_sssd_enabled` | `audit_only` |
 | `linux_compliance_rule_service_telnet_disabled_enabled` | `service_telnet_disabled` | `audit_only` |
 | `linux_compliance_rule_service_tftp_disabled_enabled` | `service_tftp_disabled` | `audit_only` |
-| `linux_compliance_rule_service_timesyncd_configured_enabled` | `service_timesyncd_configured` | `audit_only` |
-| `linux_compliance_rule_service_timesyncd_disabled_enabled` | `service_timesyncd_disabled` | `audit_only` |
-| `linux_compliance_rule_service_timesyncd_enabled_enabled` | `service_timesyncd_enabled` | `audit_only` |
-| `linux_compliance_rule_service_usbguard_enabled_enabled` | `service_usbguard_enabled` | `audit_only` |
 | `linux_compliance_rule_service_vsftpd_disabled_enabled` | `service_vsftpd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_xinetd_disabled_enabled` | `service_xinetd_disabled` | `audit_only` |
 | `linux_compliance_rule_service_ypserv_disabled_enabled` | `service_ypserv_disabled` | `audit_only` |
 | `linux_compliance_rule_snmpd_use_newer_protocol_enabled` | `snmpd_use_newer_protocol` | `audit_only` |
-| `linux_compliance_rule_sssd_certificate_verification_enabled` | `sssd_certificate_verification` | `audit_only` |
-| `linux_compliance_rule_sssd_certification_path_trust_anchor_enabled` | `sssd_certification_path_trust_anchor` | `audit_only` |
-| `linux_compliance_rule_sssd_enable_certmap_enabled` | `sssd_enable_certmap` | `audit_only` |
-| `linux_compliance_rule_sssd_enable_pam_services_enabled` | `sssd_enable_pam_services` | `audit_only` |
-| `linux_compliance_rule_sssd_enable_smartcards_enabled` | `sssd_enable_smartcards` | `audit_only` |
-| `linux_compliance_rule_sssd_enable_user_cert_enabled` | `sssd_enable_user_cert` | `audit_only` |
-| `linux_compliance_rule_sssd_has_trust_anchor_enabled` | `sssd_has_trust_anchor` | `audit_only` |
-| `linux_compliance_rule_sssd_ldap_configure_tls_reqcert_enabled` | `sssd_ldap_configure_tls_reqcert` | `audit_only` |
-| `linux_compliance_rule_sssd_ldap_start_tls_enabled` | `sssd_ldap_start_tls` | `audit_only` |
-| `linux_compliance_rule_sssd_offline_cred_expiration_enabled` | `sssd_offline_cred_expiration` | `audit_only` |
-| `linux_compliance_rule_usbguard_allow_hid_and_hub_enabled` | `usbguard_allow_hid_and_hub` | `audit_only` |
-| `linux_compliance_rule_usbguard_generate_policy_enabled` | `usbguard_generate_policy` | `audit_only` |
-| `linux_compliance_rule_use_kerberos_security_all_exports_enabled` | `use_kerberos_security_all_exports` | `audit_only` |
 | `linux_compliance_rule_xwindows_remove_packages_enabled` | `xwindows_remove_packages` | `audit_only` |
 | `linux_compliance_rule_xwindows_runlevel_target_enabled` | `xwindows_runlevel_target` | `audit_only` |
 
-### `packages`
+### `package_updates`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_clean_components_post_updating_enabled` | `clean_components_post_updating` | `audit_only` |
+| `linux_compliance_rule_dnf_automatic_apply_updates_enabled` | `dnf-automatic_apply_updates` | `audit_only` |
+| `linux_compliance_rule_dnf_automatic_security_updates_only_enabled` | `dnf-automatic_security_updates_only` | `audit_only` |
+| `linux_compliance_rule_package_dnf_automatic_installed_enabled` | `package_dnf-automatic_installed` | `audit_only` |
+| `linux_compliance_rule_security_patches_up_to_date_enabled` | `security_patches_up_to_date` | `audit_only` |
+| `linux_compliance_rule_timer_dnf_automatic_enabled_enabled` | `timer_dnf-automatic_enabled` | `audit_only` |
+
+### `package_sources`
 
 | Variable | Rule | Strategy |
 |---|---|---|
 | `linux_compliance_rule_apt_conf_disallow_unauthenticated_enabled` | `apt_conf_disallow_unauthenticated` | `audit_only` |
-| `linux_compliance_rule_clean_components_post_updating_enabled` | `clean_components_post_updating` | `audit_only` |
-| `linux_compliance_rule_dnf_automatic_apply_updates_enabled` | `dnf-automatic_apply_updates` | `audit_only` |
-| `linux_compliance_rule_dnf_automatic_security_updates_only_enabled` | `dnf-automatic_security_updates_only` | `audit_only` |
 | `linux_compliance_rule_ensure_epel_repos_disabled_enabled` | `ensure_epel_repos_disabled` | `audit_only` |
 | `linux_compliance_rule_ensure_gpgcheck_globally_activated_enabled` | `ensure_gpgcheck_globally_activated` | `audit_only` |
 | `linux_compliance_rule_ensure_gpgcheck_local_packages_enabled` | `ensure_gpgcheck_local_packages` | `audit_only` |
 | `linux_compliance_rule_ensure_gpgcheck_never_disabled_enabled` | `ensure_gpgcheck_never_disabled` | `audit_only` |
 | `linux_compliance_rule_ensure_redhat_gpgkey_installed_enabled` | `ensure_redhat_gpgkey_installed` | `audit_only` |
+
+### `system_packages`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_package_cryptsetup_luks_installed_enabled` | `package_cryptsetup-luks_installed` | `audit_only` |
-| `linux_compliance_rule_package_dnf_automatic_installed_enabled` | `package_dnf-automatic_installed` | `audit_only` |
 | `linux_compliance_rule_package_gnutls_utils_installed_enabled` | `package_gnutls-utils_installed` | `audit_only` |
 | `linux_compliance_rule_package_gssproxy_removed_enabled` | `package_gssproxy_removed` | `audit_only` |
 | `linux_compliance_rule_package_iprutils_removed_enabled` | `package_iprutils_removed` | `audit_only` |
@@ -826,8 +961,6 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_package_subscription_manager_installed_enabled` | `package_subscription-manager_installed` | `audit_only` |
 | `linux_compliance_rule_package_tuned_removed_enabled` | `package_tuned_removed` | `audit_only` |
 | `linux_compliance_rule_prefer_64bit_os_enabled` | `prefer_64bit_os` | `audit_only` |
-| `linux_compliance_rule_security_patches_up_to_date_enabled` | `security_patches_up_to_date` | `audit_only` |
-| `linux_compliance_rule_timer_dnf_automatic_enabled_enabled` | `timer_dnf-automatic_enabled` | `audit_only` |
 
 ### `desktop`
 
@@ -855,29 +988,10 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_gnome_gdm_disable_xdmcp_enabled` | `gnome_gdm_disable_xdmcp` | `audit_only` |
 | `linux_compliance_rule_package_gdm_removed_enabled` | `package_gdm_removed` | `audit_only` |
 
-### `network`
+### `ipv4_parameters`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_directory_groupowner_etc_ipsecd_enabled` | `directory_groupowner_etc_ipsecd` | `audit_only` |
-| `linux_compliance_rule_directory_owner_etc_ipsecd_enabled` | `directory_owner_etc_ipsecd` | `audit_only` |
-| `linux_compliance_rule_directory_permissions_etc_ipsecd_enabled` | `directory_permissions_etc_ipsecd` | `audit_only` |
-| `linux_compliance_rule_file_groupowner_etc_ipsec_conf_enabled` | `file_groupowner_etc_ipsec_conf` | `audit_only` |
-| `linux_compliance_rule_file_groupowner_etc_ipsec_secrets_enabled` | `file_groupowner_etc_ipsec_secrets` | `audit_only` |
-| `linux_compliance_rule_file_owner_etc_ipsec_conf_enabled` | `file_owner_etc_ipsec_conf` | `audit_only` |
-| `linux_compliance_rule_file_owner_etc_ipsec_secrets_enabled` | `file_owner_etc_ipsec_secrets` | `audit_only` |
-| `linux_compliance_rule_file_permissions_etc_ipsec_conf_enabled` | `file_permissions_etc_ipsec_conf` | `audit_only` |
-| `linux_compliance_rule_file_permissions_etc_ipsec_secrets_enabled` | `file_permissions_etc_ipsec_secrets` | `audit_only` |
-| `linux_compliance_rule_firewall_single_service_active_enabled` | `firewall_single_service_active` | `audit_only` |
-| `linux_compliance_rule_libreswan_approved_tunnels_enabled` | `libreswan_approved_tunnels` | `audit_only` |
-| `linux_compliance_rule_network_configure_name_resolution_enabled` | `network_configure_name_resolution` | `audit_only` |
-| `linux_compliance_rule_network_nmcli_permissions_enabled` | `network_nmcli_permissions` | `audit_only` |
-| `linux_compliance_rule_network_sniffer_disabled_enabled` | `network_sniffer_disabled` | `audit_only` |
-| `linux_compliance_rule_networkmanager_dns_mode_enabled` | `networkmanager_dns_mode` | `audit_only` |
-| `linux_compliance_rule_only_allow_dod_certs_enabled` | `only_allow_dod_certs` | `audit_only` |
-| `linux_compliance_rule_only_allow_specific_certs_enabled` | `only_allow_specific_certs` | `audit_only` |
-| `linux_compliance_rule_package_libreswan_installed_enabled` | `package_libreswan_installed` | `audit_only` |
-| `linux_compliance_rule_service_bluetooth_disabled_enabled` | `service_bluetooth_disabled` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_local_enabled` | `sysctl_net_ipv4_conf_all_accept_local` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_redirects_enabled` | `sysctl_net_ipv4_conf_all_accept_redirects` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_source_route_enabled` | `sysctl_net_ipv4_conf_all_accept_source_route` | `audit_only` |
@@ -904,6 +1018,11 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_sysctl_net_ipv4_ip_local_port_range_enabled` | `sysctl_net_ipv4_ip_local_port_range` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv4_tcp_rfc1337_enabled` | `sysctl_net_ipv4_tcp_rfc1337` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv4_tcp_syncookies_enabled` | `sysctl_net_ipv4_tcp_syncookies` | `audit_only` |
+
+### `ipv6_parameters`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_enabled` | `sysctl_net_ipv6_conf_all_accept_ra` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_defrtr_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_defrtr` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_pinfo_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_pinfo` | `audit_only` |
@@ -923,81 +1042,140 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_sysctl_net_ipv6_conf_default_autoconf_enabled` | `sysctl_net_ipv6_conf_default_autoconf` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv6_conf_default_max_addresses_enabled` | `sysctl_net_ipv6_conf_default_max_addresses` | `audit_only` |
 | `linux_compliance_rule_sysctl_net_ipv6_conf_default_router_solicitations_enabled` | `sysctl_net_ipv6_conf_default_router_solicitations` | `audit_only` |
+
+### `ipsec`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_directory_groupowner_etc_ipsecd_enabled` | `directory_groupowner_etc_ipsecd` | `audit_only` |
+| `linux_compliance_rule_directory_owner_etc_ipsecd_enabled` | `directory_owner_etc_ipsecd` | `audit_only` |
+| `linux_compliance_rule_directory_permissions_etc_ipsecd_enabled` | `directory_permissions_etc_ipsecd` | `audit_only` |
+| `linux_compliance_rule_file_groupowner_etc_ipsec_conf_enabled` | `file_groupowner_etc_ipsec_conf` | `audit_only` |
+| `linux_compliance_rule_file_groupowner_etc_ipsec_secrets_enabled` | `file_groupowner_etc_ipsec_secrets` | `audit_only` |
+| `linux_compliance_rule_file_owner_etc_ipsec_conf_enabled` | `file_owner_etc_ipsec_conf` | `audit_only` |
+| `linux_compliance_rule_file_owner_etc_ipsec_secrets_enabled` | `file_owner_etc_ipsec_secrets` | `audit_only` |
+| `linux_compliance_rule_file_permissions_etc_ipsec_conf_enabled` | `file_permissions_etc_ipsec_conf` | `audit_only` |
+| `linux_compliance_rule_file_permissions_etc_ipsec_secrets_enabled` | `file_permissions_etc_ipsec_secrets` | `audit_only` |
+| `linux_compliance_rule_libreswan_approved_tunnels_enabled` | `libreswan_approved_tunnels` | `audit_only` |
+| `linux_compliance_rule_package_libreswan_installed_enabled` | `package_libreswan_installed` | `audit_only` |
+
+### `wireless`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_service_bluetooth_disabled_enabled` | `service_bluetooth_disabled` | `audit_only` |
 | `linux_compliance_rule_wireless_disable_in_bios_enabled` | `wireless_disable_in_bios` | `audit_only` |
 | `linux_compliance_rule_wireless_disable_interfaces_enabled` | `wireless_disable_interfaces` | `audit_only` |
 
-### `kernel_modules`
+### `network_settings`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_firewall_single_service_active_enabled` | `firewall_single_service_active` | `audit_only` |
+| `linux_compliance_rule_network_configure_name_resolution_enabled` | `network_configure_name_resolution` | `audit_only` |
+| `linux_compliance_rule_network_nmcli_permissions_enabled` | `network_nmcli_permissions` | `audit_only` |
+| `linux_compliance_rule_network_sniffer_disabled_enabled` | `network_sniffer_disabled` | `audit_only` |
+| `linux_compliance_rule_networkmanager_dns_mode_enabled` | `networkmanager_dns_mode` | `audit_only` |
+| `linux_compliance_rule_only_allow_dod_certs_enabled` | `only_allow_dod_certs` | `audit_only` |
+| `linux_compliance_rule_only_allow_specific_certs_enabled` | `only_allow_specific_certs` | `audit_only` |
+
+### `filesystem_modules`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_kernel_module_cramfs_disabled_enabled` | `kernel_module_cramfs_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_freevxfs_disabled_enabled` | `kernel_module_freevxfs_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_hfs_disabled_enabled` | `kernel_module_hfs_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_hfsplus_disabled_enabled` | `kernel_module_hfsplus_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_jffs2_disabled_enabled` | `kernel_module_jffs2_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_overlayfs_disabled_enabled` | `kernel_module_overlayfs_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_squashfs_disabled_enabled` | `kernel_module_squashfs_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_udf_disabled_enabled` | `kernel_module_udf_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_usb_storage_disabled_enabled` | `kernel_module_usb-storage_disabled` | `audit_only` |
+
+### `protocol_modules`
 
 | Variable | Rule | Strategy |
 |---|---|---|
 | `linux_compliance_rule_kernel_module_atm_disabled_enabled` | `kernel_module_atm_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_bluetooth_disabled_enabled` | `kernel_module_bluetooth_disabled` | `audit_only` |
 | `linux_compliance_rule_kernel_module_can_disabled_enabled` | `kernel_module_can_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_cfg80211_disabled_enabled` | `kernel_module_cfg80211_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_cramfs_disabled_enabled` | `kernel_module_cramfs_disabled` | `audit_only` |
 | `linux_compliance_rule_kernel_module_dccp_disabled_enabled` | `kernel_module_dccp_disabled` | `audit_only` |
 | `linux_compliance_rule_kernel_module_firewire_core_disabled_enabled` | `kernel_module_firewire-core_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_freevxfs_disabled_enabled` | `kernel_module_freevxfs_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_hfs_disabled_enabled` | `kernel_module_hfs_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_hfsplus_disabled_enabled` | `kernel_module_hfsplus_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_iwlmvm_disabled_enabled` | `kernel_module_iwlmvm_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_iwlwifi_disabled_enabled` | `kernel_module_iwlwifi_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_jffs2_disabled_enabled` | `kernel_module_jffs2_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_mac80211_disabled_enabled` | `kernel_module_mac80211_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_overlayfs_disabled_enabled` | `kernel_module_overlayfs_disabled` | `audit_only` |
 | `linux_compliance_rule_kernel_module_rds_disabled_enabled` | `kernel_module_rds_disabled` | `audit_only` |
 | `linux_compliance_rule_kernel_module_sctp_disabled_enabled` | `kernel_module_sctp_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_squashfs_disabled_enabled` | `kernel_module_squashfs_disabled` | `audit_only` |
 | `linux_compliance_rule_kernel_module_tipc_disabled_enabled` | `kernel_module_tipc_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_udf_disabled_enabled` | `kernel_module_udf_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_usb_storage_disabled_enabled` | `kernel_module_usb-storage_disabled` | `audit_only` |
 
-### `firewall`
+### `wireless_modules`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_check_ufw_active_enabled` | `check_ufw_active` | `audit_only` |
+| `linux_compliance_rule_kernel_module_bluetooth_disabled_enabled` | `kernel_module_bluetooth_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_cfg80211_disabled_enabled` | `kernel_module_cfg80211_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_iwlmvm_disabled_enabled` | `kernel_module_iwlmvm_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_iwlwifi_disabled_enabled` | `kernel_module_iwlwifi_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_mac80211_disabled_enabled` | `kernel_module_mac80211_disabled` | `audit_only` |
+
+### `firewalld`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_configure_firewalld_ports_enabled` | `configure_firewalld_ports` | `audit_only` |
 | `linux_compliance_rule_configured_firewalld_default_deny_enabled` | `configured_firewalld_default_deny` | `audit_only` |
-| `linux_compliance_rule_directory_groupowner_etc_iptables_enabled` | `directory_groupowner_etc_iptables` | `audit_only` |
-| `linux_compliance_rule_directory_groupowner_etc_nftables_enabled` | `directory_groupowner_etc_nftables` | `audit_only` |
-| `linux_compliance_rule_directory_owner_etc_iptables_enabled` | `directory_owner_etc_iptables` | `audit_only` |
-| `linux_compliance_rule_directory_owner_etc_nftables_enabled` | `directory_owner_etc_nftables` | `audit_only` |
-| `linux_compliance_rule_directory_permissions_etc_iptables_enabled` | `directory_permissions_etc_iptables` | `audit_only` |
-| `linux_compliance_rule_directory_permissions_etc_nftables_enabled` | `directory_permissions_etc_nftables` | `audit_only` |
 | `linux_compliance_rule_firewalld_backend_enabled` | `firewalld-backend` | `audit_only` |
 | `linux_compliance_rule_firewalld_loopback_traffic_restricted_enabled` | `firewalld_loopback_traffic_restricted` | `audit_only` |
 | `linux_compliance_rule_firewalld_loopback_traffic_trusted_enabled` | `firewalld_loopback_traffic_trusted` | `audit_only` |
-| `linux_compliance_rule_ip6tables_rules_for_open_ports_enabled` | `ip6tables_rules_for_open_ports` | `audit_only` |
-| `linux_compliance_rule_iptables_rules_for_open_ports_enabled` | `iptables_rules_for_open_ports` | `audit_only` |
+| `linux_compliance_rule_package_firewalld_installed_enabled` | `package_firewalld_installed` | `audit_only` |
+| `linux_compliance_rule_service_firewalld_enabled_enabled` | `service_firewalld_enabled` | `audit_only` |
+| `linux_compliance_rule_set_firewalld_appropriate_zone_enabled` | `set_firewalld_appropriate_zone` | `audit_only` |
+| `linux_compliance_rule_set_firewalld_default_zone_enabled` | `set_firewalld_default_zone` | `audit_only` |
+| `linux_compliance_rule_unnecessary_firewalld_services_ports_disabled_enabled` | `unnecessary_firewalld_services_ports_disabled` | `audit_only` |
+
+### `nftables`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_directory_groupowner_etc_nftables_enabled` | `directory_groupowner_etc_nftables` | `audit_only` |
+| `linux_compliance_rule_directory_owner_etc_nftables_enabled` | `directory_owner_etc_nftables` | `audit_only` |
+| `linux_compliance_rule_directory_permissions_etc_nftables_enabled` | `directory_permissions_etc_nftables` | `audit_only` |
 | `linux_compliance_rule_nftables_ensure_default_deny_policy_enabled` | `nftables_ensure_default_deny_policy` | `audit_only` |
 | `linux_compliance_rule_nftables_rules_permanent_enabled` | `nftables_rules_permanent` | `audit_only` |
-| `linux_compliance_rule_package_firewalld_installed_enabled` | `package_firewalld_installed` | `audit_only` |
+| `linux_compliance_rule_package_nftables_installed_enabled` | `package_nftables_installed` | `audit_only` |
+| `linux_compliance_rule_service_nftables_disabled_enabled` | `service_nftables_disabled` | `audit_only` |
+| `linux_compliance_rule_service_nftables_enabled_enabled` | `service_nftables_enabled` | `audit_only` |
+| `linux_compliance_rule_set_nftables_base_chain_enabled` | `set_nftables_base_chain` | `audit_only` |
+| `linux_compliance_rule_set_nftables_loopback_traffic_enabled` | `set_nftables_loopback_traffic` | `audit_only` |
+| `linux_compliance_rule_set_nftables_table_enabled` | `set_nftables_table` | `audit_only` |
+
+### `iptables`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_directory_groupowner_etc_iptables_enabled` | `directory_groupowner_etc_iptables` | `audit_only` |
+| `linux_compliance_rule_directory_owner_etc_iptables_enabled` | `directory_owner_etc_iptables` | `audit_only` |
+| `linux_compliance_rule_directory_permissions_etc_iptables_enabled` | `directory_permissions_etc_iptables` | `audit_only` |
+| `linux_compliance_rule_ip6tables_rules_for_open_ports_enabled` | `ip6tables_rules_for_open_ports` | `audit_only` |
+| `linux_compliance_rule_iptables_rules_for_open_ports_enabled` | `iptables_rules_for_open_ports` | `audit_only` |
 | `linux_compliance_rule_package_iptables_persistent_installed_enabled` | `package_iptables-persistent_installed` | `audit_only` |
 | `linux_compliance_rule_package_iptables_persistent_removed_enabled` | `package_iptables-persistent_removed` | `audit_only` |
 | `linux_compliance_rule_package_iptables_installed_enabled` | `package_iptables_installed` | `audit_only` |
-| `linux_compliance_rule_package_nftables_installed_enabled` | `package_nftables_installed` | `audit_only` |
-| `linux_compliance_rule_package_ufw_installed_enabled` | `package_ufw_installed` | `audit_only` |
-| `linux_compliance_rule_package_ufw_removed_enabled` | `package_ufw_removed` | `audit_only` |
-| `linux_compliance_rule_service_firewalld_enabled_enabled` | `service_firewalld_enabled` | `audit_only` |
-| `linux_compliance_rule_service_nftables_disabled_enabled` | `service_nftables_disabled` | `audit_only` |
-| `linux_compliance_rule_service_nftables_enabled_enabled` | `service_nftables_enabled` | `audit_only` |
-| `linux_compliance_rule_service_ufw_enabled_enabled` | `service_ufw_enabled` | `audit_only` |
-| `linux_compliance_rule_set_firewalld_appropriate_zone_enabled` | `set_firewalld_appropriate_zone` | `audit_only` |
-| `linux_compliance_rule_set_firewalld_default_zone_enabled` | `set_firewalld_default_zone` | `audit_only` |
 | `linux_compliance_rule_set_ip6tables_default_rule_enabled` | `set_ip6tables_default_rule` | `audit_only` |
 | `linux_compliance_rule_set_iptables_default_rule_enabled` | `set_iptables_default_rule` | `audit_only` |
 | `linux_compliance_rule_set_ipv6_loopback_traffic_enabled` | `set_ipv6_loopback_traffic` | `audit_only` |
 | `linux_compliance_rule_set_loopback_traffic_enabled` | `set_loopback_traffic` | `audit_only` |
-| `linux_compliance_rule_set_nftables_base_chain_enabled` | `set_nftables_base_chain` | `audit_only` |
-| `linux_compliance_rule_set_nftables_loopback_traffic_enabled` | `set_nftables_loopback_traffic` | `audit_only` |
-| `linux_compliance_rule_set_nftables_table_enabled` | `set_nftables_table` | `audit_only` |
+
+### `ufw`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_check_ufw_active_enabled` | `check_ufw_active` | `audit_only` |
+| `linux_compliance_rule_package_ufw_installed_enabled` | `package_ufw_installed` | `audit_only` |
+| `linux_compliance_rule_package_ufw_removed_enabled` | `package_ufw_removed` | `audit_only` |
+| `linux_compliance_rule_service_ufw_enabled_enabled` | `service_ufw_enabled` | `audit_only` |
 | `linux_compliance_rule_set_ufw_default_rule_enabled` | `set_ufw_default_rule` | `audit_only` |
 | `linux_compliance_rule_set_ufw_loopback_traffic_enabled` | `set_ufw_loopback_traffic` | `audit_only` |
 | `linux_compliance_rule_ufw_only_required_services_enabled` | `ufw_only_required_services` | `audit_only` |
 | `linux_compliance_rule_ufw_rate_limit_enabled` | `ufw_rate_limit` | `audit_only` |
 | `linux_compliance_rule_ufw_rules_for_open_ports_enabled` | `ufw_rules_for_open_ports` | `audit_only` |
-| `linux_compliance_rule_unnecessary_firewalld_services_ports_disabled_enabled` | `unnecessary_firewalld_services_ports_disabled` | `audit_only` |
 
 ### `ssh`
 
@@ -1071,9 +1249,26 @@ a rule with a native remediation, or `audit_only`.
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_account_password_pam_faillock_password_auth_enabled` | `account_password_pam_faillock_password_auth` | `audit_only` |
-| `linux_compliance_rule_account_password_pam_faillock_system_auth_enabled` | `account_password_pam_faillock_system_auth` | `audit_only` |
-| `linux_compliance_rule_account_password_selinux_faillock_dir_enabled` | `account_password_selinux_faillock_dir` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_modules_in_authselect_profile_enabled` | `accounts_password_pam_modules_in_authselect_profile` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_unix_authtok_enabled` | `accounts_password_pam_unix_authtok` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_unix_enabled_enabled` | `accounts_password_pam_unix_enabled` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_unix_remember_enabled` | `accounts_password_pam_unix_remember` | `audit_only` |
+| `linux_compliance_rule_disallow_bypass_password_sudo_enabled` | `disallow_bypass_password_sudo` | `audit_only` |
+| `linux_compliance_rule_display_login_attempts_enabled` | `display_login_attempts` | `audit_only` |
+| `linux_compliance_rule_package_nss_sss_installed_enabled` | `package_nss_sss_installed` | `audit_only` |
+| `linux_compliance_rule_package_pam_modules_installed_enabled` | `package_pam_modules_installed` | `audit_only` |
+| `linux_compliance_rule_package_pam_runtime_installed_enabled` | `package_pam_runtime_installed` | `audit_only` |
+| `linux_compliance_rule_package_pam_sss_installed_enabled` | `package_pam_sss_installed` | `audit_only` |
+| `linux_compliance_rule_set_password_hashing_algorithm_auth_stig_enabled` | `set_password_hashing_algorithm_auth_stig` | `audit_only` |
+| `linux_compliance_rule_set_password_hashing_algorithm_libuserconf_enabled` | `set_password_hashing_algorithm_libuserconf` | `audit_only` |
+| `linux_compliance_rule_set_password_hashing_algorithm_logindefs_enabled` | `set_password_hashing_algorithm_logindefs` | `audit_only` |
+| `linux_compliance_rule_set_password_hashing_algorithm_passwordauth_enabled` | `set_password_hashing_algorithm_passwordauth` | `audit_only` |
+| `linux_compliance_rule_set_password_hashing_algorithm_systemauth_enabled` | `set_password_hashing_algorithm_systemauth` | `audit_only` |
+
+### `pwquality`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_accounts_password_pam_dcredit_enabled` | `accounts_password_pam_dcredit` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_dictcheck_enabled` | `accounts_password_pam_dictcheck` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_difok_enabled` | `accounts_password_pam_difok` | `audit_only` |
@@ -1085,8 +1280,19 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_accounts_password_pam_maxsequence_enabled` | `accounts_password_pam_maxsequence` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_minclass_enabled` | `accounts_password_pam_minclass` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_minlen_enabled` | `accounts_password_pam_minlen` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_modules_in_authselect_profile_enabled` | `accounts_password_pam_modules_in_authselect_profile` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_ocredit_enabled` | `accounts_password_pam_ocredit` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_pwquality_enabled_enabled` | `accounts_password_pam_pwquality_enabled` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_pwquality_password_auth_enabled` | `accounts_password_pam_pwquality_password_auth` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled` | `accounts_password_pam_pwquality_retry` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_pwquality_system_auth_enabled` | `accounts_password_pam_pwquality_system_auth` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_retry_enabled` | `accounts_password_pam_retry` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_ucredit_enabled` | `accounts_password_pam_ucredit` | `audit_only` |
+| `linux_compliance_rule_package_pam_pwquality_installed_enabled` | `package_pam_pwquality_installed` | `audit_only` |
+
+### `pwhistory`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_accounts_password_pam_pwhistory_enabled_enabled` | `accounts_password_pam_pwhistory_enabled` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_enforce_for_root_enabled` | `accounts_password_pam_pwhistory_enforce_for_root` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_enforce_root_enabled` | `accounts_password_pam_pwhistory_enforce_root` | `audit_only` |
@@ -1094,15 +1300,14 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_accounts_password_pam_pwhistory_remember_password_auth_enabled` | `accounts_password_pam_pwhistory_remember_password_auth` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_remember_system_auth_enabled` | `accounts_password_pam_pwhistory_remember_system_auth` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwhistory_use_authtok_enabled` | `accounts_password_pam_pwhistory_use_authtok` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwquality_enabled_enabled` | `accounts_password_pam_pwquality_enabled` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwquality_password_auth_enabled` | `accounts_password_pam_pwquality_password_auth` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled` | `accounts_password_pam_pwquality_retry` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwquality_system_auth_enabled` | `accounts_password_pam_pwquality_system_auth` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_retry_enabled` | `accounts_password_pam_retry` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_ucredit_enabled` | `accounts_password_pam_ucredit` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_unix_authtok_enabled` | `accounts_password_pam_unix_authtok` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_unix_enabled_enabled` | `accounts_password_pam_unix_enabled` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_unix_remember_enabled` | `accounts_password_pam_unix_remember` | `audit_only` |
+
+### `faillock`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_account_password_pam_faillock_password_auth_enabled` | `account_password_pam_faillock_password_auth` | `audit_only` |
+| `linux_compliance_rule_account_password_pam_faillock_system_auth_enabled` | `account_password_pam_faillock_system_auth` | `audit_only` |
+| `linux_compliance_rule_account_password_selinux_faillock_dir_enabled` | `account_password_selinux_faillock_dir` | `audit_only` |
 | `linux_compliance_rule_accounts_passwords_pam_faildelay_delay_enabled` | `accounts_passwords_pam_faildelay_delay` | `audit_only` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_audit_enabled` | `accounts_passwords_pam_faillock_audit` | `audit_only` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_deny_enabled` | `accounts_passwords_pam_faillock_deny` | `audit_only` |
@@ -1114,58 +1319,66 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_accounts_passwords_pam_faillock_root_unlock_time_enabled` | `accounts_passwords_pam_faillock_root_unlock_time` | `audit_only` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_silent_enabled` | `accounts_passwords_pam_faillock_silent` | `audit_only` |
 | `linux_compliance_rule_accounts_passwords_pam_faillock_unlock_time_enabled` | `accounts_passwords_pam_faillock_unlock_time` | `audit_only` |
-| `linux_compliance_rule_disallow_bypass_password_sudo_enabled` | `disallow_bypass_password_sudo` | `audit_only` |
-| `linux_compliance_rule_display_login_attempts_enabled` | `display_login_attempts` | `audit_only` |
-| `linux_compliance_rule_package_nss_sss_installed_enabled` | `package_nss_sss_installed` | `audit_only` |
-| `linux_compliance_rule_package_pam_modules_installed_enabled` | `package_pam_modules_installed` | `audit_only` |
-| `linux_compliance_rule_package_pam_pwquality_installed_enabled` | `package_pam_pwquality_installed` | `audit_only` |
-| `linux_compliance_rule_package_pam_runtime_installed_enabled` | `package_pam_runtime_installed` | `audit_only` |
-| `linux_compliance_rule_package_pam_sss_installed_enabled` | `package_pam_sss_installed` | `audit_only` |
-| `linux_compliance_rule_set_password_hashing_algorithm_auth_stig_enabled` | `set_password_hashing_algorithm_auth_stig` | `audit_only` |
-| `linux_compliance_rule_set_password_hashing_algorithm_libuserconf_enabled` | `set_password_hashing_algorithm_libuserconf` | `audit_only` |
-| `linux_compliance_rule_set_password_hashing_algorithm_logindefs_enabled` | `set_password_hashing_algorithm_logindefs` | `audit_only` |
-| `linux_compliance_rule_set_password_hashing_algorithm_passwordauth_enabled` | `set_password_hashing_algorithm_passwordauth` | `audit_only` |
-| `linux_compliance_rule_set_password_hashing_algorithm_systemauth_enabled` | `set_password_hashing_algorithm_systemauth` | `audit_only` |
 
-### `accounts`
+### `password_aging`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_account_disable_post_pw_expiration_enabled` | `account_disable_post_pw_expiration` | `audit_only` |
-| `linux_compliance_rule_account_temp_expire_date_enabled` | `account_temp_expire_date` | `audit_only` |
-| `linux_compliance_rule_account_unique_id_enabled` | `account_unique_id` | `audit_only` |
-| `linux_compliance_rule_account_unique_name_enabled` | `account_unique_name` | `audit_only` |
-| `linux_compliance_rule_accounts_authorized_local_users_enabled` | `accounts_authorized_local_users` | `audit_only` |
-| `linux_compliance_rule_accounts_have_homedir_login_defs_enabled` | `accounts_have_homedir_login_defs` | `audit_only` |
-| `linux_compliance_rule_accounts_logon_fail_delay_enabled` | `accounts_logon_fail_delay` | `audit_only` |
-| `linux_compliance_rule_accounts_max_concurrent_login_sessions_enabled` | `accounts_max_concurrent_login_sessions` | `audit_only` |
 | `linux_compliance_rule_accounts_maximum_age_login_defs_enabled` | `accounts_maximum_age_login_defs` | `audit_only` |
 | `linux_compliance_rule_accounts_minimum_age_login_defs_enabled` | `accounts_minimum_age_login_defs` | `audit_only` |
-| `linux_compliance_rule_accounts_no_uid_except_zero_enabled` | `accounts_no_uid_except_zero` | `audit_only` |
-| `linux_compliance_rule_accounts_password_all_shadowed_enabled` | `accounts_password_all_shadowed` | `audit_only` |
-| `linux_compliance_rule_accounts_password_all_shadowed_sha512_enabled` | `accounts_password_all_shadowed_sha512` | `audit_only` |
-| `linux_compliance_rule_accounts_password_last_change_is_in_past_enabled` | `accounts_password_last_change_is_in_past` | `audit_only` |
 | `linux_compliance_rule_accounts_password_minlen_login_defs_enabled` | `accounts_password_minlen_login_defs` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_unix_no_remember_enabled` | `accounts_password_pam_unix_no_remember` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_unix_rounds_password_auth_enabled` | `accounts_password_pam_unix_rounds_password_auth` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_unix_rounds_system_auth_enabled` | `accounts_password_pam_unix_rounds_system_auth` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_max_life_existing_enabled` | `accounts_password_set_max_life_existing` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_max_life_root_enabled` | `accounts_password_set_max_life_root` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_min_life_existing_enabled` | `accounts_password_set_min_life_existing` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_warn_age_existing_enabled` | `accounts_password_set_warn_age_existing` | `audit_only` |
 | `linux_compliance_rule_accounts_password_warn_age_login_defs_enabled` | `accounts_password_warn_age_login_defs` | `audit_only` |
-| `linux_compliance_rule_accounts_polyinstantiated_tmp_enabled` | `accounts_polyinstantiated_tmp` | `audit_only` |
-| `linux_compliance_rule_accounts_polyinstantiated_var_tmp_enabled` | `accounts_polyinstantiated_var_tmp` | `audit_only` |
+| `linux_compliance_rule_accounts_set_post_pw_existing_enabled` | `accounts_set_post_pw_existing` | `audit_only` |
+
+### `root_access`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_accounts_no_uid_except_zero_enabled` | `accounts_no_uid_except_zero` | `audit_only` |
 | `linux_compliance_rule_accounts_root_gid_zero_enabled` | `accounts_root_gid_zero` | `audit_only` |
 | `linux_compliance_rule_accounts_root_path_dirs_no_write_enabled` | `accounts_root_path_dirs_no_write` | `audit_only` |
-| `linux_compliance_rule_accounts_set_post_pw_existing_enabled` | `accounts_set_post_pw_existing` | `audit_only` |
-| `linux_compliance_rule_accounts_tmout_enabled` | `accounts_tmout` | `audit_only` |
+| `linux_compliance_rule_ensure_pam_wheel_group_empty_enabled` | `ensure_pam_wheel_group_empty` | `audit_only` |
+| `linux_compliance_rule_ensure_root_access_controlled_enabled` | `ensure_root_access_controlled` | `audit_only` |
+| `linux_compliance_rule_ensure_root_password_configured_enabled` | `ensure_root_password_configured` | `audit_only` |
+| `linux_compliance_rule_groups_no_zero_gid_except_root_enabled` | `groups_no_zero_gid_except_root` | `audit_only` |
+| `linux_compliance_rule_no_direct_root_logins_enabled` | `no_direct_root_logins` | `audit_only` |
+| `linux_compliance_rule_no_dirs_unowned_by_root_enabled` | `no_dirs_unowned_by_root` | `audit_only` |
+| `linux_compliance_rule_no_invalid_shell_accounts_unlocked_enabled` | `no_invalid_shell_accounts_unlocked` | `audit_only` |
+| `linux_compliance_rule_no_password_auth_for_systemaccounts_enabled` | `no_password_auth_for_systemaccounts` | `audit_only` |
+| `linux_compliance_rule_no_shelllogin_for_systemaccounts_enabled` | `no_shelllogin_for_systemaccounts` | `audit_only` |
+| `linux_compliance_rule_prevent_direct_root_logins_enabled` | `prevent_direct_root_logins` | `audit_only` |
+| `linux_compliance_rule_restrict_serial_port_logins_enabled` | `restrict_serial_port_logins` | `audit_only` |
+| `linux_compliance_rule_root_path_all_dirs_enabled` | `root_path_all_dirs` | `audit_only` |
+| `linux_compliance_rule_root_path_no_dot_enabled` | `root_path_no_dot` | `audit_only` |
+| `linux_compliance_rule_securetty_root_login_console_only_enabled` | `securetty_root_login_console_only` | `audit_only` |
+| `linux_compliance_rule_use_pam_wheel_for_su_enabled` | `use_pam_wheel_for_su` | `audit_only` |
+| `linux_compliance_rule_use_pam_wheel_group_for_su_enabled` | `use_pam_wheel_group_for_su` | `audit_only` |
+
+### `umask`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_accounts_umask_etc_bashrc_enabled` | `accounts_umask_etc_bashrc` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_etc_csh_cshrc_enabled` | `accounts_umask_etc_csh_cshrc` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_etc_login_defs_enabled` | `accounts_umask_etc_login_defs` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_etc_profile_enabled` | `accounts_umask_etc_profile` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_interactive_users_enabled` | `accounts_umask_interactive_users` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_root_enabled` | `accounts_umask_root` | `audit_only` |
+
+### `user_sessions`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_accounts_have_homedir_login_defs_enabled` | `accounts_have_homedir_login_defs` | `audit_only` |
+| `linux_compliance_rule_accounts_logon_fail_delay_enabled` | `accounts_logon_fail_delay` | `audit_only` |
+| `linux_compliance_rule_accounts_max_concurrent_login_sessions_enabled` | `accounts_max_concurrent_login_sessions` | `audit_only` |
+| `linux_compliance_rule_accounts_polyinstantiated_tmp_enabled` | `accounts_polyinstantiated_tmp` | `audit_only` |
+| `linux_compliance_rule_accounts_polyinstantiated_var_tmp_enabled` | `accounts_polyinstantiated_var_tmp` | `audit_only` |
+| `linux_compliance_rule_accounts_tmout_enabled` | `accounts_tmout` | `audit_only` |
 | `linux_compliance_rule_accounts_user_dot_group_ownership_enabled` | `accounts_user_dot_group_ownership` | `audit_only` |
 | `linux_compliance_rule_accounts_user_dot_user_ownership_enabled` | `accounts_user_dot_user_ownership` | `audit_only` |
 | `linux_compliance_rule_accounts_user_home_paths_only_enabled` | `accounts_user_home_paths_only` | `audit_only` |
@@ -1174,51 +1387,61 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_accounts_users_home_files_groupownership_enabled` | `accounts_users_home_files_groupownership` | `audit_only` |
 | `linux_compliance_rule_accounts_users_home_files_ownership_enabled` | `accounts_users_home_files_ownership` | `audit_only` |
 | `linux_compliance_rule_accounts_users_home_files_permissions_enabled` | `accounts_users_home_files_permissions` | `audit_only` |
+
+### `smartcard`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_configure_opensc_card_drivers_enabled` | `configure_opensc_card_drivers` | `audit_only` |
-| `linux_compliance_rule_disable_ctrlaltdel_burstaction_enabled` | `disable_ctrlaltdel_burstaction` | `audit_only` |
-| `linux_compliance_rule_disable_ctrlaltdel_reboot_enabled` | `disable_ctrlaltdel_reboot` | `audit_only` |
-| `linux_compliance_rule_enable_authselect_enabled` | `enable_authselect` | `audit_only` |
-| `linux_compliance_rule_ensure_pam_wheel_group_empty_enabled` | `ensure_pam_wheel_group_empty` | `audit_only` |
-| `linux_compliance_rule_ensure_root_access_controlled_enabled` | `ensure_root_access_controlled` | `audit_only` |
-| `linux_compliance_rule_ensure_root_password_configured_enabled` | `ensure_root_password_configured` | `audit_only` |
-| `linux_compliance_rule_ensure_shadow_group_empty_enabled` | `ensure_shadow_group_empty` | `audit_only` |
-| `linux_compliance_rule_ensure_sudo_group_restricted_enabled` | `ensure_sudo_group_restricted` | `audit_only` |
-| `linux_compliance_rule_gid_passwd_group_same_enabled` | `gid_passwd_group_same` | `audit_only` |
-| `linux_compliance_rule_group_unique_id_enabled` | `group_unique_id` | `audit_only` |
-| `linux_compliance_rule_group_unique_name_enabled` | `group_unique_name` | `audit_only` |
-| `linux_compliance_rule_groups_no_zero_gid_except_root_enabled` | `groups_no_zero_gid_except_root` | `audit_only` |
 | `linux_compliance_rule_install_smartcard_packages_enabled` | `install_smartcard_packages` | `audit_only` |
-| `linux_compliance_rule_logind_session_timeout_enabled` | `logind_session_timeout` | `audit_only` |
-| `linux_compliance_rule_no_direct_root_logins_enabled` | `no_direct_root_logins` | `audit_only` |
-| `linux_compliance_rule_no_dirs_unowned_by_root_enabled` | `no_dirs_unowned_by_root` | `audit_only` |
-| `linux_compliance_rule_no_duplicate_uids_enabled` | `no_duplicate_uids` | `audit_only` |
-| `linux_compliance_rule_no_empty_passwords_enabled` | `no_empty_passwords` | `audit_only` |
-| `linux_compliance_rule_no_empty_passwords_etc_shadow_enabled` | `no_empty_passwords_etc_shadow` | `audit_only` |
-| `linux_compliance_rule_no_empty_passwords_unix_enabled` | `no_empty_passwords_unix` | `audit_only` |
-| `linux_compliance_rule_no_forward_files_enabled` | `no_forward_files` | `audit_only` |
-| `linux_compliance_rule_no_invalid_shell_accounts_unlocked_enabled` | `no_invalid_shell_accounts_unlocked` | `audit_only` |
-| `linux_compliance_rule_no_netrc_files_enabled` | `no_netrc_files` | `audit_only` |
-| `linux_compliance_rule_no_nologin_in_shells_enabled` | `no_nologin_in_shells` | `audit_only` |
-| `linux_compliance_rule_no_password_auth_for_systemaccounts_enabled` | `no_password_auth_for_systemaccounts` | `audit_only` |
-| `linux_compliance_rule_no_shelllogin_for_systemaccounts_enabled` | `no_shelllogin_for_systemaccounts` | `audit_only` |
 | `linux_compliance_rule_package_opensc_installed_enabled` | `package_opensc_installed` | `audit_only` |
 | `linux_compliance_rule_package_pcsc_lite_installed_enabled` | `package_pcsc-lite_installed` | `audit_only` |
-| `linux_compliance_rule_prevent_direct_root_logins_enabled` | `prevent_direct_root_logins` | `audit_only` |
-| `linux_compliance_rule_require_emergency_target_auth_enabled` | `require_emergency_target_auth` | `audit_only` |
-| `linux_compliance_rule_require_singleuser_auth_enabled` | `require_singleuser_auth` | `audit_only` |
-| `linux_compliance_rule_restrict_serial_port_logins_enabled` | `restrict_serial_port_logins` | `audit_only` |
-| `linux_compliance_rule_root_path_all_dirs_enabled` | `root_path_all_dirs` | `audit_only` |
-| `linux_compliance_rule_root_path_no_dot_enabled` | `root_path_no_dot` | `audit_only` |
-| `linux_compliance_rule_securetty_root_login_console_only_enabled` | `securetty_root_login_console_only` | `audit_only` |
-| `linux_compliance_rule_service_debug_shell_disabled_enabled` | `service_debug-shell_disabled` | `audit_only` |
 | `linux_compliance_rule_service_pcscd_enabled_enabled` | `service_pcscd_enabled` | `audit_only` |
 | `linux_compliance_rule_smartcard_configure_ca_enabled` | `smartcard_configure_ca` | `audit_only` |
 | `linux_compliance_rule_smartcard_configure_cert_checking_enabled` | `smartcard_configure_cert_checking` | `audit_only` |
 | `linux_compliance_rule_smartcard_configure_crl_enabled` | `smartcard_configure_crl` | `audit_only` |
 | `linux_compliance_rule_smartcard_pam_enabled_enabled` | `smartcard_pam_enabled` | `audit_only` |
-| `linux_compliance_rule_use_pam_wheel_for_su_enabled` | `use_pam_wheel_for_su` | `audit_only` |
-| `linux_compliance_rule_use_pam_wheel_group_for_su_enabled` | `use_pam_wheel_group_for_su` | `audit_only` |
+
+### `console_access`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_disable_ctrlaltdel_burstaction_enabled` | `disable_ctrlaltdel_burstaction` | `audit_only` |
+| `linux_compliance_rule_disable_ctrlaltdel_reboot_enabled` | `disable_ctrlaltdel_reboot` | `audit_only` |
+| `linux_compliance_rule_logind_session_timeout_enabled` | `logind_session_timeout` | `audit_only` |
+| `linux_compliance_rule_require_emergency_target_auth_enabled` | `require_emergency_target_auth` | `audit_only` |
+| `linux_compliance_rule_require_singleuser_auth_enabled` | `require_singleuser_auth` | `audit_only` |
+| `linux_compliance_rule_service_debug_shell_disabled_enabled` | `service_debug-shell_disabled` | `audit_only` |
 | `linux_compliance_rule_vlock_installed_enabled` | `vlock_installed` | `audit_only` |
+
+### `user_accounts`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_account_disable_post_pw_expiration_enabled` | `account_disable_post_pw_expiration` | `audit_only` |
+| `linux_compliance_rule_account_temp_expire_date_enabled` | `account_temp_expire_date` | `audit_only` |
+| `linux_compliance_rule_account_unique_id_enabled` | `account_unique_id` | `audit_only` |
+| `linux_compliance_rule_account_unique_name_enabled` | `account_unique_name` | `audit_only` |
+| `linux_compliance_rule_accounts_authorized_local_users_enabled` | `accounts_authorized_local_users` | `audit_only` |
+| `linux_compliance_rule_accounts_password_all_shadowed_enabled` | `accounts_password_all_shadowed` | `audit_only` |
+| `linux_compliance_rule_accounts_password_all_shadowed_sha512_enabled` | `accounts_password_all_shadowed_sha512` | `audit_only` |
+| `linux_compliance_rule_accounts_password_last_change_is_in_past_enabled` | `accounts_password_last_change_is_in_past` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_unix_no_remember_enabled` | `accounts_password_pam_unix_no_remember` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_unix_rounds_password_auth_enabled` | `accounts_password_pam_unix_rounds_password_auth` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_unix_rounds_system_auth_enabled` | `accounts_password_pam_unix_rounds_system_auth` | `audit_only` |
+| `linux_compliance_rule_enable_authselect_enabled` | `enable_authselect` | `audit_only` |
+| `linux_compliance_rule_ensure_shadow_group_empty_enabled` | `ensure_shadow_group_empty` | `audit_only` |
+| `linux_compliance_rule_ensure_sudo_group_restricted_enabled` | `ensure_sudo_group_restricted` | `audit_only` |
+| `linux_compliance_rule_gid_passwd_group_same_enabled` | `gid_passwd_group_same` | `audit_only` |
+| `linux_compliance_rule_group_unique_id_enabled` | `group_unique_id` | `audit_only` |
+| `linux_compliance_rule_group_unique_name_enabled` | `group_unique_name` | `audit_only` |
+| `linux_compliance_rule_no_duplicate_uids_enabled` | `no_duplicate_uids` | `audit_only` |
+| `linux_compliance_rule_no_empty_passwords_enabled` | `no_empty_passwords` | `audit_only` |
+| `linux_compliance_rule_no_empty_passwords_etc_shadow_enabled` | `no_empty_passwords_etc_shadow` | `audit_only` |
+| `linux_compliance_rule_no_empty_passwords_unix_enabled` | `no_empty_passwords_unix` | `audit_only` |
+| `linux_compliance_rule_no_forward_files_enabled` | `no_forward_files` | `audit_only` |
+| `linux_compliance_rule_no_netrc_files_enabled` | `no_netrc_files` | `audit_only` |
+| `linux_compliance_rule_no_nologin_in_shells_enabled` | `no_nologin_in_shells` | `audit_only` |
 
 ### `sudo`
 
@@ -1247,23 +1470,17 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_sudoers_no_root_target_enabled` | `sudoers_no_root_target` | `audit_only` |
 | `linux_compliance_rule_sudoers_validate_passwd_enabled` | `sudoers_validate_passwd` | `audit_only` |
 
-### `mandatory_access_control`
+### `selinux`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_all_apparmor_profiles_enforced_enabled` | `all_apparmor_profiles_enforced` | `audit_only` |
-| `linux_compliance_rule_all_apparmor_profiles_in_enforce_complain_mode_enabled` | `all_apparmor_profiles_in_enforce_complain_mode` | `audit_only` |
-| `linux_compliance_rule_apparmor_configured_enabled` | `apparmor_configured` | `audit_only` |
 | `linux_compliance_rule_directory_groupowner_etc_selinux_enabled` | `directory_groupowner_etc_selinux` | `audit_only` |
 | `linux_compliance_rule_directory_owner_etc_selinux_enabled` | `directory_owner_etc_selinux` | `audit_only` |
 | `linux_compliance_rule_directory_permissions_etc_selinux_enabled` | `directory_permissions_etc_selinux` | `audit_only` |
 | `linux_compliance_rule_file_groupowner_etc_sestatus_conf_enabled` | `file_groupowner_etc_sestatus_conf` | `audit_only` |
 | `linux_compliance_rule_file_owner_etc_sestatus_conf_enabled` | `file_owner_etc_sestatus_conf` | `audit_only` |
 | `linux_compliance_rule_file_permissions_etc_sestatus_conf_enabled` | `file_permissions_etc_sestatus_conf` | `audit_only` |
-| `linux_compliance_rule_grub2_enable_apparmor_enabled` | `grub2_enable_apparmor` | `audit_only` |
 | `linux_compliance_rule_grub2_enable_selinux_enabled` | `grub2_enable_selinux` | `audit_only` |
-| `linux_compliance_rule_package_apparmor_utils_installed_enabled` | `package_apparmor-utils_installed` | `audit_only` |
-| `linux_compliance_rule_package_apparmor_installed_enabled` | `package_apparmor_installed` | `audit_only` |
 | `linux_compliance_rule_package_libselinux_installed_enabled` | `package_libselinux_installed` | `audit_only` |
 | `linux_compliance_rule_package_mcstrans_removed_enabled` | `package_mcstrans_removed` | `audit_only` |
 | `linux_compliance_rule_package_policycoreutils_python_utils_installed_enabled` | `package_policycoreutils-python-utils_installed` | `audit_only` |
@@ -1284,6 +1501,17 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_selinux_not_disabled_enabled` | `selinux_not_disabled` | `audit_only` |
 | `linux_compliance_rule_selinux_policytype_enabled` | `selinux_policytype` | `audit_only` |
 | `linux_compliance_rule_selinux_state_enabled` | `selinux_state` | `audit_only` |
+
+### `apparmor`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_all_apparmor_profiles_enforced_enabled` | `all_apparmor_profiles_enforced` | `audit_only` |
+| `linux_compliance_rule_all_apparmor_profiles_in_enforce_complain_mode_enabled` | `all_apparmor_profiles_in_enforce_complain_mode` | `audit_only` |
+| `linux_compliance_rule_apparmor_configured_enabled` | `apparmor_configured` | `audit_only` |
+| `linux_compliance_rule_grub2_enable_apparmor_enabled` | `grub2_enable_apparmor` | `audit_only` |
+| `linux_compliance_rule_package_apparmor_utils_installed_enabled` | `package_apparmor-utils_installed` | `audit_only` |
+| `linux_compliance_rule_package_apparmor_installed_enabled` | `package_apparmor_installed` | `audit_only` |
 
 ### `crypto_policy`
 
@@ -1307,11 +1535,17 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_package_crypto_policies_installed_enabled` | `package_crypto-policies_installed` | `audit_only` |
 | `linux_compliance_rule_sysctl_crypto_fips_enabled_enabled` | `sysctl_crypto_fips_enabled` | `audit_only` |
 
-### `mounts`
+### `autofs`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_encrypt_partitions_enabled` | `encrypt_partitions` | `audit_only` |
+| `linux_compliance_rule_package_autofs_removed_enabled` | `package_autofs_removed` | `audit_only` |
+| `linux_compliance_rule_service_autofs_disabled_enabled` | `service_autofs_disabled` | `audit_only` |
+
+### `mount_options`
+
+| Variable | Rule | Strategy |
+|---|---|---|
 | `linux_compliance_rule_mount_option_boot_efi_nosuid_enabled` | `mount_option_boot_efi_nosuid` | `audit_only` |
 | `linux_compliance_rule_mount_option_boot_nodev_enabled` | `mount_option_boot_nodev` | `audit_only` |
 | `linux_compliance_rule_mount_option_boot_noexec_enabled` | `mount_option_boot_noexec` | `audit_only` |
@@ -1346,7 +1580,12 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_mount_option_var_tmp_nodev_enabled` | `mount_option_var_tmp_nodev` | `audit_only` |
 | `linux_compliance_rule_mount_option_var_tmp_noexec_enabled` | `mount_option_var_tmp_noexec` | `audit_only` |
 | `linux_compliance_rule_mount_option_var_tmp_nosuid_enabled` | `mount_option_var_tmp_nosuid` | `audit_only` |
-| `linux_compliance_rule_package_autofs_removed_enabled` | `package_autofs_removed` | `audit_only` |
+
+### `partitioning`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_encrypt_partitions_enabled` | `encrypt_partitions` | `audit_only` |
 | `linux_compliance_rule_partition_for_dev_shm_enabled` | `partition_for_dev_shm` | `audit_only` |
 | `linux_compliance_rule_partition_for_home_enabled` | `partition_for_home` | `audit_only` |
 | `linux_compliance_rule_partition_for_opt_enabled` | `partition_for_opt` | `audit_only` |
@@ -1357,7 +1596,6 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_partition_for_var_log_enabled` | `partition_for_var_log` | `audit_only` |
 | `linux_compliance_rule_partition_for_var_log_audit_enabled` | `partition_for_var_log_audit` | `audit_only` |
 | `linux_compliance_rule_partition_for_var_tmp_enabled` | `partition_for_var_tmp` | `audit_only` |
-| `linux_compliance_rule_service_autofs_disabled_enabled` | `service_autofs_disabled` | `audit_only` |
 | `linux_compliance_rule_systemd_tmp_mount_enabled_enabled` | `systemd_tmp_mount_enabled` | `audit_only` |
 
 ### `bootloader`

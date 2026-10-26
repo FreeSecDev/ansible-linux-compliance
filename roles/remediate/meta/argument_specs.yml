@@ -32,20 +32,58 @@ argument_specs:
         elements: str
         choices:
           - accounts
+          - apparmor
           - auditd
+          - autofs
           - bootloader
+          - console_access
+          - cron
           - crypto_policy
           - desktop
+          - faillock
+          - fapolicyd
+          - filesystem_modules
           - firewall
+          - firewalld
+          - ipsec
+          - iptables
+          - ipv4_parameters
+          - ipv6_parameters
           - kernel_modules
+          - mail
           - mandatory_access_control
+          - mount_options
           - mounts
           - network
+          - network_services
+          - network_settings
+          - nfs
+          - nftables
+          - package_sources
+          - package_updates
           - packages
           - pam
+          - partitioning
+          - password_aging
+          - protocol_modules
+          - pwhistory
+          - pwquality
+          - root_access
+          - selinux
           - services
+          - smartcard
           - ssh
+          - sssd
           - sudo
+          - system_packages
+          - time_sync
+          - ufw
+          - umask
+          - usbguard
+          - user_accounts
+          - user_sessions
+          - wireless
+          - wireless_modules
       linux_compliance_remediate_profile:
         type: str
         default: "cis_level1_server"
@@ -58,281 +96,493 @@ argument_specs:
         type: bool
         default: true
         description:
-          - "Topic toggle of the file_permissions control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "Catalogued rules: 155, with a native remediation: 1."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the file_permissions family (ADR 0011); false switches its rules off."
+          - "Rules: 155, native: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_sysctl_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the sysctl control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "Catalogued rules: 31, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the sysctl family (ADR 0011); false switches its rules off."
+          - "Rules: 31, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_logging_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the logging control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "Catalogued rules: 41, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off journald, rsyslog, logrotate."
+          - "Rules: 41, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_journald_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the journald family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_logging_enabled."
+          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_rsyslog_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the rsyslog family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_logging_enabled."
+          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_logrotate_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the logrotate family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_logging_enabled."
+          - "Rules: 3, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_banners_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the banners control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "Catalogued rules: 18, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the banners family (ADR 0011); false switches its rules off."
+          - "Rules: 18, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_integrity_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the integrity control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "Catalogued rules: 21, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off aide, software_integrity,"
+          - "endpoint_security."
+          - "Rules: 21, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_aide_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the aide family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_integrity_enabled."
+          - "Rules: 13, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_software_integrity_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the software_integrity family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_integrity_enabled."
+          - "Rules: 5, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_endpoint_security_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the endpoint_security family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_integrity_enabled."
+          - "Rules: 3, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_kernel_build_config_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the kernel_build_config control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "Catalogued rules: 67, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the kernel_build_config family (ADR 0011); false switches its rules off."
+          - "Rules: 67, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_auditd_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the auditd control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 206, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the auditd family (ADR 0011); false switches its rules off."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 206, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_services_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the services control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 119, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off sssd, time_sync, mail, cron, nfs,"
+          - "usbguard, fapolicyd, network_services."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 119, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_sssd_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the sssd family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 12, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_time_sync_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the time_sync family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_mail_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the mail family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 8, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_cron_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the cron family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_nfs_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the nfs family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 6, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_usbguard_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the usbguard family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 5, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_fapolicyd_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the fapolicyd family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 3, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_network_services_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the network_services family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_services_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 59, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_packages_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the packages control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 24, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off package_updates, package_sources,"
+          - "system_packages."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 24, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_package_updates_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the package_updates family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_packages_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 6, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_package_sources_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the package_sources family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_packages_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 6, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_system_packages_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the system_packages family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_packages_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 12, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_desktop_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the desktop control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 21, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the desktop family (ADR 0011); false switches its rules off."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 21, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_network_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the network control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 66, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off ipv4_parameters, ipv6_parameters, ipsec,"
+          - "wireless, network_settings."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 66, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_ipv4_parameters_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the ipv4_parameters family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_network_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 26, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_ipv6_parameters_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the ipv6_parameters family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_network_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_ipsec_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the ipsec family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_network_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 11, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_wireless_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the wireless family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_network_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 3, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_network_settings_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the network_settings family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_network_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_kernel_modules_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the kernel_modules control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 21, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off filesystem_modules, protocol_modules,"
+          - "wireless_modules."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 21, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_filesystem_modules_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the filesystem_modules family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_kernel_modules_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 9, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_protocol_modules_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the protocol_modules family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_kernel_modules_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_wireless_modules_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the wireless_modules family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_kernel_modules_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 5, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_firewall_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the firewall control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 42, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off firewalld, nftables, iptables, ufw."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 42, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_firewalld_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the firewalld family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_firewall_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 10, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_nftables_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the nftables family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_firewall_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 11, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_iptables_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the iptables family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_firewall_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 12, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_ufw_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the ufw family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_firewall_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 9, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_ssh_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the ssh control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 63, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the ssh family (ADR 0011); false switches its rules off."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 63, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_pam_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the pam control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 55, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the pam family (ADR 0011); false switches its rules off."
+          - "Also the umbrella of pwquality, pwhistory, faillock, which it switches off too."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 55, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_pwquality_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the pwquality family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_pam_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_pwhistory_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the pwhistory family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_pam_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_faillock_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the faillock family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_pam_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 14, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_accounts_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the accounts control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 88, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off password_aging, root_access, umask,"
+          - "user_sessions, smartcard, console_access, user_accounts."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 88, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_password_aging_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the password_aging family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 9, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_root_access_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the root_access family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_umask_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the umask family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 6, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_user_sessions_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the user_sessions family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 14, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_smartcard_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the smartcard family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 9, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_console_access_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the console_access family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_user_accounts_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the user_accounts family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 24, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_sudo_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the sudo control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 22, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the sudo family (ADR 0011); false switches its rules off."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 22, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_mandatory_access_control_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the mandatory_access_control control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 33, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off selinux, apparmor."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 33, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_selinux_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the selinux family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_mandatory_access_control_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 27, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_apparmor_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the apparmor family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_mandatory_access_control_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 6, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_crypto_policy_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the crypto_policy control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 17, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the crypto_policy family (ADR 0011); false switches its rules off."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 17, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_mounts_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the mounts control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 48, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Umbrella toggle (ADR 0011); false switches off autofs, mount_options, partitioning."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 48, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_autofs_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the autofs family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_mounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 2, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_mount_options_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the mount_options family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_mounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 34, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_partitioning_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the partitioning family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_mounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 12, native: 0. Generated; see docs/remediation-variables.md."
       linux_compliance_bootloader_enabled:
         type: bool
         default: true
         description:
-          - "Topic toggle of the bootloader control family (ADR 0011)."
-          - "When false, every rule of the family whose rule toggle is not set is off."
-          - "Remediation cleans such a rule up when the state ledger records it as applied."
-          - "The audit excludes it and reports it as disabled, naming this variable."
-          - "The family is disruptive: remediation applies and cleans up its rules only"
-          - "when linux_compliance_remediate_allow_disruptive names it."
-          - "Catalogued rules: 45, with a native remediation: 0."
-          - "Rule toggles linux_compliance_rule_<id>_enabled are not declared here; see"
-          - "docs/remediation-variables.md."
-          - "Generated from roles/remediate/vars/rules.yml; see docs/remediation-variables.md."
+          - "Topic toggle of the bootloader family (ADR 0011); false switches its rules off."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 45, native: 0. Generated; see docs/remediation-variables.md."
