@@ -43,8 +43,8 @@
           or collected.
         quiet: true
       when: >-
-        linux_compliance_run_start_checked is not defined or 'linux_compliance_run_start_checked' in
-        (hostvars['localhost'] | list)
+        linux_compliance_run_start_checked is not defined or (groups['all'] + ['localhost']) | unique | map('extract',
+        hostvars) | map('list') | flatten | select('equalto', 'linux_compliance_run_start_checked') | list | length > 0
       run_once: true
       tags:
         - always

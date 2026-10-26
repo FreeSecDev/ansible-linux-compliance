@@ -53,7 +53,14 @@ def test_the_check_reads_only_magic_variables_and_literals() -> None:
     message = str(assertion["fail_msg"])
     for part in message.split("{{")[1:]:
         assert names_of(part.split("}}")[0]) <= {"groups", "hostvars"}
-    assert names_of(str(task["when"])) == {run_start.MARKER, "hostvars"}
+    when = " ".join(str(task["when"]).split())
+    assert names_of(when) == {run_start.MARKER, "hostvars", "groups"}
+    assert when == (
+        f"{run_start.MARKER} is not defined or {run_start.NAMES}"
+        f" | select('equalto', '{run_start.MARKER}') | list | length > 0"
+    )
+    assert "inventory_hostname" not in when
+    assert "hostvars['localhost']" not in when
 
 
 def test_the_check_refuses_every_internal_name_and_role_output_by_its_name() -> None:

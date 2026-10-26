@@ -903,7 +903,9 @@ adds an exemption, and no lint limit was raised.
   it is read, so it is exempt. A shipped playbook that imports another passes the play variable
   `linux_compliance_run_start_checked: true` to it, because its own earlier plays have set facts by then; a play
   variable is not in `hostvars`, so the marker skips the check only when it is neither an extra variable nor an
-  inventory variable, and the check refuses it in `hostvars` like any other name.
+  inventory variable, and the check refuses it in `hostvars` like any other name. Since the `--limit` item below the
+  condition is `<marker> is not defined or <every name in hostvars of the inventory hosts and localhost> |
+  select('equalto', '<marker>') | list | length > 0`, the same on every host; see the marker item below.
 - `linux_compliance_audited` (review of PR #41): the audit role accepted `-e linux_compliance_audited=...` as an
   override of its own output, and the `run_id` check of the evidence role's `collected.yml` relies on that fact. The
   run-start check now refuses it from `-e` and the inventory. In addition, `scan.yml` checks right after it publishes
@@ -952,6 +954,26 @@ adds an exemption, and no lint limit was raised.
     failed. `docs/evidence.md` already tells operators to add `localhost` to a limit.
   - The `run_once` tasks of the roles (the exceptions file read and validation, `reached.yml`, the stale and summary
     tasks) run on the first host of their play, which is a selected host whenever the play runs at all.
+- The marker under `run_once` (review of PR #44 at c847afa): the skip condition used to be `<marker> is not defined
+  or '<marker>' in (hostvars['localhost'] | list)`. On `all:localhost` with `run_once` it is evaluated on the first
+  selected host, so an inventory variable `linux_compliance_run_start_checked: true` of that host made the marker
+  defined while `localhost` lacked it, and the whole check was skipped, with or without `--limit`. The check is now
+  skipped only when the marker is defined and no inventory host and not `localhost` has a `hostvars` name equal to it.
+  The only source left is a play variable, which only the importing shipped playbook sets: an extra variable, an
+  inventory, `group_vars` or `host_vars` value or a fact of that name on any host puts the name in `hostvars`, the
+  check runs and it refuses the marker. The condition reads only `groups`, `hostvars` and literals and is the same on
+  every host. The alternative, dropping the skip, would make an imported `audit.yml` refuse the facts of the plays
+  before it; a value that the importing playbook passes cannot be told from an inventory value by its content, only
+  by where it is defined, which is what the condition checks. `make test-role-guards` runs shipped `remediate.yml`
+  and `audit.yml` with the marker as a `host_vars` and as a `group_vars` value of web01, the first selected host,
+  with and without `--limit web01`, and requires the refusal.
+- Residual, explicit operator options: `--skip-tags always` and `--start-at-task <a later task>` skip the run-start
+  check like any task. The check already carries the `always` tag, so `--tags` alone cannot skip it; no other tag
+  would survive `--skip-tags always`. With `--skip-tags always` the roles fail closed: every task that scans, changes
+  or compares is tagged `always`, and the dispatched guards of the `remediate` and `verify` roles (tagged
+  `linux_compliance_<role>_guard`) fail the host. `--start-at-task` also skips the internal-variable guards and does
+  not fail closed. Both are choices on the command line with the trust of `-e` in a custom playbook, and
+  `docs/playbooks.md` tells operators not to use them with the shipped playbooks.
 - Two shipped playbooks in one `ansible-playbook` invocation are refused by the run-start check of the second, because
   the first left role outputs and internal facts in `hostvars`. This fails closed and is intended: the shipped
   playbooks that need another one import it with the marker, and facts of a finished playbook must not seed the next.

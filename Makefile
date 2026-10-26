@@ -603,6 +603,21 @@ if grep -qE 'UNREACHABLE|unreachable=[1-9]' '$(ROLE_GUARDS_DIR)/run-start-limit-
 	printf 'error: the run-start check of %s connected to a host with --limit %s\n' '$(1)' '$(2)' >&2; exit 1; fi
 endef
 
+RUN_START_MARKER_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook --check \
+	-e linux_compliance_target_hosts=freesecdev_no_target_host -e @tests/playbooks/vars/run-start-templated-plan.yml
+
+define run_start_marker_refusal
+status=0; $(RUN_START_MARKER_PLAYBOOK) -i tests/playbooks/inventory/run-start-marker-$(2) $(4) playbooks/$(3).yml \
+		> '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log' 2>&1 || status=$$?; \
+	cat '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: marker case %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -qF '$(RUN_START_REFUSAL) (__linux_compliance_remediate_plan, linux_compliance_run_start_checked)' \
+		'$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log' || \
+		{ printf 'error: marker case %s was not refused by the first play\n' '$(1)' >&2; exit 1; }; \
+	test "$$(grep -c '^PLAY \[' '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log')" -eq 1 || \
+		{ printf 'error: marker case %s went on after the first play\n' '$(1)' >&2; exit 1; }
+endef
+
 define run_start_expect_success
 $(RUN_START_PLAYBOOK) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log' 2>&1 || \
 	{ cat '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log'; printf 'error: %s refused a plain run\n' '$(1)' >&2; exit 1; }
@@ -646,6 +661,14 @@ test-role-guards: require-uv collection-link
 	$(call run_start_limit_plain,remediate,web01)
 	$(call run_start_limit_plain,remediate,lost01)
 	$(call run_start_limit_plain,audit,localhost)
+	$(call run_start_marker_refusal,host-remediate,host,remediate,)
+	$(call run_start_marker_refusal,host-remediate-limit,host,remediate,--limit web01)
+	$(call run_start_marker_refusal,host-audit,host,audit,)
+	$(call run_start_marker_refusal,host-audit-limit,host,audit,--limit web01)
+	$(call run_start_marker_refusal,group-remediate,group,remediate,)
+	$(call run_start_marker_refusal,group-remediate-limit,group,remediate,--limit web01)
+	$(call run_start_marker_refusal,group-audit,group,audit,)
+	$(call run_start_marker_refusal,group-audit-limit,group,audit,--limit web01)
 	status=0; $(RUN_START_PLAYBOOK) playbooks/audit.yml playbooks/audit.yml > '$(ROLE_GUARDS_DIR)/run-start-twice.log' 2>&1 \
 		|| status=$$?; cat '$(ROLE_GUARDS_DIR)/run-start-twice.log'; \
 		test "$$status" -eq 2 || { printf 'error: two shipped playbooks in one invocation gave status %s\n' "$$status" >&2; exit 1; }; \

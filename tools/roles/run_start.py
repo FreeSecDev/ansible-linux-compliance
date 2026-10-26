@@ -20,8 +20,12 @@ A fact that a role sets with ``cacheable: true`` survives in a persistent fact c
 design and is checked by the role where it is read, so it is exempt. A shipped playbook that
 imports another one passes the play variable ``linux_compliance_run_start_checked`` to it,
 because the facts of its own earlier plays are in ``hostvars`` by then. A play variable is not
-in ``hostvars``, so the marker skips the check only when it is not an extra variable or an
-inventory variable, and the check refuses the marker in ``hostvars`` like any other name.
+in ``hostvars``, so the check is skipped only when the marker is defined and no inventory host
+and not ``localhost`` has it in ``hostvars``: then it can only be a variable of the play, set
+by the importing playbook. An extra variable, an inventory, ``group_vars`` or ``host_vars``
+value or a fact of that name on any host is in ``hostvars``, so the check runs and refuses the
+marker like any other name. The condition is the same on every host, so it does not depend on
+the host that ``run_once`` picks.
 """
 
 from __future__ import annotations
@@ -100,7 +104,9 @@ def play(outputs: Iterable[str], exempt: Iterable[str]) -> str:
         "inventory_hostname or group_names as an extra variable. Nothing was audited, remediated, "
         "compared or collected."
     )
-    condition = f"{MARKER} is not defined or '{MARKER}' in (hostvars['localhost'] | list)"
+    condition = (
+        f"{MARKER} is not defined or {NAMES} | select('equalto', '{MARKER}') | list | length > 0"
+    )
     lines = [
         "---",
         "- name: Refuse internal variables and role outputs that exist before the run starts",
