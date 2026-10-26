@@ -255,6 +255,33 @@ def test_the_filter_step_skips_the_smoke_test_without_an_scc_change(scratch: _Sc
         assert scratch.filter_step(event, base, head) == "true"
 
 
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "tools/reporting/checklist.py",
+        "tools/reporting/checklist_export.py",
+        "tools/reporting/checklist_formats.py",
+        "tools/reporting/stig_content.py",
+        "docs/adr/0020-stig-viewer-checklist-export.md",
+    ],
+)
+def test_a_change_to_the_checklist_exporter_runs_the_smoke_test(
+    scratch: _Scratch, relative: str
+) -> None:
+    base = scratch.git("rev-parse", "HEAD")
+    scratch.write(relative, "changed\n")
+    head = scratch.commit("checklist exporter change")
+    assert scratch.filter_step("pull_request", base) == "true"
+    assert scratch.filter_step("merge_group", base, head) == "true"
+
+
+def test_other_reporting_changes_do_not_run_the_smoke_test(scratch: _Scratch) -> None:
+    base = scratch.git("rev-parse", "HEAD")
+    scratch.write("tools/reporting/dashboard.py", "changed\n")
+    head = scratch.commit("dashboard change")
+    assert scratch.filter_step("merge_group", base, head) == "false"
+
+
 def test_a_pull_request_cannot_exempt_itself_by_editing_the_filter(scratch: _Scratch) -> None:
     base = scratch.git("rev-parse", "HEAD")
     scratch.write(FILTER_RELATIVE, FALSE_FILTER)

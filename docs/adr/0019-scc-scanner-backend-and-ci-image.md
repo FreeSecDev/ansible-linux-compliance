@@ -358,7 +358,9 @@ The expiry is enforced on the SCC path, not in every pull request:
 - **When it runs.** `scc-smoke` runs on every pull request and every merge group that touches an SCC path. It
   always runs for a push to `main`, on the daily schedule of `ci.yml` and on manual dispatch. The SCC
   paths are `extensions/ci/scc/`, `tools/scc/`, the hadolint fetcher, the `Makefile`, the workflows, the SCC tests,
-  this ADR, and the FREES-145 code (`scc*`, `process` and `backends` in `plugins/module_utils/compliance/`).
+  this ADR, the FREES-145 code (`scc*`, `process` and `backends` in `plugins/module_utils/compliance/`), and,
+  since FREES-147, the checklist exporter (`checklist*` and `stig_content` in `tools/reporting/`) and ADR 0020,
+  because `make scc-integration` exports the real scans.
 - **Path filter.** The `scc-changes` job decides with `tools/scc/needs-smoke.sh`.
   - For `pull_request`, it diffs the pull request's base SHA against the checked-out merge commit.
   - For `merge_group`, it diffs `github.event.merge_group.base_sha` against `head_sha`.
@@ -1045,6 +1047,8 @@ Decision 9 and decision 7 of the FREES-161 amendment are implemented by
   `--checklist-content`.
 - `oscap` results are refused with a message that names FREES-146 until decision 8 is built.
 - `make scc-integration` exports the real scans of both images and reads the checklists back inside the container.
+  The path filter runs it for changes to the exporter and to ADR 0020; that takes effect once the filter is merged
+  (FREES-152).
 
 ## References
 
