@@ -480,6 +480,12 @@ atomically with mode 0600 and escaped as untrusted data.
   - **No publishing anywhere near SCC.** Every tracked file that names an SCC identifier, and every file under
     `tools/scc/` or `extensions/ci/scc/`, must not contain a push, login, save or export command. This includes
     scripts, Makefile fragments and test modules under `tests/`, where FREES-145 will put its integration tests.
+  - **Multi-line commands count (FREES-155).** Before matching, the guard joins backslash-newline continuations
+    and collapses every run of whitespace, quotes, commas, brackets, parentheses, backticks and `*` into one
+    space. The container tool and the publishing verb then only have to be within 60 characters of that text.
+    A ruff-formatted argument list with one element per line, a continued shell command in a script, a code
+    fence or a workflow `run` block, and Markdown emphasis around each word are therefore caught. A hit names
+    the original file and line. The window keeps prose in which the two words are far apart from matching.
   - **Markdown is checked too (FREES-155).** A Markdown file that names an SCC identifier, or lies under
     `tools/scc/` or `extensions/ci/scc/`, must not contain a publishing command either. A document that genuinely
     has to show one needs a reviewed entry in `ACCEPTED_PUBLISHING_MARKDOWN` in the guard module: the path and the

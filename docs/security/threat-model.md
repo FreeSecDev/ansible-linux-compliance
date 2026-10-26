@@ -137,7 +137,9 @@ by the `scc-smoke` job and never published.
     contains a push, login, save or export command. This covers scripts, Makefile fragments, test modules under
     `tests/` and, since FREES-155, Markdown. A Markdown file that must show such a command needs a reviewed
     `ACCEPTED_PUBLISHING_MARKDOWN` entry of its path and the SHA-256 of its exact content, so any later change
-    fails again. Only the guard module is exempt;
+    fails again. Only the guard module is exempt. The check joins line continuations and collapses whitespace,
+    quotes, commas and brackets first, so a command split over several lines, for example a ruff-formatted
+    argument list or a continued shell command, is caught too (FREES-155);
   - the Makefile includes any file other than `$(SCC_PINS)` that is untracked, computed, or breaks the same rules;
   - something loads or runs a Markdown file as code (FREES-152, kept as defence in depth by FREES-155):
     - the Makefile or an included file uses `$(eval`, `$(file`, `MAKEFILES`, `GNUMAKEFLAGS`, `.INCLUDE_DIRS` or
