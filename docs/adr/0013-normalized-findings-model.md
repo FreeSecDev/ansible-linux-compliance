@@ -379,9 +379,11 @@ unchanged; these are the consumer rules.
   opts into counting `fail` of the waived result. `error` is taken from the raw result and counts in both modes.
 - **Fail closed.** The file is read and validated once on the controller (`run_once`, `any_errors_fatal`) before any host
   is scanned; an invalid file fails the play and nothing is applied. Every host of the play, across `serial` batches,
-  must resolve the same file, each host checks that the SHA-256 of the text it applied is the validated one, and the
-  `free` strategy is detected and refused. A scan start more
-  than five minutes after the controller time fails that host. Waivers are never applied to a run that is not
+  must resolve the same file, and each host checks that the SHA-256 of the text it applied is the validated one. Under
+  the `free` strategy, at least one host of every batch with two or more hosts is always refused, and any host that
+  finishes has applied exactly the validated file. The strategy itself cannot be detected from a task (FREES-143). A
+  batch with a single host is not refused under `free`; that is harmless, because no other host can race it. A scan
+  start more than five minutes after the controller time fails that host. Waivers are never applied to a run that is not
   `completed`, and check mode without a scan reports that they were not applied.
 - **Stale exceptions are aggregated once, after every host**, in a final play on the controller, because a `run_once`
   task inside the role would run once per `serial` batch (or on every host with the `free` strategy) and see only part of
