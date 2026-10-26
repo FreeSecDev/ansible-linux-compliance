@@ -90,34 +90,54 @@ def test_bundle_files_are_written_with_mode_0600_and_directories_with_0700() -> 
             assert arguments["mode"] == "0600"
 
 
-def test_the_playbook_collects_before_the_gates_and_names_the_missing_hosts() -> None:
+def imports(path: Path) -> list[str]:
+    return [
+        cast("str", task["ansible.builtin.import_tasks"])
+        for task in cast("list[dict[str, object]]", load(path))
+        if "ansible.builtin.import_tasks" in task
+    ]
+
+
+def test_the_playbook_enforces_the_gates_before_it_collects_and_names_the_missing_hosts() -> None:
     plays = cast("list[dict[str, object]]", load(REPOSITORY_ROOT / "playbooks" / "evidence.yml"))
-    assert plays[0]["ansible.builtin.import_playbook"] == "audit.yml"
-    assert plays[0]["vars"] == {"linux_compliance_audit_defer_gate": True}
-    roles = [cast("list[dict[str, object]]", play["tasks"])[0] for play in plays[1:]]
-    targets = [
-        cast(
-            "dict[str, str]",
-            task.get("ansible.builtin.include_role") or task.get("ansible.builtin.import_role"),
-        )
-        for task in roles
-    ]
-    assert [(target["name"], target.get("tasks_from")) for target in targets] == [
-        ("freesecdev.linux_compliance.evidence", None),
-        ("freesecdev.linux_compliance.evidence", "summary.yml"),
-        ("freesecdev.linux_compliance.audit", "gate.yml"),
-    ]
-    assert plays[2]["hosts"] == "localhost"
+    audit = cast("list[dict[str, object]]", plays[0]["tasks"])[0]
+    assert audit["ansible.builtin.import_role"] == {
+        "name": "freesecdev.linux_compliance.audit",
+        "tasks_from": "deferred.yml",
+    }
+    assert audit["become"] is True
+    assert "vars" not in plays[0]
+    collect = cast("list[dict[str, object]]", plays[2]["tasks"])[0]
+    enforce = cast("list[dict[str, object]]", collect["block"])[0]["ansible.builtin.include_role"]
+    gather = cast("list[dict[str, object]]", collect["always"])[0]["ansible.builtin.include_role"]
+    assert enforce == {"name": "freesecdev.linux_compliance.audit", "tasks_from": "enforce.yml"}
+    assert gather == {"name": "freesecdev.linux_compliance.evidence"}
+    summary = cast("list[dict[str, object]]", plays[3]["tasks"])[0]["ansible.builtin.import_role"]
+    assert summary == {"name": "freesecdev.linux_compliance.evidence", "tasks_from": "summary.yml"}
+    assert plays[3]["hosts"] == "localhost"
 
 
-def test_the_audit_role_defers_its_gates_only_on_request() -> None:
-    audit = REPOSITORY_ROOT / "roles" / "audit"
-    defaults = cast("dict[str, object]", load(audit / "defaults" / "main.yml"))
-    assert defaults["linux_compliance_audit_defer_gate"] is False
-    for entry in ("main.yml", "evaluate.yml"):
-        gates = [
-            task
-            for task in cast("list[dict[str, object]]", load(audit / "tasks" / entry))
-            if task.get("ansible.builtin.import_tasks") == "gate.yml"
-        ]
-        assert [task["when"] for task in gates] == ["not linux_compliance_audit_defer_gate"]
+def test_only_the_deferred_entry_points_skip_the_gates_and_no_variable_does() -> None:
+    tasks = REPOSITORY_ROOT / "roles" / "audit" / "tasks"
+    assert imports(tasks / "main.yml") == ["internal_variables.yml", "scan.yml", "gate.yml"]
+    assert imports(tasks / "evaluate.yml") == [
+        "internal_variables.yml",
+        "evaluation.yml",
+        "gate.yml",
+    ]
+    assert imports(tasks / "enforce.yml") == ["internal_variables.yml", "gate.yml"]
+    assert imports(tasks / "deferred.yml") == ["internal_variables.yml", "scan.yml", "defer.yml"]
+    assert imports(tasks / "evaluate_deferred.yml") == [
+        "internal_variables.yml",
+        "evaluation.yml",
+        "defer.yml",
+    ]
+    for path in sorted(tasks.glob("*.yml")):
+        for task in cast("list[dict[str, object]]", load(path)):
+            if task.get("ansible.builtin.import_tasks") == "gate.yml":
+                assert "when" not in task, path.name
+        assert "defer_gate" not in path.read_text(encoding="utf-8"), path.name
+    defaults = cast(
+        "dict[str, object]", load(REPOSITORY_ROOT / "roles" / "audit" / "defaults" / "main.yml")
+    )
+    assert not [name for name in defaults if "defer" in name]

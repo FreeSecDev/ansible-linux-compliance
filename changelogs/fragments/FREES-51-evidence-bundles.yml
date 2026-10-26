@@ -19,13 +19,16 @@ minor_changes:
     ``linux_compliance_evidence_become`` (default ``true``) and ``linux_compliance_evidence_stale_exceptions``
     (default ``{}``).
   - >-
-    Add the playbook ``freesecdev.linux_compliance.evidence``. It runs the audit playbook with the result gates
-    deferred, collects a bundle for every audited host (including hosts with failed rules and scans that did not
-    complete) with the stale result of the run, names every target host without a bundle, and then enforces the gates,
-    so the hosts that fail them still fail the play but are never missing from the evidence.
+    Add the playbook ``freesecdev.linux_compliance.evidence``. It audits with the result gates deferred, then enforces
+    them on each host with the evidence collection in an ``always`` section, so every audited host (including hosts
+    with failed rules and scans that did not complete) gets a bundle with the stale result of the run and the hosts
+    that a gate fails still fail the play. It then names every target host without a bundle.
   - >-
-    audit role - add ``linux_compliance_audit_defer_gate`` (default ``false``), which skips the result gates in the
-    ``main`` and ``evaluate.yml`` entry points, and the ``gate.yml`` entry point that enforces them later.
+    audit role - add the ``deferred.yml`` and ``evaluate_deferred.yml`` entry points, which run ``main`` and
+    ``evaluate.yml`` without the result gates and record ``linux_compliance_audited.gate`` as deferred and not enforced,
+    and the ``enforce.yml`` entry point, which enforces them later. ``linux_compliance_audited.gate`` gains
+    ``deferred`` and ``enforced``. No variable defers a gate. The gate decision is now recorded before the host fails,
+    also for a scan that did not complete.
   - >-
     evidence role - inspect every recorded file on the host with ``stat`` and ``follow: false`` before fetching it, and
     refuse symbolic links, special files and sizes other than the recorded one; add the ``summary.yml`` entry point,

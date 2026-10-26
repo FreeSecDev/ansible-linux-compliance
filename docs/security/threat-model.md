@@ -188,10 +188,21 @@ bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
 - **Failure:** the failure gate, or a scan that did not complete, fails a host in the audit play, Ansible drops it from
   every later play, and a collection play never sees it. A report over the bundles then covers only compliant hosts
   and its fleet figures are inflated, with nothing saying that hosts are missing (PR #31 review, B2).
-- **Mitigation (FREES-51):** `playbooks/evidence.yml` imports the audit playbook with
-  `linux_compliance_audit_defer_gate: true`, collects every audited host (failed rules and incomplete scans included),
-  names every target host without a bundle with the reason (no audit result, no evidence written, collection failed),
-  and only then runs the audit role's `gate.yml`, which fails the same hosts as before. `tests/playbooks/evidence-gate.yml`
-  shows a gated host and an incomplete scan collected, an unreachable and an empty host named, and the play failing.
-- **Residual:** unreachable and limited-out hosts cannot be collected; the run output names them, the report does not.
-  A playbook that sets `linux_compliance_audit_defer_gate` without running `gate.yml` would never enforce the gates.
+- **Mitigation (FREES-51):** `playbooks/evidence.yml` audits with the audit role's `deferred.yml` entry point, then
+  enforces the gates with `enforce.yml` in a `block` whose `always` section collects the evidence, so every audited
+  host is collected (failed rules and incomplete scans included) and the gates still fail the same hosts and the
+  play. It names every target host without a bundle with the reason (no audit result, no evidence written, collection
+  failed). The deferral is chosen only by the entry point: no variable defers a gate (the round 2 review found that a
+  public `linux_compliance_audit_defer_gate` failed open, B3, and it was removed). The bundle records the gate
+  (`deferred`, `enforced` and the decision); the evidence role refuses a deferred gate that was not enforced and the
+  report refuses a manifest without an enforced gate. `tests/playbooks/evidence-gate.yml` shows a gated host and an
+  incomplete scan collected, an unreachable and an empty host named, and the play failing;
+  `tests/playbooks/audit-gate-routes.yml` shows that the removed variable and a forged internal one, set with `-e`,
+  `group_vars`, `host_vars`, an include parameter or a role import parameter, do not defer the gate.
+- **Residual:** unreachable and limited-out hosts cannot be collected; the run output names them, the report does not
+  (a follow-up issue tracks a run-level collection record for the report). A custom playbook that deliberately calls `deferred.yml` or `evaluate_deferred.yml` and never runs `enforce.yml`,
+  or that writes `linux_compliance_audited.gate` with its own `set_fact`, can still end without the gates. That is a
+  deliberate act by whoever writes the playbook, the same class as the documented residual of the `verify` role's
+  baseline marker; no variable from the inventory, `group_vars`, `host_vars`, `-e`, a role parameter or an include
+  parameter can defer a gate. Such a run never produces a bundle: the evidence role refuses an audit result whose
+  gate is recorded as deferred and not enforced, and the report refuses a manifest without an enforced gate.

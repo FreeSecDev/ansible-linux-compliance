@@ -112,5 +112,6 @@
     linux_compliance_audited: >-
       {{ linux_compliance_audited | ansible.builtin.combine({
            'run_status': audit_exceptions_scan_run.status,
+           'gate': evidence_fixture_gate,
            'evidence_written': true,
            'evidence': {'directory': evidence_fixture_dir, 'skipped': [], 'files': evidence_fixture_files}}) }}

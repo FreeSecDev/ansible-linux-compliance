@@ -15,6 +15,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.filter import (
 )
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     evidence,
+    evidence_check,
     model,
 )
 
@@ -71,6 +72,17 @@ def audited() -> dict[str, object]:
             ],
         },
         "evidence_written": True,
+        "gate": {
+            "after_waivers": False,
+            "basis": "raw",
+            "counted": True,
+            "deferred": False,
+            "enabled": True,
+            "enforced": True,
+            "error": 0,
+            "fail": 1,
+            "waived": 0,
+        },
         "exceptions": {
             "applied": False,
             "file": None,
@@ -139,7 +151,7 @@ def test_the_filters_plan_build_and_check_a_bundle() -> None:
         "raw/scan-run.json",
     ]
     contents["bundle.json"] = cast("str", result["manifest"]).encode("utf-8")
-    assert evidence.check_bundle(contents).evaluation is None
+    assert evidence_check.check_bundle(contents).evaluation is None
 
 
 def test_the_document_filter_refuses_an_incomplete_collected_record() -> None:

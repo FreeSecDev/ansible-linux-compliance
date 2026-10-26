@@ -26,31 +26,39 @@ ansible-playbook -i inventory.yml freesecdev.linux_compliance.evidence \
   -e linux_compliance_evidence_output_dir=/srv/compliance/evidence
 ```
 
-`playbooks/evidence.yml` has four stages, in this order:
+`playbooks/evidence.yml` has four plays, in this order:
 
-1. It imports `playbooks/audit.yml` (`discover`, `audit`, then the stale-exceptions play on the controller) with
-   `linux_compliance_audit_defer_gate: true`. The audit role then skips its result gates: neither a scan that did not
-   complete nor `linux_compliance_audit_fail_on_noncompliant` fails a host yet, so no audited host is dropped before
-   its evidence is collected.
-2. It runs the `evidence` role on every target host, passing it the stale result of the run
-   (`hostvars['localhost'].linux_compliance_audit_stale_exceptions`). Hosts with failed rules and hosts whose scan did
-   not complete (`failed`, `timed_out`) are collected like any other host, because the audit wrote their evidence.
-3. It runs the role's `summary.yml` entry point once on the controller over every target host. It publishes
+1. `discover` and the audit role's `deferred.yml` entry point on the target hosts. `deferred.yml` runs every task of
+   the main entry point except the result gates and records `linux_compliance_audited.gate` as
+   `{deferred: true, enforced: false}`, so neither a scan that did not complete nor
+   `linux_compliance_audit_fail_on_noncompliant` drops a host before its evidence is collected.
+2. The stale-exceptions aggregation on the controller, after every host and every `serial` batch.
+3. On every target host, a `block` that runs the audit role's `enforce.yml` entry point, with an `always` section that
+   runs the `evidence` role. `enforce.yml` records the gate decision (`deferred: true`, `enforced: true`) and then
+   fails the host exactly as the main entry point would: for a scan that did not complete, and with
+   `linux_compliance_audit_fail_on_noncompliant` for failed or errored rules. The `always` section collects the
+   evidence whatever the gate decided, with the stale result of the run, and the host stays failed.
+4. The evidence role's `summary.yml` entry point once on the controller over every target host. It publishes
    `linux_compliance_evidence_collection` and prints a `WARNING` that names every target host without a bundle, split
    into hosts without an audit result (unreachable, limited out, failed before the scan), hosts without evidence
    (check mode or no scan) and hosts whose collection failed.
-4. It enforces the deferred gates with the audit role's `gate.yml` entry point on the target hosts. A scan that did not
-   complete, and with `linux_compliance_audit_fail_on_noncompliant` a failed or errored rule, still fails the host
-   and the playbook, exactly as `playbooks/audit.yml` would, but only after the bundle exists.
 
 Why the gates are deferred rather than collected in an `always` section of the audit play: the stale result is
 computed after every host and every `serial` batch of the audit play, so the bundles can only include it when they are
-collected in a later play, and a later play only sees the hosts that did not fail. Deferring the gates keeps both: every
-audited host reaches the collection play with the stale result available, and the gates run last.
+collected in a later play, and a later play only sees the hosts that did not fail. Deferring the gates to the
+collection play keeps both.
 
-Never set `linux_compliance_audit_defer_gate` in a playbook that does not run `gate.yml` afterwards: the gates would
-then not run at all. Hosts that are unreachable or limited out cannot be collected; the summary names them, so a report
-over the collected bundles can be read with the missing hosts in view.
+The deferral is chosen only by the entry point. No variable defers or skips a gate: the main and `evaluate.yml` entry
+points always enforce it, whatever the inventory, `group_vars`, `host_vars`, `-e`, role or include parameters say.
+A custom playbook that deliberately calls `deferred.yml` or `evaluate_deferred.yml` and never runs `enforce.yml`,
+or that writes `linux_compliance_audited.gate` with its own `set_fact`, can still end without the gates. That is a
+deliberate act by whoever writes the playbook, the same class as the documented residual of the `verify` role's
+baseline marker; no variable from the inventory, `group_vars`, `host_vars`, `-e`, a role parameter or an include
+parameter can defer a gate. Such a run never produces a bundle: the evidence role refuses an audit result whose
+gate is recorded as deferred and not enforced, and the report refuses a manifest without an enforced gate.
+
+Hosts that are unreachable or limited out cannot be collected; the summary names them, so a report over the collected
+bundles can be read with the missing hosts in view.
 
 The role can also run on its own, after the `audit` role, in any play whose hosts have the fact
 `linux_compliance_audited`.
@@ -66,7 +74,8 @@ changes it.
 3. Skip the host with a message when the audit wrote no evidence (`evidence_written: false`: check mode, or no scan).
    With `--check` nothing is fetched or written; the role prints the bundle it would write (no test covers check
    mode yet).
-4. Plan the bundle with `freesecdev.linux_compliance.evidence_plan` (below).
+4. Plan the bundle with `freesecdev.linux_compliance.evidence_plan` (below). The plan requires the gate record of
+   the audit and refuses one that is deferred and not enforced yet.
 5. Refuse an existing bundle (a bundle is never overwritten) and an existing output or host directory that is a
    symbolic link, not a directory or not mode `0700`. Nothing is repaired.
 6. Create the output directory, the host directory and the bundle directory with mode `0700`, check that all three are
@@ -163,6 +172,7 @@ file listed twice and a run without `scan-run.json` fail too.
 | `run` | `run_id`, `status`, `started_at`, `finished_at` (reported by the host), `benchmark_id`, `profile_id` |
 | `scanner` | Scanner `name` and `version` from the scan run |
 | `content` | Datastream `source` (with the tailoring label of ADR 0013), `content_version` and `content_sha256` |
+| `gate` | `deferred` and `enforced` (always `true`: a bundle is written only after the gate ran) and the `decision` the gate enforced: `enabled`, `after_waivers`, `basis` (`raw` or `waived`), `counted` (false for a scan that did not complete) and the `fail`, `error` and `waived` counts it used (null when nothing was counted) |
 | `exceptions` | `status` (`not_requested`, `applied`, `not_run`, `not_completed`), `source_sha256` of the exceptions file (null without one), and the bundle paths `evaluation`, `file` and `stale` (null unless present) |
 | `files` | Every file except `bundle.json` and `SHA256SUMS`, sorted by path: `path`, `kind`, `sha256`, `size`, `source` |
 | `excluded` | Every recorded host file that was not collected: `source`, `audit_kind`, `sha256` and `size` as recorded, `reason` (`not_allow_listed`, `arf_not_requested`) |
@@ -252,6 +262,7 @@ python -m tools.reporting --scope fleet --output build/report/report.json --html
    - the files are exactly the listed ones plus `bundle.json` and `SHA256SUMS`, so an unlisted file is an error;
    - every size and SHA-256 matches, and `SHA256SUMS` is exactly the file the manifest implies;
    - the scan run matches the run, host, scanner and content of the manifest;
+   - the manifest records an enforced gate; a gate that was deferred and never enforced refuses the bundle;
    - with exceptions applied, the exceptions file has the recorded SHA-256, the evaluation verifies against it, names
      the bundle's inventory host and was made from the bundle's raw scan run.
 3. The bundle then contributes **one** compliance input: its evaluation when exceptions were applied (which is also an
@@ -298,8 +309,8 @@ label. Follow-up: FREES-140.
 | `linux_compliance_evidence_stale_exceptions` | `dict` | `{}` | The stale result to include when exceptions were applied; `playbooks/evidence.yml` passes it. |
 | `linux_compliance_evidence_summary_hosts` | `list` | required | `summary.yml` entry point only: the target hosts to account for. |
 
-The audit role's `linux_compliance_audit_defer_gate` (default `false`) skips its result gates; `playbooks/evidence.yml`
-sets it and runs the audit role's `gate.yml` entry point after the collection ([audit guide](audit.md)).
+The audit role's `deferred.yml` and `enforce.yml` entry points defer and enforce the result gates for
+`playbooks/evidence.yml` ([audit guide](audit.md#entry-points)); there is no variable for it.
 
 ## Tests
 
@@ -324,11 +335,17 @@ sets it and runs the audit role's `gate.yml` entry point after the collection ([
   `--exceptions-file` and checks the waived counts and the exceptions section; checks that the same bundles without
   `--exceptions-file`, or with another file, are refused with exit status 2; and that a bundle with one changed byte is
   an input error.
-- `tests/playbooks/evidence-gate.yml` (also in `make test-evidence`) runs the stages of `playbooks/evidence.yml` on four
-  inventory hosts with `linux_compliance_audit_fail_on_noncompliant: true`: a host with failed rules and a host whose
-  scan did not complete both get a bundle, a host without evidence and an unreachable host are named by the summary,
-  the gates then fail the two collected hosts, the playbook exits non-zero, and the report over the two bundles shows
+- `tests/playbooks/evidence-gate.yml` (also in `make test-evidence`) runs the plays of `playbooks/evidence.yml` on
+  four inventory hosts with `linux_compliance_audit_fail_on_noncompliant: true`, with `evaluate_deferred.yml` in place
+  of a real scan: a host with failed rules and a host whose scan did not complete are both failed by `enforce.yml`
+  and both get a bundle whose manifest records the enforced, deferred gate; a host without evidence and an
+  unreachable host are named by the summary; the playbook exits non-zero; and the report over the two bundles shows
   both hosts, one of them with run status `failed`.
+- `tests/playbooks/audit-gate-routes.yml` (also in `make test-evidence`) runs `evaluate.yml` with the gate on for a
+  host with failed rules and a scan that did not complete, once without and once each with the removed
+  `linux_compliance_audit_defer_gate` and a forged `__linux_compliance_audit_gate_deferred` set through `-e`,
+  `group_vars`, `host_vars`, include parameters and the parameters of a static role import. Every run must exit with
+  status 2 and fail both hosts.
 
 Not covered yet: a Molecule scenario that collects the bundle of a real scan from a managed host over SSH with
 `become` (FREES-60).

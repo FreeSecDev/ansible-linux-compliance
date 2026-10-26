@@ -11,6 +11,7 @@ import pytest
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     evidence,
+    evidence_check,
     exceptions,
     model,
 )
@@ -157,6 +158,17 @@ def audited(
     return {
         "evidence": {"directory": DIRECTORY, "files": listed, "skipped": []},
         "evidence_written": True,
+        "gate": {
+            "after_waivers": False,
+            "basis": "raw",
+            "counted": True,
+            "deferred": False,
+            "enabled": True,
+            "enforced": True,
+            "error": 0,
+            "fail": 1,
+            "waived": 0,
+        },
         "exceptions": waivers,
         "run_id": RUN_ID,
         "run_status": "completed",
@@ -267,7 +279,7 @@ def reseal(
 def test_the_bundle_vocabulary_matches_the_audit_module() -> None:
     names = set(evidence.HOST_SOURCES)
     assert names == {"scan-run.json", "tailoring.xml", "scan/results.xml", "scan/results-arf.xml"}
-    assert evidence.bundle_directory_paths() == {"raw", "raw/scan", "exceptions"}
+    assert evidence_check.bundle_directory_paths() == {"raw", "raw/scan", "exceptions"}
     assert set(evidence.BUNDLE_PATHS) == {
         "raw/scan-run.json",
         "raw/tailoring.xml",
@@ -489,7 +501,7 @@ def test_a_bundle_is_built_and_verifies() -> None:
         sums.splitlines()[0]
         == f"{sha(contents['exceptions/evaluation.json'])}  exceptions/evaluation.json"
     )
-    verified = evidence.check_bundle(contents)
+    verified = evidence_check.check_bundle(contents)
     assert verified.evaluation is not None
     assert verified.exceptions_text == exceptions_text()
     assert verified.run == scan_run()
@@ -511,10 +523,10 @@ def test_a_bundle_without_exceptions_or_stale_result_verifies() -> None:
         "stale": None,
         "status": "not_requested",
     }
-    assert evidence.check_bundle(contents).evaluation is None
+    assert evidence_check.check_bundle(contents).evaluation is None
     applied = bundle(stale=None)
     assert cast("dict[str, object]", manifest_of(applied)["exceptions"])["stale"] is None
-    assert evidence.check_bundle(applied).evaluation is not None
+    assert evidence_check.check_bundle(applied).evaluation is not None
 
 
 def test_a_bundle_records_the_incomplete_stale_coverage() -> None:
@@ -787,7 +799,7 @@ def test_a_bundle_that_changed_after_it_was_written_is_refused(
     contents = bundle()
     tamper(contents)
     with pytest.raises(evidence.EvidenceError, match=message):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
 
 
 def test_a_consistent_checksums_file_that_the_manifest_does_not_imply_is_refused() -> None:
@@ -802,7 +814,7 @@ def test_a_consistent_checksums_file_that_the_manifest_does_not_imply_is_refused
     }
     contents[evidence.MANIFEST_NAME] = evidence.canonical_json(document).encode("utf-8")
     with pytest.raises(evidence.EvidenceError, match="SHA256SUMS does not match"):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
 
 
 def edited(path: str, data: bytes) -> Callable[[Contents], None]:
@@ -828,7 +840,12 @@ def edited(path: str, data: bytes) -> Callable[[Contents], None]:
             "is not the exceptions file the manifest names",
         ),
         (edited("exceptions/evaluation.json", b"{}"), None, "evaluation.json does not verify"),
-        (edited("exceptions/stale.json", b"{}"), None, "missing keys"),
+        (
+            edited("exceptions/stale.json", b"{}"),
+            None,
+            "must have exactly the keys kind, result, schema_version",
+        ),
+        (edited("exceptions/stale.json", b"[]"), None, "stale.json must be a mapping"),
     ],
 )
 def test_a_resealed_bundle_with_inconsistent_content_is_refused(
@@ -841,7 +858,7 @@ def test_a_resealed_bundle_with_inconsistent_content_is_refused(
         edit(contents)
     reseal(contents, manifest_change)
     with pytest.raises(evidence.EvidenceError, match=message):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
 
 
 def test_an_exceptions_file_that_is_not_utf8_is_refused() -> None:
@@ -850,7 +867,7 @@ def test_an_exceptions_file_that_is_not_utf8_is_refused() -> None:
     contents["exceptions/exceptions.yml"] = raw
     reseal(contents, set_key("exceptions", "source_sha256", value=sha(raw)))
     with pytest.raises(evidence.EvidenceError, match="is not valid UTF-8"):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
 
 
 def test_an_evaluation_for_another_host_or_run_is_refused() -> None:
@@ -861,13 +878,13 @@ def test_an_evaluation_for_another_host_or_run_is_refused() -> None:
     contents["exceptions/exceptions.yml"] = text
     reseal(contents, set_key("exceptions", "source_sha256", value=sha(text)))
     with pytest.raises(evidence.EvidenceError, match="was made for another inventory host"):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
     contents = bundle()
     other_run = evaluate(scan_run(outcome=model.Outcome.ERROR), exceptions_text())
     contents["exceptions/evaluation.json"] = evidence.canonical_json(other_run).encode("utf-8")
     reseal(contents)
     with pytest.raises(evidence.EvidenceError, match=r"was not made from raw/scan-run\.json"):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
 
 
 def stale_edit(**changes: object) -> Callable[[Contents], None]:
@@ -890,6 +907,7 @@ def stale_edit(**changes: object) -> Callable[[Contents], None]:
         ({"schema_version": "9"}, "unsupported kind or schema_version"),
         ({"source_sha256": "c" * 64}, "computed from another exceptions file"),
         ({"evaluated_hosts": ["db01"]}, "does not include the evaluation of web01"),
+        ({"evaluated_hosts": "web01"}, "evaluated_hosts must be a list"),
     ],
 )
 def test_a_stale_result_that_does_not_belong_to_the_bundle_is_refused(
@@ -899,7 +917,7 @@ def test_a_stale_result_that_does_not_belong_to_the_bundle_is_refused(
     stale_edit(**changes)(contents)
     reseal(contents)
     with pytest.raises(evidence.EvidenceError, match=message):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
 
 
 def test_the_machine_id_of_the_manifest_must_match_the_scan_run() -> None:
@@ -911,10 +929,10 @@ def test_the_machine_id_of_the_manifest_must_match_the_scan_run() -> None:
     for path, text in cast("dict[str, str]", result["documents"]).items():
         contents[path] = text.encode("utf-8")
     contents[evidence.MANIFEST_NAME] = cast("str", result["manifest"]).encode("utf-8")
-    assert evidence.check_bundle(copy.deepcopy(contents)).run.host.machine_id == "c" * 32
+    assert evidence_check.check_bundle(copy.deepcopy(contents)).run.host.machine_id == "c" * 32
     reseal(contents, set_key("host", "machine_id", value="d" * 32))
     with pytest.raises(evidence.EvidenceError, match="machine ID of the manifest differs"):
-        evidence.check_bundle(contents)
+        evidence_check.check_bundle(contents)
 
 
 def host_stat(data: bytes, **changes: object) -> dict[str, object]:
@@ -957,3 +975,64 @@ def test_a_host_file_that_was_not_inspected_is_refused() -> None:
     del observed["raw/tailoring.xml"]
     with pytest.raises(evidence.EvidenceError, match="was not inspected on the host"):
         evidence.check_host_files(audited(), HOST, DISABLED, observed)
+
+
+def gate_of(**changes: object) -> dict[str, object]:
+    gate = dict(cast("dict[str, object]", audited()["gate"]))
+    gate.update(changes)
+    return gate
+
+
+def test_a_deferred_gate_that_was_enforced_is_recorded_in_the_manifest() -> None:
+    fact = audited()
+    fact["gate"] = gate_of(deferred=True)
+    document = manifest_of(bundle(fact))
+    assert document["gate"] == {
+        "decision": {
+            "after_waivers": False,
+            "basis": "raw",
+            "counted": True,
+            "enabled": True,
+            "error": 0,
+            "fail": 1,
+            "waived": 0,
+        },
+        "deferred": True,
+        "enforced": True,
+    }
+    incomplete = audited()
+    incomplete["gate"] = gate_of(counted=False, fail=None, error=None, waived=None)
+    assert evidence_check.check_bundle(bundle(incomplete)).manifest.gate.counted is False
+
+
+GATE_CASES: list[tuple[object, str]] = [
+    (None, "has no gate record"),
+    ("gate", "gate must be a mapping"),
+    ({"deferred": True, "enforced": False}, "deferred and not enforced yet"),
+    ({"deferred": True}, "missing keys"),
+    (gate_of(basis="other"), "gate basis 'other' is unknown"),
+    (gate_of(enabled="yes"), "gate enabled must be a boolean"),
+    (gate_of(fail=-1), "gate fail must be a non-negative integer"),
+    (gate_of(counted=False), "must be null when the gate counted nothing"),
+]
+
+
+@pytest.mark.parametrize(("gate", "message"), GATE_CASES)
+def test_a_bundle_needs_an_enforced_gate_record(gate: object, message: str) -> None:
+    fact = audited()
+    fact["gate"] = gate
+    with pytest.raises(evidence.EvidenceError, match=message):
+        evidence.plan_bundle(fact, HOST, DISABLED)
+
+
+def test_a_manifest_whose_gate_was_never_enforced_is_refused() -> None:
+    for change, message in (
+        (set_key("gate", "decision", value=None), "deferred and never enforced"),
+        (set_key("gate", "enforced", value=False), "deferred and never enforced"),
+        (set_key("gate", "deferred", value="yes"), "gate deferred must be a boolean"),
+        (delete_key("gate"), "missing keys: gate"),
+    ):
+        document = manifest_of(bundle())
+        change(document)
+        with pytest.raises(evidence.EvidenceError, match=message):
+            evidence.parse_manifest(evidence.canonical_json(document).encode("utf-8"))

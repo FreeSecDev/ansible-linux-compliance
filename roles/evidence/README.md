@@ -63,10 +63,10 @@ and are never written to a bundle.
 
 ## Running
 
-Use `playbooks/evidence.yml`. It runs the audit playbook with the result gates deferred
-(`linux_compliance_audit_defer_gate`), collects every audited host, including hosts with failed rules and scans that
-did not complete, runs the `summary.yml` entry point to name every target host without a bundle, and then enforces the
-gates with the audit role's `gate.yml`. The `summary.yml` entry point takes `linux_compliance_evidence_summary_hosts`
+Use `playbooks/evidence.yml`. It audits with the audit role's `deferred.yml` entry point, then, in one play per
+host, enforces the gates with `enforce.yml` and collects the evidence in an `always` section, so a host that a gate
+fails is collected and still fails the play. It then runs the `summary.yml` entry point to name every target host
+without a bundle. The role refuses an audit result whose gate is recorded as deferred and not enforced. The `summary.yml` entry point takes `linux_compliance_evidence_summary_hosts`
 and publishes `linux_compliance_evidence_collection` (`target_hosts`, `collected_hosts`, `missing_hosts`,
 `no_audit_result`, `no_evidence_written`, `collection_failed`, `bundles`). Select hosts with
 `-e linux_compliance_target_hosts=<group or host>`. Pass booleans as JSON, for example

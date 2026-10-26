@@ -1,19 +1,46 @@
 ---
-- name: Audit hosts with the result gates deferred until their evidence is collected
-  ansible.builtin.import_playbook: audit.yml
-  vars:
-    linux_compliance_audit_defer_gate: true
+- name: Audit hosts against a compliance profile, with the result gates deferred until the evidence is collected
+  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
+  gather_facts: true
+  roles:
+    - role: freesecdev.linux_compliance.discover
+  tasks:
+    - name: Audit the host with the deferred.yml entry point of the audit role
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: deferred.yml
+      become: true
 
-- name: Collect the evidence of every audited host into bundles on the controller
+- name: Report exceptions that no audited host needed
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Aggregate the exceptions evaluations of every audited host once
+      ansible.builtin.import_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: stale.yml
+      vars:
+        linux_compliance_audit_stale_hosts: >-
+          {{ query('ansible.builtin.inventory_hostnames',
+                   linux_compliance_target_hosts | default('linux_compliance')) }}
+
+- name: Enforce the result gates and collect the evidence of every audited host, also when a gate fails it
   hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
   gather_facts: false
   tasks:
-    - name: Collect the evidence bundle of this host
-      ansible.builtin.include_role:
-        name: freesecdev.linux_compliance.evidence
-      vars:
-        linux_compliance_evidence_stale_exceptions: >-
-          {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}
+    - name: Enforce the gates, then collect the evidence bundle whatever the gates decided
+      block:
+        - name: Enforce the deferred result gates of this host
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: enforce.yml
+      always:
+        - name: Collect the evidence bundle of this host
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.evidence
+          vars:
+            linux_compliance_evidence_stale_exceptions: >-
+              {{ hostvars['localhost']['linux_compliance_audit_stale_exceptions'] | default({}) }}
 
 - name: Name the target hosts that have no evidence bundle
   hosts: localhost
@@ -27,12 +54,3 @@
         linux_compliance_evidence_summary_hosts: >-
           {{ query('ansible.builtin.inventory_hostnames',
                    linux_compliance_target_hosts | default('linux_compliance')) }}
-
-- name: Enforce the audit result gates after the evidence was collected
-  hosts: "{{ linux_compliance_target_hosts | default('linux_compliance') }}"
-  gather_facts: false
-  tasks:
-    - name: Fail the hosts whose scan did not complete or that the failure gate counts
-      ansible.builtin.include_role:
-        name: freesecdev.linux_compliance.audit
-        tasks_from: gate.yml

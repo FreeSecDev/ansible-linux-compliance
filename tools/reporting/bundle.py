@@ -5,7 +5,7 @@ following any symbolic link: every component of the path is opened with
 ``O_NOFOLLOW``, every entry is inspected with ``lstat`` semantics, only the
 directories and files that the bundle format defines are accepted, and each file is
 read through a descriptor with a size bound. The bytes are then verified with
-:func:`evidence.check_bundle`: the manifest, every SHA-256 and size, ``SHA256SUMS``,
+:func:`evidence_check.check_bundle`: the manifest, every SHA-256 and size, ``SHA256SUMS``,
 the scan run against the manifest, and, when exceptions were applied, the evaluation
 against the exceptions file in the bundle and against the raw scan run.
 
@@ -30,6 +30,7 @@ from typing import Final
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     evidence,
+    evidence_check,
 )
 from tools.reporting.common import (
     MAX_PATH_LENGTH,
@@ -55,7 +56,7 @@ from tools.reporting.parsers.scanrun import scan_run_data
 
 SCAN_RUN_FORMAT: Final[str] = "scan_run"
 MAX_ENTRIES: Final[int] = 64
-DIRECTORIES: Final[frozenset[str]] = evidence.bundle_directory_paths()
+DIRECTORIES: Final[frozenset[str]] = evidence_check.bundle_directory_paths()
 _DIRECTORY_FLAGS: Final[int] = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
 _FILE_FLAGS: Final[int] = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 
@@ -234,7 +235,7 @@ def parse_bundle(path: Path, max_bytes: int) -> BundleInput:
         reason = f"evidence bundle rejected: {error}"
         return _rejected(display, _peek_manifest(path, max_bytes), SectionStatus.ERROR, reason)
     try:
-        verified = evidence.check_bundle(contents)
+        verified = evidence_check.check_bundle(contents)
     except evidence.EvidenceError as error:
         reason = f"evidence bundle rejected: {clean_text(str(error), 300)}"
         return _rejected(display, contents, SectionStatus.ERROR, reason)

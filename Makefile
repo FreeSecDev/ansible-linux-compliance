@@ -60,6 +60,20 @@ EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
 EVIDENCE_TAMPERED_CHECK := .sections.compliance.status == "error" \
 	and (.sections.compliance.gaps[0].reason | test("checksum mismatch for raw/scan/results.xml"))
 
+EVIDENCE_ROUTES_PLAYBOOK := $(EVIDENCE_PLAYBOOK) tests/playbooks/audit-gate-routes.yml
+EVIDENCE_FORGED_DEFERRAL := {"linux_compliance_audit_defer_gate": true, "__linux_compliance_audit_gate_deferred": true}
+
+define evidence_gate_route
+status=0; $(EVIDENCE_ROUTES_PLAYBOOK) $(2) > '$(EVIDENCE_DIR)/route-$(1).log' 2>&1 || status=$$?; \
+	cat '$(EVIDENCE_DIR)/route-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: gate route %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -q 'The audit reported 2 failed and 1 errored rule(s)' '$(EVIDENCE_DIR)/route-$(1).log' && \
+	grep -q 'The scan did not complete (run_status failed)' '$(EVIDENCE_DIR)/route-$(1).log' || \
+	{ printf 'error: gate route %s did not gate both hosts\n' '$(1)' >&2; exit 1; }; \
+	if grep -q 'GATE-ROUTE-PASSED' '$(EVIDENCE_DIR)/route-$(1).log'; then \
+		printf 'error: gate route %s let a host pass\n' '$(1)' >&2; exit 1; fi
+endef
+
 define evidence_expect_status
 status=0; $(2) > '$(EVIDENCE_DIR)/$(1).log' 2>&1 || status=$$?; cat '$(EVIDENCE_DIR)/$(1).log'; \
 	test "$$status" -eq $(3) || { printf 'error: %s gave exit status %s, not %s\n' '$(1)' "$$status" '$(3)' >&2; exit 1; }; \
@@ -351,6 +365,12 @@ test-evidence: require-uv collection-link
 	grep -qE '^db01 +: .*failed=1' '$(EVIDENCE_DIR)/gate.log'
 	grep -qE '^lost01 +: .*unreachable=1' '$(EVIDENCE_DIR)/gate.log'
 	$(EVIDENCE_REPORT) --scope multi_host --output '$(EVIDENCE_DIR)/gate.json' $(EVIDENCE_GATE_BUNDLES)
+	$(call evidence_gate_route,baseline,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline)
+	$(call evidence_gate_route,extra,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=baseline -e '$(EVIDENCE_FORGED_DEFERRAL)')
+	$(call evidence_gate_route,group_vars,-i tests/playbooks/inventory/gate-routes-group -e gate_route=baseline)
+	$(call evidence_gate_route,host_vars,-i tests/playbooks/inventory/gate-routes-host -e gate_route=baseline)
+	$(call evidence_gate_route,include,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=include)
+	$(call evidence_gate_route,import,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e gate_route=import)
 	jq -e '$(EVIDENCE_GATE_CHECK)' '$(EVIDENCE_DIR)/gate.json' > /dev/null
 
 REMEDIATE_CHECK = $(RUN) ansible-playbook -i localhost, --check

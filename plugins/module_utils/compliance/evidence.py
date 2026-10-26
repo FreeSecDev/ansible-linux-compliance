@@ -4,8 +4,9 @@ An evidence bundle is a directory on the controller that holds the evidence of o
 audit run of one host, the manifest ``bundle.json`` and a ``SHA256SUMS`` file. The
 ``evidence`` role fetches the files that the audit recorded on the host, and this
 module decides which files those are, checks every digest and writes the documents
-of the bundle. The reporting package verifies a bundle with :func:`check_bundle`
-before it reads anything from it. The format is documented in ``docs/evidence.md``.
+of the bundle. The reporting package verifies a bundle with
+:func:`evidence_check.check_bundle` before it reads anything from it. The format
+is documented in ``docs/evidence.md``.
 
 Only a fixed vocabulary of files can enter a bundle. A host file is collected only
 when its path is directly inside the run directory that the audit reported and its
@@ -145,11 +146,27 @@ _MANIFEST_KEYS: Final[tuple[str, ...]] = (
     "exceptions",
     "excluded",
     "files",
+    "gate",
     "host",
     "kind",
     "run",
     "scanner",
     "schema_version",
+)
+_GATE_KEYS: Final[tuple[str, ...]] = ("decision", "deferred", "enforced")
+_DECISION_KEYS: Final[tuple[str, ...]] = (
+    "after_waivers",
+    "basis",
+    "counted",
+    "enabled",
+    "error",
+    "fail",
+    "waived",
+)
+_GATE_BASES: Final[frozenset[str]] = frozenset({"raw", "waived"})
+NOT_ENFORCED: Final[str] = (
+    "the result gate of this run was deferred and never enforced; a bundle is only written after "
+    "the gate ran (playbooks/evidence.yml runs the enforce.yml entry point of the audit role first)"
 )
 _COLLECTION_KEYS: Final[tuple[str, ...]] = ("name", "version")
 _HOST_KEYS: Final[tuple[str, ...]] = ("inventory_hostname", "machine_id", "reported")
@@ -172,7 +189,7 @@ _FILE_KEYS: Final[tuple[str, ...]] = ("kind", "path", "sha256", "size", "source"
 _EXCLUDED_KEYS: Final[tuple[str, ...]] = ("audit_kind", "reason", "sha256", "size", "source")
 _CHECKSUMS_KEYS: Final[tuple[str, ...]] = ("path", "sha256", "size")
 _AUDIT_FILE_KEYS: Final[tuple[str, ...]] = ("kind", "path", "sha256", "size")
-_STALE_KEYS: Final[tuple[str, ...]] = (
+STALE_KEYS: Final[tuple[str, ...]] = (
     "audited_hosts",
     "complete",
     "computed",
@@ -183,7 +200,7 @@ _STALE_KEYS: Final[tuple[str, ...]] = (
     "target_hosts",
     "unmatched",
 )
-_STALE_DOCUMENT_KEYS: Final[tuple[str, ...]] = ("kind", "result", "schema_version")
+STALE_DOCUMENT_KEYS: Final[tuple[str, ...]] = ("kind", "result", "schema_version")
 _COLLECTED_KEYS: Final[tuple[str, ...]] = (
     "collection_version",
     "controller_uid",
@@ -470,6 +487,124 @@ class ExceptionsRecord:
         )
 
 
+def _gate_counts(record: GateRecord) -> None:
+    for where, value in (
+        ("gate fail", record.fail),
+        ("gate error", record.error),
+        ("gate waived", record.waived),
+    ):
+        if not record.counted:
+            if value is not None:
+                _fail(f"{where} must be null when the gate counted nothing")
+        elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            _fail(f"{where} must be a non-negative integer")
+
+
+@dataclass(frozen=True)
+class GateRecord:
+    """Whether and how the result gates of the audit ran before the bundle was written.
+
+    A bundle is only written after the gates were enforced, so ``enforced`` is always
+    true; ``deferred`` says that the gates ran in a later play than the scan (the
+    deferred.yml and enforce.yml entry points of the audit role), after which the
+    evidence was collected.
+
+    Attributes:
+        deferred: Whether the gates were deferred and enforced later.
+        enforced: Whether the gates were enforced; always true in a bundle.
+        enabled: Whether linux_compliance_audit_fail_on_noncompliant was true.
+        after_waivers: Whether the gate counted the waived result.
+        basis: ``raw`` or ``waived``.
+        counted: Whether the run completed, so that the gate counted rules.
+        fail: The failed rules the gate counted, or ``None``.
+        error: The errored rules the gate counted, or ``None``.
+        waived: The waived rules of the counted result, or ``None``.
+    """
+
+    deferred: bool
+    enforced: bool
+    enabled: bool
+    after_waivers: bool
+    basis: str
+    counted: bool
+    fail: int | None
+    error: int | None
+    waived: int | None
+
+    def __post_init__(self) -> None:
+        """Validate the record."""
+        _flag(self.deferred, "gate deferred")
+        _flag(self.enforced, "gate enforced")
+        _flag(self.enabled, "gate enabled")
+        _flag(self.after_waivers, "gate after_waivers")
+        _flag(self.counted, "gate counted")
+        if not self.enforced:
+            _fail(NOT_ENFORCED)
+        if self.basis not in _GATE_BASES:
+            _fail(f"gate basis {_echo(self.basis)} is unknown")
+        _gate_counts(self)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the manifest mapping."""
+        return {
+            "decision": {
+                "after_waivers": self.after_waivers,
+                "basis": self.basis,
+                "counted": self.counted,
+                "enabled": self.enabled,
+                "error": self.error,
+                "fail": self.fail,
+                "waived": self.waived,
+            },
+            "deferred": self.deferred,
+            "enforced": self.enforced,
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> GateRecord:
+        """Build the record from its manifest mapping."""
+        data = _mapping(value, "manifest gate", _GATE_KEYS)
+        if data["decision"] is None:
+            _fail(NOT_ENFORCED)
+        decision = _mapping(data["decision"], "manifest gate decision", _DECISION_KEYS)
+        return cls.from_values(data["deferred"], data["enforced"], decision)
+
+    @classmethod
+    def from_audit(cls, value: object) -> GateRecord:
+        """Build the record from ``linux_compliance_audited.gate``."""
+        if value is None:
+            _fail(
+                "linux_compliance_audited has no gate record; collect the evidence after the "
+                "result gates of the audit role ran (main, evaluate.yml or enforce.yml)"
+            )
+        where = "linux_compliance_audited.gate"
+        if _mapping(value, where).get("enforced") is False:
+            _fail(
+                "the result gate of this run was deferred and not enforced yet; run the "
+                "enforce.yml entry point of the audit role before collecting "
+                "(playbooks/evidence.yml does)"
+            )
+        data = _mapping(value, where, (*_DECISION_KEYS, "deferred", "enforced"))
+        return cls.from_values(data["deferred"], data["enforced"], data)
+
+    @classmethod
+    def from_values(
+        cls, deferred: object, enforced: object, decision: dict[str, object]
+    ) -> GateRecord:
+        """Build the record from the two flags and the decision mapping."""
+        return cls(
+            deferred=cast("bool", deferred),
+            enforced=cast("bool", enforced),
+            enabled=cast("bool", decision["enabled"]),
+            after_waivers=cast("bool", decision["after_waivers"]),
+            basis=cast("str", decision["basis"]),
+            counted=cast("bool", decision["counted"]),
+            fail=cast("int | None", decision["fail"]),
+            error=cast("int | None", decision["error"]),
+            waived=cast("int | None", decision["waived"]),
+        )
+
+
 @dataclass(frozen=True)
 class ManifestParts:
     """The parts of a manifest that come from the controller rather than the scan run.
@@ -504,6 +639,7 @@ class Manifest:
         scanner: Scanner name and version.
         content: Datastream source, content version and SHA-256.
         waivers: Whether and how exceptions were applied.
+        gate: Whether the result gates were deferred, and the decision they enforced.
         files: Every file of the bundle except the manifest and the checksums file.
         excluded: The host files that the audit recorded and that were not collected.
         checksums_sha256: SHA-256 of ``SHA256SUMS``.
@@ -524,6 +660,7 @@ class Manifest:
     scanner: model.ScannerInfo
     content: model.Provenance
     waivers: ExceptionsRecord
+    gate: GateRecord
     files: tuple[BundleFile, ...]
     excluded: tuple[ExcludedFile, ...]
     checksums_sha256: str
@@ -578,6 +715,7 @@ class Manifest:
             "collection": {"name": COLLECTION_NAME, "version": self.collection_version},
             "content": self.content.to_dict(),
             "exceptions": self.waivers.to_dict(),
+            "gate": self.gate.to_dict(),
             "excluded": [item.to_dict() for item in self.excluded],
             "files": [item.to_dict() for item in self.files],
             "host": {
@@ -638,6 +776,7 @@ class Manifest:
             scanner=scanner,
             content=content,
             waivers=ExceptionsRecord.from_dict(data["exceptions"]),
+            gate=GateRecord.from_dict(data["gate"]),
             files=tuple(
                 BundleFile.from_dict(item)
                 for item in _list(data["files"], "manifest files", len(BUNDLE_PATHS))
@@ -721,6 +860,7 @@ class BundlePlan:
         exceptions_source: The SHA-256 of the exceptions file, or ``None``.
         exceptions_file: The controller path of the exceptions file, or ``None``.
         evaluation: The evaluation document when the exceptions were applied.
+        gate: The result gate record of the audit, which must have been enforced.
     """
 
     host: str
@@ -732,6 +872,7 @@ class BundlePlan:
     exceptions_source: str | None
     exceptions_file: str | None
     evaluation: object
+    gate: GateRecord
 
     @property
     def applied(self) -> bool:
@@ -877,6 +1018,7 @@ def plan_bundle(audited: object, host: object, include_arf: object) -> BundlePla
         exceptions_source=source,
         exceptions_file=path,
         evaluation=evaluation,
+        gate=GateRecord.from_audit(data.get("gate")),
     )
 
 
@@ -955,7 +1097,7 @@ def _check_received(item: HostFile, observed: object, controller_uid: int) -> No
 def _stale_document(stale: object, plan: BundlePlan) -> dict[str, object] | None:
     if stale is None or stale == {}:
         return None
-    data = _mapping(stale, STALE_SOURCE, _STALE_KEYS)
+    data = _mapping(stale, STALE_SOURCE, STALE_KEYS)
     computed = _flag(data["computed"], "stale computed")
     complete = _flag(data["complete"], "stale complete")
     if not computed:
@@ -1175,6 +1317,7 @@ def _manifest(
             EXCEPTIONS_FILE_PATH if plan.applied else None,
             stale_path,
         ),
+        gate=plan.gate,
         files=ordered,
         excluded=plan.excluded,
         checksums_sha256=sha256_hex(sums),
@@ -1249,162 +1392,3 @@ def check_written(expected: object, observed: object, controller_uid: object) ->
         if data.get("checksum") != entry["sha256"] or data.get("size") != entry["size"]:
             _fail(f"{path} in the bundle differs from what was written; the bundle was not kept")
     return sorted(wanted)
-
-
-@dataclass(frozen=True)
-class VerifiedBundle:
-    """A bundle whose manifest, files and documents verified.
-
-    Attributes:
-        manifest: The parsed manifest.
-        run: The raw scan run of ``raw/scan-run.json``.
-        evaluation: The verified evaluation, or ``None`` without exceptions.
-        exceptions_text: The text of the exceptions file, or ``None``.
-    """
-
-    manifest: Manifest
-    run: model.ScanRun
-    evaluation: exceptions.Evaluation | None
-    exceptions_text: str | None
-
-
-def _unlisted_message(names: list[str]) -> str:
-    signed = [name for name in names if name.endswith(SIGNATURE_SUFFIXES)]
-    if signed:
-        return (
-            f"the bundle carries a signature ({_echo(signed[0])}) that this version cannot "
-            "verify (ADR 0018 is proposed); it is refused rather than treated as unsigned"
-        )
-    listed = ", ".join(_echo(name) for name in names[:5])
-    return f"the bundle has files that its manifest does not list: {listed}"
-
-
-def _check_files(manifest: Manifest, contents: Mapping[str, bytes]) -> None:
-    expected = {item.path for item in manifest.files} | {MANIFEST_NAME, CHECKSUMS_NAME}
-    unlisted = sorted(set(contents) - expected)
-    if unlisted:
-        _fail(_unlisted_message(unlisted))
-    missing = sorted(expected - set(contents))
-    if missing:
-        _fail(f"the bundle is missing {', '.join(missing)}")
-    for item in manifest.files:
-        data = contents[item.path]
-        if len(data) != item.size or sha256_hex(data) != item.sha256:
-            _fail(f"checksum mismatch for {item.path}: it changed after the bundle was written")
-    sums = contents[CHECKSUMS_NAME]
-    if (
-        sha256_hex(sums) != manifest.checksums_sha256
-        or len(sums) != manifest.checksums_size
-        or sums != checksums_text(manifest.files).encode("utf-8")
-    ):
-        _fail(f"{CHECKSUMS_NAME} does not match the manifest")
-
-
-def _check_run(manifest: Manifest, data: bytes) -> model.ScanRun:
-    try:
-        run = model.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, model.ModelError) as error:
-        message = f"{SCAN_RUN_PATH} is not a valid scan run: {error}"
-        raise EvidenceError(message) from None
-    identity = (
-        run.run_id,
-        run.status,
-        run.started_at,
-        run.finished_at,
-        run.benchmark_id,
-        run.profile_id,
-        run.host,
-        run.scanner,
-        run.content,
-    )
-    recorded = (
-        manifest.run_id,
-        manifest.run_status,
-        manifest.started_at,
-        manifest.finished_at,
-        manifest.benchmark_id,
-        manifest.profile_id,
-        manifest.reported_host,
-        manifest.scanner,
-        manifest.content,
-    )
-    if identity != recorded:
-        _fail(f"{SCAN_RUN_PATH} does not match the run, host, scanner or content of the manifest")
-    machine = manifest.machine_id
-    if machine is not None and run.host.machine_id not in (None, machine):
-        _fail("the machine ID of the manifest differs from the one in the scan run")
-    return run
-
-
-def _check_stale(manifest: Manifest, data: bytes) -> None:
-    document = _mapping(load_json(data, STALE_PATH), STALE_PATH, _STALE_DOCUMENT_KEYS)
-    if document["schema_version"] != STALE_SCHEMA_VERSION or document["kind"] != STALE_KIND:
-        _fail(f"{STALE_PATH} has an unsupported kind or schema_version")
-    result = _mapping(document["result"], f"{STALE_PATH} result", _STALE_KEYS)
-    if result["source_sha256"] != manifest.waivers.source_sha256:
-        _fail(f"{STALE_PATH} was computed from another exceptions file")
-    evaluated = _list(result["evaluated_hosts"], f"{STALE_PATH} evaluated_hosts", MAX_HOSTS)
-    if manifest.inventory_host not in evaluated:
-        _fail(f"{STALE_PATH} does not include the evaluation of {manifest.inventory_host}")
-
-
-def _check_exceptions(
-    manifest: Manifest, contents: Mapping[str, bytes], run: model.ScanRun
-) -> tuple[exceptions.Evaluation | None, str | None]:
-    if manifest.waivers.status != EXCEPTIONS_APPLIED:
-        return None, None
-    raw = contents[EXCEPTIONS_FILE_PATH]
-    if sha256_hex(raw) != manifest.waivers.source_sha256:
-        _fail(f"{EXCEPTIONS_FILE_PATH} is not the exceptions file the manifest names")
-    try:
-        text = raw.decode("utf-8")
-        evaluation = exceptions.verify_evaluation(
-            load_json(contents[EVALUATION_PATH], EVALUATION_PATH), text
-        )
-    except UnicodeDecodeError:
-        _fail(f"{EXCEPTIONS_FILE_PATH} is not valid UTF-8")
-    except exceptions.ExceptionsError as error:
-        message = f"{EVALUATION_PATH} does not verify: {error}"
-        raise EvidenceError(message) from None
-    if evaluation.target.host != manifest.inventory_host:
-        _fail(f"{EVALUATION_PATH} was made for another inventory host")
-    if model.dumps(exceptions.unmarked(evaluation.run)) != model.dumps(run):
-        _fail(f"{EVALUATION_PATH} was not made from {SCAN_RUN_PATH}")
-    if manifest.waivers.stale is not None:
-        _check_stale(manifest, contents[STALE_PATH])
-    return evaluation, text
-
-
-def check_bundle(contents: Mapping[str, bytes]) -> VerifiedBundle:
-    """Verify a bundle read from disk and return its verified content.
-
-    ``contents`` maps every regular file of the bundle directory, by its path relative
-    to the bundle, to its bytes. The manifest must be valid; the files must be exactly
-    the listed ones plus ``bundle.json`` and ``SHA256SUMS``; every size and SHA-256
-    must match; ``SHA256SUMS`` must be the one the manifest implies; the scan run must
-    match the manifest; and when exceptions were applied, the exceptions file must have
-    the recorded SHA-256, the evaluation must verify against it
-    (:func:`exceptions.verify_evaluation`), must name the bundle's inventory host and
-    must have been made from the bundle's raw scan run.
-
-    The result is integrity, not authenticity: the bundle is not signed, so whoever can
-    write it can rewrite it consistently.
-
-    Raises:
-        EvidenceError: If any check fails.
-    """
-    if MANIFEST_NAME not in contents:
-        _fail(f"the directory has no {MANIFEST_NAME}; it is not a complete evidence bundle")
-    manifest = parse_manifest(contents[MANIFEST_NAME])
-    _check_files(manifest, contents)
-    run = _check_run(manifest, contents[SCAN_RUN_PATH])
-    evaluation, text = _check_exceptions(manifest, contents, run)
-    return VerifiedBundle(manifest, run, evaluation, text)
-
-
-def bundle_directory_paths() -> frozenset[str]:
-    """Return every directory that a bundle may contain, relative to the bundle."""
-    names: set[str] = set()
-    for path in BUNDLE_PATHS:
-        names.update(str(parent) for parent in PurePosixPath(path).parents if str(parent) != ".")
-    return frozenset(names)

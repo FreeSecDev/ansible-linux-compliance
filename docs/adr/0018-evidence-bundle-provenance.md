@@ -154,8 +154,9 @@ The status stays **proposed**. FREES-51 implements the evidence bundle without a
   the raw scan run. A bundle that fails is an input `error`. A bundle with applied exceptions requires
   `--exceptions-file`, and its copy must be byte-identical to it: section 4's "without a signature, the exceptions file
   is self-asserted" means the bundle's copy is never trusted as the reviewed file.
-- **No host is silently missing.** `playbooks/evidence.yml` defers the audit gates until every audited host was
-  collected, then enforces them, and names every target host without a bundle.
+- **No host is silently missing.** `playbooks/evidence.yml` audits with the audit role's `deferred.yml` entry
+  point, enforces the gates with `enforce.yml` and collects every host in an `always` section, and names every target
+  host without a bundle. The manifest records the enforced gate; no variable can defer one.
 - **No label.** The report schema is unchanged (2.0) and has no `provenance` field, so no input is labelled
   `verified`. A file in a bundle that looks like a signature (`*.sigstore.json`, `*.sig`, `*.pem`, `*.intoto.jsonl`,
   ...) is refused as an input error, so a signature that cannot be verified never reads as an unsigned bundle (the

@@ -1,0 +1,25 @@
+---
+- name: Audit | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
+- name: Audit | Check that there is a deferred audit result to enforce
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_audited is defined
+      - linux_compliance_audited is mapping
+      - linux_compliance_audited.gate is defined
+      - linux_compliance_audited.gate is mapping
+      - linux_compliance_audited.gate.deferred | default(false) is sameas true
+    fail_msg: >-
+      The enforce.yml entry point enforces the result gates that the deferred.yml or evaluate_deferred.yml entry point
+      of the audit role deferred on this host, and there is no such result.
+    quiet: true
+  tags:
+    - always
+
+- name: Audit | Enforce the deferred result gates
+  ansible.builtin.import_tasks: gate.yml
+  tags:
+    - always

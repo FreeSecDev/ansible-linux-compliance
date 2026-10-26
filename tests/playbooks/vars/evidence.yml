@@ -26,3 +26,13 @@ evidence_expected_files:
   - exceptions/stale.json
   - raw/scan-run.json
   - raw/scan/results.xml
+evidence_fixture_gate:
+  deferred: false
+  enforced: true
+  enabled: false
+  after_waivers: false
+  basis: raw
+  counted: true
+  fail: 2
+  error: 1
+  waived: 0

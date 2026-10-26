@@ -7,7 +7,6 @@ linux_compliance_audit_scan_timeout: 1800
 linux_compliance_audit_disabled_rules: []
 linux_compliance_audit_fail_on_noncompliant_after_waivers: false
 linux_compliance_exceptions_file: null
-linux_compliance_audit_defer_gate: false
 linux_compliance_file_permissions_enabled: true
 linux_compliance_sysctl_enabled: true
 linux_compliance_auditd_enabled: true
