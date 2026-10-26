@@ -288,9 +288,9 @@ def _matching_prefix(args: tuple[str, ...], policy: ExecutablePolicy) -> tuple[s
     return _deny(f"command is not allow-listed for {policy.name}: {_safe(' '.join(args))}")
 
 
-def _trusted_directories(search_dirs: Sequence[str], owner_uid: int) -> list[tuple[Path, Path]]:
+def _trusted_directories(*, trusted_dirs: Sequence[str], owner_uid: int) -> list[tuple[Path, Path]]:
     directories: list[tuple[Path, Path]] = []
-    for directory in search_dirs:
+    for directory in trusted_dirs:
         if not _is_text(directory) or not directory.startswith("/") or "\x00" in directory:
             _deny(f"trusted directory must be an absolute path: {_safe(directory)}")
         real = Path(directory).resolve()
@@ -309,7 +309,7 @@ def _trusted_directories(search_dirs: Sequence[str], owner_uid: int) -> list[tup
 
 
 def resolve_executable(
-    name: str, search_dirs: Sequence[str] = TRUSTED_DIRECTORIES, owner_uid: int = ROOT_UID
+    name: str, *, trusted_dirs: Sequence[str] = TRUSTED_DIRECTORIES, owner_uid: int = ROOT_UID
 ) -> str:
     """Resolve ``name`` to an absolute path inside a trusted directory.
 
@@ -322,8 +322,10 @@ def resolve_executable(
 
     Args:
         name: Bare executable name; separators and traversal are rejected.
-        search_dirs: Absolute trusted directories, searched in order.
-        owner_uid: Required owner of directories and file. Only tests change it.
+        trusted_dirs: Absolute trusted directories, searched in order. Keyword-only;
+            only tests change it.
+        owner_uid: Required owner of directories and file. Keyword-only; only tests
+            change it.
 
     Returns:
         The absolute path of the executable.
@@ -334,7 +336,7 @@ def resolve_executable(
     """
     if not _is_text(name) or not _EXECUTABLE_NAME.fullmatch(name):
         _deny(f"invalid executable name: {_safe(name)}")
-    directories = _trusted_directories(search_dirs, owner_uid)
+    directories = _trusted_directories(trusted_dirs=trusted_dirs, owner_uid=owner_uid)
     real_directories = {pair[1] for pair in directories}
     for pair in directories:
         candidate = pair[0] / name
@@ -506,7 +508,7 @@ def _supervise(spec: CommandSpec, argv: tuple[str, ...]) -> CommandResult:
 
 class _PolicyChecker(Protocol):
     def __call__(
-        self, spec: CommandSpec, policies: Mapping[str, ExecutablePolicy]
+        self, spec: CommandSpec, *, policies: Mapping[str, ExecutablePolicy] | None = None
     ) -> ExecutablePolicy: ...
 
 
@@ -551,13 +553,14 @@ def bind_policy(
     sequences = frozenset(forbidden_sequences)
 
     def check_policy(
-        spec: CommandSpec, policies: Mapping[str, ExecutablePolicy]
+        spec: CommandSpec, *, policies: Mapping[str, ExecutablePolicy] | None = None
     ) -> ExecutablePolicy:
         """Check the executable and the options of ``spec`` against ``policies``.
 
         Args:
             spec: The command to check.
-            policies: Allow-list keyed by executable name.
+            policies: Test-only, keyword-only allow-list keyed by executable name;
+                the allow-list bound at import applies when omitted.
 
         Returns:
             The policy of the executable.
@@ -568,7 +571,7 @@ def bind_policy(
                 argument is forbidden, or an option is not allow-listed.
         """
         _reject_forbidden_words(spec.args, words, sequences)
-        policy = policies.get(spec.executable)
+        policy = (bound_policies if policies is None else policies).get(spec.executable)
         if policy is None:
             _deny(f"executable is not allow-listed: {_safe(spec.executable)}")
         if spec.args in policy.standalone_commands:
@@ -629,11 +632,11 @@ def bind_policy(
             spec.env_allow,
             spec.cwd,
         )
-        check_policy(spec, bound_policies if policies is None else policies)
+        check_policy(spec, policies=policies)
         executable = resolve_executable(
             spec.executable,
-            bound_trusted if trusted_dirs is None else trusted_dirs,
-            owner_uid,
+            trusted_dirs=bound_trusted if trusted_dirs is None else trusted_dirs,
+            owner_uid=owner_uid,
         )
         argv = (executable, *spec.args)
         return _supervise(spec, argv)

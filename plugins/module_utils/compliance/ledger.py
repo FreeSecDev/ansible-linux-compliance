@@ -443,7 +443,9 @@ class Ledger:
         create: bool,
     ) -> T:
         try:
-            directory = fileio.open_directory(self._state_dir, self._owner_uid, create=create)
+            directory = fileio.open_directory(
+                self._state_dir, owner_uid=self._owner_uid, create=create
+            )
             if directory is None:
                 return update(())[1]
             try:

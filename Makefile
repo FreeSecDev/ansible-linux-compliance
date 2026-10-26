@@ -41,6 +41,8 @@ ANSIBLE_TEST := PATH="$$(uv python dir --bin):$$PATH" uv run --frozen --project 
 
 space := $(subst ,, )
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
+PYLINT_GUARD := tools/lint/check_repo_rules.py
+PYLINT_GUARD_MAX_LINES := 1700
 PYLINT_MODULE_DIRECTORIES := plugins/modules
 PYLINT_MODULE_IGNORES := $(subst $(space),|,$(patsubst %,^%/,$(PYLINT_MODULE_DIRECTORIES)))
 
@@ -75,6 +77,8 @@ Formatting and linting
   lint-ansible          ansible-lint (production profile), role argument spec check and antsibull-changelog lint
   lint-toggles          Fail when the generated toggles, their argument specs or their reference drift from the catalogue
   toggles               Regenerate the toggle defaults, argument specs and docs/remediation-variables.md
+  lint-role-guards      Fail when the generated family dispatch or internal-variable guards drift from the roles
+  role-guards           Regenerate the family dispatch and the internal-variable guards of the roles
   lint-iac              tofu fmt check, tofu validate per root module and shellcheck of the rendered bootstrap script
   lint-packer           [pending FREES-64] Packer validation
 
@@ -95,6 +99,7 @@ Tests
   test-name-sets        Check the guard name sets on one interpreter (NAME_SET_PYTHON=3.9.25)
   test-audit-exceptions Run the audit role's exceptions path on localhost with synthetic scan runs, without oscap
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
+  test-role-guards      Check in check mode that forged internal role variables are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  [pending FREES-59] Molecule Docker scenarios
@@ -127,8 +132,8 @@ Housekeeping
 endef
 export HELP_TEXT
 
-.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-python lint-yaml lint-actions \
-	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-remediate-check test-verify \
+.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-python lint-yaml lint-actions \
+	lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-remediate-check test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps test-molecule-docker test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -160,7 +165,7 @@ format: require-uv
 	$(RUN) ruff check --fix .
 	$(RUN) ruff format .
 
-lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible lint-toggles
+lint: lock-check lint-repo lint-skills lint-python lint-yaml lint-actions lint-ansible lint-toggles lint-role-guards
 
 GENERATE_TOGGLES := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_toggles
 
@@ -170,6 +175,14 @@ toggles: require-uv collection-link
 lint-toggles: require-uv collection-link
 	$(GENERATE_TOGGLES) --check
 
+GENERATE_ROLE_GUARDS := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.generate_role_guards
+
+role-guards: require-uv collection-link
+	$(GENERATE_ROLE_GUARDS)
+
+lint-role-guards: require-uv collection-link
+	$(GENERATE_ROLE_GUARDS) --check
+
 lock-check: require-uv
 	uv lock --check
 
@@ -178,8 +191,9 @@ lint-python: require-uv collection-link lint-pylint
 	$(RUN) ruff format --check .
 
 lint-pylint: require-uv collection-link
-	$(RUN) pylint --ignore-paths='$(PYLINT_BASE_IGNORES)|$(PYLINT_MODULE_IGNORES)' tools tests plugins
+	$(RUN) pylint --ignore-paths='$(PYLINT_BASE_IGNORES)|$(PYLINT_MODULE_IGNORES)' --ignore=$(notdir $(PYLINT_GUARD)) tools tests plugins
 	$(RUN) pylint --disable=wrong-import-position $(PYLINT_MODULE_DIRECTORIES)
+	$(RUN) pylint --max-module-lines=$(PYLINT_GUARD_MAX_LINES) $(PYLINT_GUARD)
 
 lint-yaml: require-uv
 	$(RUN) yamllint --strict .
@@ -284,6 +298,39 @@ test-remediate-check: require-uv collection-link
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
+
+ROLE_GUARDS_DIR := build/test-role-guards
+ROLE_GUARDS_FORGED_PLAN := {"__linux_compliance_remediate_plan": {"enabled": true, "errors": [], \
+	"families": [{"name": "../../../../tmp/forged", "disruptive": false, "apply": [], "cleanup": []}]}}
+ROLE_GUARDS_FORGED_FAMILY := {"__linux_compliance_remediate_family": {"name": "../../../../tmp/forged"}}
+
+ROLE_GUARDS_REFUSALS := is set from outside the role|Validation of arguments failed
+
+define role_guards_expect_refusal
+status=0; ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit $(1) --check \
+		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/$(1).log' 2>&1 || status=$$?; \
+	cat '$(ROLE_GUARDS_DIR)/$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: %s did not fail the play (status %s)\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -qE '$(ROLE_GUARDS_REFUSALS)' '$(ROLE_GUARDS_DIR)/$(1).log' || { printf 'error: %s was not refused\n' '$(1)' >&2; exit 1; }; \
+	if grep -q 'Remediate | Read the state ledger' '$(ROLE_GUARDS_DIR)/$(1).log'; then \
+		printf 'error: the role went on after %s\n' '$(1)' >&2; exit 1; fi
+endef
+
+test-role-guards: require-uv collection-link
+	rm -rf '$(ROLE_GUARDS_DIR)'
+	mkdir -p '$(ROLE_GUARDS_DIR)'
+	$(REMEDIATE_CHECK) tests/playbooks/internal-variables-include.yml
+	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_FORGED_PLAN)' -e internal_forged_variable=__linux_compliance_remediate_plan \
+		tests/playbooks/internal-variables-extra.yml
+	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_FORGED_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
+		tests/playbooks/internal-variables-extra.yml
+	$(call role_guards_expect_refusal,forged_plan)
+	$(call role_guards_expect_refusal,forged_family)
+	ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit forged_vars --check \
+		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/forged_vars.log' 2>&1 || \
+		{ cat '$(ROLE_GUARDS_DIR)/forged_vars.log'; exit 1; }
+	if grep -q 'tmp/forged' '$(ROLE_GUARDS_DIR)/forged_vars.log'; then \
+		printf 'error: role variables of a roles entry replaced the plan\n' >&2; exit 1; fi
 
 VERIFY_DIR := build/test-verify
 VERIFY_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(AUDIT_EXCEPTIONS_INVENTORY) \
@@ -419,4 +466,4 @@ clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage coverage.xml htmlcov build dist
 	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 
-ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-verify security docs test-sanity test-ansible-units package-check
+ci: lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check

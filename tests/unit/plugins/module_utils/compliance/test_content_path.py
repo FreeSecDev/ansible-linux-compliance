@@ -66,12 +66,12 @@ def owned_by(monkeypatch: pytest.MonkeyPatch, owners: dict[Path, int] | None, ui
 
 def refused(path: Path, match: str, owner_uid: int = UID) -> None:
     with pytest.raises(catalog.UnsafeContentError, match=match) as raised:
-        catalog.vetted_content_path(str(path), owner_uid)
+        catalog.vetted_content_path(str(path), owner_uid=owner_uid)
     assert catalog.error_type(raised.value) == "unsafe_content_dir"
 
 
 def vetted(path: Path, owner_uid: int = UID) -> str:
-    return catalog.vetted_content_path(str(path), owner_uid)
+    return catalog.vetted_content_path(str(path), owner_uid=owner_uid)
 
 
 def test_an_image_mode_opt_link_is_resolved_to_var_opt(root: Path, image_mode: Path) -> None:

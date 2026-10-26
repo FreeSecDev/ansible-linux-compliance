@@ -1,4 +1,13 @@
 ---
+- name: Remediate | Refuse internal variables supplied from outside the role
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/internal_variables.yml"
+    apply:
+      tags:
+        - always
+  tags:
+    - always
+
 - name: Remediate | Arm the guard against skipping the always-tagged tasks
   ansible.builtin.set_fact:
     __linux_compliance_remediate_dispatched: false
@@ -100,14 +109,10 @@
 
 - name: Remediate | Dispatch every family with work, in registry order
   ansible.builtin.include_tasks:
-    file: "{{ role_path }}/tasks/{{ __linux_compliance_remediate_family.name }}.yml"
+    file: "{{ role_path }}/tasks/dispatch.yml"
     apply:
       tags:
         - always
-  loop: "{{ __linux_compliance_remediate_plan.families }}"
-  loop_control:
-    loop_var: __linux_compliance_remediate_family
-    label: "{{ __linux_compliance_remediate_family.name }}"
   tags:
     - always
 

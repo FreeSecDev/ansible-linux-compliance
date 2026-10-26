@@ -106,7 +106,7 @@ def datastream(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
     vetted = directory / path.name
     shutil.copyfile(path, vetted)
     vetted.chmod(0o644)
-    assert catalog.vetted_content_path(str(vetted), UID) == str(vetted)
+    assert catalog.vetted_content_path(str(vetted), owner_uid=UID) == str(vetted)
     return vetted, digest
 
 

@@ -355,7 +355,7 @@ def test_check_mode_keeps_nothing_when_the_backend_refuses(harness: Harness) -> 
 
 def test_check_mode_reports_no_evidence_for_an_unregistered_backend(harness: Harness) -> None:
     harness.output_root.mkdir(mode=0o700)
-    planned = audit.plan(harness.job(), UID)
+    planned = audit.plan(harness.job(), owner_uid=UID)
     empty = audit.Auditor(owner_uid=UID, registry=scanner.BackendRegistry())
     with pytest.raises(audit.AuditError) as raised:
         empty.preview(planned)
@@ -629,7 +629,7 @@ def test_the_scanner_reads_only_the_verified_private_copy(harness: Harness) -> N
 
 def test_a_source_that_changed_after_verification_is_never_scanned(harness: Harness) -> None:
     auditor = harness.auditor()
-    planned = audit.plan(harness.job(), UID)
+    planned = audit.plan(harness.job(), owner_uid=UID)
     harness.datastream.write_bytes(SYNTHETIC.read_bytes() + b"\n")
     with pytest.raises(audit.AuditError, match="changed after verification") as raised:
         auditor.execute(planned)
@@ -643,7 +643,7 @@ def test_a_source_replaced_by_a_symlink_after_verification_is_never_scanned(
     harness: Harness,
 ) -> None:
     auditor = harness.auditor()
-    planned = audit.plan(harness.job(), UID)
+    planned = audit.plan(harness.job(), owner_uid=UID)
     harness.datastream.unlink()
     harness.datastream.symlink_to(SYNTHETIC)
     with pytest.raises(audit.AuditError, match="cannot be copied") as raised:
@@ -656,7 +656,7 @@ def test_a_source_replaced_by_a_symlink_after_verification_is_never_scanned(
 def test_a_copy_that_cannot_be_written_is_reported(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    planned = audit.plan(harness.job(), UID)
+    planned = audit.plan(harness.job(), owner_uid=UID)
     original = Path.open
 
     def failing_open(self: Path, *args: Any, **kwargs: Any) -> Any:
@@ -800,9 +800,9 @@ def test_a_profile_identifier_too_long_to_tailor_is_rejected(harness: Harness) -
     disabled = audit.parse_disabled_rules([{"rule_id": ALPHA}])
     job = harness.job(profile_id=long_profile, expected_sha256=digest, disabled_rules=disabled)
     with pytest.raises(audit.AuditError, match="too long to be tailored") as raised:
-        audit.plan(job, UID)
+        audit.plan(job, owner_uid=UID)
     assert raised.value.error_type == "invalid_argument"
-    plain = audit.plan(harness.job(profile_id=long_profile, expected_sha256=digest), UID)
+    plain = audit.plan(harness.job(profile_id=long_profile, expected_sha256=digest), owner_uid=UID)
     assert plain.evaluated_profile_id == long_profile
 
 
@@ -982,14 +982,14 @@ def test_an_output_root_with_open_permissions_is_never_repaired(
 def test_an_output_root_owned_by_someone_else_is_rejected(harness: Harness) -> None:
     harness.output_root.mkdir(mode=0o700)
     with pytest.raises(audit.AuditError, match="owner") as raised:
-        audit.inspect_output_root(str(harness.output_root), UID + 1, create=False)
+        audit.inspect_output_root(str(harness.output_root), owner_uid=UID + 1, create=False)
     assert raised.value.error_type == "unsafe_output_dir"
 
 
 def test_production_requires_root_ownership(harness: Harness) -> None:
     harness.output_root.mkdir(mode=0o700)
     with pytest.raises(audit.AuditError) as raised:
-        audit.inspect_output_root(str(harness.output_root), audit.ROOT_UID, create=False)
+        audit.inspect_output_root(str(harness.output_root), owner_uid=audit.ROOT_UID, create=False)
     assert raised.value.error_type == "unsafe_output_dir"
 
 
@@ -1044,7 +1044,7 @@ def test_a_symlink_planted_as_the_run_directory_is_never_followed(harness: Harne
 
 def test_a_run_directory_created_after_planning_is_never_reused(harness: Harness) -> None:
     auditor = harness.auditor()
-    planned = audit.plan(harness.job(), UID)
+    planned = audit.plan(harness.job(), owner_uid=UID)
     harness.output_root.mkdir(mode=0o700)
     harness.run_dir.mkdir()
     with pytest.raises(audit.AuditError) as raised:
@@ -1103,7 +1103,7 @@ def test_a_directory_created_concurrently_is_vetted(
         raise FileExistsError(str(self))
 
     monkeypatch.setattr(Path, "mkdir", racing_mkdir)
-    assert audit.inspect_output_root(str(harness.output_root), UID, create=True) is True
+    assert audit.inspect_output_root(str(harness.output_root), owner_uid=UID, create=True) is True
     assert mode(harness.output_root) == 0o700
 
 
@@ -1115,14 +1115,14 @@ def test_a_directory_that_vanishes_after_creation_is_unsafe(
 
     monkeypatch.setattr(Path, "mkdir", vanishing_mkdir)
     with pytest.raises(audit.AuditError, match="vanished while it was created"):
-        audit.inspect_output_root(str(harness.output_root), UID, create=True)
+        audit.inspect_output_root(str(harness.output_root), owner_uid=UID, create=True)
 
 
 def test_a_run_directory_that_vanishes_is_unsafe(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     harness.output_root.mkdir(mode=0o700)
-    planned = audit.plan(harness.job(), UID)
+    planned = audit.plan(harness.job(), owner_uid=UID)
     original = Path.mkdir
 
     def vanishing_mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
@@ -1142,7 +1142,7 @@ def test_an_unknown_backend_is_rejected_before_anything_runs(harness: Harness) -
 
 
 def test_an_unregistered_backend_at_execution_is_reported(harness: Harness) -> None:
-    planned = audit.plan(harness.job(), UID)
+    planned = audit.plan(harness.job(), owner_uid=UID)
     empty = audit.Auditor(owner_uid=UID, registry=scanner.BackendRegistry())
     with pytest.raises(audit.AuditError) as raised:
         empty.execute(planned)
@@ -1308,7 +1308,7 @@ def test_long_failure_messages_are_bounded(harness: Harness) -> None:
 
 def test_the_planned_scan_is_described_without_side_effects(harness: Harness) -> None:
     disabled = audit.parse_disabled_rules([{"rule_id": BETA}])
-    planned = audit.plan(harness.job(disabled_rules=disabled), UID)
+    planned = audit.plan(harness.job(disabled_rules=disabled), owner_uid=UID)
     assert planned.tailored is True
     description = planned.to_dict()
     assert description["rule_count"] == 2
@@ -1407,7 +1407,7 @@ def test_the_tailoring_document_contains_only_validated_identifiers(harness: Har
     planned = audit.AuditPlan(
         harness.job(disabled_rules=disabled),
         str(harness.datastream),
-        audit.plan(harness.job(), UID).benchmark,
+        audit.plan(harness.job(), owner_uid=UID).benchmark,
         (),
         (),
         TAILORED,
@@ -1434,7 +1434,7 @@ def test_the_tailoring_document_contains_only_validated_identifiers(harness: Har
 
 def test_a_final_directory_owned_by_another_user_is_rejected() -> None:
     with pytest.raises(audit.AuditError, match="not owned by uid") as raised:
-        audit.inspect_output_root("/usr", UID + 1 if UID == 0 else UID, create=False)
+        audit.inspect_output_root("/usr", owner_uid=UID + 1 if UID == 0 else UID, create=False)
     assert raised.value.error_type == "unsafe_output_dir"
 
 

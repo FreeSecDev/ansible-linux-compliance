@@ -309,7 +309,7 @@ def _vet_component(path: Path, info: _Status, subject: _Subject) -> None:
         subject.refuse(f"{subject.name} component is not a directory: {_safe(path)}")
 
 
-def _vet_ancestor(path: Path, info: _Status, owner_uid: int, subject: _Subject) -> None:
+def _vet_ancestor(path: Path, info: _Status, subject: _Subject, *, owner_uid: int) -> None:
     _vet_component(path, info, subject)
     if info.uid not in {ROOT_UID, owner_uid}:
         subject.refuse(f"{subject.ancestor} has an unexpected owner: {_safe(path)}")
@@ -317,9 +317,9 @@ def _vet_ancestor(path: Path, info: _Status, owner_uid: int, subject: _Subject) 
         subject.refuse(f"{subject.ancestor} is writable by group or others: {_safe(path)}")
 
 
-def _vet_directory(path: Path, info: _Status, owner_uid: int, *, final: bool) -> None:
+def _vet_directory(path: Path, info: _Status, *, owner_uid: int, final: bool) -> None:
     if not final:
-        _vet_ancestor(path, info, owner_uid, _OUTPUT)
+        _vet_ancestor(path, info, _OUTPUT, owner_uid=owner_uid)
         return
     _vet_component(path, info, _OUTPUT)
     if info.uid != owner_uid:
@@ -349,12 +349,13 @@ def _make_directory(path: Path) -> None:
         _unsafe(f"output_dir cannot be created: {error.strerror or type(error).__name__}")
 
 
-def inspect_output_root(path: str, owner_uid: int, *, create: bool) -> bool:
+def inspect_output_root(path: str, *, owner_uid: int = ROOT_UID, create: bool) -> bool:
     """Walk the output root from ``/`` and vet every component.
 
     Args:
         path: Output root, validated with :func:`check_output_root`.
-        owner_uid: Expected owner of the output root.
+        owner_uid: Expected owner of the output root. Keyword-only and root by
+            default; only tests change it.
         create: Create missing components with mode 0700.
 
     Returns:
@@ -376,7 +377,7 @@ def inspect_output_root(path: str, owner_uid: int, *, create: bool) -> bool:
             info = _lstat(current)
             if info is None:
                 _unsafe(f"output_dir vanished while it was created: {_safe(current)}")
-        _vet_directory(current, info, owner_uid, final=index == len(parts) - 1)
+        _vet_directory(current, info, owner_uid=owner_uid, final=index == len(parts) - 1)
     return True
 
 
@@ -544,10 +545,10 @@ class AuditPlan:
 
 
 def _verified_profile(
-    job: AuditJob, owner_uid: int
+    job: AuditJob, *, owner_uid: int
 ) -> tuple[str, catalog.Benchmark, tuple[catalog.Rule, ...]]:
     try:
-        content = catalog.vetted_content_path(job.content_path, owner_uid)
+        content = catalog.vetted_content_path(job.content_path, owner_uid=owner_uid)
         benchmark = catalog.single_benchmark(catalog.read_benchmarks(content, job.expected_sha256))
         profile = catalog.find_profile(benchmark, job.profile_id)
     except catalog.CatalogError as error:
@@ -563,7 +564,7 @@ def _tailored_profile_id(profile_id: str) -> str:
         _invalid(f"profile_id is too long to be tailored: {error}")
 
 
-def plan(job: AuditJob, owner_uid: int) -> AuditPlan:
+def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
     """Validate an audit against the host without writing anything.
 
     Resolves the real path of the datastream and vets it and the way to it with
@@ -577,12 +578,13 @@ def plan(job: AuditJob, owner_uid: int) -> AuditPlan:
     Args:
         job: The validated job.
         owner_uid: Expected owner of the output root, and the only owner besides
-            root that the datastream and its directories may have.
+            root that the datastream and its directories may have. Keyword-only
+            and root by default; only tests change it.
 
     Raises:
         AuditError: For every problem, with a stable ``error_type``.
     """
-    content, benchmark, rules = _verified_profile(job, owner_uid)
+    content, benchmark, rules = _verified_profile(job, owner_uid=owner_uid)
     if re.fullmatch(_CONTENT_NAME, Path(content).name) is None:
         _invalid(
             f"the datastream file name must match {_CONTENT_NAME}, because it labels the "
@@ -602,7 +604,7 @@ def plan(job: AuditJob, owner_uid: int) -> AuditPlan:
             ERROR_NOTHING_TO_SCAN, "the profile selects no rule that is enabled, nothing to scan"
         )
     evaluated = _tailored_profile_id(job.profile_id) if disabled else job.profile_id
-    exists = inspect_output_root(job.output_root, owner_uid, create=False)
+    exists = inspect_output_root(job.output_root, owner_uid=owner_uid, create=False)
     run_dir = str(Path(job.output_root) / job.run_id)
     if exists and _lstat(Path(run_dir)) is not None:
         raise AuditError(ERROR_OUTPUT_EXISTS, f"the run directory already exists: {_safe(run_dir)}")
@@ -926,7 +928,7 @@ def finalize_run(audit_plan: AuditPlan, run: model.ScanRun) -> model.ScanRun:
     )
 
 
-def _secure_directory(path: Path, owner_uid: int) -> None:
+def _secure_directory(path: Path, *, owner_uid: int) -> None:
     try:
         path.mkdir(mode=DIRECTORY_MODE)
     except FileExistsError as error:
@@ -937,11 +939,15 @@ def _secure_directory(path: Path, owner_uid: int) -> None:
     info = _lstat(path)
     if info is None:
         _unsafe(f"the run directory vanished: {_safe(path)}")
-    _vet_directory(path, info, owner_uid, final=True)
+    _vet_directory(path, info, owner_uid=owner_uid, final=True)
 
 
 def _run_backend(
-    audit_plan: AuditPlan, run_dir: Path, registry: scanner.BackendRegistry, content: ContentCopy
+    audit_plan: AuditPlan,
+    run_dir: Path,
+    content: ContentCopy,
+    *,
+    registry: scanner.BackendRegistry,
 ) -> model.ScanRun:
     tailoring = str(run_dir / TAILORING_FILE_NAME) if audit_plan.tailored else None
     try:
@@ -1094,7 +1100,7 @@ class Auditor:
             if audit_plan.tailored:
                 tailoring = run_dir / TAILORING_FILE_NAME
                 _write_new_file(tailoring, tailoring_document(audit_plan, self._clock()))
-            run = _run_backend(audit_plan, run_dir, self._registry, content)
+            run = _run_backend(audit_plan, run_dir, content, registry=self._registry)
         finally:
             _discard_copy(run_dir / CONTENT_DIRECTORY_NAME)
         return finalize_run(audit_plan, run), content
@@ -1111,9 +1117,9 @@ class Auditor:
                 Scanner failures are not errors: they are a run whose status is
                 ``failed`` or ``timed_out`` and whose findings are all ``error``.
         """
-        inspect_output_root(audit_plan.job.output_root, self._owner_uid, create=True)
+        inspect_output_root(audit_plan.job.output_root, owner_uid=self._owner_uid, create=True)
         run_dir = Path(audit_plan.run_dir)
-        _secure_directory(run_dir, self._owner_uid)
+        _secure_directory(run_dir, owner_uid=self._owner_uid)
         try:
             run, content = self._scan(audit_plan, run_dir)
             evidence: list[EvidenceFile] = []
@@ -1151,9 +1157,9 @@ class Auditor:
             AuditError: As :meth:`execute`, and ``cleanup_failed`` (naming the
                 directory) if the temporary directory cannot be removed.
         """
-        inspect_output_root(audit_plan.job.output_root, self._owner_uid, create=False)
+        inspect_output_root(audit_plan.job.output_root, owner_uid=self._owner_uid, create=False)
         scratch = Path(audit_plan.job.output_root) / f"{PREVIEW_PREFIX}{audit_plan.job.run_id}"
-        _secure_directory(scratch, self._owner_uid)
+        _secure_directory(scratch, owner_uid=self._owner_uid)
         try:
             return self._scan(audit_plan, scratch)
         except AuditError as error:
@@ -1185,7 +1191,7 @@ class Auditor:
         if job.backend not in names:
             message = f"unknown scanner backend {_safe(job.backend)}; known: {', '.join(names)}"
             raise AuditError(ERROR_UNKNOWN_BACKEND, message)
-        planned = plan(job, self._owner_uid)
+        planned = plan(job, owner_uid=self._owner_uid)
         if check_mode and not planned.output_root_exists:
             message = (
                 f"check mode: output_dir {job.output_root} does not exist and check mode does "

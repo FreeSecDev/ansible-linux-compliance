@@ -376,7 +376,6 @@ def test_nested_parameters_and_data_are_not_flagged(text: str) -> None:
         "ansible.builtin.include_tasks: tasks/family.yml",
         "ansible.builtin.include_tasks: tasks/family.yaml",
         "ansible.builtin.import_tasks: other.yml",
-        "include_tasks: '{{ family }}.yml'",
         "ansible.legacy.include_tasks:\n        file: guard.yml\n        apply: {tags: [x]}",
         "ansible.builtin.import_tasks:\n        file: shared/tasks/check.yaml",
         "ansible.builtin.include_role:\n        name: x",
@@ -393,7 +392,8 @@ def test_includes_of_scanned_files_are_allowed(task: str) -> None:
     ("task", "message"),
     [
         ("ansible.builtin.include_tasks: tasks.json", "target must end in .yml or .yaml"),
-        ("include_tasks: '{{ task_file }}'", "target must end in .yml or .yaml"),
+        ("include_tasks: '{{ task_file }}'", "target must not be templated"),
+        ("include_tasks: '{{ family }}.yml'", "target must not be templated"),
         ("ansible.builtin.import_tasks: tasks", "target must end in .yml or .yaml"),
         ("ansible.builtin.include_tasks:\n        file: x.txt", "target must end in .yml"),
         ("ansible.builtin.include_tasks:\n        file: [a.yml]", "target must end in .yml"),

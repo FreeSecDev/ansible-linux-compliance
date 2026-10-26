@@ -11,10 +11,14 @@ Rules:
   ``handlers``, ``block``, ``rescue`` and ``always`` at any depth, aliases and
   merge keys) and their ``action`` and ``local_action`` values are checked, so
   module parameters and ``vars`` data may contain the banned words. A templated
-  module name in an action is denied, and included task files, playbooks and role
-  entry points must have a ``.yml`` or ``.yaml`` suffix. Any other document is
-  checked for banned keys at any depth, and a ``redirect`` to a banned module is
-  denied (FREES-128).
+  module name in an action and a templated task key are denied, and included task
+  files, playbooks and role entry points must be relative ``.yml`` or ``.yaml``
+  paths without ``..`` that are not templated, except ``{{ role_path }}/tasks/``
+  followed by a literal relative path. Role names
+  of role includes and of the ``roles`` of a play must be plain or fully qualified
+  names, not templates or paths (FREES-137). Any other document is checked for
+  banned keys at any depth, and a ``redirect`` to a banned module is denied
+  (FREES-128).
 * Python files contain no comments, except a shebang on the first line.
 * Python files under ``plugins/`` are checked deny-by-default: they import only
   allow-listed standard library modules, ``ansible.module_utils`` and this
@@ -61,6 +65,10 @@ Rules:
   ``module.attribute``; it keeps every other rule. Only
   ``plugins/module_utils/compliance/ledger.py`` may import ``fileio`` or name it as an attribute
   or ``getattr`` literal (ADR 0011).
+  A parameter named like a banned keyword (a test seam) must be keyword-only, and only the files
+  in ``SEAM_OWNERS`` may define one. They may pass their own seams on unchanged, as ``name=name``
+  from a keyword-only parameter of the enclosing function or as ``name=self._name`` in a class whose
+  ``__init__`` takes the seam, and may assign ``self._name`` only in ``__init__`` (FREES-137).
 
 Violations are printed as ``path:line: message`` and the exit status is 1.
 """
@@ -109,6 +117,16 @@ INCLUDE_FILE_KEYS: Final[frozenset[str]] = frozenset({"file", "_raw_params"})
 ROLE_ENTRY_POINT_KEYS: Final[frozenset[str]] = frozenset({"tasks_from", "handlers_from"})
 TASK_FILE_SUFFIXES: Final[tuple[str, ...]] = (".yml", ".yaml")
 TEMPLATE_MARKERS: Final[tuple[str, ...]] = ("{{", "{%", "{#")
+ROLE_NAME_KEY: Final[str] = "name"
+PLAY_ROLES_KEY: Final[str] = "roles"
+PLAY_ROLE_NAME_KEYS: Final[frozenset[str]] = frozenset({"role", "name"})
+ROLE_NAME: Final[re.Pattern[str]] = re.compile(
+    r"[A-Za-z0-9_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_][A-Za-z0-9_-]*)*"
+)
+PATH_SEGMENT: Final[str] = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
+ROLE_PATH_TARGET: Final[re.Pattern[str]] = re.compile(
+    rf"\{{\{{\s*role_path\s*\}}\}}/tasks/(?:{PATH_SEGMENT}/)*{PATH_SEGMENT}\.(?:yml|yaml)"
+)
 MERGE_TAG: Final[str] = "tag:yaml.org,2002:merge"
 REDIRECT_KEY: Final[str] = "redirect"
 VERSION_ANNOTATION: Final[re.Pattern[str]] = re.compile(r"# v\d+\.\d+\.\d+")
@@ -293,6 +311,23 @@ BANNED_KEYWORDS: Final[frozenset[str]] = frozenset(
         "registry",
     }
 )
+SEAM_OWNERS: Final[Mapping[Path, frozenset[str]]] = MappingProxyType(
+    {
+        Path("plugins/module_utils/compliance/audit.py"): frozenset(
+            {"owner_uid", "registry", "clock"}
+        ),
+        Path("plugins/module_utils/compliance/catalog.py"): frozenset({"owner_uid"}),
+        Path("plugins/module_utils/compliance/fileio.py"): frozenset({"owner_uid"}),
+        Path("plugins/module_utils/compliance/ledger.py"): frozenset(
+            {"state_dir", "owner_uid", "lock_timeout"}
+        ),
+        Path("plugins/module_utils/compliance/openscap.py"): frozenset(
+            {"runner", "clock", "limits"}
+        ),
+    }
+)
+RESERVED_SEAM_ATTRIBUTES: Final[frozenset[str]] = frozenset(f"_{name}" for name in BANNED_KEYWORDS)
+INIT: Final[str] = "__init__"
 DUNDER: Final[re.Pattern[str]] = re.compile(r"__\w+__")
 OWN_NAMES: Final[frozenset[str]] = frozenset({"self", "cls"})
 DUNDER_READS: Final[frozenset[str]] = frozenset({"__name__"})
@@ -352,6 +387,18 @@ KNOWN_SUBMODULE_ATTRIBUTES: Final[frozenset[str]] = _words(
 SETATTR_ARGUMENTS: Final[int] = 3
 SUPER_ARGUMENTS: Final[int] = 2
 FUNCTIONS: Final[tuple[type, ...]] = (ast.FunctionDef, ast.AsyncFunctionDef)
+CALLABLES: Final = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+DEFINITIONS: Final = (ast.FunctionDef, ast.AsyncFunctionDef)
+SCOPE_NODES: Final = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.Lambda,
+    ast.ClassDef,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+)
 ALLOWED_COMPONENTS: Final[frozenset[str]] = frozenset(
     part for name in ALLOWED_IMPORTS for part in name.split(".")
 ) - frozenset({"types"})
@@ -608,11 +655,54 @@ def _node_text(node: yaml.Node) -> str:
     return "sequence" if isinstance(node, yaml.SequenceNode) else "mapping"
 
 
-def _is_task_file_name(node: yaml.Node) -> bool:
-    """Return whether ``node`` is a scalar file name with a YAML suffix."""
-    return isinstance(node, yaml.ScalarNode) and str(node.value).strip().endswith(
-        TASK_FILE_SUFFIXES
-    )
+def _path_problem(text: str, *, allow_role_path: bool) -> str | None:
+    """Return why the task file ``text`` may not be scanned, or ``None`` if it is safe.
+
+    The check scans every YAML file of the repository, so a target must be a
+    relative ``.yml`` or ``.yaml`` path without ``..``: a templated, absolute or
+    home-relative target, or one that walks up, could load tasks from a file
+    outside the repository that is never scanned. The only templated form is
+    ``{{ role_path }}/tasks/`` followed by a literal relative path: ``role_path``
+    is the directory of the running role, so the target stays inside it. No
+    variable may choose the file, because a role parameter, an include parameter
+    or an extra variable outranks every fact the role sets (FREES-137).
+    """
+    target = text.strip()
+    if allow_role_path and ROLE_PATH_TARGET.fullmatch(target):
+        return None
+    if _is_templated(target):
+        return "must not be templated, except {{ role_path }}/tasks/<file>"
+    if not target.endswith(TASK_FILE_SUFFIXES):
+        return "must end in .yml or .yaml"
+    if target.startswith(("/", "~")):
+        return "must be a relative path"
+    if ".." in target.split("/"):
+        return "must not contain '..'"
+    return None
+
+
+def _node_path_problem(node: yaml.Node, *, allow_role_path: bool) -> str | None:
+    """Return why the task file named by ``node`` may not be scanned, or ``None``."""
+    if not isinstance(node, yaml.ScalarNode):
+        return "must end in .yml or .yaml"
+    return _path_problem(str(node.value), allow_role_path=allow_role_path)
+
+
+def _role_name_problem(node: yaml.Node | str) -> str | None:
+    """Return why a role name cannot be checked statically, or ``None``.
+
+    A templated name selects a role at run time, and a path (``/srv/role`` or
+    ``../role``) loads a role from outside the repository, so only plain and fully
+    qualified role names are accepted.
+    """
+    text = node if isinstance(node, str) else _node_text(node)
+    if _is_templated(text):
+        return "must not be templated"
+    if isinstance(node, yaml.Node) and not isinstance(node, yaml.ScalarNode):
+        return "must be a plain or fully qualified role name"
+    if ROLE_NAME.fullmatch(text.strip()) is None:
+        return "must be a plain or fully qualified role name"
+    return None
 
 
 def _include_findings(
@@ -620,10 +710,8 @@ def _include_findings(
 ) -> Iterable[tuple[yaml.Node, str]]:
     """Yield findings for an included task or playbook file that the check cannot scan.
 
-    The included file is itself a task file or a playbook. The check scans every
-    YAML file of the repository, so the target must be a ``.yml`` or ``.yaml``
-    file: a target without that suffix (``tasks.json``) or with a templated suffix
-    could load tasks from a file that is never scanned.
+    The included file is itself a task file or a playbook, so its target must be
+    a file the check scans (:func:`_path_problem`).
     """
     if isinstance(value, yaml.MappingNode):
         targets = [inner for field, _, inner in _scalar_items(value) if field in INCLUDE_FILE_KEYS]
@@ -632,32 +720,71 @@ def _include_findings(
     if not targets:
         yield key, f"{name} needs a file name ending in .yml or .yaml"
     for target in targets:
-        if not _is_task_file_name(target):
-            yield target, f"{name} target must end in .yml or .yaml: {_node_text(target)!r}"
+        problem = _node_path_problem(target, allow_role_path=True)
+        if problem is not None:
+            yield target, f"{name} target {problem}: {_node_text(target)!r}"
+
+
+def _free_form_role_findings(value: yaml.ScalarNode, name: str) -> Iterable[str]:
+    """Yield findings for the free-form ``key=value`` string of a role include."""
+    text = str(value.value)
+    if _is_templated(text):
+        yield f"{name} arguments must not be templated: {text!r}"
+        return
+    for word in text.split():
+        field, separator, entry = word.partition("=")
+        if not separator:
+            continue
+        if field in ROLE_ENTRY_POINT_KEYS:
+            problem = _path_problem(entry, allow_role_path=False)
+            if problem is not None:
+                yield f"{name} {field} {problem}: {entry!r}"
+        elif field == ROLE_NAME_KEY:
+            problem = _role_name_problem(entry)
+            if problem is not None:
+                yield f"{name} role name {problem}: {entry!r}"
 
 
 def _role_include_findings(value: yaml.Node, name: str) -> Iterable[tuple[yaml.Node, str]]:
-    """Yield findings for a role entry point that the check cannot scan.
+    """Yield findings for a role or role entry point that the check cannot scan.
 
     Without a suffix Ansible also tries ``.json`` and the bare name, which the
     check never scans, so ``tasks_from`` and ``handlers_from`` need ``.yml`` or
-    ``.yaml``. The default entry point is ``main``; a repository test keeps every
-    file below a ``tasks`` or ``handlers`` directory a YAML file. The free-form
-    ``key=value`` string is checked word by word.
+    ``.yaml``, and they may not be templated, absolute or walk up. The role name
+    must be a plain or fully qualified name (:func:`_role_name_problem`). The
+    default entry point is ``main``; a repository test keeps every file below a
+    ``tasks`` or ``handlers`` directory a YAML file. The free-form ``key=value``
+    string is checked word by word.
     """
     if isinstance(value, yaml.ScalarNode):
-        for word in str(value.value).split():
-            field, separator, entry = word.partition("=")
-            if (
-                separator
-                and field in ROLE_ENTRY_POINT_KEYS
-                and not entry.endswith(TASK_FILE_SUFFIXES)
-            ):
-                yield value, f"{name} {field} must end in .yml or .yaml: {entry!r}"
+        yield from ((value, message) for message in _free_form_role_findings(value, name))
     elif isinstance(value, yaml.MappingNode):
         for field, _, inner in _scalar_items(value):
-            if field in ROLE_ENTRY_POINT_KEYS and not _is_task_file_name(inner):
-                yield inner, f"{name} {field} must end in .yml or .yaml: {_node_text(inner)!r}"
+            if field in ROLE_ENTRY_POINT_KEYS:
+                problem = _node_path_problem(inner, allow_role_path=False)
+                if problem is not None:
+                    yield inner, f"{name} {field} {problem}: {_node_text(inner)!r}"
+            elif field == ROLE_NAME_KEY:
+                problem = _role_name_problem(inner)
+                if problem is not None:
+                    yield inner, f"{name} role name {problem}: {_node_text(inner)!r}"
+
+
+def _play_role_findings(value: yaml.Node) -> Iterable[tuple[yaml.Node, str]]:
+    """Yield findings for the ``roles`` of a play whose names cannot be checked."""
+    if not isinstance(value, yaml.SequenceNode):
+        return
+    for item in value.value:
+        if isinstance(item, yaml.MappingNode):
+            names = [
+                inner for field, _, inner in _scalar_items(item) if field in PLAY_ROLE_NAME_KEYS
+            ]
+        else:
+            names = [item]
+        for node in names:
+            problem = _role_name_problem(node)
+            if problem is not None:
+                yield node, f"role name in roles {problem}: {_node_text(node)!r}"
 
 
 def _task_findings(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
@@ -666,11 +793,15 @@ def _task_findings(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
     Only the keys of the mapping itself can name the module of a task. Their
     values are module parameters or keyword data (``vars``, ``set_fact``
     arguments, ``loop`` items, ``module_defaults``) and are not inspected, except
-    for ``action`` and ``local_action`` and the file names of includes.
+    for ``action`` and ``local_action``, the file names of includes and
+    the role names of role includes and of the ``roles`` of a play. A templated
+    key could name any module at run time and is denied.
     """
     for name, key, value in _scalar_items(task):
         module = _module_name(name.strip())
-        if module in BANNED_MODULES:
+        if _is_templated(name):
+            yield key, f"templated task key is not allowed: {key.value!r}"
+        elif module in BANNED_MODULES:
             yield key, f"banned module: {key.value!r}"
         elif name in ACTION_KEYS:
             yield from _action_findings(value)
@@ -678,6 +809,8 @@ def _task_findings(task: yaml.MappingNode) -> Iterable[tuple[yaml.Node, str]]:
             yield from _include_findings(key, value, name)
         elif module in ROLE_INCLUDE_MODULES:
             yield from _role_include_findings(value, name)
+        elif name == PLAY_ROLES_KEY:
+            yield from _play_role_findings(value)
 
 
 def _task_mappings(root: yaml.Node) -> Iterable[yaml.MappingNode]:
@@ -856,6 +989,17 @@ def _binding_names(node: ast.AST) -> Iterable[str]:
         yield from (node.rest,) if node.rest else ()
 
 
+def _shadows(
+    function: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda, argument: ast.arg
+) -> bool:
+    """Return whether ``function`` rebinds, deletes or shadows its parameter ``argument``."""
+    return any(
+        argument.arg in _binding_names(node)
+        for node in ast.walk(function)
+        if node is not argument and node is not function
+    )
+
+
 def _rebinds(method: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
     """Return whether ``method`` rebinds, deletes or shadows its first parameter ``name``."""
     first = [*method.args.posonlyargs, *method.args.args][0]
@@ -879,6 +1023,7 @@ class _Scope:
     restricted_bases: set[int]
     fileio_attribute_allowed: bool
     reserved: Mapping[str, str]
+    seams: frozenset[str]
 
     def ancestors(self, node: ast.AST) -> Iterable[ast.AST]:
         """Yield the parents of ``node``, nearest first."""
@@ -1077,6 +1222,101 @@ def _import_findings(
             yield f"import of {alias.name!r} is not allowed in plugins"
 
 
+def _is_seam_attribute(name: str, scope: _Scope) -> bool:
+    """Return whether ``name`` is the private attribute that holds a seam of this file."""
+    return name in RESERVED_SEAM_ATTRIBUTES and name[1:] in scope.seams
+
+
+def _is_foreign_seam_attribute(name: str, scope: _Scope) -> bool:
+    """Return whether ``name`` holds a seam that another file of ``SEAM_OWNERS`` defines.
+
+    ``_<seam>`` for every banned keyword is reserved: only the owner of the seam
+    may name it, so no other plugin can read or set the seam of an owner object
+    through a subclass, a class attribute or a method called on another object.
+    """
+    return name in RESERVED_SEAM_ATTRIBUTES and name[1:] not in scope.seams
+
+
+def _class_binding_findings(node: ast.AST, scope: _Scope) -> Iterable[str]:
+    """Yield a description for each reserved seam attribute that ``node`` binds in a class body.
+
+    A class attribute named like a seam attribute would be read where the seam is
+    expected, so it is denied in every file, the owners included: an owner sets
+    the attribute only in ``__init__`` from its keyword-only parameter.
+    """
+    names = RESERVED_SEAM_ATTRIBUTES.intersection(_binding_names(node))
+    if not names:
+        return
+    owner = next((item for item in scope.ancestors(node) if isinstance(item, SCOPE_NODES)), None)
+    if isinstance(owner, ast.ClassDef):
+        for name in sorted(names):
+            yield f"the seam attribute {name!r} may not be bound in a class body"
+
+
+def _seam_definition_findings(node: ast.AST, scope: _Scope) -> Iterable[str]:
+    """Yield descriptions for test seam parameters that are positional or defined elsewhere.
+
+    A seam that a positional argument can fill would bypass the keyword ban, so
+    every seam is keyword-only, and only the files in ``SEAM_OWNERS`` define seams.
+    Nodes other than functions and lambdas define no parameters.
+    """
+    if not isinstance(node, CALLABLES):
+        return
+    arguments = node.args
+    optional = (arguments.vararg, arguments.kwarg)
+    for argument in (
+        *arguments.posonlyargs,
+        *arguments.args,
+        *(item for item in optional if item is not None),
+    ):
+        if argument.arg in BANNED_KEYWORDS:
+            yield f"test seam {argument.arg!r} must be a keyword-only parameter"
+    for argument in arguments.kwonlyargs:
+        if argument.arg in BANNED_KEYWORDS and argument.arg not in scope.seams:
+            yield f"test seam {argument.arg!r} may not be defined in this file"
+
+
+def _forwards_parameter(name: str, call: ast.Call, scope: _Scope) -> bool:
+    """Return whether the function around ``call`` has an intact keyword-only ``name``."""
+    function = next((item for item in scope.ancestors(call) if isinstance(item, CALLABLES)), None)
+    if not isinstance(function, CALLABLES):
+        return False
+    argument = next((item for item in function.args.kwonlyargs if item.arg == name), None)
+    return argument is not None and not _shadows(function, argument)
+
+
+def _forwards_attribute(name: str, value: ast.Attribute, scope: _Scope) -> bool:
+    """Return whether ``value`` is ``self._<name>`` in a class whose ``__init__`` takes ``name``."""
+    if not (
+        value.attr == f"_{name}" and isinstance(value.value, ast.Name) and value.value.id == "self"
+    ):
+        return False
+    method = scope.own_method(value.value)
+    owner = None if method is None else scope.parents.get(id(method))
+    return isinstance(owner, ast.ClassDef) and any(
+        isinstance(item, DEFINITIONS)
+        and item.name == INIT
+        and name in {argument.arg for argument in item.args.kwonlyargs}
+        for item in owner.body
+    )
+
+
+def _is_forwarded(keyword: ast.keyword, call: ast.Call, scope: _Scope) -> bool:
+    """Return whether ``keyword`` forwards a seam of this file unchanged.
+
+    Only a file in ``SEAM_OWNERS`` may pass its own seams on, and only as
+    ``name=name`` from the keyword-only parameter of the enclosing function or as
+    ``name=self._name`` in a class whose ``__init__`` takes the keyword-only seam.
+    """
+    name = str(keyword.arg)
+    value = keyword.value
+    if name not in scope.seams:
+        return False
+    if isinstance(value, ast.Name):
+        return value.id == name and _forwards_parameter(name, call, scope)
+    return isinstance(value, ast.Attribute) and _forwards_attribute(name, value, scope)
+
+
 def _dynamic_attribute_findings(node: ast.Call, name: str, scope: _Scope) -> Iterable[str]:
     """Yield descriptions for ``getattr`` style calls with an unsafe target or name."""
     attribute = node.args[1] if len(node.args) > 1 else None
@@ -1097,6 +1337,11 @@ def _dynamic_attribute_findings(node: ast.Call, name: str, scope: _Scope) -> Ite
         yield f"underscore-prefixed attribute {attribute.value!r} of another object is not allowed"
     if name != "getattr" and node.args and scope.is_imported(node.args[0]):
         yield f"{name} on an imported module is not allowed in plugins"
+    literal = str(attribute.value) if isinstance(attribute, ast.Constant) else ""
+    if _is_foreign_seam_attribute(literal, scope) or (
+        name != "getattr" and _is_seam_attribute(literal, scope)
+    ):
+        yield f"the seam attribute {literal!r} may not be used with {name}"
 
 
 def _call_findings(node: ast.Call, scope: _Scope) -> Iterable[str]:
@@ -1104,7 +1349,7 @@ def _call_findings(node: ast.Call, scope: _Scope) -> Iterable[str]:
     for keyword in node.keywords:
         if keyword.arg is None:
             yield "dict splat (**) in a call is not allowed in plugins"
-        if keyword.arg in BANNED_KEYWORDS:
+        if keyword.arg in BANNED_KEYWORDS and not _is_forwarded(keyword, node, scope):
             yield f"keyword {keyword.arg!r} is not allowed in plugins"
         if (
             keyword.arg == "shell"
@@ -1161,6 +1406,7 @@ def _is_guarded_store(node: ast.Attribute, scope: _Scope) -> bool:
         and isinstance(field.value, str)
         and not _is_banned_attribute(field.value)
         and DUNDER.fullmatch(field.value) is None
+        and field.value not in RESERVED_SEAM_ATTRIBUTES
     )
 
 
@@ -1197,6 +1443,28 @@ def _is_super_call(node: ast.Attribute, scope: _Scope) -> bool:
     )
 
 
+def _seam_attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
+    """Yield descriptions for a reserved seam attribute used outside its owner or set late.
+
+    Another file may not name the attribute at all. The owner may read it, and may
+    store or delete it only on ``self`` inside ``__init__``.
+    """
+    if _is_foreign_seam_attribute(node.attr, scope):
+        yield f"the seam attribute {node.attr!r} is reserved for the file that defines the seam"
+        return
+    if isinstance(node.ctx, ast.Load) or not _is_seam_attribute(node.attr, scope):
+        return
+    target = node.value
+    method = scope.own_method(target)
+    if not (
+        isinstance(target, ast.Name)
+        and target.id == "self"
+        and method is not None
+        and method.name == INIT
+    ):
+        yield f"the seam attribute {node.attr!r} may only be assigned to self in __init__"
+
+
 def _attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
     """Yield descriptions for banned, dunder, private and imported-module attribute use."""
     if _is_guarded_store(node, scope):
@@ -1215,6 +1483,7 @@ def _attribute_findings(node: ast.Attribute, scope: _Scope) -> Iterable[str]:
         yield f"underscore-prefixed attribute {node.attr!r} of another object is not allowed"
     if stored and scope.is_imported(node.value):
         yield f"assigning attribute {node.attr!r} of an imported module is not allowed in plugins"
+    yield from _seam_attribute_findings(node, scope)
     if node.attr == FILE_IO_MODULE and not scope.fileio_attribute_allowed:
         yield f"attribute {FILE_IO_MODULE!r} is restricted to ledger.py"
     if node.attr in scope.reserved:
@@ -1254,11 +1523,15 @@ def _pattern_findings(node: ast.MatchClass, scope: _Scope) -> Iterable[str]:
     for name in node.kwd_attrs:
         if name in scope.reserved:
             yield f"attribute {name!r} is restricted to {scope.reserved[name]}"
+        if _is_foreign_seam_attribute(name, scope):
+            yield f"the seam attribute {name!r} is reserved for the file that defines the seam"
 
 
 def _process_findings(node: ast.AST, scope: _Scope, extra: frozenset[str]) -> Iterable[str]:
     """Yield a description for each forbidden construct on ``node`` itself."""
     yield from _binding_findings(node)
+    yield from _seam_definition_findings(node, scope)
+    yield from _class_binding_findings(node, scope)
     if isinstance(node, (ast.Import, ast.ImportFrom)):
         yield from _import_findings(node, extra, frozenset(scope.restricted), scope.reserved)
     elif isinstance(node, ast.Name):
@@ -1300,12 +1573,7 @@ def _reserved_for(extra_imports: frozenset[str]) -> Mapping[str, str]:
 
 
 def check_process_isolation(
-    path: Path,
-    data: bytes,
-    extra_imports: frozenset[str] = frozenset(),
-    restricted: Mapping[str, frozenset[str]] = NO_RESTRICTION,
-    *,
-    fileio_attribute_allowed: bool = False,
+    path: Path, data: bytes, relative: Path | None = None
 ) -> list[Violation]:
     """Reject, by default, anything in plugin code that could run a process.
 
@@ -1313,7 +1581,14 @@ def check_process_isolation(
     ``__import__`` are banned, ``os`` is usable only as ``os.path``, attribute
     names that run or spawn processes are banned wherever they appear, and
     ``getattr`` style calls need a literal, permitted attribute name.
+    ``relative`` is the path of the file in the repository. It selects the
+    allowances of that one file: its ``EXTRA_IMPORTS``, the ``FILE_IO_ATTRIBUTES``
+    of the file-I/O helper, the ``fileio`` attribute of the ledger and the test
+    seams of ``SEAM_OWNERS`` that it may define and forward unchanged.
     """
+    location = Path() if relative is None else relative
+    restricted = FILE_IO_ATTRIBUTES if location == FILE_IO_HELPER else NO_RESTRICTION
+    extra_imports = EXTRA_IMPORTS.get(location, frozenset()) | frozenset(restricted)
     try:
         tree = ast.parse(data, filename=str(path))
     except (SyntaxError, ValueError) as error:
@@ -1336,8 +1611,9 @@ def check_process_isolation(
         {id(child): parent for parent in nodes for child in ast.iter_child_nodes(parent)},
         restricted,
         _restricted_bases(nodes, restricted),
-        fileio_attribute_allowed,
+        location == LEDGER_MODULE,
         _reserved_for(extra_imports),
+        SEAM_OWNERS.get(location, frozenset()),
     )
     return sorted(
         {
@@ -1385,19 +1661,7 @@ def check_file(path: Path, root: Path = REPO_ROOT) -> list[Violation]:
         violations = check_python_comments(path, data)
         if is_process_scope(path, root):
             relative = path.resolve().relative_to(root.resolve())
-            extra = EXTRA_IMPORTS.get(relative, frozenset())
-            restricted = FILE_IO_ATTRIBUTES if relative == FILE_IO_HELPER else NO_RESTRICTION
-            if restricted:
-                extra = extra | frozenset(restricted)
-            violations.extend(
-                check_process_isolation(
-                    path,
-                    data,
-                    extra,
-                    restricted,
-                    fileio_attribute_allowed=relative == LEDGER_MODULE,
-                )
-            )
+            violations.extend(check_process_isolation(path, data, relative))
             if relative not in FILE_IO_IMPORTERS:
                 violations.extend(_file_io_import_findings(path, data))
         return violations

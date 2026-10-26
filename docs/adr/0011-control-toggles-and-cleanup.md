@@ -290,7 +290,9 @@ refinements apply.
   `linux_compliance_remediate_enabled: true`.
 - **Family files load from the role.** The dispatcher includes `{{ role_path }}/tasks/<family>.yml`, and family files
   include their helpers the same way. A registered family without a task file therefore fails the run, instead of
-  loading a file of the same name from the playbook directory.
+  loading a file of the same name from the playbook directory. Since FREES-137 the include names each family file
+  literally: `tasks/dispatch.yml`, generated from the registry, holds one static include per catalogued family, so
+  a plan supplied from outside the role cannot choose the file (ADR 0004, FREES-137 amendment).
 - **Incomplete cleanup keeps the record.** A cleanup that cannot restore the prior state (target absent, not a regular
   file, unusable record) keeps the ledger entry and reports `cleanup_incomplete` with the reason, and is retried on the
   next run. The record is never dropped silently.

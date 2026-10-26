@@ -1,4 +1,9 @@
 ---
+- name: Verify | Refuse internal variables supplied from outside the role
+  ansible.builtin.import_tasks: internal_variables.yml
+  tags:
+    - always
+
 - name: Verify | Arm the guard against skipping the always-tagged tasks
   ansible.builtin.set_fact:
     __linux_compliance_verify_dispatched: false

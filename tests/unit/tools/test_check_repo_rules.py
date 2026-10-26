@@ -1054,6 +1054,34 @@ def test_pylint_wrong_import_position_is_not_globally_disabled() -> None:
     assert "wrong-import-position" in pyproject["tool"]["freesecdev"]["pylint-justifications"]
 
 
+def test_only_the_guard_may_exceed_the_module_line_limit() -> None:
+    pyproject = tomllib.loads((rules.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    limit = pyproject["tool"]["pylint"]["format"]["max-module-lines"]
+    assert limit == 1500
+    justifications = pyproject["tool"]["freesecdev"]["pylint-justifications"]
+    assert "--max-module-lines=1700" in justifications["max-module-lines-repository-guard"]
+    makefile = (rules.REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "--ignore=$(notdir $(PYLINT_GUARD)) tools tests plugins" in makefile
+    assert [
+        path.relative_to(rules.REPO_ROOT).as_posix()
+        for directory in ("tools", "tests", "plugins")
+        for path in (rules.REPO_ROOT / directory).rglob("check_repo_rules.py")
+    ] == ["tools/lint/check_repo_rules.py"]
+    assert "PYLINT_GUARD := tools/lint/check_repo_rules.py" in makefile
+    assert "PYLINT_GUARD_MAX_LINES := 1700" in makefile
+    assert "pylint --max-module-lines=$(PYLINT_GUARD_MAX_LINES) $(PYLINT_GUARD)" in makefile
+    long_modules = {
+        path.relative_to(rules.REPO_ROOT).as_posix(): len(
+            path.read_text(encoding="utf-8").splitlines()
+        )
+        for directory in ("tools", "tests", "plugins")
+        for path in (rules.REPO_ROOT / directory).rglob("*.py")
+        if len(path.read_text(encoding="utf-8").splitlines()) > limit
+    }
+    assert set(long_modules) <= {"tools/lint/check_repo_rules.py"}
+    assert all(lines <= 1700 for lines in long_modules.values())
+
+
 def test_make_lint_runs_pylint_in_two_passes() -> None:
     makefile = (rules.REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     assert "PYLINT_MODULE_DIRECTORIES := plugins/modules" in makefile

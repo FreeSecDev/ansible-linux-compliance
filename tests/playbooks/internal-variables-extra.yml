@@ -1,0 +1,40 @@
+---
+- name: Internal variables | An extra variable cannot replace an internal variable of the remediate role
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_file_permissions_crontab
+  tasks:
+    - name: Refuse to run outside check mode or without the extra variables of the Makefile
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+          - internal_forged_variable is defined
+        fail_msg: >-
+          Run this playbook through make test-role-guards, which passes --check, a forged internal
+          variable with -e and internal_forged_variable.
+        quiet: true
+
+    - name: Run the remediate role while an extra variable holds an internal variable
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because the extra variable was kept
+          ansible.builtin.fail:
+            msg: INTERNAL-VARIABLES-EXTRA-NOT-REFUSED
+      rescue:
+        - name: Check that the guard refused the extra variable before the ledger was read
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('Refuse internal variables supplied from outside the role')
+              - internal_forged_variable in ansible_failed_result.assertion
+              - "'Read the state ledger' not in ansible_failed_task.name"
+            quiet: true

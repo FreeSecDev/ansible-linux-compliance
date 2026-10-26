@@ -1,0 +1,28 @@
+---
+- name: Verify | Reset the internal facts of the role
+  ansible.builtin.set_fact:
+    __linux_compliance_verify_baseline_recorded: __linux_compliance_unset__
+    __linux_compliance_verify_comparison: __linux_compliance_unset__
+    __linux_compliance_verify_dispatched: __linux_compliance_unset__
+  tags:
+    - always
+
+- name: Verify | Refuse internal variables supplied from outside the role
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_verify_baseline_recorded == '__linux_compliance_unset__'
+      - __linux_compliance_verify_comparison == '__linux_compliance_unset__'
+      - __linux_compliance_verify_dispatched == '__linux_compliance_unset__'
+      - __linux_compliance_verify_gate == '__linux_compliance_unset__'
+      - __linux_compliance_verify_marker == '__linux_compliance_unset__'
+    fail_msg: >-
+      An internal variable of the verify role (__linux_compliance_verify_*) is set from outside the role: by a role
+      parameter, an include parameter (vars of include_role or include_tasks) or an extra variable (-e), which outrank
+      every fact the role sets. The failed assertion names it. Remove it and pass only the documented linux_compliance_*
+      variables. Nothing was scanned, changed or compared.
+    quiet: true
+  vars:
+    __linux_compliance_verify_gate: __linux_compliance_unset__
+    __linux_compliance_verify_marker: __linux_compliance_unset__
+  tags:
+    - always

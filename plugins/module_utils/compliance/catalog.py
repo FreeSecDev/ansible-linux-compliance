@@ -584,21 +584,21 @@ def _still_there(path: Path) -> _Status:
     return info
 
 
-def _accepted_owner(info: _Status, owner_uid: int) -> bool:
-    return info.uid in {ROOT_UID, owner_uid}
+def _accepted_owner(info: _Status, *, owner_uid: int | None) -> bool:
+    return info.uid in {ROOT_UID, effective_uid() if owner_uid is None else owner_uid}
 
 
-def _vet_directory(path: Path, info: _Status, owner_uid: int) -> None:
+def _vet_directory(path: Path, info: _Status, *, owner_uid: int | None) -> None:
     if not stat.S_ISDIR(info.mode):
         _unsafe(f"content_path component is not a directory: {_echo(path)}")
-    if not _accepted_owner(info, owner_uid):
+    if not _accepted_owner(info, owner_uid=owner_uid):
         _unsafe(f"{_ANCESTOR} has an unexpected owner: {_echo(path)}")
     if info.mode & _GROUP_OR_OTHER_WRITE and not info.mode & stat.S_ISVTX:
         _unsafe(f"{_ANCESTOR} is writable by group or others: {_echo(path)}")
 
 
-def _link_target(path: Path, info: _Status, owner_uid: int) -> Path:
-    if not _accepted_owner(info, owner_uid):
+def _link_target(path: Path, info: _Status, *, owner_uid: int | None) -> Path:
+    if not _accepted_owner(info, owner_uid=owner_uid):
         _unsafe(f"a symlink on the way to content_path has an unexpected owner: {_echo(path)}")
     try:
         return path.readlink()
@@ -606,7 +606,7 @@ def _link_target(path: Path, info: _Status, owner_uid: int) -> Path:
         _unsafe(f"content_path cannot be inspected: {error.strerror or type(error).__name__}")
 
 
-def _real_directory(path: Path, owner_uid: int) -> Path:
+def _real_directory(path: Path, *, owner_uid: int | None) -> Path:
     """Resolve a directory like ``realpath`` and vet everything the resolution uses.
 
     The walk starts at ``/`` and keeps a resolved prefix that contains no symlink.
@@ -617,7 +617,7 @@ def _real_directory(path: Path, owner_uid: int) -> Path:
     :data:`MAX_SYMLINKS` symlinks, which every loop reaches, are refused.
     """
     resolved = Path("/")
-    _vet_directory(resolved, _existing(resolved), owner_uid)
+    _vet_directory(resolved, _existing(resolved), owner_uid=owner_uid)
     pending = list(path.parts[1:])
     followed = 0
     while pending:
@@ -628,7 +628,7 @@ def _real_directory(path: Path, owner_uid: int) -> Path:
         candidate = resolved / name
         info = _existing(candidate)
         if not stat.S_ISLNK(info.mode):
-            _vet_directory(candidate, info, owner_uid)
+            _vet_directory(candidate, info, owner_uid=owner_uid)
             resolved = candidate
             continue
         followed += 1
@@ -637,14 +637,14 @@ def _real_directory(path: Path, owner_uid: int) -> Path:
                 f"content_path follows more than {MAX_SYMLINKS} symlinks, "
                 f"probably a loop: {_echo(candidate)}"
             )
-        target = _link_target(candidate, info, owner_uid)
+        target = _link_target(candidate, info, owner_uid=owner_uid)
         if target.is_absolute():
             resolved = Path("/")
         pending[:0] = target.parts[1:] if target.is_absolute() else target.parts
     return resolved
 
 
-def vetted_content_path(path: str, owner_uid: int) -> str:
+def vetted_content_path(path: str, *, owner_uid: int | None = None) -> str:
     """Resolve the datastream that ``path`` names and vet the way to it.
 
     Root reads the datastream, and :class:`xmlsafe.RegularFile` checks the type
@@ -672,8 +672,9 @@ def vetted_content_path(path: str, owner_uid: int) -> str:
 
     Args:
         path: Absolute ``content_path`` as the operator gave it.
-        owner_uid: The only owner besides root that is accepted. Production
-            audits pass root; the discover modules pass :func:`effective_uid`.
+        owner_uid: The only owner besides root that is accepted. Keyword-only;
+            when omitted, :func:`effective_uid` is accepted, which the discover
+            modules rely on. The audit forwards its own seam, root in production.
 
     Returns:
         The real path of the datastream file.
@@ -683,14 +684,14 @@ def vetted_content_path(path: str, owner_uid: int) -> str:
         CatalogError: If the path is invalid, missing or ambiguous.
     """
     given = Path(_checked_path(path))
-    target = _real_directory(given.parent, owner_uid) / given.name
+    target = _real_directory(given.parent, owner_uid=owner_uid) / given.name
     datastream = Path(resolve_content_path(str(target)))
     if datastream != target:
-        _vet_directory(target, _still_there(target), owner_uid)
+        _vet_directory(target, _still_there(target), owner_uid=owner_uid)
     info = _still_there(datastream)
     if not stat.S_ISREG(info.mode):
         _unsafe(f"the datastream is not a regular file: {_echo(datastream)}")
-    if not _accepted_owner(info, owner_uid):
+    if not _accepted_owner(info, owner_uid=owner_uid):
         _unsafe(f"the datastream has an unexpected owner: {_echo(datastream)}")
     if info.mode & _GROUP_OR_OTHER_WRITE:
         _unsafe(f"the datastream is writable by group or others: {_echo(datastream)}")
@@ -849,7 +850,7 @@ def benchmark_report(path: str, expected_sha256: str) -> dict[str, object]:
     only JSON-serializable values. See :func:`read_benchmarks` for the
     verification and the other errors.
     """
-    content = vetted_content_path(path, effective_uid())
+    content = vetted_content_path(path)
     benchmark = single_benchmark(read_benchmarks(content, expected_sha256))
     return {
         "content_path": content,
@@ -878,7 +879,7 @@ def profile_report(path: str, expected_sha256: str, profile_id: str) -> dict[str
             No other profile is substituted.
         UnsafeContentError: If the way to the datastream is unsafe.
     """
-    content = vetted_content_path(path, effective_uid())
+    content = vetted_content_path(path)
     benchmark = single_benchmark(read_benchmarks(content, expected_sha256))
     profile = find_profile(benchmark, profile_id)
     rules = profile_rules(benchmark, profile)

@@ -40,7 +40,8 @@ longer shadow the working tree (FREES-127). The `Makefile` sets and exports thes
 The defaults are absolute paths below the checkout. A value from the environment or the command line wins, for
 example `make lint-ansible ANSIBLE_HOME=/var/tmp/ansible-home`. `make collection-link` and `make collection-tree`
 create the directories through `ansible-home`, so every target that runs Ansible tooling has them: `lint-ansible`,
-`test-sanity`, `test-ansible-units`, `package`, `package-check`, `test-audit-exceptions`, `test-remediate-check`, and
+`test-sanity`, `test-ansible-units`, `package`, `package-check`, `test-audit-exceptions`, `test-remediate-check`,
+`test-role-guards`, and
 the Molecule targets once they are implemented. The ansible-lint pre-commit hook runs `make lint-ansible`, so it uses
 the same paths and needs no manual `ANSIBLE_HOME`. `make clean` removes `build/`, and with it the default Ansible home
 and the `ansible-test` home; it never removes a directory given as an override.
@@ -58,10 +59,12 @@ overriding them.
 | `bootstrap` | implemented | `install` plus tool version check |
 | `install` | implemented | `uv sync --frozen`, installs both git hook types |
 | `format` | implemented | `ruff check --fix` and `ruff format` |
-| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible`, `lint-toggles` |
+| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-ansible`, `lint-toggles`, `lint-role-guards` |
 | `lint-ansible` | implemented | `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-toggles` | implemented | `tools/roles/generate_toggles.py --check`: fails with a diff when the generated toggle defaults, argument specs or `docs/remediation-variables.md` differ from the rule catalogue ([remediation guide](remediation.md#generated-toggles)) |
 | `toggles` | implemented | Regenerates the toggle defaults and argument specs of the `remediate` role and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
+| `lint-role-guards` | implemented | `tools/roles/generate_role_guards.py --check`: fails with a diff when `roles/remediate/tasks/dispatch.yml` or a `tasks/internal_variables.yml` of the audit, remediate or verify role differs from what the family registry and the role files give (FREES-137) |
+| `role-guards` | implemented | Regenerates the static family dispatch of the remediate role and the internal-variable guards of the audit, remediate and verify roles |
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
 | `lint-actions` | implemented | actionlint |
@@ -85,7 +88,8 @@ overriding them.
 | `test-remediate-check` | implemented | Runs `tests/playbooks/remediate-check-mode.yml` against localhost with `--check --diff` and again with `--skip-tags file_permissions`, then `tests/playbooks/remediate-skip-always.yml` with `--skip-tags always`, all without `become`; the toggle plays also run the audit role's toggle resolution ([remediation guide](remediation.md#testing)) |
 | `docs` | implemented | markdownlint-cli2 and the relative link checker |
 | `clean` | implemented | Removes caches, coverage output and `build/`, including the per-checkout Ansible home |
-| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-verify security docs test-sanity test-ansible-units package-check` |
+| `test-role-guards` | implemented | Runs `tests/playbooks/internal-variables-include.yml`, `internal-variables-extra.yml` (twice, with a forged plan and a forged family as extra variables) and `internal-variables-role-param.yml` (per host) against localhost with `--check`, and fails unless every forged internal role variable is refused before the remediate role reads the ledger |
+| `ci` | implemented | `lint lint-iac typecheck test-coverage test-browser test-audit-exceptions test-remediate-check test-role-guards test-verify security docs test-sanity test-ansible-units package-check` |
 | `test-audit-exceptions` | implemented | Runs the audit role's exceptions path (`evaluate.yml` and `stale.yml` entry points) against two local inventory hosts with synthetic scan runs, without `oscap`, with the per-checkout `ANSIBLE_HOME`; checks the stale report under `--limit`; then requires that an invalid file, per-host files under `serial` and the `free` strategy fail the play ([audit guide](audit.md#tests)) |
 | `test-verify` | implemented | Runs the verify role (`baseline.yml` and `main`) on the local inventory host `web01` with synthetic baseline and later audits, without `oscap`, with the per-checkout `ANSIBLE_HOME`; requires the printed regression and applicability warnings, then that baselines not recorded by `baseline.yml` (extra, play, host and inventory variables, a pre-set marker, none at all) are refused and that `--skip-tags always` fails the role ([verify guide](verify.md#tests)) |
 | `test-browser` | implemented | Dashboard browser and accessibility tests in the pinned headless Chromium with axe-core; fetches both into `build/browser-test` first (`browser-test-deps`), see the [dashboard guide](dashboard.md) |
@@ -216,7 +220,18 @@ YAML and Python files (ADR 0005):
   with a justification when a new module is genuinely needed. Since FREES-129 the import allow-list holds only modules
   that plugins use: `collections` (bare), `functools` and `itertools` were removed, `collections.abc` stays. A new
   keyword-only parameter of plugin code must be classified in `tests/unit/tools/test_check_repo_rules_followups.py`
-  as a test seam (and then added to `BANNED_KEYWORDS`) or as a production keyword. Files are opened through
+  as a test seam (and then added to `BANNED_KEYWORDS`) or as a production keyword. Since FREES-137 every test seam is
+  keyword-only: a parameter named like a banned keyword that a positional argument can fill (positional,
+  positional-only, `*args` or `**kwargs`) fails the guard and the classification test, so `audit.plan(job, 1000)` or
+  `process.resolve_executable("oscap", ("/tmp",), 1000)` cannot bypass the keyword ban (the latter's directories
+  parameter is now the banned `trusted_dirs`). Only the files in `SEAM_OWNERS` of the guard (`audit.py`, `catalog.py`,
+  `fileio.py`, `ledger.py`, `openscap.py`; `process.py` is exempt from the guard) may define a seam, and they may pass a seam on
+  only unchanged, as `owner_uid=owner_uid` from the keyword-only parameter of the enclosing function or as
+  `owner_uid=self._owner_uid` in a class whose `__init__` takes the keyword-only seam; `self._<seam>` may only be
+  assigned to `self` in `__init__` and never through `setattr`, `delattr` or `object.__setattr__`. Every other banned
+  keyword in a call still fails. `_<seam>` for every banned keyword is reserved: any other file may not read, set,
+  delete or `getattr` it on any object (so a subclass of `audit.Auditor` or a method called on one cannot change its
+  `_owner_uid`), and no file may bind it in a class body. Files are opened through
   `xmlsafe.RegularFile`; the open helper behind it is private (`_open_regular`), so no other plugin file can call it.
   The standard library name sets of the guard (`STDLIB_MODULE_NAMES`, `KNOWN_SUBMODULE_ATTRIBUTES`) are generated:
   `make name-sets` runs `tools/lint/name_set_probe.py` in a clean interpreter of every version from 3.9 to 3.15,
@@ -239,6 +254,26 @@ YAML and Python files (ADR 0005):
     `include_role` and `import_role`, must end in `.yml` or `.yaml`, because Ansible would also load a `.json` or
     suffix-less file that the check never scans. A repository test keeps every file below a `tasks` or `handlers`
     directory a YAML file, which covers the default `main` entry point of a role.
+  - Since FREES-137 these targets must also be relative paths without a `..` component and must not be templated or
+    start with `/` or `~`, because such a target could load an unscanned file from outside the repository. The one
+    templated form is `{{ role_path }}/tasks/` followed by a literal relative path
+    (`{{ role_path }}/tasks/file_permissions_apply.yml`); no variable may choose the file, because a role parameter,
+    an include parameter or an extra variable outranks every fact a role sets. The remediate role therefore
+    dispatches with one static include per catalogued family in `roles/remediate/tasks/dispatch.yml`, which
+    `make role-guards` generates from the family registry and `make lint-role-guards` checks for drift. A test
+    playbook that chose a helper by template now uses one static include per helper with `when`.
+  - Every entry point of the audit, remediate and verify roles starts with the generated
+    `tasks/internal_variables.yml`, which refuses an internal `__linux_compliance_<role>_*` variable supplied from
+    outside the role (a role parameter, an include parameter, an extra variable, or a play `set_fact` of a constant
+    the role loads). Regenerate it with `make role-guards` after adding an internal variable; the generator fails on a
+    variable it cannot classify. `make test-role-guards` checks the refusals in check mode.
+  - A repository test fails when a symlink below the repository points outside it or is a symlinked directory other
+    than `.claude/skills`, because the guard does not scan through a symlinked directory.
+  - Role names of `include_role` and `import_role` (mapping and free-form `name=`) and of the `roles` of a play
+    (`- name`, `- role: name` or `- name: name`) must be plain or fully qualified names: a templated name or a path
+    such as `/srv/roles/x` or `../x` is denied. A free-form role include may not be templated at all.
+  - A templated task key (`"{{ m }}": cmd`) is denied as defence in depth; `ansible-playbook --syntax-check`
+    rejects it too. Templated keys inside module parameters and `vars` are data and stay allowed.
   - A document with any other root (a mapping such as `molecule.yml`, a vars file or a workflow) can never be loaded as
     plays or tasks; it stays checked deny-by-default for banned keys and `action` values at any depth. A `redirect` to a
     banned module (`plugin_routing` in `meta/runtime.yml`) is denied there too, because it would make another name an
@@ -269,7 +304,7 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-remediate-check`, `make test-content-golden`, `make test-browser` |
+| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-remediate-check`, `make test-role-guards`, `make test-verify`, `make test-content-golden`, `make test-browser` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
