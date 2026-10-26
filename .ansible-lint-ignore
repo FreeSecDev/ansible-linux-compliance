@@ -1,2 +1,3 @@
 tests/sanity/ignore-2.20.txt sanity[cannot-ignore] skip
 tests/sanity/ignore-2.21.txt sanity[cannot-ignore] skip
+tests/playbooks/internal-variables-hostname.yml var-naming[read-only] skip

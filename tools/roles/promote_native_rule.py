@@ -10,9 +10,11 @@ family, the derived toggle and the reversible ``recorded_state`` strategy. Every
 of the copy stays as generated, so no task file of the family exists and the role must fail
 closed if the rule is ever planned for apply.
 
-The tool refuses a catalogue below the repository's own ``roles/`` directory, a rule that
-is not an ``audit_only`` rule, and a family that is not disruptive, and the result must pass
-the same validation as the generated catalogue.
+The tool refuses a catalogue below the repository's own ``roles/`` directory, also through a
+symbolic link, and a hard link to the repository catalogue, which it recognises by the device
+and inode numbers (FREES-157). It also refuses a rule that is not an ``audit_only`` rule and a
+family that is not disruptive, and the result must pass the same validation as the generated
+catalogue.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ if TYPE_CHECKING:
 
 GenerationError = generate_toggles.GenerationError
 REPOSITORY_ROLES: Path = Path(__file__).resolve().parents[2] / "roles"
+REPOSITORY_CATALOGUE: Path = REPOSITORY_ROLES / "remediate" / "vars" / "rules.yml"
 NATIVE_STRATEGY: str = "recorded_state"
 
 
@@ -70,9 +73,18 @@ def promote(data: dict[str, object], rule_id: str) -> dict[str, object]:
     return promoted
 
 
+def _is_repository_file(catalogue: Path) -> bool:
+    """Return whether ``catalogue`` is, links to or is a hard link of the repository catalogue."""
+    if catalogue.resolve().is_relative_to(REPOSITORY_ROLES):
+        return True
+    target = catalogue.stat()
+    repository = REPOSITORY_CATALOGUE.stat()
+    return (target.st_dev, target.st_ino) == (repository.st_dev, repository.st_ino)
+
+
 def rewrite(catalogue: Path, rule_id: str) -> None:
     """Promote ``rule_id`` in the catalogue file ``catalogue``, which must be a copy."""
-    if catalogue.resolve().is_relative_to(REPOSITORY_ROLES):
+    if _is_repository_file(catalogue):
         message = f"{catalogue} is the catalogue of the repository; promote only in a copy"
         raise GenerationError(message)
     data = cast("dict[str, object]", yaml.safe_load(catalogue.read_text(encoding="utf-8")))

@@ -246,7 +246,7 @@ Tests
   test-evidence         Collect evidence bundles of synthetic audit results on localhost and report on them
   test-remediate-check  Run the remediate role and the audit toggle resolution against localhost in check mode, without become
   test-remediate-disruptive  Check in check mode that a disruptive rule is skipped without the allow-list (run by test-remediate-check)
-  test-role-guards      Check in check mode that forged internal role variables are refused before any change
+  test-role-guards      Check in check mode that forged internal variables and role outputs are refused before any change
   test-verify           Run the verify role on localhost with synthetic baseline and later audits, without oscap
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
@@ -453,6 +453,8 @@ test-audit-exceptions: require-uv collection-link
 	rm -rf '$(AUDIT_EXCEPTIONS_DIR)'
 	mkdir -p '$(AUDIT_EXCEPTIONS_DIR)'
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/audit-exceptions.yml
+	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) -e '{"group_names": ["web"]}' \
+		tests/playbooks/audit-exceptions-group-names.yml
 	$(AUDIT_EXCEPTIONS_PLAYBOOK) -i $(AUDIT_EXCEPTIONS_INVENTORY) --limit db01,localhost tests/playbooks/audit-exceptions-limit.yml \
 		| tee '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
 	grep -q 'unmatched on 1 of 2 target hosts; not covered: web01' '$(AUDIT_EXCEPTIONS_DIR)/limit.log'
@@ -566,15 +568,63 @@ ROLE_GUARDS_SENTINEL_PLAN := {"__linux_compliance_remediate_plan": "__linux_comp
 ROLE_GUARDS_SENTINEL_FAMILY := {"__linux_compliance_remediate_family": "__linux_compliance_unset__"}
 
 ROLE_GUARDS_REFUSALS := is set from outside the role|Validation of arguments failed
+ROLE_GUARDS_PARAMETERS := Refuse internal variables supplied from outside the role as parameters
+ROLE_GUARDS_HOSTS := forged_plan,forged_family,forged_vars,forged_template,
 
 define role_guards_expect_refusal
-status=0; ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit $(1) --check \
+status=0; ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(ROLE_GUARDS_HOSTS) --limit $(1) --check \
 		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/$(1).log' 2>&1 || status=$$?; \
 	cat '$(ROLE_GUARDS_DIR)/$(1).log'; \
 	test "$$status" -eq 2 || { printf 'error: %s did not fail the play (status %s)\n' '$(1)' "$$status" >&2; exit 1; }; \
-	grep -qE '$(ROLE_GUARDS_REFUSALS)' '$(ROLE_GUARDS_DIR)/$(1).log' || { printf 'error: %s was not refused\n' '$(1)' >&2; exit 1; }; \
-	if grep -q 'Remediate | Read the state ledger' '$(ROLE_GUARDS_DIR)/$(1).log'; then \
-		printf 'error: the role went on after %s\n' '$(1)' >&2; exit 1; fi
+	grep -qE '$(2)' '$(ROLE_GUARDS_DIR)/$(1).log' || { printf 'error: %s was not refused\n' '$(1)' >&2; exit 1; }; \
+	if grep -qE 'Remediate \| Read the state ledger|tmp/forged|FORGED-PLAN-USED|PROBE-COMPLETED' \
+		'$(ROLE_GUARDS_DIR)/$(1).log'; then printf 'error: the role went on after %s\n' '$(1)' >&2; exit 1; fi
+endef
+
+RUN_START_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i localhost, --check \
+	-e linux_compliance_target_hosts=freesecdev_no_target_host
+RUN_START_REFUSAL := Refusing to run: internal variables or role outputs of the freesecdev.linux_compliance roles
+RUN_START_AUDITED := {"linux_compliance_audited": {"run_id": "forged", "run_status": "completed", "evidence_written": true}}
+
+define run_start_expect_refusal
+status=0; $(RUN_START_PLAYBOOK) $(3) playbooks/$(2).yml > '$(ROLE_GUARDS_DIR)/run-start-$(1).log' 2>&1 || status=$$?; \
+	cat '$(ROLE_GUARDS_DIR)/run-start-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: run start %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -qF '$(RUN_START_REFUSAL) ($(4))' '$(ROLE_GUARDS_DIR)/run-start-$(1).log' || \
+		{ printf 'error: run start %s was not refused by the first play\n' '$(1)' >&2; exit 1; }; \
+	test "$$(grep -c '^PLAY \[' '$(ROLE_GUARDS_DIR)/run-start-$(1).log')" -eq 1 || \
+		{ printf 'error: run start %s went on after the first play\n' '$(1)' >&2; exit 1; }
+endef
+
+RUN_START_LIMIT := -i tests/playbooks/inventory/run-start-limit.yml --limit
+
+define run_start_limit_plain
+$(RUN_START_PLAYBOOK) $(RUN_START_LIMIT) $(2) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log' 2>&1 || \
+	{ cat '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log'; printf 'error: %s refused a plain run limited to %s\n' '$(1)' '$(2)' >&2; exit 1; }
+grep -qE '^ok: \[$(2)\]' '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log' || \
+	{ printf 'error: the run-start check of %s did not run with --limit %s\n' '$(1)' '$(2)' >&2; exit 1; }
+if grep -qE 'UNREACHABLE|unreachable=[1-9]' '$(ROLE_GUARDS_DIR)/run-start-limit-$(1)-$(2).log'; then \
+	printf 'error: the run-start check of %s connected to a host with --limit %s\n' '$(1)' '$(2)' >&2; exit 1; fi
+endef
+
+RUN_START_MARKER_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook --check \
+	-e linux_compliance_target_hosts=freesecdev_no_target_host -e @tests/playbooks/vars/run-start-templated-plan.yml
+
+define run_start_marker_refusal
+status=0; $(RUN_START_MARKER_PLAYBOOK) -i tests/playbooks/inventory/run-start-marker-$(2) $(4) playbooks/$(3).yml \
+		> '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log' 2>&1 || status=$$?; \
+	cat '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log'; \
+	test "$$status" -eq 2 || { printf 'error: marker case %s gave exit status %s, not 2\n' '$(1)' "$$status" >&2; exit 1; }; \
+	grep -qF '$(RUN_START_REFUSAL) (__linux_compliance_remediate_plan, linux_compliance_run_start_checked)' \
+		'$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log' || \
+		{ printf 'error: marker case %s was not refused by the first play\n' '$(1)' >&2; exit 1; }; \
+	test "$$(grep -c '^PLAY \[' '$(ROLE_GUARDS_DIR)/run-start-marker-$(1).log')" -eq 1 || \
+		{ printf 'error: marker case %s went on after the first play\n' '$(1)' >&2; exit 1; }
+endef
+
+define run_start_expect_success
+$(RUN_START_PLAYBOOK) playbooks/$(1).yml > '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log' 2>&1 || \
+	{ cat '$(ROLE_GUARDS_DIR)/run-start-plain-$(1).log'; printf 'error: %s refused a plain run\n' '$(1)' >&2; exit 1; }
 endef
 
 test-role-guards: require-uv collection-link
@@ -589,13 +639,45 @@ test-role-guards: require-uv collection-link
 		tests/playbooks/internal-variables-extra.yml
 	$(REMEDIATE_CHECK) -e '$(ROLE_GUARDS_SENTINEL_FAMILY)' -e internal_forged_variable=__linux_compliance_remediate_family \
 		tests/playbooks/internal-variables-extra.yml
-	$(call role_guards_expect_refusal,forged_plan)
-	$(call role_guards_expect_refusal,forged_family)
-	ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i forged_plan,forged_family,forged_vars, --limit forged_vars --check \
-		tests/playbooks/internal-variables-role-param.yml > '$(ROLE_GUARDS_DIR)/forged_vars.log' 2>&1 || \
-		{ cat '$(ROLE_GUARDS_DIR)/forged_vars.log'; exit 1; }
-	if grep -q 'tmp/forged' '$(ROLE_GUARDS_DIR)/forged_vars.log'; then \
-		printf 'error: role variables of a roles entry replaced the plan\n' >&2; exit 1; fi
+	$(REMEDIATE_CHECK) tests/playbooks/internal-variables-templated.yml
+	$(call role_guards_expect_refusal,forged_plan,$(ROLE_GUARDS_REFUSALS))
+	$(call role_guards_expect_refusal,forged_family,$(ROLE_GUARDS_REFUSALS))
+	$(call role_guards_expect_refusal,forged_vars,$(ROLE_GUARDS_PARAMETERS))
+	$(call role_guards_expect_refusal,forged_template,$(ROLE_GUARDS_REFUSALS))
+	$(call run_start_expect_success,audit)
+	$(call run_start_expect_success,remediate)
+	$(call run_start_expect_success,verify)
+	$(call run_start_expect_refusal,templated_plan,remediate,-e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,audited_audit,audit,-e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,audited_evidence,evidence,-e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,audited_inventory,evidence,-i tests/playbooks/inventory/run-start-planted.yml,linux_compliance_audited)
+	$(call run_start_expect_refusal,comparison,verify,-e '{"__linux_compliance_verify_comparison": {}}',__linux_compliance_verify_comparison)
+	$(call run_start_expect_refusal,marker,remediate,-e linux_compliance_run_start_checked=true,linux_compliance_run_start_checked)
+	$(call run_start_expect_refusal,inventory_hostname,evidence,-e inventory_hostname=freesecdev_forged,none)
+	$(call run_start_expect_refusal,group_names,audit,-e '{"group_names": ["web"]}',none)
+	$(call run_start_expect_refusal,group_names_grouped,audit,-i $(AUDIT_EXCEPTIONS_INVENTORY) -e '{"group_names": ["web"]}',none)
+	$(REMEDIATE_CHECK) -i $(AUDIT_EXCEPTIONS_INVENTORY) tests/playbooks/internal-variables-hostname.yml
+	$(call run_start_expect_refusal,limit_plan,remediate,$(RUN_START_LIMIT) web01 -e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,limit_audited,audit,$(RUN_START_LIMIT) web01 -e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,limit_unreachable,remediate,$(RUN_START_LIMIT) lost01 -e @tests/playbooks/vars/run-start-templated-plan.yml,__linux_compliance_remediate_plan)
+	$(call run_start_expect_refusal,limit_evidence,evidence,$(RUN_START_LIMIT) web01 -e '$(RUN_START_AUDITED)',linux_compliance_audited)
+	$(call run_start_expect_refusal,limit_verify,verify,$(RUN_START_LIMIT) web01 -e '{"__linux_compliance_verify_comparison": {}}',__linux_compliance_verify_comparison)
+	$(call run_start_limit_plain,remediate,web01)
+	$(call run_start_limit_plain,remediate,lost01)
+	$(call run_start_limit_plain,audit,localhost)
+	$(call run_start_marker_refusal,host-remediate,host,remediate,)
+	$(call run_start_marker_refusal,host-remediate-limit,host,remediate,--limit web01)
+	$(call run_start_marker_refusal,host-audit,host,audit,)
+	$(call run_start_marker_refusal,host-audit-limit,host,audit,--limit web01)
+	$(call run_start_marker_refusal,group-remediate,group,remediate,)
+	$(call run_start_marker_refusal,group-remediate-limit,group,remediate,--limit web01)
+	$(call run_start_marker_refusal,group-audit,group,audit,)
+	$(call run_start_marker_refusal,group-audit-limit,group,audit,--limit web01)
+	status=0; $(RUN_START_PLAYBOOK) playbooks/audit.yml playbooks/audit.yml > '$(ROLE_GUARDS_DIR)/run-start-twice.log' 2>&1 \
+		|| status=$$?; cat '$(ROLE_GUARDS_DIR)/run-start-twice.log'; \
+		test "$$status" -eq 2 || { printf 'error: two shipped playbooks in one invocation gave status %s\n' "$$status" >&2; exit 1; }; \
+		grep -qF '$(RUN_START_REFUSAL) (__linux_compliance_audit_' '$(ROLE_GUARDS_DIR)/run-start-twice.log' || \
+		{ printf 'error: the second shipped playbook was not refused by its run-start check\n' >&2; exit 1; }
 
 VERIFY_DIR := build/test-verify
 VERIFY_PLAYBOOK := ANSIBLE_NOCOLOR=1 $(RUN) ansible-playbook -i $(AUDIT_EXCEPTIONS_INVENTORY) \

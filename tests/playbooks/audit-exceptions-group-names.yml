@@ -1,0 +1,47 @@
+---
+- name: Audit exceptions | Write the exceptions files
+  ansible.builtin.import_playbook: audit-exceptions-files.yml
+
+- name: Audit exceptions | A forged group_names does not widen the scope of an exception
+  hosts: db01
+  gather_facts: false
+  vars_files:
+    - vars/audit-exceptions.yml
+  vars:
+    linux_compliance_exceptions_file: "{{ audit_exceptions_valid_file }}"
+  tasks:
+    - name: Require the forged group_names from the Makefile
+      ansible.builtin.assert:
+        that:
+          - group_names == ['web']
+          - "'db01' not in groups['web']"
+        fail_msg: >-
+          Run this playbook through make test-audit-exceptions, which passes -e '{"group_names": ["web"]}' for db01,
+          a host outside the group web.
+        quiet: true
+
+    - name: Build a synthetic audit result with failures, an error and a pass
+      ansible.builtin.include_tasks: tasks/audit-exceptions-synthetic.yml
+      vars:
+        audit_exceptions_outcomes: "{{ audit_exceptions_outcomes_mixed }}"
+
+    - name: Apply the exceptions with the audit role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.audit
+        tasks_from: evaluate.yml
+
+    - name: Check that the exception scoped to the group web did not apply to db01
+      vars:
+        waived_outcomes: >-
+          {{ linux_compliance_audited.exceptions.evaluation.scan_run.findings
+             | items2dict(key_name='rule_id', value_name='outcome') }}
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_audited.exceptions.status == 'applied'
+          - waived_outcomes[audit_exceptions_rule_login_events] == 'fail'
+          - waived_outcomes[audit_exceptions_rule_root_login] == 'fail'
+          - linux_compliance_audited.exceptions.summary.waived == 0
+        fail_msg: >-
+          AUDIT-EXCEPTIONS-GROUP-NAMES-WIDENED: the extra variable group_names put db01 in the scope of an exception
+          for the group web: {{ waived_outcomes }}
+        quiet: true

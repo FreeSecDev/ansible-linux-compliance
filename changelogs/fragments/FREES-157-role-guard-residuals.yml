@@ -1,0 +1,42 @@
+---
+security_fixes:
+  - >-
+    role guards - the generated guard of the audit, evidence, remediate and verify roles first refuses every internal
+    fact, task variable and loaded constant of the role that is visible to the ``varnames`` lookup but not in
+    ``hostvars``, that is one passed as a role parameter, a variable of a ``roles`` entry, an include parameter
+    (``include_role``, ``import_role`` or ``include_tasks``) or a block or play variable. It refuses such a name
+    whatever its value, so a template that imitates the sentinels of the read-backs, such as a remediation plan that
+    copies the dispatched flag while it is a string and returns a forged plan later, no longer passes. The read-backs
+    of FREES-153 refuse fixed values only; a name that is already a fact from an earlier entry point of the same role
+    in the run, and an extra variable in a playbook that does not import ``playbooks/run_start.yml``, still meet only
+    the read-backs.
+  - >-
+    playbooks - every shipped playbook first imports the new ``playbooks/run_start.yml``, which refuses the run when
+    an inventory host or ``localhost`` already has an internal ``__linux_compliance_*`` variable or a role output such
+    as ``linux_compliance_audited`` or ``linux_compliance_discovered`` from an extra variable, the inventory,
+    ``group_vars``, ``host_vars`` or a fact cache, or when ``inventory_hostname`` is an extra variable. It reads only
+    magic variables and literals, and its play targets ``all:localhost`` with ``run_once``, so ``--limit`` cannot skip
+    it and it never connects to a host. The cacheable baseline marker of the verify role is exempt, and a shipped
+    playbook that imports another passes ``linux_compliance_run_start_checked`` as a play variable.
+  - >-
+    audit role - right after it publishes ``linux_compliance_audited`` the role checks that the fact, also as read
+    through ``hostvars``, holds the ``run_id`` of the scan that just ran, so an override of its own output fails before
+    a gate, a collection or a comparison trusts it.
+  - >-
+    evidence role - ``tasks/collect.yml`` is merged into ``tasks/main.yml``, so ``tasks_from`` can no longer start the
+    collection without the internal-variable guard and the output directory validation.
+  - >-
+    role guards - after the parameter check each guard records a random host nonce and refuses the run unless it reads
+    back through ``hostvars[inventory_hostname]``, so a role parameter, an include parameter or an extra variable
+    ``inventory_hostname`` can no longer point the guard at the facts of another host.
+  - >-
+    audit role - exception scopes match the groups that the ``groups`` magic variable lists for the host, not
+    ``group_names``, which an extra variable or an include parameter can replace; ``-e group_names=[web]`` no longer
+    puts a host outside ``web`` in the scope of an exception for ``web``. ``playbooks/run_start.yml`` also refuses an
+    extra variable ``group_names``, and two shipped playbooks in one ``ansible-playbook`` invocation are refused by
+    design.
+trivial:
+  - >-
+    ``tools/roles/promote_native_rule.py`` refuses a hard link to the repository catalogue, recognised by its device
+    and inode numbers. ``make test-role-guards`` runs the templated-plan probe through an include parameter, a static
+    role import and a role parameter, and the run-start refusals through ``-e`` and the inventory.

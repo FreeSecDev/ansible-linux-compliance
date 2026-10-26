@@ -849,12 +849,17 @@ def test_only_the_two_sanity_ignore_files_exist() -> None:
     assert names == ["ignore-2.20.txt", "ignore-2.21.txt"]
 
 
-def test_ansible_lint_ignore_skips_only_the_two_sanity_ignore_files() -> None:
+def test_ansible_lint_ignore_skips_only_the_sanity_files_and_the_host_nonce_test() -> None:
     lines = (rules.REPO_ROOT / ".ansible-lint-ignore").read_text(encoding="utf-8").splitlines()
     assert lines == [
         "tests/sanity/ignore-2.20.txt sanity[cannot-ignore] skip",
         "tests/sanity/ignore-2.21.txt sanity[cannot-ignore] skip",
+        "tests/playbooks/internal-variables-hostname.yml var-naming[read-only] skip",
     ]
+    pyproject = tomllib.loads((rules.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    justifications = pyproject["tool"]["freesecdev"]["lint-justifications"]
+    key = "ansible-lint var-naming[read-only] (tests/playbooks/internal-variables-hostname.yml)"
+    assert "include parameter" in justifications[key]
 
 
 def test_ansible_lint_ignore_is_not_published() -> None:
