@@ -1054,22 +1054,19 @@ def test_pylint_wrong_import_position_is_not_globally_disabled() -> None:
     assert "wrong-import-position" in pyproject["tool"]["freesecdev"]["pylint-justifications"]
 
 
-def test_only_the_guard_may_exceed_the_module_line_limit() -> None:
+def test_no_module_exceeds_the_module_line_limit() -> None:
     pyproject = tomllib.loads((rules.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     limit = pyproject["tool"]["pylint"]["format"]["max-module-lines"]
     assert limit == 1500
     justifications = pyproject["tool"]["freesecdev"]["pylint-justifications"]
-    assert "--max-module-lines=1700" in justifications["max-module-lines-repository-guard"]
+    assert not any(key.startswith("max-module-lines-") for key in justifications)
     makefile = (rules.REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "--ignore=$(notdir $(PYLINT_GUARD)) tools tests plugins" in makefile
-    assert [
-        path.relative_to(rules.REPO_ROOT).as_posix()
-        for directory in ("tools", "tests", "plugins")
-        for path in (rules.REPO_ROOT / directory).rglob("check_repo_rules.py")
-    ] == ["tools/lint/check_repo_rules.py"]
-    assert "PYLINT_GUARD := tools/lint/check_repo_rules.py" in makefile
-    assert "PYLINT_GUARD_MAX_LINES := 1700" in makefile
-    assert "pylint --max-module-lines=$(PYLINT_GUARD_MAX_LINES) $(PYLINT_GUARD)" in makefile
+    assert "--max-module-lines" not in makefile
+    assert "--ignore=" not in makefile
+    assert "PYLINT_GUARD" not in makefile
+    lint_pylint = makefile.split("\nlint-pylint:", 1)[1].split("\n\n", 1)[0]
+    ignores = "'$(PYLINT_BASE_IGNORES)|$(PYLINT_MODULE_IGNORES)'"
+    assert f"pylint --ignore-paths={ignores} tools tests plugins" in lint_pylint
     long_modules = {
         path.relative_to(rules.REPO_ROOT).as_posix(): len(
             path.read_text(encoding="utf-8").splitlines()
@@ -1078,8 +1075,19 @@ def test_only_the_guard_may_exceed_the_module_line_limit() -> None:
         for path in (rules.REPO_ROOT / directory).rglob("*.py")
         if len(path.read_text(encoding="utf-8").splitlines()) > limit
     }
-    assert set(long_modules) <= {"tools/lint/check_repo_rules.py"}
-    assert all(lines <= 1700 for lines in long_modules.values())
+    assert long_modules == {}
+
+
+def test_the_repository_guard_is_a_package_of_small_modules() -> None:
+    package = rules.REPO_ROOT / "tools" / "lint" / "repo_rules"
+    sizes = {
+        path.name: len(path.read_text(encoding="utf-8").splitlines())
+        for path in package.glob("*.py")
+    }
+    assert set(sizes) >= {"__init__.py", "names.py", "isolation.py", "repository.py"}
+    assert all(lines < 600 for lines in sizes.values())
+    entry = rules.REPO_ROOT / "tools" / "lint" / "check_repo_rules.py"
+    assert len(entry.read_text(encoding="utf-8").splitlines()) < 600
 
 
 def test_make_lint_runs_pylint_in_two_passes() -> None:
