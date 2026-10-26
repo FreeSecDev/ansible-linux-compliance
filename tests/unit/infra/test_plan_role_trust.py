@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -256,15 +257,16 @@ def git_tracked_files(directory: Path) -> list[str]:
     if git is None:
         message = "git is required to list the tracked files of infra/account"
         raise RuntimeError(message)
+    prefix = f"{directory.relative_to(REPOSITORY_ROOT).as_posix()}/"
     completed = subprocess.run(
-        [git, "-C", str(directory), "ls-files", "-z", "--full-name", "--", "."],
+        [git, "-C", str(REPOSITORY_ROOT), "ls-files", "-z", "--", prefix],
         capture_output=True,
         check=True,
         text=True,
         timeout=GIT_TIMEOUT_SECONDS,
         shell=False,
+        env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
     )
-    prefix = f"{directory.relative_to(REPOSITORY_ROOT).as_posix()}/"
     return [entry.removeprefix(prefix) for entry in completed.stdout.split("\0") if entry]
 
 
