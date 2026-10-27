@@ -25,7 +25,7 @@ MOLECULE_SELFTEST = MOLECULE_INSTANCE_CONFIG='$(MOLECULE_SELFTEST_CONFIG)' $(MOL
 	-e molecule_instance_config='$(MOLECULE_SELFTEST_CONFIG)'
 MOLECULE_SELFTEST_REFUSED := docker_host extra_args privileged local localhost loopback unknown mounted unmasked seccomp
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
-	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions
+	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions content/stig-mapping.json
 TREE_SORT := sort -z
 AWS_ACCOUNT_ID := 910736812072
 AWS_REGION := eu-west-1
@@ -70,7 +70,7 @@ EVIDENCE_GATE_CHECK := .sections.compliance.status == "available" \
 	and ([.sections.compliance.items[].format] | sort) == ["exceptions_evaluation", "scan_run"] \
 	and ([.sections.compliance.groups[].summary.run_status] | sort) == ["completed", "failed"] \
 	and ([.sections.compliance.groups[].host.hostname] | sort) == ["db01", "web01"] \
-	and .sections.compliance.host_coverage.status == "unknown" and .schema_version == "2.2" \
+	and .sections.compliance.host_coverage.status == "unknown" and .schema_version == "2.3" \
 	and .overview.off_platform == 0 and .sections.compliance.off_platform == []
 EVIDENCE_MISSING_CHECK := .sections.compliance.status == "partial" and .sections.compliance.summary == null \
 	and .sections.compliance.groups == [] and .sections.compliance.aggregates == [] \

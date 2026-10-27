@@ -1,0 +1,24 @@
+---
+minor_changes:
+  - >-
+    audit - the ``audit`` role offers ``linux_compliance_audit_backend: scc``, with
+    ``linux_compliance_audit_scc_content_path``, ``linux_compliance_audit_scc_content_sha256``,
+    ``linux_compliance_audit_scc_profile_id`` and ``linux_compliance_audit_allow_off_platform_benchmark``. It maps the
+    topic and rule toggles to the DISA rules of the SCC profile through ``content/stig-mapping.json`` with the new
+    ``scc_toggles`` filter: a DISA rule is disabled only when every ComplianceAsCode rule of its STIG ID is disabled,
+    partial disables leave it enabled and are noted, a DISA rule without a mapped rule is never disabled by a toggle,
+    and a mapping of another DISA release refuses the run (FREES-170).
+  - >-
+    compliance_scan - with ``backend: scc`` the module accepts ``disabled_rules``. SCC 5.15 applies tailoring only
+    from its installation directory, which an audit never changes, so SCC scans every rule and the disabled ones are
+    reported as ``disabled`` afterwards, never as passing; SCC's own result stays in the raw results and in the
+    finding's ``scanner_result`` evidence. ``planned.disable_method`` says ``tailoring`` or ``post_scan`` (FREES-170).
+  - >-
+    compliance_scan - the new option ``control_placement`` gives findings the control family, topic and tags of the
+    ComplianceAsCode rules they map to (findings model schema 1.2, ``placement`` module_utils). Unmapped SCC rules are
+    placed in the family ``unmapped`` (FREES-170).
+  - >-
+    reporting - report schema 2.3: every rule carries its ``control`` placement, an embedded scan run may be findings
+    model schema 1.2, and the dashboard filters the rules by family and topic (FREES-170).
+  - >-
+    profile_info - each rule also returns its XCCDF ``version``, the STIG ID of a DISA rule (FREES-170).

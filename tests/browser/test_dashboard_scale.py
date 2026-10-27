@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
     from tests.browser.conftest import Dashboard
 
-RULES_PER_INPUT = 148
+RULES_PER_INPUT = 145
 LOAD_SECONDS = 60.0
 ACTION_SECONDS = 10.0
 SCHEMA = json.loads(
@@ -122,7 +123,7 @@ def exercise_rules(view: Dashboard) -> dict[str, float]:
     timings["500 rows"] = timed(lambda: size.select_option(value="500"))
     assert rules.locator("tbody > tr").count() == 500
     timings["last page"] = timed(rules.locator("button", has_text="Last page").click)
-    host = rules.locator("select").first
+    host = rules.locator("label").filter(has_text=re.compile(r"^Host")).locator("select")
     second = host.evaluate("s => s.options[2].value")
     timings["filter"] = timed(lambda: host.select_option(value=second))
     before = status.inner_text()

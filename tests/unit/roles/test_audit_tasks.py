@@ -8,6 +8,8 @@ import yaml
 ROLE = Path(__file__).resolve().parents[3] / "roles" / "audit"
 SCAN_MODULE = "freesecdev.linux_compliance.compliance_scan"
 TOGGLE_RESULT = "{{ __linux_compliance_audit_toggles.disabled_rules }}"
+OPENSCAP = "linux_compliance_audit_backend == 'openscap'"
+SCC = "linux_compliance_audit_backend == 'scc'"
 
 Task = dict[str, object]
 
@@ -43,10 +45,52 @@ def test_the_toggles_are_resolved_after_the_discover_check_and_before_the_scan()
         if "discover role verified the same profile" in str(task.get("name"))
     )
     toggles = index_of(main, "toggles.yml")
+    scc = index_of(main, "scc.yml")
     scan = index_of(main, SCAN_MODULE)
-    assert discover_check < toggles < scan
+    assert discover_check < toggles < scc < scan
     assert main[toggles].get("tags") == ["always"]
-    assert "when" not in main[toggles]
+    assert main[scc].get("tags") == ["always"]
+    assert main[discover_check]["when"] == OPENSCAP
+    assert main[toggles]["when"] == OPENSCAP
+    assert main[scc]["when"] == SCC
+
+
+def test_the_scc_branch_reads_the_profile_and_maps_the_toggles_before_the_scan() -> None:
+    steps = tasks("scc.yml")
+    assert steps[0].get("ansible.builtin.import_tasks") == "toggle_names.yml"
+    read = index_of(steps, "freesecdev.linux_compliance.profile_info")
+    assert steps[read]["become"] is True
+    resolve = next(
+        position
+        for position, task in enumerate(steps)
+        if "__linux_compliance_audit_toggles"
+        in cast("dict[str, object]", task.get("ansible.builtin.set_fact", {}))
+    )
+    facts = cast("dict[str, str]", steps[resolve]["ansible.builtin.set_fact"])
+    expression = facts["__linux_compliance_audit_toggles"]
+    assert "freesecdev.linux_compliance.scc_toggles" in expression
+    assert "role_path ~ '/../../content/stig-mapping.json'" in expression
+    assert "linux_compliance_audit_disabled_rules" in expression
+    stop = next(
+        position
+        for position, task in enumerate(steps)
+        if "Stop on invalid toggles" in str(task.get("name"))
+    )
+    assertion = cast("dict[str, list[str]]", steps[stop]["ansible.builtin.assert"])
+    assert assertion["that"] == ["__linux_compliance_audit_toggles.errors | length == 0"]
+    assert read < resolve < stop
+    assert all(task.get("tags") == ["always"] for task in steps)
+
+
+def test_the_scan_passes_the_scc_inputs() -> None:
+    main = tasks("scan.yml")
+    scan = cast("dict[str, str]", main[index_of(main, SCAN_MODULE)][SCAN_MODULE])
+    assert "__linux_compliance_audit_toggles.control_placement" in scan["control_placement"]
+    assert scan["allow_off_platform_benchmark"] == (
+        "{{ linux_compliance_audit_allow_off_platform_benchmark }}"
+    )
+    assert "__linux_compliance_audit_scc_profile.content_path" in scan["content_path"]
+    assert "__linux_compliance_audit_scc_profile.content_sha256" in scan["expected_sha256"]
 
 
 def test_the_toggle_file_resolves_with_the_shared_filter_and_fails_closed() -> None:
@@ -145,3 +189,11 @@ def test_the_exception_scope_uses_the_groups_magic_variable_not_group_names() ->
         " | map(attribute='key') | sort)" in expression
     )
     assert "group_names" not in str(apply.get("vars"))
+
+
+def test_the_stig_mapping_that_the_scc_branch_reads_ships_with_the_collection() -> None:
+    root = ROLE.parents[1]
+    assert (ROLE / ".." / ".." / "content" / "stig-mapping.json").resolve().is_file()
+    makefile = (root / "Makefile").read_text(encoding="utf-8")
+    sources = makefile.split("\nCOLLECTION_SOURCES := ", 1)[1].split("\nTREE_SORT", 1)[0]
+    assert "content/stig-mapping.json" in sources.split()

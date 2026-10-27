@@ -701,3 +701,14 @@ gains secondary subsystem tags. These refinements apply.
   profiles, and each reviewed example in every profile that selects it. `make test-remediate-check` runs the remediate
   role and the audit toggle resolution in check mode with `services`, `sssd`, `cron` and `time_sync`, and `smartcard`,
   `apparmor`, `selinux` and `pwhistory` off.
+
+## Amendment 2026-10-27: toggles for SCC (FREES-170)
+
+The toggles also reach the DISA rules that the SCC backend scans
+([ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-27-toggles-and-control-families-for-scc-frees-170)).
+The audit role resolves them with the same function as for OpenSCAP (`toggles.resolve_audit`, which the
+`audit_disabled_rules` filter now calls too) for the ComplianceAsCode rules of the STIG mapping, and the
+`scc_toggles` filter disables a DISA rule only when every ComplianceAsCode rule mapped to its STIG ID is disabled.
+A DISA rule with no mapped rule is never disabled by a toggle. SCC tailors only from its installation directory, so
+SCC's disabled rules are reported as `disabled` after the scan instead of through a tailoring file; they are never
+counted as passing, as this ADR requires.

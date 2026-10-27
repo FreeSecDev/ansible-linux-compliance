@@ -1,0 +1,29 @@
+---
+- name: Audit | Load the rule catalogue and the family registry of the remediate role
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../remediate/vars/rules.yml"
+    name: __linux_compliance_audit_catalogue
+  tags:
+    - always
+
+- name: Audit | Find the toggle variables
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_toggle_names: >-
+      {{ lookup('ansible.builtin.varnames', __linux_compliance_audit_toggle_pattern, wantlist=True) | sort }}
+  tags:
+    - always
+
+- name: Audit | Check that the toggle variable names are a list of names
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_toggle_names is sequence
+      - __linux_compliance_audit_toggle_names is not string
+      - __linux_compliance_audit_toggle_names is not mapping
+      - __linux_compliance_audit_toggle_names | reject('string') | list | length == 0
+    fail_msg: >-
+      An internal fact of the audit role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was scanned.
+    quiet: true
+  tags:
+    - always

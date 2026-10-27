@@ -11,7 +11,9 @@ rejects DOCTYPE and ENTITY declarations. Elements are never stored; only the
 benchmark, its profiles (with their version) and the identifier, severity and title
 of its rules are kept, and the text of each rule's ``reference`` whose ``href`` is one
 of :data:`STIG_ID_REFERENCES`: the DISA STIG IDs that ComplianceAsCode records for a
-rule (FREES-146). That text is kept as written; whoever uses it validates it.
+rule (FREES-146). The text of a rule's own ``version`` is kept too: a DISA benchmark
+records the rule's STIG ID there (FREES-170). That text is kept as written; whoever
+uses it validates it.
 
 Rule selection follows XCCDF. Each ``select`` of a profile is classified by what
 the benchmark defines, never by the shape of the identifier: the identifier of a
@@ -108,11 +110,12 @@ _TITLE_KIND: Final[str] = "title"
 _VERSION_KIND: Final[str] = "version"
 _PROFILE_VERSION_KIND: Final[str] = "profile_version"
 _STIG_ID_KIND: Final[str] = "stig_id"
+_RULE_VERSION_KIND: Final[str] = "rule_version"
 _PART: Final[str] = "part"
 _SELECT_KIND: Final[str] = "select"
 _OTHER: Final[str] = "other"
 _COLLECTING: Final[frozenset[str]] = frozenset(
-    {_TITLE_KIND, _VERSION_KIND, _PROFILE_VERSION_KIND, _STIG_ID_KIND, _PART}
+    {_TITLE_KIND, _VERSION_KIND, _PROFILE_VERSION_KIND, _STIG_ID_KIND, _RULE_VERSION_KIND, _PART}
 )
 _TITLE_OWNERS: Final[frozenset[str]] = frozenset({_BENCH, _PROFILE_KIND, _RULE_KIND})
 
@@ -169,6 +172,9 @@ class Rule:
             first, in the order of the XCCDF group hierarchy.
         stig_ids: The text of the rule's DISA STIG ID references, in document
             order, cleaned but not validated.
+        version: The text of the rule's own first ``version``, cleaned but not
+            validated, empty when it has none. A DISA benchmark records the rule's
+            STIG ID there, for example ``UBTU-24-100010``.
     """
 
     rule_id: str
@@ -176,6 +182,7 @@ class Rule:
     title: str
     groups: tuple[str, ...] = ()
     stig_ids: tuple[str, ...] = ()
+    version: str = ""
 
 
 @dataclass(frozen=True)
@@ -248,7 +255,7 @@ class _Frame:
 
 
 class _RuleDraft:
-    __slots__ = ("default", "groups", "rule_id", "severity", "stig_ids", "title")
+    __slots__ = ("default", "groups", "rule_id", "severity", "stig_ids", "title", "version")
 
     def __init__(
         self, rule_id: str, severity: str, groups: tuple[str, ...], *, default: bool
@@ -259,6 +266,7 @@ class _RuleDraft:
         self.default = default
         self.title: str | None = None
         self.stig_ids: list[str] = []
+        self.version: str | None = None
 
 
 class _ProfileDraft:
@@ -326,7 +334,7 @@ def _finish_benchmark(draft: _BenchmarkDraft) -> Benchmark:
         title=draft.title or "",
         profiles=tuple(_finish_profile(profile, draft) for profile in draft.profiles),
         rules=tuple(
-            Rule(r.rule_id, r.severity, r.title or "", r.groups, tuple(r.stig_ids))
+            Rule(r.rule_id, r.severity, r.title or "", r.groups, tuple(r.stig_ids), r.version or "")
             for r in draft.rules
         ),
     )
@@ -358,6 +366,7 @@ class _Collector:
             (_PROFILE_KIND, _SELECT): self._open_select,
             (_PROFILE_KIND, _VERSION_TAG): self._open_profile_version,
             (_RULE_KIND, _REFERENCE): self._open_reference,
+            (_RULE_KIND, _VERSION_TAG): self._open_rule_version,
         }
 
     def start(self, name: str, attributes: dict[str, str]) -> None:
@@ -397,6 +406,10 @@ class _Collector:
     def _open_profile_version(self, _attributes: dict[str, str]) -> _Frame:
         self.parts = []
         return _Frame(_PROFILE_VERSION_KIND)
+
+    def _open_rule_version(self, _attributes: dict[str, str]) -> _Frame:
+        self.parts = []
+        return _Frame(_RULE_VERSION_KIND)
 
     def _open_reference(self, attributes: dict[str, str]) -> _Frame:
         if attributes.get("href") not in STIG_ID_REFERENCES:
@@ -482,6 +495,8 @@ class _Collector:
             self.profile.version = _clean("".join(self.parts))
         elif kind == _STIG_ID_KIND:
             self.rule.stig_ids.append(_clean("".join(self.parts)))
+        elif kind == _RULE_VERSION_KIND and self.rule.version is None:
+            self.rule.version = _clean("".join(self.parts))
         elif kind == _TITLE_KIND and frame.accept:
             self._store_title(self.frames[-1].kind)
 
@@ -937,7 +952,12 @@ def profile_report(path: str, expected_sha256: str, profile_id: str) -> dict[str
         "rule_count": len(rules),
         "rule_ids": [rule.rule_id for rule in rules],
         "rules": [
-            {"rule_id": rule.rule_id, "severity": rule.severity, "title": rule.title}
+            {
+                "rule_id": rule.rule_id,
+                "severity": rule.severity,
+                "title": rule.title,
+                "version": rule.version,
+            }
             for rule in rules
         ],
     }

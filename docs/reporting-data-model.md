@@ -221,6 +221,12 @@ worst `outcome`, the highest `severity`,
 `benchmark_id`, `profile_id`, `outcome`, `expired_waiver`), so the outcome of each file stays visible. Two inputs of
 one host with the same benchmark, version and profile are merged, worst outcome first.
 
+Since 2.3 every `rules` entry has `control`: the control placement of the rule (`family`, `topic`, `tags`, `stig_id`,
+`mapped_rules`, `partially_disabled_by`) from the first source, by artifact path, whose finding carries one, or
+`null`. SCC findings carry it through the STIG mapping, so a DISA rule is grouped with the control family of the
+ComplianceAsCode rules of its STIG ID, or under `unmapped`
+([audit guide](audit.md#scc-toggles-and-control-families)). The dashboard filters the rules by family and topic.
+
 ## Off-platform results
 
 A scan run with an off-platform marker (findings model schema 1.1) evaluated a benchmark made for another platform
@@ -387,7 +393,12 @@ scenario is required. Any other `format` or `version` is an error.
 - 1.0: first version (FREES-75), including the `partial` section status, `groups`, `aggregates` and `gaps`. A change that adds a field bumps the minor version; a breaking change bumps the major
   version, and `report-v<major>.json` is a new file. The version, this page and ADR 0016 change together.
 - The HTML dashboard (FREES-77, ADR 0017) adds no field to the document and refuses every version it does not
-  know; it reads 2.0, 2.1 and 2.2.
+  know; it reads 2.0, 2.1, 2.2 and 2.3.
+- 2.3 (FREES-170, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-27-schema-23-control-placement-frees-170)):
+  a field addition, so a minor version in the same `report-v2.json`. Every `rules` entry has `control`, an object or
+  `null`, and an embedded scan run may have findings model schema 1.2, in which every finding has `control` and at
+  least one is an object. A 2.0, 2.1 or 2.2 document has no `control` on any rule and still validates. A 2.2 consumer
+  migrates by accepting `"2.3"` and the key; figures are unchanged.
 - 2.2 (FREES-161, [ADR 0016 amendment](adr/0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-22-off-platform-results-frees-161)):
   a field addition, so a minor version in the same `report-v2.json`. `sections.compliance.off_platform`,
   `overview.off_platform` and `off_platform` in every compliance item's data are new and required in a 2.2 document,

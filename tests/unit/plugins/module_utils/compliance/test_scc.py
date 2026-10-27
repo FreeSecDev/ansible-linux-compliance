@@ -322,7 +322,7 @@ class TestRequestErrors:
     """What the backend refuses before anything runs."""
 
     def test_refuses_tailoring(self, setup: Setup) -> None:
-        with pytest.raises(scanner.ScanRequestError, match="FREES-146"):
+        with pytest.raises(scanner.ScanRequestError, match="never applies a tailoring file"):
             setup.audit(tailoring_path="tailoring.xml")
 
     def test_refuses_a_benchmark_without_an_scc_pin(self, setup: Setup) -> None:
@@ -864,7 +864,7 @@ class TestOffPlatform:
             )
 
     def test_the_opt_in_does_not_lift_the_tailoring_refusal(self, setup: Setup) -> None:
-        with pytest.raises(scanner.ScanRequestError, match="FREES-146"):
+        with pytest.raises(scanner.ScanRequestError, match="never applies a tailoring file"):
             setup.audit(
                 host=TARGET_2604, allow_off_platform_benchmark=True, tailoring_path="tailoring.xml"
             )

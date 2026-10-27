@@ -61,8 +61,18 @@ def test_success_reports_the_selected_rules_without_change(
     assert result["rule_count"] == 2
     assert result["rule_ids"] == [RULE + "alpha", RULE + "beta"]
     assert result["rules"] == [
-        {"rule_id": RULE + "alpha", "severity": "high", "title": "Synthetic alpha rule"},
-        {"rule_id": RULE + "beta", "severity": "medium", "title": "Synthetic beta rule"},
+        {
+            "rule_id": RULE + "alpha",
+            "severity": "high",
+            "title": "Synthetic alpha rule",
+            "version": "",
+        },
+        {
+            "rule_id": RULE + "beta",
+            "severity": "medium",
+            "title": "Synthetic beta rule",
+            "version": "",
+        },
     ]
 
 

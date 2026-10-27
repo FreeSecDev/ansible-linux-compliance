@@ -14,6 +14,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     collection,
     exceptions,
     model,
+    placement,
 )
 from tools.reporting import common, report
 from tools.reporting.common import dumps
@@ -75,7 +76,7 @@ def test_the_schema_is_a_valid_2020_12_schema() -> None:
 def test_full_report_validates_against_the_schema(kit: Any) -> None:
     document = build(full_inputs(kit))
     assert errors(document) == []
-    assert document["schema_version"] == "2.2"
+    assert document["schema_version"] == "2.3"
     exceptions_summary = document["sections"]["exceptions"]["summary"]
     assert document["overview"] == {
         "available": sorted(SECTIONS),
@@ -737,6 +738,29 @@ def anchored_text(pattern: str) -> str:
 
 LIMIT_RULES: list[tuple[str, Any]] = [
     (r"/(then|else)/.*/maxItems$", STRUCTURAL),
+    (
+        (
+            r"/\$defs/controlPlacement/properties/"
+            r"(family|topic|tags/items|stig_id/oneOf/\d+)/maxLength$"
+        ),
+        placement.MAX_FAMILY_LENGTH,
+    ),
+    (r"/\$defs/controlPlacement/properties/\w+/items/maxLength$", model.MAX_ID_LENGTH),
+    (r"/\$defs/controlPlacement/properties/tags/maxItems$", placement.MAX_CONTROL_TAGS),
+    (r"/\$defs/controlPlacement/properties/mapped_rules/maxItems$", placement.MAX_MAPPED_RULES),
+    (r"/\$defs/controlPlacement/properties/partially_disabled_by/maxItems$", model.MAX_ITEMS),
+    (
+        r"/\$defs/controlPlacement/properties/(family|topic|tags/items)/pattern$",
+        anchored_text(placement.FAMILY_PATTERN),
+    ),
+    (
+        r"/\$defs/controlPlacement/properties/stig_id/oneOf/\d+/pattern$",
+        anchored_text(placement.STIG_ID_PATTERN),
+    ),
+    (
+        r"/\$defs/controlPlacement/properties/partially_disabled_by/items/pattern$",
+        anchored_text(placement.VARIABLE_PATTERN),
+    ),
     (r"/\$defs/sameHostNote/properties/groups/maxItems$", report.MAX_INPUTS),
     (r"/\$defs/exceptionScope/properties/\w+/maxItems$", exceptions.MAX_SCOPE_ITEMS),
     (r"/properties/findings/maxItems$", model.MAX_FINDINGS),

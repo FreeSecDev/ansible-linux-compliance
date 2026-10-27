@@ -75,7 +75,7 @@ from tools.reporting.parsers.scanrun import parse_scan_run
 from tools.reporting.parsers.xccdf import parse_arf, parse_xccdf
 from tools.reporting.waivers import exception_entries
 
-SCHEMA_VERSION: Final[str] = "2.2"
+SCHEMA_VERSION: Final[str] = "2.3"
 SECTION_NAMES: Final[tuple[str, ...]] = (
     "codebuild",
     "compliance",

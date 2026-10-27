@@ -288,7 +288,7 @@ def test_the_audit_role_finds_the_toggles_and_the_catalogue_like_the_remediate_r
     )
     tasks = cast(
         "list[dict[str, dict[str, str]]]",
-        yaml.safe_load((audit_role / "tasks" / "toggles.yml").read_text(encoding="utf-8")),
+        yaml.safe_load((audit_role / "tasks" / "toggle_names.yml").read_text(encoding="utf-8")),
     )
     catalogue_file = tasks[0]["ansible.builtin.include_vars"]["file"]
     assert catalogue_file == "{{ role_path }}/../remediate/vars/rules.yml"

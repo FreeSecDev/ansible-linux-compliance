@@ -42,6 +42,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_audit_scan$') == [] or '__linux_compliance_audit_scan' in
         (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_audit_scc_profile$') == [] or
+        '__linux_compliance_audit_scc_profile' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_audit_stale_audited$') == [] or
         '__linux_compliance_audit_stale_audited' in (hostvars[inventory_hostname] | list)
       - >-
@@ -139,6 +142,7 @@
     __linux_compliance_audit_exceptions_overview: __linux_compliance_unset__
     __linux_compliance_audit_exceptions_read_here: __linux_compliance_unset__
     __linux_compliance_audit_scan: __linux_compliance_unset__
+    __linux_compliance_audit_scc_profile: __linux_compliance_unset__
     __linux_compliance_audit_toggle_names: __linux_compliance_unset__
     __linux_compliance_audit_toggles: __linux_compliance_unset__
   tags:
@@ -152,6 +156,7 @@
       - __linux_compliance_audit_exceptions_overview == '__linux_compliance_unset__'
       - __linux_compliance_audit_exceptions_read_here == '__linux_compliance_unset__'
       - __linux_compliance_audit_scan == '__linux_compliance_unset__'
+      - __linux_compliance_audit_scc_profile == '__linux_compliance_unset__'
       - __linux_compliance_audit_toggle_names == '__linux_compliance_unset__'
       - __linux_compliance_audit_toggles == '__linux_compliance_unset__'
       - __linux_compliance_audit_exceptions_paths == '__linux_compliance_unset__'
@@ -226,6 +231,7 @@
     __linux_compliance_audit_exceptions_overview: __linux_compliance_unset_again__
     __linux_compliance_audit_exceptions_read_here: __linux_compliance_unset_again__
     __linux_compliance_audit_scan: __linux_compliance_unset_again__
+    __linux_compliance_audit_scc_profile: __linux_compliance_unset_again__
     __linux_compliance_audit_toggle_names: __linux_compliance_unset_again__
     __linux_compliance_audit_toggles: __linux_compliance_unset_again__
   tags:
@@ -239,6 +245,7 @@
       - __linux_compliance_audit_exceptions_overview == '__linux_compliance_unset_again__'
       - __linux_compliance_audit_exceptions_read_here == '__linux_compliance_unset_again__'
       - __linux_compliance_audit_scan == '__linux_compliance_unset_again__'
+      - __linux_compliance_audit_scc_profile == '__linux_compliance_unset_again__'
       - __linux_compliance_audit_toggle_names == '__linux_compliance_unset_again__'
       - __linux_compliance_audit_toggles == '__linux_compliance_unset_again__'
       - __linux_compliance_audit_exceptions_paths == '__linux_compliance_unset_again__'
@@ -306,6 +313,7 @@
     __linux_compliance_audit_exceptions_overview: __linux_compliance_unset__
     __linux_compliance_audit_exceptions_read_here: __linux_compliance_unset__
     __linux_compliance_audit_scan: __linux_compliance_unset__
+    __linux_compliance_audit_scc_profile: __linux_compliance_unset__
     __linux_compliance_audit_toggle_names: __linux_compliance_unset__
     __linux_compliance_audit_toggles: __linux_compliance_unset__
   tags:
