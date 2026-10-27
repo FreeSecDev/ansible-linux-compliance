@@ -157,7 +157,7 @@ def test_the_openscap_run_exports_honest_checklists_through_the_mapping(
     assert report["with_cci"] == DISA_RULES
     assert report["host_name"] == "scc-integration"
     assert report["findings"] == OSCAP_PROFILE_RULES
-    counts = {key: cast("int", value) for key, value in report.items() if isinstance(value, int)}
+    counts = {key: value for key, value in report.items() if isinstance(value, int)}
     assert counts["mapped_entries"] + counts["no_check_entries"] == DISA_RULES
     assert counts["exported_findings"] + counts["unexported_findings"] == OSCAP_PROFILE_RULES
     statuses = cast("dict[str, int]", report["statuses"])
