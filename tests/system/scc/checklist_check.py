@@ -153,16 +153,13 @@ def _profile_checks(mapping: Path, run: model.ScanRun) -> dict[str, list[str]]:
     return {}
 
 
-def check_mapped(directory: Path, scan_run: Path, mapping: Path) -> dict[str, object]:
-    """Return the counts and mismatches of the checklist of a mapped ComplianceAsCode run."""
-    report, ckl_files, cklb_files = _files(directory)
-    if len(ckl_files) != 1 or len(cklb_files) != 1:
-        return report
-    ckl = checklist_formats.read_ckl(ckl_files[0].read_bytes())
-    cklb = checklist_formats.read_cklb(cklb_files[0].read_bytes())
-    run = model.loads(scan_run.read_text(encoding="utf-8"))
-    checks = _profile_checks(mapping, run)
-    vulns = _vulns(ckl_files[0].read_bytes())
+def _mapped_mismatches(
+    run: model.ScanRun,
+    checks: dict[str, list[str]],
+    vulns: list[dict[str, str]],
+    statuses: tuple[dict[str, str], dict[str, str]],
+) -> tuple[list[str], set[str], int]:
+    ckl, cklb = statuses
     found: list[str] = []
     covered: set[str] = set()
     mapped = 0
@@ -174,6 +171,20 @@ def check_mapped(directory: Path, scan_run: Path, mapping: Path) -> dict[str, ob
             found.append(reference)
         mapped += 1 if rules else 0
         covered.update(rules)
+    return found, covered, mapped
+
+
+def check_mapped(directory: Path, scan_run: Path, mapping: Path) -> dict[str, object]:
+    """Return the counts and mismatches of the checklist of a mapped ComplianceAsCode run."""
+    report, ckl_files, cklb_files = _files(directory)
+    if len(ckl_files) != 1 or len(cklb_files) != 1:
+        return report
+    ckl = checklist_formats.read_ckl(ckl_files[0].read_bytes())
+    cklb = checklist_formats.read_cklb(cklb_files[0].read_bytes())
+    run = model.loads(scan_run.read_text(encoding="utf-8"))
+    checks = _profile_checks(mapping, run)
+    vulns = _vulns(ckl_files[0].read_bytes())
+    found, covered, mapped = _mapped_mismatches(run, checks, vulns, (ckl, cklb))
     exported = sum(1 for finding in run.findings if finding.rule_id in covered)
     report.update(
         {
