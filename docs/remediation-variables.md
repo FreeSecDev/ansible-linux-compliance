@@ -1384,24 +1384,24 @@ families through their subsystem tags:
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_accounts_password_pam_dcredit_enabled` | `accounts_password_pam_dcredit` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_dictcheck_enabled` | `accounts_password_pam_dictcheck` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_difok_enabled` | `accounts_password_pam_difok` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_enforce_root_enabled` | `accounts_password_pam_enforce_root` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_enforcing_enabled` | `accounts_password_pam_enforcing` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_lcredit_enabled` | `accounts_password_pam_lcredit` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_maxclassrepeat_enabled` | `accounts_password_pam_maxclassrepeat` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_maxrepeat_enabled` | `accounts_password_pam_maxrepeat` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_maxsequence_enabled` | `accounts_password_pam_maxsequence` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_minclass_enabled` | `accounts_password_pam_minclass` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_minlen_enabled` | `accounts_password_pam_minlen` | `owned_dropin` |
-| `linux_compliance_rule_accounts_password_pam_ocredit_enabled` | `accounts_password_pam_ocredit` | `owned_dropin` |
+| `linux_compliance_rule_accounts_password_pam_dcredit_enabled` | `accounts_password_pam_dcredit` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_dictcheck_enabled` | `accounts_password_pam_dictcheck` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_difok_enabled` | `accounts_password_pam_difok` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_enforce_root_enabled` | `accounts_password_pam_enforce_root` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_enforcing_enabled` | `accounts_password_pam_enforcing` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_lcredit_enabled` | `accounts_password_pam_lcredit` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_maxclassrepeat_enabled` | `accounts_password_pam_maxclassrepeat` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_maxrepeat_enabled` | `accounts_password_pam_maxrepeat` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_maxsequence_enabled` | `accounts_password_pam_maxsequence` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_minclass_enabled` | `accounts_password_pam_minclass` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_minlen_enabled` | `accounts_password_pam_minlen` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_ocredit_enabled` | `accounts_password_pam_ocredit` | `recorded_value` |
 | `linux_compliance_rule_accounts_password_pam_pwquality_enabled_enabled` | `accounts_password_pam_pwquality_enabled` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwquality_password_auth_enabled` | `accounts_password_pam_pwquality_password_auth` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled` | `accounts_password_pam_pwquality_retry` | `owned_dropin` |
+| `linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled` | `accounts_password_pam_pwquality_retry` | `recorded_value` |
 | `linux_compliance_rule_accounts_password_pam_pwquality_system_auth_enabled` | `accounts_password_pam_pwquality_system_auth` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_retry_enabled` | `accounts_password_pam_retry` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_ucredit_enabled` | `accounts_password_pam_ucredit` | `owned_dropin` |
+| `linux_compliance_rule_accounts_password_pam_ucredit_enabled` | `accounts_password_pam_ucredit` | `recorded_value` |
 | `linux_compliance_rule_package_pam_pwquality_installed_enabled` | `package_pam_pwquality_installed` | `audit_only` |
 
 ### `pwhistory`

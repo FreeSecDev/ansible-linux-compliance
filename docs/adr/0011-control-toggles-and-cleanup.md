@@ -725,10 +725,11 @@ step-2 and FREES-165 amendments; the statements about the crontab rule itself ar
   `discover` role verified. A rule without a value for them fails its family before anything changes.
 - **Recorded values per attribute.** When several rules share one file, each records and restores only the attribute
   it changes (content, mode, uid or gid), so every rule toggle reverts exactly its own change.
-- **Owned drop-ins per rule, and a created directory.** `pwquality` writes one drop-in per rule. A drop-in directory
-  that the collection had to create carries an empty marker and is removed with it once nothing else is in it; a
-  directory without the marker is never removed. This keeps "absent before means absent after" for directories without
-  a ledger record of the directory.
+- **Where the content checks.** `pwquality` writes one line per setting into the main file where the content checks
+  only it (Ubuntu 24.04) and one drop-in per rule where it checks the drop-ins (RHEL 9), so the audit agrees with the
+  remediation; both are `recorded_value`, the main file with the prior line and the file's mode, owner, group and
+  hash. A drop-in directory that the collection had to create carries an empty marker and is removed with it once
+  nothing else is in it; a directory without the marker is never removed.
 - **Disruptive native topic.** `pwquality` is the first disruptive family with native rules. Its rules are `skip` with
   `disruptive_not_allowed` without `pwquality` or `pam` in the allow-list, which `make test-remediate-disruptive` now
   also checks on the pinned catalogue, and the toggle lifecycle applies and cleans it up with its allow-list entry.

@@ -434,7 +434,7 @@ test-coverage: require-uv collection-link
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 
 test-content-golden: require-uv collection-link content
-	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_banners.py --no-cov
+	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py --no-cov
 	$(GENERATE_CATALOGUE) --check
 	$(GENERATE_STIG_MAPPING) --check
 

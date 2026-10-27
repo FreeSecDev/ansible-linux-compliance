@@ -110,18 +110,43 @@ keeps its ledger entry and reports `cleanup_incomplete`, as for `file_permission
 The content is rewritten with `ansible.builtin.copy`, which replaces the inode; the content hash, mode, owner and
 group are restored, the inode and mtime are not.
 
-### 4. Password quality: one owned drop-in per rule
+### 4. Password quality: written where the content of each platform checks
 
-Every pwquality rule is `owned_dropin`: it writes `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf` with
-a header that names the rule and one setting with the profile value (`enforce_for_root` is a flag without value). The
-main file is never touched. Cleanup removes the drop-in when it carries the header; a file at that path without the
-header is never overwritten or removed (`not_owned`). When the directory does not exist (Ubuntu) the first drop-in
-creates it with mode `0755` and an empty marker file `.freesecdev-created`, which libpwquality ignores because it
-reads only `*.conf`; after the family's cleanup and apply the directory and the marker are removed when nothing else is
-left in it, so an absent directory is absent again. A directory that existed is never removed. The rule reports
-`notapplicable` when `/etc/security/pwquality.conf` does not exist, because libpwquality is not installed, and
-`overridden` without changing anything when the main file or a drop-in that libpwquality reads later sets the same
-setting, because the drop-in would not be in force and the result would claim a remediation that did not happen.
+Decided by the lead after review: the remediation follows what the pinned content checks on each platform, so that
+the audit agrees with the remediation. The OVAL of the pinned 0.1.82 datastreams, read per rule, says:
+
+- **RHEL 9:** every native pwquality check reads `^/etc/security/pwquality\.conf(\.d/[^/]+\.conf)?$`, the main file
+  and every drop-in (13 rules; `accounts_password_pam_enforcing` has no RHEL definition).
+- **Ubuntu 24.04:** every native pwquality check reads only `^/etc/security/pwquality.conf$` (12 rules).
+
+Each pwquality rule names the benchmarks whose content checks only the main file in `main_file_benchmarks` (today
+`xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04`), and the family chooses the method from the benchmark that the
+`discover` role verified. `tests/unit/tools/test_content_golden_native.py` checks every rule against the OVAL objects
+of both pinned datastreams, so a content update that moves a check fails CI until the parameter follows. Every
+pwquality rule is `recorded_value`.
+
+- **Main file (Ubuntu).** `ansible.builtin.lineinfile` writes one line per setting into
+  `/etc/security/pwquality.conf` (`minlen = 14`, or `enforce_for_root`): it replaces the one active line of the
+  setting, or appends the line when there is none. Before the change the ledger records the exact prior state of the
+  setting and of the file: `setting_line` (the active line as it was, or `null` when the setting was absent), `mode`,
+  `owner`, `group` and `sha256` of the file. Cleanup writes the recorded line back in place, or removes the setting
+  when it was absent, and gives the file back its recorded mode, owner and group; with every rule cleaned up the file
+  is byte for byte the original, which the toggle lifecycle checks by SHA-256. No drop-in directory is created. A
+  setting that is active on more than one line is not touched (`duplicate_setting`), because libpwquality would take
+  the last one and the content's check requires every one to comply. Nothing overrides the main file, which
+  libpwquality reads last.
+- **Drop-ins (RHEL).** One drop-in per rule, `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf`, with a
+  header that names the rule; the main file is not touched. The ledger records that the drop-in did not exist
+  (`dropin: null`); cleanup removes it when it carries the header, and a file at that path without the header is never
+  overwritten or removed (`not_owned`). A rule is `overridden`, without any change, when the main file or a drop-in
+  that libpwquality reads later sets the same setting. Where the directory does not exist, the first drop-in creates
+  it with mode `0755` and an empty marker `.freesecdev-created`, which libpwquality ignores because it reads only
+  `*.conf`, and the directory and the marker are removed when nothing else is left in it. The Rocky Linux 9 package
+  ships the directory, so the Molecule lifecycle does not exercise this branch; the first version of this change did
+  exercise it on Ubuntu.
+
+On both platforms a rule is `notapplicable` when `/etc/security/pwquality.conf` does not exist, because libpwquality
+is not installed, as in the content.
 
 Kept `audit_only`, each with its reason:
 
@@ -133,10 +158,11 @@ Kept `audit_only`, each with its reason:
 | `banner_etc_profiled_ssh_confirm` (banners) | It installs a login script that asks SSH users for confirmation; its value is a regular expression of the whole script, and it changes the behaviour of interactive SSH sessions |
 | `dconf_gnome_banner_enabled`, `dconf_gnome_login_banner_text` (banners) | They need GDM, which neither the containers nor server profiles have (`package_gdm` platform); on RHEL the dconf database must be compiled with `dconf update`, a command; they belong with the `desktop` topic and need the libvirt scenarios |
 
-Known gap: on Ubuntu 24.04 the pinned content reads only `/etc/security/pwquality.conf`, so a host audit reports the
-pwquality rules as failing although the drop-ins are in force. Writing the main file on Ubuntu only would make the
-audit pass, but edits a file that the package owns and that the operator may manage; the decision is recorded as a
-follow-up for the lead (FREES-53 comment) rather than taken silently here.
+Upstream gap, kept documented: the Ubuntu 24.04 checks of the pinned content ignore
+`/etc/security/pwquality.conf.d`, although libpwquality 1.4.5 reads it (since 1.3.0). A drop-in therefore takes effect
+on Ubuntu but is not seen by the audit; settings that an operator keeps in drop-ins are invisible to the Ubuntu audit.
+This is a ComplianceAsCode limitation to report upstream; the collection does not depend on it, because on Ubuntu it
+writes the main file.
 
 `pwquality` stays disruptive under the `pam` umbrella: its rules can reject every password change, including root's
 (`enforce_for_root`). It is applied and cleaned up only with `pwquality` or `pam` in
@@ -165,7 +191,7 @@ check that the list of those topics matches the catalogue.
 
 Every banner and pwquality rule that can be remediated natively and safely is now remediated, with the value of the
 selected profile and an exact revert per rule. The profile values are reviewed data in the catalogue, checked against
-the pinned content in CI. The patterns (per-attribute records, owned drop-ins, a marker for a created directory,
+the pinned content in CI. The patterns (per-attribute records, one line per setting in a shared file, drop-ins per rule, a marker for a created directory,
 generated profile values) are reusable by the next topics, as the [guide](../native-remediation-guide.md) describes.
 
 ## Trade-offs
@@ -184,7 +210,8 @@ proves only that the collection created the directory; removing it by hand makes
 ## Operational consequences
 
 `make catalogue` reads the values (a second bounded parse per datastream). The Ubuntu Molecule image installs
-`libpam-pwquality` (pinned) so that the pwquality lifecycle runs on both platforms. The harness runs four banner
+`libpam-pwquality` (pinned) so that the pwquality lifecycle runs on both platforms: through the main file on
+Ubuntu and through drop-ins on Rocky Linux. The harness runs four banner
 cycles and two pwquality cycles per platform in addition to the four of `file_permissions`. The containers drop every
 capability, so root cannot change ownership there: the owner and group rules are proven compliant on the as-built
 root-owned files, and their change and restore are not exercised in a container; the customised banner pre-state

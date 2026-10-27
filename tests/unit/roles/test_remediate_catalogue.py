@@ -28,7 +28,10 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "attribute", "max_mode"},
         {"path", "attribute", "id"},
     ],
-    "pwquality": [{"path", "setting"}, {"path", "setting"} | PROFILE_VALUE_PARAMETERS],
+    "pwquality": [
+        {"path", "setting", "main_file_benchmarks"},
+        {"path", "setting", "main_file_benchmarks"} | PROFILE_VALUE_PARAMETERS,
+    ],
 }
 NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality"]
 

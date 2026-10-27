@@ -660,102 +660,130 @@ native_rules:
       attribute: mode
       max_mode: "0644"
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_dcredit
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-dcredit.conf
       setting: dcredit
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_dictcheck
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-dictcheck.conf
       setting: dictcheck
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_difok
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_difok
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-difok.conf
       setting: difok
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_enforce_root
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-enforce-root.conf
       setting: enforce_for_root
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_enforcing
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_enforcing
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-enforcing.conf
       setting: enforcing
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_lcredit
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_lcredit
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-lcredit.conf
       setting: lcredit
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_maxclassrepeat
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_maxclassrepeat
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-maxclassrepeat.conf
       setting: maxclassrepeat
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_maxrepeat
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_maxrepeat
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-maxrepeat.conf
       setting: maxrepeat
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_maxsequence
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_maxsequence
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-maxsequence.conf
       setting: maxsequence
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_minclass
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_minclass
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-minclass.conf
       setting: minclass
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_minlen
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-minlen.conf
       setting: minlen
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_ocredit
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_ocredit
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-ocredit.conf
       setting: ocredit
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_retry
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_retry
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-pwquality-retry.conf
       setting: retry
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_ucredit
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     runbook: null
     profile_value: var_password_pam_ucredit
     parameters:
       path: /etc/security/pwquality.conf.d/50-freesecdev-ucredit.conf
       setting: ucredit
+      main_file_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
 untagged_families:
   - family: auditd
     reason: >-

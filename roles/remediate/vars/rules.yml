@@ -159,12 +159,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_dcredit_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-dcredit.conf"
       setting: "dcredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_dcredit"
       profile_values:
         - datastream: "ubuntu2404"
@@ -198,12 +200,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_dictcheck_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-dictcheck.conf"
       setting: "dictcheck"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_dictcheck"
       profile_values:
         - datastream: "ubuntu2404"
@@ -231,12 +235,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_difok_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-difok.conf"
       setting: "difok"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_difok"
       profile_values:
         - datastream: "ubuntu2404"
@@ -274,22 +280,26 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_enforce_root_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-enforce-root.conf"
       setting: "enforce_for_root"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
   - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforcing"
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_enforcing_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-enforcing.conf"
       setting: "enforcing"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_enforcing"
       profile_values:
         - datastream: "ubuntu2404"
@@ -306,12 +316,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_lcredit_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-lcredit.conf"
       setting: "lcredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_lcredit"
       profile_values:
         - datastream: "ubuntu2404"
@@ -345,12 +357,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_maxclassrepeat_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-maxclassrepeat.conf"
       setting: "maxclassrepeat"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_maxclassrepeat"
       profile_values:
         - datastream: "rhel9"
@@ -364,12 +378,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_maxrepeat_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-maxrepeat.conf"
       setting: "maxrepeat"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_maxrepeat"
       profile_values:
         - datastream: "ubuntu2404"
@@ -396,12 +412,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_maxsequence_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-maxsequence.conf"
       setting: "maxsequence"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_maxsequence"
       profile_values:
         - datastream: "ubuntu2404"
@@ -426,12 +444,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_minclass_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-minclass.conf"
       setting: "minclass"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_minclass"
       profile_values:
         - datastream: "ubuntu2404"
@@ -462,12 +482,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_minlen_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-minlen.conf"
       setting: "minlen"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_minlen"
       profile_values:
         - datastream: "ubuntu2404"
@@ -521,12 +543,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_ocredit_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-ocredit.conf"
       setting: "ocredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_ocredit"
       profile_values:
         - datastream: "ubuntu2404"
@@ -559,12 +583,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-pwquality-retry.conf"
       setting: "retry"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_retry"
       profile_values:
         - datastream: "rhel9"
@@ -578,12 +604,14 @@ __linux_compliance_remediate_rules:
     family: pwquality
     disruptive: true
     reversible: true
-    revert_strategy: owned_dropin
+    revert_strategy: recorded_value
     toggle: linux_compliance_rule_accounts_password_pam_ucredit_enabled
     runbook: null
     parameters:
       path: "/etc/security/pwquality.conf.d/50-freesecdev-ucredit.conf"
       setting: "ucredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
       value_id: "var_password_pam_ucredit"
       profile_values:
         - datastream: "ubuntu2404"

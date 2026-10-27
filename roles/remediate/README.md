@@ -10,8 +10,8 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 
 Dispatcher and safety model implemented (FREES-52). 30 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (`file_permissions`), 15 rules of `banners` (the text,
-mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`) and 14 rules of `pwquality` (one drop-in per
-setting below `/etc/security/pwquality.conf.d`), with the values of the selected profile
+mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`) and 14 rules of `pwquality` (one line per
+setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks), with the values of the selected profile
 ([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md)). The catalogue `vars/rules.yml` holds
 every rule of the 25 pinned profiles, 1203 rules in 55 families, generated from the pinned content (FREES-53,
 [control families](../../docs/control-families.md)); every rule without a native remediation has the strategy

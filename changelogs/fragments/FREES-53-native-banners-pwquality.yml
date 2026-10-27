@@ -6,9 +6,11 @@ minor_changes:
     profile's XCCDF value) and their mode, owner and group, each rule recording and restoring only the
     attribute it changes.
   - >-
-    remediate - the ``pwquality`` topic is native: one owned drop-in per setting below
-    ``/etc/security/pwquality.conf.d`` with the value of the selected profile, removed again when the rule
-    or topic is switched off. It is disruptive and needs ``pwquality`` or ``pam`` in
+    remediate - the ``pwquality`` topic is native, with the value of the selected profile, written where
+    the pinned content of the platform checks it: one line per setting in ``/etc/security/pwquality.conf``
+    on Ubuntu 24.04 and one drop-in per setting below ``/etc/security/pwquality.conf.d`` on RHEL 9. Switching
+    the rule or topic off restores the recorded line or removes the drop-in. It is disruptive and needs
+    ``pwquality`` or ``pam`` in
     ``linux_compliance_remediate_allow_disruptive``.
   - >-
     catalogue - native rules take the values of the XCCDF ``Value`` their check exports from the pinned

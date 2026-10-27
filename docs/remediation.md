@@ -337,21 +337,28 @@ asks for confirmation) and `dconf_gnome_banner_enabled`, `dconf_gnome_login_bann
 `pwquality` is disruptive (umbrella `pam`), so it is applied and cleaned up only with `pwquality` or `pam` in
 `linux_compliance_remediate_allow_disruptive`.
 
-| Rules | What is applied | Strategy and cleanup |
-|---|---|---|
-| `accounts_password_pam_dcredit`, `_dictcheck`, `_difok`, `_enforcing`, `_lcredit`, `_maxclassrepeat`, `_maxrepeat`, `_maxsequence`, `_minclass`, `_minlen`, `_ocredit`, `_ucredit`, `_pwquality_retry`, `_enforce_root` | `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf` with a header that names the rule and the setting with the profile's value (`enforce_for_root` without value); the main `pwquality.conf` is never touched | `owned_dropin`: cleanup removes the drop-in when it carries the header |
+Each rule writes where the pinned content of the platform checks the setting
+([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md)): the Ubuntu 24.04 checks read only
+`/etc/security/pwquality.conf`, the RHEL 9 checks also every `/etc/security/pwquality.conf.d/*.conf`. The parameter
+`main_file_benchmarks` of each rule names the benchmarks of the first kind, and the family picks the method from the
+benchmark that the `discover` role verified.
 
-libpwquality reads the drop-ins in lexical order and the main file last, so a rule is `overridden`, with nothing
-changed and the overriding file named, when the main file or a later drop-in sets the same setting. A file at the
-drop-in's path without the header is `not_owned` and never touched. Without `/etc/security/pwquality.conf`
-libpwquality is not installed and every rule is `notapplicable`, as in the content. Where the directory does not exist
-(Ubuntu), the first drop-in creates it with mode `0755` and an empty marker `.freesecdev-created`; once the family's
-cleanup leaves nothing else in it, the marker and the directory are removed again. Kept `audit_only`: the rules that
-put `pam_pwquality.so` into the PAM stack (`accounts_password_pam_pwquality_enabled`, `_password_auth`,
-`_system_auth`, topic `pam`), `accounts_password_pam_retry` (its check reads the PAM arguments first and never the
-drop-ins) and `package_pam_pwquality_installed` (package state, and on Ubuntu the package changes the PAM stack). On
-Ubuntu 24.04 the pinned content checks only the main file, so a host audit reports the pwquality rules as failing even
-with the drop-ins in force; this is recorded in ADR 0021.
+| Rules | Method | What is applied | Record and cleanup |
+|---|---|---|---|
+| `accounts_password_pam_dcredit`, `_dictcheck`, `_difok`, `_enforcing`, `_lcredit`, `_maxclassrepeat`, `_maxrepeat`, `_maxsequence`, `_minclass`, `_minlen`, `_ocredit`, `_ucredit`, `_pwquality_retry`, `_enforce_root` | main file (Ubuntu 24.04) | One line per setting in `/etc/security/pwquality.conf` with the profile's value (`enforce_for_root` without value), written with `lineinfile`: the one active line of the setting is replaced, or the line is appended | `recorded_value` of `setting_line` (the prior active line, or `null` when absent) and the file's `mode`, `owner`, `group` and `sha256`; cleanup writes the line back or removes the setting, and restores the mode, owner and group, so the file is byte for byte the original once every rule is cleaned up |
+| the same rules | drop-ins (RHEL 9) | `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf` with a header that names the rule; the main file is not touched | `recorded_value` of `dropin` (`null`: it did not exist); cleanup removes the drop-in when it carries the header |
+
+With the main file, a setting that is active on more than one line is `duplicate_setting` and not touched. With
+drop-ins, libpwquality reads them in lexical order and the main file last, so a rule is `overridden`, with nothing
+changed and the overriding file named, when the main file or a later drop-in sets the same setting; a file at the
+drop-in's path without the header is `not_owned` and never touched; and where the directory does not exist, the
+first drop-in creates it with mode `0755` and an empty marker `.freesecdev-created`, removed with the directory once
+nothing else is in it. Without `/etc/security/pwquality.conf` libpwquality is not installed and every rule is
+`notapplicable`, as in the content. Kept `audit_only`: the rules that put `pam_pwquality.so` into the PAM stack
+(`accounts_password_pam_pwquality_enabled`, `_password_auth`, `_system_auth`, topic `pam`),
+`accounts_password_pam_retry` (its check reads the PAM arguments first and never the drop-ins) and
+`package_pam_pwquality_installed` (package state, and on Ubuntu the package changes the PAM stack). That the Ubuntu
+checks ignore the drop-in directory, which libpwquality reads, is an upstream gap recorded in ADR 0021.
 
 ## Results
 

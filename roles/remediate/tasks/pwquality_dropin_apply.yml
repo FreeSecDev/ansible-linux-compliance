@@ -9,6 +9,9 @@
       - __linux_compliance_remediate_rule is mapping
       - __linux_compliance_remediate_rule.family == 'pwquality'
       - __linux_compliance_remediate_rule.parameters.path in __linux_compliance_remediate_pwq_owned
+      - >-
+        __linux_compliance_remediate_pwq_benchmark
+        not in __linux_compliance_remediate_rule.parameters.main_file_benchmarks
       - __linux_compliance_remediate_pwq_values[__linux_compliance_remediate_rule.rule_id] is string
       - __linux_compliance_remediate_plan is defined
       - __linux_compliance_remediate_plan is mapping
@@ -18,8 +21,9 @@
         ((__linux_compliance_remediate_plan.families
          | selectattr('name', 'equalto', 'pwquality') | list | first | default({}))).apply | default([])
     fail_msg: >-
-      pwquality_apply.yml runs only for a rule that the remediate dispatcher planned to apply,
-      with linux_compliance_remediate_enabled true. No change was made to the host.
+      pwquality_dropin_apply.yml runs only for a rule that the remediate dispatcher planned to apply,
+      for content whose check reads the drop-ins, with linux_compliance_remediate_enabled true. No change was made
+      to the host.
     quiet: true
   tags:
     - always
@@ -122,12 +126,15 @@
   tags:
     - always
 
-- name: Password quality | Record that the collection owns the drop-in before writing it
+- name: Password quality | Record that the drop-in did not exist before writing it
   freesecdev.linux_compliance.control_state:
     action: record
     rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
     family: "{{ __linux_compliance_remediate_rule.family }}"
     revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values:
+      - name: dropin
+        value: null
     collection_version: "{{ __linux_compliance_remediate_collection_version }}"
   register: __linux_compliance_remediate_pwq_record
   when:

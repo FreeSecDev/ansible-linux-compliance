@@ -20,7 +20,9 @@ both pinned datastreams of `content/manifest.yml`:
 - its `platform` elements: `system_with_kernel` and `machine` exclude containers, `package_<name>` makes the rule
   not applicable without the package.
 
-Decide per rule whether it can be implemented natively and safely: with `ansible.builtin` modules only (`copy`,
+Write the setting where the content's check reads it on each platform, so the audit agrees with the remediation;
+when the platforms differ, choose the method per benchmark and pin it with a golden test against the OVAL (as
+`pwquality` does with `main_file_benchmarks`). Decide per rule whether it can be implemented natively and safely: with `ansible.builtin` modules only (`copy`,
 `template`, `lineinfile`, `file`, `stat`, `slurp`, `find`; never `shell`, `command`, `raw` or `script`), without
 changing what another topic owns (the PAM stack belongs to `pam`, packages to the package topics), and with an exact
 revert. A rule that fails any of these stays `audit_only`; write the reason into the ADR of the topic and the
@@ -130,4 +132,4 @@ role README and add a changelog fragment.
 |---|---|---|---|
 | `file_permissions` | `file_permissions_crontab` | `recorded_value` (mode) | Keeps a stricter mode (`current & 0600`) |
 | `banners` | text of `/etc/issue`, `/etc/issue.net`, `/etc/motd` (CIS and STIG/CCN rules), their mode, owner and group | `recorded_value` per attribute | Text from `linux_compliance_remediate_banner_text`, validated against the profile's value; a missing file is created `0644 root:root` and removed again on cleanup |
-| `pwquality` | `dcredit`, `dictcheck`, `difok`, `enforce_for_root`, `enforcing`, `lcredit`, `maxclassrepeat`, `maxrepeat`, `maxsequence`, `minclass`, `minlen`, `ocredit`, `retry` (STIG rule), `ucredit` | `owned_dropin`, one per rule | Values from the profile; `overridden` when the main file or a later drop-in sets the same setting; the Ubuntu content checks only the main file |
+| `pwquality` | `dcredit`, `dictcheck`, `difok`, `enforce_for_root`, `enforcing`, `lcredit`, `maxclassrepeat`, `maxrepeat`, `maxsequence`, `minclass`, `minlen`, `ocredit`, `retry` (STIG rule), `ucredit` | `recorded_value`: one line per setting in the main file where the content checks only it (Ubuntu), one drop-in per rule where it checks the drop-ins (RHEL) | Values from the profile; the method per platform follows the content's OVAL (`main_file_benchmarks`, checked by a golden test); `duplicate_setting` and `overridden` refuse to claim a change that would not take effect |

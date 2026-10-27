@@ -18,47 +18,63 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 OVAL = "{http://oval.mitre.org/XMLSchema/oval-definitions-5#independent}"
 OBJECT = f"{OVAL}textfilecontent54_object"
 PATTERN = f"{OVAL}pattern"
+FILEPATH = f"{OVAL}filepath"
+FIELDS = {PATTERN: "pattern", FILEPATH: "filepath"}
+MAIN_ONLY = "^/etc/security/pwquality.conf$"
+WITH_DROPINS = r"^/etc/security/pwquality\.conf(\.d/[^/]+\.conf)?$"
 
 
-class PatternCollector:
-    """Keeps the pattern of every textfilecontent54 object of an OVAL document."""
+class ObjectCollector:
+    """Keeps the file path and the pattern of every textfilecontent54 object of an OVAL document."""
 
     def __init__(self) -> None:
-        self.patterns: dict[str, str] = {}
+        self.objects: dict[str, dict[str, str]] = {}
         self.current = ""
-        self.inside = False
+        self.field = ""
         self.parts: list[str] = []
 
     def start(self, name: str, attributes: dict[str, str], /) -> None:
         if name == OBJECT:
             self.current = attributes.get("id", "")
-        elif name == PATTERN and self.current:
-            self.inside = True
+            self.objects[self.current] = {}
+        elif name in FIELDS and self.current:
+            self.field = FIELDS[name]
             self.parts = []
 
     def end(self, name: str, /) -> None:
-        if name == PATTERN and self.inside:
-            self.patterns[self.current] = "".join(self.parts)
-            self.inside = False
+        if name in FIELDS and self.field:
+            self.objects[self.current][self.field] = "".join(self.parts)
+            self.field = ""
         elif name == OBJECT:
             self.current = ""
 
     def text(self, data: str, /) -> None:
-        if self.inside:
+        if self.field:
             self.parts.append(data)
 
 
+def collected(path: str) -> dict[str, dict[str, str]]:
+    collector = ObjectCollector()
+    xmlsafe.parse_chunks(xmlsafe.iter_file_chunks(path, profile_values.MAX_BYTES), collector)
+    return collector.objects
+
+
 def pinned() -> list[tuple[str, str]]:
+    return [(path, sha256) for path, sha256, _ in pinned_benchmarks()]
+
+
+def pinned_benchmarks() -> list[tuple[str, str, str]]:
     manifest = fetch.load_manifest(REPOSITORY_ROOT / "content" / "manifest.yml")
     paths = [
-        (CONTENT_DIRECTORY / stream.file_name, stream.sha256) for stream in manifest.datastreams
+        (CONTENT_DIRECTORY / stream.file_name, stream.sha256, stream.benchmark_id)
+        for stream in manifest.datastreams
     ]
-    missing = [str(path) for path, _ in paths if not path.is_file()]
+    missing = [str(path) for path, _, _ in paths if not path.is_file()]
     if missing:
         if REQUIRE_CONTENT:
             pytest.fail(f"pinned content {missing} is missing but FREESECDEV_REQUIRE_CONTENT=1")
         pytest.skip(f"pinned content {missing} is not present; run make test-content-golden")
-    return [(str(path.resolve()), sha256) for path, sha256 in paths]
+    return [(str(path.resolve()), sha256, benchmark) for path, sha256, benchmark in paths]
 
 
 def native_parameters() -> dict[str, dict[str, object]]:
@@ -98,13 +114,46 @@ def test_the_forbidden_patterns_cover_every_os_pattern_of_the_cis_banner_checks(
     checked = 0
     for path, sha256 in pinned():
         profile_values.read_values(path, sha256)
-        collector = PatternCollector()
-        xmlsafe.parse_chunks(xmlsafe.iter_file_chunks(path, profile_values.MAX_BYTES), collector)
+        objects = collected(path)
         for rule_id, pattern in forbidden.items():
             short = toggles.rule_short_id(rule_id)
-            content = collector.patterns[f"oval:ssg-obj_{short}:obj:1"]
+            content = objects[f"oval:ssg-obj_{short}:obj:1"]["pattern"]
             assert content.startswith("(")
             assert content.endswith(")")
             assert set(content[1:-1].split("|")) <= set(pattern[1:-1].split("|")), rule_id
             checked += 1
     assert checked == 6
+
+
+def test_each_pwquality_rule_writes_where_the_content_of_each_platform_checks() -> None:
+    rules = {
+        rule_id: parameters
+        for rule_id, parameters in native_parameters().items()
+        if "main_file_benchmarks" in parameters
+    }
+    assert len(rules) == 14
+    checked: dict[str, set[str]] = {}
+    for path, sha256, benchmark in pinned_benchmarks():
+        profile_values.read_values(path, sha256)
+        objects = list(collected(path).values())
+        for rule_id, parameters in rules.items():
+            setting = str(parameters["setting"])
+            pattern = (
+                "^enforce_for_root$"
+                if setting == "enforce_for_root"
+                else rf"^\s*{setting}[\s]*=[\s]*(-?\d+)(?:[\s]|$)"
+            )
+            paths = {item.get("filepath") for item in objects if item.get("pattern") == pattern}
+            if not paths:
+                continue
+            main_only = benchmark in cast("list[str]", parameters["main_file_benchmarks"])
+            assert paths == ({MAIN_ONLY} if main_only else {WITH_DROPINS}), (
+                rule_id,
+                benchmark,
+                paths,
+            )
+            checked.setdefault(benchmark, set()).add(rule_id)
+    assert {benchmark: len(found) for benchmark, found in checked.items()} == {
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04": 12,
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9": 13,
+    }

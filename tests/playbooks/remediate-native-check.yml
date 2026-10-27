@@ -42,6 +42,7 @@
       - overridden
       - not_owned
       - prior_too_large
+      - duplicate_setting
     watched_paths:
       - /etc/issue
       - /etc/issue.net
@@ -61,6 +62,7 @@
         native_rules: "{{ native_short_ids | map('regex_replace', '^', native_prefix) | list }}"
         native_profile:
           profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
           content_sha256: >-
             {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml).datastreams
                | selectattr('name', 'equalto', 'ubuntu2404') | map(attribute='sha256') | first }}
@@ -204,6 +206,7 @@
       - pam
     linux_compliance_discovered:
       profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
       content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       rule_ids:
         - xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
