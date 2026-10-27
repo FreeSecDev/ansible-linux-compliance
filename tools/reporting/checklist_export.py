@@ -16,7 +16,13 @@ exported honestly:
 - two inputs give the checklist of the same host and benchmark.
 
 A bundle's own XCCDF results are its content. Without them (a scan that did not complete
-writes none), and for ScanRun JSON and evaluations, ``--checklist-content`` supplies it.
+writes none), and for ScanRun JSON and evaluations, ``--checklist-content`` supplies it. Whatever
+the content, a bundle that carries its own XCCDF results is refused when their rule results are
+not the run's: a rule the run does not report, a rule it reports with another result (a waived
+finding counts as its failed result, a rule that SCC scanned and a toggle disabled as SCC's result
+kept in its evidence, and a rule that a tailoring file disabled as not selected), or a selected
+rule of the results that the run lacks (FREES-166). This checks consistency only; bundles are
+unsigned until FREES-140. The content version must be the run's for every run, completed or not.
 
 A ComplianceAsCode run whose benchmark and profile the mapping lists (FREES-146) is exported
 through the mapping, and refused when:
@@ -25,19 +31,28 @@ through the mapping, and refused when:
   ComplianceAsCode version);
 - the ``--checklist-content`` files do not hold exactly one DISA benchmark with a rule of
   one of the mapped STIG IDs;
-- that benchmark states another DISA release than the one the profile implements, or none.
+- that benchmark is not the DISA benchmark the mapping pins for the profile (FREES-171);
+- that benchmark states another DISA release than the one the profile implements, or none;
+- a DISA rule of that benchmark has another STIG ID than the one the mapping pairs with its rule
+  ID, which only the RHEL 9 profiles have (ADR 0020, amendment of FREES-171). The same check
+  applies to the own content of any other run whose DISA benchmark a profile of the mapping pins.
 
 Its content is always the supplied DISA content, never the bundle's own ComplianceAsCode
 results, so its asset IP and FQDN stay empty. ``--compare-stig FILE`` writes the comparison of
 :mod:`tools.reporting.stig_compare` from the same sources.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    model,
+    openscap,
+)
 from tools.reporting.checklist import (
+    SCANNER_RESULT_EVIDENCE,
     Checklist,
     ChecklistError,
     Source,
@@ -46,7 +61,14 @@ from tools.reporting.checklist import (
     refuse_unmapped,
 )
 from tools.reporting.checklist_formats import read_ckl, read_cklb, render_ckl, render_cklb
-from tools.reporting.common import InvalidInputError, ParseResult, clean_text, dumps, read_input
+from tools.reporting.common import (
+    InvalidInputError,
+    ParseResult,
+    clean_text,
+    decode_text,
+    dumps,
+    read_input,
+)
 from tools.reporting.compliance import ComplianceData
 from tools.reporting.report import ScanInputs
 from tools.reporting.stig_compare import compare
@@ -68,6 +90,7 @@ CKL_NAME: Final[str] = "CKL checklist"
 CKLB_NAME: Final[str] = "CKLB checklist"
 COMPARISON_NAME: Final[str] = "STIG comparison"
 PRIVATE_OUTPUTS: Final[frozenset[str]] = frozenset({CKL_NAME, CKLB_NAME, COMPARISON_NAME})
+NOT_SCANNED: Final[str] = "none"
 EXPORTED_KINDS: Final[frozenset[str]] = frozenset({"scan_run", "exceptions_evaluation"})
 
 
@@ -137,9 +160,7 @@ def _own_content(run: model.ScanRun, display: str, results: bytes) -> StigBenchm
 
 def _supplied_content(run: model.ScanRun, display: str, content: Content) -> StigBenchmark:
     candidates = content.get(run.benchmark_id, [])
-    versioned = [item for item in candidates if item[1].version == run.content.content_version]
-    if versioned or run.status is model.ScanStatus.COMPLETED:
-        candidates = versioned
+    candidates = [item for item in candidates if item[1].version == run.content.content_version]
     if len(candidates) != 1:
         found = ", ".join(sorted({name for name, _ in candidates})) or "none"
         message = (
@@ -152,13 +173,11 @@ def _supplied_content(run: model.ScanRun, display: str, content: Content) -> Sti
 
 
 def _checked_version(run: model.ScanRun, display: str, benchmark: StigBenchmark) -> None:
-    if (
-        run.status is model.ScanStatus.COMPLETED
-        and benchmark.version != run.content.content_version
-    ):
+    if benchmark.version != run.content.content_version:
         message = (
             f"{display}: the content is version {benchmark.version} of {run.benchmark_id}, but "
-            f"the scan run evaluated version {run.content.content_version}"
+            f"the scan run (status {run.status.value}) evaluated version "
+            f"{run.content.content_version}"
         )
         raise ChecklistError(message)
 
@@ -172,6 +191,82 @@ def _checked_mapping(run: model.ScanRun, display: str, mapping: ProfileMapping) 
             f"generated from {mapping.file_name} {mapping.benchmark_version} (sha256 "
             f"{mapping.content_sha256}); scan with the pinned content, or regenerate the mapping "
             "for this content with make stig-mapping"
+        )
+        raise ChecklistError(message)
+
+
+def _checked_pairs(
+    display: str, name: str, benchmark: StigBenchmark, mappings: Sequence[ProfileMapping]
+) -> None:
+    contradictions = [item for mapping in mappings for item in mapping.contradictions(benchmark)]
+    if contradictions:
+        message = (
+            f"{display}: {name} contradicts the pinned STIG mapping in {len(contradictions)} "
+            f"rule(s), for example {contradictions[0]}; supply the DISA content of the pinned "
+            "release"
+        )
+        raise ChecklistError(message)
+
+
+def _result_of(finding: model.Finding) -> tuple[model.Outcome, tuple[model.ResultFlag, ...]]:
+    return finding.evaluated_outcome, finding.flags
+
+
+def _kept_outcome(finding: model.Finding) -> str | None:
+    for item in finding.evidence:
+        if item.kind == SCANNER_RESULT_EVIDENCE:
+            return item.content
+    return None
+
+
+def _shown(raw: model.Finding | None) -> str:
+    return "absent" if raw is None else raw.evaluated_outcome.value
+
+
+def _disabled_disagreement(finding: model.Finding, raw: model.Finding | None) -> str | None:
+    kept = _kept_outcome(finding)
+    if kept is None:
+        unselected = raw is None or model.ResultFlag.NOTSELECTED in raw.flags
+        return None if unselected else f"{finding.rule_id}: disabled, results say {_shown(raw)}"
+    if kept == _shown(raw) or (kept == NOT_SCANNED and raw is None):
+        return None
+    return f"{finding.rule_id}: scanner result {kept}, results say {_shown(raw)}"
+
+
+def _disagreement(finding: model.Finding, raw: model.Finding | None) -> str | None:
+    if finding.disabled_by is not None:
+        return _disabled_disagreement(finding, raw)
+    if raw is not None and _result_of(finding) == _result_of(raw):
+        return None
+    return (
+        f"{finding.rule_id}: reported as {finding.evaluated_outcome.value}, results say "
+        f"{_shown(raw)}"
+    )
+
+
+def _cross_checked(run: model.ScanRun, display: str, results: bytes) -> None:
+    try:
+        parsed = openscap.parse_results(decode_text(results), assume_utc=True)
+    except (openscap.XccdfParseError, InvalidInputError) as error:
+        message = f"{display}: the bundle's XCCDF results cannot be cross-checked: {error}"
+        raise ChecklistError(message) from None
+    raw = {finding.rule_id: finding for finding in parsed.findings}
+    reported = {finding.rule_id for finding in run.findings}
+    problems = [
+        item
+        for item in (_disagreement(finding, raw.get(finding.rule_id)) for finding in run.findings)
+        if item is not None
+    ]
+    problems.extend(
+        f"{rule_id}: in the results ({finding.evaluated_outcome.value}), not in the run"
+        for rule_id, finding in raw.items()
+        if rule_id not in reported and model.ResultFlag.NOTSELECTED not in finding.flags
+    )
+    if problems:
+        message = (
+            f"{display}: the bundle's XCCDF results do not match the scan run {run.run_id} in "
+            f"{len(problems)} rule(s), for example {problems[0]}; an inconsistent bundle is never "
+            "exported"
         )
         raise ChecklistError(message)
 
@@ -194,6 +289,13 @@ def _mapped_content(
         )
         raise ChecklistError(message)
     name, benchmark = candidates[0]
+    if benchmark.benchmark_id != mapping.disa_benchmark_id:
+        message = (
+            f"{display}: version mismatch: {name} is the benchmark {benchmark.benchmark_id}, but "
+            f"profile {mapping.profile_id} of {mapping.file_name} implements the DISA benchmark "
+            f"{mapping.disa_benchmark_id}"
+        )
+        raise ChecklistError(message)
     release = release_of(benchmark.version, benchmark.release_info)
     if release != mapping.stig_release:
         message = (
@@ -202,6 +304,7 @@ def _mapped_content(
             f"{mapping.profile_id} of {mapping.file_name} implements release {mapping.stig_release}"
         )
         raise ChecklistError(message)
+    _checked_pairs(display, name, benchmark, [mapping])
     return Path(name).name, benchmark
 
 
@@ -223,6 +326,8 @@ def _source(
         raise ChecklistError(message)
     run = data.scan_run
     lapsed = frozenset(data.lapsed_waivers)
+    if results is not None:
+        _cross_checked(run, display, results)
     mapping = mappings.find(run.benchmark_id, run.profile_id)
     if mapping is not None:
         _checked_mapping(run, display, mapping)
@@ -236,7 +341,11 @@ def _source(
     else:
         benchmark = _supplied_content(run, display, content)
     _checked_version(run, display, benchmark)
-    return Source(display, run, lapsed, benchmark, results is not None)
+    pinned = [
+        item for item in mappings.profiles if item.disa_benchmark_id == benchmark.benchmark_id
+    ]
+    _checked_pairs(display, benchmark.benchmark_id, benchmark, pinned)
+    return Source(display, run, lapsed, benchmark, own_results=results is not None)
 
 
 def _key(result: ParseResult[ComplianceData]) -> tuple[str, str | None]:

@@ -187,6 +187,7 @@ def _inputs(
     try:
         rules = stig.scc_rules(given["rules"])
         profile = stig.mapping_for(given["mapping"], benchmark_id, benchmark_version)
+        stig.check_reported(rules, profile)
     except stig.MappingError as error:
         errors.add(str(error))
         return None

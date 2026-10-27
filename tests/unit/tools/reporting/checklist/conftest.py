@@ -71,14 +71,40 @@ def benchmark_xml(
     )
 
 
+RAW_RESULTS: dict[model.Outcome, str] = {
+    model.Outcome.PASS: "pass",
+    model.Outcome.FAIL: "fail",
+    model.Outcome.WAIVED: "fail",
+    model.Outcome.NOTAPPLICABLE: "notapplicable",
+    model.Outcome.NOTCHECKED: "notchecked",
+    model.Outcome.ERROR: "error",
+    model.Outcome.DISABLED: "notselected",
+}
+
+
+def raw_result(finding: model.Finding) -> str:
+    if model.ResultFlag.FIXED in finding.flags:
+        return "fixed"
+    if model.ResultFlag.INFORMATIONAL in finding.flags:
+        return "informational"
+    return RAW_RESULTS[finding.outcome]
+
+
+def rule_results(findings: tuple[model.Finding, ...]) -> str:
+    return "".join(
+        f'<rule-result idref="{item.rule_id}"><result>{raw_result(item)}</result></rule-result>'
+        for item in findings
+    )
+
+
 def result_xml(
-    *,
-    target: str = "web01",
-    addresses: tuple[str, ...] = ("127.0.0.1", "192.0.2.10", "fe80::1", "2001:db8::10"),
-    fqdn: str = "web01.example",
-    profile: str = PROFILE,
-    benchmark: str = BENCHMARK,
+    *, findings: tuple[model.Finding, ...] | None = None, **facts: str | tuple[str, ...]
 ) -> str:
+    target = str(facts.get("target", "web01"))
+    fqdn = str(facts.get("fqdn", "web01.example"))
+    profile = str(facts.get("profile", PROFILE))
+    benchmark = str(facts.get("benchmark", BENCHMARK))
+    addresses = facts.get("addresses", ("127.0.0.1", "192.0.2.10", "fe80::1", "2001:db8::10"))
     address = "".join(f"<target-address>{item}</target-address>" for item in addresses)
     return (
         '<TestResult id="xccdf_mil.disa.stig_testresult_1" start-time="2026-10-26T09:00:00" '
@@ -88,7 +114,7 @@ def result_xml(
         f'<fact name="urn:scap:fact:asset:identifier:host_name" type="string">{target}</fact>'
         f'<fact name="urn:scap:fact:asset:identifier:fqdn" type="string">{fqdn}</fact>'
         "</target-facts>"
-        f'<rule-result idref="{rule_id(1)}"><result>pass</result></rule-result></TestResult>'
+        f"{rule_results(mixed_findings() if findings is None else findings)}</TestResult>"
     )
 
 
@@ -183,6 +209,7 @@ class StigKit:
     result_xml = staticmethod(result_xml)
     data_stream = staticmethod(data_stream)
     finding = staticmethod(finding)
+    rule_results = staticmethod(rule_results)
     mixed_findings = staticmethod(mixed_findings)
     scan_run = staticmethod(scan_run)
 

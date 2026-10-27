@@ -31,8 +31,16 @@ build/checklists/web01.example_CAN_Ubuntu_24-04_STIG.cklb
 ```
 
 The name is the scan run's host name and the benchmark ID without `xccdf_mil.disa.stig_benchmark_`, with every
-character outside `A-Z`, `a-z`, `0-9`, `.`, `_` and `-` replaced by `_`. An existing file of that name is replaced
-atomically; other files in the directory are left alone, so use a fresh directory per export.
+character outside `A-Z`, `a-z`, `0-9`, `.`, `_` and `-` replaced by `_`. A name over 255 bytes with its suffix is
+refused before anything is written. An existing file of that name is replaced atomically; other files in the
+directory are left alone, so use a fresh directory per export.
+
+**All or nothing.** Every output of one run (the report, the dashboard, every checklist and the comparison) is first
+written to a temporary file in its own target directory, and the files are renamed to their names only when all of them
+were written. If any write fails, for example because the disk is full, the temporary files are removed, no output of
+the run is created and the command exits with status 2. A rename failing after others succeeded (for example a directory
+turning read-only in between) is the only way to leave some outputs: those are complete files, and the remaining
+temporary files are removed.
 
 | Option | Meaning |
 |---|---|
@@ -46,7 +54,7 @@ atomically; other files in the directory are left alone, so use a fresh director
 
 | Input | Exported | Content |
 |---|---|---|
-| `--evidence-bundle` of an SCC scan | yes; with exceptions, from the verified evaluation | the bundle's own XCCDF results, which embed the evaluated benchmark; `--checklist-content` when the bundle has none (a scan that did not complete writes none) |
+| `--evidence-bundle` of an SCC scan | yes; with exceptions, from the verified evaluation | the bundle's own XCCDF results, which embed the evaluated benchmark, cross-checked against the run (see below); `--checklist-content` when the bundle has none (a scan that did not complete writes none) |
 | `--scan-run` (ScanRun JSON) of an SCC scan | yes | `--checklist-content` |
 | `--exceptions-evaluation` with `--exceptions-file` | yes, waivers included | `--checklist-content` |
 | an input of a ComplianceAsCode STIG profile (`backend: openscap`, for example `xccdf_org.ssgproject.content_profile_stig`) of the pinned content | yes, through the [STIG mapping](#openscap-results-through-the-stig-mapping) | `--checklist-content`, always; never the bundle's own results |
@@ -62,6 +70,31 @@ python -m tools.reporting --scope single_host --output build/report/report.json 
   --checklist-content /opt/scc/Resources/Content/SCAP12_Content/U_CAN_Ubuntu_24-04_LTS_V1R5_STIG_SCAP_1-4_Benchmark-enhancedV7-signed.xml \
   --export-cklb build/checklists
 ```
+
+The content must be the run's content version for every run, completed or not. A run that did not complete records
+the content version `unknown` in the current scanners, so its checklist can only be written from content that states
+that version, which DISA content does not: such a run is refused, and its report is the record of the failure.
+
+### Bundles are cross-checked against their run
+
+When a bundle carries its own XCCDF results, the export compares their rule results with the scan run's outcomes before
+it writes anything, and refuses the whole export on any mismatch, so that an inconsistent bundle cannot give
+NotAFinding entries in an eMASS upload. The comparison is by rule:
+
+- a rule of the run needs the same result in the XCCDF results (a waived finding counts as its evaluated `fail`, and
+  `fixed` and `informational` must agree too);
+- a rule that SCC scanned and a toggle disabled needs SCC's result kept in its evidence to be the one in the results;
+- a rule that a tailoring file disabled must be absent from the results or not selected;
+- a selected rule in the results that the run lacks is a mismatch; rules that are not selected are ignored.
+
+This checks consistency only, not authenticity: bundles are unsigned until FREES-140.
+
+### What a toggled SCC rule shows
+
+SCC cannot exclude a rule from a scan, so a rule that a toggle disables is scanned and reported as `disabled`, which is
+Not Reviewed. Its `FINDING_DETAILS` names SCC's real result from the finding's evidence (`Scanner result: fail`), then
+`Reported outcome: disabled` and `Disabled by: <toggle>`. A rule that a toggle disables only in part stays enabled and
+its `COMMENTS` carry `Partially disabled by: <toggles>`.
 
 Rule titles, discussions, fix texts and the other benchmark text are copied from this content when the command runs.
 They are never part of the collection or the repository, and the checklists must not be committed either (`.gitignore`
@@ -137,7 +170,32 @@ The export refuses an OpenSCAP run, and writes nothing, when:
 
 - it is of another ComplianceAsCode version (a SHA-256 the mapping was not generated from);
 - the content files do not hold exactly one DISA benchmark with the profile's STIG IDs;
-- the DISA content is of another release than the profile implements, or states none.
+- the DISA content is not the DISA benchmark that the mapping pins for the profile (`disa_benchmark_id`, for example
+  `xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG`);
+- the DISA content is of another release than the profile implements, or states none;
+- a DISA rule of the content has another STIG ID than the one the mapping pairs with its rule ID (see below).
+
+### Pinned DISA rule to STIG ID pairs
+
+For the RHEL 9 profiles the pinned ComplianceAsCode stream also states the DISA rule ID (`SV-...r..._rule`) of each
+rule that references exactly one STIG ID, and the mapping holds those pairs, as identifiers only (`disa_rules`). Any
+DISA content that names a paired rule ID with another STIG ID is refused, whether the operator supplied it or a scanned
+host reported it, so that content that does not belong to the pinned release cannot relabel a requirement. The pairs
+cover the rules the stream states unambiguously (426 of 441 STIG IDs for RHEL 9 `stig`); a rule with several STIG IDs
+is not paired, and a rule ID that no pair names is not checked.
+
+**Ubuntu 24.04 has no pairs.** The pinned Ubuntu stream carries no DISA rule IDs, and the only source of them is the
+DISA content inside the SCC image, which must not be committed. The Ubuntu profile therefore pins only the DISA
+benchmark ID, and its `disa_rules` is empty. Pairs for Ubuntu would need the DISA rule IDs of the release, as IDs
+only, from a digest-pinned copy of the SCC content.
+
+### An OpenSCAP result is only as strong as the ComplianceAsCode check
+
+A Not a Finding that comes from OpenSCAP is only as strong as the ComplianceAsCode check behind it. The export
+aggregates the ComplianceAsCode checks that map to a DISA rule; it does not run the DISA check. In the integration run,
+4 rules were Open under SCC but Not a Finding through OpenSCAP. **For an eMASS upload where the DISA checks are
+required, use the SCC checklist.** Use the OpenSCAP checklist and `--compare-stig` to find rules for review, and
+treat a disagreement as a lead.
 
 ### Comparing SCC and OpenSCAP
 
@@ -152,7 +210,11 @@ python -m tools.reporting --scope single_host --output build/report/report.json 
   --compare-stig build/checklists/stig-comparison.json
 ```
 
-A host without exactly one run of each kind is refused. A disagreement is a lead for review, not a verdict.
+A host without exactly one run of each kind is refused. The entries of both sides are paired by DISA rule ID, never by
+position, and only when both sides are the same DISA content: the same release, the same set of rule IDs and the same
+STIG ID for each. A different release, a different number of rules or different rules is refused with status 2, because
+a diff of misaligned rules would state the results of the wrong rules. A disagreement is a lead for review, not a
+verdict.
 ComplianceAsCode treats rules that only apply to a real machine as not applicable in a container, for example, while
 SCC evaluates them.
 
@@ -183,7 +245,12 @@ Refusals with status 2 name the input and the reason:
   not exactly one DISA benchmark with the profile's STIG IDs;
 - an XCCDF or ARF input;
 - no DISA content of the run's benchmark and version, or more than one;
-- content of another benchmark, profile or version, or a finding whose rule it lacks;
+- content of another benchmark, profile or version, whether the run completed or not, or a finding whose rule it
+  lacks;
+- a bundle whose own XCCDF results do not match its scan run;
+- a checklist file name over 255 bytes;
+- a failed write of any output (nothing is left behind);
+- `--compare-stig` with SCC and OpenSCAP content of another release or other rules;
 - two runs of the same host and benchmark (for example two profiles): export them separately.
 
 Every checklist is read back with a strict reader before anything is written, and its statuses must equal the table
@@ -199,8 +266,10 @@ and within size bounds, and every value is escaped; characters that XML does not
 
 - `tests/unit/tools/reporting/checklist/`: the status table for every outcome and run status, waivers, expired and
   lapsed exceptions, off-platform runs, refusals (ComplianceAsCode findings, XCCDF inputs, missing, ambiguous or
-  mismatched content, duplicate hosts), hostile strings, the asset rules, the CKLB structure schema
+  mismatched content, duplicate hosts, inconsistent bundles, long names, failed writes), hostile strings, the asset rules, the CKLB structure schema
   `tools/reporting/schema/cklb-export.json`, and golden files from synthetic content in `tests/fixtures/checklist/`.
+- `tests/unit/tools/reporting/checklist/test_checklist_followups.py` (FREES-166 and FREES-171): all-or-nothing writes,
+  the name length, partial disables, and the comparison pairing with a different count, order and release.
 - `tests/unit/tools/reporting/checklist/test_checklist_mapped.py` and `test_stig_mapping.py`: the mapping with
   synthetic ComplianceAsCode and DISA-shaped fragments, covering one-to-one, one-to-many and many-to-one rules, a STIG
   rule without a check, a finding without a STIG rule, and version mismatches of either side. They also cover every

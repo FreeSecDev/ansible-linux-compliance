@@ -37,6 +37,13 @@ status is 2. ComplianceAsCode findings of a mapped STIG profile are exported thr
 comparison of an SCC run and an OpenSCAP run of each host by DISA STIG rule. Checklists
 and the comparison are written atomically with mode 0600 into directories created with
 mode 0700.
+
+Every output of one run (report, dashboard, checklists and comparison) is first written to a
+temporary file in its target directory, and only when all of them were written are they renamed
+to their names (FREES-166). When any write fails, for example because the disk is full, every
+temporary file is removed, no output of the run is created and the status is 2. A rename that
+fails after others succeeded (a read-only directory appearing in between) leaves those outputs,
+which are complete files, and removes the remaining temporary files.
 """
 
 import argparse
@@ -65,6 +72,7 @@ from tools.reporting.report import (
 )
 from tools.reporting.stig_mapping import DEFAULT_PATH as STIG_MAPPING
 
+TEMPORARY_PREFIX: Final[str] = ".fsd-"
 EXIT_OK: Final[int] = 0
 EXIT_SECTION_ERROR: Final[int] = 1
 EXIT_USAGE: Final[int] = 2
@@ -180,24 +188,44 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def write_atomic(path: Path, content: str) -> None:
-    """Write ``content`` to ``path`` through a synced temporary file and a rename.
+def stage(path: Path, content: str) -> Path:
+    """Write ``content`` to a synced temporary file in the directory of ``path``, return its path.
 
-    A crash or a full disk leaves either the previous file or the new one, never a
-    truncated file, and no temporary file is left behind.
+    The temporary name is short and fixed in length, so a target name at the file-system limit
+    can still be staged. The file is removed again when writing fails.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
-        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        dir=path.parent, prefix=TEMPORARY_PREFIX, suffix=".tmp"
     )
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        Path(temporary).replace(path)
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
+        raise
+    return Path(temporary)
+
+
+def discard(staged: Sequence[Path]) -> None:
+    """Remove the temporary files ``staged``, ignoring those already gone."""
+    for temporary in staged:
+        temporary.unlink(missing_ok=True)
+
+
+def write_atomic(path: Path, content: str) -> None:
+    """Write ``content`` to ``path`` through a synced temporary file and a rename.
+
+    A crash or a full disk leaves either the previous file or the new one, never a
+    truncated file, and no temporary file is left behind.
+    """
+    temporary = stage(path, content)
+    try:
+        temporary.replace(path)
+    except BaseException:
+        discard([temporary])
         raise
 
 
@@ -243,13 +271,29 @@ def _checklists(
         return None
 
 
-def _write(outputs: list[tuple[Path, str, str]]) -> bool:
+def _stage_all(outputs: list[tuple[Path, str, str]]) -> list[tuple[Path, Path, str]] | None:
+    staged: list[tuple[Path, Path, str]] = []
     for path, content, name in outputs:
         try:
             if name in PRIVATE_OUTPUTS:
                 path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            write_atomic(path, content)
+            staged.append((stage(path, content), path, name))
         except OSError as error:
+            discard([temporary for temporary, _, _ in staged])
+            print(f"error: cannot write the {name}: {error.strerror}", file=sys.stderr)
+            return None
+    return staged
+
+
+def _write(outputs: list[tuple[Path, str, str]]) -> bool:
+    staged = _stage_all(outputs)
+    if staged is None:
+        return False
+    for index, (temporary, path, name) in enumerate(staged):
+        try:
+            temporary.replace(path)
+        except OSError as error:
+            discard([item for item, _, _ in staged[index:]])
             print(f"error: cannot write the {name}: {error.strerror}", file=sys.stderr)
             return False
         print(f"{name} written to {path}")
