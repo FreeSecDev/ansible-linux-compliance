@@ -267,7 +267,7 @@ Images and AWS
   packer-build          [pending FREES-64] Build images with Packer
   aws-bootstrap-render  Render the gitignored bootstrap script from its template
   aws-bootstrap         Render and run the one-time interactive AWS account bootstrap
-  image-build           [pending FREES-36] Build the runner image on AWS
+  image-build           [pending FREES-36] The runner image is built by the runner repository's workflow
   scc-expiry-check      Fail from seven days before SCC_EXPIRES, so an expiring SCC is never built or run
   scc-fetch             Download the pinned SCC bundle from DISA, verify it and stage its Debian package in build/scc
   scc-image             Build the CI-only SCC image locally as SCC_IMAGE (a localhost/ tag); it is never pushed

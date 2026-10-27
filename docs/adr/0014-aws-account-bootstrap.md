@@ -3,6 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-10-25
 - **Deciders:** project owner, lead architect
+- **Amended:** 2026-10-27 (no runner image build resources, FREES-36)
 - **Jira:** FREES-30 (state backend), FREES-31 (OIDC provider and roles), FREES-33 (bootstrap template), FREES-34 (budget, tagging), FREES-69 (IaC hooks)
 - **Pull requests:** pending
 - **Related:** [0006](0006-toolchain-selection.md), [0007](0007-registry-build-and-signing.md), [0008](0008-qcow2-builds-nested-virtualization.md), [0012](0012-github-native-releases-and-packages.md)
@@ -64,7 +65,8 @@ only tokens with:
 
 All comparisons are `StringEquals`; there are no wildcards. The maximum session duration is 3600 seconds. No role is
 issued to pull requests or forks. The role is read-only for `tofu plan`: it reads state and may write only the `.tflock` object for the native lock.
-Build and release roles are added by later issues with their own trust: the release role is pinned to the `release`
+Build and release roles for VM golden images are added by later issues with their own trust (the runner image
+needs none; see the amendment below): the release role is pinned to the `release`
 environment of [ADR 0012](0012-github-native-releases-and-packages.md), which accepts `main` only and has no human
 reviewers, so the gate is automated and the trust must not depend on a reviewer.
 
@@ -130,3 +132,20 @@ attribute of `aws_iam_role.plan`. Adding a file or a resource to `infra/account`
 
 `make aws-bootstrap` is run once by the owner; [bootstrap.md](../aws/bootstrap.md) is the procedure. Developers need
 OpenTofu `1.13.2` on `PATH` for `make lint-iac`, installed with `tools/iac/install-tofu.sh`.
+
+## Amendment of 2026-10-27: no runner image build resources
+
+The product owner decided on 2026-10-27 that the CI runner image is built on GitHub-hosted runners
+([ADR 0007](0007-registry-build-and-signing.md), amendment), and that AWS is used only for VM golden images
+(Packer, [ADR 0008](0008-qcow2-builds-nested-virtualization.md), later). Therefore:
+
+- `infra/account` holds no build resources: no CodeBuild project, no ECR staging repository, no build role, no
+  build log group or KMS key, and no `AWS_BUILD_ROLE_ARN` variable. The design proposed for them in pull request 51
+  was closed unmerged and is withdrawn.
+- The pending owner acceptance of a Checkov CKV_AWS_316 exemption (a privileged CodeBuild project for rootless
+  Buildah), proposed in that pull request, is withdrawn as moot. `infra/.checkov.baseline` keeps exactly the one
+  CKV_AWS_358 exemption described above.
+- The plan role, its trust, the state backend and the budget are unchanged. The budget still covers the whole
+  account, including the future VM image builders.
+- Build roles for VM golden images will be added by their own issues, with their own trust, cost estimate and
+  review.

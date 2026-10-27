@@ -20,7 +20,10 @@ Notes:
 - Nothing in this stack is always-on compute, a NAT gateway, a load balancer or a log group, so there is no cost that
   scales with time or traffic.
 - The budget limit defaults to 50 USD per month, with actual and forecasted alerts at 50, 80 and 100 percent. It
-  covers the whole account, so it will also alert on the future builder, CodeBuild and ECR resources.
+  covers the whole account, so it will also alert on the future VM golden image builders.
 - Additional monitoring budgets are also free. Only budgets with actions are charged, after a free allowance; none is
   created here.
-- Costs of resources added later (CodeBuild, ECR, EC2 builders) are estimated in the pull request that adds them.
+- AWS is used only for VM golden images (Packer, ADR 0008). The CI runner image is built on GitHub-hosted runners
+  at no AWS cost ([ADR 0007](../adr/0007-registry-build-and-signing.md), amendment of 2026-10-27).
+- Costs of resources added later (EC2 builders and their artifact storage) are estimated in the pull request that
+  adds them.
