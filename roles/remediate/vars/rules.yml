@@ -1423,3 +1423,67 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_zipl_init_on_alloc_argument"
     - "xccdf_org.ssgproject.content_rule_zipl_page_alloc_shuffle_argument"
     - "xccdf_org.ssgproject.content_rule_zipl_systemd_debug-shell_argument_absent"
+__linux_compliance_remediate_tags:
+  cron:
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_at_allow"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_at_deny"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_cron_allow"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_cron_d"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_cron_daily"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_cron_deny"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_cron_hourly"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_cron_monthly"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_cron_weekly"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_crontab"
+    - "xccdf_org.ssgproject.content_rule_file_owner_at_allow"
+    - "xccdf_org.ssgproject.content_rule_file_owner_at_deny"
+    - "xccdf_org.ssgproject.content_rule_file_owner_cron_allow"
+    - "xccdf_org.ssgproject.content_rule_file_owner_cron_d"
+    - "xccdf_org.ssgproject.content_rule_file_owner_cron_daily"
+    - "xccdf_org.ssgproject.content_rule_file_owner_cron_deny"
+    - "xccdf_org.ssgproject.content_rule_file_owner_cron_hourly"
+    - "xccdf_org.ssgproject.content_rule_file_owner_cron_monthly"
+    - "xccdf_org.ssgproject.content_rule_file_owner_cron_weekly"
+    - "xccdf_org.ssgproject.content_rule_file_owner_crontab"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_at_allow"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_at_deny"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_cron_allow"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_cron_d"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_cron_daily"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_cron_hourly"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_cron_monthly"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_cron_not_modified"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_cron_weekly"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_crontab"
+  firewalld:
+    - "xccdf_org.ssgproject.content_rule_firewalld_sshd_port_enabled"
+  journald:
+    - "xccdf_org.ssgproject.content_rule_ensure_journald_and_rsyslog_not_active_together"
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_var_log_journal"
+    - "xccdf_org.ssgproject.content_rule_file_owner_var_log_journal"
+  pwhistory:
+    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_no_remember"
+    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_remember"
+  selinux:
+    - "xccdf_org.ssgproject.content_rule_account_password_selinux_faillock_dir"
+  smartcard:
+    - "xccdf_org.ssgproject.content_rule_dconf_gnome_lock_screen_on_smartcard_removal"
+    - "xccdf_org.ssgproject.content_rule_sssd_enable_smartcards"
+  ssh:
+    - "xccdf_org.ssgproject.content_rule_harden_sshd_ciphers_openssh_conf_crypto_policy"
+    - "xccdf_org.ssgproject.content_rule_harden_sshd_ciphers_opensshserver_conf_crypto_policy"
+    - "xccdf_org.ssgproject.content_rule_harden_sshd_macs_openssh_conf_crypto_policy"
+    - "xccdf_org.ssgproject.content_rule_harden_sshd_macs_opensshserver_conf_crypto_policy"
+  sssd:
+    - "xccdf_org.ssgproject.content_rule_file_groupownerships_var_log_sssd"
+    - "xccdf_org.ssgproject.content_rule_file_ownerships_var_log_sssd"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_var_log_sssd"
+  sudo:
+    - "xccdf_org.ssgproject.content_rule_disallow_bypass_password_sudo"
+    - "xccdf_org.ssgproject.content_rule_ensure_sudo_group_restricted"
+    - "xccdf_org.ssgproject.content_rule_selinux_context_elevation_for_sudo"
+  time_sync:
+    - "xccdf_org.ssgproject.content_rule_file_groupowner_etc_chrony_keys"
+    - "xccdf_org.ssgproject.content_rule_file_owner_etc_chrony_keys"
+    - "xccdf_org.ssgproject.content_rule_file_permissions_etc_chrony_keys"
+__linux_compliance_remediate_family_aliases: {}

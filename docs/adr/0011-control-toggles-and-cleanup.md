@@ -598,3 +598,106 @@ harness, `extensions/molecule/shared/lifecycle.yml`, rather than one scenario pe
   there and cannot reach the host. A family whose controls need a real kernel, boot loader or init system cannot be
   proven in a container; it needs the libvirt scenarios (FREES-61) and a decision on where its lifecycle runs before
   its first native rule ships.
+
+## Amendment 2026-10-27: subsystem tags (FREES-165)
+
+The review of the topic split (PR #48, findings N1 to N4) showed that a subsystem toggle does not reach every rule about
+its subsystem. The generator gives each rule one family, and for many rules that is the family of the mechanism the
+rule uses: the permissions of `/var/log/sssd` are `file_permissions`, `sssd_enable_smartcards` is `sssd`, the GNOME lock
+on smart card removal is `desktop`. The project owner expects `linux_compliance_sssd_enabled: false` to stop every rule
+about SSSD. Moving such rules to their subsystem family would break the backward compatibility of the step-2 amendment
+(`linux_compliance_file_permissions_enabled: false` would stop switching them off), so a rule keeps its one family and
+gains secondary subsystem tags. These refinements apply.
+
+- **Tags.** A subsystem tag is a family of the registry. A rule may carry any number of tags of families other than
+  its own. The catalogue lists them as `__linux_compliance_remediate_tags`, a mapping of each tag to the sorted full
+  identifiers of the rules it tags, and `toggles.check_tags` validates it (a registered family, a catalogued rule of
+  another family, sorted lists). The filters take it as the new option `tags`.
+- **Resolution.** A rule toggle that is set wins, as before. Otherwise a rule is on only when the toggles of all of its
+  controlling topics are on (`toggles.controlling_topics`): the umbrella of its family, its family, and for every tag
+  the umbrella of the tag and the tag. A tag can therefore only add a way to switch a rule off. A tag toggle that is
+  `true`, such as its default, never switches a rule on, so a family toggle that is `false` still switches off a rule
+  whatever its tags say. `linux_compliance_services_enabled: false` also reaches the rules tagged `sssd`, `time_sync`
+  and `cron`, because the umbrella of a tag counts like the umbrella of a family.
+- **Controlling variable.** `disabled_by` names the first controlling topic whose toggle is `false`, in this order: the
+  umbrella of the family, the family, then the tags in alphabetical order, each preceded by its umbrella; a topic is
+  listed once. When every topic is on and the rule toggle is `false`, it names the rule toggle. So a rule of
+  `file_permissions` tagged `cron` with `file_permissions` and `cron` off names `file_permissions`, and with `cron` and
+  `services` off names `services`. This extends the FREES-55 and step-2 rules and gives the same answer with or without
+  the generated defaults, which the audit relies on.
+- **Disruptiveness stays with the family.** The disruptive flag and the allow-list gate what remediation changes on the
+  host, and the family decides that: its task file applies and cleans up the rule. A tag does not change it in either
+  direction. `file_permissions_crontab`, the only native rule, is tagged `cron`, which is disruptive, but applying or
+  cleaning it up only changes the mode of `/etc/crontab`, so it needs no allow-list entry and `allow_disruptive: [cron]`
+  does not cover it. Making a tag disruptive would put chmod rules behind an allow-list for no change in risk, and would
+  let an allow-list entry reach rules that its family file does not own.
+- **Derived from the content.** `content/catalogue.yml` declares, per tag, `rule_patterns` (a pattern tags every
+  catalogued rule whose short identifier, in lower case, contains it), `groups` (every rule below the group in any
+  pinned datastream) and `exclusions` (rules that a pattern or group finds but that are not about the subsystem, each
+  group of them with a reason). The generator derives the tags and writes them into the catalogue; the CI job `test`
+  regenerates them from the pinned content. A rule of the tag's own family is never tagged.
+- **Drift check.** `untagged_families` lists families whose rules are never tagged, with a reason. Generation fails when
+  a pattern or group finds a rule of such a family that no exclusion lists, when a pattern or group finds no catalogued
+  rule, and when an exclusion does not exclude a rule of another family that the tag finds. A new rule of a future
+  content version that names a subsystem is therefore tagged automatically, unless it is an audit rule, which fails the
+  generation until someone decides and records the reason.
+- **Audit rules are never tagged.** `auditd` is the only untagged family. An audit rule records changes to a
+  subsystem; it does not configure it. An operator who switches AppArmor or SELinux management off, because the host
+  does not use it or another tool manages it, still wants changes to the MAC policy audited: an attacker who disables
+  MAC first edits exactly the files that `audit_rules_mac_modification`, `audit_rules_mac_modification_etc_apparmor` and
+  `audit_rules_mac_modification_etc_apparmor_d` watch, so switching the watches off with `apparmor` would weaken the
+  detective control that matters most when the preventive one is absent. The same holds for the audit watches on cron,
+  sudo, the faillock records, the journal and the SSH helpers. These rules stay switched off by
+  `linux_compliance_auditd_enabled: false` and their rule toggles only, and the exclusions of the tags list each of them.
+- **The tags of the pinned content.** Fifteen tags are declared: `aide`, `apparmor`, `cron`, `faillock`, `firewalld`,
+  `journald`, `pwhistory`, `pwquality`, `rsyslog`, `selinux`, `smartcard`, `ssh`, `sssd`, `sudo` and `time_sync`. Ten of
+  them tag 52 rules: `cron` 30 (the permissions and ownership of the cron and at files, `cron.deny`, `at.deny` and the
+  native `file_permissions_crontab`), `ssh` 4 (the sshd crypto policy back-ends), `sssd` 3 (`/var/log/sssd`),
+  `time_sync` 3 (`/etc/chrony.keys`), `journald` 3 (`/var/log/journal` and the journald and rsyslog exclusion), `sudo`
+  3, `smartcard` 2 (`sssd_enable_smartcards`, `dconf_gnome_lock_screen_on_smartcard_removal`), `pwhistory` 2 (both
+  pam_unix `remember` rules), `firewalld` 1 (`firewalld_sshd_port_enabled`) and `selinux` 1 (the SELinux context of the
+  faillock directory). `aide`, `apparmor`, `faillock`, `pwquality` and `rsyslog` tag nothing today; their patterns guard
+  against drift. 21 rules are excluded with a reason: 17 audit rules, the AIDE cron job, the rsyslog cron facility, the
+  SSH confirmation banner and the SELinux boolean `ssh_sysadm_login`. `pam` is not a tag: it is a mechanism that many
+  subsystems use, and a rule that configures another PAM module belongs to that subsystem. The
+  [control family reference](../control-families.md#subsystem-tags) lists every tag, rule and exclusion.
+- **Backward compatibility (replaces "exactly" of the step-2 amendment).** Every former family toggle still switches
+  off every rule it switched off before, and the families it governs hold exactly those rules:
+  `tests/fixtures/catalog/legacy-families.yml` still pins the count and SHA-256 of each family-only set. A former toggle
+  may switch off more rules only through tags. The fixture lists every added rule (`added_by_tags`), a test checks that
+  each former toggle switches off exactly the family-only set plus that list in both filters, and another that the
+  reference lists each added rule. Eight former toggles widen: `services` by 36, `ssh` by 4, `sudo` by 3, `logging` by
+  2, `accounts` by 2, `firewall`, `pam` and `mandatory_access_control` by 1 each; the other 13 are unchanged. The
+  change log records the widening as a breaking change.
+- **Password history (N2).** `accounts_password_pam_unix_remember` (family `pam`) and
+  `accounts_password_pam_unix_no_remember` (family `user_accounts`) are tagged `pwhistory` instead of moved: a prefix
+  cannot select a single rule identifier without a trailing `_`, and moving `no_remember` out of `accounts` would break
+  that former toggle. `linux_compliance_pwhistory_enabled: false` now switches off all nine password-history rules.
+- **`pam` is a topic and an umbrella (N3).** `linux_compliance_pam_enabled: false` switches off the `pam` family and
+  `pwquality`, `pwhistory` and `faillock`, and `allow_disruptive: [pam]` allows all four. There is no toggle or
+  allow-list entry for the `pam` family alone. The variable reference and the control family reference say so.
+- **Ledger family aliases (N4).** `ledger_family_aliases` in `content/catalogue.yml`, generated into
+  `__linux_compliance_remediate_family_aliases` and passed to `remediation_plan` as `family_aliases`, maps a former family
+  name to the families its rules may belong to now (`toggles.check_family_aliases`: a valid family name, sorted
+  registered families, not itself). `check_ledger` accepts an entry whose recorded family is the current family of its
+  rule or a former name whose alias lists it, so moving a native rule keeps the entries of upgraded hosts cleanable;
+  any other family is still an error. The entry is passed to the family file unchanged. No alias is declared, because
+  no native rule has moved; the change that moves one must add its former family.
+- **Empty-topic warning.** A rule that a toggle reaches through a tag counts as covered, so
+  `linux_compliance_smartcard_enabled: false` does not warn for a profile that selects only `sssd_enable_smartcards`.
+- **Role guard.** The two new catalogue keys are constants of `vars/rules.yml`, so `make role-guards` adds them to the
+  internal-variable guard of the remediate role like the other catalogue keys.
+- **Measured cost.** On this workstation, with ansible-core 2.21.5 and the check-mode playbook of the FREES-53
+  amendment (the remediate role without and with the opt-in over all 1203 rules, then the audit toggle resolution with
+  `linux_compliance_auditd_enabled: false`), measured as wall time of `uv run ansible-playbook` in ten interleaved runs
+  against `main` at f3bfabc: `main` took 3.89 to 4.31 s (median 3.93 s) and this change 3.86 to 4.46 s (median 3.89 s),
+  within the budget of about 4.5 s and the noise of this host.
+- **Testing.** `test_toggle_tags.py` and `test_remediation_plan_tags.py` cover the validation, the precedence with two
+  tags, tags that never switch a rule on, the warning and the ledger aliases on synthetic catalogues.
+  `test_subsystem_tags.py` checks each reviewed example on the real catalogue in both filters, the audit watches on MAC
+  policy, the precedence, and the cleanup of the native crontab rule with `cron` off and from a ledger entry under a
+  former family name. `test_generate_catalogue_tags.py` covers the derivation, the drift check and every invalid source.
+  `make test-content-golden` checks every topic and umbrella toggle, tags included, against each of the 25 pinned
+  profiles, and each reviewed example in every profile that selects it. `make test-remediate-check` runs the remediate
+  role and the audit toggle resolution in check mode with `services`, `sssd`, `cron` and `time_sync`, and `smartcard`,
+  `apparmor`, `selinux` and `pwhistory` off.

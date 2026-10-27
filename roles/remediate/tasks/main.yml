@@ -108,6 +108,8 @@
       {{ __linux_compliance_remediate_rules | freesecdev.linux_compliance.remediation_plan({
            'audit_only': __linux_compliance_remediate_audit_only,
            'families': __linux_compliance_remediate_families,
+           'tags': __linux_compliance_remediate_tags,
+           'family_aliases': __linux_compliance_remediate_family_aliases,
            'enabled': linux_compliance_remediate_enabled,
            'allow_disruptive': linux_compliance_remediate_allow_disruptive,
            'toggles': dict(__linux_compliance_remediate_toggle_names | zip(

@@ -14,7 +14,13 @@ real and once in check mode, and records the SHA-256 of every file below
 - the installed ``options.xml``, the installed content and the binaries are
   unchanged, ``/root`` is unchanged, and the only changes to SCC's state are the
   accepted residual of ADR 0019 (its content databases and one session
-  database per scan in ``/opt/scc/Local``).
+  database per scan in ``/opt/scc/Local``);
+- the reporting command exports the real run as a CKL and a CKLB checklist
+  (FREES-147), with SCC's XCCDF results and with the pinned stream as content: both
+  are mode 0600, read back with one entry per rule of the profile, DISA group IDs,
+  titles and CCIs, and the statuses of ADR 0020 for every finding, and both contents
+  give the same statuses. The checklists stay in the container and are never
+  committed.
 """
 
 from __future__ import annotations
@@ -132,3 +138,37 @@ def test_scc_leaves_its_configuration_content_and_binaries_unchanged(
     assert not any(path.startswith("/opt/scc/Resources/Content/SCAP12_Content") for path in touched)
     assert not any(path.startswith(("/opt/scc/bin", "/opt/scc/lib64")) for path in touched)
     assert "/opt/scc/cscc" not in touched
+
+
+CHECKLIST_STATUSES = {"NotAFinding", "Open", "Not_Applicable", "Not_Reviewed"}
+
+
+def check_checklists(report: dict[str, object], hostname: str) -> dict[str, int]:
+    """Assert the read-back of one exported checklist pair and return its status counts."""
+    assert report["returncode"] == 0, report["stderr"]
+    assert report["check_returncode"] == 0, report["check_stderr"]
+    files = cast("list[str]", report["files"])
+    assert len(files) == 2
+    assert {name.rsplit(".", 1)[1] for name in files} == {"ckl", "cklb"}
+    assert report["modes"] == [0o600]
+    assert report["directory_mode"] == 0o700
+    assert report["entries"] == report["cklb_entries"] == report["findings"] == PROFILE_RULES
+    assert report["mismatches"] == []
+    assert report["vuln_numbers"] == PROFILE_RULES
+    assert report["titled"] == PROFILE_RULES
+    assert report["with_cci"] == PROFILE_RULES
+    assert report["host_name"] == hostname
+    statuses = cast("dict[str, int]", report["statuses"])
+    assert set(statuses) <= CHECKLIST_STATUSES
+    return statuses
+
+
+def test_the_real_run_exports_honest_checklists(scan_report: dict[str, object]) -> None:
+    exports = cast("dict[str, dict[str, object]]", scan_report["checklists"])
+    results = check_checklists(exports["results"], "scc-integration")
+    stream = check_checklists(exports["stream"], "scc-integration")
+    harness.report_line("checklist statuses", results)
+    assert results == stream
+    assert exports["results"]["ckl"] == exports["stream"]["ckl"]
+    assert results.get("NotAFinding", 0) > 0
+    assert results.get("Open", 0) > 0

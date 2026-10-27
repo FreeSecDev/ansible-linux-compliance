@@ -18,6 +18,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_family$') == [] or
         '__linux_compliance_remediate_family' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_family_aliases$') == [] or
+        '__linux_compliance_remediate_family_aliases' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_fp_absent$') == [] or
         '__linux_compliance_remediate_fp_absent' in (hostvars[inventory_hostname] | list)
       - >-
@@ -77,6 +80,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_rules$') == [] or
         '__linux_compliance_remediate_rules' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_tags$') == [] or
+        '__linux_compliance_remediate_tags' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_toggle_names$') == [] or
         '__linux_compliance_remediate_toggle_names' in (hostvars[inventory_hostname] | list)
@@ -177,9 +183,17 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_families']
       - >-
+        __linux_compliance_remediate_family_aliases is not defined or __linux_compliance_remediate_family_aliases ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_family_aliases']
+      - >-
         __linux_compliance_remediate_rules is not defined or __linux_compliance_remediate_rules ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_rules']
+      - >-
+        __linux_compliance_remediate_tags is not defined or __linux_compliance_remediate_tags ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_tags']
       - >-
         __linux_compliance_remediate_toggle_pattern is not defined or __linux_compliance_remediate_toggle_pattern ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |

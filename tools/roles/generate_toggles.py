@@ -10,7 +10,8 @@ family toggle unless it is set. This tool derives, from ``roles/remediate/vars/r
 * their entries in the ``main`` entry point of ``meta/argument_specs.yml`` of both roles, typed
   ``bool`` with descriptions;
 * the variable reference ``docs/remediation-variables.md``, which lists every topic toggle and
-  every rule toggle, per family.
+  every rule toggle, per family, with the rules of other families that a toggle switches off
+  through subsystem tags (FREES-165).
 
 Rule toggles are not declared in the roles (amendment of FREES-53 to ADR 0011): with the full
 catalogue there are more than a thousand, and declaring each as a default and an argument spec
@@ -59,6 +60,8 @@ REFERENCE: Final[Path] = Path("docs/remediation-variables.md")
 FAMILIES_KEY: Final[str] = "__linux_compliance_remediate_families"
 RULES_KEY: Final[str] = "__linux_compliance_remediate_rules"
 AUDIT_ONLY_KEY: Final[str] = "__linux_compliance_remediate_audit_only"
+TAGS_KEY: Final[str] = "__linux_compliance_remediate_tags"
+ALIASES_KEY: Final[str] = "__linux_compliance_remediate_family_aliases"
 ENTRY_POINT: Final[str] = "main"
 ALLOW_LIST: Final[str] = "linux_compliance_remediate_allow_disruptive"
 MAX_LINE: Final[int] = 120
@@ -127,17 +130,43 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "",
     "Every umbrella keeps the name of the family that it was split from (FREES-53), so",
     "`linux_compliance_services_enabled: false`, `linux_compliance_pam_enabled: false` or",
-    "`linux_compliance_firewall_enabled: false` switch off exactly the rules that the family",
+    "`linux_compliance_firewall_enabled: false` still switch off every rule that the family",
     "held before the split, and an allow-list entry that names an umbrella still allows every",
-    "disruptive family it groups. No toggle was renamed or dropped.",
+    "disruptive family it groups. No toggle was renamed or dropped. Through subsystem tags they",
+    "may switch off more rules, each of which is listed in the",
+    "[control family reference](control-families.md#what-a-toggle-switches-off-through-tags).",
+    "",
+    "`pam` is both a topic and an umbrella. `linux_compliance_pam_enabled: false` switches off",
+    "the rules of the `pam` family and of `pwquality`, `pwhistory` and `faillock`, and the",
+    "allow-list entry `linux_compliance_remediate_allow_disruptive: [pam]` allows all four, as",
+    "before the split. There is no toggle and no allow-list entry for the rules of the `pam`",
+    "family alone: to remediate only those, allow `pam` and switch `pwquality`, `pwhistory` and",
+    "`faillock` off with their own toggles.",
+    "",
+    "## Subsystem tags",
+    "",
+    "A rule belongs to one family, often the family of the mechanism it uses, and may carry",
+    "subsystem tags: further families whose subsystem the rule is about (FREES-165). The",
+    "permissions of `/var/log/sssd` are in `file_permissions` and tagged `sssd`, so",
+    "`linux_compliance_sssd_enabled: false` switches them off too. A rule is off when the",
+    "toggle of its family, of its family's umbrella, of one of its tags or of a tag's umbrella",
+    "is `false`, so `linux_compliance_services_enabled: false` switches off the rules tagged",
+    "`sssd` as well. Tags only add ways to switch a rule off: a tag toggle that is `true` never",
+    "switches a rule on, and a rule toggle that is set still wins over every topic toggle. Tags",
+    "do not change what is disruptive: the allow-list and the disruptive flag stay properties",
+    "of the family. Audit rules (`auditd`) are never tagged, because auditing changes to a",
+    "subsystem is not configuring it. The tags, how they are derived from the content, and",
+    "every rule that a toggle switches off through them are listed in the",
+    "[control family reference](control-families.md#subsystem-tags).",
     "",
     "## Controlling variable",
     "",
-    "When a rule is off, `disabled_by` names the most general toggle that is `false`: the",
-    "umbrella toggle, else the family toggle, else the rule toggle. So when a rule toggle and",
-    "its family toggle are both `false`, `disabled_by` names the family toggle. If the family",
-    "toggle is later set back to `true`, the rule stays off and `disabled_by` changes to the",
-    "rule toggle.",
+    "When a rule is off, `disabled_by` names the first toggle that is `false` in this order:",
+    "the umbrella toggle of its family, the family toggle, then for each subsystem tag in",
+    "alphabetical order the umbrella toggle of the tag and the tag toggle, else the rule",
+    "toggle. So when a rule toggle and its family toggle are both `false`, `disabled_by` names",
+    "the family toggle. If the family toggle is later set back to `true`, the rule stays off and",
+    "`disabled_by` changes to the rule toggle.",
     "",
     "## Rule toggle names and declarations",
     "",
@@ -168,13 +197,15 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "## Topic toggles",
     "",
     "An umbrella row lists the families that it groups; the disruptive flag of an umbrella is",
-    "`yes` when it groups a disruptive family.",
+    "`yes` when it groups a disruptive family. The catalogued rules are the rules of those",
+    "families; the tagged rules are the rules of other families that the toggle switches off",
+    "through subsystem tags.",
     "",
     (
         "| Variable | Family | Umbrella | Disruptive | Default | Catalogued rules | Native | "
-        "`audit_only` |"
+        "`audit_only` | Tagged rules |"
     ),
-    "|---|---|---|---|---|---|---|---|",
+    "|---|---|---|---|---|---|---|---|---|",
 )
 
 
@@ -208,8 +239,12 @@ def load_catalogue(path: Path) -> toggles.Catalogue:
     """Load and validate the catalogue and the family registry in ``path``."""
     data = _mapping(_load_yaml(path), str(path))
     errors = toggles.Errors()
-    loaded = toggles.load_catalogue(
-        data.get(RULES_KEY), data.get(AUDIT_ONLY_KEY), data.get(FAMILIES_KEY), {}, errors
+    loaded = toggles.with_tags(
+        toggles.load_catalogue(
+            data.get(RULES_KEY), data.get(AUDIT_ONLY_KEY), data.get(FAMILIES_KEY), {}, errors
+        ),
+        data.get(TAGS_KEY, {}),
+        errors,
     )
     if errors.items:
         message = f"{path} is invalid: " + "; ".join(errors.items)
@@ -254,6 +289,16 @@ def _members(catalogue: toggles.Catalogue, topic: str) -> list[toggles.Rule]:
     return [rule for rule in catalogue.rules if rule["family"] in families]
 
 
+def tagged(catalogue: toggles.Catalogue, topic: str) -> list[toggles.Rule]:
+    """Return the rules of other families that the toggle of ``topic`` switches off through tags."""
+    families = governed(catalogue, topic)
+    return [
+        rule
+        for rule in catalogue.rules
+        if rule["family"] not in families and toggles.switches_off(topic, rule, catalogue)
+    ]
+
+
 def _rule_count(catalogue: toggles.Catalogue, family: str) -> int:
     return len(_members(catalogue, family))
 
@@ -276,9 +321,11 @@ def _grouping(catalogue: toggles.Catalogue, family: str) -> list[str]:
 
 
 def _counts(catalogue: toggles.Catalogue, topic: str) -> str:
+    extra = len(tagged(catalogue, topic))
+    through_tags = f", tagged: {extra}" if extra else ""
     return (
-        f"Rules: {_rule_count(catalogue, topic)}, native: {_native_count(catalogue, topic)}. "
-        f"{GENERATED_NOTE}"
+        f"Rules: {_rule_count(catalogue, topic)}, native: {_native_count(catalogue, topic)}"
+        f"{through_tags}. {GENERATED_NOTE}"
     )
 
 
@@ -373,6 +420,23 @@ def _rule_rows(catalogue: toggles.Catalogue, family: str) -> list[str]:
         f"`{rule['revert_strategy']}` |"
         for rule in members
     )
+    extra = tagged(catalogue, family)
+    if extra:
+        lines.extend(
+            [
+                "",
+                f"`{toggles.toggle_name(family)}: false` also switches off these rules of other",
+                "families through their subsystem tags:",
+                "",
+                "| Variable | Rule | Family |",
+                "|---|---|---|",
+            ]
+        )
+        lines.extend(
+            f"| `{rule['toggle']}` | `{toggles.rule_short_id(str(rule['rule_id']))}` | "
+            f"`{rule['family']}` |"
+            for rule in extra
+        )
     return [*lines, ""]
 
 
@@ -392,7 +456,7 @@ def reference(catalogue: toggles.Catalogue) -> str:
         flag = "yes" if is_disruptive(catalogue, topic) else "no"
         lines.append(
             f"| `{toggles.toggle_name(topic)}` | {named} | {grouping} | {flag} | "
-            f"`true` | {count} | {native} | {count - native} |"
+            f"`true` | {count} | {native} | {count - native} | {len(tagged(catalogue, topic))} |"
         )
     lines.extend(
         [

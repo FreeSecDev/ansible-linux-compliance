@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/FreeSecDev/ansible-linux-compliance/tools/reporting/schema/cklb-export.json",
+  "title": "CKLB checklist written by the checklist export (FREES-147)",
+  "description": "The exact structure of the STIG Viewer 3 checklists that tools.reporting writes. DISA publishes no CKLB schema; the field names follow the public implementations cited in ADR 0020. This schema checks the exporter's own output strictly and is not a schema of every CKLB file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "id", "active", "mode", "has_path", "target_data", "stigs", "cklb_version"],
+  "properties": {
+    "title": {"type": "string"},
+    "id": {"$ref": "#/$defs/uuid"},
+    "active": {"const": false},
+    "mode": {"const": 1},
+    "has_path": {"const": true},
+    "cklb_version": {"const": "1.0"},
+    "target_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_type", "host_name", "ip_address", "mac_address", "fqdn", "comments", "role",
+        "is_web_database", "technology_area", "web_db_site", "web_db_instance"
+      ],
+      "properties": {
+        "target_type": {"const": "Computing"},
+        "host_name": {"type": "string", "minLength": 1},
+        "ip_address": {"type": "string"},
+        "mac_address": {"const": ""},
+        "fqdn": {"type": "string"},
+        "comments": {"type": "string"},
+        "role": {"const": "None"},
+        "is_web_database": {"const": false},
+        "technology_area": {"const": ""},
+        "web_db_site": {"const": ""},
+        "web_db_instance": {"const": ""}
+      }
+    },
+    "stigs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stig_name", "display_name", "stig_id", "release_info", "version", "uuid", "size", "rules"
+        ],
+        "properties": {
+          "stig_name": {"type": "string"},
+          "display_name": {"type": "string"},
+          "stig_id": {"type": "string", "minLength": 1},
+          "release_info": {"type": "string"},
+          "version": {"type": "string"},
+          "uuid": {"$ref": "#/$defs/uuid"},
+          "size": {"type": "integer", "minimum": 0},
+          "rules": {"type": "array", "items": {"$ref": "#/$defs/rule"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "text": {"type": "string"},
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uuid", "stig_uuid", "target_key", "stig_ref", "group_id", "rule_id", "rule_id_src",
+        "weight", "severity", "rule_version", "group_title", "rule_title", "fix_text",
+        "false_positives", "false_negatives", "discussion", "check_content", "documentable",
+        "mitigations", "potential_impacts", "third_party_tools", "mitigation_control",
+        "responsibility", "security_override_guidance", "ia_controls", "check_content_ref",
+        "legacy_ids", "ccis", "group_tree", "createdAt", "updatedAt", "STIGUuid", "status",
+        "overrides", "comments", "finding_details"
+      ],
+      "properties": {
+        "uuid": {"$ref": "#/$defs/uuid"},
+        "stig_uuid": {"$ref": "#/$defs/uuid"},
+        "target_key": {"type": ["string", "null"]},
+        "stig_ref": {"type": "null"},
+        "group_id": {"type": "string", "pattern": "^V-[0-9]+$"},
+        "rule_id": {"type": "string", "pattern": "^SV-[0-9]+r[0-9]+$"},
+        "rule_id_src": {"type": "string", "pattern": "^SV-[0-9]+r[0-9]+_rule$"},
+        "weight": {"type": "string"},
+        "severity": {"enum": ["high", "medium", "low"]},
+        "rule_version": {"$ref": "#/$defs/text"},
+        "group_title": {"$ref": "#/$defs/text"},
+        "rule_title": {"$ref": "#/$defs/text"},
+        "fix_text": {"$ref": "#/$defs/text"},
+        "false_positives": {"$ref": "#/$defs/text"},
+        "false_negatives": {"$ref": "#/$defs/text"},
+        "discussion": {"$ref": "#/$defs/text"},
+        "check_content": {"$ref": "#/$defs/text"},
+        "documentable": {"$ref": "#/$defs/text"},
+        "mitigations": {"$ref": "#/$defs/text"},
+        "potential_impacts": {"$ref": "#/$defs/text"},
+        "third_party_tools": {"$ref": "#/$defs/text"},
+        "mitigation_control": {"$ref": "#/$defs/text"},
+        "responsibility": {"$ref": "#/$defs/text"},
+        "security_override_guidance": {"$ref": "#/$defs/text"},
+        "ia_controls": {"$ref": "#/$defs/text"},
+        "check_content_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["href", "name"],
+          "properties": {"href": {"type": "string"}, "name": {"type": "string"}}
+        },
+        "legacy_ids": {"type": "array", "items": {"type": "string"}},
+        "ccis": {"type": "array", "items": {"type": "string", "pattern": "^CCI-[0-9]+$"}},
+        "group_tree": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "description"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^V-[0-9]+$"},
+              "title": {"type": "string"},
+              "description": {"type": "string"}
+            }
+          }
+        },
+        "createdAt": {"$ref": "#/$defs/timestamp"},
+        "updatedAt": {"$ref": "#/$defs/timestamp"},
+        "STIGUuid": {"$ref": "#/$defs/uuid"},
+        "status": {"enum": ["not_a_finding", "open", "not_applicable", "not_reviewed"]},
+        "overrides": {"type": "object", "maxProperties": 0},
+        "comments": {"type": "string"},
+        "finding_details": {"type": "string", "minLength": 1}
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.000Z$"
+    }
+  }
+}

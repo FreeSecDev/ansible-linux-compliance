@@ -9,7 +9,8 @@
   off-platform scan of Ubuntu 26.04 with the 24.04 benchmark)
 - **Pull requests:** introduced by the pull request for FREES-144 (the CI image, its make targets, the `scc-smoke`
   job and the repository tests). The pull request for FREES-145 adds the backend, the SCC integration and egress
-  tests and the amendment at the end of this ADR. The mapping and the exporter are not implemented.
+  tests and the amendment at the end of this ADR. The pull request for FREES-147 adds the exporter
+  ([ADR 0020](0020-stig-viewer-checklist-export.md)). The mapping is not implemented.
 - **Related:** [ADR 0003](0003-native-module-remediation.md), [ADR 0004](0004-audited-process-execution.md),
   [ADR 0013](0013-normalized-findings-model.md), [ADR 0015](0015-content-acquisition-and-pinning.md),
   [ADR 0018](0018-evidence-bundle-provenance.md)
@@ -357,7 +358,9 @@ The expiry is enforced on the SCC path, not in every pull request:
 - **When it runs.** `scc-smoke` runs on every pull request and every merge group that touches an SCC path. It
   always runs for a push to `main`, on the daily schedule of `ci.yml` and on manual dispatch. The SCC
   paths are `extensions/ci/scc/`, `tools/scc/`, the hadolint fetcher, the `Makefile`, the workflows, the SCC tests,
-  this ADR, and the FREES-145 code (`scc*`, `process` and `backends` in `plugins/module_utils/compliance/`).
+  this ADR, the FREES-145 code (`scc*`, `process` and `backends` in `plugins/module_utils/compliance/`), and,
+  since FREES-147, the checklist exporter (`checklist*` and `stig_content` in `tools/reporting/`) and ADR 0020,
+  because `make scc-integration` exports the real scans.
 - **Path filter.** The `scc-changes` job decides with `tools/scc/needs-smoke.sh`.
   - For `pull_request`, it diffs the pull request's base SHA against the checked-out merge commit.
   - For `merge_group`, it diffs `github.event.merge_group.base_sha` against `head_sha`.
@@ -1029,6 +1032,23 @@ it stays `0`.
   the run fails. If its dump stops showing the value, the confirmation fails the run. If it evaluates the stream but
   most rules come back `notapplicable`, the threshold fails the run. In every case the integration test fails, and the
   change is reviewed.
+
+## Note 2026-10-26: the checklist exporter (FREES-147)
+
+Decision 9 and decision 7 of the FREES-161 amendment are implemented by
+[ADR 0020](0020-stig-viewer-checklist-export.md), which closes open item 9:
+
+- The status strings are `NotAFinding`, `Open`, `Not_Applicable` and `Not_Reviewed` in CKL and `not_a_finding`,
+  `open`, `not_applicable` and `not_reviewed` in CKLB; the sources and the `cklb_version` are in ADR 0020.
+- The table of decision 9 holds, with the off-platform row first. Two refinements: a `pass` reported as `fixed` is Not
+  Reviewed, and an expired or lapsed exception is named in the comments of an Open entry.
+- "Rule titles and other benchmark text come from the pinned DISA content at export time" means the pinned stream as
+  SCC evaluated it: the XCCDF results in the run's evidence bundle, which embed it, or the stream itself given with
+  `--checklist-content`.
+- `oscap` results are refused with a message that names FREES-146 until decision 8 is built.
+- `make scc-integration` exports the real scans of both images and reads the checklists back inside the container.
+  The path filter runs it for changes to the exporter and to ADR 0020; that takes effect once the filter is merged
+  (FREES-152).
 
 ## References
 

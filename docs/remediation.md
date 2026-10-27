@@ -29,7 +29,7 @@ lifecycle of its topic (see [Testing](#testing)).
 | `linux_compliance_remediate_enabled` | `false` | Without it the role neither reads the state ledger nor changes anything. It only reports every rule as `skip` with the reason `remediation_disabled`. It gates cleanup as well, so disabling a rule while remediation is off changes nothing until the next enabled run. |
 | `linux_compliance_remediate_allow_disruptive` | `[]` | Rules of a disruptive family are applied and cleaned up only when the family or its umbrella is named here; an umbrella allows every disruptive family it groups. Otherwise they are `skip` with the reason `disruptive_not_allowed`, and a notice names them. A rule that the ledger records as applied and that would no longer be applied (toggled off or no longer in the profile) keeps its ledger entry and is reported with `pending_cleanup: true` until the family is allow-listed. |
 | Profile check | the discovered profile | With the opt-in, the role requires `linux_compliance_discovered` from the `discover` role for the same profile and applies only rules that the verified profile selects. It never substitutes another profile. |
-| Fail closed | always | Unknown rule or family toggles, toggles that are not booleans, allow-list entries that are neither a disruptive family nor an umbrella of one, an invalid catalogue and a ledger entry whose family contradicts the catalogue stop the role before anything changes. |
+| Fail closed | always | Unknown rule or family toggles, toggles that are not booleans, allow-list entries that are neither a disruptive family nor an umbrella of one, an invalid catalogue and a ledger entry whose family contradicts the catalogue stop the role before anything changes. A ledger entry may record a former family name of its rule when `__linux_compliance_remediate_family_aliases` maps that name to the current family (FREES-165), so moving a native rule to another family keeps the entries of upgraded hosts cleanable. |
 | Check mode | `--check` | Every task runs in check mode: nothing is written, not even the ledger, and the role reports what would change. |
 | No silent skips | always | Every task runs with the tag `always`, so `--tags` and `--skip-tags <family>` cannot skip work. After the dispatch the role fails unless every rule planned for `apply` or `cleanup` has exactly one result (filter `remediation_unaccounted`). `--skip-tags always` fails the role through a guard task tagged `linux_compliance_remediate_guard`. |
 | Family files refuse direct use | always | Every family file and helper first asserts the opt-in and checks its family and rule against the dispatcher's own plan (`__linux_compliance_remediate_plan`), so `include_role` with `tasks_from` cannot change the host without the opt-in and a matching plan. |
@@ -45,7 +45,7 @@ The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_r
 | `linux_compliance_remediate_allow_disruptive` | `list` of `str` | `[]` | Disruptive families that may be applied and cleaned up. The argument specification accepts only the disruptive families of the registry and the umbrellas that group one, such as `services`. |
 | `linux_compliance_remediate_profile` | `str` | `cis_level1_server` | Profile short identifier; must equal the profile the `discover` role verified. |
 | `linux_compliance_<family>_enabled` | `bool` | `true` | Topic toggle of a registered family, for example `linux_compliance_auditd_enabled: false` turns off every auditd rule. |
-| `linux_compliance_<umbrella>_enabled` | `bool` | `true` | Umbrella toggle of the families an umbrella groups, for example `linux_compliance_services_enabled: false` turns off `sssd`, `time_sync`, `mail` and every other service family; a family toggle only narrows it. `pam` is both a family and the umbrella of `pwquality`, `pwhistory` and `faillock`. |
+| `linux_compliance_<umbrella>_enabled` | `bool` | `true` | Umbrella toggle of the families an umbrella groups, for example `linux_compliance_services_enabled: false` turns off `sssd`, `time_sync`, `mail` and every other service family; a family toggle only narrows it. `pam` is both a family and the umbrella of `pwquality`, `pwhistory` and `faillock`, so `allow_disruptive: [pam]` allows all four; there is no entry for the `pam` family alone. |
 | `linux_compliance_rule_<rule_short_id>_enabled` | `bool` | not set: follows `linux_compliance_<family>_enabled` | Toggle of one catalogued rule, for example `linux_compliance_rule_file_permissions_crontab_enabled`. Not declared as a role default (ADR 0011, amendment of FREES-53). |
 
 The topic and rule toggles are flat booleans, so any inventory layer can set one of them. The topic toggle defaults
@@ -101,13 +101,19 @@ family toggle and every rule toggle that follows it in this way fail the role as
 For every catalogued rule the filter `freesecdev.linux_compliance.remediation_plan` resolves:
 
 1. The **toggle state**: the rule toggle when it is set; otherwise on only when the umbrella toggle of the family (if
-   the family belongs to an umbrella) and the family toggle are both on, a toggle that is not set counting as on. A
-   family toggle therefore only narrows its umbrella: `linux_compliance_services_enabled: false` switches `sssd` off
-   even with `linux_compliance_sssd_enabled: true`. The variable that switched a rule off is reported as
-   `disabled_by`: the umbrella toggle whenever it is off, else the family toggle whenever it is off, and the rule
-   toggle otherwise. Because a rule toggle copied from its family default cannot be told apart from one set to `false`,
-   both name the family toggle. A rule toggle set to `true` wins over a disabled family or umbrella toggle
-   ([variable reference](remediation-variables.md#umbrellas)). The resolution lives in
+   the family belongs to an umbrella), the family toggle, and the toggle of every subsystem tag of the rule and of the
+   tag's umbrella are all on, a toggle that is not set counting as on. A family toggle therefore only narrows its
+   umbrella: `linux_compliance_services_enabled: false` switches `sssd` off even with
+   `linux_compliance_sssd_enabled: true`. A subsystem tag (FREES-165) only adds a way to switch a rule off:
+   `linux_compliance_sssd_enabled: false` also switches off the permissions of `/var/log/sssd`, which belong to
+   `file_permissions` and are tagged `sssd`, and a tag toggle that is `true` never switches a rule on
+   ([control family reference](control-families.md#subsystem-tags)). The variable that switched a rule off is reported
+   as `disabled_by`: the first toggle that is off in the order umbrella of the family, family, then each tag in
+   alphabetical order after its umbrella, and the rule toggle otherwise. Because a rule toggle copied from its family
+   default cannot be told apart from one set to `false`, both name the family toggle. A rule toggle set to `true` wins
+   over every disabled family, umbrella or tag toggle
+   ([variable reference](remediation-variables.md#umbrellas)). The disruptive allow-list stays a property of the
+   family: a tag never puts a rule behind the allow-list or takes it out. The resolution lives in
    `plugins/module_utils/compliance/toggles.py`, which the audit role uses as well, so a rule that is switched off is
    reported as `disabled` by the audit with the same controlling variable
    ([disabled rules in the audit](audit.md#disabled-rules-adr-0011)).
@@ -164,14 +170,20 @@ pinned set with FREES-53 (reasons in [ADR 0011](adr/0011-control-toggles-and-cle
 `roles/remediate/vars/rules.yml` is generated by `make catalogue` (`tools/roles/generate_catalogue.py`) from the
 digest-verified datastreams of `content/manifest.yml` and the family mapping `content/catalogue.yml`; do not edit it by
 hand. The CI job `test` regenerates it from the pinned content (`make test-content-golden`) and fails on any
-difference. It holds three keys:
+difference. It holds five keys:
 
 - `__linux_compliance_remediate_families`: the registry above, each family with `name` and `disruptive`;
 - `__linux_compliance_remediate_rules`: the rules with a native remediation, from `native_rules` of
   `content/catalogue.yml`, each with exactly the keys below;
 - `__linux_compliance_remediate_audit_only`: every family, in registry order, mapped to the sorted full identifiers of
   its rules without a native remediation. The filters expand each into an entry of the same shape with the strategy
-  `audit_only`.
+  `audit_only`;
+- `__linux_compliance_remediate_tags`: every subsystem tag that tags a rule, a family name, mapped to the sorted full
+  identifiers of the rules of other families that it tags, derived from `subsystem_tags` of `content/catalogue.yml`
+  (FREES-165, [control family reference](control-families.md#subsystem-tags));
+- `__linux_compliance_remediate_family_aliases`: former family names that the state ledger may record, mapped to the
+  families their rules belong to now, from `ledger_family_aliases` of `content/catalogue.yml`. It is empty: no native
+  rule has moved. When one moves, add its former family here so that upgraded hosts keep their cleanup.
 
 | Key | Contract |
 |---|---|
@@ -364,9 +376,12 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_content_golden.py` | With the fetched pinned content, the generated catalogue and `docs/control-families.md` equal the files in the repository and every rule of every pinned profile is catalogued; `make test-content-golden` also runs `generate_catalogue --check` | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-check-mode.yml`, full-catalogue plays | With every catalogued rule in the profile: `linux_compliance_auditd_enabled: false` switches off every auditd rule in both roles with the topic toggle as `disabled_by` and no warning; with the opt-in and `ssh` allow-listed, every `audit_only` rule gets exactly one `not_implemented` result with `changed: false`, only the reference rule is dispatched, and one notice counts them | `make test-remediate-check`, CI job `test` |
 | `tests/unit/plugins/module_utils/compliance/test_toggle_umbrellas.py`, `tests/unit/plugins/filter/test_remediation_plan_umbrellas.py` | Umbrella precedence: an umbrella toggle that is `false` switches off every family it groups and a family toggle cannot switch one back on, a family toggle narrows its umbrella, a rule toggle wins over both, `disabled_by` names the most general toggle that is off, a family that heads an umbrella (`pam`) switches off its own and its families' rules, an allow-listed umbrella allows every disruptive family it groups, invalid and nested umbrellas fail, and the empty-topic warning covers umbrellas | `make test-coverage`, CI job `test` |
-| `tests/unit/roles/test_topic_toggles.py` | On the real catalogue: every umbrella groups the subsystems it was split into, `auditd`, `ssh`, `sudo` and `pam` stay topics, every topic and umbrella toggle switches off exactly its rules in both filters, and every toggle of the 21 families before the split (recorded in `tests/fixtures/catalog/legacy-families.yml`) still switches off exactly its former rules, keeps its disruptive flag and its allow-list entry, and is a declared default of both roles | `make test-coverage`, CI job `test` |
-| `tests/unit/tools/test_content_golden.py`, topic toggles | With the pinned content, every topic and umbrella toggle switches off exactly its rules in each of the 25 pinned profiles and warns exactly when it excludes nothing | `make test-content-golden`, CI job `test` |
-| `tests/playbooks/remediate-check-mode.yml`, umbrella play | With every catalogued rule in the profile: `linux_compliance_services_enabled: false` with `linux_compliance_sssd_enabled: true` switches off all 119 rules of the services umbrella in both roles and names the umbrella; with the umbrella on, `linux_compliance_sssd_enabled: false` switches off exactly the sssd rules | `make test-remediate-check`, CI job `test` |
+| `tests/unit/roles/test_topic_toggles.py` | On the real catalogue: every umbrella groups the subsystems it was split into, `auditd`, `ssh`, `sudo` and `pam` stay topics, every topic and umbrella toggle switches off exactly its rules and the rules tagged with its families in both filters, and for every toggle of the 21 families before the split (recorded in `tests/fixtures/catalog/legacy-families.yml`) its families hold exactly its former rules, it switches off exactly those plus the rules that tags add (pinned in the fixture and listed in the control family reference), keeps its disruptive flag and its allow-list entry, and is a declared default of both roles | `make test-coverage`, CI job `test` |
+| `tests/unit/tools/test_content_golden.py`, topic toggles | With the pinned content, every topic and umbrella toggle switches off exactly its rules and its tagged rules in each of the 25 pinned profiles and warns exactly when it excludes nothing, and each reviewed example follows its subsystem toggle in every profile that selects it while the audit watches on MAC policy do not | `make test-content-golden`, CI job `test` |
+| `tests/playbooks/remediate-check-mode.yml`, umbrella play | With every catalogued rule in the profile: `linux_compliance_services_enabled: false` with `linux_compliance_sssd_enabled: true` switches off the 119 rules of the services umbrella and the 36 rules tagged with its families in both roles and names the umbrella; with the umbrella on, `linux_compliance_sssd_enabled: false` switches off exactly the sssd rules and the three sssd log file rules; `cron` and `time_sync` off switch off the native crontab rule, the cron.deny and at.deny ownership and the chrony key files but not the cron audit rules or the AIDE cron job; `smartcard`, `apparmor`, `selinux` and `pwhistory` off switch off `sssd_enable_smartcards`, the GNOME lock on smart card removal and both pam_unix `remember` rules, and leave the audit watches on MAC policy on | `make test-remediate-check`, CI job `test` |
+| `tests/unit/plugins/module_utils/compliance/test_toggle_tags.py`, `tests/unit/plugins/filter/test_remediation_plan_tags.py` | Subsystem tags (FREES-165) on synthetic catalogues: the tags of every rule are validated (registered family, catalogued rule of another family, sorted), a rule is off when any tag or tag umbrella is off, `disabled_by` follows the precedence, a tag toggle that is `true` never switches a rule on, a rule toggle still wins, a tag does not change the allow-list, the empty-topic warning counts tagged rules, and a ledger entry under a former family name is accepted only through `family_aliases` | `make test-coverage` |
+| `tests/unit/roles/test_subsystem_tags.py` | On the real catalogue: each reviewed example (sssd log files, chrony keys, cron.deny, at.deny and the native crontab rule, `sssd_enable_smartcards`, the GNOME lock on smart card removal, pam_unix `remember`) follows its subsystem toggle in both filters, the audit watches on MAC policy stay with `auditd`, the precedence of `disabled_by`, tags never switch a rule on, and the native crontab rule is cleaned up with `cron` off, also from a ledger entry under a former family name | `make test-coverage` |
+| `tests/unit/tools/test_generate_catalogue_tags.py` | The tag derivation against synthetic datastreams: rule patterns and groups, exclusions, the drift check for untagged families, unused entries and stale exclusions, the rendering into the catalogue and the reference, and every invalid source | `make test-coverage` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where

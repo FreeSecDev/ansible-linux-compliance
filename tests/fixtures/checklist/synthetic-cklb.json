@@ -1,0 +1,544 @@
+{
+  "title": "Synthetic Linux STIG SCAP Benchmark",
+  "id": "47ad1510-bb5d-56ed-b68c-85fe75397f1b",
+  "active": false,
+  "mode": 1,
+  "has_path": true,
+  "target_data": {
+    "target_type": "Computing",
+    "host_name": "web01.example",
+    "ip_address": "192.0.2.10, 2001:db8::10",
+    "mac_address": "",
+    "fqdn": "web01.example",
+    "comments": "Exported by freesecdev.linux_compliance (tools.reporting) from scan run run-web01 (scc 5.15, content synthetic-linux-stig-ds.xml 001.002.003 sha256 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb). The host identity (web01.example, ubuntu 24.04, x86_64) and the addresses are self-asserted by the scanned host.",
+    "role": "None",
+    "is_web_database": false,
+    "technology_area": "",
+    "web_db_site": "",
+    "web_db_instance": ""
+  },
+  "stigs": [
+    {
+      "stig_name": "Synthetic Linux STIG SCAP Benchmark",
+      "display_name": "Synthetic Linux STIG SCAP Benchmark",
+      "stig_id": "Synthetic_Linux_STIG",
+      "release_info": "Release: 2 Benchmark Date: 01 Oct 2026",
+      "version": "001.002.003",
+      "uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+      "size": 10,
+      "rules": [
+        {
+          "uuid": "7d083d87-15aa-533d-a20b-75bdd19ae944",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900001",
+          "rule_id": "SV-900001r1",
+          "rule_id_src": "SV-900001r1_rule",
+          "weight": "10.0",
+          "severity": "high",
+          "rule_version": "SYN-00-000001",
+          "group_title": "SRG-SYN-000001",
+          "rule_title": "Synthetic requirement 1 must hold",
+          "fix_text": "Synthetic fix 1.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 1 & notes",
+          "check_content": "Synthetic check 1.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:1"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000001"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900001",
+              "title": "SRG-SYN-000001",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "not_a_finding",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Scanner result: pass\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "9ccaaab5-a3ed-5f25-b521-824a03fc9b0a",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900002",
+          "rule_id": "SV-900002r1",
+          "rule_id_src": "SV-900002r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000002",
+          "group_title": "SRG-SYN-000002",
+          "rule_title": "Synthetic requirement 2 must hold",
+          "fix_text": "Synthetic fix 2.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 2 & notes",
+          "check_content": "Synthetic check 2.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:2"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000002"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900002",
+              "title": "SRG-SYN-000002",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "open",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Scanner result: fail\nMessage: value is 0; expected 1\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "e4da87aa-7564-53ae-aae2-594afb63ad3c",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900003",
+          "rule_id": "SV-900003r1",
+          "rule_id_src": "SV-900003r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000003",
+          "group_title": "SRG-SYN-000003",
+          "rule_title": "Synthetic requirement 3 must hold",
+          "fix_text": "Synthetic fix 3.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 3 & notes",
+          "check_content": "Synthetic check 3.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:3"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000003"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900003",
+              "title": "SRG-SYN-000003",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "not_applicable",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Scanner result: notapplicable\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "1212e040-e4ad-501f-a108-2cea2e26fdd7",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900004",
+          "rule_id": "SV-900004r1",
+          "rule_id_src": "SV-900004r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000004",
+          "group_title": "SRG-SYN-000004",
+          "rule_title": "Synthetic requirement 4 must hold",
+          "fix_text": "Synthetic fix 4.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 4 & notes",
+          "check_content": "Synthetic check 4.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:4"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000004"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900004",
+              "title": "SRG-SYN-000004",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Scanner result: notchecked\nFlags: informational\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "b3215f9b-7e91-5e02-bc8a-21c8bbbe85c3",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900005",
+          "rule_id": "SV-900005r1",
+          "rule_id_src": "SV-900005r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000005",
+          "group_title": "SRG-SYN-000005",
+          "rule_title": "Synthetic requirement 5 must hold",
+          "fix_text": "Synthetic fix 5.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 5 & notes",
+          "check_content": "Synthetic check 5.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:5"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000005"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900005",
+              "title": "SRG-SYN-000005",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Scanner result: error\nMessage: SCC reported 'unknown' for this rule\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "28426e8a-56f9-55a0-847c-0478a5dffdac",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900006",
+          "rule_id": "SV-900006r1",
+          "rule_id_src": "SV-900006r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000006",
+          "group_title": "SRG-SYN-000006",
+          "rule_title": "Synthetic requirement 6 must hold",
+          "fix_text": "Synthetic fix 6.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 6 & notes",
+          "check_content": "Synthetic check 6.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:6"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000006"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900006",
+              "title": "SRG-SYN-000006",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "open",
+          "overrides": {},
+          "comments": "Waiver: exception EXC-STIG-1 was in effect for this scan and expires 2026-12-31T00:00:00Z. The scanner's result is fail. A waiver never changes the checklist status and is not a review that the requirement is met.\nException reason: Accepted risk: the synthetic service needs it",
+          "finding_details": "Scanner result: fail\nReported outcome: waived\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "56f47a4c-c2d3-5d0a-9570-0eda2d179fb7",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900007",
+          "rule_id": "SV-900007r1",
+          "rule_id_src": "SV-900007r1_rule",
+          "weight": "10.0",
+          "severity": "high",
+          "rule_version": "SYN-00-000007",
+          "group_title": "SRG-SYN-000007",
+          "rule_title": "Synthetic requirement 7 must hold",
+          "fix_text": "Synthetic fix 7.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 7 & notes",
+          "check_content": "Synthetic check 7.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:7"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000007"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900007",
+              "title": "SRG-SYN-000007",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "open",
+          "overrides": {},
+          "comments": "Exception EXC-STIG-2 expired at 2026-10-01T00:00:00Z and was not applied; it does not change the checklist status.\nException reason: Old risk acceptance",
+          "finding_details": "Scanner result: fail\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "0206214b-0590-5c19-bd44-9d25a7f4e153",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900008",
+          "rule_id": "SV-900008r1",
+          "rule_id_src": "SV-900008r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000008",
+          "group_title": "SRG-SYN-000008",
+          "rule_title": "Synthetic requirement 8 must hold",
+          "fix_text": "Synthetic fix 8.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 8 & notes",
+          "check_content": "Synthetic check 8.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:8"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000008"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900008",
+              "title": "SRG-SYN-000008",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Scanner result: disabled\nDisabled by: linux_compliance_rule_synthetic\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "857763ea-9744-5ce9-a267-7f730afd633f",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900009",
+          "rule_id": "SV-900009r1",
+          "rule_id_src": "SV-900009r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000009",
+          "group_title": "SRG-SYN-000009",
+          "rule_title": "Synthetic requirement 9 must hold",
+          "fix_text": "Synthetic fix 9.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 9 & notes",
+          "check_content": "Synthetic check 9.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:9"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000009"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900009",
+              "title": "SRG-SYN-000009",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Not reviewed: the scanner reported fixed, and a remediation result is not a review.\nScanner result: pass\nFlags: fixed\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        },
+        {
+          "uuid": "fb0e1dc9-15b5-532c-bfce-5984471798e4",
+          "stig_uuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900010",
+          "rule_id": "SV-900010r1",
+          "rule_id_src": "SV-900010r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000010",
+          "group_title": "SRG-SYN-000010",
+          "rule_title": "Synthetic requirement 10 must hold",
+          "fix_text": "Synthetic fix 10.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 10 & notes",
+          "check_content": "Synthetic check 10.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:10"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000010"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900010",
+              "title": "SRG-SYN-000010",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T09:00:30.000Z",
+          "updatedAt": "2026-10-26T09:00:30.000Z",
+          "STIGUuid": "afae38ff-1965-55b7-a60d-d66366815333",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Not reviewed: the scan run has no result for this rule; profile xccdf_mil.disa.stig_profile_MAC-1_Classified does not select it, or it was not evaluated.\nScan run run-web01: scc 5.15, 2026-10-26T09:00:00Z to 2026-10-26T09:00:30Z, profile xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        }
+      ]
+    }
+  ],
+  "cklb_version": "1.0"
+}

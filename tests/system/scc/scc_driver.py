@@ -10,6 +10,10 @@ Commands:
   run the real ``compliance_scan`` module file with ``backend: scc`` (for real,
   then in check mode) exactly as Ansible runs it on a managed host, record the
   state again and report both results and every added, removed or changed path.
+  It then exports the real run's STIG Viewer checklists with the reporting command
+  (FREES-147), once with SCC's own XCCDF results and once with the pinned stream as
+  content, and reports what ``checklist_check.py`` reads back. The checklists stay
+  in the container.
 - ``install``: install a stream with SCC's own installer. This is test set-up
   only, in a throwaway container: the backend never installs content.
 - ``positive``: the positive control of the egress test. It builds the per-run
@@ -25,8 +29,8 @@ Commands:
 
   It reports every result, the outcomes in the kept XCCDF copy, whether SCC's logs
   say that it ignored the platform test (opted in) or rejected the stream by it
-  (backstop), the ``VERSION_ID`` of the image and the state changes below
-  ``/opt/scc`` and ``/root``.
+  (backstop), the ``VERSION_ID`` of the image, the state changes below
+  ``/opt/scc`` and ``/root`` and the read-back of the marked run's checklists.
 """
 
 from __future__ import annotations
@@ -65,6 +69,8 @@ IGNORED_PLATFORM_TEST = "Ignoring CPE-OVAL Results and continuing scanning"
 REJECTED_BY_PLATFORM_TEST = "is not applicable to this target system"
 BACKSTOP_ROOT = Path("/root/backstop")
 MAX_RESULTS_BYTES = 128 * 1024 * 1024
+EXPORT_TIMEOUT_SECONDS = 600
+CHECKLIST_CHECK = "tests/system/scc/checklist_check.py"
 
 
 def _digest(path: Path) -> str:
@@ -143,6 +149,57 @@ def module_arguments(options: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _reporting_environment(options: argparse.Namespace) -> dict[str, str]:
+    paths = (options.repository / "build" / "collections", options.repository)
+    python_path = ":".join([*(str(path) for path in paths), options.site_packages])
+    return {
+        "PATH": SAFE_PATH,
+        "PYTHONPATH": python_path,
+        "LANG": "C",
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+
+
+def _run_python(
+    options: argparse.Namespace, arguments: list[str]
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=EXPORT_TIMEOUT_SECONDS,
+        cwd=options.repository,
+        env=_reporting_environment(options),
+    )
+
+
+def export_checklists(
+    options: argparse.Namespace, run_directory: Path, content: Path
+) -> dict[str, object]:
+    """Export the checklists of a real run with the reporting command and read them back."""
+    target = Path(tempfile.mkdtemp(prefix="checklists-")) / "out"
+    scan_run = run_directory / "scan-run.json"
+    command = ["-m", "tools.reporting", "--scope", "single_host"]
+    command += ["--output", str(target.parent / "report.json"), "--scan-run", str(scan_run)]
+    command += ["--checklist-content", str(content)]
+    command += ["--export-ckl", str(target), "--export-cklb", str(target)]
+    exported = _run_python(options, command)
+    report: dict[str, object] = {
+        "returncode": exported.returncode,
+        "stderr": exported.stderr[-2000:],
+    }
+    if exported.returncode != 0:
+        return report
+    check = str(options.repository / CHECKLIST_CHECK)
+    checked = _run_python(options, ["-s", check, str(target), str(scan_run)])
+    report["check_returncode"] = checked.returncode
+    report["check_stderr"] = checked.stderr[-2000:]
+    if checked.returncode == 0:
+        report.update(cast("dict[str, object]", json.loads(checked.stdout)))
+    return report
+
+
 def scan(options: argparse.Namespace) -> dict[str, object]:
     """Run a real scan and a check-mode scan through the module."""
     module = options.repository / "plugins" / "modules" / "compliance_scan.py"
@@ -154,7 +211,18 @@ def scan(options: argparse.Namespace) -> dict[str, object]:
         module, {**arguments, "_ansible_check_mode": True, "run_id": "check"}, python_path
     )
     after = snapshot(WATCHED)
-    return {"scan": real, "check_mode": preview, "state": difference(before, after)}
+    run_directory = Path(options.output_dir) / "real"
+    results = run_directory / "scan" / scc.RESULTS_FILE_NAME
+    checklists = {
+        "results": export_checklists(options, run_directory, results),
+        "stream": export_checklists(options, run_directory, Path(options.content)),
+    }
+    return {
+        "scan": real,
+        "check_mode": preview,
+        "state": difference(before, after),
+        "checklists": checklists,
+    }
 
 
 def install(options: argparse.Namespace) -> dict[str, object]:
@@ -299,6 +367,11 @@ def off_platform(options: argparse.Namespace) -> dict[str, object]:
         "backstop": backstop(options.content, options.sha256),
         "version_id": version_id(),
         "state": difference(before, after),
+        "checklists": export_checklists(
+            options,
+            Path(options.output_dir) / "off-platform",
+            scan_directory / scc.OFF_PLATFORM_RESULTS_FILE_NAME,
+        ),
     }
 
 

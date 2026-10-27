@@ -554,3 +554,141 @@ native_rules:
     parameters:
       path: /etc/crontab
       max_mode: "0600"
+untagged_families:
+  - family: auditd
+    reason: >-
+      Audit rules record changes to a subsystem; they do not configure it. An operator who stops the collection from
+      managing a subsystem still needs its changes audited, so only the auditd toggles switch audit rules off
+subsystem_tags:
+  - name: aide
+    rule_patterns:
+      - aide
+    groups: []
+    exclusions: []
+  - name: apparmor
+    rule_patterns:
+      - apparmor
+    groups: []
+    exclusions:
+      - reason: >-
+          Audit rules that watch the AppArmor policy and its parser; auditing changes to mandatory access control is
+          not configuring it, so they stay with auditd alone
+        rules:
+          - audit_rules_mac_modification_etc_apparmor
+          - audit_rules_mac_modification_etc_apparmor_d
+          - audit_rules_privileged_commands_apparmor_parser
+  - name: cron
+    rule_patterns:
+      - at_allow
+      - at_deny
+      - cron
+    groups:
+      - cron_and_at
+    exclusions:
+      - reason: Schedules the AIDE check; it is about AIDE, and cron only runs it
+        rules:
+          - aide_periodic_cron_checking
+      - reason: Audit rules that watch cron and crontab; they stay with auditd alone
+        rules:
+          - audit_rules_cron_execution
+          - audit_rules_etc_cron_d
+          - audit_rules_privileged_commands_crontab
+          - audit_rules_var_spool_cron
+      - reason: Configures where rsyslog writes the cron facility; it is about rsyslog
+        rules:
+          - rsyslog_cron_logging
+  - name: faillock
+    rule_patterns:
+      - faildelay
+      - faillock
+    groups: []
+    exclusions:
+      - reason: An audit rule that watches the faillock records; it stays with auditd alone
+        rules:
+          - audit_rules_login_events_faillock
+  - name: firewalld
+    rule_patterns:
+      - firewalld
+    groups: []
+    exclusions: []
+  - name: journald
+    rule_patterns:
+      - journal
+    groups: []
+    exclusions:
+      - reason: An audit rule that watches the journal directory; it stays with auditd alone
+        rules:
+          - audit_rules_var_log_journal
+  - name: pwhistory
+    rule_patterns:
+      - pwhistory
+      - remember
+    groups: []
+    exclusions: []
+  - name: pwquality
+    rule_patterns:
+      - pwquality
+    groups: []
+    exclusions: []
+  - name: rsyslog
+    rule_patterns:
+      - rsyslog
+    groups: []
+    exclusions: []
+  - name: selinux
+    rule_patterns:
+      - sebool
+      - selinux
+    groups: []
+    exclusions:
+      - reason: An audit rule that watches setsebool; auditing SELinux changes stays with auditd alone
+        rules:
+          - audit_rules_execution_setsebool
+  - name: smartcard
+    rule_patterns:
+      - opensc_
+      - pcscd
+      - smartcard
+    groups: []
+    exclusions: []
+  - name: ssh
+    rule_patterns:
+      - ssh
+    groups: []
+    exclusions:
+      - reason: Audit rules that watch ssh-agent and ssh-keysign; they stay with auditd alone
+        rules:
+          - audit_rules_privileged_commands_ssh_agent
+          - audit_rules_privileged_commands_ssh_keysign
+      - reason: A login banner script in /etc/profile.d; it does not configure SSH and stays with banners
+        rules:
+          - banner_etc_profiled_ssh_confirm
+      - reason: An SELinux boolean for logins as sysadm_r; it configures the SELinux policy, not SSH
+        rules:
+          - sebool_ssh_sysadm_login
+  - name: sssd
+    rule_patterns:
+      - sssd
+    groups: []
+    exclusions: []
+  - name: sudo
+    rule_patterns:
+      - sudo
+    groups: []
+    exclusions:
+      - reason: Audit rules that watch sudo, sudoedit and the sudoers files; they stay with auditd alone
+        rules:
+          - audit_rules_privileged_commands_sudo
+          - audit_rules_privileged_commands_sudoedit
+          - audit_rules_sudoers
+          - audit_rules_sudoers_d
+          - audit_sudo_log_events
+  - name: time_sync
+    rule_patterns:
+      - chrony
+      - ntp
+      - timesyncd
+    groups:
+      - ntp
+    exclusions: []
+ledger_family_aliases: {}

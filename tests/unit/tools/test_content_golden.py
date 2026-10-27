@@ -124,9 +124,18 @@ def test_every_topic_toggle_switches_off_exactly_its_rules_in_every_pinned_profi
             for topic in generate_toggles.topics(loaded):
                 toggle = toggles.toggle_name(topic)
                 members = generate_toggles.governed(loaded, topic)
-                expected = {rule_id for rule_id in profile if families[rule_id] in members}
+                expected = {
+                    rule_id
+                    for rule_id in profile
+                    if families[rule_id] in members
+                    or any(tag in members for tag in loaded.tags.get(rule_id, ()))
+                }
                 switched_off = toggles.disabled_rules(
-                    loaded.rules, {toggle: False}, profile, umbrellas=loaded.umbrellas
+                    loaded.rules,
+                    {toggle: False},
+                    profile,
+                    umbrellas=loaded.umbrellas,
+                    tags=loaded.tags,
                 )
                 assert {str(item["rule_id"]) for item in switched_off} == expected, (
                     profile_id,
@@ -139,7 +148,82 @@ def test_every_topic_toggle_switches_off_exactly_its_rules_in_every_pinned_profi
                         families=loaded.families,
                         toggles={toggle: False},
                         umbrellas=loaded.umbrellas,
+                        tags=loaded.tags,
                     ),
                     profile,
                 )
                 assert bool(warned) is not bool(expected), (profile_id, topic)
+
+
+REVIEWED_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "sssd": (
+        "file_permissions_var_log_sssd",
+        "file_ownerships_var_log_sssd",
+        "file_groupownerships_var_log_sssd",
+    ),
+    "time_sync": (
+        "file_permissions_etc_chrony_keys",
+        "file_owner_etc_chrony_keys",
+        "file_groupowner_etc_chrony_keys",
+    ),
+    "cron": ("file_owner_cron_deny", "file_groupowner_at_deny", "file_permissions_crontab"),
+    "smartcard": ("sssd_enable_smartcards", "dconf_gnome_lock_screen_on_smartcard_removal"),
+    "pwhistory": ("accounts_password_pam_unix_remember", "accounts_password_pam_unix_no_remember"),
+}
+AUDIT_WATCHES: dict[str, tuple[str, ...]] = {
+    "apparmor": (
+        "audit_rules_mac_modification_etc_apparmor",
+        "audit_rules_mac_modification_etc_apparmor_d",
+    ),
+    "selinux": ("audit_rules_mac_modification",),
+}
+
+
+def switched_off_in(loaded: toggles.Catalogue, topic: str, profile: frozenset[str]) -> set[str]:
+    return {
+        str(item["rule_id"])
+        for item in toggles.disabled_rules(
+            loaded.rules,
+            {toggles.toggle_name(topic): False},
+            profile,
+            umbrellas=loaded.umbrellas,
+            tags=loaded.tags,
+        )
+    }
+
+
+def pinned_profiles() -> list[tuple[str, frozenset[str]]]:
+    manifest = fetch.load_manifest(REPOSITORY_ROOT / "content" / "manifest.yml")
+    missing = [
+        stream.file_name
+        for stream in manifest.datastreams
+        if not (CONTENT_DIRECTORY / stream.file_name).is_file()
+    ]
+    if missing:
+        if REQUIRE_CONTENT:
+            pytest.fail(f"pinned content {missing} is missing but FREESECDEV_REQUIRE_CONTENT=1")
+        pytest.skip(f"pinned content {missing} is not present; run make test-content-golden")
+    return [
+        (profile_id, frozenset(rule_ids))
+        for stream in generate_catalogue.streams_of(manifest, CONTENT_DIRECTORY)
+        for profile_id, rule_ids in generate_catalogue.read_stream(stream).profiles.items()
+    ]
+
+
+def test_the_reviewed_examples_follow_their_subsystem_toggle_in_every_pinned_profile() -> None:
+    profiles = pinned_profiles()
+    loaded = generate_toggles.load_catalogue(REPOSITORY_ROOT / generate_toggles.CATALOGUE)
+    seen: set[str] = set()
+    for profile_id, profile in profiles:
+        for topic, shorts in (REVIEWED_EXAMPLES | AUDIT_WATCHES).items():
+            switched_off = switched_off_in(loaded, topic, profile)
+            present = [short for short in shorts if toggles.RULE_PREFIX + short in profile]
+            seen.update(present)
+            for short in present:
+                assert (toggles.RULE_PREFIX + short in switched_off) is (
+                    topic in REVIEWED_EXAMPLES
+                ), (profile_id, topic, short)
+    assert len(profiles) == 25
+    every_example = {short for shorts in REVIEWED_EXAMPLES.values() for short in shorts}
+    every_watch = {short for shorts in AUDIT_WATCHES.values() for short in shorts}
+    assert seen == every_example | every_watch

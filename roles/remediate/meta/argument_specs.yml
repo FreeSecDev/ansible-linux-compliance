@@ -109,14 +109,14 @@ argument_specs:
         default: true
         description:
           - "Umbrella toggle (ADR 0011); false switches off journald, rsyslog, logrotate."
-          - "Rules: 41, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 41, native: 0, tagged: 2. Generated; see docs/remediation-variables.md."
       linux_compliance_journald_enabled:
         type: bool
         default: true
         description:
           - "Topic toggle of the journald family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_logging_enabled."
-          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 19, native: 0, tagged: 3. Generated; see docs/remediation-variables.md."
       linux_compliance_rsyslog_enabled:
         type: bool
         default: true
@@ -185,7 +185,7 @@ argument_specs:
           - "Umbrella toggle (ADR 0011); false switches off sssd, time_sync, mail, cron, nfs,"
           - "usbguard, fapolicyd, network_services."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 119, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 119, native: 0, tagged: 36. Generated; see docs/remediation-variables.md."
       linux_compliance_sssd_enabled:
         type: bool
         default: true
@@ -193,7 +193,7 @@ argument_specs:
           - "Topic toggle of the sssd family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_services_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 12, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 12, native: 0, tagged: 3. Generated; see docs/remediation-variables.md."
       linux_compliance_time_sync_enabled:
         type: bool
         default: true
@@ -201,7 +201,7 @@ argument_specs:
           - "Topic toggle of the time_sync family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_services_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 19, native: 0, tagged: 3. Generated; see docs/remediation-variables.md."
       linux_compliance_mail_enabled:
         type: bool
         default: true
@@ -217,7 +217,7 @@ argument_specs:
           - "Topic toggle of the cron family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_services_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 7, native: 0, tagged: 30. Generated; see docs/remediation-variables.md."
       linux_compliance_nfs_enabled:
         type: bool
         default: true
@@ -375,7 +375,7 @@ argument_specs:
         description:
           - "Umbrella toggle (ADR 0011); false switches off firewalld, nftables, iptables, ufw."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 42, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 42, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_firewalld_enabled:
         type: bool
         default: true
@@ -383,7 +383,7 @@ argument_specs:
           - "Topic toggle of the firewalld family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_firewall_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 10, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 10, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_nftables_enabled:
         type: bool
         default: true
@@ -414,7 +414,7 @@ argument_specs:
         description:
           - "Topic toggle of the ssh family (ADR 0011); false switches its rules off."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 63, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 63, native: 0, tagged: 4. Generated; see docs/remediation-variables.md."
       linux_compliance_pam_enabled:
         type: bool
         default: true
@@ -422,7 +422,7 @@ argument_specs:
           - "Topic toggle of the pam family (ADR 0011); false switches its rules off."
           - "Also the umbrella of pwquality, pwhistory, faillock, which it switches off too."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 55, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 55, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_pwquality_enabled:
         type: bool
         default: true
@@ -438,7 +438,7 @@ argument_specs:
           - "Topic toggle of the pwhistory family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_pam_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 7, native: 0, tagged: 2. Generated; see docs/remediation-variables.md."
       linux_compliance_faillock_enabled:
         type: bool
         default: true
@@ -454,7 +454,7 @@ argument_specs:
           - "Umbrella toggle (ADR 0011); false switches off password_aging, root_access, umask,"
           - "user_sessions, smartcard, console_access, user_accounts."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 88, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 88, native: 0, tagged: 2. Generated; see docs/remediation-variables.md."
       linux_compliance_password_aging_enabled:
         type: bool
         default: true
@@ -494,7 +494,7 @@ argument_specs:
           - "Topic toggle of the smartcard family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_accounts_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 9, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 9, native: 0, tagged: 2. Generated; see docs/remediation-variables.md."
       linux_compliance_console_access_enabled:
         type: bool
         default: true
@@ -517,14 +517,14 @@ argument_specs:
         description:
           - "Topic toggle of the sudo family (ADR 0011); false switches its rules off."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 22, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 22, native: 0, tagged: 3. Generated; see docs/remediation-variables.md."
       linux_compliance_mandatory_access_control_enabled:
         type: bool
         default: true
         description:
           - "Umbrella toggle (ADR 0011); false switches off selinux, apparmor."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 33, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 33, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_selinux_enabled:
         type: bool
         default: true
@@ -532,7 +532,7 @@ argument_specs:
           - "Topic toggle of the selinux family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_mandatory_access_control_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 27, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 27, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_apparmor_enabled:
         type: bool
         default: true

@@ -21,6 +21,8 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CATALOGUE = REPOSITORY_ROOT / "roles" / "remediate" / "vars" / "rules.yml"
 LEGACY = REPOSITORY_ROOT / "tests" / "fixtures" / "catalog" / "legacy-families.yml"
+REFERENCE = REPOSITORY_ROOT / "docs" / "control-families.md"
+PREFIX = "xccdf_org.ssgproject.content_rule_"
 ROLES = ("remediate", "audit")
 SUBSYSTEMS = {
     "services": {
@@ -67,11 +69,15 @@ def data() -> dict[str, object]:
 @functools.cache
 def catalogue() -> toggles.Catalogue:
     errors = toggles.Errors()
-    loaded = toggles.load_catalogue(
-        data()["__linux_compliance_remediate_rules"],
-        data()["__linux_compliance_remediate_audit_only"],
-        data()["__linux_compliance_remediate_families"],
-        {},
+    loaded = toggles.with_tags(
+        toggles.load_catalogue(
+            data()["__linux_compliance_remediate_rules"],
+            data()["__linux_compliance_remediate_audit_only"],
+            data()["__linux_compliance_remediate_families"],
+            {},
+            errors,
+        ),
+        data()["__linux_compliance_remediate_tags"],
         errors,
     )
     assert errors.items == []
@@ -91,6 +97,14 @@ def rules_of(topic: str) -> set[str]:
     return {str(rule["rule_id"]) for rule in catalogue().rules if rule["family"] in families}
 
 
+def switched_off_by(topic: str) -> set[str]:
+    return {
+        str(rule["rule_id"])
+        for rule in catalogue().rules
+        if toggles.switches_off(topic, rule, catalogue())
+    }
+
+
 def every_rule() -> list[str]:
     return sorted(str(rule["rule_id"]) for rule in catalogue().rules)
 
@@ -107,6 +121,7 @@ def audit(given: dict[str, object]) -> dict[str, object]:
         {
             "audit_only": data()["__linux_compliance_remediate_audit_only"],
             "families": data()["__linux_compliance_remediate_families"],
+            "tags": data()["__linux_compliance_remediate_tags"],
             "toggles": given,
             "profile_rule_ids": every_rule(),
             "disabled_rules": [],
@@ -120,11 +135,13 @@ def plan(given: dict[str, object], allow: list[str] | None = None) -> dict[str, 
         {
             "audit_only": data()["__linux_compliance_remediate_audit_only"],
             "families": data()["__linux_compliance_remediate_families"],
+            "tags": data()["__linux_compliance_remediate_tags"],
             "enabled": True,
             "allow_disruptive": allow or [],
             "toggles": given,
             "profile_rule_ids": every_rule(),
             "ledger_entries": [],
+            "family_aliases": data()["__linux_compliance_remediate_family_aliases"],
         },
     )
 
@@ -157,18 +174,64 @@ def test_every_family_has_rules_and_every_rule_exactly_one_family() -> None:
 
 
 @pytest.mark.parametrize("entry", legacy(), ids=lambda entry: str(entry["name"]))
-def test_every_toggle_of_the_former_families_switches_off_exactly_its_former_rules(
+def test_the_families_of_every_former_toggle_hold_exactly_its_former_rules(
     entry: dict[str, object],
 ) -> None:
     rule_ids = sorted(rules_of(str(entry["name"])))
     digest = hashlib.sha256(("\n".join(rule_ids) + "\n").encode()).hexdigest()
     assert len(rule_ids) == entry["rule_count"]
     assert digest == entry["rule_ids_sha256"]
+    assert entry["toggle"] == toggles.toggle_name(str(entry["name"]))
+
+
+@pytest.mark.parametrize("entry", legacy(), ids=lambda entry: str(entry["name"]))
+def test_every_former_toggle_switches_off_its_former_rules_and_only_the_pinned_tagged_ones(
+    entry: dict[str, object],
+) -> None:
     toggle = toggles.toggle_name(str(entry["name"]))
-    assert entry["toggle"] == toggle
+    added = {PREFIX + str(short) for short in cast("list[str]", entry["added_by_tags"])}
+    assert added.isdisjoint(rules_of(str(entry["name"])))
     switched_off = disabled(audit({toggle: False}))
-    assert set(switched_off) == set(rule_ids)
+    assert set(switched_off) == rules_of(str(entry["name"])) | added
     assert set(switched_off.values()) == {toggle}
+    assert disabled(plan({toggle: False})) == switched_off
+
+
+@pytest.mark.parametrize("entry", legacy(), ids=lambda entry: str(entry["name"]))
+def test_every_rule_that_tags_add_to_a_former_toggle_is_listed_in_the_reference(
+    entry: dict[str, object],
+) -> None:
+    toggle = toggles.toggle_name(str(entry["name"]))
+    added = cast("list[str]", entry["added_by_tags"])
+    section = REFERENCE.read_text(encoding="utf-8").split(
+        "## What a toggle switches off through tags", 1
+    )[1]
+    rows = [line for line in section.splitlines() if line.startswith(f"| `{toggle}` |")]
+    if not added:
+        assert rows == []
+        return
+    assert len(rows) == 1
+    listed = rows[0].split(" | ")[3].removesuffix(" |").split(", ")
+    assert listed == [f"`{short}`" for short in added]
+    assert rows[0].split(" | ")[2] == str(len(added))
+
+
+def test_the_tags_widen_exactly_eight_former_toggles() -> None:
+    widened = {
+        str(entry["name"]): len(cast("list[str]", entry["added_by_tags"]))
+        for entry in legacy()
+        if entry["added_by_tags"]
+    }
+    assert widened == {
+        "logging": 2,
+        "services": 36,
+        "firewall": 1,
+        "ssh": 4,
+        "pam": 1,
+        "accounts": 2,
+        "sudo": 3,
+        "mandatory_access_control": 1,
+    }
 
 
 def test_every_former_toggle_is_still_a_declared_default_of_both_roles() -> None:
@@ -179,10 +242,12 @@ def test_every_former_toggle_is_still_a_declared_default_of_both_roles() -> None
 
 
 @pytest.mark.parametrize("topic", topics())
-def test_every_topic_toggle_switches_off_exactly_its_rules_in_both_roles(topic: str) -> None:
+def test_every_topic_toggle_switches_off_exactly_its_rules_and_tagged_rules_in_both_roles(
+    topic: str,
+) -> None:
     toggle = toggles.toggle_name(topic)
-    expected = dict.fromkeys(rules_of(topic), toggle)
-    assert expected
+    expected = dict.fromkeys(switched_off_by(topic), toggle)
+    assert rules_of(topic) <= set(expected)
     audited = disabled(audit({toggle: False}))
     assert audited == expected
     assert disabled(plan({toggle: False})) == audited
@@ -194,13 +259,15 @@ def test_a_topic_toggle_cannot_widen_its_umbrella_on_the_real_catalogue() -> Non
         "linux_compliance_sssd_enabled": True,
     }
     switched_off = disabled(audit(given))
-    assert switched_off == dict.fromkeys(rules_of("services"), "linux_compliance_services_enabled")
+    assert switched_off == dict.fromkeys(
+        switched_off_by("services"), "linux_compliance_services_enabled"
+    )
     assert disabled(plan(given)) == switched_off
 
 
 def test_a_topic_toggle_narrows_its_umbrella_on_the_real_catalogue() -> None:
     switched_off = disabled(audit({"linux_compliance_sssd_enabled": False}))
-    assert switched_off == dict.fromkeys(rules_of("sssd"), "linux_compliance_sssd_enabled")
+    assert switched_off == dict.fromkeys(switched_off_by("sssd"), "linux_compliance_sssd_enabled")
     assert not set(switched_off) & rules_of("time_sync")
 
 
@@ -209,7 +276,7 @@ def test_a_rule_toggle_still_wins_over_its_umbrella() -> None:
     rule_toggle = toggles.rule_toggle_name(sssd)
     switched_off = disabled(audit({"linux_compliance_services_enabled": False, rule_toggle: True}))
     assert sssd not in switched_off
-    assert len(switched_off) == len(rules_of("services")) - 1
+    assert len(switched_off) == len(switched_off_by("services")) - 1
 
 
 @pytest.mark.parametrize("entry", legacy(), ids=lambda entry: str(entry["name"]))

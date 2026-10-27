@@ -84,6 +84,9 @@ def source_document() -> dict[str, object]:
                 "parameters": {"path": "/etc/crontab", "max_mode": "0600"},
             }
         ],
+        "subsystem_tags": [],
+        "untagged_families": [],
+        "ledger_family_aliases": {},
     }
 
 
@@ -249,6 +252,8 @@ def test_the_rendered_catalogue_is_compact_and_expands_to_the_built_one(tmp_path
         generate_toggles.FAMILIES_KEY,
         generate_toggles.RULES_KEY,
         generate_toggles.AUDIT_ONLY_KEY,
+        generate_toggles.TAGS_KEY,
+        generate_toggles.ALIASES_KEY,
     ]
     audit_only = cast("dict[str, list[str]]", data[generate_toggles.AUDIT_ONLY_KEY])
     assert audit_only["mounts"] == []

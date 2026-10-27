@@ -50,6 +50,7 @@ def catalogue() -> list[dict[str, object]]:
 def resolve(**overrides: object) -> dict[str, object]:
     options: dict[str, object] = {
         "audit_only": {},
+        "tags": {},
         "families": FAMILIES,
         "toggles": {},
         "profile_rule_ids": [CRONTAB, PASSWD, ROOT_LOGIN, IMMUTABLE],
@@ -167,12 +168,14 @@ def test_the_audit_and_the_remediation_agree_on_every_disabled_rule(
         catalogue(),
         {
             "audit_only": {},
+            "tags": {},
             "families": FAMILIES,
             "enabled": True,
             "allow_disruptive": ["ssh"],
             "toggles": given,
             "profile_rule_ids": profile,
             "ledger_entries": [],
+            "family_aliases": {},
         },
     )
     assert plan["errors"] == []
@@ -184,8 +187,13 @@ def test_rule_toggles_that_follow_a_disabled_family_give_the_same_result_as_unse
     real_rules = data["__linux_compliance_remediate_rules"]
     real_audit_only = data["__linux_compliance_remediate_audit_only"]
     real_families = data["__linux_compliance_remediate_families"]
+    real_tags = data["__linux_compliance_remediate_tags"]
     errors = toggles.Errors()
-    loaded = toggles.load_catalogue(real_rules, real_audit_only, real_families, {}, errors)
+    loaded = toggles.with_tags(
+        toggles.load_catalogue(real_rules, real_audit_only, real_families, {}, errors),
+        real_tags,
+        errors,
+    )
     assert errors.items == []
     profile = [str(item["rule_id"]) for item in loaded.rules]
     family_off = {FAMILY: False}
@@ -196,6 +204,7 @@ def test_rule_toggles_that_follow_a_disabled_family_give_the_same_result_as_unse
             real_rules,
             {
                 "audit_only": real_audit_only,
+                "tags": real_tags,
                 "families": real_families,
                 "toggles": given,
                 "profile_rule_ids": profile,

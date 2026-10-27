@@ -21,7 +21,14 @@ A family may name an ``umbrella`` (ADR 0011, topic split of FREES-53), which the
 registry repeats. A rule that nothing decides, a rule that two datastreams assign to different
 families, a group listed twice, a mapping entry that decides no rule and a native rule that no
 profile selects are errors; nothing is guessed. Rules listed in ``native_rules`` keep their
-revert strategy and parameters; every other rule gets the strategy ``audit_only``. The tool
+revert strategy and parameters; every other rule gets the strategy ``audit_only``.
+
+``subsystem_tags`` (FREES-165) give rules secondary families, the subsystems they are about: a
+rule pattern tags every rule whose short identifier contains it, a group every rule below it,
+unless an exclusion with a reason lists the rule (:func:`derive_tags`). A rule of an
+``untagged_families`` family that a tag finds without an exclusion, an entry that finds no rule
+and an exclusion that excludes nothing are errors, so the tags cannot drift from the content.
+``ledger_family_aliases`` are copied into the catalogue for the remediation plan. The tool
 writes the catalogue and
 ``docs/control-families.md``; ``make catalogue`` then runs ``generate_toggles`` for the toggles.
 With ``--check`` nothing is written: a unified diff of every file that differs is printed and the
@@ -60,10 +67,25 @@ CONTENT_DIR: Final[Path] = Path("build/content")
 SCHEMA_VERSION: Final[int] = 1
 GROUP_PREFIX: Final[str] = "xccdf_org.ssgproject.content_group_"
 PROFILE_PREFIX: Final[str] = "xccdf_org.ssgproject.content_profile_"
-SOURCE_KEYS: Final[frozenset[str]] = frozenset({"schema_version", "families", "native_rules"})
+SOURCE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "schema_version",
+        "families",
+        "native_rules",
+        "subsystem_tags",
+        "untagged_families",
+        "ledger_family_aliases",
+    }
+)
 FAMILY_KEYS: Final[frozenset[str]] = frozenset(
     {"name", "disruptive", "title", "why", "topic_groups", "rule_prefixes", "fallback_groups"}
 )
+TAG_KEYS: Final[frozenset[str]] = frozenset({"name", "rule_patterns", "groups", "exclusions"})
+EXCLUSION_KEYS: Final[frozenset[str]] = frozenset({"reason", "rules"})
+UNTAGGED_KEYS: Final[frozenset[str]] = frozenset({"family", "reason"})
+TAG_TIERS: Final[tuple[str, ...]] = ("rule_patterns", "groups")
+RULE_PATTERN_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_.+-]{1,63}")
+SHORT_RULE_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,127}")
 UMBRELLA_KEY: Final[str] = toggles.UMBRELLA_KEY
 NATIVE_KEYS: Final[frozenset[str]] = frozenset(
     {"rule_id", "revert_strategy", "runbook", "parameters"}
@@ -110,11 +132,36 @@ class Family:
 
 
 @dataclass(frozen=True)
+class Tag:
+    """A subsystem tag: a family, the entries that find the rules about it, and the exclusions.
+
+    ``exclusions`` maps the short identifier of every excluded rule to the documented reason.
+    """
+
+    name: str
+    rule_patterns: tuple[str, ...]
+    groups: tuple[str, ...]
+    exclusions: dict[str, str]
+
+    def entries(self, tier: str) -> tuple[str, ...]:
+        """Return the entries of ``tier`` (one of :data:`TAG_TIERS`)."""
+        return self.rule_patterns if tier == "rule_patterns" else self.groups
+
+
+@dataclass(frozen=True)
 class Source:
-    """The validated ``content/catalogue.yml``: the registry and the native rules."""
+    """The validated ``content/catalogue.yml``: the registry, the native rules and the tags.
+
+    ``untagged`` maps every family whose rules never get a subsystem tag to the reason, and
+    ``aliases`` maps a former family name of the state ledger to the families that its rules may
+    belong to now.
+    """
 
     families: tuple[Family, ...]
     native_rules: dict[str, dict[str, object]]
+    tags: tuple[Tag, ...]
+    untagged: dict[str, str]
+    aliases: dict[str, list[str]]
 
 
 @dataclass(frozen=True)
@@ -139,11 +186,15 @@ class StreamRules:
 
 @dataclass(frozen=True)
 class Catalogue:
-    """The generated catalogue together with the data that the reference page reports."""
+    """The generated catalogue together with the data that the reference page reports.
+
+    ``tags`` maps every subsystem tag that tags a rule to the sorted rules that it tags.
+    """
 
     source: Source
     rules: list[dict[str, object]]
     streams: tuple[StreamRules, ...]
+    tags: dict[str, list[str]]
 
 
 def _fail(message: str) -> GenerationError:
@@ -239,6 +290,97 @@ def _check_groups(families: Sequence[Family]) -> None:
                 seen[group] = family.name
 
 
+def _exclusions(raw: object, where: str) -> dict[str, str]:
+    items = toggles.as_sequence(raw)
+    if items is None:
+        message = f"{where}.exclusions must be a list"
+        raise _fail(message)
+    excluded: dict[str, str] = {}
+    for index, item in enumerate(items):
+        place = f"{where}.exclusions[{index}]"
+        table = toggles.as_mapping(item)
+        if table is None or frozenset(table) != EXCLUSION_KEYS:
+            message = f"{place} must be a mapping with exactly {sorted(EXCLUSION_KEYS)}"
+            raise _fail(message)
+        reason = _text(table, "reason", place)
+        rules = _texts(table["rules"], f"{place}.rules", SHORT_RULE_NAME)
+        if not rules:
+            message = f"{place}.rules must list at least one rule"
+            raise _fail(message)
+        for rule in rules:
+            if rule in excluded:
+                message = f"{where} excludes {rule} twice"
+                raise _fail(message)
+            excluded[rule] = reason
+    return excluded
+
+
+def _tag(raw: object, index: int, families: frozenset[str]) -> Tag:
+    where = f"subsystem_tags[{index}]"
+    table = toggles.as_mapping(raw)
+    if table is None or frozenset(table) != TAG_KEYS:
+        message = f"{where} must be a mapping with exactly {sorted(TAG_KEYS)}"
+        raise _fail(message)
+    name = table["name"]
+    if not isinstance(name, str) or name not in families:
+        message = f"{where}.name must be a family of the registry, got {name!r}"
+        raise _fail(message)
+    tag = Tag(
+        name=name,
+        rule_patterns=_texts(table["rule_patterns"], f"{where}.rule_patterns", RULE_PATTERN_NAME),
+        groups=_texts(table["groups"], f"{where}.groups", GROUP_NAME),
+        exclusions=_exclusions(table["exclusions"], where),
+    )
+    if not tag.rule_patterns and not tag.groups:
+        message = f"{where} needs at least one rule pattern or group"
+        raise _fail(message)
+    return tag
+
+
+def _tags(raw: object, families: frozenset[str]) -> tuple[Tag, ...]:
+    items = toggles.as_sequence(raw)
+    if items is None:
+        message = f"{SOURCE}: subsystem_tags must be a list"
+        raise _fail(message)
+    tags = tuple(_tag(item, index, families) for index, item in enumerate(items))
+    names = [tag.name for tag in tags]
+    if names != sorted(set(names)):
+        message = f"{SOURCE}: subsystem_tags must be sorted by name and name each family once"
+        raise _fail(message)
+    return tags
+
+
+def _untagged(raw: object, families: frozenset[str]) -> dict[str, str]:
+    items = toggles.as_sequence(raw)
+    if items is None:
+        message = f"{SOURCE}: untagged_families must be a list"
+        raise _fail(message)
+    untagged: dict[str, str] = {}
+    for index, item in enumerate(items):
+        where = f"untagged_families[{index}]"
+        table = toggles.as_mapping(item)
+        if table is None or frozenset(table) != UNTAGGED_KEYS:
+            message = f"{where} must be a mapping with exactly {sorted(UNTAGGED_KEYS)}"
+            raise _fail(message)
+        family = table["family"]
+        if not isinstance(family, str) or family not in families or family in untagged:
+            message = f"{where}.family must be a family of the registry listed once, got {family!r}"
+            raise _fail(message)
+        untagged[family] = _text(table, "reason", where)
+    return untagged
+
+
+def _aliases(raw: object, families: Sequence[Family]) -> dict[str, list[str]]:
+    errors = toggles.Errors()
+    checked = toggles.check_family_aliases(
+        raw, {family.name: family.disruptive for family in families}, errors
+    )
+    if errors.items:
+        message = f"{SOURCE}: ledger_family_aliases: " + "; ".join(errors.items)
+        raise _fail(message)
+    return {former: sorted(targets) for former, targets in checked.items()}
+
+
 def parse_source(document: object) -> Source:
     """Validate the content of ``content/catalogue.yml`` and return it."""
     table = toggles.as_mapping(document)
@@ -265,7 +407,14 @@ def parse_source(document: object) -> Source:
     if errors.items:
         message = f"{SOURCE}: " + "; ".join(errors.items)
         raise _fail(message)
-    return Source(families=families, native_rules=native)
+    names = frozenset(family.name for family in families)
+    return Source(
+        families=families,
+        native_rules=native,
+        tags=_tags(table["subsystem_tags"], names),
+        untagged=_untagged(table["untagged_families"], names),
+        aliases=_aliases(table["ledger_family_aliases"], families),
+    )
 
 
 def load_source(path: Path) -> Source:
@@ -373,6 +522,97 @@ def _assign(source: Source, streams: Sequence[StreamRules]) -> dict[str, str]:
     return assigned
 
 
+def tag_matches(rule_id: str, groups: Iterable[str], tag: Tag) -> list[tuple[str, str]]:
+    """Return the entries (tier, entry) of ``tag`` that find the rule ``rule_id``.
+
+    A rule pattern finds a rule whose short identifier, in lower case, contains it; a group finds
+    a rule below it at any depth.
+    """
+    short = toggles.rule_short_id(rule_id).lower()
+    found = [("rule_patterns", pattern) for pattern in tag.rule_patterns if pattern in short]
+    below = set(groups)
+    found.extend(("groups", group) for group in tag.groups if group in below)
+    return found
+
+
+def _listed(entries: Sequence[tuple[str, str]]) -> str:
+    return ", ".join(f"{tier.replace('_', ' ').rstrip('s')} {entry!r}" for tier, entry in entries)
+
+
+def _tag_rules(
+    tag: Tag,
+    source: Source,
+    assigned: Mapping[str, str],
+    groups: Mapping[str, frozenset[str]],
+    problems: list[str],
+) -> list[str]:
+    used: set[tuple[str, str]] = set()
+    excluded: set[str] = set()
+    tagged: list[str] = []
+    for rule_id in sorted(assigned):
+        matched = tag_matches(rule_id, groups[rule_id], tag)
+        used.update(matched)
+        short = toggles.rule_short_id(rule_id)
+        family = assigned[rule_id]
+        if not matched or family == tag.name:
+            continue
+        if short in tag.exclusions:
+            excluded.add(short)
+        elif family in source.untagged:
+            problems.append(
+                f"{rule_id} matches the subsystem tag {tag.name} ({_listed(matched)}) but belongs "
+                f"to {family}, whose rules are never tagged: list it in an exclusion of the tag "
+                f"{tag.name} with a reason"
+            )
+        else:
+            tagged.append(rule_id)
+    problems.extend(
+        f"the {tier} entry {entry!r} of the subsystem tag {tag.name} matches no rule of the "
+        f"pinned profiles"
+        for tier in TAG_TIERS
+        for entry in tag.entries(tier)
+        if (tier, entry) not in used
+    )
+    problems.extend(
+        f"the subsystem tag {tag.name} excludes {short}, which is not a pinned rule of another "
+        f"family that the tag matches"
+        for short in sorted(set(tag.exclusions) - excluded)
+    )
+    return tagged
+
+
+def derive_tags(
+    source: Source, assigned: Mapping[str, str], groups: Mapping[str, frozenset[str]]
+) -> dict[str, list[str]]:
+    """Return, per subsystem tag, the sorted catalogued rules of other families that it tags.
+
+    ``assigned`` maps every catalogued rule to its family and ``groups`` to every group that
+    contains it in any datastream. A rule of another family that an entry of the tag finds is
+    tagged unless an exclusion of the tag lists it. The drift check: a rule of an untagged family
+    (``untagged_families``) that an entry finds fails the generation unless an exclusion lists
+    it, and so do an entry that finds no rule and an exclusion that excludes nothing. A tag that
+    tags no rule is left out.
+
+    Raises:
+        GenerationError: When the drift check finds a problem.
+    """
+    problems: list[str] = []
+    tagged = {tag.name: _tag_rules(tag, source, assigned, groups, problems) for tag in source.tags}
+    if problems:
+        message = f"{len(problems)} subsystem tag problem(s): " + "; ".join(problems[:MAX_PROBLEMS])
+        raise _fail(message)
+    return {name: rules for name, rules in tagged.items() if rules}
+
+
+def rule_groups(streams: Sequence[StreamRules]) -> dict[str, frozenset[str]]:
+    """Return every group that contains each selected rule, in any of ``streams``."""
+    found: dict[str, set[str]] = {}
+    for stream in streams:
+        for rule_id in selected_rules(stream):
+            found.setdefault(rule_id, set()).update(stream.groups[rule_id])
+    return {rule_id: frozenset(names) for rule_id, names in found.items()}
+
+
 def catalogue_entry(rule_id: str, family: Family, source: Source) -> dict[str, object]:
     """Return the full catalogue entry of a rule in ``family``, native or ``audit_only``."""
     native = source.native_rules.get(rule_id)
@@ -407,19 +647,24 @@ def registry(source: Source) -> list[dict[str, object]]:
 def build(source: Source, streams: Sequence[StreamRules]) -> Catalogue:
     """Assign every selected rule its family and validate the resulting catalogue."""
     assigned = _assign(source, streams)
+    tags = derive_tags(source, assigned, rule_groups(streams))
     families = {family.name: family for family in source.families}
     rules = [
         catalogue_entry(rule_id, families[assigned[rule_id]], source)
         for rule_id in sorted(assigned)
     ]
     errors = toggles.Errors()
-    toggles.load_catalogue(
-        native_rules(rules), audit_only_rules(rules, source), registry(source), {}, errors
+    toggles.with_tags(
+        toggles.load_catalogue(
+            native_rules(rules), audit_only_rules(rules, source), registry(source), {}, errors
+        ),
+        tags,
+        errors,
     )
     if errors.items:
         message = "the generated catalogue is invalid: " + "; ".join(errors.items)
         raise _fail(message)
-    return Catalogue(source=source, rules=rules, streams=tuple(streams))
+    return Catalogue(source=source, rules=rules, streams=tuple(streams), tags=tags)
 
 
 def native_rules(rules: Sequence[dict[str, object]]) -> list[dict[str, object]]:
@@ -450,6 +695,8 @@ def render_catalogue(built: Catalogue) -> str:
         generate_toggles.FAMILIES_KEY: registry(built.source),
         generate_toggles.RULES_KEY: native_rules(built.rules),
         generate_toggles.AUDIT_ONLY_KEY: audit_only_rules(built.rules, built.source),
+        generate_toggles.TAGS_KEY: built.tags,
+        generate_toggles.ALIASES_KEY: built.source.aliases,
     }
     return generate_toggles.render_yaml(data, CATALOGUE_PLAIN_KEYS)
 
@@ -528,9 +775,11 @@ REFERENCE_INTRO: Final[tuple[str, ...]] = (
     "umbrella is `services`, whatever their own topic toggles say. An umbrella is either a name",
     "of its own, such as `services`, or a family that heads it, such as `pam` for `pwquality`,",
     "`pwhistory` and `faillock`. Every umbrella keeps the name of the family it was split from,",
-    "so it switches off exactly the rules that family held before the split",
+    "so the rules of its families are exactly the rules that family held before the split",
     "([ADR 0011](adr/0011-control-toggles-and-cleanup.md), amendment of the FREES-53 topic",
-    "split). A rule without a native remediation has the strategy",
+    "split). Subsystem tags let a toggle also switch off rules of other families that are",
+    "about its subsystem; [every such rule is listed](#what-a-toggle-switches-off-through-tags)",
+    "(FREES-165). A rule without a native remediation has the strategy",
     "`audit_only`: the audit scans it, or excludes it and reports it as `disabled` when it is",
     "switched off, and remediation reports it as `not_implemented` and never changes anything",
     "for it ([remediation guide](remediation.md#effective-state-of-a-rule)).",
@@ -599,6 +848,150 @@ def _umbrella_lines(built: Catalogue) -> list[str]:
         count = sum(rule["family"] in members for rule in built.rules)
         listed = ", ".join(f"`{member}`" for member in members)
         lines.append(_cell([f"`{toggles.toggle_name(topic)}`", listed, count]))
+    for head in (topic for topic in families if topic in umbrellas.values()):
+        grouped = [
+            member for member in toggles.governed(head, families, umbrellas) if member != head
+        ]
+        names = ", ".join(f"`{member}`" for member in grouped)
+        lines.extend(
+            [
+                "",
+                f"`{head}` is both a topic and an umbrella: `{toggles.toggle_name(head)}: false`",
+                f"switches off its own rules and those of {names}, and the allow-list entry",
+                f"`{head}` allows all of them. There is no toggle or allow-list entry for the",
+                f"rules of `{head}` alone; to remediate only those, allow `{head}` and switch",
+                "the grouped families off with their own toggles.",
+            ]
+        )
+    return lines
+
+
+TAGS_INTRO: Final[tuple[str, ...]] = (
+    "",
+    "## Subsystem tags",
+    "",
+    "The steps above give every rule exactly one family, often the family of the mechanism",
+    "it uses: the permissions of `/var/log/sssd` are `file_permissions`, the GNOME lock on",
+    "smart card removal is `desktop`. A subsystem tag adds the family of the subsystem that",
+    "such a rule is about (FREES-165), so that `linux_compliance_sssd_enabled: false` also",
+    "switches off the permissions of the SSSD logs. A rule is off when the toggle of its",
+    "family, of the umbrella of its family, of one of its tags or of the umbrella of a tag is",
+    "`false`; a rule toggle that is set still wins. Tags only add ways to switch a rule off:",
+    "a tag toggle that is `true` never switches a rule on. When several toggles are off,",
+    "`disabled_by` names the first in this order: the umbrella of the family, the family, then",
+    "each tag in alphabetical order, after the umbrella of that tag; else the rule toggle.",
+    "",
+    "Tags do not change what is disruptive. The allow-list",
+    "`linux_compliance_remediate_allow_disruptive` and the disruptive flag stay properties of",
+    "the family, because they gate what remediation changes on the host, and the family",
+    "decides that: `file_permissions_crontab` is tagged `cron`, which is disruptive, but",
+    "applying it only changes the mode of `/etc/crontab`, so it needs no allow-list entry.",
+    "",
+    "Tags are derived from the pinned content: a rule pattern tags every rule whose short",
+    "identifier, in lower case, contains it, and a group tags every rule below it. An",
+    "exclusion with a reason keeps a rule untagged. The generator fails when an entry finds no",
+    "rule, when an exclusion excludes nothing and when an entry finds a rule of a family whose",
+    "rules are never tagged and no exclusion lists it, so a new rule of the content cannot",
+    "drift past a decision. The rules of these families are never tagged:",
+    "",
+)
+
+
+def rule_tags(built: Catalogue) -> dict[str, tuple[str, ...]]:
+    """Return the subsystem tags of every tagged rule, sorted, as :attr:`toggles.Catalogue.tags`."""
+    found: dict[str, list[str]] = {}
+    for tag, rule_ids in built.tags.items():
+        for rule_id in rule_ids:
+            found.setdefault(rule_id, []).append(tag)
+    return {rule_id: tuple(sorted(tags)) for rule_id, tags in sorted(found.items())}
+
+
+def _short_list(rule_ids: Iterable[str]) -> str:
+    return ", ".join(f"`{toggles.rule_short_id(rule_id)}`" for rule_id in rule_ids)
+
+
+def _exclusion_lines(tag: Tag) -> list[str]:
+    reasons: dict[str, list[str]] = {}
+    for short, reason in tag.exclusions.items():
+        reasons.setdefault(reason, []).append(short)
+    if not reasons:
+        return []
+    lines = ["", "Not tagged:", ""]
+    lines.extend(
+        f"- {', '.join(f'`{short}`' for short in shorts)}: {reason}."
+        for reason, shorts in reasons.items()
+    )
+    return lines
+
+
+def _tag_lines(built: Catalogue) -> list[str]:
+    families_of_rules = {str(rule["rule_id"]): str(rule["family"]) for rule in built.rules}
+    lines: list[str] = list(TAGS_INTRO)
+    lines.extend(f"- `{family}`: {reason}." for family, reason in built.source.untagged.items())
+    lines.extend(
+        [
+            "",
+            "| Tag | Rule patterns | Groups | Tagged rules |",
+            "|---|---|---|---|",
+        ]
+    )
+    for tag in built.source.tags:
+        patterns = ", ".join(f"`{pattern}`" for pattern in tag.rule_patterns) or "none"
+        groups = ", ".join(f"`{group}`" for group in tag.groups) or "none"
+        lines.append(_cell([f"`{tag.name}`", patterns, groups, len(built.tags.get(tag.name, []))]))
+    for tag in built.source.tags:
+        tagged = built.tags.get(tag.name, [])
+        lines.extend(["", f"### Tag `{tag.name}`", ""])
+        if tagged:
+            lines.extend(["| Rule | Family |", "|---|---|"])
+            lines.extend(
+                _cell([f"`{toggles.rule_short_id(rule_id)}`", f"`{families_of_rules[rule_id]}`"])
+                for rule_id in tagged
+            )
+        else:
+            lines.append(
+                "It tags no rule of another family of the pinned content; its entries keep new "
+                "rules from drifting."
+            )
+        lines.extend(_exclusion_lines(tag))
+    return lines
+
+
+def _coverage_lines(built: Catalogue) -> list[str]:
+    families = {family.name: family.disruptive for family in built.source.families}
+    umbrellas = {
+        family.name: family.umbrella
+        for family in built.source.families
+        if family.umbrella is not None
+    }
+    catalogue = toggles.Catalogue(
+        rules=built.rules, families=families, toggles={}, umbrellas=umbrellas, tags=rule_tags(built)
+    )
+    lines = [
+        "",
+        "## What a toggle switches off through tags",
+        "",
+        "Every topic and umbrella toggle switches off the rules of the families it governs and,",
+        "through the tags, these rules of other families. Every toggle of a former family keeps",
+        "switching off exactly the rules of its families (the legacy fixture",
+        "`tests/fixtures/catalog/legacy-families.yml` pins them), and switches off these rules",
+        "in addition.",
+        "",
+        "| Toggle | Rules of its families | Added through tags | Added rules |",
+        "|---|---|---|---|",
+    ]
+    for topic in toggles.topics(families, umbrellas):
+        members = toggles.governed(topic, families, umbrellas)
+        own = sum(rule["family"] in members for rule in built.rules)
+        added = [
+            str(rule["rule_id"])
+            for rule in built.rules
+            if rule["family"] not in members and toggles.switches_off(topic, rule, catalogue)
+        ]
+        if added:
+            lines.append(
+                _cell([f"`{toggles.toggle_name(topic)}`", own, len(added), _short_list(added)])
+            )
     return lines
 
 
@@ -640,6 +1033,8 @@ def reference(built: Catalogue) -> str:
         )
     )
     lines.extend(_umbrella_lines(built))
+    lines.extend(_tag_lines(built))
+    lines.extend(_coverage_lines(built))
     lines.extend(
         [
             "",

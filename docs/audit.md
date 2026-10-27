@@ -542,9 +542,12 @@ before the scan (`tasks/toggles.yml`, FREES-55) from two sources:
    each catalogued rule that the discovered profile selects, with or without a native remediation, with the filter
    `freesecdev.linux_compliance.audit_disabled_rules`. That filter and the `remediation_plan` filter of the remediate
    role use the same code (`plugins/module_utils/compliance/toggles.py`): the rule toggle when it is set, else on
-   only when the umbrella toggle of the family (if any) and the family toggle are both on. A rule that is off is
-   disabled with `disabled_by` set to the umbrella toggle when it is off, else to the family toggle when it is off,
-   and to the rule toggle otherwise ([umbrellas](remediation-variables.md#umbrellas)). So `linux_compliance_auditd_enabled: false` in the inventory
+   only when the umbrella toggle of the family (if any), the family toggle and the toggles of the rule's subsystem
+   tags and their umbrellas are all on (FREES-165, [subsystem tags](control-families.md#subsystem-tags)). A rule that
+   is off is disabled with `disabled_by` set to the first of these that is off: the umbrella toggle, the family
+   toggle, then each tag in alphabetical order after its umbrella; and to the rule toggle otherwise
+   ([umbrellas](remediation-variables.md#umbrellas)). So `linux_compliance_sssd_enabled: false` also excludes the
+   permissions of `/var/log/sssd`, and `linux_compliance_auditd_enabled: false` in the inventory
    disables every auditd rule of the profile in the audit and in remediation at once, and names that variable in
    both: the catalogue holds every rule of the pinned profiles (FREES-53, [control families](control-families.md)).
    The global remediation opt-in plays no part: the audit honours the toggles whether or not remediation runs. The

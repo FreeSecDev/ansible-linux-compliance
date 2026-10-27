@@ -63,11 +63,22 @@ options:
         of the audit role uses too. An umbrella toggle that is false switches off every family
         it groups, whatever their topic toggles say; a rule toggle that is set wins over both.
         A rule that is off names the umbrella toggle as C(disabled_by) when the umbrella toggle is
-        off, else the family toggle when the family toggle is off, and its rule toggle otherwise.
+        off, else the family toggle when the family toggle is off, else the first subsystem tag
+        toggle that is off (each tag after its umbrella, tags in alphabetical order), and its rule
+        toggle otherwise.
+      - C(tags) maps a family to the full identifiers of the catalogued rules of other families
+        that carry it as a subsystem tag, C(__linux_compliance_remediate_tags) of the same file
+        (FREES-165). A tag toggle or the toggle of its umbrella that is false switches the tagged
+        rules off too. A tag never switches a rule on and does not change the allow-list, which
+        stays a property of the family of the rule.
       - C(profile_rule_ids) lists the full rule identifiers that the discovered profile selects.
         It is required when C(enabled) is true and ignored otherwise (pass C(none)).
       - C(ledger_entries) lists the entries of the state ledger, as the control_state module
         returns them.
+      - C(family_aliases) maps a family name that a ledger entry may record to the families that
+        its rule may belong to now, C(__linux_compliance_remediate_family_aliases) of the same
+        file, so that a native rule moved to another family keeps the entries that an older
+        collection version recorded under the former name, and is still cleaned up.
     type: dict
     required: true
 """
@@ -78,8 +89,9 @@ EXAMPLES = r"""
     plan: >-
       {{ catalogue | freesecdev.linux_compliance.remediation_plan({
            'audit_only': audit_only, 'families': registry, 'enabled': true,
-           'allow_disruptive': [], 'toggles': {},
-           'profile_rule_ids': discovered_rule_ids, 'ledger_entries': []}) }}
+           'allow_disruptive': [], 'toggles': {}, 'tags': {},
+           'profile_rule_ids': discovered_rule_ids, 'ledger_entries': [],
+           'family_aliases': {}}) }}
 """
 
 RETURN = r"""
@@ -158,8 +170,10 @@ OPTION_KEYS: Final[frozenset[str]] = frozenset(
         "audit_only",
         "enabled",
         "families",
+        "family_aliases",
         "ledger_entries",
         "profile_rule_ids",
+        "tags",
         "toggles",
     }
 )
@@ -187,6 +201,7 @@ class Context:
     toggle_values: Mapping[str, bool]
     ledger: Mapping[str, Rule]
     umbrellas: Mapping[str, str]
+    tags: Mapping[str, tuple[str, ...]]
 
 
 def check_allow_list(
@@ -216,15 +231,36 @@ def check_allow_list(
     return frozenset(allowed)
 
 
+def recorded_family_matches(
+    recorded: object, family: str, aliases: Mapping[str, frozenset[str]]
+) -> bool:
+    """Return whether a ledger entry that records ``recorded`` may belong to a rule of ``family``.
+
+    It may when it records the current family of the rule, or a former family name whose alias
+    lists the current family (FREES-165), because an older collection version recorded the entry
+    before the rule moved.
+    """
+    return recorded == family or (
+        isinstance(recorded, str) and family in aliases.get(recorded, frozenset())
+    )
+
+
 def check_ledger(
-    raw: object, rules: Sequence[Rule], errors: Errors
+    raw: object,
+    rules: Sequence[Rule],
+    errors: Errors,
+    aliases: Mapping[str, frozenset[str]],
 ) -> tuple[dict[str, Rule], list[str]]:
-    """Index the ledger entries by rule identifier and list those the catalogue lacks."""
+    """Index the ledger entries by rule identifier and list those the catalogue lacks.
+
+    An entry must record the family of its rule or a former family name that ``aliases`` maps to
+    it (:func:`recorded_family_matches`); any other family is an error.
+    """
     items = toggles.as_sequence(raw)
     if items is None:
         errors.add("ledger_entries must be a list")
         return {}, []
-    families = {str(rule["rule_id"]): rule["family"] for rule in rules}
+    families = {str(rule["rule_id"]): str(rule["family"]) for rule in rules}
     entries: dict[str, Rule] = {}
     orphaned: list[str] = []
     for raw_entry in items:
@@ -234,7 +270,7 @@ def check_ledger(
             errors.add("every ledger entry must be a mapping with a rule_id")
         elif rule_id not in families:
             orphaned.append(rule_id)
-        elif entry.get("family") != families[rule_id]:
+        elif not recorded_family_matches(entry.get("family"), families[rule_id], aliases):
             errors.add(f"{rule_id}: the ledger records family {toggles.show(entry.get('family'))}")
         else:
             entries[rule_id] = entry
@@ -282,7 +318,12 @@ def decide(rule: Rule, toggle: toggles.Toggle, context: Context) -> tuple[str, s
 
 def plan_rule(rule: Rule, context: Context) -> Rule:
     """Return ``rule`` with its action, reason, controlling variable and ledger entry."""
-    toggle = toggles.resolve_toggle(rule, context.toggle_values, umbrellas=context.umbrellas)
+    toggle = toggles.resolve_toggle(
+        rule,
+        context.toggle_values,
+        umbrellas=context.umbrellas,
+        tags=context.tags.get(str(rule["rule_id"]), toggles.EMPTY),
+    )
     action, reason = decide(rule, toggle, context)
     rule_id = str(rule["rule_id"])
     entry = context.ledger.get(rule_id)
@@ -401,11 +442,16 @@ def _context(
     if not isinstance(enabled, bool):
         errors.add("linux_compliance_remediate_enabled must be a boolean")
     switched_on = enabled is True
-    loaded = toggles.load_catalogue(
-        catalogue, options["audit_only"], options["families"], options["toggles"], errors
+    loaded = toggles.with_tags(
+        toggles.load_catalogue(
+            catalogue, options["audit_only"], options["families"], options["toggles"], errors
+        ),
+        options["tags"],
+        errors,
     )
     rules = loaded.rules
-    ledger, orphaned = check_ledger(options["ledger_entries"], rules, errors)
+    aliases = toggles.check_family_aliases(options["family_aliases"], loaded.families, errors)
+    ledger, orphaned = check_ledger(options["ledger_entries"], rules, errors, aliases)
     context = Context(
         enabled=switched_on,
         allowed=check_allow_list(
@@ -417,6 +463,7 @@ def _context(
         toggle_values=loaded.toggles,
         ledger=ledger,
         umbrellas=loaded.umbrellas,
+        tags=loaded.tags,
     )
     return rules, loaded.families, context, orphaned
 
@@ -451,6 +498,7 @@ def remediation_plan(catalogue: object, options: object) -> dict[str, object]:
                 context.toggle_values,
                 context.profile if context.enabled else None,
                 umbrellas=context.umbrellas,
+                tags=context.tags,
             ),
             "orphaned": orphaned,
             "report": [{key: rule[key] for key in REPORT_KEYS} for rule in planned],
@@ -461,6 +509,7 @@ def remediation_plan(catalogue: object, options: object) -> dict[str, object]:
                     families=registry,
                     toggles=dict(context.toggle_values),
                     umbrellas=dict(context.umbrellas),
+                    tags=dict(context.tags),
                 ),
                 context.profile if context.enabled else None,
             ),

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-readonly SCC_PATHS='^(extensions/ci/scc/|tools/scc/|tools/lint/fetch-hadolint\.sh$|Makefile$|\.github/workflows/|tests/unit/tools/test_scc_image\.py$|plugins/module_utils/compliance/(scc|process|backends)[^/]*\.py$|tests/.*scc|docs/adr/0019-)'
+readonly SCC_PATHS='^(extensions/ci/scc/|tools/scc/|tools/lint/fetch-hadolint\.sh$|Makefile$|\.github/workflows/|tests/unit/tools/test_scc_image\.py$|plugins/module_utils/compliance/(scc|process|backends)[^/]*\.py$|tools/reporting/(checklist|stig_content)[^/]*\.py$|tests/.*scc|docs/adr/00(19|20)-)'
 readonly SHA='^[0-9a-f]{40}$'
 
 event="${1:-}"

@@ -18,6 +18,13 @@ narrow an umbrella, never widen it. A rule toggle that is set still wins over bo
 umbrella toggles default to ``true`` in the roles (``tools/roles/generate_toggles.py``); a rule
 toggle that is not set follows its family.
 
+A rule may also carry subsystem tags (FREES-165): families other than its own whose subsystem the
+rule is about, such as ``sssd`` for the permissions of ``/var/log/sssd``, which belong to the
+``file_permissions`` family. A tag only adds ways to switch the rule off: the rule is off when the
+toggle of its family, of its family's umbrella, of any of its tags or of any tag's umbrella is
+false. Tags never switch a rule on and play no part in the disruptive allow-list, which stays a
+property of the family.
+
 This module is the single source of truth for the toggle names, the validation of the catalogue,
 the registry and the toggle variables, and the resolution of the toggle state of a rule. The
 ``remediation_plan`` filter of the remediate role and the ``audit_disabled_rules`` filter of the
@@ -30,7 +37,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, cast
 
 RULE_PREFIX: Final[str] = "xccdf_org.ssgproject.content_rule_"
@@ -125,6 +132,7 @@ RULE_KEYS: Final[frozenset[str]] = frozenset(
 )
 FAMILY_KEYS: Final[frozenset[str]] = frozenset({"disruptive", "name"})
 UMBRELLA_KEY: Final[str] = "umbrella"
+EMPTY: Final[tuple[str, ...]] = ()
 MAX_RULES: Final[int] = 4096
 MAX_FAMILIES: Final[int] = 64
 MAX_ERRORS: Final[int] = 100
@@ -165,13 +173,15 @@ class Registry:
 class Catalogue:
     """The validated catalogue: rules sorted by identifier, the registry and the toggle values.
 
-    ``umbrellas`` maps every family that belongs to an umbrella to the name of that umbrella.
+    ``umbrellas`` maps every family that belongs to an umbrella to the name of that umbrella, and
+    ``tags`` maps every rule that has subsystem tags to its tags, sorted (see :func:`check_tags`).
     """
 
     rules: list[Rule]
     families: dict[str, bool]
     toggles: dict[str, bool]
     umbrellas: dict[str, str]
+    tags: dict[str, tuple[str, ...]]
 
 
 def show(value: object) -> str:
@@ -504,6 +514,79 @@ def expand_audit_only(raw: object, families: Mapping[str, bool], errors: Errors)
     return entries
 
 
+def _tag_problem(tag: str, value: object, families: Mapping[str, bool]) -> str | None:
+    rule_ids = as_sequence(value)
+    if tag not in families:
+        return f"the subsystem tags name the unknown family {show(tag)}"
+    if rule_ids is None or not all(is_text(item, RULE_PATTERN) for item in rule_ids):
+        return f"the rules tagged {tag} must be a list of rule identifiers"
+    if [str(item) for item in rule_ids] != sorted({str(item) for item in rule_ids}):
+        return f"the rules tagged {tag} must be sorted and free of duplicates"
+    return None
+
+
+def check_tags(
+    raw: object, rules: Sequence[Rule], families: Mapping[str, bool], errors: Errors
+) -> dict[str, tuple[str, ...]]:
+    """Validate the subsystem tags and return the tags of every tagged rule, sorted.
+
+    ``raw`` maps a family, the tag, to the sorted full identifiers of the catalogued rules of other
+    families that it tags (``__linux_compliance_remediate_tags`` of the catalogue). A tag must be a
+    registered family, and a tagged rule must be catalogued and belong to another family, because a
+    family toggle already switches off the rules of its own family.
+    """
+    mapping = as_mapping(raw)
+    if mapping is None:
+        errors.add("the subsystem tags must map families to lists of rule identifiers")
+        return {}
+    family_of = {str(rule["rule_id"]): rule["family"] for rule in rules}
+    tagged: dict[str, list[str]] = {}
+    for tag, value in mapping.items():
+        problem = _tag_problem(tag, value, families)
+        if problem is not None:
+            errors.add(problem)
+            continue
+        for rule_id in (str(item) for item in as_sequence(value) or []):
+            if rule_id not in family_of:
+                errors.add(f"the subsystem tag {tag} names {rule_id}, which is not catalogued")
+            elif family_of[rule_id] == tag:
+                errors.add(
+                    f"{rule_id} belongs to the family {tag} and cannot also be tagged with it"
+                )
+            else:
+                tagged.setdefault(rule_id, []).append(tag)
+    return {rule_id: tuple(sorted(names)) for rule_id, names in sorted(tagged.items())}
+
+
+def check_family_aliases(
+    raw: object, families: Mapping[str, bool], errors: Errors
+) -> dict[str, frozenset[str]]:
+    """Validate the ledger family aliases and return the current families of each former name.
+
+    ``raw`` maps a family name that the state ledger may record, because a rule was moved to
+    another family after it was applied, to the sorted registered families that its rules may
+    belong to now (``__linux_compliance_remediate_family_aliases``). A former name must be a valid
+    family name and may still be a registered family; it cannot alias itself.
+    """
+    mapping = as_mapping(raw)
+    if mapping is None:
+        errors.add("the ledger family aliases must map former family names to lists of families")
+        return {}
+    aliases: dict[str, frozenset[str]] = {}
+    for former, value in mapping.items():
+        targets = as_sequence(value)
+        names = [str(item) for item in targets or []]
+        if not is_topic_name(former):
+            errors.add(f"invalid or reserved former family name {show(former)} in the aliases")
+        elif not names or not all(item in families for item in names):
+            errors.add(f"the alias {former} must list registered families")
+        elif names != sorted(set(names)) or former in names:
+            errors.add(f"the alias {former} must be sorted, free of duplicates and not name itself")
+        else:
+            aliases[former] = frozenset(names)
+    return aliases
+
+
 def load_catalogue(
     catalogue: object, audit_only: object, families: object, toggles: object, errors: Errors
 ) -> Catalogue:
@@ -512,7 +595,8 @@ def load_catalogue(
     ``catalogue`` lists the rules with a native remediation, each with every key of
     :data:`RULE_KEYS`, and ``audit_only`` the rules without one, per family (see
     :func:`expand_audit_only`). A native entry with the strategy ``audit_only`` is an error, so each
-    rule has exactly one place in the catalogue.
+    rule has exactly one place in the catalogue. No rule is tagged; :func:`with_tags` adds the
+    subsystem tags.
     """
     checked = check_registry(families, errors)
     registry = checked.families
@@ -528,34 +612,61 @@ def load_catalogue(
     rules = check_catalogue(combined, registry, errors)
     rule_toggles = frozenset(str(rule["toggle"]) for rule in rules)
     values = check_toggles(toggles, rule_toggles, registry, errors, umbrellas=checked.umbrellas)
-    return Catalogue(rules=rules, families=registry, toggles=values, umbrellas=checked.umbrellas)
+    return Catalogue(
+        rules=rules, families=registry, toggles=values, umbrellas=checked.umbrellas, tags={}
+    )
+
+
+def with_tags(catalogue: Catalogue, tags: object, errors: Errors) -> Catalogue:
+    """Return ``catalogue`` with the subsystem tags ``tags``, validated by :func:`check_tags`."""
+    return replace(catalogue, tags=check_tags(tags, catalogue.rules, catalogue.families, errors))
+
+
+def controlling_topics(family: str, tags: Sequence[str], umbrellas: Mapping[str, str]) -> list[str]:
+    """Return the topics whose toggles must all be on for a rule, in the order of precedence.
+
+    These are the umbrella of the rule's family, the family, and then, for each subsystem tag in
+    alphabetical order, the umbrella of the tag and the tag; a topic is listed once. The first of
+    them whose toggle is false is the ``disabled_by`` of the rule.
+    """
+    names: list[str] = []
+    for topic in (family, *sorted(tags)):
+        umbrella = umbrellas.get(topic)
+        for name in (topic,) if umbrella is None else (umbrella, topic):
+            if name not in names:
+                names.append(name)
+    return names
 
 
 def resolve_toggle(
-    rule: Rule, toggles: Mapping[str, bool], *, umbrellas: Mapping[str, str]
+    rule: Rule,
+    toggles: Mapping[str, bool],
+    *,
+    umbrellas: Mapping[str, str],
+    tags: Sequence[str] = EMPTY,
 ) -> Toggle:
     """Return the toggle state of ``rule`` and the variable that switched it off.
 
     The state is the rule toggle when it is set. Otherwise the topic of the rule is on when the
-    umbrella toggle of its family (if the family belongs to an umbrella) and its family toggle are
-    both on, a toggle that is not set counting as on, so a topic toggle can only narrow its
-    umbrella and never widen it. When the rule is off, the controlling variable is the most
-    general toggle that is off: the umbrella toggle, else the family toggle, else the rule toggle.
-    A rule toggle copied from its family default cannot be told apart from one set by the
-    operator once templated, so the topic is named whenever it is off. A rule toggle that
-    switches a rule of a disabled topic on again wins over the family and the umbrella toggle.
+    toggle of every topic of :func:`controlling_topics` is on: the umbrella of its family (if the
+    family belongs to an umbrella), its family, and for each subsystem tag in ``tags`` the umbrella
+    of the tag and the tag, a toggle that is not set counting as on. So a topic toggle can only
+    narrow its umbrella and never widen it, and a tag can only switch a rule off. When the rule is
+    off, the controlling variable is the first of those toggles that is off, in that order: the
+    family umbrella, the family, then the tags in alphabetical order, each after its umbrella;
+    else the rule toggle. A rule toggle copied from its family default cannot be told apart from
+    one set by the operator once templated, so the topic is named whenever it is off. A rule
+    toggle that switches a rule of a disabled topic on again wins over every topic toggle.
     """
-    family = toggle_name(str(rule["family"]))
-    umbrella = umbrellas.get(str(rule["family"]))
-    umbrella_toggle = family if umbrella is None else toggle_name(umbrella)
-    umbrella_on = toggles.get(umbrella_toggle, True)
-    topic_on = umbrella_on and toggles.get(family, True)
-    on = toggles.get(str(rule["toggle"]), topic_on)
+    topics_off = [
+        toggle_name(topic)
+        for topic in controlling_topics(str(rule["family"]), tags, umbrellas)
+        if not toggles.get(toggle_name(topic), True)
+    ]
+    on = toggles.get(str(rule["toggle"]), not topics_off)
     if on:
         return Toggle(on=True, disabled_by=None)
-    if topic_on:
-        return Toggle(on=False, disabled_by=str(rule["toggle"]))
-    return Toggle(on=False, disabled_by=family if umbrella_on else umbrella_toggle)
+    return Toggle(on=False, disabled_by=topics_off[0] if topics_off else str(rule["toggle"]))
 
 
 def disabled_rules(
@@ -564,19 +675,33 @@ def disabled_rules(
     profile: frozenset[str] | None,
     *,
     umbrellas: Mapping[str, str],
+    tags: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, object]]:
     """Return the rules that a toggle switches off, with ``rule_id`` and ``disabled_by``.
 
-    When ``profile`` is not ``None``, only rules that the profile selects are returned, because the
+    ``tags`` maps a rule identifier to its subsystem tags (:attr:`Catalogue.tags`). When
+    ``profile`` is not ``None``, only rules that the profile selects are returned, because the
     audit can only disable a rule that its profile selects.
     """
+    tagged = tags or {}
     found: list[dict[str, object]] = []
     for rule in rules:
-        toggle = resolve_toggle(rule, toggles, umbrellas=umbrellas)
+        rule_tags = tagged.get(str(rule["rule_id"]), EMPTY)
+        toggle = resolve_toggle(rule, toggles, umbrellas=umbrellas, tags=rule_tags)
         if toggle.on or (profile is not None and rule["rule_id"] not in profile):
             continue
         found.append({"rule_id": rule["rule_id"], "disabled_by": toggle.disabled_by})
     return found
+
+
+def switches_off(topic: str, rule: Rule, catalogue: Catalogue) -> bool:
+    """Return whether the toggle of ``topic`` being false switches ``rule`` off.
+
+    That is the case when ``topic`` is one of the :func:`controlling_topics` of the rule: its
+    family, the umbrella of its family, one of its subsystem tags or the umbrella of one.
+    """
+    tags = catalogue.tags.get(str(rule["rule_id"]), EMPTY)
+    return topic in controlling_topics(str(rule["family"]), tags, catalogue.umbrellas)
 
 
 def _scope(topic: str, members: Sequence[str]) -> str:
@@ -591,11 +716,12 @@ def topic_warnings(catalogue: Catalogue, profile: frozenset[str] | None) -> list
     A topic toggle covers only catalogued rules. The catalogue holds every rule of the supported
     profiles of the pinned content, so for those profiles the warning fires only for a family, or
     an umbrella, that has no rule in the profile at all. When the toggle is false and no
-    catalogued rule of the families that it governs (:func:`governed`) is selected by ``profile``
-    (or, when ``profile`` is ``None``, when they have no catalogued rule at all), the toggle has
-    no effect; rules of content that the catalogue does not describe, such as user-supplied
-    content, are still audited. Saying so prevents the false impression that something was
-    excluded.
+    catalogued rule that it switches off (:func:`switches_off`: a rule of a family that it governs,
+    or a rule of another family that a subsystem tag of such a family reaches) is selected by
+    ``profile`` (or, when ``profile`` is ``None``, when there is no such catalogued rule at all),
+    the toggle has no effect; rules of content that the catalogue does not describe, such as
+    user-supplied content, are still audited. Saying so prevents the false impression that
+    something was excluded.
     """
     warnings: list[str] = []
     for topic in topics(catalogue.families, catalogue.umbrellas):
@@ -606,7 +732,8 @@ def topic_warnings(catalogue: Catalogue, profile: frozenset[str] | None) -> list
         covered = [
             rule
             for rule in catalogue.rules
-            if rule["family"] in members and (profile is None or rule["rule_id"] in profile)
+            if switches_off(topic, rule, catalogue)
+            and (profile is None or rule["rule_id"] in profile)
         ]
         if not covered:
             warnings.append(
