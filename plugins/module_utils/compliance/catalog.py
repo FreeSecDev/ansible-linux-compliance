@@ -74,6 +74,9 @@ SEVERITIES: Final[frozenset[str]] = frozenset({"unknown", "info", "low", "medium
 STIG_ID_REFERENCES: Final[frozenset[str]] = frozenset(
     {"https://www.cyber.mil/stigs/downloads/?_dl_facet_stigs=operating-systems%2Cunix-linux"}
 )
+DISA_RULE_REFERENCES: Final[frozenset[str]] = frozenset(
+    {"https://www.cyber.mil/stigs/srg-stig-tools/"}
+)
 MAX_STIG_IDS: Final[int] = 64
 
 _GROUP_ID: Final[str] = r"xccdf_[A-Za-z0-9_.+-]+"
@@ -111,11 +114,20 @@ _VERSION_KIND: Final[str] = "version"
 _PROFILE_VERSION_KIND: Final[str] = "profile_version"
 _STIG_ID_KIND: Final[str] = "stig_id"
 _RULE_VERSION_KIND: Final[str] = "rule_version"
+_DISA_RULE_KIND: Final[str] = "disa_rule"
 _PART: Final[str] = "part"
 _SELECT_KIND: Final[str] = "select"
 _OTHER: Final[str] = "other"
 _COLLECTING: Final[frozenset[str]] = frozenset(
-    {_TITLE_KIND, _VERSION_KIND, _PROFILE_VERSION_KIND, _STIG_ID_KIND, _RULE_VERSION_KIND, _PART}
+    {
+        _TITLE_KIND,
+        _VERSION_KIND,
+        _PROFILE_VERSION_KIND,
+        _STIG_ID_KIND,
+        _RULE_VERSION_KIND,
+        _DISA_RULE_KIND,
+        _PART,
+    }
 )
 _TITLE_OWNERS: Final[frozenset[str]] = frozenset({_BENCH, _PROFILE_KIND, _RULE_KIND})
 
@@ -175,6 +187,8 @@ class Rule:
         version: The text of the rule's own first ``version``, cleaned but not
             validated, empty when it has none. A DISA benchmark records the rule's
             STIG ID there, for example ``UBTU-24-100010``.
+        disa_rules: The text of the rule's DISA rule ID references
+            (``SV-257777r1155676_rule``), in document order, cleaned but not validated.
     """
 
     rule_id: str
@@ -183,6 +197,7 @@ class Rule:
     groups: tuple[str, ...] = ()
     stig_ids: tuple[str, ...] = ()
     version: str = ""
+    disa_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -255,7 +270,16 @@ class _Frame:
 
 
 class _RuleDraft:
-    __slots__ = ("default", "groups", "rule_id", "severity", "stig_ids", "title", "version")
+    __slots__ = (
+        "default",
+        "disa_rules",
+        "groups",
+        "rule_id",
+        "severity",
+        "stig_ids",
+        "title",
+        "version",
+    )
 
     def __init__(
         self, rule_id: str, severity: str, groups: tuple[str, ...], *, default: bool
@@ -266,6 +290,7 @@ class _RuleDraft:
         self.default = default
         self.title: str | None = None
         self.stig_ids: list[str] = []
+        self.disa_rules: list[str] = []
         self.version: str | None = None
 
 
@@ -334,7 +359,15 @@ def _finish_benchmark(draft: _BenchmarkDraft) -> Benchmark:
         title=draft.title or "",
         profiles=tuple(_finish_profile(profile, draft) for profile in draft.profiles),
         rules=tuple(
-            Rule(r.rule_id, r.severity, r.title or "", r.groups, tuple(r.stig_ids), r.version or "")
+            Rule(
+                r.rule_id,
+                r.severity,
+                r.title or "",
+                r.groups,
+                tuple(r.stig_ids),
+                r.version or "",
+                tuple(r.disa_rules),
+            )
             for r in draft.rules
         ),
     )
@@ -412,7 +445,15 @@ class _Collector:
         return _Frame(_RULE_VERSION_KIND)
 
     def _open_reference(self, attributes: dict[str, str]) -> _Frame:
-        if attributes.get("href") not in STIG_ID_REFERENCES:
+        href = attributes.get("href")
+        if href in DISA_RULE_REFERENCES:
+            if len(self.rule.disa_rules) >= MAX_STIG_IDS:
+                _fail(
+                    f"rule {self.rule.rule_id!r} has more than {MAX_STIG_IDS} DISA rule references"
+                )
+            self.parts = []
+            return _Frame(_DISA_RULE_KIND)
+        if href not in STIG_ID_REFERENCES:
             return _Frame(_OTHER)
         if len(self.rule.stig_ids) >= MAX_STIG_IDS:
             _fail(f"rule {self.rule.rule_id!r} has more than {MAX_STIG_IDS} STIG ID references")
@@ -495,6 +536,8 @@ class _Collector:
             self.profile.version = _clean("".join(self.parts))
         elif kind == _STIG_ID_KIND:
             self.rule.stig_ids.append(_clean("".join(self.parts)))
+        elif kind == _DISA_RULE_KIND:
+            self.rule.disa_rules.append(_clean("".join(self.parts)))
         elif kind == _RULE_VERSION_KIND and self.rule.version is None:
             self.rule.version = _clean("".join(self.parts))
         elif kind == _TITLE_KIND and frame.accept:

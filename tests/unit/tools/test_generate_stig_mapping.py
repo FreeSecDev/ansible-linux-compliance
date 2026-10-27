@@ -20,12 +20,20 @@ NS = (
     'xmlns:x="http://checklists.nist.gov/xccdf/1.2"'
 )
 STIG_HREF = next(iter(catalog.STIG_ID_REFERENCES))
+DISA_HREF = next(iter(catalog.DISA_RULE_REFERENCES))
 OTHER_HREF = (
     "https://www.cyber.mil/stigs/downloads/?_dl_facet_stigs=operating-systems%2Cgeneral-purpose-os"
 )
 RULE = "xccdf_org.ssgproject.content_rule_"
 PROFILE = "xccdf_org.ssgproject.content_profile_"
 BENCHMARK = "xccdf_org.ssgproject.content_benchmark_SYNTHETIC"
+DISA_BENCHMARK = "xccdf_mil.disa.stig_benchmark_SYNTHETIC_STIG"
+DISA_REFERENCES: dict[str, tuple[str, ...]] = {
+    "one": ("SV-1r1_rule",),
+    "split_a": ("SV-2r1_rule",),
+    "split_b": ("SV-2r1_rule", "SV-3r1_rule"),
+    "joint": ("SV-4r1_rule",),
+}
 RULES: dict[str, tuple[str, ...]] = {
     "one": ("SYNT-01-000010",),
     "split_a": ("SYNT-01-000020",),
@@ -37,9 +45,20 @@ RULES: dict[str, tuple[str, ...]] = {
 }
 
 
-def rule(name: str, stig_ids: tuple[str, ...]) -> str:
+@pytest.fixture(autouse=True)
+def pinned_disa_benchmark(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gen, "DISA_BENCHMARKS", {BENCHMARK: DISA_BENCHMARK})
+
+
+def rule(
+    name: str, stig_ids: tuple[str, ...], disa: dict[str, tuple[str, ...]] | None = None
+) -> str:
     references = "".join(
         f'<x:reference href="{STIG_HREF}">{value}</x:reference>' for value in stig_ids
+    )
+    references += "".join(
+        f'<x:reference href="{DISA_HREF}">{value}</x:reference>'
+        for value in (DISA_REFERENCES if disa is None else disa).get(name, ())
     )
     other = f'<x:reference href="{OTHER_HREF}">SRG-OS-000001-GPOS-00001</x:reference>'
     title = f"<x:title>{name}</x:title>"
@@ -55,13 +74,17 @@ def profile(name: str, version: str, rules: dict[str, tuple[str, ...]]) -> str:
     return f'<x:Profile id="{PROFILE}{name}">{shown}<x:title>{name}</x:title>{selects}</x:Profile>'
 
 
-def stream(rules: dict[str, tuple[str, ...]] | None = None, stig_version: str = "V1R2") -> bytes:
+def stream(
+    rules: dict[str, tuple[str, ...]] | None = None,
+    stig_version: str = "V1R2",
+    disa: dict[str, tuple[str, ...]] | None = None,
+) -> bytes:
     rules = RULES if rules is None else rules
     body = (
         f'<x:Benchmark id="{BENCHMARK}"><x:version>0.1.82</x:version>'
         f"{profile('stig', stig_version, rules)}{profile('cis', '1.0.0', rules)}"
         f'<x:Group id="xccdf_org.ssgproject.content_group_system">'
-        f"{''.join(rule(name, ids) for name, ids in rules.items())}</x:Group></x:Benchmark>"
+        f"{''.join(rule(name, ids, disa) for name, ids in rules.items())}</x:Group></x:Benchmark>"
     )
     component = f"<ds:component>{body}</ds:component>"
     return f"<ds:data-stream-collection {NS}>{component}</ds:data-stream-collection>".encode()
@@ -124,6 +147,20 @@ def test_the_mapping_joins_rules_on_their_stig_ids_many_to_many(tmp_path: Path) 
         "SYNT-01-000040": [f"{RULE}joint"],
     }
     assert profiles[0]["rules_without_stig_id"] == [f"{RULE}plain", f"{RULE}support"]
+    assert profiles[0]["disa_benchmark_id"] == DISA_BENCHMARK
+
+
+def test_a_rule_pairs_its_disa_rule_ids_only_with_its_one_stig_id(tmp_path: Path) -> None:
+    streams = cast("list[dict[str, object]]", generated(write_root(tmp_path))["datastreams"])
+    profiles = cast("list[dict[str, object]]", streams[0]["profiles"])
+    assert profiles[0]["disa_rules"] == {
+        "SV-1r1_rule": "SYNT-01-000010",
+        "SV-2r1_rule": "SYNT-01-000020",
+        "SV-3r1_rule": "SYNT-01-000020",
+    }
+    assert list(cast("dict[str, str]", profiles[0]["disa_rules"])) == sorted(
+        cast("dict[str, str]", profiles[0]["disa_rules"])
+    )
 
 
 def test_the_generated_file_is_a_valid_mapping_for_the_reader(tmp_path: Path) -> None:
@@ -131,6 +168,8 @@ def test_the_generated_file_is_a_valid_mapping_for_the_reader(tmp_path: Path) ->
     text = gen.generate(root, gen.CONTENT_DIR)[gen.MAPPING]
     parsed = stig_mapping.parse_mapping(text.encode("utf-8"), "generated")
     assert parsed.profiles[0].rules_of("SYNT-01-000020") == (f"{RULE}split_a", f"{RULE}split_b")
+    assert parsed.profiles[0].disa_rules["SV-3r1_rule"] == "SYNT-01-000020"
+    assert parsed.profiles[0].disa_benchmark_id == DISA_BENCHMARK
 
 
 def test_a_stream_without_a_release_profile_is_left_out(tmp_path: Path) -> None:
@@ -145,6 +184,17 @@ def test_a_stream_without_a_release_profile_is_left_out(tmp_path: Path) -> None:
         (stream({"bad": ("UBTU-24-1",)}), "references the STIG ID 'UBTU-24-1', which is not"),
         (stream({"plain": ()}), "versioned as the DISA release V1R2, but none of its rules"),
         (b"<x/>", "synthetic: the root is not"),
+        (
+            stream({"bad": ("SYNT-01-000010",)}, disa={"bad": ("SV-1_rule",)}),
+            "references the DISA rule ID 'SV-1_rule', which is not of the form",
+        ),
+        (
+            stream(
+                {"a": ("SYNT-01-000010",), "b": ("SYNT-01-000020",)},
+                disa={"a": ("SV-1r1_rule",), "b": ("SV-1r1_rule",)},
+            ),
+            "the DISA rule ID SV-1r1_rule is paired with SYNT-01-000010 and with SYNT-01-000020",
+        ),
     ],
 )
 def test_malformed_or_empty_mappings_are_refused(tmp_path: Path, data: bytes, message: str) -> None:
@@ -179,7 +229,7 @@ def test_main_reports_missing_content_and_a_broken_manifest(
 def test_main_runs_as_a_module(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root = write_root(tmp_path)
+    root = write_root(tmp_path, stream(stig_version="2.0.0"))
     assert gen.main(["--root", str(root)]) == 0
     monkeypatch.setattr(sys, "argv", ["generate_stig_mapping", "--root", str(root), "--check"])
     monkeypatch.delitem(sys.modules, "tools.content.generate_stig_mapping", raising=False)
@@ -207,3 +257,23 @@ def test_the_committed_mapping_is_valid_and_names_only_identifiers() -> None:
         for item in cast("list[dict[str, object]]", manifest["datastreams"])
     }
     assert all(pinned[profile.datastream] == profile.content_sha256 for profile in mapping.profiles)
+
+
+def test_a_release_profile_of_an_unpinned_disa_benchmark_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gen, "DISA_BENCHMARKS", {})
+    with pytest.raises(gen.GenerationError, match="no DISA benchmark ID is pinned for"):
+        gen.generate(write_root(tmp_path), gen.CONTENT_DIR)
+
+
+def test_the_committed_mapping_pins_the_disa_benchmarks_and_the_rhel_9_pairs() -> None:
+    mapping = stig_mapping.load_mapping(REPOSITORY_ROOT / gen.MAPPING)
+    pinned = {item.disa_benchmark_id for item in mapping.profiles}
+    assert pinned == {
+        "xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG",
+        "xccdf_mil.disa.stig_benchmark_RHEL_9_STIG",
+    }
+    for profile in mapping.profiles:
+        assert all(stig_id in profile.checks for stig_id in profile.disa_rules.values())
+        assert bool(profile.disa_rules) is profile.stig_release.startswith("V2")

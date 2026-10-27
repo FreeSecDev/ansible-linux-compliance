@@ -11,7 +11,9 @@ on the managed host, so no DISA content is ever committed. This module joins the
   benchmark and STIG profile of the mapping. The release that the mapping implements
   (``V1R5``) must equal the release of the SCC benchmark's version (``001.005.007`` is V1R5);
   otherwise the run is refused (:class:`MappingError`), because a STIG ID may change meaning
-  between releases.
+  between releases. The mapping also pins the DISA benchmark ID of the profile and, where the
+  pinned ComplianceAsCode stream states them, the STIG ID of each DISA rule; what the host
+  reports must be that benchmark, and must not differ from those pairs (FREES-171).
 - **All or nothing.** A DISA rule is disabled only when every ComplianceAsCode rule mapped to its
   STIG ID is disabled. Its ``disabled_by`` is the toggle variable that disables most of them, the
   alphabetically first on a tie. When only some are disabled, the rule stays enabled and its
@@ -62,8 +64,18 @@ STREAM_KEYS: Final[frozenset[str]] = frozenset(
     {"name", "file_name", "sha256", "benchmark_id", "benchmark_version", "profiles"}
 )
 PROFILE_KEYS: Final[frozenset[str]] = frozenset(
-    {"profile_id", "stig_release", "stig_ids", "rules_without_stig_id"}
+    {
+        "profile_id",
+        "stig_release",
+        "disa_benchmark_id",
+        "stig_ids",
+        "disa_rules",
+        "rules_without_stig_id",
+    }
 )
+_DISA_RULE_PREFIX: Final[str] = "xccdf_mil.disa.stig_rule_"
+_DISA_RULE_REF: Final[str] = r"SV-[0-9]+r[0-9]+_rule"
+_DISA_BENCHMARK: Final[str] = r"xccdf_mil\.disa\.stig_benchmark_[A-Za-z0-9_.+-]{1,200}"
 _RELEASE: Final[str] = r"V([0-9]{1,3})R([0-9]{1,3})"
 _DOTTED: Final[str] = r"([0-9]{1,3})\.([0-9]{1,3})(?:\.[0-9]{1,6})*"
 _RULE: Final[str] = model.XCCDF_ID_PATTERNS["rule"]
@@ -90,13 +102,17 @@ class StigProfile:
         benchmark_id: The ComplianceAsCode benchmark identifier.
         profile_id: The ComplianceAsCode STIG profile identifier.
         stig_release: The DISA release that the profile implements, ``V<n>R<n>``.
+        disa_benchmark_id: The identifier of the DISA benchmark that the profile implements.
         checks: The ComplianceAsCode rules that check each STIG ID.
+        disa_rules: The STIG ID that the pinned stream pairs with each DISA rule ID.
     """
 
     benchmark_id: str
     profile_id: str
     stig_release: str
+    disa_benchmark_id: str
     checks: Mapping[str, tuple[str, ...]]
+    disa_rules: Mapping[str, str]
 
     def mapped_rules(self) -> frozenset[str]:
         """Return every ComplianceAsCode rule that checks at least one STIG ID."""
@@ -179,6 +195,20 @@ def _checks(value: object, where: str) -> Mapping[str, tuple[str, ...]]:
     return MappingProxyType(checks)
 
 
+def _disa_rules(value: object, checks: Mapping[str, tuple[str, ...]]) -> Mapping[str, str]:
+    table = _object(value, "disa_rules")
+    if list(table) != sorted(table):
+        _refuse("disa_rules must be an object with sorted DISA rule IDs")
+    pairs: dict[str, str] = {}
+    for rule, raw in table.items():
+        _identifier(rule, _DISA_RULE_REF, f"disa_rules key {_show(rule)}")
+        stig_id = _identifier(raw, placement.STIG_ID_PATTERN, f"disa_rules.{rule}")
+        if stig_id not in checks:
+            _refuse(f"disa_rules.{rule} pairs a STIG ID that the profile does not map")
+        pairs[rule] = stig_id
+    return MappingProxyType(pairs)
+
+
 def _stream_profiles(document: dict[str, object]) -> Iterable[tuple[str, dict[str, object]]]:
     for index, raw in enumerate(_array(document["datastreams"], "datastreams")):
         stream = _object(raw, f"datastreams[{index}]")
@@ -223,11 +253,16 @@ def read_profile(text: object, benchmark_id: str, profile_id: str) -> StigProfil
             f"{_show(benchmark_id)}, expected exactly one"
         )
     entry = found[0]
+    checks = _checks(entry["stig_ids"], "stig_ids")
     return StigProfile(
         benchmark_id=benchmark_id,
         profile_id=profile_id,
         stig_release=_identifier(entry["stig_release"], _RELEASE, "stig_release"),
-        checks=_checks(entry["stig_ids"], "stig_ids"),
+        disa_benchmark_id=_identifier(
+            entry["disa_benchmark_id"], _DISA_BENCHMARK, "disa_benchmark"
+        ),
+        checks=checks,
+        disa_rules=_disa_rules(entry["disa_rules"], checks),
     )
 
 
@@ -252,13 +287,19 @@ def mapping_for(text: object, benchmark_id: str, benchmark_version: str) -> Stig
     """Return the mapping for the SCC benchmark ``benchmark_id`` at ``benchmark_version``.
 
     Raises:
-        MappingError: If no mapping is paired with the benchmark, or if the release that the
-            mapping implements is not the release of the benchmark version.
+        MappingError: If no mapping is paired with the benchmark, if the mapping pins another DISA
+            benchmark, or if the release that the mapping implements is not the release of the
+            benchmark version.
     """
     pair = STIG_PROFILES.get(benchmark_id)
     if pair is None:
         _refuse(f"no STIG mapping is paired with the SCC benchmark {_show(benchmark_id)}")
     profile = read_profile(text, *pair)
+    if profile.disa_benchmark_id != benchmark_id:
+        _refuse(
+            f"the STIG mapping pins the DISA benchmark {_show(profile.disa_benchmark_id)}, but "
+            f"the SCC benchmark is {_show(benchmark_id)}; nothing was scanned"
+        )
     release = release_of(benchmark_version)
     if release != profile.stig_release:
         _refuse(
@@ -290,6 +331,29 @@ def scc_rules(raw: object) -> tuple[SccRule, ...]:
     if len({rule.rule_id for rule in rules}) != len(rules):
         _refuse("the SCC profile lists a rule more than once")
     return tuple(rules)
+
+
+def check_reported(rules: Sequence[SccRule], profile: StigProfile) -> int:
+    """Refuse SCC rules whose STIG ID differs from the one that the pinned mapping pairs with them.
+
+    The rules come from the SCC benchmark on the managed host, which the host controls. A rule
+    that the mapping does not pair, which is every rule of the Ubuntu profile, is not checked.
+    Returns the number of rules that were checked, which is zero when nothing is paired.
+
+    Raises:
+        MappingError: If a reported STIG ID differs from the pinned one.
+    """
+    checked = 0
+    for rule in rules:
+        pinned = profile.disa_rules.get(rule.rule_id.removeprefix(_DISA_RULE_PREFIX))
+        if pinned is not None:
+            checked += 1
+        if pinned is not None and pinned != rule.stig_id:
+            _refuse(
+                f"the SCC rule {_show(rule.rule_id)} reports the STIG ID {_show(rule.stig_id)}, "
+                f"but the STIG mapping pairs it with {pinned}; nothing was scanned"
+            )
+    return checked
 
 
 def primary_family(families: Iterable[str]) -> str:

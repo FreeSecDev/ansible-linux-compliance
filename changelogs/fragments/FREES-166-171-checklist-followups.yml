@@ -1,0 +1,18 @@
+---
+minor_changes:
+  - >-
+    reporting - the checklist export writes every output of one run to temporary files first and renames them
+    only when all were written, so a failed write leaves no partial set and exits with status 2. It refuses a
+    checklist file name over 255 bytes before anything is written, cross-checks the XCCDF results of an evidence
+    bundle against its scan run and refuses any mismatch, and requires the content version a run recorded to match
+    the content, for runs that did not complete too. A run that recorded no version (``unknown``) exports as all Not
+    Reviewed, with the version of the content stated as unverified (FREES-166).
+  - >-
+    reporting - ``--compare-stig`` pairs the entries of the SCC and OpenSCAP checklists by DISA rule ID and refuses
+    another release, another number of rules or other rules with status 2. The details of a toggled SCC rule show
+    SCC's real result, and the comments of a partly disabled rule name the toggles (FREES-171).
+  - >-
+    content - ``content/stig-mapping.json`` pins the DISA benchmark ID of every profile and, for the RHEL 9
+    profiles, the DISA rule ID to STIG ID pairs that the pinned ComplianceAsCode stream states, as identifiers
+    only. The export and the ``scc_toggles`` filter refuse DISA content or host-reported rules that differ. The
+    Ubuntu 24.04 profile has no pairs, because its stream carries no DISA rule IDs (FREES-171).

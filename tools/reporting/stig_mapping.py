@@ -4,7 +4,10 @@
 pinned, digest-verified ComplianceAsCode datastreams alone and checked in CI against them. For each
 ComplianceAsCode STIG profile it records the DISA release the profile implements (``V1R5``) and,
 for each STIG ID (the DISA rule ``version``, ``Rule_Ver`` in a checklist), the ComplianceAsCode
-rules that check it. It holds identifiers only.
+rules that check it. It also records the DISA benchmark ID that the profile implements
+(``disa_benchmark_id``) and, as far as the pinned stream states them, the pairs of DISA rule ID
+(``SV-<n>r<n>_rule``) and STIG ID (``disa_rules``); the Ubuntu stream states none, so its pairs
+are empty (FREES-171). It holds identifiers only.
 
 A ComplianceAsCode scan run is exported with an entry only when the run's benchmark, profile and
 content SHA-256 are the entry's: a scan of other ComplianceAsCode content is never exported with
@@ -12,8 +15,13 @@ this mapping. The DISA group and rule IDs come from the DISA content given at ex
 on the STIG ID (:mod:`tools.reporting.checklist_mapped`).
 
 The file is read strictly: bounded, strict JSON, exact key sets, identifiers checked against
-their patterns, every list sorted and unique, and every rule of an entry listed once at most among
-the rules without a STIG ID.
+their patterns, every list sorted and unique, every rule of an entry listed once at most among
+the rules without a STIG ID, and every paired STIG ID one of the entry's STIG IDs.
+
+DISA content is checked against the entry before it is used (:meth:`ProfileMapping.contradictions`):
+the benchmark must be the pinned DISA benchmark, and a DISA rule that the entry pairs with a STIG ID
+must carry that STIG ID. This stops DISA content that the scanned host reported, or an operator
+file that is not the pinned release, from relabelling a rule.
 """
 
 import re
@@ -31,6 +39,7 @@ from tools.reporting.common import (
     load_json,
     read_input,
 )
+from tools.reporting.stig_content import StigBenchmark
 
 DEFAULT_PATH: Final[Path] = Path(__file__).resolve().parents[2] / "content" / "stig-mapping.json"
 MAX_BYTES: Final[int] = 16 * 1024 * 1024
@@ -42,10 +51,21 @@ STREAM_KEYS: Final[frozenset[str]] = frozenset(
     {"name", "file_name", "sha256", "benchmark_id", "benchmark_version", "profiles"}
 )
 PROFILE_KEYS: Final[frozenset[str]] = frozenset(
-    {"profile_id", "stig_release", "stig_ids", "rules_without_stig_id"}
+    {
+        "profile_id",
+        "stig_release",
+        "disa_benchmark_id",
+        "stig_ids",
+        "disa_rules",
+        "rules_without_stig_id",
+    }
 )
 STIG_ID: Final[re.Pattern[str]] = re.compile(r"[A-Z][A-Z0-9]{1,15}-[0-9]{2}-[0-9]{6}")
 STIG_RELEASE: Final[re.Pattern[str]] = re.compile(r"V([0-9]{1,3})R([0-9]{1,3})")
+DISA_RULE_REF: Final[re.Pattern[str]] = re.compile(r"SV-[0-9]+r[0-9]+_rule")
+DISA_BENCHMARK_ID: Final[re.Pattern[str]] = re.compile(
+    r"xccdf_mil\.disa\.stig_benchmark_[A-Za-z0-9_.+-]{1,200}"
+)
 XCCDF_ID: Final[re.Pattern[str]] = re.compile(r"xccdf_[A-Za-z0-9_.+-]{1,250}")
 SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
 NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}")
@@ -63,7 +83,9 @@ class ProfileMapping:
         benchmark_version: The ComplianceAsCode benchmark version.
         profile_id: The ComplianceAsCode profile ID.
         stig_release: The DISA release that the profile implements, ``V<n>R<n>``.
+        disa_benchmark_id: The ID of the DISA benchmark that the profile implements.
         checks: The ComplianceAsCode rules of each STIG ID.
+        disa_rules: The STIG ID that the pinned stream pairs with each DISA rule ID.
         unmapped_rules: The selected rules of the profile that reference no STIG ID.
     """
 
@@ -74,7 +96,9 @@ class ProfileMapping:
     benchmark_version: str
     profile_id: str
     stig_release: str
+    disa_benchmark_id: str
     checks: Mapping[str, tuple[str, ...]]
+    disa_rules: Mapping[str, str]
     unmapped_rules: tuple[str, ...]
 
     def rules_of(self, stig_id: str) -> tuple[str, ...]:
@@ -84,6 +108,19 @@ class ProfileMapping:
     def mapped_rules(self) -> frozenset[str]:
         """Return every ComplianceAsCode rule that checks at least one STIG ID."""
         return frozenset(rule for rules in self.checks.values() for rule in rules)
+
+    def contradictions(self, benchmark: StigBenchmark) -> list[str]:
+        """Return what DISA content ``benchmark`` states against the pinned pairs.
+
+        A DISA rule whose ID the profile pairs with a STIG ID, and whose own STIG ID is another,
+        is one contradiction. Rules the profile pairs with nothing are not checked.
+        """
+        return [
+            f"{rule.rule_ref} has the STIG ID {rule.version}, but the STIG mapping pairs it with "
+            f"{self.disa_rules[rule.rule_ref]}"
+            for rule in benchmark.rules
+            if self.disa_rules.get(rule.rule_ref, rule.version) != rule.version
+        ]
 
 
 @dataclass(frozen=True)
@@ -141,6 +178,23 @@ def _checks(value: object, where: str) -> Mapping[str, tuple[str, ...]]:
     return MappingProxyType(checks)
 
 
+def _disa_rules(
+    value: object, checks: Mapping[str, tuple[str, ...]], where: str
+) -> Mapping[str, str]:
+    table = as_object(value, where)
+    if list(table) != sorted(table):
+        message = f"{where} must be an object with sorted DISA rule IDs"
+        raise InvalidInputError(message)
+    pairs: dict[str, str] = {}
+    for rule, stig_id in table.items():
+        _identifier(rule, DISA_RULE_REF, f"{where} key {clean_text(rule, 64)!r}")
+        pairs[rule] = _identifier(stig_id, STIG_ID, f"{where}.{rule}")
+        if stig_id not in checks:
+            message = f"{where}.{rule} pairs a STIG ID that the profile does not map"
+            raise InvalidInputError(message)
+    return MappingProxyType(pairs)
+
+
 def _profile(value: object, stream: dict[str, object], where: str) -> ProfileMapping:
     table = as_object(value, where)
     _exact(table, PROFILE_KEYS, where)
@@ -160,7 +214,11 @@ def _profile(value: object, stream: dict[str, object], where: str) -> ProfileMap
         benchmark_version=_identifier(stream["benchmark_version"], NAME, "benchmark_version"),
         profile_id=_identifier(table["profile_id"], XCCDF_ID, f"{where}.profile_id"),
         stig_release=_identifier(table["stig_release"], STIG_RELEASE, f"{where}.stig_release"),
+        disa_benchmark_id=_identifier(
+            table["disa_benchmark_id"], DISA_BENCHMARK_ID, f"{where}.disa_benchmark_id"
+        ),
         checks=checks,
+        disa_rules=_disa_rules(table["disa_rules"], checks, f"{where}.disa_rules"),
         unmapped_rules=unmapped,
     )
 

@@ -10,9 +10,18 @@ the pinned SHA-256 before it parses a byte, and writes ``content/stig-mapping.js
 
 - for every pinned profile whose version is a DISA release (``V<n>R<n>``), the STIG IDs that its
   selected rules reference, each with the sorted ComplianceAsCode rules that reference it, and the
-  selected rules that reference none;
+  selected rules that reference none, the DISA benchmark ID that the profile implements
+  (:data:`DISA_BENCHMARKS`, pinned here by hand because no pinned stream carries it), and the
+  pairs of DISA rule ID (``SV-<n>r<n>_rule``) and STIG ID that the stream states;
 - the datastream's file name, SHA-256, benchmark ID and version, so that a scan of other content
   is never exported with this mapping.
+
+The DISA rule IDs are read only where the stream states them unambiguously: a rule that references
+exactly one STIG ID and at least one DISA rule ID pairs each of them with that STIG ID, and a rule
+that references several STIG IDs pairs none, because the stream does not say which belongs to
+which. Two rules that pair one DISA rule ID with different STIG IDs are an error. The RHEL 9 stream
+carries these references; the Ubuntu stream carries none, so its profile has no pairs (ADR 0020,
+amendment of FREES-171). The pairs are identifiers only and no DISA text.
 
 Mappings are many-to-many: one STIG ID can have several rules and one rule several STIG IDs. Only
 identifiers of the BSD-licensed ComplianceAsCode content are written, never benchmark text, and no
@@ -33,6 +42,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import catalog
@@ -40,7 +50,7 @@ from tools.content import fetch_content
 from tools.roles import generate_catalogue, generate_toggles
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 MAPPING: Final[Path] = Path("content/stig-mapping.json")
 MANIFEST: Final[Path] = Path("content/manifest.yml")
@@ -50,7 +60,18 @@ GENERATOR: Final[str] = "tools/content/generate_stig_mapping.py"
 JOIN_KEY: Final[str] = "STIG ID: the DISA rule version, Rule_Ver in a checklist"
 STIG_ID: Final[re.Pattern[str]] = re.compile(r"[A-Z][A-Z0-9]{1,15}-[0-9]{2}-[0-9]{6}")
 STIG_RELEASE: Final[re.Pattern[str]] = re.compile(r"V[0-9]{1,3}R[0-9]{1,3}")
+DISA_RULE: Final[re.Pattern[str]] = re.compile(r"SV-[0-9]+r[0-9]+_rule")
 SUPPORT_MARKERS: Final[frozenset[str]] = frozenset({"needed_rules"})
+DISA_BENCHMARKS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04": (
+            "xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG"
+        ),
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9": (
+            "xccdf_mil.disa.stig_benchmark_RHEL_9_STIG"
+        ),
+    }
+)
 
 
 class GenerationError(generate_toggles.GenerationError):
@@ -69,19 +90,44 @@ def _stig_ids(rule: catalog.Rule, profile_id: str) -> list[str]:
     return sorted(set(values))
 
 
+def _pair(pairs: dict[str, str], rule: catalog.Rule, stig_ids: list[str], profile_id: str) -> None:
+    for disa_rule in sorted(set(rule.disa_rules)):
+        if DISA_RULE.fullmatch(disa_rule) is None:
+            message = (
+                f"{profile_id}: rule {rule.rule_id} references the DISA rule ID "
+                f"{disa_rule[:64]!r}, which is not of the form SV-<n>r<n>_rule"
+            )
+            raise GenerationError(message)
+        if len(stig_ids) == 1 and pairs.setdefault(disa_rule, stig_ids[0]) != stig_ids[0]:
+            message = (
+                f"{profile_id}: the DISA rule ID {disa_rule} is paired with {pairs[disa_rule]} "
+                f"and with {stig_ids[0]}"
+            )
+            raise GenerationError(message)
+
+
 def profile_mapping(benchmark: catalog.Benchmark, profile: catalog.Profile) -> dict[str, object]:
     """Return the mapping of one STIG release profile.
 
     Raises:
-        GenerationError: If a STIG ID is malformed or the profile maps none.
+        GenerationError: If a STIG ID or DISA rule ID is malformed or paired twice, no DISA
+            benchmark ID is pinned for the benchmark, or the profile maps no STIG ID.
     """
+    if benchmark.benchmark_id not in DISA_BENCHMARKS:
+        message = (
+            f"{profile.profile_id} is versioned as the DISA release {profile.version}, but no DISA "
+            f"benchmark ID is pinned for {benchmark.benchmark_id}"
+        )
+        raise GenerationError(message)
     rules = catalog.profile_rules(benchmark, profile)
     checks: dict[str, list[str]] = {}
+    pairs: dict[str, str] = {}
     without: list[str] = []
     for rule in rules:
         stig_ids = _stig_ids(rule, profile.profile_id)
         if not stig_ids:
             without.append(rule.rule_id)
+        _pair(pairs, rule, stig_ids, profile.profile_id)
         for stig_id in stig_ids:
             checks.setdefault(stig_id, []).append(rule.rule_id)
     if not checks:
@@ -93,7 +139,9 @@ def profile_mapping(benchmark: catalog.Benchmark, profile: catalog.Profile) -> d
     return {
         "profile_id": profile.profile_id,
         "stig_release": profile.version,
+        "disa_benchmark_id": DISA_BENCHMARKS[benchmark.benchmark_id],
         "stig_ids": {stig_id: sorted(checks[stig_id]) for stig_id in sorted(checks)},
+        "disa_rules": {disa_rule: pairs[disa_rule] for disa_rule in sorted(pairs)},
         "rules_without_stig_id": sorted(without),
     }
 

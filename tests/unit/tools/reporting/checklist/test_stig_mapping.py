@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 RULE = "xccdf_org.ssgproject.content_rule_"
+DISA_BENCHMARK = "xccdf_mil.disa.stig_benchmark_Synthetic_Linux_STIG"
 DOCUMENT: dict[str, Any] = {
     "schema_version": 1,
     "generator": "tools/content/generate_stig_mapping.py",
@@ -29,9 +31,14 @@ DOCUMENT: dict[str, Any] = {
                 {
                     "profile_id": "xccdf_org.ssgproject.content_profile_stig",
                     "stig_release": "V1R2",
+                    "disa_benchmark_id": DISA_BENCHMARK,
                     "stig_ids": {
                         "SYN-00-000001": [RULE + "a", RULE + "b"],
                         "SYN-00-000002": [RULE + "b"],
+                    },
+                    "disa_rules": {
+                        "SV-900001r1_rule": "SYN-00-000001",
+                        "SV-900002r1_rule": "SYN-00-000002",
                     },
                     "rules_without_stig_id": [RULE + "c"],
                 }
@@ -57,6 +64,11 @@ def test_a_valid_mapping_reads_with_lookups_in_both_directions() -> None:
     assert profile.mapped_rules() == frozenset({RULE + "a", RULE + "b"})
     assert profile.unmapped_rules == (RULE + "c",)
     assert (profile.datastream, profile.stig_release) == ("synthetic", "V1R2")
+    assert profile.disa_benchmark_id == DISA_BENCHMARK
+    assert profile.disa_rules == {
+        "SV-900001r1_rule": "SYN-00-000001",
+        "SV-900002r1_rule": "SYN-00-000002",
+    }
     assert parsed.find("xccdf_org.ssgproject.content_benchmark_SYNTHETIC", "other") is None
 
 
@@ -100,6 +112,33 @@ PROFILE = ("datastreams", 0, "profiles", 0)
             "must be sorted and unique",
         ),
         (mutated((*PROFILE, "stig_ids", "SYN-00-000001"), [7]), r"SYN-00-000001\[0\] is not"),
+        (
+            mutated((*PROFILE, "disa_benchmark_id"), "xccdf_org.other"),
+            "disa_benchmark_id is not a valid identifier",
+        ),
+        (
+            mutated(
+                (*PROFILE, "disa_rules"),
+                {"SV-2r1_rule": "SYN-00-000002", "SV-1r1_rule": "SYN-00-000001"},
+            ),
+            "must be an object with sorted DISA rule IDs",
+        ),
+        (
+            mutated((*PROFILE, "disa_rules"), {"SV-1_rule": "SYN-00-000001"}),
+            "key 'SV-1_rule' is not a valid identifier",
+        ),
+        (
+            mutated((*PROFILE, "disa_rules"), {"SV-1r1_rule": "SYN-1"}),
+            r"disa_rules\.SV-1r1_rule is not a valid identifier",
+        ),
+        (
+            mutated((*PROFILE, "disa_rules"), {"SV-1r1_rule": "SYN-00-000009"}),
+            "pairs a STIG ID that the profile does not map",
+        ),
+        (
+            mutated((*PROFILE, "disa_rules"), []),
+            "disa_rules must be an object",
+        ),
         (
             mutated((*PROFILE, "rules_without_stig_id"), [RULE + "a"]),
             "listed both with and without a STIG ID",
@@ -149,3 +188,22 @@ def test_the_default_mapping_is_the_committed_file() -> None:
 )
 def test_the_release_of_disa_content(version: str, release_info: str, expected: str | None) -> None:
     assert stig_mapping.release_of(version, release_info) == expected
+
+
+def test_content_is_checked_against_the_pinned_pairs() -> None:
+    profile = parse(DOCUMENT).profiles[0]
+
+    def benchmark(*pairs: tuple[str, str]) -> Any:
+        return SimpleNamespace(
+            rules=[SimpleNamespace(rule_ref=ref, version=version) for ref, version in pairs]
+        )
+
+    assert profile.contradictions(benchmark(("SV-900001r1_rule", "SYN-00-000001"))) == []
+    assert profile.contradictions(benchmark(("SV-900009r1_rule", "SYN-00-000009"))) == []
+    contradicted = profile.contradictions(benchmark(("SV-900001r1_rule", "SYN-00-000002")))
+    assert contradicted == [
+        (
+            "SV-900001r1_rule has the STIG ID SYN-00-000002, but the STIG mapping pairs it with "
+            "SYN-00-000001"
+        )
+    ]

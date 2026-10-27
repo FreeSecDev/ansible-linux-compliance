@@ -6,6 +6,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 
 NS = 'xmlns:x="http://checklists.nist.gov/xccdf/1.2"'
 STIG = next(iter(catalog.STIG_ID_REFERENCES))
+DISA = next(iter(catalog.DISA_RULE_REFERENCES))
 SRG = (
     "https://www.cyber.mil/stigs/downloads/?_dl_facet_stigs=operating-systems%2Cgeneral-purpose-os"
 )
@@ -54,4 +55,28 @@ def test_too_many_stig_id_references_are_refused() -> None:
         catalog.MAX_STIG_IDS + 1
     )
     with pytest.raises(catalog.CatalogError, match="more than 64 STIG ID references"):
+        parse(document(references))
+
+
+def test_the_disa_rule_references_are_kept_apart_from_the_stig_ids() -> None:
+    references = (
+        f'<x:reference href="{STIG}">SYNT-01-000020</x:reference>'
+        f'<x:reference href="{DISA}"> SV-100r1_rule </x:reference>'
+        f'<x:reference href="{DISA}">SV-200r2_rule</x:reference>'
+        f'<x:reference href="{SRG}">SV-300r1_rule</x:reference>'
+    )
+    rule = parse(document(references)).rules[0]
+    assert rule.stig_ids == ("SYNT-01-000020",)
+    assert rule.disa_rules == ("SV-100r1_rule", "SV-200r2_rule")
+
+
+def test_a_rule_without_disa_references_has_none() -> None:
+    assert parse(document("")).rules[0].disa_rules == ()
+
+
+def test_too_many_disa_rule_references_are_refused() -> None:
+    references = f'<x:reference href="{DISA}">SV-1r1_rule</x:reference>' * (
+        catalog.MAX_STIG_IDS + 1
+    )
+    with pytest.raises(catalog.CatalogError, match="more than 64 DISA rule references"):
         parse(document(references))

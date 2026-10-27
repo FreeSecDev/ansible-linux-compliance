@@ -23,6 +23,8 @@ def mapping_document(**overrides: Any) -> dict[str, Any]:
     profile: dict[str, Any] = {
         "profile_id": CAC_PROFILE,
         "stig_release": "V1R5",
+        "disa_benchmark_id": SCC_BENCHMARK,
+        "disa_rules": {},
         "stig_ids": {
             "UBTU-24-100010": [CAC + "sshd_banner"],
             "UBTU-24-100020": [CAC + "banner_issue_net", CAC + "sshd_banner_net"],
@@ -182,17 +184,54 @@ class TestMapping:
             ({"stig_ids": {"UBTU-24-100010": ["not a rule"]}}, "is not a valid identifier"),
             ({"stig_ids": {"UBTU-24-100010": "x"}}, "must be an array"),
             ({"rules_without_stig_id": [], "extra": 1}, "must have exactly the keys"),
+            ({"disa_benchmark_id": "other"}, "disa_benchmark is not a valid identifier"),
+            ({"disa_rules": []}, "disa_rules must be an object"),
+            (
+                {"disa_rules": {"SV-2r1_rule": "UBTU-24-100010", "SV-1r1_rule": "UBTU-24-100010"}},
+                "sorted DISA rule IDs",
+            ),
+            ({"disa_rules": {"SV-1_rule": "UBTU-24-100010"}}, "key 'SV-1_rule' is not a valid"),
+            ({"disa_rules": {"SV-1r1_rule": "bad"}}, r"disa_rules\.SV-1r1_rule is not a valid"),
+            (
+                {"disa_rules": {"SV-1r1_rule": "UBTU-24-999999"}},
+                "pairs a STIG ID that the profile does not map",
+            ),
         ],
     )
     def test_an_invalid_entry_is_refused(self, overrides: dict[str, Any], message: str) -> None:
         with pytest.raises(stig.MappingError, match=message):
             stig.read_profile(mapping_text(**overrides), CAC_BENCHMARK, CAC_PROFILE)
 
+    def test_another_pinned_disa_benchmark_is_refused(self) -> None:
+        other = "xccdf_mil.disa.stig_benchmark_Other_STIG"
+        with pytest.raises(stig.MappingError, match="pins the DISA benchmark"):
+            stig.mapping_for(mapping_text(disa_benchmark_id=other), SCC_BENCHMARK, "001.005.007")
+
     def test_the_pinned_mapping_file_of_the_repository_is_paired_and_current(self) -> None:
         text = (Path(__file__).resolve().parents[5] / "content" / "stig-mapping.json").read_text()
         read = stig.mapping_for(text, SCC_BENCHMARK, "001.005.007")
         assert read.stig_release == "V1R5"
         assert len(read.checks) == 194
+
+
+class TestReportedBenchmark:
+    """What the host reports must not differ from the pinned pairs of DISA rule and STIG ID."""
+
+    @staticmethod
+    def paired() -> stig.StigProfile:
+        text = mapping_text(disa_rules={"SV-1r1_rule": "UBTU-24-100010"})
+        return stig.mapping_for(text, SCC_BENCHMARK, "001.005.007")
+
+    def test_reported_rules_that_agree_or_are_not_paired_pass(self) -> None:
+        assert self.paired().disa_rules == {"SV-1r1_rule": "UBTU-24-100010"}
+        assert stig.check_reported(RULES, self.paired()) == 1
+        assert stig.check_reported(RULES, profile()) == 0
+
+    @pytest.mark.parametrize("reported", ["UBTU-24-100020", None])
+    def test_a_reported_stig_id_that_differs_is_refused(self, reported: str | None) -> None:
+        rules = (scc_rule(1, reported),)
+        with pytest.raises(stig.MappingError, match="pairs it with UBTU-24-100010"):
+            stig.check_reported(rules, self.paired())
 
 
 class TestSccRules:

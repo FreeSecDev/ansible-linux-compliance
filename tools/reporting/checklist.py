@@ -15,7 +15,10 @@ order:
    Not Reviewed.
 
 Nothing else is Not a Finding. The finding details name the scanner's result and why a
-rule is not reviewed; the comments name every exception and lapsed waiver.
+rule is not reviewed; for a rule that a toggle disabled after SCC scanned it, that is SCC's
+own result from the finding's evidence, followed by the reported outcome ``disabled``. The
+comments name every exception and lapsed waiver, and the toggles that disable a rule in part
+(FREES-171). A checklist file name is at most 255 bytes with its suffix (FREES-166).
 
 The descriptive fields come from DISA STIG content (:mod:`tools.reporting.stig_content`)
 read at export time. SCC findings are DISA STIG rules and map one to one. ComplianceAsCode
@@ -35,6 +38,7 @@ and the asset comment counts them. A scan run whose rules are not DISA STIG rule
 the mapping does not cover is refused.
 """
 
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -50,6 +54,11 @@ ASSET_TYPE: Final[str] = "Computing"
 UUID_NAMESPACE: Final[uuid.UUID] = uuid.UUID("7d3f2a8e-4c1b-5e9a-8f60-2b7c1d0e9a41")
 MAPPING_ISSUE: Final[str] = "FREES-146"
 NO_CHECK: Final[str] = "no ComplianceAsCode check"
+UNKNOWN_VERSION: Final[str] = "unknown"
+SCANNER_RESULT_EVIDENCE: Final[str] = "scanner_result"
+SCANNER_RESULT: Final[re.Pattern[str]] = re.compile(r"[a-z]{1,16}")
+CHECKLIST_SUFFIXES: Final[tuple[str, ...]] = (".ckl", ".cklb")
+MAX_FILE_NAME_BYTES: Final[int] = 255
 
 
 class ChecklistError(ValueError):
@@ -144,6 +153,8 @@ class Source:
             facts describe the scanned host.
         mapping: The STIG mapping of a ComplianceAsCode run, or ``None`` for DISA rules.
         content_name: The file name of the DISA content of a mapped run.
+        pairs_checked: How many DISA rules of the content were checked against a pinned DISA
+            rule to STIG ID pair, or ``None`` when the source was not checked at all.
     """
 
     display: str
@@ -153,6 +164,7 @@ class Source:
     own_results: bool
     mapping: ProfileMapping | None = None
     content_name: str = ""
+    pairs_checked: int | None = None
 
 
 def off_platform_text(marker: model.OffPlatform) -> str:
@@ -194,11 +206,21 @@ def _not_reviewed_reason(run: model.ScanRun, finding: model.Finding | None) -> s
     return None
 
 
+def _kept_result(finding: model.Finding) -> str | None:
+    if finding.disabled_by is None:
+        return None
+    for item in finding.evidence:
+        if item.kind == SCANNER_RESULT_EVIDENCE and SCANNER_RESULT.fullmatch(item.content):
+            return item.content
+    return None
+
+
 def _finding_lines(finding: model.Finding | None) -> list[str]:
     if finding is None:
         return []
-    lines = [f"Scanner result: {finding.evaluated_outcome.value}"]
-    if finding.outcome is not finding.evaluated_outcome:
+    kept = _kept_result(finding)
+    lines = [f"Scanner result: {finding.evaluated_outcome.value if kept is None else kept}"]
+    if finding.outcome is not finding.evaluated_outcome or kept is not None:
         lines.append(f"Reported outcome: {finding.outcome.value}")
     if finding.flags:
         lines.append("Flags: " + ", ".join(flag.value for flag in finding.flags))
@@ -242,6 +264,8 @@ def _comments(finding: model.Finding | None, *, lapsed: bool) -> str:
         )
     if exception.reason is not None:
         lines.append(f"Exception reason: {exception.reason}")
+    if finding.control is not None and finding.control.partially_disabled_by:
+        lines.append("Partially disabled by: " + ", ".join(finding.control.partially_disabled_by))
     if lapsed:
         lines.append(
             "The waiver of this rule lapsed after the scan started and was not applied; it does "
@@ -428,8 +452,23 @@ def asset(source: Source) -> Asset:
     )
     if target is not None and not facts_apply:
         comment += " The scanner's target facts name another host and are not used."
+    if run.content.content_version == UNKNOWN_VERSION:
+        comment += (
+            " The scan run recorded no content version, so the version of the content is "
+            "unverified, and every entry is Not Reviewed for that reason."
+        )
     if source.mapping is not None:
         comment += _mapping_comment(source, source.mapping)
+    if source.pairs_checked == 0:
+        comment += (
+            " The STIG mapping pins no DISA rule to STIG ID pair for this benchmark, so the STIG "
+            "IDs of the content were not checked against pinned values."
+        )
+    elif source.pairs_checked is not None:
+        comment += (
+            f" {source.pairs_checked} DISA rule(s) of the content were checked against the "
+            "pinned DISA rule to STIG ID pairs of the STIG mapping."
+        )
     keys = {rule.target_key for rule in source.benchmark.rules}
     return Asset(
         host_name=host.hostname,
@@ -516,13 +555,24 @@ def build_all(sources: list[Source]) -> list[Checklist]:
     """Return one checklist per source, refusing two for one host and benchmark.
 
     Raises:
-        ChecklistError: If a finding's rule is not in its content, or two sources give
-            the same file name (compared case-insensitively, for Windows file systems).
+        ChecklistError: If a finding's rule is not in its content, a checklist file name
+            is longer than 255 bytes, or two sources give the same file name (compared
+            case-insensitively, for Windows file systems).
     """
     checklists: list[Checklist] = []
     seen: dict[str, str] = {}
     for source in sources:
         checklist = build(source)
+        longest = max(
+            len(f"{checklist.file_stem}{suffix}".encode()) for suffix in CHECKLIST_SUFFIXES
+        )
+        if longest > MAX_FILE_NAME_BYTES:
+            message = (
+                f"{source.display}: the checklist file name {checklist.file_stem} is {longest} "
+                f"bytes with its suffix, over the limit of {MAX_FILE_NAME_BYTES}; no checklist "
+                "was written"
+            )
+            raise ChecklistError(message)
         key = checklist.file_stem.lower()
         if key in seen:
             message = (
