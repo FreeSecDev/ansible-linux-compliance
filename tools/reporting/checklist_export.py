@@ -42,6 +42,7 @@ results, so its asset IP and FQDN stay empty. ``--compare-stig FILE`` writes the
 :mod:`tools.reporting.stig_compare` from the same sources.
 """
 
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,6 +54,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 )
 from tools.reporting.checklist import (
     SCANNER_RESULT_EVIDENCE,
+    UNKNOWN_VERSION,
     Checklist,
     ChecklistError,
     Source,
@@ -160,7 +162,8 @@ def _own_content(run: model.ScanRun, display: str, results: bytes) -> StigBenchm
 
 def _supplied_content(run: model.ScanRun, display: str, content: Content) -> StigBenchmark:
     candidates = content.get(run.benchmark_id, [])
-    candidates = [item for item in candidates if item[1].version == run.content.content_version]
+    if run.content.content_version != UNKNOWN_VERSION:
+        candidates = [item for item in candidates if item[1].version == run.content.content_version]
     if len(candidates) != 1:
         found = ", ".join(sorted({name for name, _ in candidates})) or "none"
         message = (
@@ -173,6 +176,14 @@ def _supplied_content(run: model.ScanRun, display: str, content: Content) -> Sti
 
 
 def _checked_version(run: model.ScanRun, display: str, benchmark: StigBenchmark) -> None:
+    if run.content.content_version == UNKNOWN_VERSION:
+        if run.status is model.ScanStatus.COMPLETED:
+            message = (
+                f"{display}: the completed scan run {run.run_id} recorded no content version, so "
+                "its results cannot be tied to the content"
+            )
+            raise ChecklistError(message)
+        return
     if benchmark.version != run.content.content_version:
         message = (
             f"{display}: the content is version {benchmark.version} of {run.benchmark_id}, but "
@@ -197,7 +208,7 @@ def _checked_mapping(run: model.ScanRun, display: str, mapping: ProfileMapping) 
 
 def _checked_pairs(
     display: str, name: str, benchmark: StigBenchmark, mappings: Sequence[ProfileMapping]
-) -> None:
+) -> int:
     contradictions = [item for mapping in mappings for item in mapping.contradictions(benchmark)]
     if contradictions:
         message = (
@@ -206,6 +217,21 @@ def _checked_pairs(
             "release"
         )
         raise ChecklistError(message)
+    checked = len(
+        {
+            rule.rule_ref
+            for rule in benchmark.rules
+            for mapping in mappings
+            if rule.rule_ref in mapping.disa_rules
+        }
+    )
+    if checked == 0:
+        print(
+            f"warning: {display}: the STIG mapping pins no DISA rule to STIG ID pair for {name}, "
+            "so its STIG IDs were not checked against pinned values",
+            file=sys.stderr,
+        )
+    return checked
 
 
 def _result_of(finding: model.Finding) -> tuple[model.Outcome, tuple[model.ResultFlag, ...]]:
@@ -273,7 +299,7 @@ def _cross_checked(run: model.ScanRun, display: str, results: bytes) -> None:
 
 def _mapped_content(
     display: str, content: Content, mapping: ProfileMapping
-) -> tuple[str, StigBenchmark]:
+) -> tuple[str, StigBenchmark, int]:
     candidates = [
         (name, benchmark)
         for items in content.values()
@@ -293,7 +319,9 @@ def _mapped_content(
         message = (
             f"{display}: version mismatch: {name} is the benchmark {benchmark.benchmark_id}, but "
             f"profile {mapping.profile_id} of {mapping.file_name} implements the DISA benchmark "
-            f"{mapping.disa_benchmark_id}"
+            f"{mapping.disa_benchmark_id}, which is pinned by hand in the mapping generator and "
+            "not verified against DISA content; if the DISA content is the real one, the pin is "
+            "wrong"
         )
         raise ChecklistError(message)
     release = release_of(benchmark.version, benchmark.release_info)
@@ -304,8 +332,7 @@ def _mapped_content(
             f"{mapping.profile_id} of {mapping.file_name} implements release {mapping.stig_release}"
         )
         raise ChecklistError(message)
-    _checked_pairs(display, name, benchmark, [mapping])
-    return Path(name).name, benchmark
+    return Path(name).name, benchmark, _checked_pairs(display, name, benchmark, [mapping])
 
 
 def _source(
@@ -331,9 +358,16 @@ def _source(
     mapping = mappings.find(run.benchmark_id, run.profile_id)
     if mapping is not None:
         _checked_mapping(run, display, mapping)
-        name, benchmark = _mapped_content(display, content, mapping)
+        name, benchmark, checked = _mapped_content(display, content, mapping)
         return Source(
-            display, run, lapsed, benchmark, own_results=False, mapping=mapping, content_name=name
+            display,
+            run,
+            lapsed,
+            benchmark,
+            own_results=False,
+            mapping=mapping,
+            content_name=name,
+            pairs_checked=checked,
         )
     refuse_unmapped(run, display, mappings.path)
     if results is not None:
@@ -344,8 +378,10 @@ def _source(
     pinned = [
         item for item in mappings.profiles if item.disa_benchmark_id == benchmark.benchmark_id
     ]
-    _checked_pairs(display, benchmark.benchmark_id, benchmark, pinned)
-    return Source(display, run, lapsed, benchmark, own_results=results is not None)
+    checked = _checked_pairs(display, benchmark.benchmark_id, benchmark, pinned)
+    return Source(
+        display, run, lapsed, benchmark, own_results=results is not None, pairs_checked=checked
+    )
 
 
 def _key(result: ParseResult[ComplianceData]) -> tuple[str, str | None]:

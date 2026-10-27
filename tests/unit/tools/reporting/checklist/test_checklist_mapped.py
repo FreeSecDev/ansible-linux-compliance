@@ -222,6 +222,7 @@ def test_compliance_as_code_findings_export_through_the_mapping(stig: Any, tmp_p
     assert "Waiver: exception EXC-CAC-1 was in effect" in by_id["SYN-00-000008"]["comments"]
     assert document["target_data"]["ip_address"] == ""
     assert "2 finding(s) check no rule of this STIG" in document["target_data"]["comments"]
+    assert "9 DISA rule(s) of the content were checked" in document["target_data"]["comments"]
     assert "for DISA release V1R2 (disa-content.xml)" in document["target_data"]["comments"]
     assert document["stigs"][0]["stig_name"] == "Synthetic Linux STIG SCAP Benchmark"
 

@@ -54,6 +54,7 @@ ASSET_TYPE: Final[str] = "Computing"
 UUID_NAMESPACE: Final[uuid.UUID] = uuid.UUID("7d3f2a8e-4c1b-5e9a-8f60-2b7c1d0e9a41")
 MAPPING_ISSUE: Final[str] = "FREES-146"
 NO_CHECK: Final[str] = "no ComplianceAsCode check"
+UNKNOWN_VERSION: Final[str] = "unknown"
 SCANNER_RESULT_EVIDENCE: Final[str] = "scanner_result"
 SCANNER_RESULT: Final[re.Pattern[str]] = re.compile(r"[a-z]{1,16}")
 CHECKLIST_SUFFIXES: Final[tuple[str, ...]] = (".ckl", ".cklb")
@@ -152,6 +153,8 @@ class Source:
             facts describe the scanned host.
         mapping: The STIG mapping of a ComplianceAsCode run, or ``None`` for DISA rules.
         content_name: The file name of the DISA content of a mapped run.
+        pairs_checked: How many DISA rules of the content were checked against a pinned DISA
+            rule to STIG ID pair, or ``None`` when the source was not checked at all.
     """
 
     display: str
@@ -161,6 +164,7 @@ class Source:
     own_results: bool
     mapping: ProfileMapping | None = None
     content_name: str = ""
+    pairs_checked: int | None = None
 
 
 def off_platform_text(marker: model.OffPlatform) -> str:
@@ -448,8 +452,23 @@ def asset(source: Source) -> Asset:
     )
     if target is not None and not facts_apply:
         comment += " The scanner's target facts name another host and are not used."
+    if run.content.content_version == UNKNOWN_VERSION:
+        comment += (
+            " The scan run recorded no content version, so the version of the content is "
+            "unverified, and every entry is Not Reviewed for that reason."
+        )
     if source.mapping is not None:
         comment += _mapping_comment(source, source.mapping)
+    if source.pairs_checked == 0:
+        comment += (
+            " The STIG mapping pins no DISA rule to STIG ID pair for this benchmark, so the STIG "
+            "IDs of the content were not checked against pinned values."
+        )
+    elif source.pairs_checked is not None:
+        comment += (
+            f" {source.pairs_checked} DISA rule(s) of the content were checked against the "
+            "pinned DISA rule to STIG ID pairs of the STIG mapping."
+        )
     keys = {rule.target_key for rule in source.benchmark.rules}
     return Asset(
         host_name=host.hostname,

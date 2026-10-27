@@ -224,8 +224,8 @@ class TestReportedBenchmark:
 
     def test_reported_rules_that_agree_or_are_not_paired_pass(self) -> None:
         assert self.paired().disa_rules == {"SV-1r1_rule": "UBTU-24-100010"}
-        stig.check_reported(RULES, self.paired())
-        stig.check_reported(RULES, profile())
+        assert stig.check_reported(RULES, self.paired()) == 1
+        assert stig.check_reported(RULES, profile()) == 0
 
     @pytest.mark.parametrize("reported", ["UBTU-24-100020", None])
     def test_a_reported_stig_id_that_differs_is_refused(self, reported: str | None) -> None:

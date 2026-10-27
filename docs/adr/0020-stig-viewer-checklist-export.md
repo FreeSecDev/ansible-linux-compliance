@@ -347,9 +347,12 @@ of the amendment above stands, except where this one says it replaces it.
    disabled needs SCC's result in its evidence (`scanner_result`) to be the result in the file; a rule that a
    tailoring file disabled is absent or not selected; a selected rule that the run lacks is a mismatch. This checks
    consistency only. Authenticity needs the signed bundles of FREES-140.
-4. **One version rule.** The content version must be the version the run evaluated for every run. This **replaces** the
-   exemption of runs that did not complete. Such runs record the content version `unknown` in the current scanners, so
-   they are refused: a checklist of a failed scan would have no results to state, and the report records the failure.
+4. **One version rule.** The content version must be the version the run recorded, for every run. This **replaces** the
+   exemption of runs that did not complete for runs that recorded a version. A run that recorded the sentinel
+   `unknown` (both scanners record it when a run did not complete) recorded no version: it takes exactly one content of
+   its benchmark, every entry is Not Reviewed because the run did not complete (the row of the status table stays
+   reachable), and the asset comment says that the content version is unverified. A completed run with `unknown` is
+   refused.
 5. **Comparison pairing.** `--compare-stig` pairs the entries of the two sides by DISA rule ID, requires the same
    release, the same set of rule IDs and the same STIG ID per rule ID, and refuses anything else with `ChecklistError`.
    This **replaces** the pairing by position of the FREES-146 amendment (decision 5).
@@ -363,6 +366,9 @@ of the amendment above stands, except where this one says it replaces it.
    with two STIG IDs. DISA content that contradicts a pair is refused, for the mapped export and for the own content
    of any run whose DISA benchmark the mapping pins; the SCC toggle mapping refuses the same from the rule list that
    the host reports (`stig.check_reported`).
+   - A profile with no pairs is reported at run time: the export warns on standard error and says so in the asset
+     comment, and the `scc_toggles` filter returns `pairs_checked`, which the audit role reports with a `WARNING:`
+     when it is zero.
    - **Ubuntu 24.04 has no pairs, and its `disa_rules` is empty.** Its stream carries no DISA rule IDs, and the only
      source is the DISA content inside the SCC image, which is not committed. Closing the gap needs a pinned,
      digest-verified source of those IDs, as IDs only.
@@ -387,7 +393,8 @@ of the amendment above stands, except where this one says it replaces it.
 ### Consequences
 
 - A bundle whose XCCDF results were edited, or that does not belong to its run, no longer exports.
-- Failed scan runs have no checklist until the scanners record the content version of a run that did not complete.
+- Failed scan runs export as all Not Reviewed with an unverified content version, so the record of the failure
+  reaches eMASS reviewers.
 - A ComplianceAsCode bump regenerates `disa_rules` with the mapping.
 
 ## References

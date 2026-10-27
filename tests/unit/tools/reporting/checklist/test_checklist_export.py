@@ -199,7 +199,7 @@ def test_a_failed_run_without_results_uses_the_supplied_content(stig: Any, tmp_p
     assert set(checklist_formats.read_cklb(cklb.read_bytes()).values()) == {"not_reviewed"}
 
 
-@pytest.mark.parametrize("content_version", ["unknown", "001.001.000"])
+@pytest.mark.parametrize("content_version", ["001.001.000"])
 def test_a_failed_run_is_refused_content_of_another_version(
     stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str], content_version: str
 ) -> None:
@@ -214,15 +214,55 @@ def test_a_failed_run_is_refused_content_of_another_version(
     assert f"version {content_version} (found: none)" in error
 
 
-def test_a_failed_run_with_results_of_another_version_is_refused(
+def test_a_failed_run_without_a_recorded_version_exports_not_reviewed_and_says_so(
     stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
     run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version="unknown")
+    bundle = write_bundle(tmp_path / "bundles", run, None)
+    content = tmp_path / "content.xml"
+    content.write_text(
+        stig.data_stream(stig.benchmark_xml(version="009.009.009")), encoding="utf-8"
+    )
+    arguments = ("--evidence-bundle", str(bundle), "--checklist-content", str(content))
+    assert run_cli(tmp_path, *arguments) == 0
+    assert "pins no DISA rule to STIG ID pair" in capsys.readouterr().err
+    cklb = tmp_path / "cklb" / "web01.example_Synthetic_Linux_STIG.cklb"
+    document = json.loads(cklb.read_text())
+    assert set(checklist_formats.read_cklb(cklb.read_bytes()).values()) == {"not_reviewed"}
+    comment = document["target_data"]["comments"]
+    assert "recorded no content version" in comment
+    assert "unverified" in comment
+    assert "pins no DISA rule to STIG ID pair" in comment
+
+
+def test_a_failed_run_without_a_version_still_needs_exactly_one_content(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
+    run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version="unknown")
+    bundle = write_bundle(tmp_path / "bundles", run, None)
+    error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+    assert "(found: none)" in error
+
+
+def test_a_completed_run_without_a_recorded_version_is_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bundle = write_bundle(tmp_path / "bundles", stig.scan_run(version="unknown"), own_results(stig))
+    error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+    assert "recorded no content version" in error
+
+
+def test_a_failed_run_with_results_of_another_version_is_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
+    run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version="001.001.000")
     results = stig.benchmark_xml(test_result=stig.result_xml(findings=findings))
     bundle = write_bundle(tmp_path / "bundles", run, results)
     error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
-    assert "the scan run (status failed) evaluated version unknown" in error
+    assert "the scan run (status failed) evaluated version 001.001.000" in error
 
 
 def test_scan_run_json_exports_with_the_supplied_content(stig: Any, tmp_path: Path) -> None:

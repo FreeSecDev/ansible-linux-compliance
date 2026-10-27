@@ -333,22 +333,27 @@ def scc_rules(raw: object) -> tuple[SccRule, ...]:
     return tuple(rules)
 
 
-def check_reported(rules: Sequence[SccRule], profile: StigProfile) -> None:
+def check_reported(rules: Sequence[SccRule], profile: StigProfile) -> int:
     """Refuse SCC rules whose STIG ID differs from the one that the pinned mapping pairs with them.
 
     The rules come from the SCC benchmark on the managed host, which the host controls. A rule
     that the mapping does not pair, which is every rule of the Ubuntu profile, is not checked.
+    Returns the number of rules that were checked, which is zero when nothing is paired.
 
     Raises:
         MappingError: If a reported STIG ID differs from the pinned one.
     """
+    checked = 0
     for rule in rules:
         pinned = profile.disa_rules.get(rule.rule_id.removeprefix(_DISA_RULE_PREFIX))
+        if pinned is not None:
+            checked += 1
         if pinned is not None and pinned != rule.stig_id:
             _refuse(
                 f"the SCC rule {_show(rule.rule_id)} reports the STIG ID {_show(rule.stig_id)}, "
                 f"but the STIG mapping pairs it with {pinned}; nothing was scanned"
             )
+    return checked
 
 
 def primary_family(families: Iterable[str]) -> str:

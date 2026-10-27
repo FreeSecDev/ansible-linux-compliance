@@ -71,9 +71,11 @@ python -m tools.reporting --scope single_host --output build/report/report.json 
   --export-cklb build/checklists
 ```
 
-The content must be the run's content version for every run, completed or not. A run that did not complete records
-the content version `unknown` in the current scanners, so its checklist can only be written from content that states
-that version, which DISA content does not: such a run is refused, and its report is the record of the failure.
+The content must be the content version that the run recorded, for every run. A run that did not complete records the
+content version `unknown` (no version recorded). Such a run takes exactly one supplied content of its benchmark, and
+every entry is Not Reviewed because the run did not complete; the asset comment says that the run recorded no content
+version and that the version of the content is unverified. A completed run that records `unknown` is refused, and so is
+a run that recorded a version that differs from the content's.
 
 ### Bundles are cross-checked against their run
 
@@ -184,6 +186,10 @@ host reported it, so that content that does not belong to the pinned release can
 cover the rules the stream states unambiguously (426 of 441 STIG IDs for RHEL 9 `stig`); a rule with several STIG IDs
 is not paired, and a rule ID that no pair names is not checked.
 
+When a profile pins no pairs, the export prints a warning on standard error, the asset comment says that the STIG IDs
+were not checked against pinned values (otherwise it gives the number of rules that were checked), and the `scc_toggles`
+filter returns `summary.pairs_checked`, which the audit role reports with a `WARNING:` when it is zero.
+
 **Ubuntu 24.04 has no pairs.** The pinned Ubuntu stream carries no DISA rule IDs, and the only source of them is the
 DISA content inside the SCC image, which must not be committed. The Ubuntu profile therefore pins only the DISA
 benchmark ID, and its `disa_rules` is empty. Pairs for Ubuntu would need the DISA rule IDs of the release, as IDs
@@ -245,8 +251,8 @@ Refusals with status 2 name the input and the reason:
   not exactly one DISA benchmark with the profile's STIG IDs;
 - an XCCDF or ARF input;
 - no DISA content of the run's benchmark and version, or more than one;
-- content of another benchmark, profile or version, whether the run completed or not, or a finding whose rule it
-  lacks;
+- content of another benchmark or profile, content that differs from a version the run recorded, a completed run that
+  recorded none, or a finding whose rule it lacks;
 - a bundle whose own XCCDF results do not match its scan run;
 - a checklist file name over 255 bytes;
 - a failed write of any output (nothing is left behind);

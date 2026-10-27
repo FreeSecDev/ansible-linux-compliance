@@ -85,6 +85,7 @@ def test_without_toggles_nothing_is_disabled_and_every_rule_is_placed() -> None:
         "disabled": 0,
         "partially_disabled": 0,
         "stig_release": "V1R5",
+        "pairs_checked": 0,
     }
 
 
@@ -243,3 +244,17 @@ def test_the_shipped_catalogue_and_mapping_place_an_ssh_topic_under_ssh() -> Non
     assert {item["disabled_by"] for item in result["disabled_rules"]} == {
         "linux_compliance_ssh_enabled"
     }
+
+
+def test_the_filter_counts_the_reported_rules_that_a_pinned_pair_checked() -> None:
+    paired = mapping_text(
+        disa_rules={"SV-1r1_rule": "UBTU-24-100010", "SV-2r1_rule": "UBTU-24-100020"}
+    )
+    assert resolve(mapping=paired)["summary"]["pairs_checked"] == 2
+    assert resolve()["summary"]["pairs_checked"] == 0
+
+
+def test_a_reported_rule_that_contradicts_a_pinned_pair_is_an_error() -> None:
+    paired = mapping_text(disa_rules={"SV-1r1_rule": "UBTU-24-100020"})
+    result = resolve(mapping=paired)
+    assert "pairs it with UBTU-24-100020" in result["errors"][0]
