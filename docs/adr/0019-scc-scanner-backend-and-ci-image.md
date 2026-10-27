@@ -6,11 +6,12 @@
 - **Jira:** FREES-144 (this ADR and the CI image), FREES-145 (backend), FREES-146 (STIG to ComplianceAsCode
   mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard),
   FREES-155 (Markdown in the publishing check, no SCC cache for pull requests from forks), FREES-161 (opt-in
-  off-platform scan of Ubuntu 26.04 with the 24.04 benchmark)
+  off-platform scan of Ubuntu 26.04 with the 24.04 benchmark), FREES-170 (toggles and control families for SCC)
 - **Pull requests:** introduced by the pull request for FREES-144 (the CI image, its make targets, the `scc-smoke`
   job and the repository tests). The pull request for FREES-145 adds the backend, the SCC integration and egress
   tests and the amendment at the end of this ADR. The pull request for FREES-147 adds the exporter
-  ([ADR 0020](0020-stig-viewer-checklist-export.md)). The mapping is not implemented.
+  ([ADR 0020](0020-stig-viewer-checklist-export.md)). The pull request for FREES-146 adds the mapping table, and
+  the pull request for FREES-170 the toggles and control families for SCC findings.
 - **Related:** [ADR 0003](0003-native-module-remediation.md), [ADR 0004](0004-audited-process-execution.md),
   [ADR 0013](0013-normalized-findings-model.md), [ADR 0015](0015-content-acquisition-and-pinning.md),
   [ADR 0018](0018-evidence-bundle-provenance.md)
@@ -405,7 +406,8 @@ distinct STIG IDs (`UBTU-24-*`) through `reference` elements pointing at cyber.m
 ID as the rule `version`. The generator joins the two pinned files on the STIG ID, keeps rule IDs only (no benchmark
 text), records both digests as provenance, and is checked in CI against the pinned files. The revisioned `SV-`
 identifier is resolved through the pinned DISA file, never stored as the join key. Unmapped STIG rules stay audit-only
-and are reported as such. A disabled topic or rule toggle excludes the mapped SCC rules through SCC's tailoring
+and are reported as such. (Superseded by the FREES-170 amendment: SCC tailors only from its installation
+directory, so disabled rules are reported as `disabled` after the scan.) A disabled topic or rule toggle excludes the mapped SCC rules through SCC's tailoring
 mechanism (`--installTailoringProfile` or a tailoring in the per-run options file, to be confirmed in FREES-146),
 and they are reported as `disabled`.
 
@@ -786,9 +788,9 @@ The tests skip without `FREESECDEV_SCC_IMAGE` and fail instead in CI (`FREESECDE
 ### Not yet done
 
 - Disabled rules (`--installTailoringProfile` or a tailoring entry) and the STIG to ComplianceAsCode mapping:
-  FREES-146. The backend refuses `disabled_rules`.
+  FREES-146. The backend refuses `disabled_rules`. (Done in FREES-170, see its amendment.)
 - A digest of the rest of `/opt/scc` (open item 6); only `cscc` and the scanned stream are pinned.
-- The audit role still offers only `openscap`.
+- The audit role still offers only `openscap`. (Done in FREES-170.)
 - Pinned DISA benchmarks in the content manifest: the backend accepts any installed stream whose SHA-256 the caller
   pins, and only the benchmark `xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG` for Ubuntu 24.04 hosts.
 
@@ -886,7 +888,7 @@ it stays `0`.
      | 26.04 host without the opt-in | Refused, as before. The message says that the opt-in exists. |
      | Opt-in, any other host (22.04, 26.10, Debian, RHEL) | Refused. The message names the allowed pairs. |
      | Opt-in, any unpinned benchmark | Refused. |
-     | Opt-in with tailoring | Refused (FREES-146). |
+     | Opt-in with tailoring | Refused (FREES-146). Since FREES-170 no SCC run is tailored: disabled rules of an off-platform run are reported `disabled` after the scan and carry the marker. |
      | Opt-in, 24.04 host | An ordinary on-platform run, without a marker. |
 
 3. **Marker** ([ADR 0013 amendment](0013-normalized-findings-model.md#amendment-2026-10-26-off-platform-marker-frees-161)).
@@ -1070,6 +1072,138 @@ records:
 - **Still open: toggles and control families for SCC findings.** Disabled toggles do not yet exclude mapped SCC rules
   through SCC's tailoring, and SCC findings are not yet grouped by control family. The backend still refuses
   `disabled_rules`. The mapping file is the input for both.
+
+## Amendment 2026-10-27: toggles and control families for SCC (FREES-170)
+
+FREES-170 is the part of FREES-146 that the mapping table left open: the toggles of
+[ADR 0011](0011-control-toggles-and-cleanup.md) must reach the DISA rules that SCC scans, and SCC findings must be
+grouped by the collection's control families.
+
+### Can SCC 5.15 tailor a scan?
+
+What was read:
+
+- `cscc --help` lists, under "Content Tailoring & Deviations", `--installTailoringProfile FILE` ("Install and enable an
+  existing benchmark tailoring file") and `-ct, --createTailoringFile ID [VERSION]` ("Create and enable a benchmark ID
+  tailoring file"). Both change SCC's installation; decision 2 refuses them.
+- User Manual section 4.7 "XCCDF Tailoring": SCC supports XCCDF 1.2 tailoring files. Deselected rules are reported as
+  "not selected", under a profile named `<profile>_tailored`. The directory `Resources/Content/XCCDF_Tailoring` of
+  the installation "contains XCCDF Tailoring files"; the configuration profile metadata reads "Tailoring and Manual
+  Questions: Installation Directory (default)".
+- `Resources/Schemas/options.xsd` declares no element that names a tailoring file. A content record in `options.xml`
+  carries `xccdfTailoringEnabled` (`N` for every shipped stream). The optional global settings `userConfigDirectory`
+  and `userConfigDirectoryValue` (0 home, 1 application directory, 2 custom) choose the configuration directory.
+- The tailoring code (`bin/System/Agnostic/XCCDFTailoringManager.pm`) is encrypted Perl, so behaviour was observed.
+
+Observed in the CI image on 2026-10-27 (a throwaway container of `localhost/freesecdev-scc:frees170`, removed
+afterwards), each time with the backend's own scan form `-o FILE -u DIR -q -d`:
+
+| Experiment | What SCC did |
+|---|---|
+| `cscc -ct CAN_Ubuntu_24-04_STIG` (set-up only) | Wrote `Resources/Content/XCCDF_Tailoring/CAN_Ubuntu_24-04_STIGMAC-1_Classified_tailored_tailoring.xml` (profile `xccdf_mil.disa.stig_profile_MAC-1_Classified_tailored` extending the profile, one `select` per rule) and rewrote the installed `options.xml`: `selectedProfile` the `_tailored` profile, that profile added to `profiles`, `xccdfTailoringEnabled` `Y` |
+| Per-run options with `xccdfTailoringEnabled` `Y` and the `_tailored` profile; the tailoring file only in the run directory, at four candidate places, with `userConfigDirectory` set to the run's directory and `userConfigDirectoryValue` `2` | The debug log records `user config dir = /root/run/config`, then `pathTailoringFile:/opt/scc/Resources/Content/XCCDF_Tailoring/CAN_Ubuntu_24-04_STIG001.005.007MAC-1_Classified_tailored_tailoring.xml ... does not exist` and "Tailoring file for SCAP content ... has been deleted, content has been disabled". "No content streams were selected"; no results |
+| The same per-run options, and the same tailoring file deselecting three rules copied to that installed path | `tailoringFileName: CAN_Ubuntu_24-04_STIG001.005.007MAC-1_Classified_tailored_tailoring.xml, tailoringComponent: , tailoringEnabled: Y`. The XCCDF results name the profile `xccdf_mil.disa.stig_profile_MAC-1_Classified_tailored`; the three rules are `notselected`, the other 191 are evaluated |
+
+So SCC 5.15 **can tailor, but only from a file in its installation directory**, at a path it derives from the
+benchmark ID, the benchmark version (when `shareDeviationsAndTailoringAcrossVersions` is `0`, as in the per-run
+template) and the profile. A custom configuration directory does not move that path, and an enabled tailoring whose
+file is missing disables the stream.
+
+### Decision: no tailoring; disabled rules are reported after the scan
+
+A per-run tailoring file would have to be written to `/opt/scc/Resources/Content/XCCDF_Tailoring`. The backend does not
+do that:
+
+- it changes SCC's installed state beyond the residual that the FREES-145 amendment accepted (the content databases
+  and one session database per scan); AGENTS.md rule 7;
+- the path is shared by every scan of that benchmark and profile, so concurrent audits, or an operator's own SCC scans,
+  would read another run's tailoring, and a crash would leave a file behind that silently changes later scans;
+- decision 2 already refuses `--installTailoringProfile` and `-ct` for the same reasons.
+
+So this ADR takes the branch for a scanner that cannot tailor a scan by itself:
+
+- **The backend never tailors.** `backend: scc` still refuses a tailoring file (`tailoring_path`). The per-run options
+  are unchanged, byte for byte, and the confirmation of decision 2 is unchanged.
+- **SCC scans every rule.** `audit.POST_SCAN_DISABLE_BACKENDS` holds `scc`. For such a backend the audit writes no
+  tailoring file, the evaluated profile is the requested one, and every rule of the profile is expected
+  (`planned.disable_method` is `post_scan`; it is `tailoring` for OpenSCAP and `none` without disabled rules).
+- **Disabled rules are `disabled` afterwards.** Each disabled rule's finding is replaced by a `disabled` finding with its
+  `disabled_by`, so it never counts as passing. SCC's own result for the rule stays in the raw XCCDF and ARF copies of
+  the evidence (`scan/results.xml`, `scan/results-arf.xml`) and in the finding's evidence (kind `scanner_result`,
+  source `scc`, the outcome), and the message says that it is never counted. In a run that did not complete the rule
+  is `error` and names the variable, as for OpenSCAP.
+- **Off-platform runs** may now have disabled rules: they are reported in the same way and carry the marker; the
+  FREES-161 refusal of a tailored off-platform run still holds, because no SCC run is tailored.
+
+### Mapping the toggles to SCC rules
+
+The audit role (`tasks/scc.yml`) does this before the scan, on the controller except for the first step:
+
+1. `profile_info` reads the SCC profile on the host. The datastream catalog now keeps each rule's own `version`, which a
+   DISA benchmark uses for the STIG ID, and `profile_info` returns it. No DISA content leaves the host or is committed.
+2. The toggles are resolved for the ComplianceAsCode rules that the mapping lists for the paired STIG profile, with
+   the function that the OpenSCAP path uses (`toggles.resolve_audit`, shared with the `audit_disabled_rules` filter).
+3. The filter `scc_toggles` (`plugins/module_utils/compliance/stig.py`) joins the disabled ComplianceAsCode rules to
+   the DISA rules on the STIG ID:
+   - `stig.STIG_PROFILES` pairs the SCC benchmark `xccdf_mil.disa.stig_benchmark_CAN_Ubuntu_24-04_STIG` with the
+     ComplianceAsCode benchmark `xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04` and its profile
+     `xccdf_org.ssgproject.content_profile_stig`. An unpaired benchmark is refused.
+   - **Versions must match.** The release that the mapping implements (`stig_release`, `V1R5`) must equal the DISA
+     release of the SCC benchmark version (`001.005.007` is V1R5, by the rule of `tools/reporting/stig_mapping.py`).
+     Otherwise the role fails before any scan: a STIG ID may change meaning between releases.
+   - **All or nothing.** A DISA rule is disabled only when every ComplianceAsCode rule mapped to its STIG ID is
+     disabled. Its `disabled_by` is the variable that disables most of them, the alphabetically first on a tie.
+   - **Partial.** When only some are disabled, the DISA rule stays enabled and is scanned. The role prints
+     "`<rule>`: partially disabled by `<variables>`", the filter lists it in `partially_disabled`, and the finding's
+     placement names the variables in `partially_disabled_by`.
+   - **Unmapped.** A DISA rule whose STIG ID maps to no ComplianceAsCode rule, or that has no valid STIG ID, is never
+     disabled by a toggle: no toggle governs it. It is scanned. Only an explicit
+     `linux_compliance_audit_disabled_rules` entry that names the DISA rule and a `disabled_by` disables it. With the
+     pinned Ubuntu 24.04 content every one of the 194 rules is mapped.
+   - **Explicit entries.** An entry naming a DISA rule of the profile needs a `disabled_by` and wins over the toggles.
+     An entry naming a ComplianceAsCode rule outside the catalogue counts as a disabled mapped rule. A catalogued rule
+     is refused, as for OpenSCAP. Anything else is refused.
+
+### Family placement
+
+Every SCC finding carries `control` ([ADR 0013 amendment](0013-normalized-findings-model.md#amendment-2026-10-27-control-placement-and-schema-12-frees-170),
+findings model schema 1.2): `family`, `topic`, `tags`, `stig_id`, `mapped_rules` and `partially_disabled_by`.
+
+- **Primary family.** The family that most of the catalogued mapped rules belong to; on a tie, the alphabetically
+  first. This is deterministic and needs no order of the registry. For example UBTU-24-100650 maps to two `pam` rules
+  and one `sssd` rule and is placed under `pam` with the tag `sssd`; UBTU-24-200640 maps to one `banners` and one
+  `ssh` rule and is placed under `banners` with the tag `ssh`.
+- **Tags.** The other families of the mapped rules and the subsystem tags of all of them (FREES-165), without the
+  primary family.
+- **Topic.** The umbrella of the primary family, or the family itself when it has none.
+- **Unmapped.** A DISA rule without a catalogued mapped rule has the family and topic `unmapped` and no tags. The family
+  name `unmapped` is reserved; a registry that uses it is refused.
+
+Reports carry the placement on each rule (report schema 2.3,
+[ADR 0016 amendment](0016-report-schema-and-summary-semantics.md#amendment-2026-10-27-schema-23-control-placement-frees-170)),
+and the dashboard filters the rules by family and topic
+([ADR 0017 amendment](0017-offline-html-dashboard.md#amendment-2026-10-27-control-families-frees-170)).
+
+### The audit role
+
+`linux_compliance_audit_backend` accepts `openscap` and `scc`. With `scc` the role needs
+`linux_compliance_audit_scc_content_path`, `linux_compliance_audit_scc_content_sha256` and
+`linux_compliance_audit_scc_profile_id` (default `MAC-1_Classified`), does not need the `discover` role, and passes
+`linux_compliance_audit_allow_off_platform_benchmark` (default `false`; a true value with `openscap` fails the role).
+The argument specification stays strict, the internal-variable guards are regenerated (`make role-guards`), and the
+run-start check covers the new internal variable `__linux_compliance_audit_scc_profile`. The role reads the mapping
+at `content/stig-mapping.json` of the collection, so that one file is now part of the collection tarball
+(`COLLECTION_SOURCES`); it holds ComplianceAsCode rule IDs and STIG IDs only, no DISA text.
+
+### Integration case
+
+`make scc-integration` runs a third scan in the existing `scc-integration` case (`tests/system/scc/test_scc_toggles.py`)
+with `linux_compliance_ssh_enabled: false`, resolved against the real installed stream, the pinned catalogue and the
+mapping exactly as the role resolves it. It asserts that the mapping applies (V1R5, 194 rules placed); that every
+disabled rule is `disabled` with that variable, never `pass`, with SCC's own result kept in the raw results and the
+evidence; that every other rule has the outcome of the untoggled scan in the same container; that partial disables
+stay enabled; and that the run is schema 1.2 with every finding placed and the disabled rules under `ssh`. The state
+changes of all three scans stay within the accepted residual.
 
 ## References
 

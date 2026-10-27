@@ -28,9 +28,14 @@ when the output directory does not exist, check mode does not create it and the 
 1. Validate the inputs.
 2. When `linux_compliance_exceptions_file` is set, read and validate it once on the controller (`run_once`); an invalid
    file fails the play before any scan. Warn about exceptions that set a framework but no profiles.
-3. Check that `linux_compliance_discovered` exists and names the same profile (`discover` must run first).
+3. With `openscap`, check that `linux_compliance_discovered` exists and names the same profile (`discover` must run
+   first).
 4. Resolve the disabled rules from the control toggles and `linux_compliance_audit_disabled_rules` (`toggles.yml`);
-   invalid toggles fail the host before any scan.
+   invalid toggles fail the host before any scan. With `scc`, read the SCC profile with `profile_info` and map the
+   toggles and control families to its DISA rules through `content/stig-mapping.json` (`scc.yml`, filter
+   `scc_toggles`); a DISA rule is disabled only when all of its mapped rules are, partial disables are printed, and
+   a mapping of another DISA release fails the host before any scan
+   ([audit guide](../../docs/audit.md#scc-toggles-and-control-families)).
 5. Check that host facts were gathered.
 6. Run `compliance_scan` with `fail_on_incomplete: false`, so the result is always registered.
 7. Set the fact `linux_compliance_audited` with the raw result.
@@ -69,7 +74,11 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 | `linux_compliance_audit_fail_on_noncompliant` | `bool` | `false` | Fail the play when at least one rule is `fail` or `error`, counted on the raw result by default, so a waiver never passes it. A scan that did not complete always fails. |
 | `linux_compliance_audit_fail_on_noncompliant_after_waivers` | `bool` | `false` | Count the waived result instead of the raw result in that gate. `error` always counts. Without applied waivers the raw result is counted. |
 | `linux_compliance_exceptions_file` | `str` | `null` | Absolute path, on the controller, of the exceptions file. `null` applies no exceptions. The same for every host of the play. Shared with the `verify` role, so it has no role prefix. |
-| `linux_compliance_audit_backend` | `str` | `"openscap"` | Scanner backend; `openscap` is the only one. |
+| `linux_compliance_audit_backend` | `str` | `"openscap"` | Scanner backend: `openscap` (the profile of the `discover` role) or `scc` (the DISA STIG benchmark that SCC installed; ADR 0019). |
+| `linux_compliance_audit_scc_content_path` | `str` | `null` | With `scc`: the pinned stream as SCC installed it, below `/opt/scc/Resources/Content/SCAP12_Content`. |
+| `linux_compliance_audit_scc_content_sha256` | `str` | `null` | With `scc`: its pinned SHA-256. |
+| `linux_compliance_audit_scc_profile_id` | `str` | `"xccdf_mil.disa.stig_profile_MAC-1_Classified"` | With `scc`: the DISA profile that SCC evaluates. |
+| `linux_compliance_audit_allow_off_platform_benchmark` | `bool` | `false` | With `scc`: the explicit opt-in to scan an Ubuntu 26.04 host with the Ubuntu 24.04 STIG benchmark, labelled off-platform (FREES-161). A true value with `openscap` fails the role. |
 | `linux_compliance_audit_output_dir` | `str` | `"/var/lib/freesecdev/linux_compliance/evidence"` | Root-owned directory without group or other permissions below which each run gets its own directory. Missing components are created with mode `0700`; symlinks are refused. |
 | `linux_compliance_audit_scan_timeout` | `int` | `1800` | Scan time limit in seconds, 1 to 3600. |
 | `linux_compliance_audit_disabled_rules` | `list` of `dict` | `[]` | Rules outside the rule catalogue to disable (ADR 0011): `rule_id` (full XCCDF identifier) and optional `disabled_by` (variable name, default `linux_compliance_rule_<short id>_enabled`). Reported as `disabled`, never as passing. A catalogued rule here fails the role; switch it off with its toggle. |

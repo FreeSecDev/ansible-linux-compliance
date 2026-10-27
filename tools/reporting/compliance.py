@@ -33,7 +33,10 @@ from dataclasses import dataclass, replace
 from decimal import ROUND_DOWN, Decimal
 from typing import Final, NamedTuple
 
-from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    model,
+    placement,
+)
 from tools.reporting.common import to_json
 
 COMPLETED: Final[str] = model.ScanStatus.COMPLETED.value
@@ -298,6 +301,8 @@ class RuleRollup:
 
     The outcome is the worst among the scans, so a pass in one scan never hides a
     failure in another. Every originating scan is listed with its own outcome.
+    ``control`` is the control placement of the rule (report schema 2.3), from the
+    first source, by artifact path, whose finding carries one, or ``None``.
     """
 
     rule_id: str
@@ -309,6 +314,7 @@ class RuleRollup:
     severity: model.Severity
     expired_waiver: bool
     sources: tuple[RuleSource, ...]
+    control: placement.ControlPlacement | None = None
 
 
 class _Evaluation(NamedTuple):
@@ -367,6 +373,10 @@ def _collapse(key: RuleKey, evaluations: list[_Evaluation]) -> RuleRollup:
         {evaluation.source for evaluation in evaluations},
         key=lambda source: (source.artifact, source.benchmark_id, source.profile_id),
     )
+    placed = sorted(
+        (evaluation for evaluation in evaluations if evaluation.finding.control is not None),
+        key=lambda evaluation: evaluation.source.artifact,
+    )
     return RuleRollup(
         rule_id=key.rule_id,
         host=key.host,
@@ -381,6 +391,7 @@ def _collapse(key: RuleKey, evaluations: list[_Evaluation]) -> RuleRollup:
             if evaluation.finding.outcome is outcome
         ),
         sources=tuple(sources),
+        control=placed[0].finding.control if placed else None,
     )
 
 

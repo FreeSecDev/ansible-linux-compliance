@@ -10,6 +10,11 @@ Commands:
   run the real ``compliance_scan`` module file with ``backend: scc`` (for real,
   then in check mode) exactly as Ansible runs it on a managed host, record the
   state again and report both results and every added, removed or changed path.
+  Between the two snapshots it also runs a third scan, ``toggled``, with the topic
+  ``ssh`` switched off (FREES-170): ``toggle_resolution.py`` maps the toggles to the
+  DISA rules exactly as the audit role does, the module gets the resulting
+  ``disabled_rules`` and ``control_placement``, and the report holds the resolution,
+  the run and SCC's own kept result of every rule.
   It then exports the real run's STIG Viewer checklists with the reporting command
   (FREES-147), once with SCC's own XCCDF results and once with the pinned stream as
   content, and reports what ``checklist_check.py`` reads back. The checklists stay
@@ -87,6 +92,8 @@ OSCAP_CONTENT_ROOT = Path("/root/content")
 OSCAP_TIMEOUT_SECONDS = 3000
 OSCAP_RUN_FILE = "oscap-scan-run.json"
 SCC_RUN_FILE = "scc-scan-run.json"
+TOGGLE_RESOLUTION = "tests/system/scc/toggle_resolution.py"
+TOGGLED_TOPICS = {"linux_compliance_ssh_enabled": False}
 
 
 def _digest(path: Path) -> str:
@@ -216,8 +223,44 @@ def export_checklists(
     return report
 
 
+def kept_results(results: Path) -> dict[str, str]:
+    """Return SCC's kept outcome of every rule, read with the hardened parser."""
+    parsed = openscap.read_results(str(results), MAX_RESULTS_BYTES, assume_utc=True)
+    return {finding.rule_id: finding.outcome.value for finding in parsed.findings}
+
+
+def toggled_scan(options: argparse.Namespace, module: Path, python_path: str) -> dict[str, object]:
+    """Scan with the ssh topic switched off, the toggles mapped as the audit role maps them."""
+    resolver = str(options.repository / TOGGLE_RESOLUTION)
+    arguments = [resolver, str(options.repository), options.content, options.sha256, PROFILE]
+    resolved = _run_python(options, ["-s", *arguments, json.dumps(TOGGLED_TOPICS)])
+    if resolved.returncode != 0:
+        return {"resolver_stderr": resolved.stderr[-2000:], "scan": None}
+    document = cast("dict[str, object]", json.loads(resolved.stdout))
+    resolution = cast("dict[str, object]", document["resolution"])
+    if resolution["errors"]:
+        return {"resolution": resolution, "scan": None}
+    toggled = run_module(
+        module,
+        {
+            **module_arguments(options),
+            "run_id": "toggled",
+            "disabled_rules": resolution["disabled_rules"],
+            "control_placement": resolution["control_placement"],
+        },
+        python_path,
+    )
+    results = Path(options.output_dir) / "toggled" / "scan" / scc.RESULTS_FILE_NAME
+    return {
+        "benchmark_version": document["benchmark_version"],
+        "resolution": resolution,
+        "scan": toggled,
+        "kept": kept_results(results) if results.is_file() else {},
+    }
+
+
 def scan(options: argparse.Namespace) -> dict[str, object]:
-    """Run a real scan and a check-mode scan through the module."""
+    """Run a real scan, a check-mode scan and a scan with a topic switched off."""
     module = options.repository / "plugins" / "modules" / "compliance_scan.py"
     python_path = f"{options.repository / 'build' / 'collections'}:{options.site_packages}"
     arguments = module_arguments(options)
@@ -226,6 +269,7 @@ def scan(options: argparse.Namespace) -> dict[str, object]:
     preview = run_module(
         module, {**arguments, "_ansible_check_mode": True, "run_id": "check"}, python_path
     )
+    toggled = toggled_scan(options, module, python_path)
     after = snapshot(WATCHED)
     run_directory = Path(options.output_dir) / "real"
     results = run_directory / "scan" / scc.RESULTS_FILE_NAME
@@ -236,6 +280,7 @@ def scan(options: argparse.Namespace) -> dict[str, object]:
     return {
         "scan": real,
         "check_mode": preview,
+        "toggled": toggled,
         "state": difference(before, after),
         "checklists": checklists,
     }

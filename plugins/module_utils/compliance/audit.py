@@ -25,6 +25,17 @@ and never counted as passing. When the scanner did not complete they are ``error
 findings like every other rule of the profile, because the model allows nothing
 else in such a run.
 
+A backend in :data:`POST_SCAN_DISABLE_BACKENDS` cannot apply a per-run tailoring
+file: SCC 5.15 reads tailoring only from its own installation directory, which an
+audit never changes (ADR 0019, amendment of FREES-170). For such a backend the
+whole profile is scanned and every disabled rule is then reported as ``disabled``
+with its ``disabled_by``. The scanner's own result for the rule stays in the raw
+results of the evidence and in the finding's evidence, and is never counted.
+
+Control placements (``control_placement``) give findings the control family, topic
+and tags of the ComplianceAsCode rules they map to (:class:`placement.ControlPlacement`);
+the audit role computes them for SCC with the ``scc_toggles`` filter.
+
 Evidence is written below an output root that must be owned by root (the expected
 owner), with no group or world permissions, reached without symlinks through
 ancestors that are owned by root or the expected owner and not writable by group or
@@ -60,6 +71,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     backends,
     catalog,
     model,
+    placement,
     process,
     scanner,
     xmlsafe,
@@ -95,6 +107,15 @@ _LONG_CONTENT_NAME: Final[str] = r"[A-Za-z0-9._+-]{1,128}"
 LONG_CONTENT_NAME_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
 OFF_PLATFORM_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
 OS_RELEASE_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+POST_SCAN_DISABLE_BACKENDS: Final[frozenset[str]] = frozenset({"scc"})
+MAX_PLACEMENTS: Final[int] = model.MAX_ITEMS
+PLACEMENT_KEYS: Final[frozenset[str]] = frozenset(
+    {"rule_id", "family", "topic", "tags", "stig_id", "mapped_rules", "partially_disabled_by"}
+)
+SCANNER_RESULT_EVIDENCE: Final[str] = "scanner_result"
+DISABLE_BY_TAILORING: Final[str] = "tailoring"
+DISABLE_AFTER_SCAN: Final[str] = "post_scan"
+DISABLE_NOTHING: Final[str] = "none"
 OS_RELEASE_PATH: Final[str] = "/etc/os-release"
 MAX_OS_RELEASE_BYTES: Final[int] = 64 * 1024
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
@@ -256,6 +277,72 @@ def parse_disabled_rules(items: object) -> tuple[DisabledRule, ...]:
     return tuple(sorted(rules, key=lambda rule: rule.rule_id))
 
 
+@dataclass(frozen=True)
+class RulePlacement:
+    """The control placement of one rule of the profile.
+
+    Attributes:
+        rule_id: Full XCCDF identifier of a rule that the profile selects.
+        control: Where its findings belong among the control families.
+    """
+
+    rule_id: str
+    control: placement.ControlPlacement
+
+
+def _placement_tuple(fields: Mapping[str, object], key: str) -> tuple[str, ...]:
+    value = fields.get(key, [])
+    if not isinstance(value, (list, tuple)) or not all(
+        isinstance(item, str) for item in cast("list[object]", value)
+    ):
+        _invalid(f"control_placement {key} must be a list of strings")
+    return tuple(cast("list[str]", value))
+
+
+def parse_control_placement(items: object) -> tuple[RulePlacement, ...]:
+    """Validate the ``control_placement`` argument.
+
+    Args:
+        items: ``None`` or a list of mappings with ``rule_id``, ``family`` and ``topic`` and the
+            optional ``tags``, ``stig_id``, ``mapped_rules`` and ``partially_disabled_by``.
+
+    Raises:
+        AuditError: With ``invalid_argument``.
+    """
+    if items is None:
+        return ()
+    if not isinstance(items, list):
+        _invalid("control_placement must be a list")
+    entries = cast("list[object]", items)
+    if len(entries) > MAX_PLACEMENTS:
+        _invalid(f"control_placement exceeds {MAX_PLACEMENTS} items")
+    parsed: list[RulePlacement] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            _invalid("every control_placement item must be a mapping")
+        fields = cast("dict[str, object]", item)
+        unknown = set(fields) - PLACEMENT_KEYS
+        if unknown:
+            _invalid(f"unknown control_placement keys: {_safe(sorted(map(str, unknown)))}")
+        rule_id = fields.get("rule_id")
+        try:
+            scanner.check_xccdf_id(rule_id, "rule", "control_placement rule_id")
+            placed = placement.ControlPlacement(
+                family=cast("str", fields.get("family")),
+                topic=cast("str", fields.get("topic")),
+                tags=_placement_tuple(fields, "tags"),
+                stig_id=cast("str | None", fields.get("stig_id")),
+                mapped_rules=_placement_tuple(fields, "mapped_rules"),
+                partially_disabled_by=_placement_tuple(fields, "partially_disabled_by"),
+            )
+        except (scanner.ScanRequestError, placement.PlacementError) as error:
+            _invalid(f"control_placement: {error}")
+        parsed.append(RulePlacement(cast("str", rule_id), placed))
+    if len({item.rule_id for item in parsed}) != len(parsed):
+        _invalid("control_placement names a rule more than once")
+    return tuple(parsed)
+
+
 def default_run_id(moment: datetime) -> str:
     """Return a run identifier from a UTC time with microseconds."""
     return moment.astimezone(timezone.utc).strftime(_RUN_ID_FORMAT)
@@ -390,13 +477,17 @@ def inspect_output_root(path: str, *, owner_uid: int = ROOT_UID, create: bool) -
     return True
 
 
-def _check_instances(host: object, disabled_rules: object) -> None:
+def _check_instances(host: object, disabled_rules: object, placements: object) -> None:
     if not isinstance(host, model.HostIdentity):
         _invalid("host must be a HostIdentity")
     if not isinstance(disabled_rules, tuple) or not all(
         isinstance(rule, DisabledRule) for rule in cast("tuple[object, ...]", disabled_rules)
     ):
         _invalid("disabled_rules must be a tuple of DisabledRule")
+    if not isinstance(placements, tuple) or not all(
+        isinstance(item, RulePlacement) for item in cast("tuple[object, ...]", placements)
+    ):
+        _invalid("control_placement must be a tuple of RulePlacement")
 
 
 def _check_timeout(value: object) -> None:
@@ -445,6 +536,8 @@ class AuditJob:
         allow_off_platform_benchmark: Explicit opt-in to the off-platform pairs
             of the backend (ADR 0019, amendment of FREES-161). Only the backends
             in :data:`OFF_PLATFORM_BACKENDS` accept it.
+        control_placement: The control placement of rules of the profile, which
+            their findings carry (ADR 0019, amendment of FREES-170).
     """
 
     backend: str
@@ -458,6 +551,7 @@ class AuditJob:
     max_result_bytes: int
     disabled_rules: tuple[DisabledRule, ...]
     allow_off_platform_benchmark: bool = False
+    control_placement: tuple[RulePlacement, ...] = ()
 
     def __post_init__(self) -> None:
         """Validate the fields that do not need the file system."""
@@ -470,7 +564,7 @@ class AuditJob:
             _invalid(str(error))
         _check_timeout(self.timeout_seconds)
         _check_size(self.max_result_bytes)
-        _check_instances(self.host, self.disabled_rules)
+        _check_instances(self.host, self.disabled_rules, self.control_placement)
         check_output_root(self.output_root)
         check_run_id(self.run_id)
 
@@ -516,6 +610,7 @@ def build_job(params: Mapping[str, object], moment: datetime) -> AuditJob:
         allow_off_platform_benchmark=cast(
             "bool", params.get("allow_off_platform_benchmark", False)
         ),
+        control_placement=parse_control_placement(params.get("control_placement")),
     )
 
 
@@ -547,7 +642,16 @@ class AuditPlan:
     @property
     def tailored(self) -> bool:
         """Whether disabled rules require a tailoring file."""
-        return bool(self.job.disabled_rules)
+        return self.disable_method == DISABLE_BY_TAILORING
+
+    @property
+    def disable_method(self) -> str:
+        """How disabled rules are excluded: ``tailoring``, ``post_scan`` or ``none``."""
+        if not self.job.disabled_rules:
+            return DISABLE_NOTHING
+        if self.job.backend in POST_SCAN_DISABLE_BACKENDS:
+            return DISABLE_AFTER_SCAN
+        return DISABLE_BY_TAILORING
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible description of the planned scan."""
@@ -558,6 +662,8 @@ class AuditPlan:
             "benchmark_version": self.benchmark.version,
             "content_path": self.content_path,
             "content_sha256": self.job.expected_sha256.lower(),
+            "control_placement_count": len(self.job.control_placement),
+            "disable_method": self.disable_method,
             "disabled_rule_count": len(self.job.disabled_rules),
             "evaluated_profile_id": self.evaluated_profile_id,
             "expected_rule_count": len(self.expected_rule_ids),
@@ -642,6 +748,40 @@ def _tailored_profile_id(profile_id: str) -> str:
         _invalid(f"profile_id is too long to be tailored: {error}")
 
 
+def _scanned_rules(job: AuditJob, rules: tuple[catalog.Rule, ...]) -> tuple[tuple[str, ...], str]:
+    """Return the rules the scanner must report on and the profile it evaluates.
+
+    Every disabled and every placed rule must be selected by the profile, and at
+    least one rule must stay enabled. A backend in :data:`POST_SCAN_DISABLE_BACKENDS`
+    scans the requested profile and reports on every rule; any other backend
+    scans the tailored profile when rules are disabled and reports on the enabled
+    rules only.
+    """
+    selected = {rule.rule_id for rule in rules}
+    outside = [rule.rule_id for rule in job.disabled_rules if rule.rule_id not in selected]
+    if outside:
+        _invalid(
+            f"{len(outside)} disabled rule(s) are not selected by the profile, "
+            f"for example {_safe(outside[0])}"
+        )
+    unplaced = [item.rule_id for item in job.control_placement if item.rule_id not in selected]
+    if unplaced:
+        _invalid(
+            f"{len(unplaced)} control_placement rule(s) are not selected by the profile, "
+            f"for example {_safe(unplaced[0])}"
+        )
+    disabled = {rule.rule_id for rule in job.disabled_rules}
+    enabled = tuple(rule.rule_id for rule in rules if rule.rule_id not in disabled)
+    if not enabled:
+        raise AuditError(
+            ERROR_NOTHING_TO_SCAN, "the profile selects no rule that is enabled, nothing to scan"
+        )
+    if job.backend in POST_SCAN_DISABLE_BACKENDS:
+        return tuple(rule.rule_id for rule in rules), job.profile_id
+    evaluated = _tailored_profile_id(job.profile_id) if disabled else job.profile_id
+    return enabled, evaluated
+
+
 def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
     """Validate an audit against the host without writing anything.
 
@@ -673,20 +813,7 @@ def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
             f"the datastream file name must match {pattern}, because it labels the "
             f"provenance: {_safe(Path(content).name)}"
         )
-    selected = {rule.rule_id for rule in rules}
-    outside = [rule.rule_id for rule in job.disabled_rules if rule.rule_id not in selected]
-    if outside:
-        _invalid(
-            f"{len(outside)} disabled rule(s) are not selected by the profile, "
-            f"for example {_safe(outside[0])}"
-        )
-    disabled = {rule.rule_id for rule in job.disabled_rules}
-    expected = tuple(rule.rule_id for rule in rules if rule.rule_id not in disabled)
-    if not expected:
-        raise AuditError(
-            ERROR_NOTHING_TO_SCAN, "the profile selects no rule that is enabled, nothing to scan"
-        )
-    evaluated = _tailored_profile_id(job.profile_id) if disabled else job.profile_id
+    expected, evaluated = _scanned_rules(job, rules)
     exists = inspect_output_root(job.output_root, owner_uid=owner_uid, create=False)
     run_dir = str(Path(job.output_root) / job.run_id)
     if exists and _lstat(Path(run_dir)) is not None:
@@ -958,6 +1085,29 @@ def _disabled_finding(rule: catalog.Rule, toggle: DisabledRule) -> model.Finding
     )
 
 
+def _scanned_disabled_finding(
+    rule: catalog.Rule, toggle: DisabledRule, scanned: model.Finding | None, scanner_name: str
+) -> model.Finding:
+    result = "none" if scanned is None else scanned.outcome.value
+    return model.Finding(
+        rule_id=rule.rule_id,
+        outcome=model.Outcome.DISABLED,
+        evaluated_outcome=model.Outcome.DISABLED,
+        severity=_severity(rule),
+        message=(
+            f"disabled by {toggle.disabled_by}; {scanner_name} cannot exclude a rule from a scan "
+            "without changing its own installation, so the rule was scanned and its result "
+            f"{result!r} is kept only in the raw results and this finding's evidence, never "
+            "counted as passing"
+        ),
+        evidence=(model.Evidence(SCANNER_RESULT_EVIDENCE, scanner_name, result),),
+        exception=model.ExceptionStatus.none(),
+        remediation=None,
+        disabled_by=toggle.disabled_by,
+        flags=(),
+    )
+
+
 def _error_finding(rule: catalog.Rule, message: str) -> model.Finding:
     return model.Finding(
         rule_id=rule.rule_id,
@@ -980,7 +1130,10 @@ def finalize_run(audit_plan: AuditPlan, run: model.ScanRun) -> model.ScanRun:
     in the provenance by the backend. A completed run whose content digest is not
     the pinned one becomes ``failed``. Disabled rules are added as ``disabled``
     findings on a completed run and as ``error`` findings otherwise, so every rule
-    of the profile is accounted for exactly once.
+    of the profile is accounted for exactly once. For a backend in
+    :data:`POST_SCAN_DISABLE_BACKENDS` the disabled rules were scanned, and their
+    findings are replaced in the same way, the scanner's result kept as evidence.
+    Every finding of a rule with a control placement then carries it.
     """
     toggles = {rule.rule_id: rule for rule in audit_plan.job.disabled_rules}
     by_id = {rule.rule_id: rule for rule in audit_plan.rules}
@@ -994,7 +1147,14 @@ def finalize_run(audit_plan: AuditPlan, run: model.ScanRun) -> model.ScanRun:
             f"the scanned content has SHA-256 {run.content.content_sha256}, not the pinned {pinned}"
         )
         findings = tuple(_error_finding(by_id[item.rule_id], message) for item in findings)
-    if status is model.ScanStatus.COMPLETED:
+    scanned = {item.rule_id: item for item in findings if item.rule_id in toggles}
+    findings = tuple(item for item in findings if item.rule_id not in toggles)
+    if status is model.ScanStatus.COMPLETED and audit_plan.disable_method == DISABLE_AFTER_SCAN:
+        added = tuple(
+            _scanned_disabled_finding(by_id[key], toggle, scanned.get(key), run.scanner.name)
+            for key, toggle in toggles.items()
+        )
+    elif status is model.ScanStatus.COMPLETED:
         added = tuple(_disabled_finding(by_id[key], toggle) for key, toggle in toggles.items())
     else:
         reason = f"the scan did not complete: {message}"
@@ -1002,12 +1162,16 @@ def finalize_run(audit_plan: AuditPlan, run: model.ScanRun) -> model.ScanRun:
             _error_finding(by_id[key], f"{reason}; the rule was disabled by {toggle.disabled_by}")
             for key, toggle in toggles.items()
         )
+    placed = {item.rule_id: item.control for item in audit_plan.job.control_placement}
     return replace(
         run,
         profile_id=audit_plan.job.profile_id,
         status=status,
         error_message=None if message is None else _truncate(message),
-        findings=(*findings, *added),
+        findings=tuple(
+            replace(item, control=placed.get(item.rule_id, item.control))
+            for item in (*findings, *added)
+        ),
     )
 
 

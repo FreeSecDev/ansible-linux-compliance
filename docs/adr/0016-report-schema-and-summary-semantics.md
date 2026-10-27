@@ -551,3 +551,21 @@ Rejected alternatives:
 | Keep the per-input percentage with a warning | A percentage next to a warning still reads as a compliance figure (as in the FREES-142 amendment) |
 | Refuse off-platform inputs | The operator opted in to collect the evidence; refusing it would hide it instead of labelling it |
 | A major version | No field changes meaning, and 2.0 and 2.1 documents stay valid |
+
+## Amendment 2026-10-27: schema 2.3, control placement (FREES-170)
+
+### Decision
+
+- **Rules carry their placement.** Every `rules` entry of the compliance section has `control`: the
+  [control placement](0013-normalized-findings-model.md#amendment-2026-10-27-control-placement-and-schema-12-frees-170)
+  of the rule, taken from the first source, by artifact path, whose finding carries one, or `null`. SCC findings carry
+  it, so a DISA rule is grouped under the control family of the ComplianceAsCode rules of its STIG ID, or under
+  `unmapped` ([ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-27-toggles-and-control-families-for-scc-frees-170)).
+- **Embedded scan runs** may have findings model schema 1.2; the schema then requires `control` on every finding and
+  at least one placement, and refuses `control` in a 1.0 or 1.1 scan run.
+- **Figures are unchanged.** The placement groups rules; it never enters a count or a percentage.
+
+### Versioning
+
+A field addition, so a minor version: `schema_version` `"2.3"` in the same `report-v2.json`. A 2.3 document has
+`control` on every rule; a 2.0, 2.1 or 2.2 document has it on none and still validates. The dashboard reads 2.0 to 2.3.

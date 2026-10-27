@@ -1,0 +1,109 @@
+---
+- name: Audit | Load the catalogue and find the toggle variables
+  ansible.builtin.import_tasks: toggle_names.yml
+  tags:
+    - always
+
+- name: Audit | Read the SCC profile and the STIG ID of each of its rules on the host
+  freesecdev.linux_compliance.profile_info:
+    content_path: "{{ linux_compliance_audit_scc_content_path }}"
+    expected_sha256: "{{ linux_compliance_audit_scc_content_sha256 | lower }}"
+    profile_id: "{{ linux_compliance_audit_scc_profile_id }}"
+  become: true
+  register: __linux_compliance_audit_scc_profile
+  tags:
+    - always
+
+- name: Audit | Check the type and shape of the SCC profile
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_scc_profile is mapping
+      - __linux_compliance_audit_scc_profile.content_path is string
+      - __linux_compliance_audit_scc_profile.content_sha256 == linux_compliance_audit_scc_content_sha256 | lower
+      - __linux_compliance_audit_scc_profile.profile_id == linux_compliance_audit_scc_profile_id
+      - __linux_compliance_audit_scc_profile.benchmark_id is string
+      - __linux_compliance_audit_scc_profile.benchmark_version is string
+      - __linux_compliance_audit_scc_profile.rules is sequence
+      - __linux_compliance_audit_scc_profile.rules is not string
+      - __linux_compliance_audit_scc_profile.rules is not mapping
+      - __linux_compliance_audit_scc_profile.rules | length > 0
+    fail_msg: >-
+      An internal fact of the audit role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was scanned.
+    quiet: true
+  tags:
+    - always
+
+- name: Audit | Map the toggles and the control families to the DISA rules of the SCC profile
+  ansible.builtin.set_fact:
+    __linux_compliance_audit_toggles: >-
+      {{ __linux_compliance_audit_catalogue.__linux_compliance_remediate_rules
+         | freesecdev.linux_compliance.scc_toggles({
+           'audit_only': __linux_compliance_audit_catalogue.__linux_compliance_remediate_audit_only,
+           'families': __linux_compliance_audit_catalogue.__linux_compliance_remediate_families,
+           'tags': __linux_compliance_audit_catalogue.__linux_compliance_remediate_tags,
+           'toggles': dict(__linux_compliance_audit_toggle_names | zip(
+             lookup('ansible.builtin.vars', *__linux_compliance_audit_toggle_names, wantlist=True))),
+           'disabled_rules': linux_compliance_audit_disabled_rules,
+           'mapping': lookup('ansible.builtin.file', role_path ~ '/../../content/stig-mapping.json'),
+           'benchmark_id': __linux_compliance_audit_scc_profile.benchmark_id,
+           'benchmark_version': __linux_compliance_audit_scc_profile.benchmark_version,
+           'rules': __linux_compliance_audit_scc_profile.rules}) }}
+  tags:
+    - always
+
+- name: Audit | Check the type and shape of the SCC toggle resolution
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_toggles is mapping
+      - __linux_compliance_audit_toggles.errors is sequence
+      - __linux_compliance_audit_toggles.errors is not string
+      - __linux_compliance_audit_toggles.errors is not mapping
+      - __linux_compliance_audit_toggles.disabled_rules is sequence
+      - __linux_compliance_audit_toggles.disabled_rules is not string
+      - __linux_compliance_audit_toggles.disabled_rules is not mapping
+      - __linux_compliance_audit_toggles.control_placement is sequence
+      - __linux_compliance_audit_toggles.control_placement is not string
+      - __linux_compliance_audit_toggles.control_placement is not mapping
+      - __linux_compliance_audit_toggles.partially_disabled is sequence
+      - __linux_compliance_audit_toggles.partially_disabled is not string
+      - __linux_compliance_audit_toggles.partially_disabled is not mapping
+      - __linux_compliance_audit_toggles.warnings is sequence
+      - __linux_compliance_audit_toggles.warnings is not string
+      - __linux_compliance_audit_toggles.warnings is not mapping
+    fail_msg: >-
+      An internal fact of the audit role does not have the type and shape that the role just gave it,
+      so a role parameter, an include parameter or an extra variable replaced it. The failed assertion
+      names it. Nothing was scanned.
+    quiet: true
+  tags:
+    - always
+
+- name: Audit | Stop on invalid toggles or an unusable STIG mapping before any scan
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_audit_toggles.errors | length == 0
+    fail_msg: >-
+      The toggles, linux_compliance_audit_disabled_rules or the STIG mapping cannot be applied to the
+      SCC profile, and nothing was scanned: {{ __linux_compliance_audit_toggles.errors | join('; ') }}
+    quiet: true
+  tags:
+    - always
+
+- name: Audit | Note the DISA rules that the toggles disable only in part, which stay enabled
+  ansible.builtin.debug:
+    msg: >-
+      {{ __linux_compliance_audit_toggles.partially_disabled
+         | map(attribute='rule_id') | zip(__linux_compliance_audit_toggles.partially_disabled
+         | map(attribute='note')) | map('join', ': ') | list }}
+  when: __linux_compliance_audit_toggles.partially_disabled | length > 0
+  tags:
+    - always
+
+- name: Audit | Warn about topic toggles that currently exclude nothing
+  ansible.builtin.debug:
+    msg: "{{ __linux_compliance_audit_toggles.warnings }}"
+  when: __linux_compliance_audit_toggles.warnings | length > 0
+  tags:
+    - always

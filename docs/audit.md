@@ -181,7 +181,14 @@ A run is `completed` only when SCC's debug log confirms that it loaded the per-r
 `appCheckForUpdates` and `contentCheckForUpdates` at `0` and no configuration profile, and when exactly one session of
 this run holds one XCCDF and one ARF results file for the requested benchmark and profile. SCC's exit status is 0 even
 on failure and is never taken as completion. Anything else is `failed` with every rule `error`. The backend refuses
-`disabled_rules` (FREES-146) and hosts for which no SCC benchmark is pinned, such as Ubuntu 26.04.
+hosts for which no SCC benchmark is pinned, such as Ubuntu 26.04.
+
+SCC 5.15 applies a tailoring file only from its own installation directory, which an audit never changes, so
+`disabled_rules` work differently with `backend: scc` (ADR 0019, amendment of FREES-170): no tailoring file is written,
+SCC scans the whole profile, and every disabled rule is then reported as `disabled` with its `disabled_by`. SCC's own
+result for the rule stays in `scan/results.xml`, `scan/results-arf.xml` and in the finding's `evidence` (kind
+`scanner_result`); it is never counted. `planned.disable_method` is `post_scan` for such a run and `tailoring` for an
+OpenSCAP run with disabled rules. See [SCC toggles and control families](#scc-toggles-and-control-families).
 
 ### Off-platform scans of Ubuntu 26.04 (FREES-161)
 
@@ -592,6 +599,51 @@ reported scan run carries the requested `profile_id`, and each disabled rule is 
 In a run that did not complete, disabled rules are `error` findings like every other rule, because the findings model
 allows nothing else there; their message still names the variable. A disabled rule that the profile does not select is
 an error, and disabling every rule is `nothing_to_scan`.
+
+## SCC toggles and control families
+
+With `linux_compliance_audit_backend: scc` the role scans the DISA STIG benchmark that SCC installed
+([ADR 0019, amendment of FREES-170](adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-27-toggles-and-control-families-for-scc-frees-170)).
+It does not need the `discover` role. Set:
+
+| Variable | Meaning |
+|---|---|
+| `linux_compliance_audit_scc_content_path` | The pinned stream as SCC installed it, below `/opt/scc/Resources/Content/SCAP12_Content` |
+| `linux_compliance_audit_scc_content_sha256` | Its pinned SHA-256 |
+| `linux_compliance_audit_scc_profile_id` | The DISA profile, default `xccdf_mil.disa.stig_profile_MAC-1_Classified` |
+| `linux_compliance_audit_allow_off_platform_benchmark` | The opt-in of FREES-161 for an Ubuntu 26.04 host, default `false`; refused with `openscap` |
+
+Before the scan the role (`tasks/scc.yml`):
+
+1. reads the SCC profile on the host with `profile_info`, which verifies the stream's SHA-256 and returns each DISA
+   rule with its `version`, the STIG ID (`UBTU-24-100010`);
+2. resolves the toggles for the ComplianceAsCode rules of the STIG mapping `content/stig-mapping.json`, with the same
+   code as for OpenSCAP (`toggles.resolve_audit`);
+3. maps them to the DISA rules with the filter `freesecdev.linux_compliance.scc_toggles`, which refuses the run when
+   the mapping implements another DISA release than the SCC benchmark (V1R5 for `001.005.007`).
+
+The mapping rules:
+
+- **All or nothing.** A DISA rule is disabled only when every ComplianceAsCode rule mapped to its STIG ID is disabled.
+  Its `disabled_by` is the variable that disables most of them, the alphabetically first on a tie.
+- **Partial disables.** When only some of them are disabled, the DISA rule stays enabled and is scanned. The role prints
+  `<rule>: partially disabled by <variables>`, and the finding's `control.partially_disabled_by` names the variables.
+- **Unmapped rules.** A DISA rule whose STIG ID maps to no ComplianceAsCode rule is never disabled by a toggle, because
+  no toggle governs it. Only an explicit `linux_compliance_audit_disabled_rules` entry with the DISA `rule_id` and a
+  `disabled_by` disables it. With the pinned Ubuntu 24.04 content every one of the 194 rules is mapped.
+- **Explicit entries.** An entry may also name a ComplianceAsCode rule outside the catalogue; it then counts as a
+  disabled mapped rule. A catalogued rule there fails the role, as with OpenSCAP.
+
+SCC applies tailoring only from its installation directory, so the disabled rules are scanned and then reported as
+`disabled`, never as passing; SCC's own result stays in the raw results and in the finding's `scanner_result`
+evidence (see [scanner invocation](#scanner-invocation)).
+
+**Family placement.** Every finding carries `control` (findings model schema 1.2): the `family`, `topic`, `tags`,
+`stig_id`, `mapped_rules` and `partially_disabled_by` of its mapped rules. The family is the one that most of the
+catalogued mapped rules belong to, the alphabetically first on a tie; the other families and the subsystem tags of
+the mapped rules are tags; the topic is the umbrella of the family, or the family itself. A DISA rule without a
+catalogued mapped rule has the family and topic `unmapped`. Reports carry the placement per rule (report schema 2.3)
+and the dashboard filters the rules by family and topic.
 
 ## Errors
 

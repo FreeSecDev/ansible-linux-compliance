@@ -1264,17 +1264,38 @@
     }));
     parts.push(el("h3", null, "Rules"));
     parts.push(el("p", null, "One row per rule, host, benchmark, content version and profile. When several scans evaluated a rule, "
-      + "the worst outcome is shown and every source keeps its own outcome."));
+      + "the worst outcome is shown and every source keeps its own outcome. Family and topic place a rule among the "
+      + "control families; a DISA STIG rule of SCC is placed through the ComplianceAsCode rules of its STIG ID, and a "
+      + "rule without any is in the family unmapped."));
     parts.push(dataTable({
       caption: "Rules",
       rows: list(section.rules).map(obj),
       detail: function (row, context) {
-        return simpleTable("Sources of " + plain(row.rule_id), ["Input", "Benchmark", "Profile", "Outcome", "Expired waiver"],
+        const sources = simpleTable("Sources of " + plain(row.rule_id), ["Input", "Benchmark", "Profile", "Outcome", "Expired waiver"],
           list(row.sources).map(function (source) {
             const fields = obj(source);
             return [mono(fields.artifact), val(fields.benchmark_id), val(fields.profile_id), badgeCell(fields.outcome),
               fields.expired_waiver ? badge("expired", "waiver expired") : "no"];
           }), context + ": sources");
+        const control = obj(row.control);
+        if (!present(row.control)) {
+          return sources;
+        }
+        return el("div", null, [
+          pairs([
+            ["Family", val(control.family)],
+            ["Topic", val(control.topic)],
+            ["Tags", list(control.tags).length > 0 ? val(list(control.tags).join(", ")) : missing("none")],
+            ["STIG ID", mono(control.stig_id, "none")],
+            ["Mapped rules", list(control.mapped_rules).length > 0
+              ? el("ul", { class: "plain" }, list(control.mapped_rules).map(function (rule) {
+                return el("li", null, mono(rule));
+              })) : missing("none")],
+            ["Partially disabled by", list(control.partially_disabled_by).length > 0
+              ? val(list(control.partially_disabled_by).join(", ")) : missing("no")]
+          ]),
+          sources
+        ]);
       },
       columns: [
         { label: "Rule ID", value: function (row) {
@@ -1282,6 +1303,16 @@
         }, cell: function (row) {
           return mono(row.rule_id);
         } },
+        { label: "Family", value: function (row) {
+          return obj(row.control).family;
+        }, cell: function (row) {
+          return val(obj(row.control).family, "not placed");
+        }, filter: true },
+        { label: "Topic", value: function (row) {
+          return obj(row.control).topic;
+        }, cell: function (row) {
+          return val(obj(row.control).topic, "not placed");
+        }, filter: true },
         { label: "Host", value: function (row) {
           return hostLabel(row.host);
         }, filterValue: function (row) {

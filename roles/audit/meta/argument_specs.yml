@@ -56,8 +56,12 @@ argument_specs:
         default: "openscap"
         choices:
           - openscap
+          - scc
         description:
-          - "Scanner backend. OpenSCAP is the only backend."
+          - "Scanner backend: openscap scans the profile that the discover role verified."
+          - "scc scans the DISA STIG benchmark that SCC installed, given by linux_compliance_audit_scc_content_path."
+          - "With scc the role maps the toggles to the DISA rules through content/stig-mapping.json (ADR 0019)."
+          - "SCC findings then carry the control family, topic and tags of their mapped rules."
       linux_compliance_audit_output_dir:
         type: str
         default: "/var/lib/freesecdev/linux_compliance/evidence"
@@ -85,6 +89,8 @@ argument_specs:
           - "rule_id is the full XCCDF rule identifier and must be selected by the profile."
           - "disabled_by names the controlling variable; it defaults to linux_compliance_rule_<short id>_enabled."
           - "Disabled rules are excluded through a generated tailoring file and reported as disabled."
+          - "With linux_compliance_audit_backend scc an item may name a DISA rule of the SCC profile instead."
+          - "It then needs disabled_by; SCC scans every rule and the role reports disabled rules afterwards."
           - "They are never counted as passing."
         options:
           rule_id:
@@ -96,6 +102,31 @@ argument_specs:
             type: str
             description:
               - "Name of the controlling toggle variable, linux_compliance_<name>_enabled."
+      linux_compliance_audit_scc_content_path:
+        type: str
+        default: null
+        description:
+          - "Absolute path of the pinned DISA stream as SCC installed it, for linux_compliance_audit_backend scc."
+          - "It lies below /opt/scc/Resources/Content/SCAP12_Content; the role never installs content."
+          - "Required with scc and ignored with openscap."
+      linux_compliance_audit_scc_content_sha256:
+        type: str
+        default: null
+        description:
+          - "Pinned SHA-256 of that stream, 64 hexadecimal characters; required with scc."
+          - "The profile_info and compliance_scan modules refuse a stream with another digest."
+      linux_compliance_audit_scc_profile_id:
+        type: str
+        default: "xccdf_mil.disa.stig_profile_MAC-1_Classified"
+        description:
+          - "Full XCCDF identifier of the DISA profile that SCC evaluates, for linux_compliance_audit_backend scc."
+      linux_compliance_audit_allow_off_platform_benchmark:
+        type: bool
+        default: false
+        description:
+          - "Explicit opt-in to scan an Ubuntu 26.04 host with the Ubuntu 24.04 STIG benchmark (ADR 0019, FREES-161)."
+          - "Only with linux_compliance_audit_backend scc; with openscap a true value fails the role."
+          - "Every result is then labelled off-platform and kept out of every compliance figure."
       linux_compliance_file_permissions_enabled:
         type: bool
         default: true
