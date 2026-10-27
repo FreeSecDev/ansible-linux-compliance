@@ -363,3 +363,24 @@ def test_a_failed_rename_of_one_file_keeps_the_previous_file_and_leaves_no_tempo
     monkeypatch.undo()
     assert target.read_text(encoding="utf-8") == "previous"
     assert sorted(path.name for path in tmp_path.iterdir()) == ["report.json"]
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        model.Evidence("note", "scc", "pass"),
+        model.Evidence("scanner_result", "scc", "PASS 1"),
+        model.Evidence("scanner_result", "scc", "pass\nfail"),
+    ],
+)
+def test_only_a_plain_scanner_result_replaces_disabled_in_the_details(
+    stig: Any, evidence: model.Evidence
+) -> None:
+    toggled = replace(
+        cast("model.Finding", stig.finding(1, model.Outcome.DISABLED, disabled_by="linux_x")),
+        evidence=(evidence,),
+    )
+    details = checklist.verdict(stig.scan_run(), toggled).details.splitlines()
+    assert "Scanner result: disabled" in details
+    assert not [line for line in details if line.startswith("Reported outcome")]
+    assert "Disabled by: linux_x" in details

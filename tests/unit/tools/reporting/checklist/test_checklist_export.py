@@ -552,7 +552,10 @@ def test_a_rule_that_a_tailoring_file_disabled_is_not_selected_in_the_results(
     listed: str | None,
     outcome: bool,
 ) -> None:
-    disabled = stig.finding(1, model.Outcome.DISABLED, disabled_by="linux_compliance_ssh_enabled")
+    disabled = replace(
+        stig.finding(1, model.Outcome.DISABLED, disabled_by="linux_compliance_ssh_enabled"),
+        evidence=(model.Evidence("note", "openscap", "excluded by tailoring"),),
+    )
     others = (stig.finding(2, model.Outcome.PASS),)
     results = stig.result_xml(findings=others)
     if listed is not None:
@@ -590,3 +593,12 @@ def test_a_toggled_scc_rule_prints_the_real_scanner_result(stig: Any, tmp_path: 
     ckl = (tmp_path / "ckl" / "web01.example_Synthetic_Linux_STIG.ckl").read_text()
     assert "Scanner result: fail" in ckl
     assert "Scanner result: disabled" not in ckl
+
+
+def test_results_that_the_content_reader_rejects_are_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    results = own_results(stig).replace('severity="high"', 'severity="bogus"')
+    bundle = write_bundle(tmp_path / "bundles", stig.scan_run(), results)
+    error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+    assert "the bundle's XCCDF results cannot be read" in error
