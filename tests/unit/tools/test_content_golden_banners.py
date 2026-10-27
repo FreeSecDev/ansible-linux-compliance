@@ -21,6 +21,8 @@ PATTERN = f"{OVAL}pattern"
 
 
 class PatternCollector:
+    """Keeps the pattern of every textfilecontent54 object of an OVAL document."""
+
     def __init__(self) -> None:
         self.patterns: dict[str, str] = {}
         self.current = ""
