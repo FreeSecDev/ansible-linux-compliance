@@ -452,6 +452,12 @@ half minutes on a WSL2 workstation. The customised pre-state (`0640`) is what sh
 restores the recorded prior value and not a distribution default: with the cleanup changed to always restore `0644`,
 the harness fails with `cleanup: files /etc/crontab: mode changed from 0640 to 0644`.
 
+With `banners` (four cycles) and `pwquality` (two cycles) each scenario runs ten cycles. On GitHub's `ubuntu-24.04`
+runners the whole `docker-ubuntu` job took 31 minutes, and `docker-rhel-compatible` ran past the former 45-minute
+job limit, so the `molecule-docker` jobs of `.github/workflows/ci.yml` now allow 90 minutes. Every further native topic
+adds its cycles to both jobs; when they approach the limit, split the lifecycle step per topic into separate jobs
+rather than raising the limit again.
+
 ### Declaring a topic
 
 Each native topic has exactly one declaration, `extensions/molecule/shared/vars/topics/<topic>.yml`, read with the
