@@ -20,7 +20,7 @@
 
 ## Supply chain
 
-- [ ] Built by rootless Buildah in CodeBuild.
+- [ ] Built by rootless Buildah in the `image-build` workflow on a GitHub-hosted runner.
 - [ ] hadolint clean.
 - [ ] SBOM in SPDX and CycloneDX stored with the release.
 - [ ] Vulnerability scan clean of fixable critical and high findings.

@@ -40,7 +40,10 @@ that `make ci` reproduces CI locally. Pull request validation and publishing are
 - Never use `pull_request_target`, and never use `workflow_run` with secrets on untrusted input.
 - Untrusted values (branch names, titles, inputs) pass through `env:` and are never interpolated into `run:`.
 - Caches are keyed so a cache written by an untrusted pull request cannot be restored by a privileged job.
-- Publishing jobs run only on `push` to protected `main`, never on tag pushes, because a tag-triggered run uses the workflow file from the tagged commit. They run in the main-only `release` environment and assume AWS OIDC roles. Environments have no human required reviewers; gates are automated checks in the workflow (ADR 0012).
+- Publishing jobs run only on `push` to protected `main`, never on tag pushes, because a tag-triggered run uses the workflow file from the tagged commit. They run in the main-only `release` environment, use the per-job `GITHUB_TOKEN` (the runner image workflow
+  needs no cloud credential), and assume AWS OIDC roles only where AWS is the target, such as VM golden images. The
+  environment does not gate `GITHUB_TOKEN` permissions: any workflow on any branch can declare `packages: write`, so
+  consumers rely on digest pins plus signature and attestation identity bound to the workflow on `main`. Environments have no human required reviewers; gates are automated checks in the workflow (ADR 0012).
 - Every workflow sets `concurrency`; every job sets `timeout-minutes`.
 - The aggregate `ci-gate` job runs with `if: always()`, depends on all required jobs and fails if any needed job failed or was cancelled, so required checks always report.
 - Support the `merge_group` trigger alongside `pull_request`.

@@ -24,7 +24,7 @@ self-hosted runner agent. The collection repository consumes it by digest only.
 
 - The Jira issue and ADRs, including the scanner decision.
 - The Containerfile, the hash-locked Python requirements file and the tool manifest.
-- CodeBuild project and ECR details from the `aws-infrastructure` skill.
+- The runner repository's `image-build` workflow, `Makefile` and digest-pinned Buildah builder image.
 
 ## Outputs
 
@@ -41,7 +41,8 @@ self-hosted runner agent. The collection repository consumes it by digest only.
 - Run as a non-root user with a fixed UID and GID such as 10001. No SSH daemon, no setuid or setgid binaries, explicit file permissions, no credentials in any layer.
 - Add OCI labels for source, revision, version and licence.
 - The image works with a read-only root filesystem, `--cap-drop=ALL` and `--security-opt=no-new-privileges`.
-- Release images are built with rootless Buildah in AWS CodeBuild, never locally or on GitHub-hosted runners.
+- Release images are built with rootless Buildah by the runner repository's `image-build` workflow on GitHub-hosted
+  runners, from `main` only; a local or self-hosted build is never published.
 - Variants are build arguments or targets of one definition; do not fork the Containerfile.
 - Lint with hadolint, which works on Containerfiles.
 - Generate SBOMs with Syft in SPDX and CycloneDX.
@@ -69,9 +70,11 @@ self-hosted runner agent. The collection repository consumes it by digest only.
 
 ## Security requirements
 
-- No secrets in build arguments, layers, labels or logs; credentials come from the CodeBuild role.
+- No secrets in build arguments, layers, labels or logs; the only credential is the per-job `GITHUB_TOKEN`, which
+  never enters the build container.
 - The final stage contains only runtime tools needed by CI.
-- Scan and signing steps run in CodeBuild with OIDC-assumed roles; no long-lived keys.
+- Scan, signing and attestation steps run in the same workflow against the pushed digest; signing is keyless
+  through GitHub OIDC; no long-lived keys and no AWS credential.
 - Vulnerability exceptions use the expiring format from the `dependency-management` skill.
 - Image and pipeline changes are reviewed by `security-review`.
 
@@ -83,13 +86,14 @@ self-hosted runner agent. The collection repository consumes it by digest only.
 
 ## Completion criteria
 
-- The image was built in CodeBuild, scanned, signed and smoke-tested; digest and run links are on the Jira issue.
+- The image was built by the `image-build` workflow, scanned, signed, attested and smoke-tested; digest and run
+  links are on the Jira issue.
 - The main repository references the new digest through a reviewed pull request.
 - No step is reported successful unless it actually ran.
 
 ## Interaction with other skills
 
-- Runs on CodeBuild and ECR from the `aws-infrastructure` skill; workflows come from the `github-actions` skill.
+- Runs on GitHub-hosted runners with workflows from the `github-actions` skill; AWS is not involved.
 - Base image and package updates flow through the `dependency-management` skill.
 - Signing and publishing procedures align with `release-engineering`.
 - Reviewed by `security-review`; design choices go through `architecture`.

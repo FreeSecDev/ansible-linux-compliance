@@ -163,12 +163,13 @@ epics:
           - {id: t040203-oidc-test, summary: "Verify OIDC with a harmless sts call from a workflow"}
       - id: s0403-build-services
         type: Story
-        summary: Provision CodeBuild, ECR, S3 artifact storage and logging
+        summary: Provision VM golden image build services, S3 artifact storage and logging
         skill: aws-infrastructure
         complexity: L
         depends_on: [s0402-oidc]
         acceptance:
-          - CodeBuild projects, ECR repositories and S3 buckets exist with encryption, lifecycle and log retention.
+          - VM golden image build services (CodeBuild for AMIs, ephemeral EC2 builders) and S3 buckets exist with encryption, lifecycle and log retention.
+          - No AWS resource is created for the CI runner image, which is built on GitHub-hosted runners (ADR 0007 amendment).
       - id: s0404-bootstrap
         type: Story
         summary: Implement the AWS bootstrap template and generated local script
@@ -189,7 +190,7 @@ epics:
     summary: Secure CI runner container
     milestone: 3
     skill: container-security
-    purpose: Build, scan, sign and publish a minimal Alpine-based CI toolbox image in AWS.
+    purpose: Build, scan, sign and publish a minimal Alpine-based CI toolbox image on GitHub-hosted runners.
     items:
       - id: s0501-containerfile
         type: Story
@@ -200,12 +201,13 @@ epics:
           - Base image pinned by digest, packages and Python dependencies pinned and hash-locked, non-root by default.
       - id: s0502-aws-build
         type: Story
-        summary: Build the image with rootless Buildah in CodeBuild orchestrated by GitHub Actions
+        summary: Build the image with rootless Buildah on GitHub-hosted runners and bind every step to its digest
         skill: container-security
         complexity: L
-        depends_on: [s0501-containerfile, s0403-build-services]
+        depends_on: [s0501-containerfile]
         acceptance:
-          - A workflow run obtains OIDC credentials, triggers CodeBuild and records the resulting digest.
+          - A workflow run on main builds the checked-out commit with rootless Buildah from a digest-pinned builder image, pushes it to GHCR by digest and records the digest and built commit.
+          - The workflow uses only the per-job GITHUB_TOKEN; no AWS credential, role or resource is involved.
       - id: s0503-supply-chain
         type: Story
         summary: Scan, SBOM, sign and attest the runner image
@@ -770,6 +772,6 @@ epics:
       - {id: s1901-workflow-a, type: Story, summary: "Acceptance workflow A new developer", skill: code-review, complexity: M, depends_on: [s1302-precommit, s1001-docker-base, s1503-html], acceptance: ["Clean clone to offline report succeeds and is recorded."]}
       - {id: s1902-workflow-b, type: Story, summary: "Acceptance workflow B bare Linux system", skill: molecule-testing, complexity: L, depends_on: [s1102-bare-scenarios], acceptance: ["Audit, remediate, re-audit, idempotency and report are recorded with results."]}
       - {id: s1903-workflow-c, type: Story, summary: "Acceptance workflow C golden image", skill: packer-images, complexity: L, depends_on: [s1103-golden-scenarios], acceptance: ["AWS build to libvirt Molecule run is recorded with artifacts and checksums."]}
-      - {id: s1904-workflow-d, type: Story, summary: "Acceptance workflow D CI runner", skill: container-security, complexity: M, depends_on: [s0503-supply-chain], acceptance: ["Image built in AWS is consumed by digest and runs real tests in the main repository."]}
+      - {id: s1904-workflow-d, type: Story, summary: "Acceptance workflow D CI runner", skill: container-security, complexity: M, depends_on: [s0503-supply-chain], acceptance: ["Image built by the runner image-build workflow is consumed by digest and runs real tests in the main repository."]}
       - {id: s1905-workflow-e, type: Story, summary: "Acceptance workflow E pull request", skill: code-review, complexity: M, depends_on: [s0303-repo-security, s1504-ci-publish], acceptance: ["Jira-linked change passes checks, review, rebase and squash merge under enforced policy."]}
       - {id: s1906-workflow-f, type: Story, summary: "Acceptance workflow F reproducible troubleshooting", skill: documentation, complexity: S, depends_on: [s1905-workflow-e], acceptance: ["An issue is traced to PR, commits, ADR, controls, CI results and image metadata and reproduced locally."]}

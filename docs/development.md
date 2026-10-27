@@ -119,7 +119,7 @@ overriding them.
 | `test-molecule-golden` | pending FREES-63 | Golden image scenarios |
 | `packer-validate` | pending FREES-64 | Packer template validation |
 | `packer-build` | pending FREES-64 | Packer image build |
-| `image-build` | pending FREES-36 | Runner image build on AWS |
+| `image-build` | pending FREES-36 | Stub: the runner image is built by the runner repository's `image-build` workflow on GitHub-hosted runners, not here |
 | `report` | implemented | Normalized JSON and the HTML dashboard (`REPORT_SCOPE`, `REPORT_ARGS`, `REPORT_OUTPUT`, `REPORT_HTML`), see [reporting data model](reporting-data-model.md) and the [dashboard guide](dashboard.md) |
 | `report-serve` | implemented | Serves `build/report/` on 127.0.0.1 only (`REPORT_PORT`, default 8765); refuses a `REPORT_HTML` outside it |
 | `release-check` | pending FREES-84 | Release readiness |
@@ -400,9 +400,15 @@ are stable, so the required check name `ci-gate` does not change. Runs for pull 
 runs; runs on `main` and merge groups are never cancelled. `docs` is part of `make ci` locally and is
 added as a job together with the documentation pipeline (FREES-80).
 
-The toolbox runner image lives in the `linux-compliance-runner` repository and does not exist yet. Jobs
-currently run on `ubuntu-24.04` with a pinned `uv`. Moving the jobs into the image, consumed by digest, is
-follow-up work tracked with the runner image issue (FREES-35); it is not simulated here.
+The toolbox runner image is built by the `linux-compliance-runner` repository's `image-build` workflow on
+GitHub-hosted runners (FREES-36) and published as `ghcr.io/freesecdev/linux-compliance-runner`, signed with cosign
+and attested. No image has been published yet. This repository consumes it by digest only:
+`ghcr.io/freesecdev/linux-compliance-runner@sha256:<digest>`, never a tag.
+`tests/unit/tools/test_runner_image_pin.py` reads every tracked file except Markdown and fails on any other reference
+to the image, including its unverified `candidate-` tags, and on any reference to an ECR staging image. It reads
+literal text only, so a name assembled from variables is left to review. Before adopting a new digest, verify its
+signature and attestations as described in the runner repository's `docs/image-build.md`. Jobs still run on
+`ubuntu-24.04` with a pinned `uv`; moving them into the image is follow-up work.
 
 ## Dependency pins
 
