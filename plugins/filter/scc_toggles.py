@@ -108,7 +108,9 @@ _value:
     summary:
       description:
         - Counts of the profile's rules, those mapped to a ComplianceAsCode rule, the unmapped
-          ones, the disabled ones and the partially disabled ones.
+          ones, the disabled ones and the partially disabled ones, the C(stig_release) and
+          C(pairs_checked), the number of reported rules that were checked against a pinned DISA
+          rule to STIG ID pair. It is zero for a profile that pins none, such as Ubuntu 24.04.
       type: dict
     warnings:
       description: The topic warnings of C(audit_disabled_rules), for the mapped rules.
@@ -181,16 +183,17 @@ def _text(value: object, name: str, errors: toggles.Errors) -> str:
 
 def _inputs(
     given: dict[str, object], errors: toggles.Errors
-) -> tuple[tuple[stig.SccRule, ...], stig.StigProfile] | None:
+) -> tuple[tuple[stig.SccRule, ...], stig.StigProfile, int] | None:
     benchmark_id = _text(given["benchmark_id"], "benchmark_id", errors)
     benchmark_version = _text(given["benchmark_version"], "benchmark_version", errors)
     try:
         rules = stig.scc_rules(given["rules"])
         profile = stig.mapping_for(given["mapping"], benchmark_id, benchmark_version)
+        checked = stig.check_reported(rules, profile)
     except stig.MappingError as error:
         errors.add(str(error))
         return None
-    return rules, profile
+    return rules, profile, checked
 
 
 def scc_toggles(catalogue: object, options: object) -> dict[str, object]:
@@ -204,7 +207,7 @@ def scc_toggles(catalogue: object, options: object) -> dict[str, object]:
     inputs = _inputs(given, errors)
     if inputs is None:
         return _empty(errors.items)
-    rules, profile = inputs
+    rules, profile, checked = inputs
     resolution = toggles.resolve_audit(catalogue, given, profile.mapped_rules(), errors)
     loaded = resolution.catalogue
     if placement.UNMAPPED_FAMILY in loaded.families:
@@ -221,12 +224,16 @@ def scc_toggles(catalogue: object, options: object) -> dict[str, object]:
     if errors.items:
         return _empty(errors.items)
     families = stig.Families(family_of, loaded.umbrellas, loaded.tags)
-    result = stig.resolve(rules, profile, disabled, families, explicit)
-    return _resolved(result, len(rules), profile.stig_release, resolution.warnings)
+    return _resolved(
+        stig.resolve(rules, profile, disabled, families, explicit),
+        len(rules),
+        (profile.stig_release, checked),
+        resolution.warnings,
+    )
 
 
 def _resolved(
-    result: stig.Resolution, count: int, release: str, warnings: list[str]
+    result: stig.Resolution, count: int, release: tuple[str, int], warnings: list[str]
 ) -> dict[str, object]:
     unmapped = sum(1 for item in result.placements if not item["mapped_rules"])
     return {
@@ -240,7 +247,8 @@ def _resolved(
             "unmapped": unmapped,
             "disabled": len(result.disabled),
             "partially_disabled": len(result.partial),
-            "stig_release": release,
+            "stig_release": release[0],
+            "pairs_checked": release[1],
         },
         "warnings": warnings,
     }

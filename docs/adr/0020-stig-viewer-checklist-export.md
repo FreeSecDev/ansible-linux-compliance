@@ -4,8 +4,11 @@
 - **Date:** 2026-10-26
 - **Deciders:** lead architect; product owner (scope, decided 2026-10-26)
 - **Jira:** FREES-147 (this ADR and the exporter), FREES-146 (STIG to ComplianceAsCode mapping, see the
-  [amendment](#amendment-2026-10-27-complianceascode-findings-through-the-stig-mapping-frees-146))
-- **Pull requests:** introduced by the pull request for FREES-147; amended by the pull request for FREES-146
+  [amendment](#amendment-2026-10-27-complianceascode-findings-through-the-stig-mapping-frees-146)), FREES-166 and
+  FREES-171 (hardening, see the
+  [second amendment](#amendment-2026-10-27-export-hardening-and-pinned-disa-identifiers-frees-166-frees-171))
+- **Pull requests:** introduced by the pull request for FREES-147; amended by the pull requests for FREES-146 and for
+  FREES-166 and FREES-171
 - **Related:** [ADR 0013](0013-normalized-findings-model.md), [ADR 0016](0016-report-schema-and-summary-semantics.md),
   [ADR 0018](0018-evidence-bundle-provenance.md), [ADR 0019](0019-scc-scanner-backend-and-ci-image.md) (decision 9 and
   the FREES-161 amendment, decision 7)
@@ -324,6 +327,75 @@ Read from the pinned, digest-verified streams of `content/manifest.yml` (Complia
   - SCC findings grouped by control family.
 
   The mapping file is the input both need.
+
+## Amendment 2026-10-27: export hardening and pinned DISA identifiers (FREES-166, FREES-171)
+
+This amendment follows the independent reviews of FREES-147, FREES-146 and FREES-170. Every other rule of this ADR and
+of the amendment above stands, except where this one says it replaces it.
+
+### Decision
+
+1. **All or nothing.** Every output of one run is written to a temporary file in its target directory, with a short
+   fixed-length name so that a target name at the file-system limit can still be staged. The files are renamed only
+   after all of them were written. A failed write removes every temporary file, creates no output and gives status 2.
+   A rename that fails after others succeeded removes the remaining temporary files; the outputs already renamed are
+   complete files.
+2. **File name length.** `build_all` refuses a checklist whose file name, with its longest suffix, is over 255 bytes,
+   before anything is written.
+3. **Bundle cross-check.** When a bundle carries its own XCCDF results, their rule results must agree with the scan run
+   before the export. A rule of the run needs the same evaluated result and flags; a rule that SCC scanned and a toggle
+   disabled needs SCC's result in its evidence (`scanner_result`) to be the result in the file; a rule that a
+   tailoring file disabled is absent or not selected; a selected rule that the run lacks is a mismatch. This checks
+   consistency only. Authenticity needs the signed bundles of FREES-140.
+4. **One version rule.** The content version must be the version the run recorded, for every run. This **replaces** the
+   exemption of runs that did not complete for runs that recorded a version. A run that recorded the sentinel
+   `unknown` (both scanners record it when a run did not complete) recorded no version: it takes exactly one content of
+   its benchmark, every entry is Not Reviewed because the run did not complete (the row of the status table stays
+   reachable), and the asset comment says that the content version is unverified. A completed run with `unknown` is
+   refused.
+5. **Comparison pairing.** `--compare-stig` pairs the entries of the two sides by DISA rule ID, requires the same
+   release, the same set of rule IDs and the same STIG ID per rule ID, and refuses anything else with `ChecklistError`.
+   This **replaces** the pairing by position of the FREES-146 amendment (decision 5).
+6. **Pinned DISA benchmark.** `content/stig-mapping.json` pins `disa_benchmark_id` for every profile. It is set in
+   `tools/content/generate_stig_mapping.py` by hand, per ComplianceAsCode benchmark, because no pinned stream carries
+   it. The export refuses DISA content of another benchmark, and the SCC toggle mapping refuses a host that reports
+   another benchmark.
+7. **Pinned DISA rule to STIG ID pairs, RHEL 9 only.** The pinned RHEL 9 stream states the DISA rule ID next to the
+   STIG ID of a rule. The mapping holds a pair for each rule that references exactly one STIG ID (`disa_rules`, 426 for
+   `stig` and 422 for `stig_gui`), as identifiers only. The generator refuses malformed IDs and a DISA rule ID paired
+   with two STIG IDs. DISA content that contradicts a pair is refused, for the mapped export and for the own content
+   of any run whose DISA benchmark the mapping pins; the SCC toggle mapping refuses the same from the rule list that
+   the host reports (`stig.check_reported`).
+   - A profile with no pairs is reported at run time: the export warns on standard error and says so in the asset
+     comment, and the `scc_toggles` filter returns `pairs_checked`, which the audit role reports with a `WARNING:`
+     when it is zero.
+   - **Ubuntu 24.04 has no pairs, and its `disa_rules` is empty.** Its stream carries no DISA rule IDs, and the only
+     source is the DISA content inside the SCC image, which is not committed. Closing the gap needs a pinned,
+     digest-verified source of those IDs, as IDs only.
+8. **Scanner result of a toggled SCC rule.** The details of a rule that a toggle disabled name SCC's real result from
+   the finding's evidence (`Scanner result: pass`), then `Reported outcome: disabled`. A result that is not a lower-case
+   word is not shown and the line falls back to `disabled`. The status stays Not Reviewed.
+9. **Partial disables.** The comments of a rule whose `control.partially_disabled_by` is set carry
+   `Partially disabled by: <toggles>`.
+10. **Strength of an OpenSCAP result.** The guide states that a Not a Finding from OpenSCAP is only as strong as the
+    ComplianceAsCode check, that the integration run had 4 rules Open under SCC but Not a Finding through OpenSCAP, and
+    that SCC is the source for eMASS uploads where the DISA checks are required.
+
+### Alternatives evaluated
+
+| Alternative | Reason rejected |
+|---|---|
+| Write each output as it is produced | A failure part-way leaves a partial set, which is what FREES-166 forbids |
+| Join the mapped export on the pinned `SV-` IDs | The pairs cover only the unambiguous rules of one stream, and a join that works for one stream is two code paths; they are a check, not a key |
+| Pairs for Ubuntu from the SCC image | The DISA content may not be committed, and the IDs would need a pinned extraction that does not exist yet |
+| Keep exporting incomplete runs with unknown content versions | The version rule would differ by run status, and a mismatch could not be told from an unknown version |
+
+### Consequences
+
+- A bundle whose XCCDF results were edited, or that does not belong to its run, no longer exports.
+- Failed scan runs export as all Not Reviewed with an unverified content version, so the record of the failure
+  reaches eMASS reviewers.
+- A ComplianceAsCode bump regenerates `disa_rules` with the mapping.
 
 ## References
 

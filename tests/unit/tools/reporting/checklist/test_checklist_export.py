@@ -189,7 +189,7 @@ def test_an_off_platform_bundle_exports_only_not_reviewed(stig: Any, tmp_path: P
 
 def test_a_failed_run_without_results_uses_the_supplied_content(stig: Any, tmp_path: Path) -> None:
     findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
-    run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version="unknown")
+    run = stig.scan_run(findings, status=model.ScanStatus.FAILED)
     bundle = write_bundle(tmp_path / "bundles", run, None)
     content = tmp_path / "content.xml"
     content.write_text(stig.data_stream(stig.benchmark_xml()), encoding="utf-8")
@@ -197,6 +197,72 @@ def test_a_failed_run_without_results_uses_the_supplied_content(stig: Any, tmp_p
     assert run_cli(tmp_path, *arguments) == 0
     cklb = tmp_path / "cklb" / "web01.example_Synthetic_Linux_STIG.cklb"
     assert set(checklist_formats.read_cklb(cklb.read_bytes()).values()) == {"not_reviewed"}
+
+
+@pytest.mark.parametrize("content_version", ["001.001.000"])
+def test_a_failed_run_is_refused_content_of_another_version(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str], content_version: str
+) -> None:
+    findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
+    run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version=content_version)
+    bundle = write_bundle(tmp_path / "bundles", run, None)
+    content = tmp_path / "content.xml"
+    content.write_text(stig.benchmark_xml(), encoding="utf-8")
+    error = refused(
+        tmp_path, capsys, "--evidence-bundle", str(bundle), "--checklist-content", str(content)
+    )
+    assert f"version {content_version} (found: none)" in error
+
+
+def test_a_failed_run_without_a_recorded_version_exports_not_reviewed_and_says_so(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
+    run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version="unknown")
+    bundle = write_bundle(tmp_path / "bundles", run, None)
+    content = tmp_path / "content.xml"
+    content.write_text(
+        stig.data_stream(stig.benchmark_xml(version="009.009.009")), encoding="utf-8"
+    )
+    arguments = ("--evidence-bundle", str(bundle), "--checklist-content", str(content))
+    assert run_cli(tmp_path, *arguments) == 0
+    assert "pins no DISA rule to STIG ID pair" in capsys.readouterr().err
+    cklb = tmp_path / "cklb" / "web01.example_Synthetic_Linux_STIG.cklb"
+    document = json.loads(cklb.read_text())
+    assert set(checklist_formats.read_cklb(cklb.read_bytes()).values()) == {"not_reviewed"}
+    comment = document["target_data"]["comments"]
+    assert "recorded no content version" in comment
+    assert "unverified" in comment
+    assert "pins no DISA rule to STIG ID pair" in comment
+
+
+def test_a_failed_run_without_a_version_still_needs_exactly_one_content(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
+    run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version="unknown")
+    bundle = write_bundle(tmp_path / "bundles", run, None)
+    error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+    assert "(found: none)" in error
+
+
+def test_a_completed_run_without_a_recorded_version_is_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bundle = write_bundle(tmp_path / "bundles", stig.scan_run(version="unknown"), own_results(stig))
+    error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+    assert "recorded no content version" in error
+
+
+def test_a_failed_run_with_results_of_another_version_is_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = tuple(stig.finding(number, model.Outcome.ERROR) for number in (1, 2))
+    run = stig.scan_run(findings, status=model.ScanStatus.FAILED, version="001.001.000")
+    results = stig.benchmark_xml(test_result=stig.result_xml(findings=findings))
+    bundle = write_bundle(tmp_path / "bundles", run, results)
+    error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+    assert "the scan run (status failed) evaluated version 001.001.000" in error
 
 
 def test_scan_run_json_exports_with_the_supplied_content(stig: Any, tmp_path: Path) -> None:
@@ -236,7 +302,10 @@ def test_a_bundle_with_applied_exceptions_exports_the_waiver_as_open(
 ) -> None:
     findings = (stig.finding(1, model.Outcome.PASS), stig.finding(2, model.Outcome.FAIL))
     bundle = write_bundle(
-        tmp_path / "bundles", stig.scan_run(findings), own_results(stig), exceptions_text=EXCEPTIONS
+        tmp_path / "bundles",
+        stig.scan_run(findings),
+        own_results(stig, findings=findings),
+        exceptions_text=EXCEPTIONS,
     )
     reviewed = tmp_path / "exceptions.yml"
     reviewed.write_text(EXCEPTIONS, encoding="utf-8")
@@ -321,7 +390,7 @@ def test_unreadable_supplied_content_is_refused(
 @pytest.mark.parametrize(
     ("results", "message"),
     [
-        ("<x>", "the bundle's XCCDF results cannot be read"),
+        ("<x>", "the bundle's XCCDF results cannot be cross-checked"),
         ("other-profile", "do not hold exactly one benchmark"),
         ("other-benchmark", "do not hold exactly one benchmark"),
         ("old-version", "the content is version 001.001.000"),
@@ -420,3 +489,156 @@ def test_a_checklist_that_does_not_read_back_is_never_written(stig: Any) -> None
         checklist_export.verify_read_back(
             made, ckl.replace("<STATUS>Open<", "<STATUS>NotAFinding<"), cklb
         )
+
+
+def kept(finding: model.Finding, result: str) -> model.Finding:
+    return replace(finding, evidence=(model.Evidence("scanner_result", "scc", result),))
+
+
+def bundle_refused(
+    stig: Any,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    run: model.ScanRun,
+    results: str,
+) -> str:
+    bundle = write_bundle(tmp_path / "bundles", run, stig.benchmark_xml(test_result=results))
+    return refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+
+
+def test_results_that_state_another_result_than_the_run_are_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = (stig.finding(1, model.Outcome.PASS), stig.finding(2, model.Outcome.FAIL))
+    swapped = (stig.finding(1, model.Outcome.FAIL), stig.finding(2, model.Outcome.FAIL))
+    error = bundle_refused(
+        stig, tmp_path, capsys, stig.scan_run(findings), stig.result_xml(findings=swapped)
+    )
+    assert "do not match the scan run run-web01 in 1 rule(s)" in error
+    assert f"{stig.rule_id(1)}: reported as pass, results say fail" in error
+    assert "an inconsistent bundle is never exported" in error
+
+
+def test_a_rule_the_results_lack_is_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = (stig.finding(1, model.Outcome.PASS), stig.finding(2, model.Outcome.FAIL))
+    results = stig.result_xml(findings=findings[:1])
+    error = bundle_refused(stig, tmp_path, capsys, stig.scan_run(findings), results)
+    assert f"{stig.rule_id(2)}: reported as fail, results say absent" in error
+
+
+def test_a_selected_rule_the_run_lacks_is_refused_but_a_notselected_one_is_not(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    findings = (stig.finding(1, model.Outcome.PASS),)
+    extra = (stig.finding(2, model.Outcome.FAIL),)
+    results = stig.result_xml(findings=findings + extra)
+    error = bundle_refused(stig, tmp_path, capsys, stig.scan_run(findings), results)
+    assert f"{stig.rule_id(2)}: in the results (fail), not in the run" in error
+    unselected = stig.result_xml(findings=findings).replace(
+        "</TestResult>",
+        f'<rule-result idref="{stig.rule_id(2)}"><result>notselected</result></rule-result>'
+        "</TestResult>",
+    )
+    bundle = write_bundle(
+        tmp_path / "ok", stig.scan_run(findings), stig.benchmark_xml(test_result=unselected)
+    )
+    assert run_cli(tmp_path, "--evidence-bundle", str(bundle)) == 0
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("pass", "pass", True),
+        ("fail", "fail", True),
+        ("pass", "fail", False),
+        ("none", None, True),
+        ("pass", None, False),
+    ],
+)
+def test_a_rule_that_scc_scanned_and_a_toggle_disabled_matches_scc_result(
+    stig: Any,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    case: tuple[str, str | None, bool],
+) -> None:
+    scanned, listed, outcome = case
+    disabled = kept(
+        stig.finding(1, model.Outcome.DISABLED, disabled_by="linux_compliance_ssh_enabled"),
+        scanned,
+    )
+    others = (stig.finding(2, model.Outcome.PASS),)
+    results = stig.rule_results(others)
+    if listed is not None:
+        results += f'<rule-result idref="{stig.rule_id(1)}"><result>{listed}</result></rule-result>'
+    results = stig.result_xml(findings=()).replace("</TestResult>", f"{results}</TestResult>")
+    run = stig.scan_run((disabled, *others))
+    bundle = write_bundle(tmp_path / "bundles", run, stig.benchmark_xml(test_result=results))
+    if outcome:
+        assert run_cli(tmp_path, "--evidence-bundle", str(bundle)) == 0
+    else:
+        error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+        assert f"{stig.rule_id(1)}: scanner result {scanned}, results say " in error
+
+
+@pytest.mark.parametrize(
+    ("listed", "outcome"), [(None, True), ("notselected", True), ("pass", False)]
+)
+def test_a_rule_that_a_tailoring_file_disabled_is_not_selected_in_the_results(
+    stig: Any,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    listed: str | None,
+    outcome: bool,
+) -> None:
+    disabled = replace(
+        stig.finding(1, model.Outcome.DISABLED, disabled_by="linux_compliance_ssh_enabled"),
+        evidence=(model.Evidence("note", "openscap", "excluded by tailoring"),),
+    )
+    others = (stig.finding(2, model.Outcome.PASS),)
+    results = stig.result_xml(findings=others)
+    if listed is not None:
+        results = results.replace(
+            "</TestResult>",
+            f'<rule-result idref="{stig.rule_id(1)}"><result>{listed}</result></rule-result>'
+            "</TestResult>",
+        )
+    run = stig.scan_run((disabled, *others))
+    bundle = write_bundle(tmp_path / "bundles", run, stig.benchmark_xml(test_result=results))
+    if outcome:
+        assert run_cli(tmp_path, "--evidence-bundle", str(bundle)) == 0
+    else:
+        error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+        assert f"{stig.rule_id(1)}: disabled, results say pass" in error
+
+
+def test_a_toggled_scc_rule_prints_the_real_scanner_result(stig: Any, tmp_path: Path) -> None:
+    toggled = kept(
+        stig.finding(1, model.Outcome.DISABLED, disabled_by="linux_compliance_ssh_enabled"),
+        "fail",
+    )
+    run = stig.scan_run((toggled, stig.finding(2, model.Outcome.PASS)))
+    run_path = tmp_path / "scan-run.json"
+    run_path.write_text(model.dumps(run), encoding="utf-8")
+    content = tmp_path / "content.xml"
+    content.write_text(stig.benchmark_xml(), encoding="utf-8")
+    assert run_cli(tmp_path, "--scan-run", str(run_path), "--checklist-content", str(content)) == 0
+    document = json.loads(
+        (tmp_path / "cklb" / "web01.example_Synthetic_Linux_STIG.cklb").read_text()
+    )
+    details = document["stigs"][0]["rules"][0]["finding_details"].splitlines()
+    assert "Scanner result: fail" in details
+    assert "Reported outcome: disabled" in details
+    ckl = (tmp_path / "ckl" / "web01.example_Synthetic_Linux_STIG.ckl").read_text()
+    assert "Scanner result: fail" in ckl
+    assert "Scanner result: disabled" not in ckl
+
+
+def test_results_that_the_content_reader_rejects_are_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    results = own_results(stig).replace('severity="high"', 'severity="bogus"')
+    bundle = write_bundle(tmp_path / "bundles", stig.scan_run(), results)
+    error = refused(tmp_path, capsys, "--evidence-bundle", str(bundle))
+    assert "the bundle's XCCDF results cannot be read" in error

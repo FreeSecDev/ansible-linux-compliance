@@ -51,8 +51,19 @@ WAIVER = model.ExceptionStatus(
 )
 
 
+DISA_BENCHMARK = "xccdf_mil.disa.stig_benchmark_Synthetic_Linux_STIG"
+PAIRS: dict[str, str] = {
+    f"SV-90{number:04d}r1_rule": f"SYN-00-{number:06d}" for number in range(1, 10)
+}
+
+
 def mapping_document(
-    checks: dict[str, list[str]] | None = None, *, release: str = "V1R2", sha: str = CAC_SHA
+    checks: dict[str, list[str]] | None = None,
+    *,
+    release: str = "V1R2",
+    sha: str = CAC_SHA,
+    benchmark: str = DISA_BENCHMARK,
+    pairs: dict[str, str] | None = None,
 ) -> dict[str, object]:
     table = CHECKS if checks is None else checks
     return {
@@ -71,7 +82,9 @@ def mapping_document(
                     {
                         "profile_id": CAC_PROFILE,
                         "stig_release": release,
+                        "disa_benchmark_id": benchmark,
                         "stig_ids": {key: [CAC + rule for rule in table[key]] for key in table},
+                        "disa_rules": PAIRS if pairs is None else pairs,
                         "rules_without_stig_id": [CAC + "unmapped"],
                     }
                 ],
@@ -209,6 +222,7 @@ def test_compliance_as_code_findings_export_through_the_mapping(stig: Any, tmp_p
     assert "Waiver: exception EXC-CAC-1 was in effect" in by_id["SYN-00-000008"]["comments"]
     assert document["target_data"]["ip_address"] == ""
     assert "2 finding(s) check no rule of this STIG" in document["target_data"]["comments"]
+    assert "9 DISA rule(s) of the content were checked" in document["target_data"]["comments"]
     assert "for DISA release V1R2 (disa-content.xml)" in document["target_data"]["comments"]
     assert document["stigs"][0]["stig_name"] == "Synthetic Linux STIG SCAP Benchmark"
 
@@ -277,6 +291,46 @@ def test_the_disa_content_must_be_exactly_one_benchmark_with_the_stig_ids(
     without = [item for item in arguments if not item.endswith("disa-content.xml")]
     without.remove("--checklist-content")
     assert "(found: none)" in refused(tmp_path, capsys, *without)
+
+
+def test_another_disa_benchmark_than_the_pinned_one_is_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pinned = mapping_document(benchmark="xccdf_mil.disa.stig_benchmark_Pinned_STIG")
+    error = refused(tmp_path, capsys, *files(tmp_path, stig, cac_run(), mapping=pinned))
+    assert "is the benchmark xccdf_mil.disa.stig_benchmark_Synthetic_Linux_STIG" in error
+    assert "implements the DISA benchmark xccdf_mil.disa.stig_benchmark_Pinned_STIG" in error
+
+
+def test_content_that_contradicts_the_pinned_pairs_is_refused(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    swapped = {**PAIRS, "SV-900001r1_rule": "SYN-00-000002", "SV-900002r1_rule": "SYN-00-000001"}
+    document = mapping_document(pairs=swapped)
+    error = refused(tmp_path, capsys, *files(tmp_path, stig, cac_run(), mapping=document))
+    assert "contradicts the pinned STIG mapping in 2 rule(s)" in error
+    assert (
+        "SV-900001r1_rule has the STIG ID SYN-00-000001, but the STIG mapping pairs it with "
+        "SYN-00-000002"
+    ) in error
+
+
+def test_content_of_a_run_that_is_not_mapped_is_checked_against_the_pinned_benchmark(
+    stig: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    scc_path = tmp_path / "scc.json"
+    scc_path.write_text(model.dumps(stig.scan_run()), encoding="utf-8")
+    content = tmp_path / "content.xml"
+    content.write_text(stig.benchmark_xml(), encoding="utf-8")
+    mapping_path = tmp_path / "stig-mapping.json"
+    arguments = ["--scan-run", str(scc_path), "--checklist-content", str(content)]
+    mapping_path.write_text(json.dumps(mapping_document()), encoding="utf-8")
+    assert export(tmp_path, *arguments, "--stig-mapping", str(mapping_path)) == 0
+    capsys.readouterr()
+    contradicting = mapping_document(pairs={**PAIRS, "SV-900001r1_rule": "SYN-00-000002"})
+    mapping_path.write_text(json.dumps(contradicting), encoding="utf-8")
+    assert export(tmp_path, *arguments, "--stig-mapping", str(mapping_path)) == 2
+    assert "contradicts the pinned STIG mapping in 1 rule(s)" in capsys.readouterr().err
 
 
 def test_an_invalid_mapping_file_is_refused(
