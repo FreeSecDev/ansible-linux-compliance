@@ -1050,6 +1050,27 @@ Decision 9 and decision 7 of the FREES-161 amendment are implemented by
   The path filter runs it for changes to the exporter and to ADR 0020; that takes effect once the filter is merged
   (FREES-152).
 
+## Note 2026-10-27: the STIG to ComplianceAsCode mapping (FREES-146)
+
+Decision 8 is built in part, as the
+[ADR 0020 amendment](0020-stig-viewer-checklist-export.md#amendment-2026-10-27-complianceascode-findings-through-the-stig-mapping-frees-146)
+records:
+
+- **The mapping is a pinned derived table, `content/stig-mapping.json`.** It is generated from the pinned
+  ComplianceAsCode streams alone, not from a join with a pinned DISA file. Two observations drove this. The DISA
+  benchmark is not in `content/manifest.yml`; only SCC's installed copy is pinned, by `SCC_CONTENT_SHA256`, and it may
+  not be committed. The ComplianceAsCode STIG profile states the DISA release it implements (`V1R5`).
+- **The join with DISA content happens at export time, on the STIG ID**, with the DISA content that the operator
+  supplies. A release mismatch refuses the export.
+- `oscap` results of the ComplianceAsCode STIG profile now export as checklists. `--compare-stig` compares them with
+  an SCC run of the same host, by DISA STIG rule.
+- `make scc-integration` also builds the CI-only OpenSCAP image `OSCAP_IMAGE` (`extensions/ci/oscap/Containerfile`).
+  The image has the SCC image's pinned base and the `openscap-scanner` of the `oscap-integration` job, and is removed
+  by `make scc-image-clean`. The test scans that image, then exports and compares the run inside the SCC image.
+- **Still open: toggles and control families for SCC findings.** Disabled toggles do not yet exclude mapped SCC rules
+  through SCC's tailoring, and SCC findings are not yet grouped by control family. The backend still refuses
+  `disabled_rules`. The mapping file is the input for both.
+
 ## References
 
 - NIWC Atlantic SCC release record and archive: <https://github.com/niwc-atlantic/scap-scc> (`scc_release.xml`,

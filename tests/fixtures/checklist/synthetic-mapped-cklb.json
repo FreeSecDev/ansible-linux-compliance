@@ -1,0 +1,544 @@
+{
+  "title": "Synthetic Linux STIG SCAP Benchmark",
+  "id": "8c9c64e4-9da5-5c8f-8506-8199b7cf6fe7",
+  "active": false,
+  "mode": 1,
+  "has_path": true,
+  "target_data": {
+    "target_type": "Computing",
+    "host_name": "web01.example",
+    "ip_address": "",
+    "mac_address": "",
+    "fqdn": "",
+    "comments": "Exported by freesecdev.linux_compliance (tools.reporting) from scan run run-oscap (oscap 1.3.9, content ssg-synthetic-ds.xml 0.1.82 sha256 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc). The host identity (web01.example, ubuntu 24.04, x86_64) and the addresses are self-asserted by the scanned host. Each status aggregates the ComplianceAsCode checks that the STIG mapping of ssg-synthetic-ds.xml (ComplianceAsCode 0.1.82, sha256 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) lists for the rule's STIG ID, for DISA release V1R2 (disa.xml): a rule is Not a Finding only when every mapped check passed. 2 finding(s) check no rule of this STIG and are not in the checklist.",
+    "role": "None",
+    "is_web_database": false,
+    "technology_area": "",
+    "web_db_site": "",
+    "web_db_instance": ""
+  },
+  "stigs": [
+    {
+      "stig_name": "Synthetic Linux STIG SCAP Benchmark",
+      "display_name": "Synthetic Linux STIG SCAP Benchmark",
+      "stig_id": "Synthetic_Linux_STIG",
+      "release_info": "Release: 2 Benchmark Date: 01 Oct 2026",
+      "version": "001.002.003",
+      "uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+      "size": 10,
+      "rules": [
+        {
+          "uuid": "910df8b4-9b39-56c0-aaab-c49986feab35",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900001",
+          "rule_id": "SV-900001r1",
+          "rule_id_src": "SV-900001r1_rule",
+          "weight": "10.0",
+          "severity": "high",
+          "rule_version": "SYN-00-000001",
+          "group_title": "SRG-SYN-000001",
+          "rule_title": "Synthetic requirement 1 must hold",
+          "fix_text": "Synthetic fix 1.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 1 & notes",
+          "check_content": "Synthetic check 1.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:1"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000001"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900001",
+              "title": "SRG-SYN-000001",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_a_finding",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Mapped by STIG ID SYN-00-000001 to 1 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_one: Not a Finding\n  Scanner result: pass\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "2d489602-b31c-5b38-ae40-48c2d9061409",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900002",
+          "rule_id": "SV-900002r1",
+          "rule_id_src": "SV-900002r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000002",
+          "group_title": "SRG-SYN-000002",
+          "rule_title": "Synthetic requirement 2 must hold",
+          "fix_text": "Synthetic fix 2.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 2 & notes",
+          "check_content": "Synthetic check 2.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:2"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000002"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900002",
+              "title": "SRG-SYN-000002",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "open",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Mapped by STIG ID SYN-00-000002 to 2 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_many_fail: Open\n  Scanner result: fail\n  Message: value is 0; expected 1\nComplianceAsCode check xccdf_org.ssgproject.content_rule_many_pass: Not a Finding\n  Scanner result: pass\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "bfb83012-84cd-5bae-8e48-6c0d244e276c",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900003",
+          "rule_id": "SV-900003r1",
+          "rule_id_src": "SV-900003r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000003",
+          "group_title": "SRG-SYN-000003",
+          "rule_title": "Synthetic requirement 3 must hold",
+          "fix_text": "Synthetic fix 3.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 3 & notes",
+          "check_content": "Synthetic check 3.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:3"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000003"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900003",
+              "title": "SRG-SYN-000003",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_a_finding",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Mapped by STIG ID SYN-00-000003 to 2 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_both_a: Not a Finding\n  Scanner result: pass\nComplianceAsCode check xccdf_org.ssgproject.content_rule_both_b: Not a Finding\n  Scanner result: pass\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "f90f2596-56f2-5f15-8015-45a9eca5d6c3",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900004",
+          "rule_id": "SV-900004r1",
+          "rule_id_src": "SV-900004r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000004",
+          "group_title": "SRG-SYN-000004",
+          "rule_title": "Synthetic requirement 4 must hold",
+          "fix_text": "Synthetic fix 4.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 4 & notes",
+          "check_content": "Synthetic check 4.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:4"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000004"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900004",
+              "title": "SRG-SYN-000004",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Not reviewed: the 2 ComplianceAsCode checks of this STIG rule disagree (Not a Finding: 1, Not Applicable: 1); the rule is Not a Finding only when every mapped check passed.\nMapped by STIG ID SYN-00-000004 to 2 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_mixed_na: Not Applicable\n  Scanner result: notapplicable\nComplianceAsCode check xccdf_org.ssgproject.content_rule_mixed_pass: Not a Finding\n  Scanner result: pass\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "b181c524-54dc-5709-88ee-65540883c226",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900005",
+          "rule_id": "SV-900005r1",
+          "rule_id_src": "SV-900005r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000005",
+          "group_title": "SRG-SYN-000005",
+          "rule_title": "Synthetic requirement 5 must hold",
+          "fix_text": "Synthetic fix 5.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 5 & notes",
+          "check_content": "Synthetic check 5.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:5"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000005"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900005",
+              "title": "SRG-SYN-000005",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_a_finding",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Mapped by STIG ID SYN-00-000005 to 1 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_shared: Not a Finding\n  Scanner result: pass\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "a6e0a9a1-061d-5067-bd6a-d148bb0b7d21",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900006",
+          "rule_id": "SV-900006r1",
+          "rule_id_src": "SV-900006r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000006",
+          "group_title": "SRG-SYN-000006",
+          "rule_title": "Synthetic requirement 6 must hold",
+          "fix_text": "Synthetic fix 6.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 6 & notes",
+          "check_content": "Synthetic check 6.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:6"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000006"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900006",
+              "title": "SRG-SYN-000006",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_a_finding",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Mapped by STIG ID SYN-00-000006 to 1 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_shared: Not a Finding\n  Scanner result: pass\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "c5f969b7-602d-50bc-82b3-27d91e3edcfd",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900007",
+          "rule_id": "SV-900007r1",
+          "rule_id_src": "SV-900007r1_rule",
+          "weight": "10.0",
+          "severity": "high",
+          "rule_version": "SYN-00-000007",
+          "group_title": "SRG-SYN-000007",
+          "rule_title": "Synthetic requirement 7 must hold",
+          "fix_text": "Synthetic fix 7.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 7 & notes",
+          "check_content": "Synthetic check 7.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:7"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000007"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900007",
+              "title": "SRG-SYN-000007",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Not reviewed: the scan run has no result for this rule; profile xccdf_org.ssgproject.content_profile_stig does not select it, or it was not evaluated.\nMapped by STIG ID SYN-00-000007 to 1 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_missing: Not Reviewed\n  Not reviewed: the scan run has no result for this rule; profile xccdf_org.ssgproject.content_profile_stig does not select it, or it was not evaluated.\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "24eb74f3-385a-50e6-a999-62aecbb246b9",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900008",
+          "rule_id": "SV-900008r1",
+          "rule_id_src": "SV-900008r1_rule",
+          "weight": "10.0",
+          "severity": "medium",
+          "rule_version": "SYN-00-000008",
+          "group_title": "SRG-SYN-000008",
+          "rule_title": "Synthetic requirement 8 must hold",
+          "fix_text": "Synthetic fix 8.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 8 & notes",
+          "check_content": "Synthetic check 8.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:8"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000008"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900008",
+              "title": "SRG-SYN-000008",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "open",
+          "overrides": {},
+          "comments": "Waiver: exception EXC-CAC-1 was in effect for this scan and expires 2027-01-31T00:00:00Z. The scanner's result is fail. A waiver never changes the checklist status and is not a review that the requirement is met.\nException reason: Accepted risk of a synthetic check",
+          "finding_details": "Mapped by STIG ID SYN-00-000008 to 1 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_waived: Open\n  Scanner result: fail\n  Reported outcome: waived\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "25d57198-1f97-5c18-8329-4cdb03e1a947",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900009",
+          "rule_id": "SV-900009r1",
+          "rule_id_src": "SV-900009r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000009",
+          "group_title": "SRG-SYN-000009",
+          "rule_title": "Synthetic requirement 9 must hold",
+          "fix_text": "Synthetic fix 9.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 9 & notes",
+          "check_content": "Synthetic check 9.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:9"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000009"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900009",
+              "title": "SRG-SYN-000009",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Not reviewed: the scanner reported fixed, and a remediation result is not a review.\nMapped by STIG ID SYN-00-000009 to 1 ComplianceAsCode check(s) of profile xccdf_org.ssgproject.content_profile_stig:\nComplianceAsCode check xccdf_org.ssgproject.content_rule_fixed: Not Reviewed\n  Not reviewed: the scanner reported fixed, and a remediation result is not a review.\n  Scanner result: pass\n  Flags: fixed\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        },
+        {
+          "uuid": "26ce87a4-cc7c-5c9c-9855-0336c790127b",
+          "stig_uuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "target_key": "9999",
+          "stig_ref": null,
+          "group_id": "V-900010",
+          "rule_id": "SV-900010r1",
+          "rule_id_src": "SV-900010r1_rule",
+          "weight": "10.0",
+          "severity": "low",
+          "rule_version": "SYN-00-000010",
+          "group_title": "SRG-SYN-000010",
+          "rule_title": "Synthetic requirement 10 must hold",
+          "fix_text": "Synthetic fix 10.",
+          "false_positives": "",
+          "false_negatives": "",
+          "discussion": "Synthetic discussion 10 & notes",
+          "check_content": "Synthetic check 10.",
+          "documentable": "false",
+          "mitigations": "",
+          "potential_impacts": "",
+          "third_party_tools": "",
+          "mitigation_control": "",
+          "responsibility": "",
+          "security_override_guidance": "",
+          "ia_controls": "",
+          "check_content_ref": {
+            "href": "synthetic-oval.xml",
+            "name": "oval:syn:def:10"
+          },
+          "legacy_ids": [
+            "SV-1"
+          ],
+          "ccis": [
+            "CCI-000010"
+          ],
+          "group_tree": [
+            {
+              "id": "V-900010",
+              "title": "SRG-SYN-000010",
+              "description": "<GroupDescription></GroupDescription>"
+            }
+          ],
+          "createdAt": "2026-10-26T10:05:00.000Z",
+          "updatedAt": "2026-10-26T10:05:00.000Z",
+          "STIGUuid": "c2a49e97-0319-5843-9018-da0d09e933e7",
+          "status": "not_reviewed",
+          "overrides": {},
+          "comments": "",
+          "finding_details": "Not reviewed: no ComplianceAsCode check: profile xccdf_org.ssgproject.content_profile_stig maps no rule to the STIG ID SYN-00-000010.\nScan run run-oscap: oscap 1.3.9, 2026-10-26T10:00:00Z to 2026-10-26T10:05:00Z, profile xccdf_org.ssgproject.content_profile_stig"
+        }
+      ]
+    }
+  ],
+  "cklb_version": "1.0"
+}

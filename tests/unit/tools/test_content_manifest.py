@@ -80,6 +80,7 @@ def test_the_repository_holds_no_downloaded_content() -> None:
     assert sorted(item.name for item in (REPOSITORY_ROOT / "content").iterdir()) == [
         "catalogue.yml",
         "manifest.yml",
+        "stig-mapping.json",
     ]
     ignored = (REPOSITORY_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "*.zip" in ignored

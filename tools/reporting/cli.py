@@ -29,9 +29,14 @@ reason is printed on standard error. Status 3 still takes precedence.
 checklist per host and DISA STIG benchmark, from the same scan inputs, with the status
 mapping of ADR 0020. ``--checklist-content FILE`` names DISA content for runs whose
 evidence bundle holds no XCCDF results, and for ScanRun JSON and evaluations. When an
-input that parsed cannot be exported honestly (for example ComplianceAsCode findings
-before the mapping of FREES-146), nothing is written and the status is 2. Checklists
-are written atomically with mode 0600 into directories created with mode 0700.
+input that parsed cannot be exported honestly (for example ComplianceAsCode findings of a
+profile that the STIG mapping of FREES-146 does not cover), nothing is written and the
+status is 2. ComplianceAsCode findings of a mapped STIG profile are exported through
+``--stig-mapping FILE`` (default ``content/stig-mapping.json``) with the DISA content of
+``--checklist-content``. ``--compare-stig FILE`` writes, from the same inputs, a JSON
+comparison of an SCC run and an OpenSCAP run of each host by DISA STIG rule. Checklists
+and the comparison are written atomically with mode 0600 into directories created with
+mode 0700.
 """
 
 import argparse
@@ -43,7 +48,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 from tools.reporting.checklist import ChecklistError
-from tools.reporting.checklist_export import ExportRequest
+from tools.reporting.checklist_export import PRIVATE_OUTPUTS, ExportRequest
 from tools.reporting.checklist_export import outputs as checklist_outputs
 from tools.reporting.common import DEFAULT_MAX_BYTES, Json, dig, dumps
 from tools.reporting.dashboard import DashboardError, render_dashboard
@@ -58,6 +63,7 @@ from tools.reporting.report import (
     has_error,
     has_gap,
 )
+from tools.reporting.stig_mapping import DEFAULT_PATH as STIG_MAPPING
 
 EXIT_OK: Final[int] = 0
 EXIT_SECTION_ERROR: Final[int] = 1
@@ -148,7 +154,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         type=Path,
         help="DISA STIG content (XCCDF 1.2 benchmark or results, or a SCAP source data stream) "
-        "for the checklists of runs whose evidence bundle holds no XCCDF results",
+        "for the checklists of runs whose evidence bundle holds no XCCDF results, and of "
+        "ComplianceAsCode runs exported through the STIG mapping",
+    )
+    parser.add_argument(
+        "--stig-mapping",
+        type=Path,
+        default=STIG_MAPPING,
+        help="the STIG to ComplianceAsCode mapping that ComplianceAsCode STIG profile runs are "
+        "exported through (default: content/stig-mapping.json of this repository)",
+    )
+    parser.add_argument(
+        "--compare-stig",
+        type=Path,
+        default=None,
+        help="also write a JSON comparison of an SCC run and an OpenSCAP run of each host by "
+        "DISA STIG rule, listing every rule whose checklist statuses differ",
     )
     for name in INPUT_OPTIONS:
         parser.add_argument(
@@ -209,11 +230,14 @@ def _checklists(
 ) -> list[tuple[Path, str, str]] | None:
     ckl = cast("Path | None", arguments["export_ckl"])
     cklb = cast("Path | None", arguments["export_cklb"])
+    comparison = cast("Path | None", arguments["compare_stig"])
     content = tuple(cast("list[Path]", arguments["checklist_content"]))
-    if ckl is None and cklb is None:
+    if ckl is None and cklb is None and comparison is None:
         return []
+    mapping = cast("Path", arguments["stig_mapping"])
+    request = ExportRequest(ckl, cklb, content, max_bytes, mapping, comparison)
     try:
-        return checklist_outputs(ExportRequest(ckl, cklb, content, max_bytes), scan)
+        return checklist_outputs(request, scan)
     except ChecklistError as error:
         print(f"error: no checklist was written: {error}", file=sys.stderr)
         return None
@@ -222,7 +246,7 @@ def _checklists(
 def _write(outputs: list[tuple[Path, str, str]]) -> bool:
     for path, content, name in outputs:
         try:
-            if name.endswith("checklist"):
+            if name in PRIVATE_OUTPUTS:
                 path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             write_atomic(path, content)
         except OSError as error:
@@ -237,9 +261,11 @@ def _inputs(arguments: dict[str, Any]) -> ReportInputs | str:
     html: Path | None = arguments["html"]
     if html is not None and html.resolve() == output.resolve():
         return "--html and --output must name different files"
-    exporting = arguments["export_ckl"] is not None or arguments["export_cklb"] is not None
+    exporting = any(
+        arguments[name] is not None for name in ("export_ckl", "export_cklb", "compare_stig")
+    )
     if arguments["checklist_content"] and not exporting:
-        return "--checklist-content needs --export-ckl or --export-cklb"
+        return "--checklist-content needs --export-ckl, --export-cklb or --compare-stig"
     try:
         metadata = RunMetadata(**{name: arguments[name] for name in METADATA_OPTIONS})
     except ReportError as error:

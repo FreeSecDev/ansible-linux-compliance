@@ -2,8 +2,9 @@
 
 The tests run only against local images whose tags start with ``localhost/``,
 given in ``FREESECDEV_SCC_IMAGE`` and, for the Ubuntu 26.04 off-platform case
-(FREES-161), ``FREESECDEV_SCC_IMAGE_UBUNTU2604`` (``make scc-integration`` sets
-both). They never
+(FREES-161), ``FREESECDEV_SCC_IMAGE_UBUNTU2604``, and for the OpenSCAP STIG checklist
+export (FREES-146) ``FREESECDEV_OSCAP_IMAGE`` (``make scc-integration`` sets all three).
+They never
 build, tag or transfer an image; ``make scc-image`` builds it and
 ``make scc-image-clean`` removes it. Without the variable the tests skip, and with
 ``FREESECDEV_REQUIRE_SCC=1`` (CI) a skip is a failure.
@@ -15,6 +16,7 @@ the project's site packages at ``/site`` and the repository at ``/src``.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -30,6 +32,7 @@ import pytest
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 IMAGE_VARIABLE = "FREESECDEV_SCC_IMAGE"
 IMAGE_UBUNTU2604_VARIABLE = "FREESECDEV_SCC_IMAGE_UBUNTU2604"
+OSCAP_IMAGE_VARIABLE = "FREESECDEV_OSCAP_IMAGE"
 REQUIRE_VARIABLE = "FREESECDEV_REQUIRE_SCC"
 LOCAL_TAG = re.compile(r"localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+")
 PYTHON_MOUNT = "/opt/py"
@@ -123,6 +126,36 @@ def driver_report(output: str) -> dict[str, object]:
     report: object = json.loads(lines[-1])
     assert isinstance(report, dict)
     return cast("dict[str, object]", report)
+
+
+@functools.cache
+def scc_scan_report(image_tag: str) -> dict[str, object]:
+    """Return the driver's report of the real SCC scan in ``image_tag``, run once per session."""
+    output = run(
+        [
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            *hardening(),
+            *python_mounts(),
+            "--entrypoint",
+            interpreter(),
+            image_tag,
+            "-s",
+            DRIVER,
+            "scan",
+            "--repository",
+            SOURCE_MOUNT,
+            "--site-packages",
+            SITE_MOUNT,
+            "--content",
+            f"{CONTENT_DIRECTORY}/{pin('SCC_CONTENT_FILE')}",
+            "--sha256",
+            pin("SCC_CONTENT_SHA256"),
+        ]
+    )
+    return driver_report(output)
 
 
 def report_line(label: str, data: object) -> None:
