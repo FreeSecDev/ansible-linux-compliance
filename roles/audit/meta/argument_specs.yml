@@ -140,7 +140,7 @@ argument_specs:
         default: true
         description:
           - "Topic toggle of the banners family (ADR 0011); false switches its rules off."
-          - "Rules: 18, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 18, native: 15. Generated; see docs/remediation-variables.md."
       linux_compliance_integrity_enabled:
         type: bool
         default: true
@@ -426,7 +426,7 @@ argument_specs:
           - "Topic toggle of the pam family (ADR 0011); false switches its rules off."
           - "Also the umbrella of pwquality, pwhistory, faillock, which it switches off too."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 55, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
+          - "Rules: 55, native: 14, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_pwquality_enabled:
         type: bool
         default: true
@@ -434,7 +434,7 @@ argument_specs:
           - "Topic toggle of the pwquality family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_pam_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 19, native: 14. Generated; see docs/remediation-variables.md."
       linux_compliance_pwhistory_enabled:
         type: bool
         default: true

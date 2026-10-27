@@ -1,0 +1,226 @@
+---
+family: pwquality
+disruptive: true
+containment: >-
+  pwquality only writes drop-ins below /etc/security/pwquality.conf.d, which libpwquality reads when a password is
+  changed through pam_pwquality; on Ubuntu it also creates that directory with a marker and removes both again. The
+  harness never changes a password: it connects with docker exec through the Docker API as root, without sshd, PAM,
+  sudo or a login shell, so a password quality setting cannot cut it off, and the guard's connection test after every
+  remediate run proves that it still reaches the same unprivileged container. The PAM stack (topic pam) is never
+  touched, and the allow-list names pwquality only for the runs of this topic.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits every pwquality rule to the system_with_kernel platform, which excludes containers, so a
+    container audit reports them notapplicable whatever the configuration says. The drop-ins and their checksums under
+    applied are the evidence. On Ubuntu 24.04 the content checks only /etc/security/pwquality.conf, not the drop-in
+    directory that libpwquality also reads, so a host audit there reports the rules as failing even when the drop-ins
+    are in force (docs/native-remediation-guide.md, pwquality).
+state:
+  files:
+    - path: /etc/security/pwquality.conf
+    - path: /etc/security/pwquality.conf.d
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/.freesecdev-created
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-dcredit.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-dictcheck.conf
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-difok.conf
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-enforce-root.conf
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-enforcing.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-lcredit.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-maxrepeat.conf
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-maxsequence.conf
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-minclass.conf
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-minlen.conf
+      rewritten: true
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-ocredit.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-ucredit.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+  packages:
+    - name: libpam-pwquality
+      platforms:
+        - ubuntu
+    - name: libpwquality
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/security/pwquality.conf.d
+      exists: true
+      attributes: []
+      type: directory
+      mode: "0755"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/.freesecdev-created
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-dcredit.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: b45c2d6fb0f4c67b4005198c2da2c5768e34f7783f8e5602df37dcbf836bb479
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-dictcheck.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 259c40a5cead754afcc837d1b89f9eaec8094e09ca2147efeec0b89b077eb2ca
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-difok.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 1d87f782ec9664097b4763ce083f792eedbcee7a08c765b36b91f7e9dc72d1ce
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-enforce-root.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: dcc1ed6ee99d8904c62c82d452a48330788f3746b6bfce8cc12210fb03152e1a
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-enforcing.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 7e210c293cbacf05be7d94edf165ff28ced287fba9506cb70c379028212ae65c
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-lcredit.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 4d9dd26ce2ebacdd80ba266cbe50c8ada0212f0fe3ac65ffa4348390fd55327c
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-maxrepeat.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: c4c7eb2deb31da8c9a6db4070cad968fb4aa14e906a3aaa2a52b2f3ebfdf47a6
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-maxsequence.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: ec7f812d2ec10c829f61ea5e582db2e01bb8fd081496d846ba234aa4ae7f364f
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-minclass.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 1352e1ef45cb1287f8952f4c35db2a89efed46dcf7d30056637e1c91b4309559
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-minlen.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 81bba089cdbc01337b5c2bc711fce02d148dd1644cabeb615e517db5322f1f5d
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-ocredit.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 0ef82829a3d6ccb00c4415889c77615886f40066cc57b39ce4bdd4edd05004ae
+      platforms:
+        - ubuntu
+    - path: /etc/security/pwquality.conf.d/50-freesecdev-ucredit.conf
+      exists: true
+      attributes: []
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: b61ea13617248c5a36cabc74779bcc80c6579dcf90a138206076dc9aef07a160
+      platforms:
+        - ubuntu

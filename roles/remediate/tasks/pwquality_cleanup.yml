@@ -1,0 +1,107 @@
+---
+- name: Password quality | Refuse to remove a drop-in that the dispatcher did not plan to clean up
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'pwquality'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'pwquality'
+      - __linux_compliance_remediate_rule.parameters.path in __linux_compliance_remediate_pwq_owned
+      - __linux_compliance_remediate_rule.ledger_entry is mapping
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'pwquality') | list | first | default({}))).cleanup | default([])
+    fail_msg: >-
+      pwquality_cleanup.yml runs only for a rule that the remediate dispatcher planned to clean
+      up from its ledger entry, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Password quality | Inspect the drop-in before removing it
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_pwq_stat
+  tags:
+    - always
+
+- name: Password quality | Read the drop-in to check that the collection wrote it
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+  register: __linux_compliance_remediate_pwq_current
+  when: __linux_compliance_remediate_pwq_stat.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Password quality | Name the reason the drop-in cannot be removed
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_reason: >-
+      {{ 'not_regular_file' if __linux_compliance_remediate_pwq_stat.stat.exists
+              and not __linux_compliance_remediate_pwq_stat.stat.isreg
+         else 'not_owned' if __linux_compliance_remediate_pwq_current is not skipped
+              and not (__linux_compliance_remediate_pwq_current.content | b64decode).startswith(
+                '# Managed by freesecdev.linux_compliance for ' ~ __linux_compliance_remediate_rule.rule_id ~ '.')
+         else none }}
+  tags:
+    - always
+
+- name: Password quality | Remove the drop-in that the collection wrote
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    state: absent
+  register: __linux_compliance_remediate_pwq_removal
+  when:
+    - __linux_compliance_remediate_pwq_reason is none
+    - __linux_compliance_remediate_pwq_stat.stat.exists
+  tags:
+    - always
+
+- name: Password quality | Remember the drop-in that this run removes
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_removed: >-
+      {{ __linux_compliance_remediate_pwq_removed + [__linux_compliance_remediate_rule.parameters.path] }}
+  when: __linux_compliance_remediate_pwq_reason is none
+  tags:
+    - always
+
+- name: Password quality | Forget the rule in the state ledger after the removal
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  register: __linux_compliance_remediate_pwq_forget
+  when: __linux_compliance_remediate_pwq_reason is none
+  tags:
+    - always
+
+- name: Password quality | Add the result of the cleanup
+  vars:
+    __linux_compliance_remediate_pwq_cleanup_status: >-
+      {{ 'restored' if __linux_compliance_remediate_pwq_reason is none else 'cleanup_incomplete' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'cleanup',
+           'status': __linux_compliance_remediate_pwq_cleanup_status,
+           'reason': __linux_compliance_remediate_pwq_reason,
+           'changed': (__linux_compliance_remediate_pwq_removal is changed)
+                      or (__linux_compliance_remediate_pwq_forget is changed),
+           'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_pwq_cleanup_status
+                      ~ ((' (' ~ __linux_compliance_remediate_pwq_reason ~ ': '
+                          ~ __linux_compliance_remediate_rule.parameters.path
+                          ~ '; the ledger entry is kept and the cleanup is retried on the next run)')
+                         if __linux_compliance_remediate_pwq_reason else '')
+         }] }}
+  tags:
+    - always

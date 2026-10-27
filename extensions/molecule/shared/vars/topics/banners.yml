@@ -1,0 +1,96 @@
+---
+family: banners
+disruptive: false
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits the banner text rules (banner_etc_issue_cis, banner_etc_issue_net_cis,
+    banner_etc_motd_cis)
+    to the system_with_kernel platform, which excludes containers, so a container audit reports them notapplicable
+    whatever the files contain. Their effect is proven by the checksums under applied. The mode, owner and group
+    rules of the banner files have no such platform and must pass. The containers drop every capability, so root
+    cannot chown there: the owner and group rules can only be proven compliant on the as-built files, not changed and
+    restored; the customised pre-state therefore changes only the mode.
+state:
+  files:
+    - path: /etc/issue
+      rewritten: true
+    - path: /etc/issue.net
+      rewritten: true
+    - path: /etc/motd
+      rewritten: true
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/issue
+      checksum: 90d51d08111adff0f76821e4a94a1773f04e608ee0ba06a49a5138db4efd1c37
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+    - path: /etc/issue.net
+      checksum: 90d51d08111adff0f76821e4a94a1773f04e608ee0ba06a49a5138db4efd1c37
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+    - path: /etc/motd
+      exists: true
+      type: file
+      attributes: []
+      checksum: 90d51d08111adff0f76821e4a94a1773f04e608ee0ba06a49a5138db4efd1c37
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+pre_states:
+  - name: as built
+    audit: true
+    unchanged:
+      - rule: file_groupowner_etc_issue
+        status: compliant
+      - rule: file_groupowner_etc_issue_net
+        status: compliant
+      - rule: file_groupowner_etc_motd
+        status: compliant
+      - rule: file_owner_etc_issue
+        status: compliant
+      - rule: file_owner_etc_issue_net
+        status: compliant
+      - rule: file_owner_etc_motd
+        status: compliant
+      - rule: file_permissions_etc_issue
+        status: compliant
+      - rule: file_permissions_etc_issue_net
+        status: compliant
+      - rule: file_permissions_etc_motd
+        status: compliant
+  - name: customised mode
+    audit: false
+    files:
+      - path: /etc/issue
+        mode: "0664"
+      - path: /etc/issue.net
+        mode: "0664"
+    unchanged:
+      - rule: file_groupowner_etc_issue
+        status: compliant
+      - rule: file_groupowner_etc_issue_net
+        status: compliant
+      - rule: file_groupowner_etc_motd
+        status: compliant
+      - rule: file_owner_etc_issue
+        status: compliant
+      - rule: file_owner_etc_issue_net
+        status: compliant
+      - rule: file_owner_etc_motd
+        status: compliant
+      - rule: file_permissions_etc_motd
+        status: compliant

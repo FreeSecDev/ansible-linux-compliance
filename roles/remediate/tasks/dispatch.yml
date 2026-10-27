@@ -12,3 +12,31 @@
   when: __linux_compliance_remediate_family.name == 'file_permissions'
   tags:
     - always
+
+- name: Remediate | Dispatch the banners family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/banners.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'banners'
+  tags:
+    - always
+
+- name: Remediate | Dispatch the pwquality family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/pwquality.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'pwquality'
+  tags:
+    - always

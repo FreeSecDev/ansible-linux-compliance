@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    remediate - the ``banners`` topic is native: the text of ``/etc/issue``, ``/etc/issue.net``
+    and ``/etc/motd`` (new variable ``linux_compliance_remediate_banner_text``, validated against the
+    profile's XCCDF value) and their mode, owner and group, each rule recording and restoring only the
+    attribute it changes.
+  - >-
+    remediate - the ``pwquality`` topic is native: one owned drop-in per setting below
+    ``/etc/security/pwquality.conf.d`` with the value of the selected profile, removed again when the rule
+    or topic is switched off. It is disruptive and needs ``pwquality`` or ``pam`` in
+    ``linux_compliance_remediate_allow_disruptive``.
+  - >-
+    catalogue - native rules take the values of the XCCDF ``Value`` their check exports from the pinned
+    content, per content and profile (``profile_value`` in ``content/catalogue.yml``, ``value_id`` and
+    ``profile_values`` in the rule parameters).

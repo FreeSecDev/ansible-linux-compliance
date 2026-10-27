@@ -6,6 +6,7 @@
     lifecycle_compare_before: "{{ lifecycle_selfcheck_case.before }}"
     lifecycle_compare_after: "{{ lifecycle_selfcheck_case.after }}"
     lifecycle_compare_expected: "{{ lifecycle_selfcheck_case.expected }}"
+    lifecycle_rewritten: "{{ lifecycle_selfcheck_case.rewritten | default([]) }}"
 
 - name: Lifecycle self-check | Assert that the comparison finds exactly the mismatches of the case
   ansible.builtin.assert:

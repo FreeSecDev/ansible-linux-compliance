@@ -431,7 +431,7 @@ def test_two_datastreams_that_disagree_on_a_family_are_an_error(tmp_path: Path) 
 def test_an_invalid_generated_catalogue_is_an_error(tmp_path: Path) -> None:
     document = source_document()
     native = cast("list[dict[str, object]]", document["native_rules"])
-    native[0]["parameters"] = []
+    native[0]["runbook"] = "docs/remediation.md"
     with pytest.raises(gen.GenerationError, match="the generated catalogue is invalid"):
         built(tmp_path, document)
 
@@ -610,8 +610,18 @@ def test_the_repository_mapping_is_valid_and_matches_the_registry() -> None:
     native = cast("list[dict[str, object]]", data[generate_toggles.RULES_KEY])
     assert {str(rule["rule_id"]) for rule in native} == set(mapping.native_rules)
     for rule in native:
-        details = mapping.native_rules[str(rule["rule_id"])]
-        assert {key: rule[key] for key in details} == details
+        details = dict(mapping.native_rules[str(rule["rule_id"])])
+        value = details.pop(gen.PROFILE_VALUE_KEY, None)
+        parameters = cast("dict[str, object]", rule["parameters"])
+        hand_written = {
+            key: parameters[key] for key in parameters if key not in gen.GENERATED_PARAMETERS
+        }
+        assert {key: rule[key] for key in details if key != "parameters"} == {
+            key: details[key] for key in details if key != "parameters"
+        }
+        assert hand_written == details["parameters"]
+        assert parameters.get("value_id") == value
+        assert ("profile_values" in parameters) is (value is not None)
 
 
 def test_the_repository_mapping_covers_the_required_topics() -> None:

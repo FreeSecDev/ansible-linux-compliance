@@ -18,7 +18,19 @@ from tools.roles import generate_toggles
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ROLE = REPOSITORY_ROOT / "roles" / "remediate"
-FAMILY_PARAMETERS = {"file_permissions": {"path", "max_mode"}}
+PROFILE_VALUE_PARAMETERS = {"value_id", "profile_values"}
+FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
+    "file_permissions": [{"path", "max_mode"}],
+    "banners": [
+        {"path", "attribute"},
+        {"path", "attribute", "forbidden_pattern"},
+        {"path", "attribute"} | PROFILE_VALUE_PARAMETERS,
+        {"path", "attribute", "max_mode"},
+        {"path", "attribute", "id"},
+    ],
+    "pwquality": [{"path", "setting"}, {"path", "setting"} | PROFILE_VALUE_PARAMETERS],
+}
+NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality"]
 
 
 def load(path: Path) -> dict[str, object]:
@@ -116,11 +128,13 @@ def test_the_catalogue_file_holds_only_the_catalogue_and_the_registry() -> None:
     }
 
 
-def test_the_native_rules_are_exactly_the_reference_rule() -> None:
-    assert [rule["rule_id"] for rule in native()] == [
-        "xccdf_org.ssgproject.content_rule_file_permissions_crontab"
+def test_the_native_rules_are_exactly_those_of_the_family_mapping() -> None:
+    source = load(REPOSITORY_ROOT / "content" / "catalogue.yml")
+    declared = [
+        str(rule["rule_id"]) for rule in cast("list[dict[str, object]]", source["native_rules"])
     ]
-    assert native()[0]["family"] == "file_permissions"
+    assert [rule["rule_id"] for rule in native()] == sorted(declared)
+    assert {str(rule["family"]) for rule in native()} == set(NATIVE_FAMILIES)
     assert all(toggles.is_native(rule) for rule in native())
 
 
@@ -177,7 +191,7 @@ def test_every_family_with_native_rules_has_a_task_file_and_known_parameters() -
         family = str(rule["family"])
         assert (ROLE / "tasks" / f"{family}.yml").is_file(), family
         parameters = cast("dict[str, object]", rule["parameters"])
-        assert set(parameters) == FAMILY_PARAMETERS[family], rule["rule_id"]
+        assert set(parameters) in FAMILY_PARAMETERS[family], rule["rule_id"]
 
 
 def test_native_file_permission_rules_have_an_absolute_path_and_an_octal_maximum() -> None:
@@ -197,7 +211,8 @@ def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
     assert not families & role_files
     for path in sorted((ROLE / "tasks").glob("*.yml")):
         stem = path.stem
-        assert stem in role_files or stem in families or stem.rsplit("_", 1)[0] in families, stem
+        helper = any(stem.startswith(f"{family}_") for family in families)
+        assert stem in role_files or stem in families or helper, stem
 
 
 def test_the_recorded_collection_version_matches_galaxy() -> None:
@@ -263,14 +278,20 @@ def test_a_disabled_topic_excludes_every_catalogued_rule_of_its_family() -> None
     assert {item["disabled_by"] for item in disabled} == {"linux_compliance_auditd_enabled"}
 
 
-def test_with_the_opt_in_only_the_reference_rule_is_applied_and_the_rest_not_implemented() -> None:
+def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_implemented() -> None:
     result = plan()
     summary = cast("dict[str, int]", result["summary"])
-    assert summary["apply"] == 1
-    assert summary["not_implemented"] == len(rules()) - 1
+    disruptive = [rule for rule in native() if rule["disruptive"] is True]
+    assert {str(rule["family"]) for rule in disruptive} == {"pwquality"}
+    assert summary["apply"] == len(native()) - len(disruptive)
+    assert summary["skip"] == len(disruptive)
+    assert summary["not_implemented"] == len(rules()) - len(native())
     assert [family["name"] for family in cast("list[dict[str, object]]", result["families"])] == [
-        "file_permissions"
+        "file_permissions",
+        "banners",
     ]
+    allowed = plan(allow_disruptive=["pwquality"])
+    assert cast("dict[str, int]", allowed["summary"])["apply"] == len(native())
     results = cast("list[dict[str, object]]", result["not_implemented"])
     assert len(results) == summary["not_implemented"]
     assert {item["status"] for item in results} == {"not_implemented"}
@@ -321,10 +342,10 @@ def test_the_ignored_role_variables_are_the_enabled_options_of_the_role_specs() 
 
 def test_only_families_with_native_rules_are_dispatched_and_have_task_files() -> None:
     catalogue = generate_toggles.load_catalogue(ROLE / "vars" / "rules.yml")
-    assert generate_toggles.native_families(catalogue) == ["file_permissions"]
+    assert generate_toggles.native_families(catalogue) == NATIVE_FAMILIES
     families_with_files = [
         family for family in catalogue.families if (ROLE / "tasks" / f"{family}.yml").is_file()
     ]
     assert families_with_files == generate_toggles.native_families(catalogue)
-    planned = cast("list[dict[str, object]]", plan()["families"])
+    planned = cast("list[dict[str, object]]", plan(allow_disruptive=["pwquality"])["families"])
     assert [family["name"] for family in planned] == generate_toggles.native_families(catalogue)

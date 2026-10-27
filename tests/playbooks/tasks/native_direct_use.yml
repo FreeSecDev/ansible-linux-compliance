@@ -1,0 +1,176 @@
+---
+- name: Native direct use | banners.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run banners.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: banners.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because banners.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: banners.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that banners.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "banners.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | banners_content_apply.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run banners_content_apply.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: banners_content_apply.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because banners_content_apply.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: banners_content_apply.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that banners_content_apply.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "banners_content_apply.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | banners_content_cleanup.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run banners_content_cleanup.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: banners_content_cleanup.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because banners_content_cleanup.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: banners_content_cleanup.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that banners_content_cleanup.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "banners_content_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | banners_attribute_apply.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run banners_attribute_apply.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: banners_attribute_apply.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because banners_attribute_apply.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: banners_attribute_apply.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that banners_attribute_apply.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "banners_attribute_apply.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | banners_attribute_cleanup.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run banners_attribute_cleanup.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: banners_attribute_cleanup.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because banners_attribute_cleanup.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: banners_attribute_cleanup.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that banners_attribute_cleanup.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "banners_attribute_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | pwquality.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run pwquality.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: pwquality.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because pwquality.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: pwquality.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that pwquality.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "pwquality.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | pwquality_apply.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run pwquality_apply.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: pwquality_apply.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because pwquality_apply.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: pwquality_apply.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that pwquality_apply.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "pwquality_apply.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | pwquality_cleanup.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run pwquality_cleanup.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: pwquality_cleanup.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because pwquality_cleanup.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: pwquality_cleanup.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that pwquality_cleanup.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "pwquality_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true

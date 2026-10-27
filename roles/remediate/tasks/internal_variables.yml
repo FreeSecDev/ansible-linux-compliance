@@ -6,6 +6,93 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_audit_only$') == [] or
         '__linux_compliance_remediate_audit_only' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_attr$') == [] or
+        '__linux_compliance_remediate_bn_attr' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_change$') == [] or
+        '__linux_compliance_remediate_bn_change' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_check$') == [] or
+        '__linux_compliance_remediate_bn_check' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_checks$') == [] or
+        '__linux_compliance_remediate_bn_checks' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_cleanup_status$') == [] or
+        '__linux_compliance_remediate_bn_cleanup_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_created$') == [] or
+        '__linux_compliance_remediate_bn_created' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_current$') == [] or
+        '__linux_compliance_remediate_bn_current' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_current_attributes$') == [] or
+        '__linux_compliance_remediate_bn_current_attributes' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_current_value$') == [] or
+        '__linux_compliance_remediate_bn_current_value' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_exists$') == [] or
+        '__linux_compliance_remediate_bn_exists' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_forget$') == [] or
+        '__linux_compliance_remediate_bn_forget' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_planned$') == [] or
+        '__linux_compliance_remediate_bn_planned' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_prior$') == [] or
+        '__linux_compliance_remediate_bn_prior' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_reason$') == [] or
+        '__linux_compliance_remediate_bn_reason' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_record$') == [] or
+        '__linux_compliance_remediate_bn_record' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_recorded$') == [] or
+        '__linux_compliance_remediate_bn_recorded' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_records$') == [] or
+        '__linux_compliance_remediate_bn_records' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_regular$') == [] or
+        '__linux_compliance_remediate_bn_regular' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_remove$') == [] or
+        '__linux_compliance_remediate_bn_remove' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_removed$') == [] or
+        '__linux_compliance_remediate_bn_removed' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_restorable$') == [] or
+        '__linux_compliance_remediate_bn_restorable' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_restored$') == [] or
+        '__linux_compliance_remediate_bn_restored' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_rewrite$') == [] or
+        '__linux_compliance_remediate_bn_rewrite' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_small$') == [] or
+        '__linux_compliance_remediate_bn_small' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_stat$') == [] or
+        '__linux_compliance_remediate_bn_stat' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_status$') == [] or
+        '__linux_compliance_remediate_bn_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_text$') == [] or
+        '__linux_compliance_remediate_bn_text' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_wanted$') == [] or
+        '__linux_compliance_remediate_bn_wanted' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_bn_write$') == [] or
+        '__linux_compliance_remediate_bn_write' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_discover_check$') == [] or
         '__linux_compliance_remediate_discover_check' in (hostvars[inventory_hostname] | list)
       - >-
@@ -72,6 +159,102 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_plan$') == [] or
         '__linux_compliance_remediate_plan' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_cleanup_status$') == [] or
+        '__linux_compliance_remediate_pwq_cleanup_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_content$') == [] or
+        '__linux_compliance_remediate_pwq_content' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_current$') == [] or
+        '__linux_compliance_remediate_pwq_current' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_directory$') == [] or
+        '__linux_compliance_remediate_pwq_directory' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_directory_missing$') == [] or
+        '__linux_compliance_remediate_pwq_directory_missing' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_directory_stat$') == [] or
+        '__linux_compliance_remediate_pwq_directory_stat' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_dropins$') == [] or
+        '__linux_compliance_remediate_pwq_dropins' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_forget$') == [] or
+        '__linux_compliance_remediate_pwq_forget' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_header$') == [] or
+        '__linux_compliance_remediate_pwq_header' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_inspected$') == [] or
+        '__linux_compliance_remediate_pwq_inspected' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_left$') == [] or
+        '__linux_compliance_remediate_pwq_left' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_main_stat$') == [] or
+        '__linux_compliance_remediate_pwq_main_stat' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_name$') == [] or
+        '__linux_compliance_remediate_pwq_name' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_overriding$') == [] or
+        '__linux_compliance_remediate_pwq_overriding' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_owned$') == [] or
+        '__linux_compliance_remediate_pwq_owned' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_path$') == [] or
+        '__linux_compliance_remediate_pwq_path' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_read$') == [] or
+        '__linux_compliance_remediate_pwq_read' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_reason$') == [] or
+        '__linux_compliance_remediate_pwq_reason' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_record$') == [] or
+        '__linux_compliance_remediate_pwq_record' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_removal$') == [] or
+        '__linux_compliance_remediate_pwq_removal' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_removed$') == [] or
+        '__linux_compliance_remediate_pwq_removed' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_rule$') == [] or
+        '__linux_compliance_remediate_pwq_rule' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_setting$') == [] or
+        '__linux_compliance_remediate_pwq_setting' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_source$') == [] or
+        '__linux_compliance_remediate_pwq_source' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_sources$') == [] or
+        '__linux_compliance_remediate_pwq_sources' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_stat$') == [] or
+        '__linux_compliance_remediate_pwq_stat' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_status$') == [] or
+        '__linux_compliance_remediate_pwq_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_tidy$') == [] or
+        '__linux_compliance_remediate_pwq_tidy' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_tidy_path$') == [] or
+        '__linux_compliance_remediate_pwq_tidy_path' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_values$') == [] or
+        '__linux_compliance_remediate_pwq_values' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_write$') == [] or
+        '__linux_compliance_remediate_pwq_write' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_pwq_written$') == [] or
+        '__linux_compliance_remediate_pwq_written' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_results$') == [] or
         '__linux_compliance_remediate_results' in (hostvars[inventory_hostname] | list)
       - >-
@@ -122,6 +305,32 @@
 
 - name: Remediate | Reset the internal facts of the role
   ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_attr: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_change: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_checks: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_created: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_current: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_current_attributes: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_current_value: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_exists: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_forget: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_planned: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_prior: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_reason: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_record: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_recorded: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_regular: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_remove: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_removed: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_restorable: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_restored: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_rewrite: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_small: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_status: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_text: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_wanted: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_write: __linux_compliance_unset__
     __linux_compliance_remediate_discover_check: __linux_compliance_unset__
     __linux_compliance_remediate_dispatched: __linux_compliance_unset__
     __linux_compliance_remediate_fp_absent: __linux_compliance_unset__
@@ -139,6 +348,31 @@
     __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset__
     __linux_compliance_remediate_ledger: __linux_compliance_unset__
     __linux_compliance_remediate_plan: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_content: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_current: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory_missing: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_dropins: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_forget: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_header: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_inspected: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_left: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_main_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_overriding: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_owned: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_read: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_reason: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_record: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_removal: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_removed: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_sources: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_status: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_tidy: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_values: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_write: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_written: __linux_compliance_unset__
     __linux_compliance_remediate_results: __linux_compliance_unset__
     __linux_compliance_remediate_toggle_names: __linux_compliance_unset__
   tags:
@@ -147,6 +381,32 @@
 - name: Remediate | Refuse internal variables supplied from outside the role
   ansible.builtin.assert:
     that:
+      - __linux_compliance_remediate_bn_attr == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_change == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_checks == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_created == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_current == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_current_attributes == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_current_value == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_exists == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_forget == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_planned == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_prior == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_reason == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_record == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_recorded == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_regular == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_remove == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_removed == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_restorable == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_restored == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_rewrite == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_small == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_stat == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_status == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_text == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_wanted == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_write == '__linux_compliance_unset__'
       - __linux_compliance_remediate_discover_check == '__linux_compliance_unset__'
       - __linux_compliance_remediate_dispatched == '__linux_compliance_unset__'
       - __linux_compliance_remediate_fp_absent == '__linux_compliance_unset__'
@@ -164,16 +424,59 @@
       - __linux_compliance_remediate_fp_valid_prior == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ledger == '__linux_compliance_unset__'
       - __linux_compliance_remediate_plan == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_content == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_current == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_directory == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_directory_missing == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_directory_stat == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_dropins == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_forget == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_header == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_inspected == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_left == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_main_stat == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_overriding == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_owned == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_read == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_reason == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_record == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_removal == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_removed == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_sources == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_stat == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_status == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_tidy == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_values == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_write == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_written == '__linux_compliance_unset__'
       - __linux_compliance_remediate_results == '__linux_compliance_unset__'
       - __linux_compliance_remediate_toggle_names == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_check == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_cleanup_status == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_bn_records == '__linux_compliance_unset__'
       - __linux_compliance_remediate_family == '__linux_compliance_unset__'
       - __linux_compliance_remediate_fp_status == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_cleanup_status == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_name == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_path == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_rule == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_setting == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_source == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_pwq_tidy_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset__'
       - >-
         __linux_compliance_remediate_audit_only is not defined or __linux_compliance_remediate_audit_only ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_audit_only']
+      - >-
+        __linux_compliance_remediate_banner_forbidden is not defined or __linux_compliance_remediate_banner_forbidden ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_banner_forbidden']
+      - >-
+        __linux_compliance_remediate_banner_max_length is not defined or __linux_compliance_remediate_banner_max_length
+        == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_banner_max_length']
       - >-
         __linux_compliance_remediate_collection_version is not defined or
         __linux_compliance_remediate_collection_version == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml')
@@ -186,6 +489,26 @@
         __linux_compliance_remediate_family_aliases is not defined or __linux_compliance_remediate_family_aliases ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_family_aliases']
+      - >-
+        __linux_compliance_remediate_newline is not defined or __linux_compliance_remediate_newline ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_newline']
+      - >-
+        __linux_compliance_remediate_prior_content_max_bytes is not defined or
+        __linux_compliance_remediate_prior_content_max_bytes == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_prior_content_max_bytes']
+      - >-
+        __linux_compliance_remediate_pwquality_directory is not defined or
+        __linux_compliance_remediate_pwquality_directory == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_directory']
+      - >-
+        __linux_compliance_remediate_pwquality_main is not defined or __linux_compliance_remediate_pwquality_main ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_main']
+      - >-
+        __linux_compliance_remediate_pwquality_marker is not defined or __linux_compliance_remediate_pwquality_marker ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_pwquality_marker']
       - >-
         __linux_compliance_remediate_rules is not defined or __linux_compliance_remediate_rules ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
@@ -205,8 +528,18 @@
       linux_compliance_* variables. Nothing was scanned, changed or compared.
     quiet: true
   vars:
+    __linux_compliance_remediate_bn_check: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_cleanup_status: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_records: __linux_compliance_unset__
     __linux_compliance_remediate_family: __linux_compliance_unset__
     __linux_compliance_remediate_fp_status: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_cleanup_status: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_name: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_path: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_rule: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_setting: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_source: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_tidy_path: __linux_compliance_unset__
     __linux_compliance_remediate_rule: __linux_compliance_unset__
     __linux_compliance_remediate_unaccounted: __linux_compliance_unset__
   tags:
@@ -214,6 +547,32 @@
 
 - name: Remediate | Reset the internal facts of the role to the second sentinel
   ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_attr: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_change: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_checks: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_created: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_current: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_current_attributes: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_current_value: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_exists: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_forget: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_planned: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_prior: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_reason: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_record: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_recorded: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_regular: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_remove: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_removed: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_restorable: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_restored: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_rewrite: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_small: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_status: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_text: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_wanted: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_write: __linux_compliance_unset_again__
     __linux_compliance_remediate_discover_check: __linux_compliance_unset_again__
     __linux_compliance_remediate_dispatched: __linux_compliance_unset_again__
     __linux_compliance_remediate_fp_absent: __linux_compliance_unset_again__
@@ -231,6 +590,31 @@
     __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset_again__
     __linux_compliance_remediate_ledger: __linux_compliance_unset_again__
     __linux_compliance_remediate_plan: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_content: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_current: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_directory: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_directory_missing: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_directory_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_dropins: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_forget: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_header: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_inspected: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_left: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_main_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_overriding: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_owned: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_read: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_reason: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_record: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_removal: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_removed: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_sources: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_status: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_tidy: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_values: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_write: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_written: __linux_compliance_unset_again__
     __linux_compliance_remediate_results: __linux_compliance_unset_again__
     __linux_compliance_remediate_toggle_names: __linux_compliance_unset_again__
   tags:
@@ -239,6 +623,32 @@
 - name: Remediate | Refuse internal variables supplied from outside the role as the first sentinel
   ansible.builtin.assert:
     that:
+      - __linux_compliance_remediate_bn_attr == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_change == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_checks == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_created == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_current == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_current_attributes == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_current_value == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_exists == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_forget == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_planned == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_prior == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_reason == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_record == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_recorded == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_regular == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_remove == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_removed == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_restorable == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_restored == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_rewrite == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_small == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_status == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_text == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_wanted == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_write == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_discover_check == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_dispatched == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_fp_absent == '__linux_compliance_unset_again__'
@@ -256,10 +666,45 @@
       - __linux_compliance_remediate_fp_valid_prior == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ledger == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_plan == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_content == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_current == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_directory == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_directory_missing == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_directory_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_dropins == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_forget == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_header == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_inspected == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_left == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_main_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_overriding == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_owned == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_read == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_reason == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_record == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_removal == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_removed == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_sources == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_status == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_tidy == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_values == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_write == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_written == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_results == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_toggle_names == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_check == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_cleanup_status == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_bn_records == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_family == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_fp_status == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_cleanup_status == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_name == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_path == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_rule == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_setting == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_source == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_pwq_tidy_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset_again__'
     fail_msg: >-
@@ -269,8 +714,18 @@
       linux_compliance_* variables. Nothing was scanned, changed or compared.
     quiet: true
   vars:
+    __linux_compliance_remediate_bn_check: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_cleanup_status: __linux_compliance_unset_again__
+    __linux_compliance_remediate_bn_records: __linux_compliance_unset_again__
     __linux_compliance_remediate_family: __linux_compliance_unset_again__
     __linux_compliance_remediate_fp_status: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_cleanup_status: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_name: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_path: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_rule: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_setting: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_source: __linux_compliance_unset_again__
+    __linux_compliance_remediate_pwq_tidy_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_unaccounted: __linux_compliance_unset_again__
   tags:
@@ -278,6 +733,32 @@
 
 - name: Remediate | Reset the internal facts of the role to the first sentinel again
   ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_attr: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_change: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_checks: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_created: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_current: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_current_attributes: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_current_value: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_exists: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_forget: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_planned: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_prior: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_reason: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_record: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_recorded: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_regular: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_remove: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_removed: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_restorable: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_restored: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_rewrite: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_small: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_status: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_text: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_wanted: __linux_compliance_unset__
+    __linux_compliance_remediate_bn_write: __linux_compliance_unset__
     __linux_compliance_remediate_discover_check: __linux_compliance_unset__
     __linux_compliance_remediate_dispatched: __linux_compliance_unset__
     __linux_compliance_remediate_fp_absent: __linux_compliance_unset__
@@ -295,6 +776,31 @@
     __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset__
     __linux_compliance_remediate_ledger: __linux_compliance_unset__
     __linux_compliance_remediate_plan: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_content: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_current: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory_missing: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_directory_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_dropins: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_forget: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_header: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_inspected: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_left: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_main_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_overriding: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_owned: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_read: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_reason: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_record: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_removal: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_removed: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_sources: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_status: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_tidy: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_values: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_write: __linux_compliance_unset__
+    __linux_compliance_remediate_pwq_written: __linux_compliance_unset__
     __linux_compliance_remediate_results: __linux_compliance_unset__
     __linux_compliance_remediate_toggle_names: __linux_compliance_unset__
   tags:

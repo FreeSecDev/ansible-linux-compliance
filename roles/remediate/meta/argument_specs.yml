@@ -92,6 +92,15 @@ argument_specs:
           - "When remediation is enabled it must equal the profile that the discover role verified."
           - "Only rules that this profile selects are applied; applied rules that it does not select are cleaned up."
           - "A profile is never substituted silently for another benchmark."
+      linux_compliance_remediate_banner_text:
+        type: str
+        default: "Authorized users only. All activity may be monitored and reported."
+        description:
+          - "Text of the login banners /etc/issue and /etc/issue.net and of the message of the day /etc/motd."
+          - "The default is the default of the XCCDF value cis_banner_text of the pinned content."
+          - "It must not be empty and must not contain a backslash or control characters other than newline and tab."
+          - "When the profile requires a text through an XCCDF value, for example the DoD notice of the STIG profiles,"
+          - "the text must match that value, or the banners family fails before it changes anything."
       linux_compliance_file_permissions_enabled:
         type: bool
         default: true
@@ -136,7 +145,7 @@ argument_specs:
         default: true
         description:
           - "Topic toggle of the banners family (ADR 0011); false switches its rules off."
-          - "Rules: 18, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 18, native: 15. Generated; see docs/remediation-variables.md."
       linux_compliance_integrity_enabled:
         type: bool
         default: true
@@ -422,7 +431,7 @@ argument_specs:
           - "Topic toggle of the pam family (ADR 0011); false switches its rules off."
           - "Also the umbrella of pwquality, pwhistory, faillock, which it switches off too."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 55, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
+          - "Rules: 55, native: 14, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_pwquality_enabled:
         type: bool
         default: true
@@ -430,7 +439,7 @@ argument_specs:
           - "Topic toggle of the pwquality family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_pam_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 19, native: 14. Generated; see docs/remediation-variables.md."
       linux_compliance_pwhistory_enabled:
         type: bool
         default: true

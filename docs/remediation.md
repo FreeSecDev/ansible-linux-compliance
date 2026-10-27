@@ -2,9 +2,12 @@
 
 Scope: the `freesecdev.linux_compliance.remediate` role, its safety model, its variables, the rule catalogue and the
 contract that every control family task file implements. Audience: operators, playbook authors, family authors and
-reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogue). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
+reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogue and native topics), FREES-57
+(cleanup per family). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendments of
-FREES-52, FREES-55 and FREES-53).
+FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
+banners and password quality). How to make a further topic native is in the
+[native remediation guide](native-remediation-guide.md).
 
 Remediation changes managed hosts. It never runs ComplianceAsCode playbooks, Bash fixes or `oscap --remediate`; every
 change is made by a native Ansible module or by a module of this collection. A remediated rule is not a claim of
@@ -12,15 +15,16 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 
 ## Status
 
-The dispatcher, the safety model and one reference family are implemented. The catalogue holds every rule that a pinned
-profile selects, 1203 rules in 21 families (FREES-53), generated from the digest-verified content and listed in the
-[control family reference](control-families.md). Exactly one rule has a native remediation,
-`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`); every other rule has the
-strategy `audit_only`: it can be switched off per rule and per topic, the audit excludes it and reports it as
-`disabled`, and remediation reports it as `not_implemented` and never changes anything for it. The native
-remediations land family by family on top of this catalogue (FREES-53 subtasks, FREES-57 for cleanup). The reference
-rule is exercised for real in the Docker Molecule scenarios on Ubuntu 24.04 and Rocky Linux 9, including the toggle
-lifecycle of its topic (see [Testing](#testing)).
+The dispatcher, the safety model and three native families are implemented. The catalogue holds every rule that a
+pinned profile selects, 1203 rules in 55 families (FREES-53), generated from the digest-verified content and listed in
+the [control family reference](control-families.md). 30 rules have a native remediation: the reference rule
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners` and 14
+of `pwquality` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
+switched off per rule and per topic, the audit excludes it and reports it as `disabled`, and remediation reports it as
+`not_implemented` and never changes anything for it. The native remediations land topic by topic on top of this
+catalogue, following the [native remediation guide](native-remediation-guide.md). Every native topic is exercised for
+real in the Docker Molecule scenarios on Ubuntu 24.04 and Rocky Linux 9 through its toggle lifecycle (see
+[Testing](#testing)).
 
 ## Safety model
 
@@ -44,6 +48,7 @@ The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_r
 | `linux_compliance_remediate_enabled` | `bool` | `false` | Global opt-in. |
 | `linux_compliance_remediate_allow_disruptive` | `list` of `str` | `[]` | Disruptive families that may be applied and cleaned up. The argument specification accepts only the disruptive families of the registry and the umbrellas that group one, such as `services`. |
 | `linux_compliance_remediate_profile` | `str` | `cis_level1_server` | Profile short identifier; must equal the profile the `discover` role verified. |
+| `linux_compliance_remediate_banner_text` | `str` | the default of the XCCDF value `cis_banner_text`: `Authorized users only. All activity may be monitored and reported.` | Text of `/etc/issue`, `/etc/issue.net` and `/etc/motd` for the banner text rules; validated against the profile before anything changes ([banners](#banners)). |
 | `linux_compliance_<family>_enabled` | `bool` | `true` | Topic toggle of a registered family, for example `linux_compliance_auditd_enabled: false` turns off every auditd rule. |
 | `linux_compliance_<umbrella>_enabled` | `bool` | `true` | Umbrella toggle of the families an umbrella groups, for example `linux_compliance_services_enabled: false` turns off `sssd`, `time_sync`, `mail` and every other service family; a family toggle only narrows it. `pam` is both a family and the umbrella of `pwquality`, `pwhistory` and `faillock`, so `allow_disruptive: [pam]` allows all four; there is no entry for the `pam` family alone. |
 | `linux_compliance_rule_<rule_short_id>_enabled` | `bool` | not set: follows `linux_compliance_<family>_enabled` | Toggle of one catalogued rule, for example `linux_compliance_rule_file_permissions_crontab_enabled`. Not declared as a role default (ADR 0011, amendment of FREES-53). |
@@ -300,6 +305,54 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 | Apply | `ansible.builtin.file` with `follow: false` | Sets the restricted mode; status `applied`, or `compliant` when nothing had to change |
 | Clean up | `ansible.builtin.file`, then `control_state` `remove` | Restores the recorded mode, which must be exactly four octal digits, and then removes the entry (`restored`). Otherwise nothing is changed, the entry is kept and the result is `cleanup_incomplete` with the reason `target_absent` (the file is missing), `not_regular_file` (a symbolic link or other non-regular file) or `invalid_record` (no usable recorded mode). The cleanup is retried on every run until it succeeds; a file that is removed for good leaves its entry behind until an operator removes it with `control_state` `remove` |
 
+## Native families
+
+Besides the reference family, two topics are native ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md)).
+Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
+parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
+family before anything changes.
+
+### Banners
+
+| Rules | What is applied | Strategy and cleanup |
+|---|---|---|
+| `banner_etc_issue_cis`, `banner_etc_issue_net_cis`, `banner_etc_motd_cis` (CIS profiles) and `banner_etc_issue`, `banner_etc_issue_net`, `banner_etc_motd` (STIG and CCN profiles) | `/etc/issue`, `/etc/issue.net` or `/etc/motd` gets exactly `linux_compliance_remediate_banner_text` and a newline; a missing file is created with mode `0644`, owner and group root | `recorded_value` of `content_base64` (the prior content, or `null` when the file did not exist); cleanup writes the prior content back, keeping the current mode and owner, or removes a file that did not exist |
+| `file_permissions_etc_issue`, `_issue_net`, `_motd` | Mode at most `0644`; a stricter mode is kept | `recorded_value` of `mode` |
+| `file_owner_etc_issue`, `_issue_net`, `_motd` | Owner uid 0 | `recorded_value` of `owner` (the uid) |
+| `file_groupowner_etc_issue`, `_issue_net`, `_motd` | Group gid 0 | `recorded_value` of `group` (the gid) |
+
+Before anything changes, the banner text must be non-empty, at most 4096 characters, without a backslash (the getty
+escapes `\s`, `\r`, `\m`, `\v` that the CIS checks forbid) or control characters other than newline and tab, without
+the operating system names of the CIS checks, and must match the profile's value of the rule, read as one string as
+the OVAL check does. The STIG profiles require the DoD notice, so with them the text must be set; the default fails
+closed with a message that names the XCCDF value. A symbolic link or non-regular file is never changed
+(`not_regular_file`), a file over 3072 bytes is not rewritten (`prior_too_large`, the record would not fit the
+ledger), and a missing file is `notapplicable` for the mode, owner and group rules unless the text rule of the same run
+creates it, which check mode predicts. Kept `audit_only`: `banner_etc_profiled_ssh_confirm` (an SSH login script that
+asks for confirmation) and `dconf_gnome_banner_enabled`, `dconf_gnome_login_banner_text` (GDM, which needs a desktop and
+`dconf update`).
+
+### Password quality
+
+`pwquality` is disruptive (umbrella `pam`), so it is applied and cleaned up only with `pwquality` or `pam` in
+`linux_compliance_remediate_allow_disruptive`.
+
+| Rules | What is applied | Strategy and cleanup |
+|---|---|---|
+| `accounts_password_pam_dcredit`, `_dictcheck`, `_difok`, `_enforcing`, `_lcredit`, `_maxclassrepeat`, `_maxrepeat`, `_maxsequence`, `_minclass`, `_minlen`, `_ocredit`, `_ucredit`, `_pwquality_retry`, `_enforce_root` | `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf` with a header that names the rule and the setting with the profile's value (`enforce_for_root` without value); the main `pwquality.conf` is never touched | `owned_dropin`: cleanup removes the drop-in when it carries the header |
+
+libpwquality reads the drop-ins in lexical order and the main file last, so a rule is `overridden`, with nothing
+changed and the overriding file named, when the main file or a later drop-in sets the same setting. A file at the
+drop-in's path without the header is `not_owned` and never touched. Without `/etc/security/pwquality.conf`
+libpwquality is not installed and every rule is `notapplicable`, as in the content. Where the directory does not exist
+(Ubuntu), the first drop-in creates it with mode `0755` and an empty marker `.freesecdev-created`; once the family's
+cleanup leaves nothing else in it, the marker and the directory are removed again. Kept `audit_only`: the rules that
+put `pam_pwquality.so` into the PAM stack (`accounts_password_pam_pwquality_enabled`, `_password_auth`,
+`_system_auth`, topic `pam`), `accounts_password_pam_retry` (its check reads the PAM arguments first and never the
+drop-ins) and `package_pam_pwquality_installed` (package state, and on Ubuntu the package changes the PAM stack). On
+Ubuntu 24.04 the pinned content checks only the main file, so a host audit reports the pwquality rules as failing even
+with the drop-ins in force; this is recorded in ADR 0021.
+
 ## Results
 
 The role publishes `linux_compliance_remediated`:
@@ -383,6 +436,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/roles/test_subsystem_tags.py` | On the real catalogue: each reviewed example (sssd log files, chrony keys, cron.deny, at.deny and the native crontab rule, `sssd_enable_smartcards`, the GNOME lock on smart card removal, pam_unix `remember`) follows its subsystem toggle in both filters, the audit watches on MAC policy stay with `auditd`, the precedence of `disabled_by`, tags never switch a rule on, and the native crontab rule is cleaned up with `cron` off, also from a ledger entry under a former family name | `make test-coverage` |
 | `tests/unit/tools/test_generate_catalogue_tags.py` | The tag derivation against synthetic datastreams: rule patterns and groups, exclusions, the drift check for untagged families, unused entries and stale exclusions, the rendering into the catalogue and the reference, and every invalid source | `make test-coverage` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
+| `tests/playbooks/remediate-native-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS profile and `pwquality` allow-listed, every banner and password quality rule gets exactly one result, `changed` exactly when it is `applied`, and the banner and pwquality files are unchanged; a banner text with a getty escape, an operating system name, an empty text, the default text under the STIG profile and a content without catalogued values fail at the text check, and the short DoD notice passes it; a pwquality rule without a profile value fails before any change; every banner and pwquality file and helper refuses to run without the opt-in | `make test-remediate-check`, CI job `test` |
+| `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration. 100% line and branch coverage | `make test-coverage` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
 `/var/lib/freesecdev/linux_compliance` already exists and is root-only it fails instead of reading it.
@@ -430,7 +485,8 @@ declared pre-state, checks check mode, idempotence and the ledger, asserts that 
 kernel parameters, users and groups are restored exactly, and asserts that the following audit reports the rules as
 `disabled` with the controlling variable. `make lint-lifecycle` fails when a topic with a native rule has no lifecycle
 declaration. The skip of a disruptive family without the allow-list is still shown only in check mode
-(`make test-remediate-disruptive`), because no disruptive family has a native rule yet.
+(`make test-remediate-disruptive`); with `pwquality` the lifecycle now also runs a disruptive topic with its
+allow-list entry, and `make test-remediate-disruptive` checks that its rules are skipped without it.
 
 ## Related decisions and issues
 

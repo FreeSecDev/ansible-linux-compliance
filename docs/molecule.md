@@ -65,7 +65,7 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle) |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`) |
 | `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`; Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
@@ -338,7 +338,10 @@ uv run --frozen molecule destroy -s docker-ubuntu
 
 with `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH` set as the `Makefile` exports them. On an instance where
 `converge` already applied a topic, the harness refuses to run, because the state before the collection is then
-unknown.
+unknown. `converge` and `verify` therefore prove the reference rule alone: their plays set the topic toggles of every
+other native topic to `false` (`molecule_other_native_topics` in `shared/vars/target.yml`), and their first task fails
+when that list differs from the native topics of the catalogue, so a new native topic cannot be applied by them by
+accident.
 
 ### What it runs
 
@@ -354,6 +357,17 @@ control, a change that nothing declares, a file left behind or removed, a declar
 file left behind, modified or only touched, a declared file replaced by another inode, a file next to the ledger, a
 kernel parameter, a package, a user, a group and a service added or changed must be refused; the listed differences
 must be accepted).
+
+Every remediate run of a topic narrows `linux_compliance_discovered.rule_ids` to the native rules of that topic, the
+way a profile that selects only them would, and restores the verified profile right after the run, so the audits and
+the next topic see it unchanged. A run that applies or cleans up a rule outside the topic fails. Without the narrowing,
+the cycles of one topic would apply every other native topic as well and its cleanup could not be compared exactly.
+
+A pre-state may declare rules `unchanged`: rules that it already satisfies (`compliant`, such as the mode of an
+`/etc/issue` that is already `0644`) or that do not apply (`notapplicable`), optionally per platform. In the steps
+below such a rule must report exactly that status and `changed: false` in check mode, on apply and on the second
+apply, is not recorded in the ledger, is planned `none` when the topic is switched off and reports no cleanup. Every
+other rule must be `applied` and changed, and at least one rule of a pre-state must change something.
 
 For each topic, for the topic toggle and then the rule toggles, and for each declared pre-state:
 
@@ -410,6 +424,7 @@ Only these differences are allowed, each listed in `shared/vars/lifecycle.yml`:
 | Difference | Why |
 |---|---|
 | mtime and ctime of the declared files and of their parent directories | changing a mode changes the ctime, and creating or removing a drop-in changes the times of its directory; everything else about these entries still counts, and the declared state compares the declared files exactly |
+| the inode of a declared file with `rewritten: true` | rewriting a file's content (`copy`, `lineinfile`, `template`) replaces it through a new inode; its type, mode, uid, gid, size and SHA-256 still count, so the restored content must be byte for byte the original |
 | `/var/lib/freesecdev`, `/var/lib/freesecdev/linux_compliance` and its `state.json` | the ledger, compared entry by entry instead; any other file in that directory counts |
 | `/var/lib/freesecdev/linux_compliance/evidence` and everything below it | the evidence and output of the real scans of the cycle |
 | the times of `/var/lib/rpm/rpmdb.sqlite-shm` and `-wal` | the scanner's RPM probes, as in the [no-change snapshot](#the-no-change-snapshot) |
@@ -485,10 +500,10 @@ pre_states:
 | `family` | yes | The topic; must equal the file name |
 | `disruptive` | yes | Must equal the flag of the family in the registry |
 | `containment` | for disruptive topics only | What the topic can break in the container and why the harness still reaches it; see below |
-| `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform |
+| `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles) and `files` (mode, owner or group of declared files); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files) and `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant` or that are `notapplicable`, optionally with `platforms`); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
@@ -515,9 +530,9 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-The disruptive families (`ssh`, `pam`, `sssd`, `sudo`, `faillock` and the others that the registry flags) have no
-native rule yet. When one gains a rule, its topic is opted in by its declaration: `disruptive: true`, which must match
-the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
+`pwquality` is the first disruptive family with native rules; the others (`ssh`, `pam`, `sssd`, `sudo`, `faillock`
+and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
 

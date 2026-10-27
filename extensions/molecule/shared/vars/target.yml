@@ -13,6 +13,10 @@ molecule_profile_id: "xccdf_org.ssgproject.content_profile_{{ molecule_profile }
 molecule_reference_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
 molecule_reference_path: /etc/crontab
 molecule_reference_toggle: linux_compliance_rule_file_permissions_crontab_enabled
+molecule_reference_family: file_permissions
+molecule_other_native_topics:
+  - banners
+  - pwquality
 molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
 molecule_native_results: >-
   {{ linux_compliance_remediated.results | rejectattr('status', 'equalto', 'not_implemented') | list }}

@@ -33,6 +33,12 @@
     lifecycle_declared_applied: "{{ (lifecycle_topic.applied | default({}, true))[item] | default([], true) }}"
   loop: "{{ lifecycle_state_keys.keys() | list }}"
 
+- name: Lifecycle topic | Name the declared files whose content the topic rewrites
+  ansible.builtin.set_fact:
+    lifecycle_rewritten: >-
+      {{ lifecycle_items.files | selectattr('rewritten', 'defined') | selectattr('rewritten')
+      | map(attribute='path') | list }}
+
 - name: Lifecycle topic | Name the rules of the topic and those whose prior state the ledger records
   ansible.builtin.set_fact:
     lifecycle_rule_ids: "{{ lifecycle_rules | map(attribute='rule_id') | list }}"
