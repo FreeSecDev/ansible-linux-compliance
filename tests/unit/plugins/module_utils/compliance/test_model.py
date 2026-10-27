@@ -968,7 +968,7 @@ def test_serialized_keys_are_sorted_at_every_level() -> None:
 
 def test_loads_rejects_unsupported_schema_versions() -> None:
     data = scan_run().to_dict()
-    for bad in ("2.0", "1", "1.2", "", "1.0 ", "1.1 "):
+    for bad in ("2.0", "1", "1.3", "", "1.0 ", "1.1 ", "1.2 "):
         with pytest.raises(model.ModelError, match="unsupported schema_version"):
             model.ScanRun.from_dict({**data, "schema_version": bad})
     with pytest.raises(model.ModelError, match="must be a string"):
@@ -1032,29 +1032,48 @@ def test_model_error_is_a_value_error() -> None:
     assert issubclass(model.ModelError, ValueError)
 
 
-def test_model_uses_only_the_standard_library() -> None:
-    tree = ast.parse(MODEL_PATH.read_text(encoding="utf-8"))
+PLACEMENT_PATH = MODEL_PATH.with_name("placement.py")
+SIBLING_PACKAGE = "ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance"
+
+
+def _imports(path: Path) -> tuple[set[str], list[tuple[str, tuple[str, ...]]]]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     imported: set[str] = set()
+    siblings: list[tuple[str, tuple[str, ...]]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             assert node.level == 0
-            imported.add((node.module or "").split(".")[0])
+            if node.module == SIBLING_PACKAGE:
+                siblings.append((node.module, tuple(alias.name for alias in node.names)))
+            else:
+                imported.add((node.module or "").split(".")[0])
+    return imported, siblings
+
+
+def test_model_uses_only_the_standard_library_and_its_placement_module() -> None:
+    imported, siblings = _imports(MODEL_PATH)
     assert imported
     assert imported <= STANDARD_LIBRARY_IMPORTS
+    assert siblings == [(SIBLING_PACKAGE, ("placement",))]
+    placement_imports, placement_siblings = _imports(PLACEMENT_PATH)
+    assert placement_imports <= STANDARD_LIBRARY_IMPORTS
+    assert placement_siblings == []
 
 
-def test_model_parses_with_the_oldest_managed_node_python_grammar() -> None:
-    source = MODEL_PATH.read_text(encoding="utf-8")
+@pytest.mark.parametrize("path", [MODEL_PATH, PLACEMENT_PATH])
+def test_model_parses_with_the_oldest_managed_node_python_grammar(path: Path) -> None:
+    source = path.read_text(encoding="utf-8")
     ast.parse(source, feature_version=(3, 9))
     assert "slots=True" not in source
     assert "StrEnum" not in source
     assert "kw_only" not in source
 
 
-def test_model_contains_no_comments() -> None:
-    lines = MODEL_PATH.read_text(encoding="utf-8").splitlines()
+@pytest.mark.parametrize("path", [MODEL_PATH, PLACEMENT_PATH])
+def test_model_contains_no_comments(path: Path) -> None:
+    lines = path.read_text(encoding="utf-8").splitlines()
     assert not [line for line in lines if line.lstrip().startswith("#")]
 
 

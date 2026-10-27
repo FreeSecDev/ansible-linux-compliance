@@ -10,7 +10,17 @@
         linux_compliance_exceptions_file is none or
         (linux_compliance_exceptions_file is string and linux_compliance_exceptions_file is match('^/'))
       - linux_compliance_audit_backend is string
-      - linux_compliance_audit_backend in ['openscap']
+      - linux_compliance_audit_backend in ['openscap', 'scc']
+      - linux_compliance_audit_allow_off_platform_benchmark is boolean
+      - not linux_compliance_audit_allow_off_platform_benchmark or linux_compliance_audit_backend == 'scc'
+      - >-
+        linux_compliance_audit_backend != 'scc' or
+        (linux_compliance_audit_scc_content_path is string and
+         linux_compliance_audit_scc_content_path is match('^/.+') and
+         linux_compliance_audit_scc_content_sha256 is string and
+         linux_compliance_audit_scc_content_sha256 is match('^[0-9a-fA-F]{64}$') and
+         linux_compliance_audit_scc_profile_id is string and
+         linux_compliance_audit_scc_profile_id is match('^xccdf_[A-Za-z0-9_.-]+_profile_[A-Za-z0-9_.+-]+$'))
       - linux_compliance_audit_output_dir is string
       - linux_compliance_audit_output_dir is match('^/.+')
       - linux_compliance_audit_scan_timeout is integer
@@ -24,6 +34,9 @@
       - linux_compliance_audit_disabled_rules | rejectattr('rule_id', 'defined') | list | length == 0
     fail_msg: >-
       The audit role received an invalid input; see meta/argument_specs.yml.
+      The scc backend needs linux_compliance_audit_scc_content_path (absolute),
+      linux_compliance_audit_scc_content_sha256 and linux_compliance_audit_scc_profile_id, and only it
+      accepts linux_compliance_audit_allow_off_platform_benchmark.
       Boolean variables must be real booleans on the command line, for example
       -e '{"linux_compliance_audit_fail_on_noncompliant": true}';
       -e linux_compliance_audit_fail_on_noncompliant=true passes a string.
@@ -52,11 +65,19 @@
       The audit role only scans content whose SHA-256 the discover role verified, and it never
       substitutes another profile.
     quiet: true
+  when: linux_compliance_audit_backend == 'openscap'
   tags:
     - always
 
 - name: Audit | Resolve the rules that the control toggles disable
   ansible.builtin.import_tasks: toggles.yml
+  when: linux_compliance_audit_backend == 'openscap'
+  tags:
+    - always
+
+- name: Audit | Map the control toggles and families to the DISA rules that SCC scans
+  ansible.builtin.import_tasks: scc.yml
+  when: linux_compliance_audit_backend == 'scc'
   tags:
     - always
 
@@ -77,12 +98,21 @@
 - name: Audit | Scan the host without changing it
   freesecdev.linux_compliance.compliance_scan:
     backend: "{{ linux_compliance_audit_backend }}"
-    content_path: "{{ linux_compliance_discovered.content_path }}"
-    expected_sha256: "{{ linux_compliance_discovered.content_sha256 }}"
-    profile_id: "{{ linux_compliance_discovered.profile_id }}"
+    content_path: >-
+      {{ linux_compliance_discovered.content_path if linux_compliance_audit_backend == 'openscap'
+         else __linux_compliance_audit_scc_profile.content_path }}
+    expected_sha256: >-
+      {{ linux_compliance_discovered.content_sha256 if linux_compliance_audit_backend == 'openscap'
+         else __linux_compliance_audit_scc_profile.content_sha256 }}
+    profile_id: >-
+      {{ linux_compliance_discovered.profile_id if linux_compliance_audit_backend == 'openscap'
+         else __linux_compliance_audit_scc_profile.profile_id }}
     output_dir: "{{ linux_compliance_audit_output_dir }}"
     scan_timeout: "{{ linux_compliance_audit_scan_timeout }}"
     disabled_rules: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
+    control_placement: >-
+      {{ __linux_compliance_audit_toggles.control_placement if linux_compliance_audit_backend == 'scc' else [] }}
+    allow_off_platform_benchmark: "{{ linux_compliance_audit_allow_off_platform_benchmark }}"
     fail_on_incomplete: false
     host:
       hostname: "{{ ansible_facts['hostname'] }}"

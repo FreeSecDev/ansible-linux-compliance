@@ -517,8 +517,18 @@ class TestReports:
         assert report["rule_count"] == 2
         assert report["rule_ids"] == [RULE + "alpha", RULE + "beta"]
         assert report["rules"] == [
-            {"rule_id": RULE + "alpha", "severity": "high", "title": "Synthetic alpha rule"},
-            {"rule_id": RULE + "beta", "severity": "medium", "title": "Synthetic beta rule"},
+            {
+                "rule_id": RULE + "alpha",
+                "severity": "high",
+                "title": "Synthetic alpha rule",
+                "version": "",
+            },
+            {
+                "rule_id": RULE + "beta",
+                "severity": "medium",
+                "title": "Synthetic beta rule",
+                "version": "",
+            },
         ]
         assert report["profile_title"] == "Synthetic baseline"
         assert report["benchmark_version"] == "1.2.3"

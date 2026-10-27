@@ -191,3 +191,11 @@ and refuses every other version.
     - hostile host, platform and benchmark values in a forged report, rendered as text with no element, request or
       script;
     - axe-core on the Overview and Compliance tabs in both themes.
+
+## Amendment 2026-10-27: control families (FREES-170)
+
+The Rules table of the Compliance tab gains two filterable columns, **Family** and **Topic**, from each rule's
+`control` (report schema 2.3). A rule without a placement shows "not placed". The detail row of a placed rule lists the
+family, topic, tags, STIG ID, mapped ComplianceAsCode rules and the variables that disable it in part, before the
+sources. Nothing else changes: the assets stay inline, the content security policy and the sink checks are unchanged,
+and every value is still rendered as text.

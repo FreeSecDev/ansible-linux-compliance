@@ -742,3 +742,81 @@ def topic_warnings(catalogue: Catalogue, profile: frozenset[str] | None) -> list
                 f"catalogue are still audited (see docs/remediation-variables.md)"
             )
     return warnings
+
+
+@dataclass(frozen=True)
+class AuditResolution:
+    """The rules that the audit excludes, from the toggles and the explicit list.
+
+    ``disabled`` holds the explicit entries followed by the rules that a toggle switches off, each
+    with ``rule_id`` and ``disabled_by``, sorted by rule identifier; ``catalogue`` is the validated
+    catalogue that was resolved and ``warnings`` the topic warnings of :func:`topic_warnings`.
+    """
+
+    catalogue: Catalogue
+    disabled: list[dict[str, object]]
+    warnings: list[str]
+
+
+def profile_rule_set(raw: object, errors: Errors) -> frozenset[str]:
+    """Return the rule identifiers of a profile, or record an error when they are not strings."""
+    items = as_sequence(raw)
+    if items is None or not all(isinstance(item, str) for item in items):
+        errors.add("profile_rule_ids must list the rule identifiers of the discovered profile")
+        return frozenset()
+    return frozenset(str(item) for item in items)
+
+
+def explicit_disabled_rules(
+    raw: object, catalogue: Catalogue, errors: Errors
+) -> list[dict[str, object]]:
+    """Return the explicit ``linux_compliance_audit_disabled_rules`` entries.
+
+    Each entry needs a ``rule_id`` string. A rule of the catalogue is an error, because the audit
+    would then skip a rule that remediation still applies, so its toggle must be used instead.
+    """
+    items = as_sequence(raw)
+    if items is None:
+        errors.add("linux_compliance_audit_disabled_rules must be a list")
+        return []
+    catalogued = {str(rule["rule_id"]): str(rule["toggle"]) for rule in catalogue.rules}
+    entries: list[dict[str, object]] = []
+    for item in items:
+        entry = as_mapping(item)
+        rule_id = None if entry is None else entry.get("rule_id")
+        if entry is None or not isinstance(rule_id, str):
+            errors.add("every linux_compliance_audit_disabled_rules item needs a rule_id string")
+        elif rule_id in catalogued:
+            errors.add(
+                f"{rule_id} is in the rule catalogue; switch it off with "
+                f"{catalogued[rule_id]} or its family toggle, not with "
+                f"linux_compliance_audit_disabled_rules, so that the audit and remediation agree"
+            )
+        else:
+            entries.append(entry)
+    return entries
+
+
+def resolve_audit(
+    catalogue: object, options: Mapping[str, object], profile: frozenset[str], errors: Errors
+) -> AuditResolution:
+    """Resolve the disabled rules of an audit exactly as the remediate role resolves its toggles.
+
+    ``options`` holds ``audit_only``, ``families``, ``tags``, ``toggles`` and ``disabled_rules`` as
+    the ``audit_disabled_rules`` filter documents them, and ``profile`` the rules that can be
+    disabled. The OpenSCAP path (``audit_disabled_rules``) and the SCC path (``scc_toggles``) of
+    the audit role both resolve their toggles here.
+    """
+    loaded = with_tags(
+        load_catalogue(
+            catalogue, options["audit_only"], options["families"], options["toggles"], errors
+        ),
+        options["tags"],
+        errors,
+    )
+    explicit = explicit_disabled_rules(options["disabled_rules"], loaded, errors)
+    switched_off = disabled_rules(
+        loaded.rules, loaded.toggles, profile, umbrellas=loaded.umbrellas, tags=loaded.tags
+    )
+    combined = sorted(explicit + switched_off, key=lambda entry: str(entry["rule_id"]))
+    return AuditResolution(loaded, combined, topic_warnings(loaded, profile))

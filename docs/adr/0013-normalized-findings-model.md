@@ -525,3 +525,49 @@ Rejected alternatives:
 | Always writing 1.1 with `off_platform: null` | Changes the bytes and digests of every on-platform run, evaluation and bundle for no information |
 | Marking only the run | A finding copied out of its run, for example into a checklist, would lose the label |
 | A new outcome such as `offplatform` | The outcome is what the scanner decided; the marker says under which benchmark it decided it, and every outcome needs it |
+
+## Amendment 2026-10-27: control placement and schema 1.2 (FREES-170)
+
+[ADR 0019](0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-27-toggles-and-control-families-for-scc-frees-170)
+places SCC findings under the collection's control families through the STIG mapping, so the model carries a
+placement.
+
+### Entities
+
+| Entity | Fields |
+|---|---|
+| ControlPlacement | `family` and `topic` (slugs `[a-z][a-z0-9_]{0,63}`), `tags` (such slugs, at most 64, never the family), `stig_id` (a STIG ID or null), `mapped_rules` (full XCCDF rule IDs, at most 64), `partially_disabled_by` (variable names; only with mapped rules) |
+
+`Finding` gains an optional `control`, the default `None`. The family and topic `unmapped` go together and have no
+tags. Lists are stored sorted and must be unique.
+
+### Placement module
+
+`ControlPlacement` lives in `plugins/module_utils/compliance/placement.py`, not in `model.py`, because `model.py`
+reached the module line limit of 1500 lines, which takes no justification. Every field of a placement is an
+identifier with an anchored ASCII pattern, so the module validates pattern, length and counts itself, with the
+standard library only and the Python 3.9 grammar, and raises `PlacementError`. The model imports that one sibling
+module and turns a `PlacementError` into `ModelError` when it reads a document. The rule "the model uses only the
+standard library" therefore becomes: `model.py` imports the standard library and `placement`, and `placement.py`
+imports only the standard library; the unit test checks exactly that, and checks the grammar and the absence of
+comments for both files. Unit tests pin `placement.RULE_PATTERN`, `MAX_ID_LENGTH` and `MAX_VARIABLES` to the model's.
+
+### Schema version 1.2
+
+- **Which version is written.** A run in which any finding carries a placement serializes as `"1.2"`, with `control` on
+  every finding (`null` where there is none). Every other run serializes exactly as before (`"1.0"` or `"1.1"`), so
+  evidence bundles and evaluations of runs without placements keep their bytes and digests.
+- **Off-platform in 1.2.** `off_platform` is on the run and every finding exactly when the run is marked; the key's
+  presence on the run decides.
+- **What readers accept.** `SUPPORTED_SCHEMA_VERSIONS` is `{"1.0", "1.1", "1.2"}`. A `1.0` or `1.1` document must not
+  hold `control`. A `1.2` document must hold it on every finding and must have at least one placement; a document whose
+  content serializes as another version is refused, so every document has one canonical form.
+- **Readers come first.** The report and the dashboard read 1.2 in the same change as the only writer, the audit.
+
+Rejected alternatives:
+
+| Alternative | Reason rejected |
+|---|---|
+| A family field on the finding only | Topic, tags and the mapped rules are needed to explain the grouping and the partial disables |
+| Placing findings in the report from the catalogue | The report has no STIG mapping of the scanned DISA content; the audit has it, and the evidence should carry what the run was told |
+| Always writing `control: null` | Changes the bytes of every existing run for no information |

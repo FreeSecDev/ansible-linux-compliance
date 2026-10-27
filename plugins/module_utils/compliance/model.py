@@ -15,6 +15,14 @@ A scan run that evaluated a benchmark made for another platform than the scanned
 host (ADR 0019, FREES-161) carries an :class:`OffPlatform` marker, and so does
 every one of its findings. Such a run serializes as schema version ``1.1``; every
 other run serializes as ``1.0``, exactly as before, and readers accept both.
+
+A finding may carry a :class:`placement.ControlPlacement`: the control family, topic and
+tags of the ComplianceAsCode rules that it maps to, so that reports group a
+finding of another benchmark, such as a DISA STIG rule of SCC, with the
+collection's control families (ADR 0019, amendment of FREES-170). A run in which
+any finding carries one serializes as schema version ``1.2``, with ``control`` on
+every finding (``null`` where there is none) and ``off_platform`` on the run and
+every finding exactly when the run is marked.
 """
 
 from __future__ import annotations
@@ -28,13 +36,18 @@ from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, NoReturn, TypeVar, cast
 
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    placement,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
 SCHEMA_VERSION: Final[str] = "1.0"
 OFF_PLATFORM_SCHEMA_VERSION: Final[str] = "1.1"
+CONTROL_SCHEMA_VERSION: Final[str] = "1.2"
 SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
-    {SCHEMA_VERSION, OFF_PLATFORM_SCHEMA_VERSION}
+    {SCHEMA_VERSION, OFF_PLATFORM_SCHEMA_VERSION, CONTROL_SCHEMA_VERSION}
 )
 OFF_PLATFORM_KEY: Final[str] = "off_platform"
 
@@ -1119,9 +1132,11 @@ class Finding:
     disabled_by: str | None
     flags: tuple[ResultFlag, ...]
     off_platform: OffPlatform | None = None
+    control: placement.ControlPlacement | None = None
 
     def __post_init__(self) -> None:
         """Validate and canonically order the finding."""
+        _optional_instance(self.control, "finding.control", placement.ControlPlacement)
         _xccdf_id(self.rule_id, "finding.rule_id", "rule")
         _enum(self.outcome, "finding.outcome", Outcome)
         _enum(self.evaluated_outcome, "finding.evaluated_outcome", Outcome)
@@ -1157,10 +1172,13 @@ class Finding:
             if self.outcome is not _FLAG_OUTCOMES[flag]:
                 _fail(f"finding.flags {flag.value} does not match outcome {self.outcome.value}")
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self, *, with_control: bool = False) -> dict[str, object]:
         """Return a JSON-compatible mapping.
 
         ``off_platform`` is present exactly when the finding carries the marker.
+        ``control`` is present when the finding carries a placement, and, as
+        ``null``, without one when ``with_control`` asks for the key (a finding of
+        a schema 1.2 scan run).
         """
         result: dict[str, object] = {
             "disabled_by": self.disabled_by,
@@ -1176,14 +1194,18 @@ class Finding:
         }
         if self.off_platform is not None:
             result[OFF_PLATFORM_KEY] = self.off_platform.to_dict()
+        if with_control or self.control is not None:
+            result[placement.CONTROL_KEY] = None if self.control is None else self.control.to_dict()
         return result
 
     @classmethod
-    def from_dict(cls, data: object, *, marked: bool = False) -> Finding:
+    def from_dict(cls, data: object, *, marked: bool = False, controlled: bool = False) -> Finding:
         """Build a finding from a mapping, rejecting unknown and missing keys.
 
         With ``marked`` the mapping must hold ``off_platform``, the marker of a
-        finding of a schema 1.1 scan run; without it the key is refused.
+        finding of a marked scan run; without it the key is refused. With
+        ``controlled`` the mapping must hold ``control``, an object or ``null``, as
+        every finding of a schema 1.2 scan run does; without it the key is refused.
         """
         keys = (
             "rule_id",
@@ -1197,7 +1219,10 @@ class Finding:
             "disabled_by",
             "flags",
         )
-        reader = _Reader(data, "finding", (*keys, OFF_PLATFORM_KEY) if marked else keys)
+        extra = ((OFF_PLATFORM_KEY,) if marked else ()) + (
+            (placement.CONTROL_KEY,) if controlled else ()
+        )
+        reader = _Reader(data, "finding", (*keys, *extra))
         return cls(
             rule_id=reader.text("rule_id"),
             outcome=reader.enum("outcome", Outcome),
@@ -1210,13 +1235,33 @@ class Finding:
             disabled_by=reader.optional_text("disabled_by"),
             flags=reader.enums("flags", ResultFlag),
             off_platform=reader.nested(OFF_PLATFORM_KEY, OffPlatform.from_dict) if marked else None,
+            control=(
+                reader.optional_nested(placement.CONTROL_KEY, _placement) if controlled else None
+            ),
         )
+
+
+def _placement(data: object) -> placement.ControlPlacement:
+    try:
+        return placement.ControlPlacement.from_dict(data)
+    except placement.PlacementError as error:
+        _fail(str(error))
 
 
 def _declared_version(data: object) -> object:
     if not isinstance(data, dict):
         return None
     return cast("dict[str, object]", data).get("schema_version")
+
+
+def _declares_marker(data: object) -> bool:
+    if not isinstance(data, dict):
+        return False
+    document = cast("dict[str, object]", data)
+    version = _declared_version(document)
+    if version == CONTROL_SCHEMA_VERSION:
+        return OFF_PLATFORM_KEY in document
+    return version == OFF_PLATFORM_SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
@@ -1304,21 +1349,28 @@ class ScanRun:
 
     @property
     def schema_version(self) -> str:
-        """Return ``1.1`` for a run with an off-platform marker, otherwise ``1.0``."""
+        """Return the schema version that the run serializes as.
+
+        ``1.2`` when any finding carries a control placement, otherwise ``1.1`` for
+        a run with an off-platform marker and ``1.0`` for every other run.
+        """
+        if any(finding.control is not None for finding in self.findings):
+            return CONTROL_SCHEMA_VERSION
         return SCHEMA_VERSION if self.off_platform is None else OFF_PLATFORM_SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible mapping that includes the schema version.
 
-        ``off_platform`` is present exactly when the run carries the marker, which
-        makes the document schema version ``1.1``.
+        ``off_platform`` is present exactly when the run carries the marker. In a
+        schema 1.2 document every finding holds ``control``.
         """
+        controlled = self.schema_version == CONTROL_SCHEMA_VERSION
         result: dict[str, object] = {
             "benchmark_id": self.benchmark_id,
             "content": self.content.to_dict(),
             "error_message": self.error_message,
             "finished_at": self.finished_at,
-            "findings": [item.to_dict() for item in self.findings],
+            "findings": [item.to_dict(with_control=controlled) for item in self.findings],
             "host": self.host.to_dict(),
             "profile_id": self.profile_id,
             "run_id": self.run_id,
@@ -1337,9 +1389,12 @@ class ScanRun:
 
         Schema version ``1.0`` documents never hold ``off_platform``. Version
         ``1.1`` documents must hold it, as an object, on the run and on every
-        finding.
+        finding. Version ``1.2`` documents hold ``control`` on every finding, at
+        least one of them an object, and ``off_platform`` either on the run and
+        every finding or nowhere.
         """
-        marked = _declared_version(data) == OFF_PLATFORM_SCHEMA_VERSION
+        marked = _declares_marker(data)
+        controlled = _declared_version(data) == CONTROL_SCHEMA_VERSION
         keys = (
             "schema_version",
             "run_id",
@@ -1358,7 +1413,7 @@ class ScanRun:
         version = reader.text("schema_version")
         if version not in SUPPORTED_SCHEMA_VERSIONS:
             _fail(f"unsupported schema_version {_safe(version)}")
-        return cls(
+        run = cls(
             run_id=reader.text("run_id"),
             started_at=reader.text("started_at"),
             finished_at=reader.text("finished_at"),
@@ -1370,10 +1425,14 @@ class ScanRun:
             status=reader.enum("status", ScanStatus),
             error_message=reader.optional_text("error_message"),
             findings=reader.objects(
-                "findings", lambda item: Finding.from_dict(item, marked=marked)
+                "findings",
+                lambda item: Finding.from_dict(item, marked=marked, controlled=controlled),
             ),
             off_platform=reader.nested(OFF_PLATFORM_KEY, OffPlatform.from_dict) if marked else None,
         )
+        if run.schema_version != version:
+            _fail(f"schema_version {_safe(version)} does not match the content of the scan run")
+        return run
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:

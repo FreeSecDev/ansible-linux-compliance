@@ -87,9 +87,21 @@ FREES-161).
 The XCCDF and ARF results are copied to ``results.xml`` and ``results-arf.xml``
 in the output directory, where the audit records them as evidence. SCC's own
 tree, with its debug logs and the rewritten options file, stays in the root-only
-``scc`` directory below it and is not recorded as evidence. Tailoring (disabled
-rules) and STIG to ComplianceAsCode mapping are FREES-146; checklist export is
+``scc`` directory below it and is not recorded as evidence. Checklist export is
 FREES-147.
+
+Disabled rules
+--------------
+
+SCC 5.15 applies an XCCDF tailoring file only from its own installation directory,
+``Resources/Content/XCCDF_Tailoring`` below ``/opt/scc``, under a name that it
+derives from the benchmark, its version and the profile; a custom configuration
+directory does not move it. An audit never writes there (ADR 0019, amendment of
+FREES-170), so the backend refuses a tailoring file. The audit scans the whole
+profile instead and reports every disabled rule as ``disabled`` afterwards
+(:data:`audit.POST_SCAN_DISABLE_BACKENDS`); SCC's own results stay in the
+evidence. The audit role maps the collection's toggles to the DISA rules through
+``content/stig-mapping.json`` (:mod:`stig`).
 """
 
 from __future__ import annotations
@@ -863,7 +875,9 @@ class SccBackend:
     def _check_request(request: scanner.ScanRequest) -> model.OffPlatform | None:
         if request.tailoring_path is not None:
             message = (
-                "the scc backend does not support disabled rules yet; SCC tailoring is FREES-146"
+                "the scc backend never applies a tailoring file: SCC reads tailoring only from its "
+                "own installation directory, which an audit never changes; the audit reports "
+                "disabled rules after the scan"
             )
             raise scanner.ScanRequestError(message)
         platform = SUPPORTED_BENCHMARKS.get(request.benchmark_id)

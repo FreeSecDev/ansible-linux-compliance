@@ -51,7 +51,7 @@ def test_an_off_platform_run_is_listed_and_never_figured(
     document = build(scope=Scope.MULTI_HOST, scan_run=(on_platform, marked))
     section = document["sections"]["compliance"]
     assert section["status"] == "available"
-    assert document["schema_version"] == "2.2"
+    assert document["schema_version"] == "2.3"
     assert document["overview"]["off_platform"] == 1
     assert [group["host"]["hostname"] for group in section["groups"]] == ["host.example"]
     assert {rule["host"]["hostname"] for rule in section["rules"]} == {"host.example"}

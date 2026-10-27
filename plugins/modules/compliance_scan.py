@@ -35,7 +35,7 @@ description:
     matches the request. SCC's exit status is never taken as evidence of completion. The C(scc)
     backend scans Ubuntu 24.04 hosts with the pinned DISA benchmark and refuses other releases
     such as Ubuntu 26.04, unless O(allow_off_platform_benchmark) opts into the one allowed
-    off-platform pair. It does not support O(disabled_rules) yet. Before anything is created
+    off-platform pair. Before anything is created
     it reads C(/etc/os-release) on the managed host and stops with C(host_mismatch) unless its
     C(ID) and C(VERSION_ID) are O(host.distribution_id) and O(host.distribution_version).
   - The module never changes the configuration of the host and always returns C(changed=false).
@@ -47,6 +47,13 @@ description:
     reported as compliant.
   - Rules that operator toggles disable (ADR 0011) are excluded from the scan through a generated
     XCCDF tailoring file and reported as C(disabled) findings that name the controlling variable.
+  - SCC 5.15 reads tailoring only from its own installation directory, which an audit never
+    changes, so with O(backend=scc) no tailoring file is written; SCC scans the whole profile and
+    every disabled rule is then reported as C(disabled), never as passing. SCC's own result for the
+    rule stays in the raw results and in the finding's C(evidence) (kind C(scanner_result))
+    (ADR 0019, amendment of FREES-170).
+  - O(control_placement) places findings under the control families of the collection, for
+    example the DISA rules of SCC through the ComplianceAsCode rules that check the same STIG ID.
 author:
   - FreeSecDev contributors (@FreeSecDev)
 options:
@@ -150,8 +157,9 @@ options:
     description:
       - Rules of the profile that operator toggles disable (ADR 0011).
       - Every rule must be selected by the profile, and at least one rule must stay enabled.
-      - The per-rule and per-family toggle variables are generated from the rule catalogue
-        (FREES-55); until then the caller lists the disabled rules here.
+      - The audit role resolves them from the toggle variables of the rule catalogue; with
+        O(backend=scc) it maps them to the DISA rules of the profile (the C(scc_toggles) filter).
+      - With O(backend=scc) the rules are scanned and reported as C(disabled) afterwards.
     type: list
     elements: dict
     default: []
@@ -167,6 +175,54 @@ options:
           - Defaults to C(linux_compliance_rule_<short id>_enabled), where the short identifier is
             the part of O(disabled_rules[].rule_id) after C(_rule_).
         type: str
+  control_placement:
+    description:
+      - The control family, topic and tags of rules of the profile, which every finding of the
+        rule carries as C(control) (findings model schema 1.2, ADR 0013). Every rule must be
+        selected by the profile and be listed once at most.
+      - The audit role computes them for O(backend=scc) with the C(scc_toggles) filter, from the
+        family of the ComplianceAsCode rules that check the rule's STIG ID, or C(unmapped).
+    type: list
+    elements: dict
+    default: []
+    suboptions:
+      rule_id:
+        description:
+          - Full XCCDF rule identifier.
+        type: str
+        required: true
+      family:
+        description:
+          - The primary control family, or C(unmapped).
+        type: str
+        required: true
+      topic:
+        description:
+          - The umbrella of the family, the family itself when it has none, or C(unmapped).
+        type: str
+        required: true
+      tags:
+        description:
+          - The other families and the subsystem tags of the mapped rules.
+        type: list
+        elements: str
+        default: []
+      stig_id:
+        description:
+          - The DISA STIG ID of the rule, when it has one.
+        type: str
+      mapped_rules:
+        description:
+          - The ComplianceAsCode rules that check the same STIG ID.
+        type: list
+        elements: str
+        default: []
+      partially_disabled_by:
+        description:
+          - The toggle variables that disable some, but not all, of the mapped rules.
+        type: list
+        elements: str
+        default: []
   allow_off_platform_benchmark:
     description:
       - Explicit opt-in to scan a host with a benchmark made for another platform (ADR 0019,
@@ -353,6 +409,9 @@ scan_run:
     - A scan run of O(allow_off_platform_benchmark) has schema 1.1 and an C(off_platform) marker,
       with C(benchmark_platform) and C(target_platform) (each C(distribution_id) and
       C(distribution_version)), on the run and on every finding.
+    - A scan run with O(control_placement) has schema 1.2; every finding then has C(control), the
+      placement or null, and C(off_platform) is on the run and every finding exactly when the run
+      is off-platform.
     - Findings are sorted by rule identifier. Null when no scan ran.
   returned: success
   type: dict
@@ -453,6 +512,8 @@ planned:
     benchmark_version: 0.1.82
     content_path: /opt/freesecdev/content/ssg-ubuntu2404-ds.xml
     content_sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+    control_placement_count: 0
+    disable_method: tailoring
     profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
     evaluated_profile_id: xccdf_org.example.content_profile_demo_freesecdev_audit_tailored
     rule_count: 200
@@ -522,6 +583,20 @@ def argument_spec() -> dict[str, object]:
             "options": {
                 "rule_id": {"type": "str", "required": True},
                 "disabled_by": {"type": "str"},
+            },
+        },
+        "control_placement": {
+            "type": "list",
+            "elements": "dict",
+            "default": [],
+            "options": {
+                "rule_id": {"type": "str", "required": True},
+                "family": {"type": "str", "required": True},
+                "topic": {"type": "str", "required": True},
+                "tags": {"type": "list", "elements": "str", "default": []},
+                "stig_id": {"type": "str"},
+                "mapped_rules": {"type": "list", "elements": "str", "default": []},
+                "partially_disabled_by": {"type": "list", "elements": "str", "default": []},
             },
         },
         "allow_off_platform_benchmark": {"type": "bool", "default": False},

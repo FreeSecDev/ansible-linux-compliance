@@ -111,39 +111,6 @@ def _result(
     return {"errors": [], "disabled_rules": disabled, "warnings": warnings}
 
 
-def _profile(raw: object, errors: toggles.Errors) -> frozenset[str]:
-    items = toggles.as_sequence(raw)
-    if items is None or not all(isinstance(item, str) for item in items):
-        errors.add("profile_rule_ids must list the rule identifiers of the discovered profile")
-        return frozenset()
-    return frozenset(str(item) for item in items)
-
-
-def _explicit(
-    raw: object, catalogue: toggles.Catalogue, errors: toggles.Errors
-) -> list[dict[str, object]]:
-    items = toggles.as_sequence(raw)
-    if items is None:
-        errors.add("linux_compliance_audit_disabled_rules must be a list")
-        return []
-    catalogued = {str(rule["rule_id"]): str(rule["toggle"]) for rule in catalogue.rules}
-    entries: list[dict[str, object]] = []
-    for item in items:
-        entry = toggles.as_mapping(item)
-        rule_id = None if entry is None else entry.get("rule_id")
-        if entry is None or not isinstance(rule_id, str):
-            errors.add("every linux_compliance_audit_disabled_rules item needs a rule_id string")
-        elif rule_id in catalogued:
-            errors.add(
-                f"{rule_id} is in the rule catalogue; switch it off with "
-                f"{catalogued[rule_id]} or its family toggle, not with "
-                f"linux_compliance_audit_disabled_rules, so that the audit and remediation agree"
-            )
-        else:
-            entries.append(entry)
-    return entries
-
-
 def audit_disabled_rules(catalogue: object, options: object) -> dict[str, object]:
     """Resolve the disabled rules of the audit; see the DOCUMENTATION block for the contract."""
     errors = toggles.Errors()
@@ -152,20 +119,9 @@ def audit_disabled_rules(catalogue: object, options: object) -> dict[str, object
         keys = [] if given is None else sorted(given)[:10]
         errors.add(f"options must be a mapping with exactly {sorted(OPTION_KEYS)}, got {keys}")
         return _result(errors.items, [], [])
-    loaded = toggles.with_tags(
-        toggles.load_catalogue(
-            catalogue, given["audit_only"], given["families"], given["toggles"], errors
-        ),
-        given["tags"],
-        errors,
-    )
-    profile = _profile(given["profile_rule_ids"], errors)
-    explicit = _explicit(given["disabled_rules"], loaded, errors)
-    switched_off = toggles.disabled_rules(
-        loaded.rules, loaded.toggles, profile, umbrellas=loaded.umbrellas, tags=loaded.tags
-    )
-    combined = sorted(explicit + switched_off, key=lambda entry: str(entry["rule_id"]))
-    return _result(errors.items, combined, toggles.topic_warnings(loaded, profile))
+    profile = toggles.profile_rule_set(given["profile_rule_ids"], errors)
+    resolution = toggles.resolve_audit(catalogue, given, profile, errors)
+    return _result(errors.items, resolution.disabled, resolution.warnings)
 
 
 class FilterModule:

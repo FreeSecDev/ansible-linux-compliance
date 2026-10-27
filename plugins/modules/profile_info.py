@@ -148,6 +148,12 @@ rules:
       description: Rule title, empty when the content has none.
       type: str
       sample: Synthetic alpha rule
+    version:
+      description:
+        - The rule's own XCCDF C(version), empty when it has none. A DISA STIG benchmark records
+          the STIG ID of the rule there, which the audit role uses to map the toggles to SCC.
+      type: str
+      sample: UBTU-24-100010
 error_type:
   description:
     - Stable identifier of the failure.

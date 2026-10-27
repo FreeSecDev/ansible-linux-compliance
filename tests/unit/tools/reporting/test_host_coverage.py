@@ -76,7 +76,7 @@ def test_a_report_without_a_collection_summary_labels_its_coverage_unknown(
         scope=Scope.FLEET, evidence_bundle=(web, db), exceptions_file=kit.EXCEPTIONS_FILE
     )
     compliance = document["sections"]["compliance"]
-    assert document["schema_version"] == "2.2"
+    assert document["schema_version"] == "2.3"
     assert compliance["status"] == "available"
     assert compliance["host_coverage"] == {
         "collection": None,
@@ -395,10 +395,12 @@ def test_the_schema_couples_coverage_with_the_section_and_the_version(
 
 
 def without_off_platform(document: dict[str, Any]) -> None:
-    """Strip the schema 2.2 off-platform keys, which a 2.0 or 2.1 document never has."""
+    """Strip the schema 2.2 and 2.3 keys, which a 2.0 or 2.1 document never has."""
     del document["overview"]["off_platform"]
     compliance = document["sections"]["compliance"]
     del compliance["off_platform"]
+    for rule in compliance["rules"]:
+        del rule["control"]
     for item in compliance["items"]:
         if isinstance(item["data"], dict):
             del item["data"]["off_platform"]
