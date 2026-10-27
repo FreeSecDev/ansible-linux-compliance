@@ -46,10 +46,26 @@ def audit_only() -> dict[str, list[str]]:
     )
 
 
+def tags() -> dict[str, list[str]]:
+    return cast(
+        "dict[str, list[str]]",
+        load(ROLE / "vars" / "rules.yml")["__linux_compliance_remediate_tags"],
+    )
+
+
+def aliases() -> dict[str, list[str]]:
+    return cast(
+        "dict[str, list[str]]",
+        load(ROLE / "vars" / "rules.yml")["__linux_compliance_remediate_family_aliases"],
+    )
+
+
 @functools.cache
 def loaded() -> toggles.Catalogue:
     errors = toggles.Errors()
-    catalogue = toggles.load_catalogue(native(), audit_only(), registry(), {}, errors)
+    catalogue = toggles.with_tags(
+        toggles.load_catalogue(native(), audit_only(), registry(), {}, errors), tags(), errors
+    )
     assert errors.items == []
     return catalogue
 
@@ -71,12 +87,14 @@ def governed(topic: str) -> list[str]:
 def plan(**overrides: object) -> dict[str, object]:
     options: dict[str, object] = {
         "audit_only": audit_only(),
+        "tags": tags(),
         "families": registry(),
         "enabled": True,
         "allow_disruptive": [],
         "toggles": {},
         "profile_rule_ids": [rule["rule_id"] for rule in rules()],
         "ledger_entries": [],
+        "family_aliases": aliases(),
     }
     options.update(overrides)
     return plan_filter.remediation_plan(native(), options)
@@ -92,7 +110,9 @@ def test_the_catalogue_file_holds_only_the_catalogue_and_the_registry() -> None:
     assert set(load(ROLE / "vars" / "rules.yml")) == {
         "__linux_compliance_remediate_audit_only",
         "__linux_compliance_remediate_families",
+        "__linux_compliance_remediate_family_aliases",
         "__linux_compliance_remediate_rules",
+        "__linux_compliance_remediate_tags",
     }
 
 

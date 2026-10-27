@@ -656,12 +656,17 @@
                + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
                   | map(attribute='value') | ansible.builtin.flatten) }}
 
-    - name: Collect the rules of the services umbrella and of the sssd family
+    - name: Collect the rules of the services umbrella and of the sssd family, and the rules tagged with them
       ansible.builtin.set_fact:
         services_rules: >-
           {{ services_families | map('extract', full_catalogue.__linux_compliance_remediate_audit_only)
              | ansible.builtin.flatten }}
+        services_tagged: >-
+          {{ services_families | select('in', full_catalogue.__linux_compliance_remediate_tags)
+             | map('extract', full_catalogue.__linux_compliance_remediate_tags) | ansible.builtin.flatten
+             | ansible.builtin.unique }}
         sssd_rules: "{{ full_catalogue.__linux_compliance_remediate_audit_only.sssd }}"
+        sssd_tagged: "{{ full_catalogue.__linux_compliance_remediate_tags.sssd }}"
 
     - name: Switch the umbrella off and try to switch the sssd family back on
       vars:
@@ -681,10 +686,11 @@
           vars:
             linux_compliance_discovered: "{{ full_profile }}"
 
-        - name: Check that every rule of the umbrella is off in both roles and names the umbrella
+        - name: Check that every rule of the umbrella and every rule tagged with its families is off and names it
           vars:
             planned: >-
-              {{ linux_compliance_remediated.rules | selectattr('family', 'in', services_families) | list }}
+              {{ linux_compliance_remediated.rules | selectattr('rule_id', 'in', services_rules + services_tagged)
+                 | list }}
             audit_disabled: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
           ansible.builtin.assert:
             that:
@@ -692,11 +698,14 @@
                 services_families | sort
                 == ['cron', 'fapolicyd', 'mail', 'network_services', 'nfs', 'sssd', 'time_sync', 'usbguard']
               - services_rules | length == 119
-              - planned | length == services_rules | length
+              - services_tagged | length == 36
+              - services_tagged | ansible.builtin.intersect(services_rules) | length == 0
+              - "'xccdf_org.ssgproject.content_rule_file_permissions_crontab' in services_tagged"
+              - planned | length == 155
               - planned | map(attribute='action') | unique | list == ['none']
               - planned | map(attribute='reason') | unique | list == ['disabled_by_toggle']
               - planned | map(attribute='disabled_by') | unique | list == [umbrella_toggle]
-              - audit_disabled | map(attribute='rule_id') | sort == services_rules | sort
+              - audit_disabled | map(attribute='rule_id') | sort == (services_rules + services_tagged) | sort
               - audit_disabled | map(attribute='disabled_by') | unique | list == [umbrella_toggle]
               - linux_compliance_remediated.disabled_rules == audit_disabled
               - __linux_compliance_audit_toggles.warnings == []
@@ -721,15 +730,121 @@
           vars:
             linux_compliance_discovered: "{{ full_profile }}"
 
-        - name: Check that the family toggle narrows the umbrella to exactly the sssd rules
+        - name: Check that the family toggle narrows the umbrella to exactly the sssd rules and the sssd log files
           vars:
             audit_disabled: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
           ansible.builtin.assert:
             that:
               - sssd_rules | length > 10
-              - audit_disabled | map(attribute='rule_id') | sort == sssd_rules | sort
+              - >-
+                sssd_tagged | sort == ['xccdf_org.ssgproject.content_rule_file_groupownerships_var_log_sssd',
+                'xccdf_org.ssgproject.content_rule_file_ownerships_var_log_sssd',
+                'xccdf_org.ssgproject.content_rule_file_permissions_var_log_sssd']
+              - audit_disabled | map(attribute='rule_id') | sort == (sssd_rules + sssd_tagged) | sort
               - audit_disabled | map(attribute='disabled_by') | unique | list == [sssd_toggle]
               - linux_compliance_remediated.disabled_rules == audit_disabled
+            quiet: true
+
+    - name: Switch cron and time synchronisation off, and with them their file permission rules
+      vars:
+        linux_compliance_cron_enabled: false
+        linux_compliance_time_sync_enabled: false
+      block:
+        - name: Run the remediate role with cron and time_sync off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Resolve the disabled rules with the audit role with cron and time_sync off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Check that the native crontab rule, cron.deny, at.deny and the chrony keys follow their subsystem
+          vars:
+            audit_disabled: >-
+              {{ __linux_compliance_audit_toggles.disabled_rules
+                 | ansible.builtin.items2dict(key_name='rule_id', value_name='disabled_by') }}
+            crontab: >-
+              {{ linux_compliance_remediated.rules
+                 | selectattr('rule_id', 'equalto', 'xccdf_org.ssgproject.content_rule_file_permissions_crontab')
+                 | first }}
+          ansible.builtin.assert:
+            that:
+              - crontab.family == 'file_permissions'
+              - crontab.action == 'none'
+              - crontab.reason == 'disabled_by_toggle'
+              - crontab.disabled_by == 'linux_compliance_cron_enabled'
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_file_permissions_crontab']
+                == 'linux_compliance_cron_enabled'
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_file_owner_cron_deny']
+                == 'linux_compliance_cron_enabled'
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_file_groupowner_at_deny']
+                == 'linux_compliance_cron_enabled'
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_file_permissions_etc_chrony_keys']
+                == 'linux_compliance_time_sync_enabled'
+              - "'xccdf_org.ssgproject.content_rule_audit_rules_etc_cron_d' not in audit_disabled"
+              - "'xccdf_org.ssgproject.content_rule_aide_periodic_cron_checking' not in audit_disabled"
+              - audit_disabled | length == 7 + 30 + 19 + 3
+              - >-
+                linux_compliance_remediated.disabled_rules
+                | ansible.builtin.items2dict(key_name='rule_id', value_name='disabled_by')
+                == audit_disabled
+            quiet: true
+
+    - name: Switch smart cards, AppArmor and SELinux off
+      vars:
+        linux_compliance_smartcard_enabled: false
+        linux_compliance_apparmor_enabled: false
+        linux_compliance_selinux_enabled: false
+        linux_compliance_pwhistory_enabled: false
+      block:
+        - name: Run the remediate role with smartcard, apparmor, selinux and pwhistory off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Resolve the disabled rules with the audit role with smartcard, apparmor, selinux and pwhistory off
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.audit
+            tasks_from: toggles.yml
+          vars:
+            linux_compliance_discovered: "{{ full_profile }}"
+
+        - name: Check the smart card rules of SSSD and GNOME, pam_unix remember and the audit watches on MAC
+          vars:
+            audit_disabled: >-
+              {{ __linux_compliance_audit_toggles.disabled_rules
+                 | ansible.builtin.items2dict(key_name='rule_id', value_name='disabled_by') }}
+          ansible.builtin.assert:
+            that:
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_sssd_enable_smartcards']
+                == 'linux_compliance_smartcard_enabled'
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_dconf_gnome_lock_screen_on_smartcard_removal']
+                == 'linux_compliance_smartcard_enabled'
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_remember']
+                == 'linux_compliance_pwhistory_enabled'
+              - >-
+                audit_disabled['xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_no_remember']
+                == 'linux_compliance_pwhistory_enabled'
+              - "'xccdf_org.ssgproject.content_rule_audit_rules_mac_modification' not in audit_disabled"
+              - "'xccdf_org.ssgproject.content_rule_audit_rules_mac_modification_etc_apparmor' not in audit_disabled"
+              - "'xccdf_org.ssgproject.content_rule_audit_rules_mac_modification_etc_apparmor_d' not in audit_disabled"
+              - >-
+                linux_compliance_remediated.disabled_rules
+                | ansible.builtin.items2dict(key_name='rule_id', value_name='disabled_by')
+                == audit_disabled
             quiet: true
 
 - name: Full catalogue in check mode | Rules without a native remediation are reported, never remediated

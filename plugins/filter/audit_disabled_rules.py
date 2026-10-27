@@ -51,6 +51,10 @@ options:
         umbrella of each family that belongs to one.
       - C(toggles) maps every variable whose name matches C(^linux_compliance_.+_enabled$) to its
         value, validated as for C(remediation_plan).
+      - C(tags) maps a family to the catalogued rules of other families that carry it as a
+        subsystem tag, C(__linux_compliance_remediate_tags) of the same file (FREES-165). A rule
+        is disabled when its family, the umbrella of its family, one of its tags or the umbrella
+        of a tag is switched off, and C(disabled_by) follows the precedence of C(remediation_plan).
       - C(profile_rule_ids) lists the full rule identifiers that the discovered profile selects;
         only those rules can be disabled in the scan.
       - C(disabled_rules) is C(linux_compliance_audit_disabled_rules), a list of mappings with a
@@ -64,7 +68,7 @@ EXAMPLES = r"""
   ansible.builtin.set_fact:
     disabled: >-
       {{ catalogue | freesecdev.linux_compliance.audit_disabled_rules({
-           'audit_only': audit_only, 'families': registry,
+           'audit_only': audit_only, 'families': registry, 'tags': tags,
            'toggles': {'linux_compliance_auditd_enabled': false},
            'profile_rule_ids': discovered_rule_ids, 'disabled_rules': []}) }}
 """
@@ -95,7 +99,7 @@ _value:
 """
 
 OPTION_KEYS: Final[frozenset[str]] = frozenset(
-    {"audit_only", "disabled_rules", "families", "profile_rule_ids", "toggles"}
+    {"audit_only", "disabled_rules", "families", "profile_rule_ids", "tags", "toggles"}
 )
 
 
@@ -148,13 +152,17 @@ def audit_disabled_rules(catalogue: object, options: object) -> dict[str, object
         keys = [] if given is None else sorted(given)[:10]
         errors.add(f"options must be a mapping with exactly {sorted(OPTION_KEYS)}, got {keys}")
         return _result(errors.items, [], [])
-    loaded = toggles.load_catalogue(
-        catalogue, given["audit_only"], given["families"], given["toggles"], errors
+    loaded = toggles.with_tags(
+        toggles.load_catalogue(
+            catalogue, given["audit_only"], given["families"], given["toggles"], errors
+        ),
+        given["tags"],
+        errors,
     )
     profile = _profile(given["profile_rule_ids"], errors)
     explicit = _explicit(given["disabled_rules"], loaded, errors)
     switched_off = toggles.disabled_rules(
-        loaded.rules, loaded.toggles, profile, umbrellas=loaded.umbrellas
+        loaded.rules, loaded.toggles, profile, umbrellas=loaded.umbrellas, tags=loaded.tags
     )
     combined = sorted(explicit + switched_off, key=lambda entry: str(entry["rule_id"]))
     return _result(errors.items, combined, toggles.topic_warnings(loaded, profile))

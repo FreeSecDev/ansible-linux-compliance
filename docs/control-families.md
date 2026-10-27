@@ -23,9 +23,11 @@ toggle: `linux_compliance_services_enabled: false` switches off every family who
 umbrella is `services`, whatever their own topic toggles say. An umbrella is either a name
 of its own, such as `services`, or a family that heads it, such as `pam` for `pwquality`,
 `pwhistory` and `faillock`. Every umbrella keeps the name of the family it was split from,
-so it switches off exactly the rules that family held before the split
+so the rules of its families are exactly the rules that family held before the split
 ([ADR 0011](adr/0011-control-toggles-and-cleanup.md), amendment of the FREES-53 topic
-split). A rule without a native remediation has the strategy
+split). Subsystem tags let a toggle also switch off rules of other families that are
+about its subsystem; [every such rule is listed](#what-a-toggle-switches-off-through-tags)
+(FREES-165). A rule without a native remediation has the strategy
 `audit_only`: the audit scans it, or excludes it and reports it as `disabled` when it is
 switched off, and remediation reports it as `not_implemented` and never changes anything
 for it ([remediation guide](remediation.md#effective-state-of-a-rule)).
@@ -139,6 +141,239 @@ entry that names an umbrella allows every disruptive family it groups.
 | `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | 88 |
 | `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | 33 |
 | `linux_compliance_mounts_enabled` | `autofs`, `mount_options`, `partitioning` | 48 |
+
+`pam` is both a topic and an umbrella: `linux_compliance_pam_enabled: false`
+switches off its own rules and those of `pwquality`, `pwhistory`, `faillock`, and the allow-list entry
+`pam` allows all of them. There is no toggle or allow-list entry for the
+rules of `pam` alone; to remediate only those, allow `pam` and switch
+the grouped families off with their own toggles.
+
+## Subsystem tags
+
+The steps above give every rule exactly one family, often the family of the mechanism
+it uses: the permissions of `/var/log/sssd` are `file_permissions`, the GNOME lock on
+smart card removal is `desktop`. A subsystem tag adds the family of the subsystem that
+such a rule is about (FREES-165), so that `linux_compliance_sssd_enabled: false` also
+switches off the permissions of the SSSD logs. A rule is off when the toggle of its
+family, of the umbrella of its family, of one of its tags or of the umbrella of a tag is
+`false`; a rule toggle that is set still wins. Tags only add ways to switch a rule off:
+a tag toggle that is `true` never switches a rule on. When several toggles are off,
+`disabled_by` names the first in this order: the umbrella of the family, the family, then
+each tag in alphabetical order, after the umbrella of that tag; else the rule toggle.
+
+Tags do not change what is disruptive. The allow-list
+`linux_compliance_remediate_allow_disruptive` and the disruptive flag stay properties of
+the family, because they gate what remediation changes on the host, and the family
+decides that: `file_permissions_crontab` is tagged `cron`, which is disruptive, but
+applying it only changes the mode of `/etc/crontab`, so it needs no allow-list entry.
+
+Tags are derived from the pinned content: a rule pattern tags every rule whose short
+identifier, in lower case, contains it, and a group tags every rule below it. An
+exclusion with a reason keeps a rule untagged. The generator fails when an entry finds no
+rule, when an exclusion excludes nothing and when an entry finds a rule of a family whose
+rules are never tagged and no exclusion lists it, so a new rule of the content cannot
+drift past a decision. The rules of these families are never tagged:
+
+- `auditd`: Audit rules record changes to a subsystem; they do not configure it. An operator who stops the collection from managing a subsystem still needs its changes audited, so only the auditd toggles switch audit rules off.
+
+| Tag | Rule patterns | Groups | Tagged rules |
+|---|---|---|---|
+| `aide` | `aide` | none | 0 |
+| `apparmor` | `apparmor` | none | 0 |
+| `cron` | `at_allow`, `at_deny`, `cron` | `cron_and_at` | 30 |
+| `faillock` | `faildelay`, `faillock` | none | 0 |
+| `firewalld` | `firewalld` | none | 1 |
+| `journald` | `journal` | none | 3 |
+| `pwhistory` | `pwhistory`, `remember` | none | 2 |
+| `pwquality` | `pwquality` | none | 0 |
+| `rsyslog` | `rsyslog` | none | 0 |
+| `selinux` | `sebool`, `selinux` | none | 1 |
+| `smartcard` | `opensc_`, `pcscd`, `smartcard` | none | 2 |
+| `ssh` | `ssh` | none | 4 |
+| `sssd` | `sssd` | none | 3 |
+| `sudo` | `sudo` | none | 3 |
+| `time_sync` | `chrony`, `ntp`, `timesyncd` | `ntp` | 3 |
+
+### Tag `aide`
+
+It tags no rule of another family of the pinned content; its entries keep new rules from drifting.
+
+### Tag `apparmor`
+
+It tags no rule of another family of the pinned content; its entries keep new rules from drifting.
+
+Not tagged:
+
+- `audit_rules_mac_modification_etc_apparmor`, `audit_rules_mac_modification_etc_apparmor_d`, `audit_rules_privileged_commands_apparmor_parser`: Audit rules that watch the AppArmor policy and its parser; auditing changes to mandatory access control is not configuring it, so they stay with auditd alone.
+
+### Tag `cron`
+
+| Rule | Family |
+|---|---|
+| `file_groupowner_at_allow` | `file_permissions` |
+| `file_groupowner_at_deny` | `file_permissions` |
+| `file_groupowner_cron_allow` | `file_permissions` |
+| `file_groupowner_cron_d` | `file_permissions` |
+| `file_groupowner_cron_daily` | `file_permissions` |
+| `file_groupowner_cron_deny` | `file_permissions` |
+| `file_groupowner_cron_hourly` | `file_permissions` |
+| `file_groupowner_cron_monthly` | `file_permissions` |
+| `file_groupowner_cron_weekly` | `file_permissions` |
+| `file_groupowner_crontab` | `file_permissions` |
+| `file_owner_at_allow` | `file_permissions` |
+| `file_owner_at_deny` | `file_permissions` |
+| `file_owner_cron_allow` | `file_permissions` |
+| `file_owner_cron_d` | `file_permissions` |
+| `file_owner_cron_daily` | `file_permissions` |
+| `file_owner_cron_deny` | `file_permissions` |
+| `file_owner_cron_hourly` | `file_permissions` |
+| `file_owner_cron_monthly` | `file_permissions` |
+| `file_owner_cron_weekly` | `file_permissions` |
+| `file_owner_crontab` | `file_permissions` |
+| `file_permissions_at_allow` | `file_permissions` |
+| `file_permissions_at_deny` | `file_permissions` |
+| `file_permissions_cron_allow` | `file_permissions` |
+| `file_permissions_cron_d` | `file_permissions` |
+| `file_permissions_cron_daily` | `file_permissions` |
+| `file_permissions_cron_hourly` | `file_permissions` |
+| `file_permissions_cron_monthly` | `file_permissions` |
+| `file_permissions_cron_not_modified` | `file_permissions` |
+| `file_permissions_cron_weekly` | `file_permissions` |
+| `file_permissions_crontab` | `file_permissions` |
+
+Not tagged:
+
+- `aide_periodic_cron_checking`: Schedules the AIDE check; it is about AIDE, and cron only runs it.
+- `audit_rules_cron_execution`, `audit_rules_etc_cron_d`, `audit_rules_privileged_commands_crontab`, `audit_rules_var_spool_cron`: Audit rules that watch cron and crontab; they stay with auditd alone.
+- `rsyslog_cron_logging`: Configures where rsyslog writes the cron facility; it is about rsyslog.
+
+### Tag `faillock`
+
+It tags no rule of another family of the pinned content; its entries keep new rules from drifting.
+
+Not tagged:
+
+- `audit_rules_login_events_faillock`: An audit rule that watches the faillock records; it stays with auditd alone.
+
+### Tag `firewalld`
+
+| Rule | Family |
+|---|---|
+| `firewalld_sshd_port_enabled` | `ssh` |
+
+### Tag `journald`
+
+| Rule | Family |
+|---|---|
+| `ensure_journald_and_rsyslog_not_active_together` | `rsyslog` |
+| `file_groupowner_var_log_journal` | `file_permissions` |
+| `file_owner_var_log_journal` | `file_permissions` |
+
+Not tagged:
+
+- `audit_rules_var_log_journal`: An audit rule that watches the journal directory; it stays with auditd alone.
+
+### Tag `pwhistory`
+
+| Rule | Family |
+|---|---|
+| `accounts_password_pam_unix_no_remember` | `user_accounts` |
+| `accounts_password_pam_unix_remember` | `pam` |
+
+### Tag `pwquality`
+
+It tags no rule of another family of the pinned content; its entries keep new rules from drifting.
+
+### Tag `rsyslog`
+
+It tags no rule of another family of the pinned content; its entries keep new rules from drifting.
+
+### Tag `selinux`
+
+| Rule | Family |
+|---|---|
+| `account_password_selinux_faillock_dir` | `faillock` |
+
+Not tagged:
+
+- `audit_rules_execution_setsebool`: An audit rule that watches setsebool; auditing SELinux changes stays with auditd alone.
+
+### Tag `smartcard`
+
+| Rule | Family |
+|---|---|
+| `dconf_gnome_lock_screen_on_smartcard_removal` | `desktop` |
+| `sssd_enable_smartcards` | `sssd` |
+
+### Tag `ssh`
+
+| Rule | Family |
+|---|---|
+| `harden_sshd_ciphers_openssh_conf_crypto_policy` | `crypto_policy` |
+| `harden_sshd_ciphers_opensshserver_conf_crypto_policy` | `crypto_policy` |
+| `harden_sshd_macs_openssh_conf_crypto_policy` | `crypto_policy` |
+| `harden_sshd_macs_opensshserver_conf_crypto_policy` | `crypto_policy` |
+
+Not tagged:
+
+- `audit_rules_privileged_commands_ssh_agent`, `audit_rules_privileged_commands_ssh_keysign`: Audit rules that watch ssh-agent and ssh-keysign; they stay with auditd alone.
+- `banner_etc_profiled_ssh_confirm`: A login banner script in /etc/profile.d; it does not configure SSH and stays with banners.
+- `sebool_ssh_sysadm_login`: An SELinux boolean for logins as sysadm_r; it configures the SELinux policy, not SSH.
+
+### Tag `sssd`
+
+| Rule | Family |
+|---|---|
+| `file_groupownerships_var_log_sssd` | `file_permissions` |
+| `file_ownerships_var_log_sssd` | `file_permissions` |
+| `file_permissions_var_log_sssd` | `file_permissions` |
+
+### Tag `sudo`
+
+| Rule | Family |
+|---|---|
+| `disallow_bypass_password_sudo` | `pam` |
+| `ensure_sudo_group_restricted` | `user_accounts` |
+| `selinux_context_elevation_for_sudo` | `selinux` |
+
+Not tagged:
+
+- `audit_rules_privileged_commands_sudo`, `audit_rules_privileged_commands_sudoedit`, `audit_rules_sudoers`, `audit_rules_sudoers_d`, `audit_sudo_log_events`: Audit rules that watch sudo, sudoedit and the sudoers files; they stay with auditd alone.
+
+### Tag `time_sync`
+
+| Rule | Family |
+|---|---|
+| `file_groupowner_etc_chrony_keys` | `file_permissions` |
+| `file_owner_etc_chrony_keys` | `file_permissions` |
+| `file_permissions_etc_chrony_keys` | `file_permissions` |
+
+## What a toggle switches off through tags
+
+Every topic and umbrella toggle switches off the rules of the families it governs and,
+through the tags, these rules of other families. Every toggle of a former family keeps
+switching off exactly the rules of its families (the legacy fixture
+`tests/fixtures/catalog/legacy-families.yml` pins them), and switches off these rules
+in addition.
+
+| Toggle | Rules of its families | Added through tags | Added rules |
+|---|---|---|---|
+| `linux_compliance_logging_enabled` | 41 | 2 | `file_groupowner_var_log_journal`, `file_owner_var_log_journal` |
+| `linux_compliance_journald_enabled` | 19 | 3 | `ensure_journald_and_rsyslog_not_active_together`, `file_groupowner_var_log_journal`, `file_owner_var_log_journal` |
+| `linux_compliance_services_enabled` | 119 | 36 | `file_groupowner_at_allow`, `file_groupowner_at_deny`, `file_groupowner_cron_allow`, `file_groupowner_cron_d`, `file_groupowner_cron_daily`, `file_groupowner_cron_deny`, `file_groupowner_cron_hourly`, `file_groupowner_cron_monthly`, `file_groupowner_cron_weekly`, `file_groupowner_crontab`, `file_groupowner_etc_chrony_keys`, `file_groupownerships_var_log_sssd`, `file_owner_at_allow`, `file_owner_at_deny`, `file_owner_cron_allow`, `file_owner_cron_d`, `file_owner_cron_daily`, `file_owner_cron_deny`, `file_owner_cron_hourly`, `file_owner_cron_monthly`, `file_owner_cron_weekly`, `file_owner_crontab`, `file_owner_etc_chrony_keys`, `file_ownerships_var_log_sssd`, `file_permissions_at_allow`, `file_permissions_at_deny`, `file_permissions_cron_allow`, `file_permissions_cron_d`, `file_permissions_cron_daily`, `file_permissions_cron_hourly`, `file_permissions_cron_monthly`, `file_permissions_cron_not_modified`, `file_permissions_cron_weekly`, `file_permissions_crontab`, `file_permissions_etc_chrony_keys`, `file_permissions_var_log_sssd` |
+| `linux_compliance_sssd_enabled` | 12 | 3 | `file_groupownerships_var_log_sssd`, `file_ownerships_var_log_sssd`, `file_permissions_var_log_sssd` |
+| `linux_compliance_time_sync_enabled` | 19 | 3 | `file_groupowner_etc_chrony_keys`, `file_owner_etc_chrony_keys`, `file_permissions_etc_chrony_keys` |
+| `linux_compliance_cron_enabled` | 7 | 30 | `file_groupowner_at_allow`, `file_groupowner_at_deny`, `file_groupowner_cron_allow`, `file_groupowner_cron_d`, `file_groupowner_cron_daily`, `file_groupowner_cron_deny`, `file_groupowner_cron_hourly`, `file_groupowner_cron_monthly`, `file_groupowner_cron_weekly`, `file_groupowner_crontab`, `file_owner_at_allow`, `file_owner_at_deny`, `file_owner_cron_allow`, `file_owner_cron_d`, `file_owner_cron_daily`, `file_owner_cron_deny`, `file_owner_cron_hourly`, `file_owner_cron_monthly`, `file_owner_cron_weekly`, `file_owner_crontab`, `file_permissions_at_allow`, `file_permissions_at_deny`, `file_permissions_cron_allow`, `file_permissions_cron_d`, `file_permissions_cron_daily`, `file_permissions_cron_hourly`, `file_permissions_cron_monthly`, `file_permissions_cron_not_modified`, `file_permissions_cron_weekly`, `file_permissions_crontab` |
+| `linux_compliance_firewall_enabled` | 42 | 1 | `firewalld_sshd_port_enabled` |
+| `linux_compliance_firewalld_enabled` | 10 | 1 | `firewalld_sshd_port_enabled` |
+| `linux_compliance_ssh_enabled` | 63 | 4 | `harden_sshd_ciphers_openssh_conf_crypto_policy`, `harden_sshd_ciphers_opensshserver_conf_crypto_policy`, `harden_sshd_macs_openssh_conf_crypto_policy`, `harden_sshd_macs_opensshserver_conf_crypto_policy` |
+| `linux_compliance_pam_enabled` | 55 | 1 | `accounts_password_pam_unix_no_remember` |
+| `linux_compliance_pwhistory_enabled` | 7 | 2 | `accounts_password_pam_unix_no_remember`, `accounts_password_pam_unix_remember` |
+| `linux_compliance_accounts_enabled` | 88 | 2 | `dconf_gnome_lock_screen_on_smartcard_removal`, `sssd_enable_smartcards` |
+| `linux_compliance_smartcard_enabled` | 9 | 2 | `dconf_gnome_lock_screen_on_smartcard_removal`, `sssd_enable_smartcards` |
+| `linux_compliance_sudo_enabled` | 22 | 3 | `disallow_bypass_password_sudo`, `ensure_sudo_group_restricted`, `selinux_context_elevation_for_sudo` |
+| `linux_compliance_mandatory_access_control_enabled` | 33 | 1 | `account_password_selinux_faillock_dir` |
+| `linux_compliance_selinux_enabled` | 27 | 1 | `account_password_selinux_faillock_dir` |
 
 ## Rules per profile
 

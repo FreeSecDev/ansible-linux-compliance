@@ -70,12 +70,14 @@ def ledger_entry(rule_id: str, family: str) -> dict[str, object]:
 def options(**overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
         "audit_only": {},
+        "tags": {},
         "families": FAMILIES,
         "enabled": True,
         "allow_disruptive": [],
         "toggles": {},
         "profile_rule_ids": [CRONTAB, PASSWD, ROOT_LOGIN, PARTITION],
         "ledger_entries": [],
+        "family_aliases": {},
     }
     values.update(overrides)
     return values
