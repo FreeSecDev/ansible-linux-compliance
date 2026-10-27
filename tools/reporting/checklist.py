@@ -18,24 +18,38 @@ Nothing else is Not a Finding. The finding details name the scanner's result and
 rule is not reviewed; the comments name every exception and lapsed waiver.
 
 The descriptive fields come from DISA STIG content (:mod:`tools.reporting.stig_content`)
-read at export time. A scan run whose rules are not DISA STIG rules (ComplianceAsCode
-findings of the OpenSCAP backend) is refused, because the mapping that would give them
-DISA group and rule IDs is FREES-146.
+read at export time. SCC findings are DISA STIG rules and map one to one. ComplianceAsCode
+findings of the OpenSCAP backend are exported only through the STIG mapping of FREES-146
+(:mod:`tools.reporting.stig_mapping`): each DISA rule takes the ComplianceAsCode checks that
+the mapping lists for its STIG ID, each check gets its status by the table above, and the
+entry aggregates them conservatively (:func:`mapped_verdict`):
+
+- any check Open makes the entry Open;
+- otherwise, when every check has the same status, the entry has it, so it is Not a Finding
+  only when every mapped check passed;
+- otherwise the checks disagree, and the entry is Not Reviewed with the reason;
+- a DISA rule without a mapped check is Not Reviewed: no ComplianceAsCode check.
+
+A ComplianceAsCode finding whose rule checks no DISA rule of the content is not exported,
+and the asset comment counts them. A scan run whose rules are not DISA STIG rules and that
+the mapping does not cover is refused.
 """
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import model
 from tools.reporting.stig_content import DISA_RULE, StigBenchmark, StigRule
+from tools.reporting.stig_mapping import ProfileMapping
 
 EXPORTER: Final[str] = "freesecdev.linux_compliance (tools.reporting)"
 ROLE: Final[str] = "None"
 ASSET_TYPE: Final[str] = "Computing"
 UUID_NAMESPACE: Final[uuid.UUID] = uuid.UUID("7d3f2a8e-4c1b-5e9a-8f60-2b7c1d0e9a41")
 MAPPING_ISSUE: Final[str] = "FREES-146"
+NO_CHECK: Final[str] = "no ComplianceAsCode check"
 
 
 class ChecklistError(ValueError):
@@ -124,9 +138,12 @@ class Source:
         display: The input path, for messages.
         run: The validated scan run (with waivers, when exceptions were applied).
         lapsed: The rules whose waiver lapsed after the scan started.
-        benchmark: The DISA STIG content of the run's benchmark.
+        benchmark: The DISA STIG content of the run's benchmark, or for a mapped run the
+            DISA content joined through the mapping.
         own_results: Whether ``benchmark`` is the run's own XCCDF results, whose target
             facts describe the scanned host.
+        mapping: The STIG mapping of a ComplianceAsCode run, or ``None`` for DISA rules.
+        content_name: The file name of the DISA content of a mapped run.
     """
 
     display: str
@@ -134,6 +151,8 @@ class Source:
     lapsed: frozenset[str]
     benchmark: StigBenchmark
     own_results: bool
+    mapping: ProfileMapping | None = None
+    content_name: str = ""
 
 
 def off_platform_text(marker: model.OffPlatform) -> str:
@@ -146,7 +165,7 @@ def off_platform_text(marker: model.OffPlatform) -> str:
     )
 
 
-def _not_reviewed_reason(run: model.ScanRun, finding: model.Finding | None) -> str | None:
+def _run_reason(run: model.ScanRun, finding: model.Finding | None) -> str | None:
     marker = run.off_platform if finding is None else finding.off_platform or run.off_platform
     if marker is not None:
         return (
@@ -158,6 +177,13 @@ def _not_reviewed_reason(run: model.ScanRun, finding: model.Finding | None) -> s
             f"Not reviewed: the scan run did not complete (run status {run.status.value}): "
             f"{run.error_message}"
         )
+    return None
+
+
+def _not_reviewed_reason(run: model.ScanRun, finding: model.Finding | None) -> str | None:
+    reason = _run_reason(run, finding)
+    if reason is not None:
+        return reason
     if finding is None:
         return (
             f"Not reviewed: the scan run has no result for this rule; profile {run.profile_id} "
@@ -168,22 +194,32 @@ def _not_reviewed_reason(run: model.ScanRun, finding: model.Finding | None) -> s
     return None
 
 
-def _details(run: model.ScanRun, finding: model.Finding | None, reason: str | None) -> str:
-    lines = [] if reason is None else [reason]
-    if finding is not None:
-        lines.append(f"Scanner result: {finding.evaluated_outcome.value}")
-        if finding.outcome is not finding.evaluated_outcome:
-            lines.append(f"Reported outcome: {finding.outcome.value}")
-        if finding.flags:
-            lines.append("Flags: " + ", ".join(flag.value for flag in finding.flags))
-        if finding.disabled_by is not None:
-            lines.append(f"Disabled by: {finding.disabled_by}")
-        if finding.message is not None:
-            lines.append(f"Message: {finding.message}")
-    lines.append(
+def _finding_lines(finding: model.Finding | None) -> list[str]:
+    if finding is None:
+        return []
+    lines = [f"Scanner result: {finding.evaluated_outcome.value}"]
+    if finding.outcome is not finding.evaluated_outcome:
+        lines.append(f"Reported outcome: {finding.outcome.value}")
+    if finding.flags:
+        lines.append("Flags: " + ", ".join(flag.value for flag in finding.flags))
+    if finding.disabled_by is not None:
+        lines.append(f"Disabled by: {finding.disabled_by}")
+    if finding.message is not None:
+        lines.append(f"Message: {finding.message}")
+    return lines
+
+
+def _run_line(run: model.ScanRun) -> str:
+    return (
         f"Scan run {run.run_id}: {run.scanner.name} {run.scanner.version}, "
         f"{run.started_at} to {run.finished_at}, profile {run.profile_id}"
     )
+
+
+def _details(run: model.ScanRun, finding: model.Finding | None, reason: str | None) -> str:
+    lines = [] if reason is None else [reason]
+    lines.extend(_finding_lines(finding))
+    lines.append(_run_line(run))
     return "\n".join(lines)
 
 
@@ -227,8 +263,105 @@ def verdict(run: model.ScanRun, finding: model.Finding | None, *, lapsed: bool =
     return Verdict(status, _details(run, finding, reason), _comments(finding, lapsed=lapsed))
 
 
-def refuse_unmapped(run: model.ScanRun, display: str) -> None:
-    """Refuse a scan run whose rules are not DISA STIG rules.
+@dataclass(frozen=True)
+class _Check:
+    rule_id: str
+    finding: model.Finding | None
+    verdict: Verdict
+
+
+def aggregate(statuses: Sequence[Status]) -> Status:
+    """Return the status of a DISA rule from the statuses of its mapped checks.
+
+    Any Open check makes it Open; checks that all have one status give that status; checks
+    that disagree otherwise, or no check at all, give Not Reviewed.
+    """
+    if OPEN in statuses:
+        return OPEN
+    if len(set(statuses)) == 1:
+        return statuses[0]
+    return NOT_REVIEWED
+
+
+def _mapped_headline(run: model.ScanRun, status: Status, checks: Sequence[_Check]) -> str | None:
+    if status is not NOT_REVIEWED:
+        return None
+    reason = _run_reason(run, None)
+    if reason is not None:
+        return reason
+    statuses = [check.verdict.status for check in checks]
+    if len(set(statuses)) > 1:
+        counts = ", ".join(
+            f"{item.name}: {statuses.count(item)}" for item in STATUSES if item in statuses
+        )
+        return (
+            f"Not reviewed: the {len(checks)} ComplianceAsCode checks of this STIG rule disagree "
+            f"({counts}); the rule is Not a Finding only when every mapped check passed."
+        )
+    if len(checks) == 1:
+        return _not_reviewed_reason(run, checks[0].finding)
+    return (
+        f"Not reviewed: none of the {len(checks)} ComplianceAsCode checks of this STIG rule gave "
+        "a result that reviews it."
+    )
+
+
+def _check_lines(run: model.ScanRun, check: _Check) -> list[str]:
+    reason = _not_reviewed_reason(run, check.finding)
+    shown = [] if reason is None or reason == _run_reason(run, None) else [reason]
+    lines = [f"ComplianceAsCode check {check.rule_id}: {check.verdict.status.name}"]
+    lines.extend(f"  {line}" for line in [*shown, *_finding_lines(check.finding)])
+    return lines
+
+
+def _mapped_comments(checks: Sequence[_Check]) -> str:
+    commented = [check for check in checks if check.verdict.comments]
+    if len(checks) == 1:
+        return checks[0].verdict.comments
+    return "\n".join(
+        f"ComplianceAsCode check {check.rule_id}:\n{check.verdict.comments}" for check in commented
+    )
+
+
+def mapped_verdict(
+    run: model.ScanRun,
+    stig_id: str,
+    checks: Sequence[tuple[str, model.Finding | None]],
+    lapsed: frozenset[str] = frozenset(),
+) -> Verdict:
+    """Return the status of the DISA rule with ``stig_id`` from its mapped ComplianceAsCode checks.
+
+    ``checks`` holds every ComplianceAsCode rule that the mapping lists for ``stig_id``, with the
+    run's finding of it or ``None``. See the module docstring for the aggregation.
+    """
+    if not checks:
+        reason = _run_reason(run, None)
+        lines = [] if reason is None else [reason]
+        lines.append(
+            f"Not reviewed: {NO_CHECK}: profile {run.profile_id} maps no rule to the STIG ID "
+            f"{stig_id}."
+        )
+        lines.append(_run_line(run))
+        return Verdict(NOT_REVIEWED, "\n".join(lines), "")
+    evaluated = [
+        _Check(rule_id, finding, verdict(run, finding, lapsed=rule_id in lapsed))
+        for rule_id, finding in checks
+    ]
+    status = aggregate([check.verdict.status for check in evaluated])
+    headline = _mapped_headline(run, status, evaluated)
+    lines = [] if headline is None else [headline]
+    lines.append(
+        f"Mapped by STIG ID {stig_id} to {len(evaluated)} ComplianceAsCode check(s) of profile "
+        f"{run.profile_id}:"
+    )
+    for check in evaluated:
+        lines.extend(_check_lines(run, check))
+    lines.append(_run_line(run))
+    return Verdict(status, "\n".join(lines), _mapped_comments(evaluated))
+
+
+def refuse_unmapped(run: model.ScanRun, display: str, mapping_path: str) -> None:
+    """Refuse a scan run whose rules are not DISA STIG rules and that the mapping does not cover.
 
     Raises:
         ChecklistError: If any finding of ``run`` has a rule ID that is not a DISA STIG
@@ -240,10 +373,11 @@ def refuse_unmapped(run: model.ScanRun, display: str) -> None:
     if foreign:
         message = (
             f"{display}: scan run {run.run_id} of {run.host.hostname} has {len(foreign)} "
-            f"finding(s) that are not DISA STIG rules (for example {foreign[0]}). Their content "
-            "carries no DISA group or rule IDs, and the STIG to ComplianceAsCode mapping that "
-            f"would supply them is {MAPPING_ISSUE}, which is not built yet; no checklist was "
-            "written. Export SCC results, which carry DISA IDs natively"
+            f"finding(s) that are not DISA STIG rules (for example {foreign[0]}), and the STIG to "
+            f"ComplianceAsCode mapping of {MAPPING_ISSUE} ({mapping_path}) has no entry for "
+            f"benchmark {run.benchmark_id} and profile {run.profile_id}; no checklist was "
+            "written. Export a scan with a mapped ComplianceAsCode STIG profile, or SCC results, "
+            "which carry DISA IDs natively"
         )
         raise ChecklistError(message)
 
@@ -255,6 +389,21 @@ def safe_name(text: str) -> str:
 
 def _matches_host(name: str, hostname: str) -> bool:
     return name.lower().split(".", 1)[0] == hostname.lower().split(".", 1)[0]
+
+
+def _mapping_comment(source: Source, mapping: ProfileMapping) -> str:
+    exported = {
+        rule_id for rule in source.benchmark.rules for rule_id in mapping.rules_of(rule.version)
+    }
+    left = sum(1 for finding in source.run.findings if finding.rule_id not in exported)
+    return (
+        f" Each status aggregates the ComplianceAsCode checks that the STIG mapping of "
+        f"{mapping.file_name} (ComplianceAsCode {mapping.benchmark_version}, sha256 "
+        f"{mapping.content_sha256}) lists for the rule's STIG ID, for DISA release "
+        f"{mapping.stig_release} ({source.content_name}): a rule is Not a Finding only when every "
+        f"mapped check passed. {left} finding(s) check no rule of this STIG and are not in the "
+        "checklist."
+    )
 
 
 def asset(source: Source) -> Asset:
@@ -279,6 +428,8 @@ def asset(source: Source) -> Asset:
     )
     if target is not None and not facts_apply:
         comment += " The scanner's target facts name another host and are not used."
+    if source.mapping is not None:
+        comment += _mapping_comment(source, source.mapping)
     keys = {rule.target_key for rule in source.benchmark.rules}
     return Asset(
         host_name=host.hostname,
@@ -300,12 +451,7 @@ def _timestamp(moment: str) -> str:
     return moment.replace("Z", ".000Z")
 
 
-def build(source: Source) -> Checklist:
-    """Return the checklist of ``source``.
-
-    Raises:
-        ChecklistError: If a finding's rule is not in the content.
-    """
+def _direct_verdicts(source: Source) -> list[Verdict]:
     run = source.run
     rules = source.benchmark.rule_map()
     unknown = [finding.rule_id for finding in run.findings if finding.rule_id not in rules]
@@ -317,14 +463,42 @@ def build(source: Source) -> Checklist:
         )
         raise ChecklistError(message)
     findings = {finding.rule_id: finding for finding in run.findings}
-    identity = _identity(run)
-    entries = tuple(
-        Entry(
-            rule,
-            verdict(run, findings.get(rule.rule_id), lapsed=rule.rule_id in source.lapsed),
-            str(uuid.uuid5(UUID_NAMESPACE, f"{identity}/{rule.rule_id}")),
+    return [
+        verdict(run, findings.get(rule.rule_id), lapsed=rule.rule_id in source.lapsed)
+        for rule in source.benchmark.rules
+    ]
+
+
+def _mapped_verdicts(source: Source, mapping: ProfileMapping) -> list[Verdict]:
+    findings = {finding.rule_id: finding for finding in source.run.findings}
+    return [
+        mapped_verdict(
+            source.run,
+            rule.version,
+            [(rule_id, findings.get(rule_id)) for rule_id in mapping.rules_of(rule.version)],
+            source.lapsed,
         )
         for rule in source.benchmark.rules
+    ]
+
+
+def build(source: Source) -> Checklist:
+    """Return the checklist of ``source``.
+
+    Raises:
+        ChecklistError: If a finding's rule is not in the content of a DISA run.
+    """
+    run = source.run
+    if source.mapping is None:
+        verdicts = _direct_verdicts(source)
+        filename = run.content.source
+    else:
+        verdicts = _mapped_verdicts(source, source.mapping)
+        filename = source.content_name
+    identity = _identity(run)
+    entries = tuple(
+        Entry(rule, item, str(uuid.uuid5(UUID_NAMESPACE, f"{identity}/{rule.rule_id}")))
+        for rule, item in zip(source.benchmark.rules, verdicts, strict=True)
     )
     return Checklist(
         file_stem=f"{safe_name(run.host.hostname)}_{safe_name(source.benchmark.stig_id)}",
@@ -332,7 +506,7 @@ def build(source: Source) -> Checklist:
         stig_uuid=str(uuid.uuid5(UUID_NAMESPACE, f"{identity}/stig")),
         asset=asset(source),
         benchmark=source.benchmark,
-        filename=run.content.source,
+        filename=filename,
         timestamp=_timestamp(run.finished_at),
         entries=entries,
     )

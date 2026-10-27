@@ -175,6 +175,10 @@ SCC_CONTAINERFILE := extensions/ci/scc/Containerfile
 SCC_CONTAINERFILE_UBUNTU2604 := extensions/ci/scc/Containerfile.ubuntu2604
 SCC_DOWNLOAD_DIR := build/scc/download
 SCC_CONTEXT_DIR := build/scc/context
+OSCAP_IMAGE ?= localhost/freesecdev-oscap:local
+OSCAP_CONTAINERFILE := extensions/ci/oscap/Containerfile
+OPENSCAP_SCANNER_VERSION := 1.3.9+dfsg-1.1ubuntu2
+GENERATE_STIG_MAPPING := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.content.generate_stig_mapping
 SCC_FETCH_ENV := SCC_VERSION='$(SCC_VERSION)' SCC_BUNDLE='$(SCC_BUNDLE)' SCC_BUNDLE_URL='$(SCC_BUNDLE_URL)' \
 	SCC_BUNDLE_SIZE='$(SCC_BUNDLE_SIZE)' SCC_BUNDLE_SHA256='$(SCC_BUNDLE_SHA256)' SCC_CHECKSUMS_URL='$(SCC_CHECKSUMS_URL)' \
 	SCC_DEB_MEMBER='$(SCC_DEB_MEMBER)' SCC_DEB_SHA256='$(SCC_DEB_SHA256)' SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)'
@@ -213,7 +217,7 @@ Formatting and linting
   lint-pylint           Pylint in two passes: wrong-import-position on, and off for plugins/modules only
   lint-yaml             yamllint in strict mode
   lint-actions          actionlint for GitHub workflows
-  lint-containerfile    hadolint (pinned binary, fetched into build/tools) on the CI-only SCC Containerfile
+  lint-containerfile    hadolint (pinned binary, fetched into build/tools) on the CI-only SCC and OpenSCAP Containerfiles
   lint-repo             Repository source rules (document start, comments, banned modules)
   name-sets             Probe Python 3.9 to 3.15 and regenerate the guard name sets
   lint-skills           Validate agent skills under .agents/skills
@@ -225,6 +229,7 @@ Formatting and linting
   lint-lifecycle        Fail when a native topic has no valid Molecule toggle lifecycle declaration
   content               Fetch and verify the pinned SCAP content into build/content
   catalogue             Regenerate the rule catalogue and docs/control-families.md from build/content, then the toggles and role guards
+  stig-mapping          Regenerate content/stig-mapping.json, the STIG ID to ComplianceAsCode rule mapping, from build/content
   lint-iac              tofu fmt check, tofu validate per root module and shellcheck of the rendered bootstrap script
   lint-packer           [pending FREES-64] Packer validation
 
@@ -238,7 +243,7 @@ Tests
   test-sanity           ansible-test sanity on a temporary collection tree, no Docker
   test-ansible-units    ansible-test units on the temporary collection tree, no Docker
   test-coverage         Unit tests with branch coverage thresholds
-  test-content-golden   Fetch the pinned content, compare the catalog with the recorded rule lists and check the catalogue for drift
+  test-content-golden   Fetch the pinned content, compare the catalog with the recorded rule lists and check the catalogue and STIG mapping for drift
   test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap, also through the audit role
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
   browser-test-deps     Fetch and verify the pinned headless Chromium and axe-core into build/
@@ -268,8 +273,9 @@ Images and AWS
   scc-image             Build the CI-only SCC image locally as SCC_IMAGE (a localhost/ tag); it is never pushed
   scc-smoke             Build the SCC image and check that cscc starts and reports the pinned version
   scc-image-ubuntu2604  Build SCC_IMAGE_UBUNTU2604, the same SCC on an Ubuntu 26.04 base, locally; never pushed
-  scc-integration       Run real SCC scans through compliance_scan, the egress test and the 26.04 case
-  scc-image-clean       Remove the local SCC_IMAGE and SCC_IMAGE_UBUNTU2604
+  oscap-image           Build OSCAP_IMAGE, the CI-only OpenSCAP image on the SCC image's base, locally; never pushed
+  scc-integration       Run real SCC scans through compliance_scan, the egress test, the 26.04 case and the OpenSCAP STIG checklist export
+  scc-image-clean       Remove the local SCC_IMAGE, SCC_IMAGE_UBUNTU2604 and OSCAP_IMAGE
 
 Reporting, docs and release
   report                Write the normalized report JSON and the HTML dashboard from REPORT_ARGS
@@ -288,8 +294,8 @@ Housekeeping
 endef
 export HELP_TEXT
 
-.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue lint-python lint-yaml lint-actions \
-	lint-containerfile scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
+.PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
+	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -337,6 +343,9 @@ catalogue: require-uv collection-link
 	$(GENERATE_TOGGLES)
 	$(GENERATE_ROLE_GUARDS)
 
+stig-mapping: require-uv collection-link
+	$(GENERATE_STIG_MAPPING)
+
 lint-toggles: require-uv collection-link
 	$(GENERATE_TOGGLES) --check
 
@@ -370,7 +379,7 @@ lint-actions: require-uv
 
 lint-containerfile:
 	tools/lint/fetch-hadolint.sh '$(HADOLINT)'
-	'$(HADOLINT)' --failure-threshold info $(SCC_CONTAINERFILE) $(SCC_CONTAINERFILE_UBUNTU2604)
+	'$(HADOLINT)' --failure-threshold info $(SCC_CONTAINERFILE) $(SCC_CONTAINERFILE_UBUNTU2604) $(OSCAP_CONTAINERFILE)
 
 lint-repo: require-uv
 	@if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$$'; then printf 'error: compiled Python files are tracked\n' >&2; exit 1; fi
@@ -427,6 +436,7 @@ test-coverage: require-uv collection-link
 test-content-golden: require-uv collection-link content
 	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py --no-cov
 	$(GENERATE_CATALOGUE) --check
+	$(GENERATE_STIG_MAPPING) --check
 
 test-oscap-integration: require-uv collection-link
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
@@ -838,15 +848,22 @@ scc-image-ubuntu2604: scc-image
 scc-smoke: scc-image
 	tools/scc/smoke-test.sh '$(SCC_IMAGE)' '$(SCC_VERSION)'
 
-scc-integration: scc-image scc-image-ubuntu2604 require-uv collection-link
+oscap-image: lint-containerfile
+	@printf '%s' '$(OSCAP_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: OSCAP_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) build --file $(OSCAP_CONTAINERFILE) --tag '$(OSCAP_IMAGE)' \
+		--build-arg OPENSCAP_SCANNER_VERSION='$(OPENSCAP_SCANNER_VERSION)' $(dir $(OSCAP_CONTAINERFILE))
+
+scc-integration: scc-image scc-image-ubuntu2604 oscap-image require-uv collection-link
 	uv python install
+	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
 	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_SCC_IMAGE_UBUNTU2604='$(SCC_IMAGE_UBUNTU2604)' FREESECDEV_REQUIRE_SCC=1 \
-		$(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
+		FREESECDEV_OSCAP_IMAGE='$(OSCAP_IMAGE)' $(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
 
 scc-image-clean:
 	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
 	@printf '%s' '$(SCC_IMAGE_UBUNTU2604)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE_UBUNTU2604 must be a localhost/ tag\n' >&2; exit 2; }
-	$(DOCKER) image rm --force '$(SCC_IMAGE)' '$(SCC_IMAGE_UBUNTU2604)'
+	@printf '%s' '$(OSCAP_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: OSCAP_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
+	$(DOCKER) image rm --force '$(SCC_IMAGE)' '$(SCC_IMAGE_UBUNTU2604)' '$(OSCAP_IMAGE)'
 
 REPORT_SCOPE ?=
 REPORT_ARGS ?=

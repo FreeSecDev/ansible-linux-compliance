@@ -38,7 +38,9 @@ atomically; other files in the directory are left alone, so use a fresh director
 |---|---|
 | `--export-ckl DIR` | Write CKL files (STIG Viewer 2) into `DIR`, created with mode 0700 when missing |
 | `--export-cklb DIR` | Write CKLB files (STIG Viewer 3) into `DIR`; it may be the same directory |
-| `--checklist-content FILE` | DISA content for runs that have none of their own (see below); repeatable |
+| `--checklist-content FILE` | DISA content for runs that have none of their own, and for OpenSCAP runs (see below); repeatable |
+| `--stig-mapping FILE` | The STIG to ComplianceAsCode mapping; default `content/stig-mapping.json` of the repository |
+| `--compare-stig FILE` | Also write a JSON comparison of the SCC run and the OpenSCAP run of each host by DISA STIG rule |
 
 ## Inputs
 
@@ -47,7 +49,8 @@ atomically; other files in the directory are left alone, so use a fresh director
 | `--evidence-bundle` of an SCC scan | yes; with exceptions, from the verified evaluation | the bundle's own XCCDF results, which embed the evaluated benchmark; `--checklist-content` when the bundle has none (a scan that did not complete writes none) |
 | `--scan-run` (ScanRun JSON) of an SCC scan | yes | `--checklist-content` |
 | `--exceptions-evaluation` with `--exceptions-file` | yes, waivers included | `--checklist-content` |
-| any input with ComplianceAsCode rule IDs (`backend: openscap`) | **refused** | needs the STIG to ComplianceAsCode mapping of FREES-146 |
+| an input of a ComplianceAsCode STIG profile (`backend: openscap`, for example `xccdf_org.ssgproject.content_profile_stig`) of the pinned content | yes, through the [STIG mapping](#openscap-results-through-the-stig-mapping) | `--checklist-content`, always; never the bundle's own results |
+| any other input with ComplianceAsCode rule IDs (a CIS profile, or other content) | **refused** | the mapping has no entry for its benchmark and profile |
 | `--xccdf`, `--arf` | **refused** | they carry neither waivers nor the off-platform marker |
 
 `--checklist-content` accepts an XCCDF 1.2 benchmark, XCCDF results or a SCAP 1.2 or 1.3 source data stream. Use the
@@ -92,6 +95,67 @@ its reason (justification, risk, owner, approver and dates). An expired exceptio
 scan started, is named in the comments too, and the rule stays Open. The assessor sees the open finding and the
 accepted risk together; STIG Viewer's severity override is left for them.
 
+## OpenSCAP results through the STIG mapping
+
+OpenSCAP findings are ComplianceAsCode rules. A ComplianceAsCode rule names the DISA STIG requirements it checks by
+their STIG ID (`UBTU-24-100010`), which is the DISA rule's `Rule_Ver`. It does not name the DISA group ID (`V-`) or
+rule ID (`SV-...r..._rule`) that a checklist needs. The export therefore joins three things on the STIG ID (ADR 0020,
+amendment of FREES-146):
+
+1. `content/stig-mapping.json`. It is generated from the pinned, digest-verified ComplianceAsCode streams alone by
+   `make stig-mapping`, and checked against them in CI by `make test-content-golden`. For each ComplianceAsCode STIG
+   profile it holds the DISA release the profile implements (Ubuntu 24.04: V1R5; RHEL 9: V2R9), the
+   ComplianceAsCode rules of every STIG ID, and the SHA-256 of the stream. It holds identifiers only.
+2. The OpenSCAP scan run of that profile and stream.
+3. The DISA STIG content of that release, given with `--checklist-content`, for example SCC's copy. The group and rule
+   IDs and all benchmark text come from it at export time, and are never committed.
+
+```bash
+python -m tools.reporting --scope single_host --output build/report/report.json \
+  --evidence-bundle evidence/web01/20261027T080000.000000Z \
+  --checklist-content U_CAN_Ubuntu_24-04_LTS_V1R5_STIG_SCAP_1-4_Benchmark-enhancedV7-signed.xml \
+  --export-ckl build/checklists --export-cklb build/checklists
+```
+
+The checklist has one entry per DISA rule of the content. One STIG rule can map to several ComplianceAsCode rules,
+and one rule to several STIG rules. Each mapped check gets its status by the table above, then:
+
+| Mapped ComplianceAsCode checks | Entry |
+|---|---|
+| any of them Open (`fail`, `waived`) | Open |
+| all of them with the same status | that status: Not a Finding only when every mapped check passed |
+| otherwise, for example one `pass` and one `notapplicable` | Not Reviewed, with the disagreement as the reason |
+| none: the STIG ID has no ComplianceAsCode rule | Not Reviewed: "no ComplianceAsCode check" |
+
+Off-platform runs, runs that did not complete, `fixed` and waivers behave exactly as for SCC: every check of such a
+run is Not Reviewed, and a waived check is Open with its waiver in the comments. `FINDING_DETAILS` names the STIG ID and
+every mapped check with its result. A ComplianceAsCode finding that checks no rule of the DISA content is not in the
+checklist, and the asset comment says how many there are. `HOST_IP` and `HOST_FQDN` stay empty, because the
+ComplianceAsCode results are not DISA content.
+
+The export refuses an OpenSCAP run, and writes nothing, when:
+
+- it is of another ComplianceAsCode version (a SHA-256 the mapping was not generated from);
+- the content files do not hold exactly one DISA benchmark with the profile's STIG IDs;
+- the DISA content is of another release than the profile implements, or states none.
+
+### Comparing SCC and OpenSCAP
+
+`--compare-stig FILE` takes the SCC run and the OpenSCAP run of each host, with the DISA content of both. It builds
+both checklists as above and writes one JSON document, mode 0600, with each side's status counts and every DISA rule on
+which they differ: group, rule and STIG ID, both statuses and the mapped ComplianceAsCode rules.
+
+```bash
+python -m tools.reporting --scope single_host --output build/report/report.json \
+  --scan-run scc-scan-run.json --scan-run oscap-scan-run.json \
+  --checklist-content U_CAN_Ubuntu_24-04_LTS_V1R5_STIG_SCAP_1-4_Benchmark-enhancedV7-signed.xml \
+  --compare-stig build/checklists/stig-comparison.json
+```
+
+A host without exactly one run of each kind is refused. A disagreement is a lead for review, not a verdict.
+ComplianceAsCode treats rules that only apply to a real machine as not applicable in a container, for example, while
+SCC evaluates them.
+
 ## Asset fields
 
 | Field | Value |
@@ -113,7 +177,10 @@ accepted risk together; STIG Viewer's severity override is left for them.
 
 Refusals with status 2 name the input and the reason:
 
-- the findings are ComplianceAsCode rules: the message names FREES-146;
+- the findings are ComplianceAsCode rules of a profile that the STIG mapping does not cover: the message names the
+  mapping, the benchmark and the profile;
+- an OpenSCAP run of another ComplianceAsCode version, or DISA content of another release ("version mismatch"), or
+  not exactly one DISA benchmark with the profile's STIG IDs;
 - an XCCDF or ARF input;
 - no DISA content of the run's benchmark and version, or more than one;
 - content of another benchmark, profile or version, or a finding whose rule it lacks;
@@ -134,7 +201,15 @@ and within size bounds, and every value is escaped; characters that XML does not
   lapsed exceptions, off-platform runs, refusals (ComplianceAsCode findings, XCCDF inputs, missing, ambiguous or
   mismatched content, duplicate hosts), hostile strings, the asset rules, the CKLB structure schema
   `tools/reporting/schema/cklb-export.json`, and golden files from synthetic content in `tests/fixtures/checklist/`.
+- `tests/unit/tools/reporting/checklist/test_checklist_mapped.py` and `test_stig_mapping.py`: the mapping with
+  synthetic ComplianceAsCode and DISA-shaped fragments, covering one-to-one, one-to-many and many-to-one rules, a STIG
+  rule without a check, a finding without a STIG rule, and version mismatches of either side. They also cover every
+  pair of outcomes (Not a Finding only when both pass), off-platform and incomplete runs, waivers, the comparison and a
+  golden CKLB. `tests/unit/tools/test_generate_stig_mapping.py` covers the generator.
 - `make scc-integration` exports the real SCC scan of the CI image, once with SCC's results and once with the pinned
   stream as content, and the off-platform scan of the Ubuntu 26.04 image, and reads every file back
-  (`tests/system/scc/checklist_check.py`). The files stay in the container.
+  (`tests/system/scc/checklist_check.py`). It also scans the CI-only OpenSCAP image with the ComplianceAsCode STIG
+  profile, exports that run through the mapping with SCC's DISA stream, checks every entry against an independent
+  aggregation of its findings, and compares it with the SCC run (`tests/system/scc/test_scc_oscap_checklist.py`). The
+  files stay in the container.
 - Opening the files in STIG Viewer and uploading them to eMASS is a manual check (ADR 0020, open item 1).

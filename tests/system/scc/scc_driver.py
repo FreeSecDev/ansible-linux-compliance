@@ -31,6 +31,15 @@ Commands:
   say that it ignored the platform test (opted in) or rejected the stream by it
   (backstop), the ``VERSION_ID`` of the image, the state changes below
   ``/opt/scc`` and ``/root`` and the read-back of the marked run's checklists.
+- ``oscap-scan``: in the CI-only OpenSCAP image (FREES-146), on the same pinned Ubuntu
+  24.04 base as the SCC image: copy the pinned ComplianceAsCode stream into a root-owned
+  directory and run the module with ``backend: openscap`` and the ComplianceAsCode STIG
+  profile, for the same host name as the SCC scan.
+- ``oscap-export``: in the SCC image, export the OpenSCAP run (``/work``, read-only) as
+  CKL and CKLB through the STIG mapping with the DISA stream that SCC ships as
+  ``--checklist-content``, read the files back with ``checklist_check.py mapped``, and
+  compare the OpenSCAP run with the SCC run by DISA STIG rule (``--compare-stig``). Only
+  counts leave the container; the checklists and the comparison stay in it.
 """
 
 from __future__ import annotations
@@ -39,6 +48,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -71,6 +81,12 @@ BACKSTOP_ROOT = Path("/root/backstop")
 MAX_RESULTS_BYTES = 128 * 1024 * 1024
 EXPORT_TIMEOUT_SECONDS = 600
 CHECKLIST_CHECK = "tests/system/scc/checklist_check.py"
+STIG_MAPPING = "content/stig-mapping.json"
+OSCAP_PROFILE = "xccdf_org.ssgproject.content_profile_stig"
+OSCAP_CONTENT_ROOT = Path("/root/content")
+OSCAP_TIMEOUT_SECONDS = 3000
+OSCAP_RUN_FILE = "oscap-scan-run.json"
+SCC_RUN_FILE = "scc-scan-run.json"
 
 
 def _digest(path: Path) -> str:
@@ -375,12 +391,99 @@ def off_platform(options: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def oscap_scan(options: argparse.Namespace) -> dict[str, object]:
+    """Scan this container with the ComplianceAsCode STIG profile through the module."""
+    OSCAP_CONTENT_ROOT.mkdir(mode=0o755)
+    stream = OSCAP_CONTENT_ROOT / Path(options.content).name
+    shutil.copyfile(options.content, stream)
+    stream.chmod(0o644)
+    module = options.repository / "plugins" / "modules" / "compliance_scan.py"
+    python_path = f"{options.repository / 'build' / 'collections'}:{options.site_packages}"
+    arguments = {
+        **module_arguments(options),
+        "backend": "openscap",
+        "content_path": str(stream),
+        "profile_id": OSCAP_PROFILE,
+        "scan_timeout": OSCAP_TIMEOUT_SECONDS,
+        "run_id": "oscap",
+    }
+    return {"scan": run_module(module, arguments, python_path)}
+
+
+def _comparison_summary(path: Path) -> dict[str, object]:
+    document = cast("dict[str, object]", json.loads(path.read_text(encoding="utf-8")))
+    pairs = cast("list[dict[str, object]]", document["comparisons"])
+    summary: dict[str, object] = {"comparisons": len(pairs)}
+    if len(pairs) == 1:
+        pair = pairs[0]
+        differences = cast("list[dict[str, str]]", pair["disagreements"])
+        by_pair: dict[str, int] = {}
+        for item in differences:
+            key = f"{item['disa']}/{item['compliance_as_code']}"
+            by_pair[key] = by_pair.get(key, 0) + 1
+        summary.update(
+            {
+                "host": pair["host"],
+                "rules": pair["rules"],
+                "agree": pair["agree"],
+                "disagree": pair["disagree"],
+                "statuses": pair["statuses"],
+                "disagreements_by_status": by_pair,
+                "mode": stat.S_IMODE(path.stat().st_mode),
+            }
+        )
+    return summary
+
+
+def oscap_export(options: argparse.Namespace) -> dict[str, object]:
+    """Export a real OpenSCAP STIG run through the mapping and compare it with the SCC run."""
+    work = Path(options.work)
+    oscap_run = work / OSCAP_RUN_FILE
+    scc_run = work / SCC_RUN_FILE
+    target = Path(tempfile.mkdtemp(prefix="checklists-")) / "out"
+    command = ["-m", "tools.reporting", "--scope", "single_host"]
+    command += ["--output", str(target.parent / "report.json"), "--scan-run", str(oscap_run)]
+    command += ["--checklist-content", options.content]
+    command += ["--export-ckl", str(target), "--export-cklb", str(target)]
+    exported = _run_python(options, command)
+    report: dict[str, object] = {
+        "returncode": exported.returncode,
+        "stderr": exported.stderr[-2000:],
+    }
+    if exported.returncode == 0:
+        mapping = str(options.repository / STIG_MAPPING)
+        check = str(options.repository / CHECKLIST_CHECK)
+        checked = _run_python(
+            options, ["-s", check, "mapped", str(target), str(oscap_run), mapping]
+        )
+        report["check_returncode"] = checked.returncode
+        report["check_stderr"] = checked.stderr[-2000:]
+        if checked.returncode == 0:
+            report.update(cast("dict[str, object]", json.loads(checked.stdout)))
+    comparison = target.parent / "comparison" / "stig-comparison.json"
+    command = ["-m", "tools.reporting", "--scope", "single_host"]
+    command += ["--output", str(target.parent / "compare-report.json")]
+    command += ["--scan-run", str(scc_run), "--scan-run", str(oscap_run)]
+    command += ["--checklist-content", options.content, "--compare-stig", str(comparison)]
+    compared = _run_python(options, command)
+    result: dict[str, object] = {
+        "returncode": compared.returncode,
+        "stderr": compared.stderr[-2000:],
+    }
+    if compared.returncode == 0:
+        result.update(_comparison_summary(comparison))
+    report["comparison"] = result
+    return report
+
+
 COMMANDS = {
     "scan": scan,
     "install": install,
     "positive": positive,
     "egress-scan": egress_scan,
     "off-platform": off_platform,
+    "oscap-scan": oscap_scan,
+    "oscap-export": oscap_export,
 }
 
 
@@ -393,6 +496,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--content", required=True)
     parser.add_argument("--sha256", default="")
     parser.add_argument("--output-dir", default="/var/lib/freesecdev/linux_compliance/evidence")
+    parser.add_argument("--work", default="/work")
     options = parser.parse_args(argv)
     report = COMMANDS[options.command](options)
     sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")

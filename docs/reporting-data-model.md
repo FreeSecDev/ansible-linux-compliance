@@ -38,7 +38,9 @@ and `REPORT_HTML` override them). `--scope` and `--output` are required; `--html
 | `--evidence-bundle` | An evidence bundle directory written by the `evidence` role ([evidence bundles](evidence.md#in-the-report)); verified, then read as its evaluation or, without exceptions, its raw scan run |
 | `--evidence-collection` | The collection summary that `playbooks/evidence.yml` wrote next to the bundles ([collection summary](evidence.md#the-collection-summary)); one file, not repeatable. The report then accounts for every target host of the run ([host coverage](#host-coverage)). At most 1000 target hosts; split a larger fleet ([evidence bundles](evidence.md#fleets-of-more-than-1000-hosts)) |
 | `--export-ckl`, `--export-cklb` | Directories for STIG Viewer 2 (CKL) and 3 (CKLB) checklists, one per host and DISA STIG benchmark, from the same scan inputs ([checklist export](ckl-export.md), ADR 0020); not repeatable |
-| `--checklist-content` | DISA STIG content (XCCDF 1.2 benchmark or results, or a SCAP source data stream) for checklists of runs without their own XCCDF results ([checklist export](ckl-export.md#inputs)) |
+| `--checklist-content` | DISA STIG content (XCCDF 1.2 benchmark or results, or a SCAP source data stream) for checklists of runs without their own XCCDF results and of OpenSCAP runs ([checklist export](ckl-export.md#inputs)) |
+| `--stig-mapping` | The STIG to ComplianceAsCode mapping that OpenSCAP runs of a ComplianceAsCode STIG profile are exported through; default `content/stig-mapping.json` ([checklist export](ckl-export.md#openscap-results-through-the-stig-mapping)) |
+| `--compare-stig` | A JSON file comparing the SCC run and the OpenSCAP run of each host by DISA STIG rule ([checklist export](ckl-export.md#comparing-scc-and-openscap)) |
 
 Metadata options are `--commit`, `--pull-request`, `--workflow-run`, `--started-at`, `--finished-at` and
 `--generated-at`. They are validated and written as given; timestamps use `YYYY-MM-DDTHH:MM:SSZ`. Nothing is read

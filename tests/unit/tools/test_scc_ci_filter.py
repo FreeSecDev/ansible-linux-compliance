@@ -262,6 +262,10 @@ def test_the_filter_step_skips_the_smoke_test_without_an_scc_change(scratch: _Sc
         "tools/reporting/checklist_export.py",
         "tools/reporting/checklist_formats.py",
         "tools/reporting/stig_content.py",
+        "tools/reporting/stig_mapping.py",
+        "tools/reporting/stig_compare.py",
+        "content/stig-mapping.json",
+        "extensions/ci/oscap/Containerfile",
         "docs/adr/0020-stig-viewer-checklist-export.md",
     ],
 )
