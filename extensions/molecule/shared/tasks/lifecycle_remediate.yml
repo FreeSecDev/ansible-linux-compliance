@@ -1,0 +1,22 @@
+---
+- name: Lifecycle remediate | Run the real remediate role with the opt-in on
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    apply:
+      check_mode: "{{ lifecycle_check_mode | bool }}"
+  vars:
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive: "{{ lifecycle_allow_disruptive }}"
+
+- name: Lifecycle remediate | Keep the plan and the results of the rules of the topic
+  ansible.builtin.set_fact:
+    lifecycle_planned: >-
+      {{ linux_compliance_remediated.rules | selectattr('rule_id', 'in', lifecycle_rule_ids)
+      | sort(attribute='rule_id') }}
+    lifecycle_results: >-
+      {{ linux_compliance_remediated.results | selectattr('rule_id', 'in', lifecycle_rule_ids)
+      | sort(attribute='rule_id') }}
+
+- name: Lifecycle remediate | Check that the connection still reaches the same unprivileged instance
+  ansible.builtin.include_tasks:
+    file: lifecycle_connection.yml

@@ -16,8 +16,8 @@ the strategy `audit_only` and is reported as `not_implemented`, never as remedia
 from the catalogue (FREES-55). The native remediations of the other families follow. The intended platforms in
 `meta/main.yml` (Ubuntu 24.04 and RHEL
 9 compatible, per [ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested
-support: the reference rule was run in a disposable Ubuntu 24.04 container for the pull request, and no Molecule
-scenario exists yet (FREES-60).
+support: the reference rule runs in the Docker Molecule scenarios on Ubuntu 24.04 and Rocky Linux 9, whose toggle
+lifecycle step applies and cleans up every topic with a native rule (FREES-60, `docs/molecule.md`).
 
 ## Safety
 

@@ -1,0 +1,53 @@
+---
+- name: Lifecycle broad | Find every entry below the watched paths, with a SHA-256 of every regular file
+  ansible.builtin.find:
+    paths: "{{ lifecycle_broad_paths }}"
+    file_type: any
+    recurse: true
+    hidden: true
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: lifecycle_broad_files
+
+- name: Lifecycle broad | Read every kernel parameter that the instance may read
+  ansible.builtin.find:
+    paths: /proc/sys
+    file_type: file
+    recurse: true
+    follow: false
+    mode: "0444"
+    exact_mode: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: lifecycle_broad_sysctl
+
+- name: Lifecycle broad | Read every installed package
+  ansible.builtin.package_facts:
+
+- name: Lifecycle broad | Read every service, where a service manager runs
+  ansible.builtin.service_facts:
+  register: lifecycle_broad_services
+
+- name: Lifecycle broad | Read every user
+  ansible.builtin.getent:
+    database: passwd
+  register: lifecycle_broad_users
+
+- name: Lifecycle broad | Read every group
+  ansible.builtin.getent:
+    database: group
+  register: lifecycle_broad_groups
+
+- name: Lifecycle broad | Normalise the instance state
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_lines.yml
+  vars:
+    lifecycle_broad_declared: "{{ lifecycle_items.files | map(attribute='path') | list }}"
+    lifecycle_broad_raw:
+      files: "{{ lifecycle_broad_files.files }}"
+      sysctl: "{{ lifecycle_broad_sysctl.files }}"
+      packages: "{{ ansible_facts.packages }}"
+      services: "{{ none if lifecycle_broad_services is skipped else ansible_facts.services | default(none) }}"
+      users: "{{ lifecycle_broad_users.ansible_facts.getent_passwd }}"
+      groups: "{{ lifecycle_broad_groups.ansible_facts.getent_group }}"

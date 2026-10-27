@@ -1,0 +1,13 @@
+---
+- name: Lifecycle compare | List every declared attribute that differs from what the step must leave
+  ansible.builtin.include_tasks:
+    file: lifecycle_mismatches.yml
+
+- name: Lifecycle compare | Assert that the declared state is what the step must leave
+  ansible.builtin.assert:
+    that:
+      - lifecycle_compare_after.keys() | list | sort == lifecycle_compare_before.keys() | list | sort
+      - lifecycle_mismatches | default('', true) | trim | length == 0
+    fail_msg: >-
+      {{ lifecycle_label }}, {{ lifecycle_compare_step }}: {{ lifecycle_mismatches | default('', true) | trim }}
+    quiet: true

@@ -19,6 +19,7 @@ ansible:
     prepare: ../shared/prepare.yml
     converge: ../shared/converge.yml
     verify: ../shared/verify.yml
+    side_effect: ../shared/lifecycle.yml
     destroy: ../shared/destroy.yml
 
 driver:
@@ -39,4 +40,5 @@ scenario:
     - converge
     - idempotence
     - verify
+    - side_effect
     - destroy

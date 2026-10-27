@@ -2,7 +2,7 @@
 
 Scope: the Docker Molecule scenarios under `extensions/molecule/`, how to run them and what they prove.
 Audience: contributors adding or changing roles, modules and scenarios.
-Decision record: [ADR 0009](adr/0009-molecule-layout-and-drivers.md). Jira: FREES-59, follow-up FREES-60.
+Decision record: [ADR 0009](adr/0009-molecule-layout-and-drivers.md). Jira: FREES-59, FREES-60.
 
 Molecule is configured ansible-native: every scenario is a flat directory `extensions/molecule/<scenario>/` that holds
 only a `molecule.yml`. There is no molecule-plugins driver. Every playbook lives in `extensions/molecule/shared/` and
@@ -25,8 +25,8 @@ make test-molecule-docker-selftest
 `build/content` (`make molecule-content`, the same `tools/content/fetch_content.py` as `test-oscap-integration`), runs
 `molecule test -s <scenario>` for each scenario and stops at the first failure, and then runs the self-test.
 
-A local run of both scenarios takes about three to five minutes once the instance images are built; the first run
-builds them. The images stay in the local Docker cache (`freesecdev-molecule/*`); remove them with `docker image rm`
+With the toggle lifecycle step, a local run of both scenarios and the self-test took 21 minutes on a WSL2 workstation
+once the instance images were built, including one [scanner timeout](#scanner-hangs) and its retry. The first run builds the images. The images stay in the local Docker cache (`freesecdev-molecule/*`); remove them with `docker image rm`
 when no longer needed.
 
 CI runs the same targets as the `molecule-docker` job, one matrix entry per scenario plus `docker-selftest`, on
@@ -39,8 +39,9 @@ CI runs the same targets as the `molecule-docker` job, one matrix entry per scen
 | `docker-ubuntu` | Ubuntu 24.04 | `ubuntu2404`, `cis_level1_server` ([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)) |
 | `docker-rhel-compatible` | Rocky Linux 9 | `rhel9`, `cis_server_l1` |
 
-Each scenario runs `create`, `prepare`, `converge`, `idempotence`, `verify` and `destroy`. `destroy` runs even when an
-earlier step failed. Molecule warns that the scenario has no `cleanup` playbook; there is nothing to clean up outside
+Each scenario runs `create`, `prepare`, `converge`, `idempotence`, `verify`, `side_effect` and `destroy`. The
+`side_effect` step is the [toggle lifecycle](#toggle-lifecycle-of-every-native-topic) of every native topic. `destroy`
+runs even when an earlier step failed. Molecule warns that the scenario has no `cleanup` playbook; there is nothing to clean up outside
 the container, so that is expected.
 
 Rocky Linux is a stand-in for RHEL. Per ADR 0010, RHEL ComplianceAsCode content is listed as "RHEL datastream,
@@ -64,7 +65,7 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2` |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle) |
 | `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`; Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
@@ -282,7 +283,10 @@ The scans are real `oscap` runs against the pinned datastreams and take seconds.
 rule. On Rocky every rule is `notapplicable` (see above). The audits therefore prove that discovery, the scan
 pipeline, evidence handling, check mode and the comparison work end to end. They do not show the reference rule
 moving from `fail` to `pass`; the scenarios assert that change on the file itself (`0644`, `0600`, then restored
-`0644`). The audit step logs the outcome of the reference rule and the summary of each scan.
+`0644`). The audit step logs the outcome of the reference rule and the summary of each scan. One outcome does not
+depend on the platform: after the toggle lifecycle switches a topic off, the audit must report its rules `disabled`
+by the controlling toggle (114 disabled rules for the `file_permissions` topic toggle on Ubuntu, 57 on Rocky, and
+one for the rule toggle).
 
 ### Scanner hangs
 
@@ -295,9 +299,9 @@ before the audit, `run_status` must be `timed_out` and the failure message must 
 earlier audit never decides), it logs a `WARNING: oscap did not finish` line, counts the timeout in
 `molecule_scan_timeouts` and runs the audit once more. A second timeout, or any other failure, fails the scenario.
 `verify` tests that decision: it leaves a timed-out `linux_compliance_audited` from an earlier audit in place, runs
-the wrapper with an invalid profile and asserts that the input error fails the audit without a retry or a warning. Search the Molecule log for that warning to see whether a run needed the retry. Each scenario runs six
-scans (two in converge, two in idempotence, one real and one check-mode scan in verify); the check-mode audit
-runs only in verify.
+the wrapper with an invalid profile and asserts that the input error fails the audit without a retry or a warning. Search the Molecule log for that warning to see whether a run needed the retry. Each scenario runs ten
+scans (two in converge, two in idempotence, one real and one check-mode scan in verify, and four in the toggle
+lifecycle of `file_permissions`); the check-mode audit runs only in verify.
 
 ### Known limitation of check mode through include_role
 
@@ -311,9 +315,229 @@ assert the plan and the unchanged snapshot instead.
 New platforms need a key in `shared/vars/versions.yml` (with `datastream` and `profile`) and a Dockerfile in
 `shared/images/`. New invalid inputs go into `shared/vars/contract.yml` with an `expect` pattern. A new input name
 must also be added to `contract_input_names` and to the include in `shared/tasks/run_role.yml`. When the
-remediation catalogue grows, add the new rule's file-level assertions next to the reference rule in `converge.yml` and
-`verify.yml`. FREES-60 tracks importing the real `playbooks/*.yml` instead of applying the roles one by one, and diff
-mode.
+remediation catalogue gains a native rule, extend the [lifecycle declaration](#declaring-a-topic) of its topic, or add
+one for a new topic; `make lint-lifecycle` fails until it exists. Importing the real `playbooks/*.yml` instead of
+applying the roles one by one, and diff mode, are still open under FREES-60.
+
+## Toggle lifecycle of every native topic
+
+`shared/lifecycle.yml` (FREES-60) is the `side_effect` step of both scenarios. It proves, for every topic that has a
+rule with a native remediation, that switching the topic on applies its controls and that switching it off again
+restores the state before it, with the topic toggle and with the rule toggles. It runs the real remediate role, never
+an internal variable, and only after the [guard](#localhost-guard) accepted the instance; it runs last, after
+`verify`, so nothing that it does can affect another step, and `destroy` removes the container afterwards.
+
+Run it on its own during development, against a fresh instance:
+
+```text
+uv run --frozen molecule create -s docker-ubuntu
+uv run --frozen molecule prepare -s docker-ubuntu
+uv run --frozen molecule side-effect -s docker-ubuntu
+uv run --frozen molecule destroy -s docker-ubuntu
+```
+
+with `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH` set as the `Makefile` exports them. On an instance where
+`converge` already applied a topic, the harness refuses to run, because the state before the collection is then
+unknown.
+
+### What it runs
+
+The topics are derived from the catalogue at run time: every family of `roles/remediate/vars/rules.yml` with a rule
+whose strategy is not `audit_only`, in registry order with the non-disruptive families first. The rules of a topic
+are its native rules that the verified profile of the platform selects. A platform whose profile selects none must
+be listed under `unselected_platforms` in the declaration, with a reason, and a listed platform must select none; the
+run fails otherwise, and the coverage gate refuses a declaration that lists every platform, so no topic can be skipped
+everywhere. Before the first topic, two self-checks feed synthetic states to the comparisons and fail the run if a
+comparison would pass what it must refuse: `shared/tasks/lifecycle_selfcheck.yml` for the declared state (a missing
+control, a change that nothing declares, a file left behind or removed, a declared change that did not happen) and
+`shared/tasks/lifecycle_broad_selfcheck.yml` for the [whole instance](#the-whole-instance-comparison) (an undeclared
+file left behind, modified or only touched, a declared file replaced by another inode, a file next to the ledger, a
+kernel parameter, a package, a user, a group and a service added or changed must be refused; the listed differences
+must be accepted).
+
+For each topic, for the topic toggle and then the rule toggles, and for each declared pre-state:
+
+1. The pre-state is set (only file modes and ownership), the topic is switched on and the **declared state** is
+   recorded: per file existence, type, mode, owner, group, uid, gid, inode, mtime, `lsattr` attributes, SHA-256 and
+   link target (`stat` without following links); per package whether it is installed and its versions (`package_facts`); per service whether it exists, its
+   state and its status (`service_facts`); per kernel parameter its value (`slurp` of `/proc/sys`); per user and group
+   whether it exists and its entry (`getent`); and every entry of the state ledger (`control_state` `list`). The
+   ledger must not record any rule of the topic. The state of the whole instance is recorded as well (see below).
+2. **Check mode on.** The remediate role runs in check mode. The plan must have `apply` for every rule of the topic and
+   the results must report each as `applied` and changed, while the [no-change snapshot](#the-no-change-snapshot) of
+   every watched path stays identical.
+3. **Apply.** Every rule must be `applied` and changed. The declared state must match the declaration's `applied`
+   expectations, and every other declared attribute must be unchanged. The ledger must record every rule of the topic
+   whose strategy is `recorded_value` or `recorded_state`, and every other ledger entry must be unchanged. For a
+   pre-state with `audit: true` a real scan follows, and every rule must be `pass` or `fixed`, or an outcome the
+   declaration adds with a reason.
+4. **Idempotence.** A second apply must report every rule `compliant` and unchanged, and the no-change snapshot must
+   be identical.
+5. **Check mode off.** The topic is switched off, with `linux_compliance_<topic>_enabled: false` in the topic-toggle
+   cycle and with every `linux_compliance_rule_<rule>_enabled: false` (topic toggle on) in the rule-toggle cycle. In
+   check mode the plan must have `cleanup` for every rule, with `disabled_by` naming the toggle that switched it off,
+   the results must report the cleanup, and the no-change snapshot must be identical.
+6. **Cleanup.** Every rule must be cleaned up, changed and not `cleanup_incomplete`. The declared state must equal the
+   state of step 1 exactly: a file that did not exist before must not exist, a file that existed must still exist with
+   only the collection's changes reverted, and the ledger must equal its entries of step 1. The whole instance must
+   equal its state of step 1, with only the listed differences. With `audit: true` a real scan must report every rule
+   `disabled` by the same toggle.
+7. **Off again.** A further run must plan `none` for every rule, give no result and leave the no-change snapshot
+   identical.
+
+After every remediate run the harness reads `/proc/1/environ` and `/proc/self/status` over the connection and applies
+the guard's own connection test (`shared/tasks/guard_connection.yml`): the run still reaches the container that the
+create step started, by its marker, without capabilities and with `NoNewPrivs`. After the last cycle the files of the
+pre-states get their original mode and ownership back, and the declared state, the ledger and the whole instance
+must equal those before the first cycle.
+
+### The whole-instance comparison
+
+A declaration names what a topic is expected to touch, so a cleanup that forgets something the declaration also
+forgot, such as a backup file, a second drop-in or a package, would pass a comparison of the declared items alone.
+`shared/tasks/lifecycle_broad.yml` therefore records the whole instance before each cycle and before the first cycle,
+and the state after the cleanup and after the last cycle must equal it:
+
+- every entry below `/etc`, `/usr`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib`
+  (`find` without following links): path, type, mode, uid, gid, size, inode, mtime, ctime and the SHA-256 of every
+  regular file;
+- every kernel parameter that the instance may read (`find` over `/proc/sys` with a SHA-256 of each value);
+- every installed package with its versions (`package_facts`), every user and group with its entry (`getent`), and
+  every service where a service manager runs (`service_facts`; the containers have none, which is recorded as such).
+
+Only these differences are allowed, each listed in `shared/vars/lifecycle.yml`:
+
+| Difference | Why |
+|---|---|
+| mtime and ctime of the declared files and of their parent directories | changing a mode changes the ctime, and creating or removing a drop-in changes the times of its directory; everything else about these entries still counts, and the declared state compares the declared files exactly |
+| `/var/lib/freesecdev`, `/var/lib/freesecdev/linux_compliance` and its `state.json` | the ledger, compared entry by entry instead; any other file in that directory counts |
+| `/var/lib/freesecdev/linux_compliance/evidence` and everything below it | the evidence and output of the real scans of the cycle |
+| the times of `/var/lib/rpm/rpmdb.sqlite-shm` and `-wal` | the scanner's RPM probes, as in the [no-change snapshot](#the-no-change-snapshot) |
+| the kernel usage counters `fs/aio-nr`, `fs/dentry-state`, `fs/file-nr`, `fs/inode-nr`, `fs/inode-state`, `fs/quota/*`, `kernel/hung_task_detect_count`, `kernel/ns_last_pid`, `kernel/pty/nr`, `kernel/random/entropy_avail` and `kernel/random/uuid` | they count current kernel use, change between two reads without any write, and are not settings; two reads in a fresh container differed in six of them |
+
+`find` does not report the target of a symbolic link. A link cannot be changed in place, so a new target shows up as
+a new inode, mtime and ctime of the link, which are recorded. Extended attributes, POSIX ACLs and SELinux contexts are
+not recorded: `ansible.builtin` has no module that reads them (`ansible.posix.acl` and `community.general.xattr` are
+not pinned dependencies, and the images have neither the `acl` tools nor SELinux), so a topic that manages them needs
+a module or the libvirt scenarios first. `lsattr` attributes are recorded for declared files only, through `stat`;
+where the file system of the container does not support them, `stat` reports none both times.
+
+Three mutations of the remediate role, each applied only to a local copy and reverted, made the harness fail at the
+first cleanup with the offending entry: writing an undeclared `/etc/fsd-review-stray` during apply, appending a line
+to `/etc/issue`, and appending a user to `/etc/passwd` (which shows as the changed file and the new `user` entry).
+
+The topic-toggle cycles run before the rule-toggle cycles, because a rule toggle that is set wins over the topic
+toggle and set facts cannot be unset. The harness asserts that no rule toggle of the topic exists before a
+topic-toggle cycle. The toggles are set with `set_fact` under the names that the catalogue gives, which the remediate
+and audit roles find through `varnames`, exactly as inventory values.
+
+For `file_permissions` each scenario runs four cycles (topic and rule toggle, from the as-built state and from a
+customised mode), 24 remediate runs, four real scans and ten whole-instance records; the Ubuntu step took seven and a
+half minutes on a WSL2 workstation. The customised pre-state (`0640`) is what shows that cleanup
+restores the recorded prior value and not a distribution default: with the cleanup changed to always restore `0644`,
+the harness fails with `cleanup: files /etc/crontab: mode changed from 0640 to 0644`.
+
+### Declaring a topic
+
+Each native topic has exactly one declaration, `extensions/molecule/shared/vars/topics/<topic>.yml`, read with the
+`file` lookup as plain data (no Jinja). The declaration of the reference topic:
+
+```yaml
+---
+family: file_permissions
+disruptive: false
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits file_permissions_crontab to the machine platform, which excludes containers, so a
+    container audit reports it notapplicable whatever the mode of /etc/crontab.
+state:
+  files:
+    - path: /etc/crontab
+  packages:
+    - name: cron
+      platforms:
+        - ubuntu
+    - name: cronie
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/crontab
+      mode: "0600"
+pre_states:
+  - name: as built
+    audit: true
+  - name: customised mode
+    audit: false
+    files:
+      - path: /etc/crontab
+        mode: "0640"
+```
+
+| Key | Required | Meaning |
+|---|---|---|
+| `family` | yes | The topic; must equal the file name |
+| `disruptive` | yes | Must equal the flag of the family in the registry |
+| `containment` | for disruptive topics only | What the topic can break in the container and why the harness still reaches it; see below |
+| `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform |
+| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
+| `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles) and `files` (mode, owner or group of declared files); the default is the as-built state with scans |
+| `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
+
+Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
+with services fails there with a clear message. A topic whose remediation must write kernel parameters, mounts or
+the boot loader cannot apply them in these containers either (see below); it needs the libvirt scenarios (FREES-61)
+before it can ship.
+
+### The coverage gate
+
+No topic can gain a native rule without its lifecycle test:
+
+- `make lint-lifecycle` (part of `make lint` and of the CI `lint` job) runs `tools/roles/check_lifecycle_topics.py`.
+  It derives the native topics with `generate_toggles.native_families`, the same predicate as the remediation dispatch,
+  and fails when a native topic has no declaration, when a declaration names a topic without a native rule, or when a
+  declaration breaks the format above: unknown keys, attributes or platforms, a family or disruptive flag that
+  disagrees with the file name or the registry, a disruptive topic without `containment`, an expectation or pre-state
+  for an undeclared item, a declaration without an `applied` expectation, an expectation that expects nothing, a
+  mode that is not a four-digit octal string, or `unselected_platforms` that list every platform. A container audit
+  often reports `notapplicable`, so the state after apply is the positive evidence that the remediation works, and it
+  is required.
+- `shared/lifecycle.yml` repeats the coverage check at run time, before any topic runs, checks each declaration
+  against the registry again, and fails when a platform skips a topic that its declaration does not list under
+  `unselected_platforms`, so both Molecule jobs fail too.
+
+### Disruptive topics
+
+The disruptive families (`ssh`, `pam`, `sssd`, `sudo`, `faillock` and the others that the registry flags) have no
+native rule yet. When one gains a rule, its topic is opted in by its declaration: `disruptive: true`, which must match
+the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
+that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
+container:
+
+- The connection is `docker exec` through the Docker API (`community.docker.docker`). It uses neither `sshd`, PAM,
+  `sssd`, `sudo` nor a login shell inside the container, so a broken SSH, PAM, SSSD or sudo configuration does not cut
+  the harness off. A disruptive topic must still name in `containment` what it can break and why that holds.
+- The container is unprivileged, drops every capability, has `no-new-privileges`, no network and no mounts, volumes or
+  devices; the guard checked all of it before the first task. A broken service inside it cannot reach the host, and
+  nothing in the harness changes those settings.
+- After every remediate run the harness re-checks the marker and the missing privileges over the connection, so a
+  topic that breaks the connection or the container fails the run at that point instead of producing results from
+  somewhere else.
+- Disruptive topics run after every non-disruptive topic, and the first failure ends the play (`any_errors_fatal`), so
+  a broken container cannot hide a regression in another topic or let a later topic run on a broken instance.
+- The lifecycle is the last step before `destroy`, which removes only the containers that carry this scenario's
+  labels, and runs even after a failure. The container is never reused.
+
+A disruptive topic that cannot be applied meaningfully in a container (boot loader, mounts, kernel parameters,
+firewall, auditd) needs the libvirt scenarios (FREES-61); its declaration would then have to run there, which is not
+built yet.
 
 ## Container-meaningful and not
 

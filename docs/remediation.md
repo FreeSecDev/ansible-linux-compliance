@@ -19,8 +19,8 @@ profile selects, 1203 rules in 21 families (FREES-53), generated from the digest
 strategy `audit_only`: it can be switched off per rule and per topic, the audit excludes it and reports it as
 `disabled`, and remediation reports it as `not_implemented` and never changes anything for it. The native
 remediations land family by family on top of this catalogue (FREES-53 subtasks, FREES-57 for cleanup). The reference
-rule was exercised for real only in a disposable Ubuntu 24.04 container (see [Testing](#testing)); no Molecule scenario
-exists yet (FREES-60).
+rule is exercised for real in the Docker Molecule scenarios on Ubuntu 24.04 and Rocky Linux 9, including the toggle
+lifecycle of its topic (see [Testing](#testing)).
 
 ## Safety model
 
@@ -421,13 +421,16 @@ role unit tests fail, at the assertion meant for it:
 A play in `remediate-check-mode.yml` also catalogues a rule of the registered `sysctl` family, which has no task file
 yet, and checks that the run stops at the dispatch.
 
-The Molecule scenario (nothing changes without the opt-in, disruptive families skipped without the allow-list, the
-reference rule applied, idempotent and cleaned up on disable, check mode changing nothing) waits for the Docker Molecule
-framework of FREES-59 and is tracked as a FREES-60 follow-up. The Molecule assertions of FREES-55 (a single rule and a
-whole topic switched off after being applied are cleaned up, and the following audit reports them as `disabled` with
-the controlling variable) belong to the same follow-up, because the Docker Molecule framework (pull request #14) has not
-been merged. Until then the toggles are proven by the unit tests and the check-mode playbook above, which do not apply
-a rule for real or run a scan.
+The Docker Molecule scenarios ([Molecule guide](molecule.md)) run the role for real in disposable containers. `converge`
+and `verify` show that nothing changes without the opt-in, that the reference rule is applied, idempotent and cleaned up
+on disable, and that check mode changes nothing. The toggle lifecycle step (FREES-60,
+[toggle lifecycle](molecule.md#toggle-lifecycle-of-every-native-topic)) does so for every topic with a native rule: it
+switches the topic on and off with its topic toggle and with its rule toggles, from the as-built state and from every
+declared pre-state, checks check mode, idempotence and the ledger, asserts that the declared files, packages, services,
+kernel parameters, users and groups are restored exactly, and asserts that the following audit reports the rules as
+`disabled` with the controlling variable. `make lint-lifecycle` fails when a topic with a native rule has no lifecycle
+declaration. The skip of a disruptive family without the allow-list is still shown only in check mode
+(`make test-remediate-disruptive`), because no disruptive family has a native rule yet.
 
 ## Related decisions and issues
 

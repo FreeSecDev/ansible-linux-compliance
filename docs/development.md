@@ -60,11 +60,12 @@ overriding them.
 | `bootstrap` | implemented | `install` plus tool version check |
 | `install` | implemented | `uv sync --frozen`, installs both git hook types |
 | `format` | implemented | `ruff check --fix` and `ruff format` |
-| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-containerfile`, `lint-ansible`, `lint-toggles`, `lint-role-guards` |
+| `lint` | implemented | `uv lock --check`, `lint-repo`, `lint-skills`, `lint-python`, `lint-yaml`, `lint-actions`, `lint-containerfile`, `lint-ansible`, `lint-toggles`, `lint-role-guards`, `lint-lifecycle` |
 | `lint-ansible` | implemented | `molecule-dependencies`, then `ansible-lint` with the `production` profile, `tools/roles/check_role_specs.py`, then `antsibull-changelog lint` |
 | `lint-toggles` | implemented | `tools/roles/generate_toggles.py --check`: fails with a diff when the generated toggle defaults, argument specs or `docs/remediation-variables.md` differ from the rule catalogue ([remediation guide](remediation.md#generated-toggles)) |
 | `toggles` | implemented | Regenerates the topic toggle defaults, the topic toggle argument specs and the allow-list choices of the `remediate` and `audit` roles and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
 | `lint-role-guards` | implemented | `tools/roles/generate_role_guards.py --check`: fails with a diff when `roles/remediate/tasks/dispatch.yml` or a `tasks/internal_variables.yml` of the audit, evidence, remediate or verify role differs from what the family registry and the role files give, or a role with internal variables is not guarded (FREES-137, FREES-153) |
+| `lint-lifecycle` | implemented | `tools/roles/check_lifecycle_topics.py`: fails when a topic with a native rule in the catalogue has no Molecule toggle lifecycle declaration in `extensions/molecule/shared/vars/topics/`, when a declaration names a topic without a native rule, or when a declaration does not follow the format ([Molecule](molecule.md#toggle-lifecycle-of-every-native-topic), FREES-60) |
 | `role-guards` | implemented | Regenerates the static family dispatch of the remediate role, with one include per family that has a native rule, and the internal-variable guards of the audit, evidence, remediate and verify roles |
 | `content` | implemented | `tools/content/fetch_content.py --output-dir build/content`: fetches the pinned release archive and extracts the verified datastreams |
 | `catalogue` | implemented | `tools/roles/generate_catalogue.py`, then `toggles` and `role-guards`: regenerates `roles/remediate/vars/rules.yml` and `docs/control-families.md` from the datastreams in `build/content` and the family mapping `content/catalogue.yml` (run `make content` first) |
@@ -85,7 +86,7 @@ overriding them.
 | `test-ansible-units` | implemented | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
 | `molecule-dependencies` | implemented | Installs the pinned `extensions/molecule/requirements.yml` collections into `build/collections` |
 | `molecule-content` | implemented | Fetches and verifies the pinned `ubuntu2404` and `rhel9` datastreams into `build/content` for the Molecule scenarios |
-| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, then `molecule test` for `docker-ubuntu` and `docker-rhel-compatible` (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`; needs a running Docker daemon, see [Molecule](molecule.md) |
+| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, then `molecule test` for `docker-ubuntu` and `docker-rhel-compatible`, including the toggle lifecycle of every native topic (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`; needs a running Docker daemon, see [Molecule](molecule.md) |
 | `test-molecule-docker-selftest` | implemented | Real guard bypass attempts and the label-based destroy fallback against containers of the `docker-selftest` scenario, see [Molecule](molecule.md#self-test-against-real-containers) |
 | `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
 | `package-check` | implemented | Builds twice from differently ordered trees and fails unless the SHA-256 values match |

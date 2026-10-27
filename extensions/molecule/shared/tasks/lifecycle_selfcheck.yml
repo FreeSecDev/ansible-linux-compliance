@@ -1,0 +1,23 @@
+---
+- name: Lifecycle self-check | Compare the synthetic states of the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_mismatches.yml
+  vars:
+    lifecycle_compare_before: "{{ lifecycle_selfcheck_case.before }}"
+    lifecycle_compare_after: "{{ lifecycle_selfcheck_case.after }}"
+    lifecycle_compare_expected: "{{ lifecycle_selfcheck_case.expected }}"
+
+- name: Lifecycle self-check | Assert that the comparison finds exactly the mismatches of the case
+  ansible.builtin.assert:
+    that:
+      - >-
+        (lifecycle_mismatches | default('', true) | trim | length > 0) is sameas
+        (lifecycle_selfcheck_case.mismatch | length > 0)
+      - >-
+        lifecycle_selfcheck_case.mismatch | length == 0
+        or lifecycle_mismatches | default('', true) is search(lifecycle_selfcheck_case.mismatch | regex_escape)
+    fail_msg: >-
+      The lifecycle comparison is broken for the case '{{ lifecycle_selfcheck_case.name }}': it reported
+      '{{ lifecycle_mismatches | default('', true) | trim }}', expected
+      '{{ lifecycle_selfcheck_case.mismatch | default('no mismatch', true) }}'.
+    quiet: true

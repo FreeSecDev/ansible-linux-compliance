@@ -1,0 +1,35 @@
+---
+family: file_permissions
+disruptive: false
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits file_permissions_crontab to the machine platform, which excludes containers, so a
+    container audit reports it notapplicable whatever the mode of /etc/crontab.
+state:
+  files:
+    - path: /etc/crontab
+  packages:
+    - name: cron
+      platforms:
+        - ubuntu
+    - name: cronie
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/crontab
+      mode: "0600"
+pre_states:
+  - name: as built
+    audit: true
+  - name: customised mode
+    audit: false
+    files:
+      - path: /etc/crontab
+        mode: "0640"

@@ -1,0 +1,19 @@
+---
+- name: Lifecycle connection | Read the environment of the init process over the real connection
+  ansible.builtin.slurp:
+    src: /proc/1/environ
+  register: lifecycle_init_environ
+
+- name: Lifecycle connection | Read the status of the process that the connection runs
+  ansible.builtin.slurp:
+    src: /proc/self/status
+  register: lifecycle_self_status
+
+- name: Lifecycle connection | Check the marker and the missing privileges with the guard's own test
+  ansible.builtin.include_tasks:
+    file: guard_connection.yml
+  vars:
+    guard_instance: "{{ molecule_target }}"
+    guard_marker_variable: "{{ lifecycle_marker_variable }}"
+    guard_environ: "{{ lifecycle_init_environ.content | b64decode }}"
+    guard_status: "{{ lifecycle_self_status.content | b64decode }}"

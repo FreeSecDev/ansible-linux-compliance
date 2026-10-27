@@ -1,0 +1,30 @@
+---
+- name: Lifecycle broad self-check | Normalise the synthetic state before the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_lines.yml
+  vars:
+    lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
+    lifecycle_broad_raw: "{{ lifecycle_broad_selfcheck_raw }}"
+
+- name: Lifecycle broad self-check | Remember the synthetic state before the case
+  ansible.builtin.set_fact:
+    lifecycle_broad_selfcheck_before: "{{ lifecycle_broad_lines }}"
+
+- name: Lifecycle broad self-check | Normalise the synthetic state after the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_lines.yml
+  vars:
+    lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
+    lifecycle_broad_raw: "{{ lifecycle_broad_selfcheck_raw | combine(lifecycle_broad_selfcheck_case.after) }}"
+
+- name: Lifecycle broad self-check | Assert that the comparison refuses exactly the differences it must
+  ansible.builtin.assert:
+    that:
+      - lifecycle_broad_selfcheck_before | length > 0
+      - (lifecycle_broad_lines != lifecycle_broad_selfcheck_before) is sameas lifecycle_broad_selfcheck_case.refused
+    fail_msg: >-
+      The whole-instance comparison is broken for the case '{{ lifecycle_broad_selfcheck_case.name }}': it
+      {{ 'accepted' if lifecycle_broad_selfcheck_case.refused else 'refused' }} the state. Only before:
+      {{ lifecycle_broad_selfcheck_before | difference(lifecycle_broad_lines) }}. Only after:
+      {{ lifecycle_broad_lines | difference(lifecycle_broad_selfcheck_before) }}.
+    quiet: true

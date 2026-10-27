@@ -1,0 +1,13 @@
+---
+- name: Lifecycle unchanged | Take the no-change snapshot of every watched path
+  ansible.builtin.include_tasks:
+    file: snapshot.yml
+
+- name: Lifecycle unchanged | Assert that nothing below the watched paths changed
+  ansible.builtin.assert:
+    that:
+      - snapshot_digest == lifecycle_reference.digest
+    fail_msg: >-
+      {{ lifecycle_label }}, {{ lifecycle_unchanged_step }} changed the watched paths:
+      {{ (lifecycle_reference.lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
+    quiet: true

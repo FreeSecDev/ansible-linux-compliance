@@ -564,6 +564,41 @@ reason for its disruptive flag. These refinements apply.
   service rules in both roles and names the umbrella, and `linux_compliance_sssd_enabled: false` alone switches off
   exactly the sssd rules.
 
+## Amendment 2026-10-26: toggle lifecycle in Molecule (FREES-60)
+
+The "toggle-and-cleanup scenario for every family" of the operational consequences is implemented as one data-driven
+harness, `extensions/molecule/shared/lifecycle.yml`, rather than one scenario per family
+([Molecule guide](../molecule.md#toggle-lifecycle-of-every-native-topic)). These refinements apply.
+
+- **A step of the existing scenarios.** The harness is the `side_effect` step of `docker-ubuntu` and
+  `docker-rhel-compatible`, after `verify` and before `destroy`, so it runs in the same disposable, guarded container
+  and adds no image build or container to CI. It runs the real remediate role with public inputs only; the toggles are
+  set as facts under the names the catalogue gives, which both roles find through `varnames` like inventory values.
+- **Native topics, not every family.** Only families with a native rule (`generate_toggles.native_families`) get a
+  lifecycle; an `audit_only` rule changes nothing and has nothing to clean up. Each needs one declaration,
+  `extensions/molecule/shared/vars/topics/<family>.yml`, that names the files, packages, services, kernel parameters,
+  users and groups to record, the expectations after apply and the pre-states. `make lint-lifecycle` and the harness
+  itself fail when a native family has no declaration or a declaration has no native family.
+- **What is proven.** Per topic, with the topic toggle and with the rule toggles, from every declared pre-state: check
+  mode plans and reports the work and changes nothing; apply sets exactly the declared controls and records the prior
+  state in the ledger; a second apply changes nothing; switching off plans the cleanup in check mode with the
+  controlling `disabled_by`, restores the declared state and the ledger exactly and is reported as `disabled` by the
+  audit; a further run changes nothing. A customised pre-state proves that cleanup restores the recorded value rather
+  than a distribution default.
+- **Restored exactly means the whole instance** (review of PR #50). Besides the declared items, the harness records
+  every file below the system trees with its inode, times and SHA-256, every readable kernel parameter, every package,
+  user, group and service, before each cycle and before the first, and the state after the cleanup and after the last
+  cycle must equal it. The only allowed differences are listed in the harness and the Molecule guide: the times of the
+  declared files and their directories, the ledger file, the evidence tree, the RPM database times and eleven kernel
+  usage counters. A declaration must have at least one `applied` expectation, and a platform may skip a topic only
+  when the declaration says so, never all platforms. Self-checks prove that both comparisons refuse what they must.
+- **Disruptive families** opt in through their declaration (`disruptive: true` and a `containment` note) and get the
+  allow-list for their own family and runs only. They run after every non-disruptive topic, the first failure ends the
+  play, and the guard's connection test runs after every remediate run, so a topic that breaks the container fails
+  there and cannot reach the host. A family whose controls need a real kernel, boot loader or init system cannot be
+  proven in a container; it needs the libvirt scenarios (FREES-61) and a decision on where its lifecycle runs before
+  its first native rule ships.
+
 ## Amendment 2026-10-27: subsystem tags (FREES-165)
 
 The review of the topic split (PR #48, findings N1 to N4) showed that a subsystem toggle does not reach every rule about
