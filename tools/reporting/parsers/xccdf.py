@@ -154,7 +154,10 @@ def _declared_platforms(tree: XmlNode, result: XmlNode) -> set[str]:
         if node.local == "Benchmark" and wanted and node.attributes.get("id") == wanted
     ]
     scope = benchmarks or [tree]
-    return set().union(*(_os_platforms(_outside_results(node)) for node in scope))
+    declared: set[str] = set()
+    for node in scope:
+        declared |= _os_platforms(_outside_results(node))
+    return declared
 
 
 def refuse_platform_mismatch(tree: XmlNode) -> None:
