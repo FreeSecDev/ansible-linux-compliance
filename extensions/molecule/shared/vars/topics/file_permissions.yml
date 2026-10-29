@@ -33,3 +33,11 @@ pre_states:
     files:
       - path: /etc/crontab
         mode: "0640"
+  - name: customised ownership
+    audit: true
+    requires:
+      - libvirt
+    files:
+      - path: /etc/crontab
+        owner: daemon
+        group: adm

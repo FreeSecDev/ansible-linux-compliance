@@ -6,6 +6,7 @@
         file: guard.yml
       vars:
         guard_scenario: "{{ guard_simulation.scenario }}"
+        guard_driver: docker
         guard_instances: "{{ guard_simulation.instances }}"
         guard_hostname: "{{ guard_case.hostname | default('instance') }}"
         guard_connection_vars: >-

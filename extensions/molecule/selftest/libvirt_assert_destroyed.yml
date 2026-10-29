@@ -1,0 +1,52 @@
+---
+- name: Assert that destroy removed this scenario's labelled objects and nothing else
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../shared/vars/libvirt.yml
+    - vars/libvirt_strangers.yml
+  vars:
+    selftest_expect_orphan: false
+  tasks:
+    - name: List every domain
+      community.libvirt.virt:
+        uri: qemu:///system
+        command: list_vms
+      register: selftest_domains
+
+    - name: List every network
+      community.libvirt.virt_net:
+        uri: qemu:///system
+        command: list_nets
+      register: selftest_networks
+
+    - name: List every pool
+      community.libvirt.virt_pool:
+        uri: qemu:///system
+        command: list_pools
+      register: selftest_pools
+
+    - name: Check that only the strangers are left, and the orphan only when expected
+      ansible.builtin.assert:
+        that:
+          - selftest_left_domains | sort == selftest_expected_domains | sort
+          - selftest_networks.list_nets | select('match', '^fsd-mol-' ~ selftest_scenario ~ '-') | list
+            == [selftest_stranger_network]
+          - selftest_pools.list_pools | select('match', '^fsd-mol-' ~ selftest_scenario ~ '-') | list == []
+          - selftest_instance_config == []
+        fail_msg: >-
+          destroy left the domains {{ selftest_left_domains }} (expected {{ selftest_expected_domains }}), the
+          networks {{ selftest_networks.list_nets | select('match', '^fsd-mol-' ~ selftest_scenario ~ '-') | list }},
+          the pools {{ selftest_pools.list_pools | select('match', '^fsd-mol-' ~ selftest_scenario ~ '-') | list }}
+          and the instance config {{ selftest_instance_config }}.
+        quiet: true
+      vars:
+        selftest_stranger_names: "{{ selftest_strangers | map(attribute='name') | list }}"
+        selftest_left_domains: >-
+          {{ selftest_domains.list_vms | select('match', '^fsd-(mol-' ~ selftest_scenario ~ '|selftest)-') | list }}
+        selftest_expected_domains: >-
+          {{ selftest_strangers | rejectattr('removed_by_fallback') | map(attribute='name') | list
+          + (selftest_strangers | selectattr('removed_by_fallback') | map(attribute='name') | list
+          if selftest_expect_orphan | bool else []) }}
+        selftest_instance_config: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml }}"

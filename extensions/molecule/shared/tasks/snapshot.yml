@@ -14,6 +14,7 @@
       {%- for entry in snapshot_find.files | sort(attribute='path') -%}
       {{ entry.path }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|
       {{- 'volatile-directory' if entry.path in snapshot_volatile_directories | default([])
+      else 'volatile-contents' if entry.path is match(contract_snapshot_volatile_contents)
       else entry.size ~ '|volatile-times|' ~ entry.checksum | default('')
       if entry.path is match(contract_snapshot_volatile_times)
       else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ entry.checksum | default('') }}

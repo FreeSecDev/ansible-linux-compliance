@@ -1,0 +1,67 @@
+---
+- name: Guard libvirt isolation | Refuse a virtual machine, network or pool that is not this run's isolated one
+  ansible.builtin.assert:
+    that:
+      - guard_instance.driver | default('') == 'libvirt'
+      - guard_domain_xml is search('<name>' ~ guard_instance.domain | regex_escape ~ '</name>')
+      - guard_domain_xml is search(guard_label_prefix ~ '\s*<fsd:instance>' ~ guard_instance.instance | regex_escape
+        ~ '</fsd:instance>')
+      - guard_domain_xml is search("<entry name='serial'>" ~ guard_instance.marker | regex_escape ~ '</entry>')
+      - guard_domain_xml is search("<uuid>[0-9a-f-]{36}</uuid>")
+      - guard_domain_xml | regex_findall('<interface ') | length == 1
+      - guard_domain_xml is search("<interface type='network'>")
+      - guard_domain_xml is search("<mac address='" ~ guard_instance.mac | regex_escape ~ "'/>")
+      - guard_domain_xml is search("<source network='" ~ guard_instance.network | regex_escape ~ "'[ />]")
+      - guard_domain_xml | regex_findall('<disk ') | length == 2
+      - guard_domain_xml | regex_findall("<disk type='volume' ") | length == 2
+      - guard_domain_xml | regex_findall(guard_disk_source) | length == 2
+      - guard_domain_xml is not search(guard_forbidden_devices)
+      - guard_network_xml is search('<name>' ~ guard_instance.network | regex_escape ~ '</name>')
+      - guard_network_xml is search(guard_label_prefix)
+      - guard_network_xml is not search('<forward')
+      - guard_network_xml is not search('<(dhcp|route|portgroup|virtualport|tftp|bootp)[ >/]')
+      - guard_network_xml is search("<bridge name='" ~ guard_instance.bridge | regex_escape ~ "'")
+      - guard_network_xml is search("<dns enable='no'/>")
+      - guard_network_xml | regex_findall('<ip ') | length == 1
+      - >-
+        guard_network_xml is search("<ip address='" ~ guard_instance.gateway | regex_escape
+        ~ "' netmask='255.255.255.0'")
+      - guard_instance.gateway is match('^10\.2[0-4][0-9]\.[0-9]{1,3}\.1$')
+      - guard_instance.address | regex_replace('\.[0-9]+$', '.1') == guard_instance.gateway
+      - guard_instance.address != guard_instance.gateway
+      - guard_pool_xml is search("<pool type='dir'>")
+      - guard_pool_xml is search('<name>' ~ guard_instance.pool | regex_escape ~ '</name>')
+      - guard_instance.pool_path == guard_pool_parent ~ '/' ~ guard_instance.pool
+      - guard_pool_xml is search('<path>' ~ guard_instance.pool_path | regex_escape ~ '</path>')
+      - guard_ssh_settings.host_key_checking | bool
+      - guard_ssh_settings.plugin_host_key_checking | bool
+      - guard_ssh_settings.ssh_args == guard_default_ssh_args
+      - guard_ssh_settings.ssh_extra_args | default('', true) | length == 0
+      - guard_ssh_settings.scp_extra_args | default('', true) | length == 0
+      - guard_ssh_settings.sftp_extra_args | default('', true) | length == 0
+      - guard_ssh_settings.ssh_executable == 'ssh'
+    fail_msg: >-
+      Refusing to run: virtual machine {{ guard_instance.domain | default('unknown') }} is not isolated. It must carry
+      this run's labels and marker, have exactly the recorded disk and seed from the run's pool, one interface on the
+      run's network and no device that shares the host, and the network must have no forwarding, DHCP or DNS and
+      the recorded bridge and address. Host key checking must be on and the SSH arguments, executable and copy
+      arguments of the Ansible configuration must be the defaults.
+    success_msg: Virtual machine {{ guard_instance.domain }} is isolated on the run's own network.
+  vars:
+    guard_label_prefix: >-
+      xmlns:fsd="{{ guard_metadata_namespace | regex_escape }}">\s*<fsd:scenario>{{
+      guard_instance.scenario | regex_escape }}</fsd:scenario>\s*<fsd:run>{{
+      guard_instance.run_id | regex_escape }}</fsd:run>
+    guard_disk_source: >-
+      <source pool='{{ guard_instance.pool | regex_escape }}' volume='({{ guard_instance.disk | regex_escape }}|{{
+      guard_instance.seed | regex_escape }})'
+    guard_forbidden_device_alternatives:
+      - <(hostdev|filesystem|shmem|redirdev|smartcard|channel|graphics|vsock|iommu|parallel|hub|lease|sound|tpm)[ >/]
+      - qemu:commandline
+      - qemu:override
+      - xmlns:qemu
+      - <serial type='(?!pty')
+      - <console type='(?!pty')
+      - <interface type='(?!network')
+    guard_forbidden_devices: "{{ guard_forbidden_device_alternatives | join('|') }}"
+    guard_default_ssh_args: -C -o ControlMaster=auto -o ControlPersist=60s

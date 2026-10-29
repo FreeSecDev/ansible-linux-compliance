@@ -1,0 +1,57 @@
+---
+- name: Remove the strangers of the self-test by their exact names and assert that nothing of it is left
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../shared/vars/libvirt.yml
+    - vars/libvirt_strangers.yml
+  tasks:
+    - name: List every domain
+      community.libvirt.virt:
+        uri: qemu:///system
+        command: list_vms
+      register: selftest_domains
+
+    - name: Undefine the stranger domains that still exist
+      community.libvirt.virt:
+        uri: qemu:///system
+        name: "{{ item }}"
+        command: undefine
+        force: true
+      loop: "{{ selftest_strangers | map(attribute='name') | select('in', selftest_domains.list_vms) | list }}"
+
+    - name: Undefine the stranger network
+      community.libvirt.virt_net:
+        uri: qemu:///system
+        name: "{{ selftest_stranger_network }}"
+        state: absent
+
+    - name: List every domain again
+      community.libvirt.virt:
+        uri: qemu:///system
+        command: list_vms
+      register: selftest_domains_after
+
+    - name: List every network again
+      community.libvirt.virt_net:
+        uri: qemu:///system
+        command: list_nets
+      register: selftest_networks_after
+
+    - name: List every pool again
+      community.libvirt.virt_pool:
+        uri: qemu:///system
+        command: list_pools
+      register: selftest_pools_after
+
+    - name: Check that no object of the self-test is left
+      ansible.builtin.assert:
+        that:
+          - selftest_left | length == 0
+        fail_msg: "The self-test left {{ selftest_left }}."
+        quiet: true
+      vars:
+        selftest_left: >-
+          {{ (selftest_domains_after.list_vms + selftest_networks_after.list_nets + selftest_pools_after.list_pools)
+          | select('match', '^fsd-(mol-' ~ selftest_scenario ~ '|selftest)-') | list }}

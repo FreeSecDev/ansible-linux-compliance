@@ -126,7 +126,34 @@
         content: "{{ selftest_unprivileged_status | b64encode }}"
       guard_environ: "{{ selftest_marker_environ }}"
       guard_status: "{{ selftest_unprivileged_status }}"
+      guard_driver: docker
+      guard_driver_settings:
+        docker:
+          forbidden: "^$"
+          name: ".*"
+      guard_outside_pattern: "^$"
+      guard_record: "{{ selftest_mounted_record }}"
+      guard_expected_names: []
+      guard_expected_list: []
+      guard_expected_values: {}
+      guard_actual_values: []
+      guard_unexpected_values: []
+      guard_domain:
+        get_xml: ""
+      guard_domain_xml: ""
+      guard_network:
+        get_xml: ""
+      guard_network_xml: ""
+      guard_pool:
+        get_xml: ""
+      guard_pool_xml: ""
+      guard_metadata_namespace: ""
+      guard_pool_parent: /
+      guard_ssh_settings:
+        host_key_checking: true
       molecule_target: "{{ selftest_probe }}"
+      molecule_libvirt_ssh_options: []
+      molecule_libvirt_pool_parent: /
       molecule_docker_default_paths:
         "28": "{{ selftest_isolated_paths }}"
         "29": "{{ selftest_isolated_paths }}"
@@ -138,6 +165,8 @@
       inventory_hostname: probe
     selftest_outside_names:
       - molecule_target
+      - molecule_libvirt_ssh_options
+      - molecule_libvirt_pool_parent
       - molecule_docker_default_paths
       - molecule_instance_config
       - molecule_allowed_connections

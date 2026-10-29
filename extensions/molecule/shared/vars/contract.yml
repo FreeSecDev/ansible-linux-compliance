@@ -144,3 +144,8 @@ contract_snapshot_paths:
   - /var/lib/freesecdev
 
 contract_snapshot_volatile_times: '^/var/lib/rpm/rpmdb\.sqlite-(shm|wal)$'
+contract_snapshot_volatile_contents_by_driver:
+  docker: '^$'
+  libvirt: >-
+    ^(/var/log/(syslog|auth\.log|kern\.log|messages|secure|cron|wtmp|btmp|lastlog|audit/audit\.log|journal/[0-9a-f]{32}/system\.journal)|/var/lib/systemd/timesync/clock)$
+contract_snapshot_volatile_contents: "{{ contract_snapshot_volatile_contents_by_driver[molecule_target.driver] }}"

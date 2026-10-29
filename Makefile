@@ -24,6 +24,23 @@ MOLECULE_SELFTEST_PLAYBOOK = MOLECULE_SCENARIO_NAME=docker-selftest $(RUN) ansib
 MOLECULE_SELFTEST = MOLECULE_INSTANCE_CONFIG='$(MOLECULE_SELFTEST_CONFIG)' $(MOLECULE_SELFTEST_PLAYBOOK) \
 	-e molecule_instance_config='$(MOLECULE_SELFTEST_CONFIG)'
 MOLECULE_SELFTEST_REFUSED := docker_host extra_args privileged local localhost loopback unknown mounted unmasked seccomp
+RUN_LIBVIRT := uv run --frozen --group libvirt
+MOLECULE_LIBVIRT_SCENARIOS := libvirt-ubuntu libvirt-rhel-compatible
+MOLECULE_LIBVIRT_PLATFORMS ?= ubuntu rhel_compatible
+MOLECULE_LIBVIRT_SELFTEST ?= true
+MOLECULE_LIBVIRT_PINS := extensions/molecule/shared/images/cloud-images.pins
+MOLECULE_LIBVIRT_CACHE := $(CURDIR)/build/molecule-libvirt/cache
+MOLECULE_LIBVIRT_SELFTEST_DIR := $(CURDIR)/build/molecule-libvirt-selftest
+MOLECULE_LIBVIRT_SELFTEST_CONFIG := $(MOLECULE_LIBVIRT_SELFTEST_DIR)/instance_config.yml
+MOLECULE_LIBVIRT_SELFTEST_PLAYBOOK = MOLECULE_SCENARIO_NAME=libvirt-selftest \
+	MOLECULE_EPHEMERAL_DIRECTORY='$(MOLECULE_LIBVIRT_SELFTEST_DIR)/ephemeral' $(RUN_LIBVIRT) ansible-playbook \
+	-e molecule_no_log=false -e molecule_selftest_dir='$(MOLECULE_LIBVIRT_SELFTEST_DIR)' \
+	-e @extensions/molecule/selftest/vars/libvirt_platforms.yml
+MOLECULE_LIBVIRT_SELFTEST_RUN = MOLECULE_INSTANCE_CONFIG='$(MOLECULE_LIBVIRT_SELFTEST_CONFIG)' \
+	$(MOLECULE_LIBVIRT_SELFTEST_PLAYBOOK) -e molecule_instance_config='$(MOLECULE_LIBVIRT_SELFTEST_CONFIG)'
+MOLECULE_LIBVIRT_SELFTEST_REFUSED := local localhost loopback unknown proxy jump port user key password hostkey become \
+	shared bridged channel
+MOLECULE_LIBVIRT_SELFTEST_ENVIRONMENTS := ANSIBLE_HOST_KEY_CHECKING=False
 COLLECTION_SOURCES := galaxy.yml README.md LICENSE NOTICE meta plugins roles playbooks changelogs docs \
 	tests/unit/plugins tests/fixtures tests/sanity tests/integration extensions content/stig-mapping.json
 TREE_SORT := sort -z
@@ -257,7 +274,9 @@ Tests
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
   test-molecule-docker-selftest Guard bypass attempts and the destroy fallback against real containers
-  test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
+  test-molecule-libvirt Molecule libvirt scenarios on KVM virtual machines and their self-test (requires KVM and libvirt)
+  test-molecule-libvirt-selftest Guard bypass attempts, decoys, strangers and the destroy fallback against real libvirt objects
+  molecule-libvirt-images Fetch the pinned cloud images and packages and check the vendors' signed checksum files
   test-molecule-golden  [pending FREES-63] Molecule golden image scenarios
   test-idempotency      [pending FREES-60] Idempotency checks
   test-compliance       [pending FREES-62] Compliance scan scenarios
@@ -298,6 +317,7 @@ export HELP_TEXT
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
+	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
 	require-uv ansible-home
@@ -794,8 +814,86 @@ test-molecule-docker-selftest: require-uv molecule-dependencies
 	$(MOLECULE_SELFTEST) extensions/molecule/selftest/assert_destroyed.yml || status=1; \
 	exit $$status
 
-test-molecule-libvirt:
-	$(call NOT_IMPLEMENTED,test-molecule-libvirt,FREES-61)
+molecule-libvirt-images:
+	tools/molecule/fetch-cloud-images.sh '$(MOLECULE_LIBVIRT_PINS)' '$(MOLECULE_LIBVIRT_CACHE)' $(MOLECULE_LIBVIRT_PLATFORMS)
+
+molecule-libvirt-preflight: require-uv
+	@test -c /dev/kvm || { printf 'error: /dev/kvm is missing; the libvirt scenarios need KVM (docs/molecule-libvirt.md)\n' >&2; exit 1; }
+	@$(RUN_LIBVIRT) python -I -c 'import libvirt; libvirt.open("qemu:///system").close()' \
+		|| { printf 'error: qemu:///system is not reachable; see docs/molecule-libvirt.md\n' >&2; exit 1; }
+
+test-molecule-libvirt: require-uv molecule-dependencies molecule-content molecule-libvirt-images molecule-libvirt-preflight
+	@printf '%s\n' $(MOLECULE_LIBVIRT_SCENARIOS) | grep -Eqx 'libvirt-[a-z0-9-]+' || { printf 'error: MOLECULE_LIBVIRT_SCENARIOS must name libvirt scenarios\n' >&2; exit 2; }
+	for scenario in $(MOLECULE_LIBVIRT_SCENARIOS); do \
+		$(RUN_LIBVIRT) molecule test -s "$$scenario" || exit 1; \
+	done
+	if [ '$(MOLECULE_LIBVIRT_SELFTEST)' = true ]; then $(MAKE) --no-print-directory test-molecule-libvirt-selftest MOLECULE_LIBVIRT_PLATFORMS=ubuntu; fi
+
+test-molecule-libvirt-selftest: require-uv molecule-dependencies molecule-libvirt-images molecule-libvirt-preflight
+	rm -rf '$(MOLECULE_LIBVIRT_SELFTEST_DIR)'
+	mkdir -p '$(MOLECULE_LIBVIRT_SELFTEST_DIR)/host-directory' '$(MOLECULE_LIBVIRT_SELFTEST_DIR)/ephemeral'
+	status=0; dir='$(MOLECULE_LIBVIRT_SELFTEST_DIR)'; \
+	$(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/shared/create_libvirt.yml || status=1; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/shared/create_libvirt.yml || status=1; fi; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/selftest/libvirt_assert_created.yml || status=1; fi; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/selftest/libvirt_bypass.yml || status=1; fi; \
+	if [ $$status -eq 0 ]; then $(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/selftest/libvirt_strangers.yml || status=1; fi; \
+	if [ $$status -eq 0 ]; then \
+		$(MOLECULE_LIBVIRT_SELFTEST_RUN) -i "$$dir/good.yml" extensions/molecule/shared/guard.yml \
+			> "$$dir/good.log" 2>&1 || { cat "$$dir/good.log"; status=1; }; \
+	fi; \
+	for case in $(MOLECULE_LIBVIRT_SELFTEST_REFUSED); do \
+		[ $$status -eq 0 ] || break; \
+		config="$$dir/instance_config.yml"; \
+		if [ -f "$$dir/instance_config_$$case.yml" ]; then config="$$dir/instance_config_$$case.yml"; fi; \
+		if MOLECULE_INSTANCE_CONFIG="$$config" $(MOLECULE_LIBVIRT_SELFTEST_PLAYBOOK) -e "molecule_instance_config=$$config" \
+			-i "$$dir/$$case.yml" extensions/molecule/shared/guard.yml > "$$dir/$$case.log" 2>&1; then \
+			printf 'error: the guard accepted the bypass attempt %s\n' "$$case" >&2; status=1; \
+		elif ! grep -q 'Refusing to run' "$$dir/$$case.log"; then \
+			cat "$$dir/$$case.log"; \
+			printf 'error: the bypass attempt %s failed for another reason than the guard\n' "$$case" >&2; status=1; \
+		elif [ -f "$$dir/instance_config_$$case.yml" ] && ! grep -q 'is not isolated' "$$dir/$$case.log"; then \
+			cat "$$dir/$$case.log"; \
+			printf 'error: the decoy %s was not refused by the isolation check\n' "$$case" >&2; status=1; \
+		else printf 'guard refused the bypass attempt %s\n' "$$case"; fi; \
+	done; \
+	for setting in $(MOLECULE_LIBVIRT_SELFTEST_ENVIRONMENTS); do \
+		[ $$status -eq 0 ] || break; \
+		name="$${setting%%=*}"; \
+		if env "$$setting" $(MOLECULE_LIBVIRT_SELFTEST_RUN) -i "$$dir/good.yml" extensions/molecule/shared/guard.yml \
+			> "$$dir/environment-$$name.log" 2>&1; then \
+			printf 'error: the guard accepted the environment setting %s\n' "$$name" >&2; status=1; \
+		elif ! grep -q 'is not isolated' "$$dir/environment-$$name.log"; then \
+			cat "$$dir/environment-$$name.log"; \
+			printf 'error: the environment setting %s was not refused by the isolation check\n' "$$name" >&2; status=1; \
+		else printf 'guard refused the environment setting %s\n' "$$name"; fi; \
+	done; \
+	extra="$$dir/extra-vars"; \
+	if [ $$status -eq 0 ] && [ ! -s "$$extra/cases" ]; then \
+		printf 'error: libvirt_bypass.yml listed no extra-variable bypass attempts\n' >&2; status=1; \
+	fi; \
+	for case in $$(cat "$$extra/cases" 2>/dev/null); do \
+		[ $$status -eq 0 ] || break; \
+		if MOLECULE_INSTANCE_CONFIG="$$extra/$$case/instance_config.yml" $(MOLECULE_LIBVIRT_SELFTEST_PLAYBOOK) \
+			-e "molecule_instance_config=$$extra/$$case/instance_config.yml" -e "@$$extra/$$case/vars.yml" \
+			-i "$$extra/$$case/inventory.yml" extensions/molecule/shared/guard.yml > "$$extra/$$case/guard.log" 2>&1; then \
+			printf 'error: the guard accepted the extra variable %s\n' "$$case" >&2; status=1; \
+		elif ! grep -q 'Refusing to run: a variable that the guard relies on was supplied from outside' \
+			"$$extra/$$case/guard.log"; then \
+			cat "$$extra/$$case/guard.log"; \
+			printf 'error: the extra variable %s was not refused as supplied from outside the guard\n' "$$case" >&2; \
+			status=1; \
+		else printf 'guard refused the extra variable %s\n' "$$case"; fi; \
+	done; \
+	$(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/shared/destroy_libvirt.yml || status=1; \
+	$(MOLECULE_LIBVIRT_SELFTEST_RUN) -e selftest_expect_orphan=true extensions/molecule/selftest/libvirt_assert_destroyed.yml || status=1; \
+	printf '[]\n' > '$(MOLECULE_LIBVIRT_SELFTEST_CONFIG)'; \
+	$(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/shared/destroy_libvirt.yml || status=1; \
+	$(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/selftest/libvirt_assert_destroyed.yml || status=1; \
+	rm -f '$(MOLECULE_LIBVIRT_SELFTEST_CONFIG)'; \
+	$(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/shared/destroy_libvirt.yml || status=1; \
+	$(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/selftest/libvirt_cleanup.yml || status=1; \
+	exit $$status
 
 test-molecule-golden:
 	$(call NOT_IMPLEMENTED,test-molecule-golden,FREES-63)

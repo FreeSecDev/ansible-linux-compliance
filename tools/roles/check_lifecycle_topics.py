@@ -41,6 +41,9 @@ if TYPE_CHECKING:
 GenerationError = generate_toggles.GenerationError
 TOPICS: Final[Path] = Path("extensions/molecule/shared/vars/topics")
 VERSIONS: Final[Path] = Path("extensions/molecule/shared/vars/versions.yml")
+MOLECULE: Final[Path] = Path("extensions/molecule")
+DRIVERS: Final[tuple[str, ...]] = ("docker", "libvirt")
+REQUIRES_KEY: Final[str] = "requires"
 IMAGES_KEY: Final[str] = "molecule_images"
 TOP_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -52,6 +55,7 @@ TOP_KEYS: Final[frozenset[str]] = frozenset(
         "applied",
         "pre_states",
         "unselected_platforms",
+        "requires",
     }
 )
 REQUIRED_KEYS: Final[tuple[str, ...]] = ("family", "disruptive", "state", "applied")
@@ -88,7 +92,7 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 }
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
-PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files"})
+PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files", "requires"})
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset({"path", "mode", "owner", "group"})
 UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
@@ -120,12 +124,25 @@ def _strings(value: object) -> list[str] | None:
 class Declaration:
     """The validation of one topic declaration; ``errors`` collects every finding."""
 
-    def __init__(self, where: str, platforms: frozenset[str]) -> None:
-        """Start the validation of the declaration in ``where`` for the known ``platforms``."""
+    def __init__(
+        self,
+        where: str,
+        platforms: frozenset[str],
+        coverage: dict[str, frozenset[str]] | None = None,
+    ) -> None:
+        """Start the validation of ``where`` for the known ``platforms`` and driver ``coverage``.
+
+        ``coverage`` maps each driver to the platforms that its scenarios run; without it every
+        driver counts as running every platform.
+        """
         self.where = where
         self.platforms = platforms
+        self.coverage = coverage if coverage is not None else dict.fromkeys(DRIVERS, platforms)
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
+        self.drivers: frozenset[str] = frozenset(DRIVERS)
+        self.skipped_platforms: set[str] = set()
+        self.required: set[str] = set()
 
     def error(self, message: str) -> None:
         """Record a finding about this declaration."""
@@ -270,6 +287,7 @@ class Declaration:
                 self.error(f"{what} lists {platform} twice")
             else:
                 seen.add(platform)
+                self.skipped_platforms.add(platform)
             if not _text(item.get("reason")):
                 self.error(f"{what} needs a reason")
         if seen and seen >= self.platforms:
@@ -316,6 +334,41 @@ class Declaration:
                 ):
                     self.error(f"{where} needs a valid {owner}")
 
+    def driver_list(self, value: object, what: str) -> frozenset[str] | None:
+        """Return the drivers that ``what`` requires, or record why the list is invalid."""
+        drivers = _strings(value)
+        if drivers is None:
+            self.error(f"{what} needs a non-empty list of drivers")
+            return None
+        if len(set(drivers)) != len(drivers):
+            self.error(f"{what} names a driver twice")
+        unknown = [driver for driver in drivers if driver not in DRIVERS]
+        for driver in unknown:
+            self.error(
+                f"{what} names the unknown driver {driver!r}; known are {', '.join(DRIVERS)}"
+            )
+        return None if unknown else frozenset(drivers)
+
+    def requires(self, value: object) -> None:
+        """Check the drivers that the topic needs."""
+        drivers = self.driver_list(value, REQUIRES_KEY)
+        if drivers is not None:
+            self.drivers = drivers
+            self.required.update(drivers)
+
+    def covered(self) -> None:
+        """Check that a scenario of each required driver runs every platform that the topic runs.
+
+        A driver is required when the topic or one of its pre-states names it.
+        """
+        running = self.platforms - self.skipped_platforms
+        for driver in sorted(self.required):
+            for platform in sorted(running - self.coverage.get(driver, frozenset())):
+                self.error(
+                    f"the declaration requires {driver}, but no {driver} scenario in {MOLECULE} "
+                    f"runs the platform {platform}, which unselected_platforms does not list"
+                )
+
     def pre_states(self, value: object) -> None:
         """Check the states from which the harness runs the cycles."""
         entries = self.sequence(value, "pre_states")
@@ -339,6 +392,11 @@ class Declaration:
                 self.error(f"{what}.audit must be a boolean")
             if "files" in item:
                 self.pre_state_files(item["files"], what)
+            if REQUIRES_KEY in item:
+                drivers = self.driver_list(item[REQUIRES_KEY], f"{what}.requires") or frozenset()
+                for driver in sorted(drivers - self.drivers):
+                    self.error(f"{what} requires {driver}, which the topic does not require")
+                self.required.update(drivers & self.drivers)
 
 
 def _identity(
@@ -359,14 +417,21 @@ def _identity(
 
 
 def check_declaration(
-    path: Path, family: str, platforms: frozenset[str], *, disruptive: bool
+    path: Path,
+    family: str,
+    platforms: frozenset[str],
+    *,
+    disruptive: bool,
+    coverage: dict[str, frozenset[str]] | None = None,
 ) -> list[str]:
     """Return the findings for the declaration of ``family`` in ``path``."""
-    declaration = Declaration(str(path), platforms)
+    declaration = Declaration(str(path), platforms, coverage)
     data = declaration.mapping(_load(path), "the declaration")
     if data is None:
         return declaration.errors
     _identity(declaration, data, family, disruptive=disruptive)
+    if REQUIRES_KEY in data:
+        declaration.requires(data[REQUIRES_KEY])
     if "state" in data:
         declaration.state(data["state"])
     if "applied" in data:
@@ -377,6 +442,7 @@ def check_declaration(
         declaration.pre_states(data["pre_states"])
     if "unselected_platforms" in data:
         declaration.unselected(data["unselected_platforms"])
+    declaration.covered()
     return declaration.errors
 
 
@@ -390,11 +456,39 @@ def platforms(root: Path) -> frozenset[str]:
     return frozenset(images)
 
 
+def scenarios(root: Path, platforms: frozenset[str]) -> dict[str, frozenset[str]]:
+    """Return, per driver, the platforms that the Molecule scenarios below ``root`` run.
+
+    A scenario is a directory of ``extensions/molecule`` with a ``molecule.yml``; its name
+    starts with its driver. Every platform must name a key of ``versions.yml``.
+    """
+    covered: dict[str, set[str]] = {driver: set() for driver in DRIVERS}
+    for config in sorted((root / MOLECULE).glob("*/molecule.yml")):
+        driver = config.parent.name.split("-", 1)[0]
+        if driver not in covered:
+            message = f"{config}: a scenario name must start with one of {', '.join(DRIVERS)}"
+            raise GenerationError(message)
+        data = toggles.as_mapping(_load(config))
+        entries = toggles.as_sequence(data.get("platforms")) if data is not None else None
+        if not entries:
+            message = f"{config}: the scenario has no platforms"
+            raise GenerationError(message)
+        for entry in entries:
+            item = toggles.as_mapping(entry)
+            image = item.get("image") if item is not None else None
+            if not isinstance(image, str) or image not in platforms:
+                message = f"{config}: every platform needs an image key of {VERSIONS}"
+                raise GenerationError(message)
+            covered[driver].add(image)
+    return {driver: frozenset(images) for driver, images in covered.items()}
+
+
 def check(root: Path) -> tuple[list[str], list[str]]:
     """Return the native topics and every finding about their declarations below ``root``."""
     catalogue = generate_toggles.load_catalogue(root / generate_toggles.CATALOGUE)
     native = generate_toggles.native_families(catalogue)
     known = platforms(root)
+    coverage = scenarios(root, known)
     directory = root / TOPICS
     declared = sorted(path.stem for path in directory.glob("*.yml")) if directory.is_dir() else []
     errors = [
@@ -416,6 +510,7 @@ def check(root: Path) -> tuple[list[str], list[str]]:
                     family,
                     known,
                     disruptive=catalogue.families[family],
+                    coverage=coverage,
                 )
             )
     return native, errors

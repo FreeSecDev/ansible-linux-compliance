@@ -15,6 +15,9 @@ lifecycle_applied_outcomes:
 lifecycle_recorded_strategies:
   - recorded_value
   - recorded_state
+lifecycle_known_drivers:
+  - docker
+  - libvirt
 lifecycle_toggle_modes:
   - topic
   - rule

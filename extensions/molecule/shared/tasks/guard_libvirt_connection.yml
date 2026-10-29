@@ -1,0 +1,18 @@
+---
+- name: Guard libvirt connection | Refuse a connection that reaches the controller or another machine
+  ansible.builtin.assert:
+    that:
+      - guard_instance.marker | length == 32
+      - guard_serial | trim == guard_instance.marker
+      - guard_instance.uuid | default('') is match('^[0-9a-f-]{36}$')
+      - guard_product_uuid | trim | lower == guard_instance.uuid
+      - guard_boot_id | trim is match('^[0-9a-f-]{36}$')
+      - guard_controller_boot_id | trim is match('^[0-9a-f-]{36}$')
+      - guard_boot_id | trim != guard_controller_boot_id | trim
+      - guard_machine_id | trim is match('^[0-9a-f]{32}$')
+      - guard_machine_id | trim != guard_controller_machine_id | trim
+    fail_msg: >-
+      Refusing to run: the connection to {{ guard_instance.domain | default('unknown') }} does not reach the virtual
+      machine that the create step started (its SMBIOS serial or UUID differs), or it reaches the controller itself
+      (same boot id or machine id).
+    success_msg: The connection reaches {{ guard_instance.domain }} and not the controller.

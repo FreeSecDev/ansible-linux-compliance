@@ -14,7 +14,14 @@
       | selectattr('rule_id', 'in', linux_compliance_discovered.rule_ids) | sort(attribute='rule_id') }}
     lifecycle_family_toggle: "linux_compliance_{{ lifecycle_family }}_enabled"
     lifecycle_allow_disruptive: "{{ [lifecycle_family] if lifecycle_registry_entry.disruptive else [] }}"
-    lifecycle_pre_states: "{{ lifecycle_topic.pre_states | default([{'name': 'as built', 'audit': true}], true) }}"
+    lifecycle_drivers: "{{ lifecycle_topic.requires | default(lifecycle_known_drivers, true) }}"
+    lifecycle_declared_pre_states: >-
+      {{ lifecycle_topic.pre_states | default([{'name': 'as built', 'audit': true}], true) }}
+    lifecycle_pre_states: >-
+      {{ (lifecycle_topic.pre_states | default([{'name': 'as built', 'audit': true}], true)
+      | rejectattr('requires', 'defined') | list)
+      + (lifecycle_topic.pre_states | default([], true) | selectattr('requires', 'defined')
+      | selectattr('requires', 'contains', molecule_target.driver) | list) }}
     lifecycle_items: {}
     lifecycle_applied: {}
 
@@ -50,13 +57,17 @@
       - not lifecycle_topic.disruptive or (lifecycle_topic.containment | default('') | length > 0)
       - lifecycle_items.values() | map('length') | sum > 0
       - lifecycle_applied.values() | map('length') | sum > 0
-      - lifecycle_pre_states | map(attribute='name') | unique | list | length == lifecycle_pre_states | length
+      - lifecycle_declared_pre_states | map(attribute='name') | unique | list | length
+        == lifecycle_declared_pre_states | length
+      - lifecycle_drivers | difference(lifecycle_known_drivers) | length == 0
+      - molecule_target.driver not in lifecycle_drivers or lifecycle_pre_states | length > 0
     fail_msg: >-
       The lifecycle declaration of {{ lifecycle_family }} does not match the catalogue: its family must be
       {{ lifecycle_family }}, disruptive must be {{ lifecycle_registry_entry.disruptive }} as in the registry, a
       disruptive topic must describe its containment, at least one item and one applied expectation must be declared
-      for this platform and every pre-state needs a distinct name. tools/roles/check_lifecycle_topics.py checks the
-      full format.
+      for this platform, every pre-state needs a distinct name, requires may name only {{ lifecycle_known_drivers }},
+      and a driver that the topic requires must keep at least one pre-state. tools/roles/check_lifecycle_topics.py
+      checks the full format.
     quiet: true
 
 - name: Lifecycle topic | Refuse a topic that this platform skips without the declaration saying so, and the reverse
@@ -80,6 +91,22 @@
       {{ lifecycle_family }} has no native rule in {{ molecule_profile_id }} on {{ molecule_target.instance }}, as its
       declaration states; its lifecycle runs on the other platforms.
   when: lifecycle_rules | length == 0
+
+- name: Lifecycle topic | Report a topic that needs another driver, as declared
+  ansible.builtin.debug:
+    msg: >-
+      {{ lifecycle_family }} requires {{ lifecycle_drivers | join(', ') }}, so its lifecycle does not run in this
+      {{ molecule_target.driver }} scenario; tools/roles/check_lifecycle_topics.py checks that a scenario of each
+      required driver runs it.
+  when: molecule_target.driver not in lifecycle_drivers
+
+- name: Lifecycle topic | Report the pre-states that only another driver can set
+  ansible.builtin.debug:
+    msg: >-
+      {{ lifecycle_family }}: the pre-states {{ lifecycle_declared_pre_states | map(attribute='name')
+      | difference(lifecycle_pre_states | map(attribute='name')) | list }} require another driver than
+      {{ molecule_target.driver }} and run in its scenarios.
+  when: lifecycle_declared_pre_states | length != lifecycle_pre_states | length
 
 - name: Lifecycle topic | Take the state of the topic before any cycle
   ansible.builtin.include_tasks:
@@ -113,7 +140,9 @@
   loop_control:
     loop_var: lifecycle_cycle
     label: "{{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state"
-  when: lifecycle_rules | length > 0
+  when:
+    - lifecycle_rules | length > 0
+    - molecule_target.driver in lifecycle_drivers
 
 - name: Lifecycle topic | Take the state of the topic after every cycle
   ansible.builtin.include_tasks:

@@ -1,0 +1,109 @@
+---
+molecule_libvirt_pins_file: "{{ playbook_dir }}/images/cloud-images.pins"
+molecule_libvirt_pins: >-
+  {{ lookup('ansible.builtin.file', molecule_libvirt_pins_file).splitlines() | map('trim') | reject('equalto', '')
+  | map('split') | list }}
+molecule_libvirt_cache: "{{ playbook_dir }}/../../../build/molecule-libvirt/cache"
+molecule_libvirt_pool_parent: /var/lib/libvirt/freesecdev-molecule
+molecule_libvirt_name_prefix: fsd-mol
+molecule_libvirt_metadata_namespace: https://github.com/FreeSecDev/ansible-linux-compliance/molecule
+molecule_libvirt_bounds:
+  memory_mib:
+    minimum: 1024
+    maximum: 4096
+    default: 2048
+  vcpus:
+    minimum: 1
+    maximum: 4
+    default: 2
+  disk_gib:
+    minimum: 8
+    maximum: 16
+    default: 12
+molecule_libvirt_boot_timeout: 900
+molecule_libvirt_rpm_keys:
+  rhel_compatible:
+    path: /etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+    fingerprint: 21CB256AE16FC54C6E652949702D426D350D275D
+molecule_libvirt_quiet_units:
+  - service: snapd.service
+    units:
+      - snapd.socket
+      - snapd.service
+  - service: unattended-upgrades.service
+    units:
+      - unattended-upgrades.service
+  - service: packagekit.service
+    units:
+      - packagekit.service
+molecule_libvirt_ssh_options:
+  - -F /dev/null
+  - -o UserKnownHostsFile=@KNOWN_HOSTS@
+  - -o StrictHostKeyChecking=yes
+  - -o IdentitiesOnly=yes
+  - -o ControlMaster=auto
+  - -o ControlPersist=60s
+  - -o ForwardAgent=no
+  - -o ForwardX11=no
+  - -o LogLevel=ERROR
+molecule_libvirt_domain_xml: |
+  <domain type='kvm'>
+    <name>{{ libvirt_domain.domain }}</name>
+    <metadata>
+      <fsd:molecule xmlns:fsd="{{ molecule_libvirt_metadata_namespace }}">
+        <fsd:scenario>{{ libvirt_domain.scenario }}</fsd:scenario>
+        <fsd:run>{{ libvirt_domain.run_id }}</fsd:run>
+        <fsd:instance>{{ libvirt_domain.instance }}</fsd:instance>
+      </fsd:molecule>
+    </metadata>
+    <memory unit='MiB'>{{ libvirt_domain.memory_mib }}</memory>
+    <vcpu>{{ libvirt_domain.vcpus }}</vcpu>
+    <sysinfo type='smbios'>
+      <system>
+        <entry name='manufacturer'>FreeSecDev</entry>
+        <entry name='product'>molecule</entry>
+        <entry name='serial'>{{ libvirt_domain.marker }}</entry>
+      </system>
+    </sysinfo>
+    <os>
+      <type arch='x86_64' machine='q35'>hvm</type>
+      <boot dev='hd'/>
+      <smbios mode='sysinfo'/>
+    </os>
+    <features>
+      <acpi/>
+      <apic/>
+    </features>
+    <cpu mode='host-passthrough' check='none'/>
+    <clock offset='utc'/>
+    <on_poweroff>destroy</on_poweroff>
+    <on_reboot>restart</on_reboot>
+    <on_crash>destroy</on_crash>
+    <devices>
+      <disk type='volume' device='disk'>
+        <driver name='qemu' type='qcow2'/>
+        <source pool='{{ libvirt_domain.pool }}' volume='{{ libvirt_domain.disk }}'/>
+        <target dev='vda' bus='virtio'/>
+      </disk>
+      <disk type='volume' device='cdrom'>
+        <driver name='qemu' type='raw'/>
+        <source pool='{{ libvirt_domain.pool }}' volume='{{ libvirt_domain.seed }}'/>
+        <target dev='sda' bus='sata'/>
+        <readonly/>
+      </disk>
+      <interface type='network'>
+        <source network='{{ libvirt_domain.network }}'/>
+        <mac address='{{ libvirt_domain.mac }}'/>
+        <model type='virtio'/>
+      </interface>
+      <serial type='pty'/>
+      <console type='pty'/>
+      <rng model='virtio'>
+        <backend model='random'>/dev/urandom</backend>
+      </rng>
+      <video>
+        <model type='vga'/>
+      </video>
+      {{ libvirt_domain_extra_devices | default('') }}
+    </devices>
+  </domain>

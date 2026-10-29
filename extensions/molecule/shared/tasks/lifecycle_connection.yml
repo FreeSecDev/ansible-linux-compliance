@@ -3,11 +3,13 @@
   ansible.builtin.slurp:
     src: /proc/1/environ
   register: lifecycle_init_environ
+  when: molecule_target.driver == 'docker'
 
 - name: Lifecycle connection | Read the status of the process that the connection runs
   ansible.builtin.slurp:
     src: /proc/self/status
   register: lifecycle_self_status
+  when: molecule_target.driver == 'docker'
 
 - name: Lifecycle connection | Check the marker and the missing privileges with the guard's own test
   ansible.builtin.include_tasks:
@@ -17,3 +19,18 @@
     guard_marker_variable: "{{ lifecycle_marker_variable }}"
     guard_environ: "{{ lifecycle_init_environ.content | b64decode }}"
     guard_status: "{{ lifecycle_self_status.content | b64decode }}"
+  when: molecule_target.driver == 'docker'
+
+- name: Lifecycle connection | Check the SMBIOS identity and that the connection does not reach the controller
+  ansible.builtin.include_tasks:
+    file: guard_libvirt_reach.yml
+  vars:
+    guard_instance: "{{ molecule_target }}"
+  when: molecule_target.driver == 'libvirt'
+
+- name: Lifecycle connection | Refuse an instance of an unknown driver
+  ansible.builtin.assert:
+    that:
+      - molecule_target.driver in ['docker', 'libvirt']
+    fail_msg: "{{ molecule_target.instance }} was created by the unknown driver {{ molecule_target.driver }}."
+    quiet: true

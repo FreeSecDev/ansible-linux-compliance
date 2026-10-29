@@ -1,0 +1,28 @@
+---
+- name: Define libvirt objects that destroy must never touch, and one orphan only the fallback may remove
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../shared/vars/libvirt.yml
+    - vars/libvirt_strangers.yml
+  tasks:
+    - name: Define, but never start, the stranger domains
+      community.libvirt.virt:
+        uri: qemu:///system
+        command: define
+        xml: >-
+          <domain type='kvm'><name>{{ item.name }}</name>{{ item.labels }}<memory unit='MiB'>64</memory><os><type
+          arch='x86_64'>hvm</type></os></domain>
+      loop: "{{ selftest_strangers }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Define, but never start, an unlabelled isolated network named like one of this scenario
+      community.libvirt.virt_net:
+        uri: qemu:///system
+        command: define
+        name: "{{ selftest_stranger_network }}"
+        xml: >-
+          <network><name>{{ selftest_stranger_network }}</name>
+          <bridge name='fsdx{{ selftest_stranger_run }}'/></network>
