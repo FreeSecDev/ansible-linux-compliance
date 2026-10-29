@@ -3,6 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-10-25
 - **Deciders:** project owner, lead architect
+- **Amended:** 2026-10-27 (runner image provenance, FREES-36)
 - **Jira:** FREES-118 (release features), FREES-119 (GHCR artifacts), FREES-120 (code scanning), FREES-121 (report image), FREES-122 (Pages)
 - **Pull requests:** [ansible-linux-compliance#1](https://github.com/FreeSecDev/ansible-linux-compliance/pull/1)
 - **Related:** [0006](0006-toolchain-selection.md), [0007](0007-registry-build-and-signing.md), [0008](0008-qcow2-builds-nested-virtualization.md)
@@ -37,11 +38,13 @@ GitHub Packages has no native registry for Ansible collections or Python package
   with `gh attestation verify`. What an attestation proves depends on where the artifact was built:
   - The collection tarball and the content mirror are built inside the GitHub release workflow. Their provenance
     identifies that workflow, its commit and its run.
-  - The runner and report images are built in AWS CodeBuild and promoted by digest, as decided in
-    [ADR 0007](0007-registry-build-and-signing.md). Their provenance is issued by the GitHub workflow that triggered,
-    scanned, copied and signed the image. It records the CodeBuild build ID and the staged ECR digest as build
-    parameters, but it does not cryptographically prove which steps CodeBuild executed. Trust in the CodeBuild step
-    rests on its IAM role scoping and on the build specification being version-controlled in the runner repository.
+  - The runner and report images are built in the runner repository's `image-build` workflow on GitHub-hosted
+    runners, as amended in [ADR 0007](0007-registry-build-and-signing.md) on 2026-10-27. Their provenance is
+    issued by the workflow run that executed the build steps themselves, so it covers the build: it names the
+    workflow file, the commit and the run, and the workflow verifies it (with `--deny-self-hosted-runners`) before it
+    tags the release.
+  - Superseded: the CodeBuild design, in which the provenance came from the workflow that only triggered, scanned,
+    copied and signed the image and did not prove which steps CodeBuild executed. That weakness is removed.
 - A **tag ruleset** on `refs/tags/v*` blocks tag deletion and updates. It does not yet restrict tag creation:
   GitHub rejects the built-in GitHub Actions app as a bypass actor on repository rulesets, so restricting creation
   needs a dedicated org-owned release App. That App is tracked in FREES-124.
@@ -133,8 +136,9 @@ More publishing paths to maintain. Immutable releases mean a bad release must be
 | Risk | Mitigation now | Owner | Follow-up |
 |---|---|---|---|
 | No human approves a release before publication, by owner decision | Automated gates in the release workflow, which always runs from protected `main` (approved pull request, required checks, new SemVer version with changelog, reproducibility); main-only release environment; immutable releases; attestations | Project owner | FREES-84 |
-| Anyone with write access can create a `v*` tag and run workflows from their own commits with the repository token. They cannot use the `release` environment, so they get no publishing secrets and no AWS release role | Write access is the real containment: today the owner is the only collaborator and the organisation default permission is read. Releases are never triggered by tags. The tag ruleset blocks deletion and update | Project owner | FREES-124 |
-| CodeBuild steps are not covered by cryptographic provenance | Version-controlled build specification, least-privilege CodeBuild role, digest comparison before promotion | Lead architect | FREES-36 |
+| Anyone with write access can create a `v*` tag and run workflows from their own commits with the repository token. They cannot use the `release` environment, so they get no publishing secrets and no AWS release role. The environment does not gate `GITHUB_TOKEN` permissions, though: a workflow on any branch can declare `packages: write` and write to a GHCR package, including the runner image and its tags. Consumers are protected by digest pins plus signature and attestation verification bound to the release workflow on `main` | Write access is the real containment: today the owner is the only collaborator and the organisation default permission is read. Releases are never triggered by tags. The tag ruleset blocks deletion and update | Project owner | FREES-124 |
+| Withdrawn 2026-10-27: CodeBuild steps were not covered by cryptographic provenance | Removed: images are built on GitHub-hosted runners in the attested workflow run ([ADR 0007](0007-registry-build-and-signing.md) amendment) | Lead architect | FREES-36 |
+| Image builds trust GitHub-hosted runners and their images | Single-use VMs; the build job holds no write or package token and the push runs in a separate job; digest-pinned builder and base images, checksum-pinned tools, provenance verified with `--deny-self-hosted-runners`, Grype gate on the published digest | Project owner | FREES-36 |
 
 ## Operational consequences
 

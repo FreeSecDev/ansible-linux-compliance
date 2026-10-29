@@ -7,6 +7,10 @@ Cost: [costs.md](costs.md).
 Account `910736812072`, region `eu-west-1`. This is a one-time procedure run by the project owner from a trusted
 workstation. CI never uses root or access keys; it assumes the OIDC role created here.
 
+AWS is used only for VM golden images (Packer, [ADR 0008](../adr/0008-qcow2-builds-nested-virtualization.md)). The
+CI runner image is built on GitHub-hosted runners and needs no AWS resource, role or repository variable
+([ADR 0007](../adr/0007-registry-build-and-signing.md), amendment of 2026-10-27).
+
 ## Prerequisites
 
 - A shell on a workstation with `aws` (CLI v2), `gh`, `git`, GNU `make` and `uv` installed.

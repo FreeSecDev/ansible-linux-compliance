@@ -470,7 +470,7 @@ atomically with mode 0600 and escaped as untrusted data.
     `chown` the tree and copy desktop files. The `chown` of the man pages fails harmlessly because the Ubuntu base
     image excludes `/usr/share/man`.
 - **Root inside the container only.** SCC requires root, so the image keeps the default root user. This deviates
-  from the `container-security` skill: non-root user, Alpine base, CodeBuild build, signing and scanning. Those rules
+  from the `container-security` skill: non-root user, Alpine base, a build in the runner repository's `image-build` workflow, signing and scanning. Those rules
   are for published images. This image is never published, is built on the runner, and has its base fixed by the
   product owner's platform fact. The smoke test still runs it with `--network none`, `--cap-drop ALL`,
   `--security-opt no-new-privileges`, a read-only root file system and a `noexec` `/tmp`.

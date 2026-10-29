@@ -13,7 +13,8 @@
 
 - [ ] Validation role is read-only.
 - [ ] Image-build role can launch tagged builders, create AMIs and write to the artifact bucket only.
-- [ ] Release role can push to ECR and write release artifacts only.
+- [ ] Release role can write its own release artifacts (for example VM golden images in S3) only; the CI runner image
+      needs no AWS role.
 - [ ] No `*` action, no `*` resource without a documented condition, no administrator policy.
 - [ ] `iam:PassRole` restricted to named roles and the intended service.
 

@@ -7,7 +7,7 @@ Status: initial design, pending ADR acceptance. Update this file when components
 | Repository | Responsibility | Consumes | Produces |
 |---|---|---|---|
 | `FreeSecDev/ansible-linux-compliance` | Collection, Molecule, Packer templates, reporting, docs | Runner image by digest | Collection tarball, golden images, reports |
-| `FreeSecDev/linux-compliance-runner` | CI toolbox OCI image built in AWS | Alpine base by digest | Signed image, SBOM, provenance |
+| `FreeSecDev/linux-compliance-runner` | CI toolbox OCI image built on GitHub-hosted runners | Alpine base by digest | Signed image, SBOM, provenance |
 
 ## Collection components
 

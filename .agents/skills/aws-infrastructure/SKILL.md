@@ -90,7 +90,8 @@ OIDC-only, scoped per repository, ref or environment, and short-lived.
 ## Interaction with other skills
 
 - Supplies roles and buckets to the `github-actions` skill and builders to the `packer-images` skill.
-- Supplies ECR and CodeBuild for the `container-security` skill.
+- Does not supply the runner image build: it runs on GitHub-hosted runners (`container-security`). AWS hosts VM
+  golden image builds only.
 - Reviewed by `security-review` for IAM and trust changes; design choices go through `architecture`.
 - Provider updates are handled by the `dependency-management` skill; documentation by the `documentation` skill.
 - Release roles are consumed by the `release-engineering` skill; work is tracked via `jira-management`.
