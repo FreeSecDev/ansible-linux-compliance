@@ -712,3 +712,22 @@ The audit role resolves them with the same function as for OpenSCAP (`toggles.re
 A DISA rule with no mapped rule is never disabled by a toggle. SCC tailors only from its installation directory, so
 SCC's disabled rules are reported as `disabled` after the scan instead of through a tailoring file; they are never
 counted as passing, as this ADR requires.
+
+## Amendment 2026-10-30: lifecycle per driver (FREES-61)
+
+The FREES-60 amendment left open where the lifecycle of a family runs whose controls need a real kernel, boot loader or
+init system. The libvirt scenarios of ADR 0009 answer it ([libvirt guide](../molecule-libvirt.md#driver-requirements-of-a-topic)).
+
+- **Declared requirement.** A lifecycle declaration may name the drivers its topic needs (`requires: [libvirt]`), and a
+  pre-state may do the same. A topic with `requires` runs only in the scenarios of those drivers and is reported as
+  skipped elsewhere. The harness itself is unchanged; it selects the pre-states and skips the cycles by the driver of
+  the instance that the guard verified.
+- **Tight coverage.** `make lint-lifecycle` fails when a declaration requires a driver for which no scenario runs every
+  platform that the topic does not list under `unselected_platforms`, so a native topic that requires libvirt must run
+  in a libvirt scenario on each of its platforms, and CI runs every scenario of each driver.
+- **A virtual machine has more state than a container.** For a libvirt instance the whole-instance comparison ignores
+  the contents, but not the existence, mode, owner or inode, of the system logs, the login accounting, the journal and
+  three service state files that a running system rewrites by itself; the list and its reasons are in the libvirt guide.
+- **A VM-only case.** The `file_permissions` declaration gains a pre-state that changes the owner and group of
+  `/etc/crontab` and requires libvirt, because a container without `CAP_CHOWN` cannot set it. It proves that cleanup
+  restores the recorded mode and leaves the ownership alone.

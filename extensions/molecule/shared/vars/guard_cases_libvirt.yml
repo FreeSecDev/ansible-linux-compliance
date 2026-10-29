@@ -113,6 +113,10 @@ guard_libvirt_simulation:
 guard_libvirt_cases:
   - name: disposable virtual machine over SSH
     refused: false
+  - name: virtual machine with a video adapter but no graphical console
+    domain_edits:
+      - ["<serial type='pty'>", "<video><model type='vga'/></video><serial type='pty'>"]
+    refused: false
   - name: localhost over a local connection
     hostname: localhost
     connection_vars:

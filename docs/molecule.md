@@ -2,7 +2,9 @@
 
 Scope: the Docker Molecule scenarios under `extensions/molecule/`, how to run them and what they prove.
 Audience: contributors adding or changing roles, modules and scenarios.
-Decision record: [ADR 0009](adr/0009-molecule-layout-and-drivers.md). Jira: FREES-59, FREES-60.
+Decision record: [ADR 0009](adr/0009-molecule-layout-and-drivers.md). Jira: FREES-59, FREES-60, FREES-61.
+The libvirt scenarios, which run the same playbooks in KVM virtual machines, have their own
+[libvirt guide](molecule-libvirt.md).
 
 Molecule is configured ansible-native: every scenario is a flat directory `extensions/molecule/<scenario>/` that holds
 only a `molecule.yml`. There is no molecule-plugins driver. Every playbook lives in `extensions/molecule/shared/` and
@@ -90,7 +92,8 @@ controller, then copies it into the instance as `/usr/share/freesecdev-molecule/
   `mounts` or `devices`, or add capabilities without a `capabilities_reason`.
 - The run id is generated once, as the first fact of `create.yml`, and persisted in the instance config. A repeated
   `create` reuses the recorded run id and marker, so it starts no second container. Container names are
-  `fsd-mol-<scenario>-<run id>-<platform>`.
+  `fsd-mol-<scenario>-<run id>-<platform>`. Every record names its driver (`docker`); a Docker scenario name may not
+  start with `libvirt-`, the prefix from which the guard decides that a target is a virtual machine.
 - Every container carries the labels `org.freesecdev.molecule.scenario` and `org.freesecdev.molecule.run`. The keys
   are built as a dictionary expression, because Ansible does not template mapping keys. After the start,
   `create.yml` inspects each container and asserts the name, both labels and the marker on it.
@@ -119,8 +122,8 @@ it; the same worked with `guard_inspect`, `molecule_target` and `inventory_hostn
 `env` are out of reach. `inventory_hostname` is not: it is a host variable. The first task therefore uses only those,
 and literal values:
 
-- No variable named `guard_*`, `molecule_target` or `molecule_docker_default_paths` may exist in
-  `hostvars[inventory_hostname]` when the play starts. `hostvars` holds inventory variables, facts and registered
+- No variable named `guard_*`, `molecule_target*`, `molecule_docker_default_paths` or `molecule_libvirt_*` may exist
+  in `hostvars[inventory_hostname]` when the play starts. `hostvars` holds inventory variables, facts and registered
   results of earlier plays and extra variables, but not play variables or `vars_files`. Any such name is therefore
   supplied from outside, whatever its value.
 - `ansible_play_hosts_all`, mapped to each host's `inventory_hostname`, must give back `ansible_play_hosts_all`, which
@@ -174,6 +177,8 @@ capabilities, and `NoNewPrivs` must be 1. That catches a connection that reaches
 
 `verify` feeds simulated bypass attempts to the same task files (`shared/vars/guard_cases.yml`, 64 cases). It asserts
 that each is refused with a message that starts with "Refusing to run" and that a disposable container is accepted.
+Every scenario's `verify` also runs the 59 simulated libvirt cases of the [libvirt guard](molecule-libvirt.md#guard),
+whatever its own driver, so the libvirt guard is exercised even where no KVM is available.
 The loopback check does not enumerate the controller's own addresses; the exact match against the create step's
 records is what keeps every other target out.
 
@@ -266,7 +271,8 @@ the failure of a task inside the role.
 `/var/lib/freesecdev`. The state ledger and the evidence directory are part of it. On a mismatch the assertion prints
 up to 20 differing entries.
 
-Two exceptions are recorded explicitly:
+Two exceptions are recorded explicitly, and a virtual machine has a third, for the system logs and service state files
+that a running system rewrites by itself ([libvirt guide](molecule-libvirt.md#differences-that-only-a-virtual-machine-has)):
 
 - For the evidence directory `/var/lib/freesecdev/linux_compliance/evidence` itself, only path, mode and owner count,
   not its size and times. A check-mode scan runs in a private `.check-<run id>` directory below it and removes that
@@ -488,13 +494,16 @@ pre_states:
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles) and `files` (mode, owner or group of declared files); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
+| `requires` | no | The drivers whose scenarios run the topic, `docker` or `libvirt`; without it, every scenario runs it ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
 with services fails there with a clear message. A topic whose remediation must write kernel parameters, mounts or
-the boot loader cannot apply them in these containers either (see below); it needs the libvirt scenarios (FREES-61)
-before it can ship.
+the boot loader cannot apply them in these containers either (see below); its declaration names
+`requires: [libvirt]`, so its lifecycle runs in the [libvirt scenarios](molecule-libvirt.md) only, and
+`make lint-lifecycle` requires that a libvirt scenario runs each of its platforms. The `file_permissions` declaration
+has one pre-state that requires libvirt: an ownership change, which a container without `CAP_CHOWN` cannot make.
 
 ### The coverage gate
 
@@ -536,8 +545,9 @@ container:
   labels, and runs even after a failure. The container is never reused.
 
 A disruptive topic that cannot be applied meaningfully in a container (boot loader, mounts, kernel parameters,
-firewall, auditd) needs the libvirt scenarios (FREES-61); its declaration would then have to run there, which is not
-built yet.
+firewall, auditd) declares `requires: [libvirt]` and runs in the [libvirt scenarios](molecule-libvirt.md), where the
+connection is SSH as root to a disposable virtual machine; its `containment` note must then say why a broken SSH, PAM
+or network configuration still cannot reach the host.
 
 ## Container-meaningful and not
 
@@ -557,7 +567,8 @@ Not meaningful in a container, and therefore not covered by these scenarios:
 
 ## Tests that need libvirt
 
-These belong to the libvirt scenarios (FREES-61, FREES-63) and run on a KVM-capable host:
+`libvirt-ubuntu` and `libvirt-rhel-compatible` (FREES-61) run the scenarios above, including the toggle lifecycle, in
+KVM virtual machines ([libvirt guide](molecule-libvirt.md)). These further scenarios build on them (FREES-62, FREES-63):
 
 - `libvirt-ubuntu-bare` and `libvirt-rhel-bare`: full VM from a bare cloud image.
 - `libvirt-negative`: invalid profile, unavailable scanner, bad arguments on a real OS.

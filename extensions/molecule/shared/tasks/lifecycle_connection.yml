@@ -1,4 +1,11 @@
 ---
+- name: Lifecycle connection | Refuse an instance of an unknown driver
+  ansible.builtin.assert:
+    that:
+      - molecule_target.driver in ['docker', 'libvirt']
+    fail_msg: "{{ molecule_target.instance }} was created by the unknown driver {{ molecule_target.driver }}."
+    quiet: true
+
 - name: Lifecycle connection | Read the environment of the init process over the real connection
   ansible.builtin.slurp:
     src: /proc/1/environ
@@ -27,10 +34,3 @@
   vars:
     guard_instance: "{{ molecule_target }}"
   when: molecule_target.driver == 'libvirt'
-
-- name: Lifecycle connection | Refuse an instance of an unknown driver
-  ansible.builtin.assert:
-    that:
-      - molecule_target.driver in ['docker', 'libvirt']
-    fail_msg: "{{ molecule_target.instance }} was created by the unknown driver {{ molecule_target.driver }}."
-    quiet: true

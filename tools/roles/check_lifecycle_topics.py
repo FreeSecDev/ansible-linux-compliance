@@ -137,7 +137,9 @@ class Declaration:
         """
         self.where = where
         self.platforms = platforms
-        self.coverage = coverage if coverage is not None else dict.fromkeys(DRIVERS, platforms)
+        self.coverage: dict[str, frozenset[str]] = (
+            coverage if coverage is not None else dict.fromkeys(DRIVERS, platforms)
+        )
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
         self.drivers: frozenset[str] = frozenset(DRIVERS)

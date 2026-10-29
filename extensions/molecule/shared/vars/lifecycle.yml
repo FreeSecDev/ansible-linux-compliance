@@ -69,6 +69,14 @@ lifecycle_broad_selfcheck_crontab: >-
 lifecycle_broad_selfcheck_ledger: >-
   {{ lifecycle_broad_selfcheck_file
   | combine({'path': '/var/lib/freesecdev/linux_compliance/state.json', 'inode': 104}) }}
+lifecycle_broad_selfcheck_syslog: >-
+  {{ lifecycle_broad_selfcheck_file | combine({'path': '/var/log/syslog', 'inode': 105, 'mode': '0640'}) }}
+lifecycle_broad_selfcheck_with_syslog:
+  files:
+    - "{{ lifecycle_broad_selfcheck_file }}"
+    - "{{ lifecycle_broad_selfcheck_crontab }}"
+    - "{{ lifecycle_broad_selfcheck_ledger }}"
+    - "{{ lifecycle_broad_selfcheck_syslog }}"
 lifecycle_broad_selfcheck_declared:
   - /etc/crontab
 lifecycle_broad_selfcheck_raw:
@@ -97,6 +105,24 @@ lifecycle_broad_selfcheck_cases:
   - name: unchanged instance
     after: {}
     refused: false
+  - name: contents of a system log, which only a virtual machine may change
+    before: "{{ lifecycle_broad_selfcheck_with_syslog }}"
+    after:
+      files:
+        - "{{ lifecycle_broad_selfcheck_file }}"
+        - "{{ lifecycle_broad_selfcheck_crontab }}"
+        - "{{ lifecycle_broad_selfcheck_ledger }}"
+        - "{{ lifecycle_broad_selfcheck_syslog | combine({'size': 20, 'mtime': 2.0, 'ctime': 2.0, 'checksum': 'b'}) }}"
+    refused: "{{ molecule_target.driver != 'libvirt' }}"
+  - name: mode of a system log
+    before: "{{ lifecycle_broad_selfcheck_with_syslog }}"
+    after:
+      files:
+        - "{{ lifecycle_broad_selfcheck_file }}"
+        - "{{ lifecycle_broad_selfcheck_crontab }}"
+        - "{{ lifecycle_broad_selfcheck_ledger }}"
+        - "{{ lifecycle_broad_selfcheck_syslog | combine({'mode': '0644'}) }}"
+    refused: true
   - name: times of a declared file
     after:
       files:

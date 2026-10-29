@@ -115,7 +115,10 @@ overriding them.
 | `test-integration` | pending FREES-60 | Integration tests |
 | `test-idempotency` | pending FREES-60 | Idempotency checks |
 | `test-compliance` | pending FREES-62 | Compliance scan scenarios |
-| `test-molecule-libvirt` | pending FREES-61 | libvirt Molecule scenarios |
+| `test-molecule-libvirt` | implemented | `molecule-dependencies`, `molecule-content`, `molecule-libvirt-images`, `molecule-libvirt-preflight`, then `molecule test` for `libvirt-ubuntu` and `libvirt-rhel-compatible` in KVM virtual machines, including the toggle lifecycle (stops at the first failure), then `test-molecule-libvirt-selftest` unless `MOLECULE_LIBVIRT_SELFTEST=false`; needs `/dev/kvm` and `qemu:///system`, see [libvirt](molecule-libvirt.md) |
+| `test-molecule-libvirt-selftest` | implemented | Real guard bypass attempts, decoys, strangers and the destroy fallback against libvirt objects of the `libvirt-selftest` scenario, see [libvirt](molecule-libvirt.md#self-test-against-real-libvirt-objects) |
+| `molecule-libvirt-images` | implemented | `tools/molecule/fetch-cloud-images.sh`: fetches the cloud images and packages of `MOLECULE_LIBVIRT_PLATFORMS` into `build/molecule-libvirt/cache`, checks every SHA-256 and the vendors' signed checksum files |
+| `molecule-libvirt-preflight` | implemented | Fails unless `/dev/kvm` exists and `qemu:///system` is reachable |
 | `test-molecule-golden` | pending FREES-63 | Golden image scenarios |
 | `packer-validate` | pending FREES-64 | Packer template validation |
 | `packer-build` | pending FREES-64 | Packer image build |
