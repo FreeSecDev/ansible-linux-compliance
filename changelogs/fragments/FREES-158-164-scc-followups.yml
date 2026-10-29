@@ -1,0 +1,9 @@
+---
+bugfixes:
+  - >-
+    Match the SCC never-publish guard per command instead of within 60 characters, so long global
+    options before a publishing verb no longer hide it (FREES-158).
+  - >-
+    The ``compliance_scan`` module falls back to ``/usr/lib/os-release`` when ``/etc/os-release``
+    does not exist, and the report parsers refuse SCC XCCDF and ARF results whose test result
+    lists none of the operating system platforms of their benchmark (FREES-164).

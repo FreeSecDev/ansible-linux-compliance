@@ -117,6 +117,7 @@ DISABLE_BY_TAILORING: Final[str] = "tailoring"
 DISABLE_AFTER_SCAN: Final[str] = "post_scan"
 DISABLE_NOTHING: Final[str] = "none"
 OS_RELEASE_PATH: Final[str] = "/etc/os-release"
+OS_RELEASE_FALLBACK_PATH: Final[str] = "/usr/lib/os-release"
 MAX_OS_RELEASE_BYTES: Final[int] = 64 * 1024
 _RUN_ID: Final[str] = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 _OS_RELEASE_KEY: Final[str] = r"[A-Z][A-Z0-9_]*"
@@ -707,6 +708,18 @@ def read_os_release(path: str) -> dict[str, str]:
     return values
 
 
+def resolve_os_release(primary: str, fallback: str) -> str:
+    """Return the os-release file to read, as os-release(5) orders them.
+
+    ``primary`` is used when it exists, even if it cannot be read, so an unreadable
+    file never silently yields to ``fallback``. When neither exists, ``primary`` is
+    returned and reading it fails closed with ``host_mismatch``.
+    """
+    if Path(primary).exists() or not Path(fallback).exists():
+        return primary
+    return fallback
+
+
 def check_host_release(host: model.HostIdentity, path: str) -> None:
     """Refuse a host whose ``ID`` and ``VERSION_ID`` in ``path`` differ from ``host``.
 
@@ -802,10 +815,11 @@ def plan(job: AuditJob, *, owner_uid: int = ROOT_UID) -> AuditPlan:
     Raises:
         AuditError: For every problem, with a stable ``error_type``. A backend in
             :data:`OS_RELEASE_BACKENDS` also needs the host's ``/etc/os-release``
-            to report the asserted distribution and version (``host_mismatch``).
+            (or ``/usr/lib/os-release`` when that is missing) to report the asserted
+            distribution and version (``host_mismatch``).
     """
     if job.backend in OS_RELEASE_BACKENDS:
-        check_host_release(job.host, OS_RELEASE_PATH)
+        check_host_release(job.host, resolve_os_release(OS_RELEASE_PATH, OS_RELEASE_FALLBACK_PATH))
     content, benchmark, rules = _verified_profile(job, owner_uid=owner_uid)
     pattern = _LONG_CONTENT_NAME if job.backend in LONG_CONTENT_NAME_BACKENDS else _CONTENT_NAME
     if re.fullmatch(pattern, Path(content).name) is None:

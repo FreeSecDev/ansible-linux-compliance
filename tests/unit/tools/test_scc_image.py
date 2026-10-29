@@ -148,9 +148,12 @@ HELP_DEFINE = "define HELP_TEXT"
 ASSIGNMENT = re.compile(r"([A-Za-z0-9_.-]+)\s*(?::=|::=|\?=|\+=|=)")
 RULE = re.compile(r"([A-Za-z0-9_./%-]+(?:\s+[A-Za-z0-9_./%-]+)*)\s*:(?!=)")
 PUSH_PATTERNS = re.compile(
-    r"(?i)\b(docker|podman|buildah|nerdctl)\b.{0,60}?\b(push|login|save|export)\b"
+    r"(?i)\b(docker|podman|buildah|nerdctl)\b[^\x00]*?\b(push|login|save|export)\b"
     r"|\bskopeo\b|\bcrane\b|\boras\b|--push\b|\bregctl\b"
 )
+SEGMENT_BREAK = "\x00"
+COMMAND_BOUNDARY = re.compile(r"&&|\|\||[;|\]\)}]|[.!?](?=\s|$)")
+COMMAND_OPENERS = {"[": "]", "(": ")", "{": "}"}
 COMMAND_GAP = re.compile(r"(?:\\\r?\n|[\s'\"`,()\[\]{}*])+")
 CONTINUATIONS = re.compile(r"(?:\\\r?\n)+")
 MAKE_REFUSED = re.compile(
@@ -317,13 +320,41 @@ def normalised(text: str) -> tuple[str, list[tuple[int, int]]]:
     return "".join(parts), anchors
 
 
-def publishing_line(text: str) -> int | None:
+def command_marked(text: str, *, wrapped: bool = False) -> str:
+    """Replace every command boundary with a NUL character, keeping all offsets.
+
+    The boundaries are ``;``, ``&&``, ``||``, ``|``, a closing bracket, the end of a
+    sentence, and a newline outside any bracket and not escaped by a backslash. In
+    wrapped prose (Markdown) a newline never ends a command.
+    Verbs computed at run time (variables, f-strings) are out of scope (ADR 0019).
+    """
+    marked = list(text)
+    for boundary in COMMAND_BOUNDARY.finditer(text):
+        marked[boundary.start() : boundary.end()] = SEGMENT_BREAK * len(boundary.group(0))
+    depth = 0
+    for position, character in enumerate(text):
+        if character in COMMAND_OPENERS:
+            depth += 1
+        elif character in COMMAND_OPENERS.values():
+            depth = max(depth - 1, 0)
+        elif character == "\n":
+            blank = text[position + 1 : position + 2] == "\n"
+            escaped = text[position - 1 : position] == "\\"
+            if blank:
+                depth = 0
+            if depth == 0 and not escaped and not wrapped:
+                marked[position] = SEGMENT_BREAK
+    return "".join(marked)
+
+
+def publishing_line(text: str, *, wrapped: bool = False) -> int | None:
     """Return the original line of the first publishing command, or ``None``.
 
-    The tool and the verb may be split across a continuation, a formatter-wrapped
-    argument list or Markdown markup, but must be within 60 normalised characters.
+    The text is split into commands (see ``command_marked``). Within one command the
+    tool and the verb may be split across a continuation, a formatter-wrapped
+    argument list or Markdown markup, with any number of options between them.
     """
-    flat, anchors = normalised(text)
+    flat, anchors = normalised(command_marked(text, wrapped=wrapped))
     match = PUSH_PATTERNS.search(flat)
     if match is None:
         return None
@@ -537,7 +568,7 @@ def workflow_violations(name: str, text: str) -> list[str]:
 
 
 def markdown_violations(relative: str, text: str) -> list[str]:
-    line = publishing_line(text)
+    line = publishing_line(text, wrapped=True)
     if line is None:
         return []
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -981,9 +1012,49 @@ def test_normalising_joins_continuations_and_collapses_separators(text: str) -> 
     assert publishing_line(text) == 1
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        (
+            "docker --log-level debug --tlsverify --tlscacert /etc/ca.pem --host tcp://h:2376"
+            " image push localhost/x:1"
+        ),
+        "podman --remote --connection builder --identity /home/u/.ssh/id push localhost/x:1",
+        "docker \\\n  --log-level debug \\\n  --tlsverify \\\n  --tlscacert /ca.pem \\\n  login",
+        '["podman", "--remote", "--connection", "c", "--identity", "i", "--url", "u", "push", "x"]',
+        "true && docker --config /tmp/c --debug save x",
+    ],
+)
+def test_long_global_options_before_the_verb_do_not_hide_a_publishing_command(
+    text: str,
+) -> None:
+    assert publishing_line(text) == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "docker build -t x . ; echo push",
+        "docker build -t x . && echo push",
+        "docker build -t x . || echo login",
+        "docker images | grep export",
+        'run(["docker", "build"])\nrun(["echo", "push"])',
+        "docker build .\necho push origin main",
+        "Build with Docker locally. Then push the branch.",
+    ],
+)
+def test_a_verb_in_another_command_is_not_a_publishing_command(text: str) -> None:
+    assert publishing_line(text) is None
+
+
+def test_a_blank_line_closes_an_unbalanced_bracket() -> None:
+    assert publishing_line("docker [build\n\necho push") is None
+
+
 def test_a_hit_names_the_original_line_after_continuations() -> None:
     text = "first \\\nsecond\n\nthird `docker`\n\n  push x\n"
-    assert publishing_line(text) == 4
+    assert publishing_line(text, wrapped=True) == 4
+    assert publishing_line(text) is None
     assert normalised("a \\\n b\\\nc")[0] == "a bc"
 
 

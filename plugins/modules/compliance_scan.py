@@ -36,7 +36,8 @@ description:
     backend scans Ubuntu 24.04 hosts with the pinned DISA benchmark and refuses other releases
     such as Ubuntu 26.04, unless O(allow_off_platform_benchmark) opts into the one allowed
     off-platform pair. Before anything is created
-    it reads C(/etc/os-release) on the managed host and stops with C(host_mismatch) unless its
+    it reads C(/etc/os-release) on the managed host, or C(/usr/lib/os-release) when that file is
+    missing, and stops with C(host_mismatch) unless its
     C(ID) and C(VERSION_ID) are O(host.distribution_id) and O(host.distribution_version).
   - The module never changes the configuration of the host and always returns C(changed=false).
     Outside check mode it writes evidence files below O(output_dir), which is reported separately in

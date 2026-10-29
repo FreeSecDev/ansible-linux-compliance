@@ -422,3 +422,89 @@ def test_xccdf_rule_results_are_bounded_by_the_model_limit(
     )
     over = xccdf.parse_arf(write("a.xml", arf.replace("</TestResult>", f"{extra}</TestResult>")))
     assert over.status is SectionStatus.ERROR
+
+
+UBUNTU_2404_CPE = "cpe:/o:canonical:ubuntu_linux:24.04::~~lts~~~"
+RSYSLOG_PLATFORM = "xccdf_mil.disa.stig_platform_LinuxRsyslog"
+
+
+def scc_xccdf(
+    kit: Any, *, benchmark: tuple[str, ...], result: tuple[str, ...], system: str = "scc"
+) -> str:
+    test_system = "cpe:/a:niwc:scc:5.15" if system == "scc" else "cpe:/a:open-scap:oscap:1.3"
+    declared = "".join(f'<platform idref="{idref}"/>' for idref in benchmark)
+    listed = "".join(f'<platform idref="{idref}"/>' for idref in result)
+    text: str = kit.xccdf_text("host.example")
+    text = text.replace("<TestResult ", f'<TestResult test-system="{test_system}" ')
+    text = text.replace("<version>", f"{declared}<version>", 1)
+    return text.replace("</TestResult>", f"{listed}</TestResult>")
+
+
+def test_scc_results_that_list_the_benchmark_platform_are_accepted(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(
+        kit, benchmark=(UBUNTU_2404_CPE,), result=(UBUNTU_2404_CPE, RSYSLOG_PLATFORM)
+    )
+    assert xccdf.parse_xccdf(write("on.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def test_scc_results_without_the_benchmark_platform_are_refused_by_content(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(RSYSLOG_PLATFORM,))
+    result = xccdf.parse_xccdf(write("copied-out-of-the-bundle.xml", document))
+    assert result.status is SectionStatus.ERROR
+    assert result.data is None
+    assert result.reason == xccdf.PLATFORM_REFUSAL
+
+
+def test_scc_results_that_list_another_operating_system_are_refused(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    other = "cpe:/o:canonical:ubuntu_linux:26.04"
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(other,))
+    assert xccdf.parse_xccdf(write("other.xml", document)).status is SectionStatus.ERROR
+
+
+def test_scc_results_of_a_benchmark_without_operating_system_platforms_are_accepted(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(RSYSLOG_PLATFORM,), result=())
+    assert xccdf.parse_xccdf(write("none.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def test_results_of_another_scanner_are_not_checked_for_platforms(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(), system="oscap")
+    assert xccdf.parse_xccdf(write("oscap.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def test_a_platform_listed_by_the_test_result_alone_does_not_declare_one(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(), result=(UBUNTU_2404_CPE,))
+    assert xccdf.parse_xccdf(write("alone.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def scc_arf(kit: Any, *, result: tuple[str, ...]) -> str:
+    arf: str = (kit.REPORTING / "arf.xml").read_text(encoding="utf-8")
+    benchmark = (
+        '<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_org.example.b">'
+        f'<platform idref="{UBUNTU_2404_CPE}"/></Benchmark>'
+    )
+    listed = "".join(f'<platform idref="{idref}"/>' for idref in result)
+    arf = arf.replace("<arf:content>", f"<arf:content>{benchmark}", 1)
+    arf = arf.replace("<TestResult xmlns=", '<TestResult test-system="cpe:/a:niwc:scc:5.15" xmlns=')
+    return arf.replace("</TestResult>", f"{listed}</TestResult>")
+
+
+def test_an_scc_arf_is_checked_against_the_platform_of_its_benchmark(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    accepted = xccdf.parse_arf(write("on.xml", scc_arf(kit, result=(UBUNTU_2404_CPE,))))
+    assert accepted.status is SectionStatus.AVAILABLE
+    refused = xccdf.parse_arf(write("off.xml", scc_arf(kit, result=(RSYSLOG_PLATFORM,))))
+    assert refused.status is SectionStatus.ERROR
+    assert refused.reason == xccdf.PLATFORM_REFUSAL
