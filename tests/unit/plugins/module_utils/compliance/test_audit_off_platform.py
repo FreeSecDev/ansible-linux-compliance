@@ -200,6 +200,19 @@ def test_an_existing_etc_release_wins_over_the_usr_lib_file(
     audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
 
 
+def test_a_dangling_etc_release_symlink_counts_as_missing(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fallback = harness.root / "usr-lib-os-release"
+    fallback.write_text('ID=ubuntu\nVERSION_ID="26.04"\n', encoding="utf-8")
+    dangling = harness.root / "etc-os-release"
+    dangling.symlink_to(harness.root / "nowhere")
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(dangling))
+    monkeypatch.setattr(audit, "OS_RELEASE_FALLBACK_PATH", str(fallback))
+    assert audit.resolve_os_release(str(dangling), str(fallback)) == str(fallback)
+    audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
+
+
 def test_an_unreadable_etc_release_does_not_fall_back(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:

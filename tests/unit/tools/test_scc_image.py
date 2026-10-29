@@ -152,7 +152,7 @@ PUSH_PATTERNS = re.compile(
     r"|\bskopeo\b|\bcrane\b|\boras\b|--push\b|\bregctl\b"
 )
 SEGMENT_BREAK = "\x00"
-COMMAND_BOUNDARY = re.compile(r"&&|\|\||[;|\]\)}]|[.!?](?=\s|$)")
+COMMAND_BOUNDARY = re.compile(r"&&|\|\||[;|]|[.!?](?=\s+[A-Z])")
 COMMAND_OPENERS = {"[": "]", "(": ")", "{": "}"}
 COMMAND_GAP = re.compile(r"(?:\\\r?\n|[\s'\"`,()\[\]{}*])+")
 CONTINUATIONS = re.compile(r"(?:\\\r?\n)+")
@@ -323,9 +323,11 @@ def normalised(text: str) -> tuple[str, list[tuple[int, int]]]:
 def command_marked(text: str, *, wrapped: bool = False) -> str:
     """Replace every command boundary with a NUL character, keeping all offsets.
 
-    The boundaries are ``;``, ``&&``, ``||``, ``|``, a closing bracket, the end of a
-    sentence, and a newline outside any bracket and not escaped by a backslash. In
-    wrapped prose (Markdown) a newline never ends a command.
+    The boundaries are ``;``, ``&&``, ``||``, ``|``, the end of a sentence (a full stop,
+    ``!`` or ``?`` before whitespace and a capital letter), and a newline outside any
+    bracket and not escaped by a backslash. In wrapped prose (Markdown) a newline never
+    ends a command. A closing bracket is not a boundary, so a variable, a call or an
+    f-string between the tool and the verb does not hide it.
     Verbs computed at run time (variables, f-strings) are out of scope (ADR 0019).
     """
     marked = list(text)
@@ -339,7 +341,7 @@ def command_marked(text: str, *, wrapped: bool = False) -> str:
             depth = max(depth - 1, 0)
         elif character == "\n":
             blank = text[position + 1 : position + 2] == "\n"
-            escaped = text[position - 1 : position] == "\\"
+            escaped = text.endswith(("\\", "\\\r"), 0, position)
             if blank:
                 depth = 0
             if depth == 0 and not escaped and not wrapped:
@@ -1023,12 +1025,29 @@ def test_normalising_joins_continuations_and_collapses_separators(text: str) -> 
         "docker \\\n  --log-level debug \\\n  --tlsverify \\\n  --tlscacert /ca.pem \\\n  login",
         '["podman", "--remote", "--connection", "c", "--identity", "i", "--url", "u", "push", "x"]',
         "true && docker --config /tmp/c --debug save x",
+        "\tdocker $(DOCKER_FLAGS) push $(SCC_IMAGE)",
+        'docker ${OPTS} push "$IMAGE"',
+        'subprocess.run(["docker", *global_flags(), "push", IMAGE])',
+        'subprocess.run(["docker", f"--config={cfg}", "save", IMAGE])',
+        "docker --config . push localhost/freesecdev-scc:ci",
+        "docker \\\r\n  push localhost/freesecdev-scc:ci",
     ],
 )
 def test_long_global_options_before_the_verb_do_not_hide_a_publishing_command(
     text: str,
 ) -> None:
     assert publishing_line(text) == 1
+
+
+def test_a_markdown_fence_with_a_variable_before_the_verb_is_caught() -> None:
+    text = "```sh\ndocker $(FLAGS) push x\n```\n"
+    assert publishing_line(text, wrapped=True) == 2
+    assert publishing_line(text) == 2
+
+
+def test_a_multi_line_list_with_a_call_reports_the_line_of_the_tool() -> None:
+    text = 'run(\n    [\n        "docker",\n        *flags(),\n        "push",\n    ]\n)\n'
+    assert publishing_line(text) == 3
 
 
 @pytest.mark.parametrize(

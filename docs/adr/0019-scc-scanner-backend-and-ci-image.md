@@ -491,15 +491,18 @@ atomically with mode 0600 and escaped as untrusted data.
     scripts, Makefile fragments and test modules under `tests/`, where FREES-145 will put its integration tests.
   - **Multi-line commands count (FREES-155).** Before matching, the guard joins backslash-newline continuations
     and collapses every run of whitespace, quotes, commas, brackets, parentheses, backticks and `*` into one
-    space. The text is then split into commands on `;`, `&&`, `||`, `|`, a closing bracket, a newline outside
-    any bracket, and the end of a sentence (FREES-158). Within one command the container tool followed by a
-    publishing verb is flagged with no character limit, so long global options before the verb
-    (TLS, logging, remote connection and identity options of Docker and Podman) no longer hide it. The regression
-    tests in the guard module carry the two reported command lines. In Markdown a newline does not end a command, because prose wraps; the end of a
-    sentence does. A ruff-formatted argument list with one element per line, a continued shell command in a
-    script, a code fence or a workflow `run` block, and Markdown emphasis around each word are caught. A hit
-    names the original file and line. **Out of scope:** verbs computed at run time, through variables, f-strings
-    or concatenation, cannot be seen by a regex guard and are left to review, like a split image name.
+    space. The text is then split into commands on `;`, `&&`, `||`, `|`, a
+    newline outside any bracket and not escaped by a backslash (also with CR LF), and the end of a sentence, which is
+    a full stop, `!` or `?` followed by whitespace and a capital letter (FREES-158). A closing bracket is not a
+    boundary. Within one command the container tool followed by a publishing verb is flagged with no character
+    limit, so long global options before the verb (TLS, logging, remote connection and identity options of Docker
+    and Podman) no longer hide it. So do a make variable, a shell variable, a call such as `*global_flags()`, an
+    f-string or a lone `.` between the tool and the verb, also inside a ruff-formatted argument list with one
+    element per line. The regression tests in the guard module carry these shapes. In Markdown a newline does not
+    end a command, because prose wraps. A continued shell command in a script, a code fence or a workflow `run`
+    block, and Markdown emphasis around each word are caught. A hit names the original file and line.
+    **Out of scope:** a verb that is itself computed at run time, through a variable, an f-string or
+    concatenation, cannot be seen by a regex guard and is left to review, like a split image name.
   - **Markdown is checked too (FREES-155).** A Markdown file that names an SCC identifier, or lies under
     `tools/scc/` or `extensions/ci/scc/`, must not contain a publishing command either. A document that genuinely
     has to show one needs a reviewed entry in `ACCEPTED_PUBLISHING_MARKDOWN` in the guard module: the path and the
@@ -1021,7 +1024,12 @@ it stays `0`.
      with SCC 5.15 on 2026-10-29: the Ubuntu 24.04 run lists `cpe:/o:canonical:ubuntu_linux:24.04::~~lts~~~`; the
      Ubuntu 26.04 run with the platform test ignored lists only the non-OS platforms. The `os_name` and `os_version`
      target facts cannot be used: SCC wrote `Debian Variant` and `Unknown` on both hosts. Results of other scanners
-     are not checked, because OpenSCAP does not always list platforms.
+     are not checked, because OpenSCAP does not always list platforms. Both CPE 2.2 URIs and CPE 2.3 formatted
+     strings are recognised, for the `test-system` and for the platforms. A `test-system` that names niwc or scc in
+     neither form is refused, so the check cannot fail open. The platforms are those of the `Benchmark` whose ID the
+     `TestResult` names in its own `benchmark` element, so another benchmark of a multi-benchmark ARF cannot supply
+     a match. If no `Benchmark` of the document has that ID, or the `TestResult` names none, the platforms of the
+     whole document are used, which is the limit: a hand-built document can then still borrow a platform.
 10. **Integration case.**
     - `extensions/ci/scc/Containerfile.ubuntu2604` is the Containerfile of decision 10. Only the base, pinned by index
       digest, and two labels differ, and a repository test enforces that.

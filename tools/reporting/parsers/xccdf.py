@@ -29,6 +29,7 @@ test ignored. Its ``os_name`` and ``os_version`` target facts are no evidence: t
 ``Debian Variant`` and ``Unknown`` on both.
 """
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
@@ -61,8 +62,9 @@ TEST_RESULT_TAG: Final[str] = "{http://checklists.nist.gov/xccdf/1.2}TestResult"
 FQDN_FACT: Final[str] = "urn:xccdf:fact:asset:identifier:fqdn"
 OFF_PLATFORM_SUFFIX: Final[str] = ".off-platform.xml"
 SCAN_RUN_NAME: Final[str] = "scan-run.json"
-NIWC_TEST_SYSTEM_PREFIX: Final[str] = "cpe:/a:niwc:scc"
-OS_PLATFORM_PREFIX: Final[str] = "cpe:/o:"
+NIWC_TEST_SYSTEM_PREFIXES: Final[tuple[str, ...]] = ("cpe:/a:niwc:scc", "cpe:2.3:a:niwc:scc")
+NIWC_NAME: Final[re.Pattern[str]] = re.compile(r"(?<![a-z])(?:niwc|scc)(?![a-z])")
+OS_PLATFORM_PREFIXES: Final[tuple[str, ...]] = ("cpe:/o:", "cpe:2.3:o:")
 PLATFORM_REFUSAL: Final[str] = (
     "the SCC results do not list any operating system platform of their benchmark, so the "
     "scanned host was not matched to the benchmark platform; these are the results of an "
@@ -114,12 +116,12 @@ def _asset_names(tree: XmlNode) -> set[str]:
 
 
 def _os_platforms(nodes: list[XmlNode]) -> set[str]:
-    return {
-        node.attributes.get("idref", "").strip()
+    listed = (
+        node.attributes.get("idref", "").strip().lower()
         for node in nodes
         if node.local == "platform"
-        and node.attributes.get("idref", "").strip().startswith(OS_PLATFORM_PREFIX)
-    }
+    )
+    return {idref for idref in listed if idref.startswith(OS_PLATFORM_PREFIXES)}
 
 
 def _outside_results(tree: XmlNode) -> list[XmlNode]:
@@ -133,21 +135,45 @@ def _outside_results(tree: XmlNode) -> list[XmlNode]:
     return kept
 
 
+def _is_niwc_result(result: XmlNode) -> bool:
+    system = result.attributes.get("test-system", "").strip().lower()
+    if system.startswith(NIWC_TEST_SYSTEM_PREFIXES):
+        return True
+    if NIWC_NAME.search(system):
+        message = "the test-system names SCC in a form this report does not recognise"
+        raise InvalidInputError(message)
+    return False
+
+
+def _declared_platforms(tree: XmlNode, result: XmlNode) -> set[str]:
+    references = [node for node in result.children if node.local == "benchmark"]
+    wanted = references[0].attributes.get("id", "") if references else ""
+    benchmarks = [
+        node
+        for node in tree.descendants()
+        if node.local == "Benchmark" and wanted and node.attributes.get("id") == wanted
+    ]
+    scope = benchmarks or [tree]
+    return set().union(*(_os_platforms(_outside_results(node)) for node in scope))
+
+
 def refuse_platform_mismatch(tree: XmlNode) -> None:
     """Refuse SCC results whose TestResult does not list a platform of their benchmark.
 
+    The platforms are those of the Benchmark that the TestResult names in its own
+    ``benchmark`` element; when no Benchmark of the document has that ID, those of the
+    whole document. CPE 2.2 URIs and CPE 2.3 formatted strings are both recognised.
+
     Raises:
         InvalidInputError: If a TestResult written by SCC lists none of the operating
-            system platforms that the benchmark declares.
+            system platforms that the benchmark declares, or if its ``test-system``
+            names SCC in a form that is not recognised.
     """
     results = [
-        node
-        for node in tree.descendants()
-        if node.local == "TestResult"
-        and node.attributes.get("test-system", "").startswith(NIWC_TEST_SYSTEM_PREFIX)
+        node for node in tree.descendants() if node.local == "TestResult" and _is_niwc_result(node)
     ]
-    declared = _os_platforms(_outside_results(tree))
     for result in results:
+        declared = _declared_platforms(tree, result)
         if declared and not declared & _os_platforms(result.descendants()):
             raise InvalidInputError(PLATFORM_REFUSAL)
 
