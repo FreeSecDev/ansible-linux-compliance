@@ -300,7 +300,9 @@
   ansible.builtin.lineinfile:
     path: "{{ __linux_compliance_remediate_ssh_restore.path }}"
     regexp: "{{ __linux_compliance_remediate_ssh_restore.regexp }}"
-    line: "{{ __linux_compliance_remediate_ssh_restore.line }}"
+    line: >-
+      {{ __linux_compliance_remediate_ssh_restore.line | replace('\\', '\\\\') }}
+    backrefs: true
     state: present
     create: false
   loop: >-
@@ -623,8 +625,7 @@
       {%- for edit in __linux_compliance_remediate_ssh_plan[rule.rule_id].edits
             if ('vendor_line:' ~ edit.path) not in base -%}
       {%- set _ = vendor.update({'vendor_line:' ~ edit.path: edit.original,
-                                 'vendor_written:' ~ edit.path: edit.written,
-                                 'vendor_number:' ~ edit.path: edit.number | string}) -%}
+                                 'vendor_written:' ~ edit.path: edit.written}) -%}
       {%- endfor -%}
       {%- set values = base | combine(vendor)
             | combine({'dropin_sha256': __linux_compliance_remediate_ssh_contents[rule.rule_id] | hash('sha256'),
@@ -717,7 +718,9 @@
   ansible.builtin.lineinfile:
     path: "{{ __linux_compliance_remediate_ssh_edit.path }}"
     regexp: "{{ __linux_compliance_remediate_ssh_edit.regexp }}"
-    line: "{{ __linux_compliance_remediate_ssh_edit.written }}"
+    line: >-
+      {{ __linux_compliance_remediate_ssh_edit.written | replace('\\', '\\\\') }}
+    backrefs: true
     state: present
     create: false
   loop: "{{ __linux_compliance_remediate_ssh_edits }}"
@@ -838,9 +841,21 @@
   tags:
     - always
 
+- name: SSH server | Report that the changes of this run were not validated and sshd not reloaded, as sshd is missing
+  ansible.builtin.debug:
+    msg: >-
+      sshd is not installed in a trusted directory ({{ __linux_compliance_remediate_ssh_final.message }}), so the
+      configuration after this run was not validated and no sshd was reloaded.
+  when:
+    - __linux_compliance_remediate_ssh_final is not skipped
+    - not __linux_compliance_remediate_ssh_final.available
+  tags:
+    - always
+
 - name: SSH server | Roll back the changes of this run when sshd refuses the configuration after them
   when:
     - __linux_compliance_remediate_ssh_final is not skipped
+    - __linux_compliance_remediate_ssh_final.available
     - not __linux_compliance_remediate_ssh_final.valid
   tags:
     - always
@@ -849,7 +864,9 @@
       ansible.builtin.lineinfile:
         path: "{{ __linux_compliance_remediate_ssh_undo.path }}"
         regexp: "{{ __linux_compliance_remediate_ssh_undo.regexp }}"
-        line: "{{ __linux_compliance_remediate_ssh_undo.original }}"
+        line: >-
+          {{ __linux_compliance_remediate_ssh_undo.original | replace('\\', '\\\\') }}
+        backrefs: true
         state: present
         create: false
       loop: >-
@@ -901,7 +918,9 @@
 - name: SSH server | Read the services, to reload sshd only where it runs
   ansible.builtin.service_facts:
   register: __linux_compliance_remediate_ssh_services
-  when: __linux_compliance_remediate_ssh_reload
+  when:
+    - __linux_compliance_remediate_ssh_reload
+    - __linux_compliance_remediate_ssh_final.valid | default(false)
   tags:
     - always
 
@@ -914,6 +933,7 @@
       {{ 'ssh' if 'ssh.service' in __linux_compliance_remediate_ssh_known_services else 'sshd' }}
     __linux_compliance_remediate_ssh_running: >-
       {{ __linux_compliance_remediate_ssh_reload
+         and (__linux_compliance_remediate_ssh_final.valid | default(false))
          and ((__linux_compliance_remediate_ssh_known_services['ssh.service']
                | default(__linux_compliance_remediate_ssh_known_services['sshd.service'] | default({})))
               .state | default('') == 'running') }}

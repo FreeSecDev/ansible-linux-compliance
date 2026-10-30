@@ -91,8 +91,10 @@ sshd reads after the drop-ins (`__linux_compliance_remediate_sshd_vendor_files`:
 `recorded_value` method that `pwquality` uses for the package-owned `/etc/security/pwquality.conf` on Ubuntu, and
 ComplianceAsCode's own fix removes the keyword from these files too. Before the change, the rule's ledger entry records
 for each such file the exact original line (`vendor_line:<path>`), the line written (`vendor_written:<path>`, the same
-`<Keyword> <value>` as the drop-in) and its line number (`vendor_number:<path>`); a file is recorded once, by the first
-run that changes it. `ansible.builtin.lineinfile` then replaces that one line, keeping the file's mode and owner.
+`<Keyword> <value>` as the drop-in); a file is recorded once, by the first run that changes it.
+`ansible.builtin.lineinfile` then replaces that one line, keeping the file's mode and owner. It runs with `backrefs:
+true` for the edit, the cleanup and the rollback, so a line that no longer matches is left alone and nothing is ever
+appended at the end of the file, where it could land inside a `Match` block.
 Otherwise the rule is refused with nothing changed: `overridden` for a later line in an administrator's drop-in (for
 example `LoginGraceTime 120` in a `60-site.conf`, which the collection never edits) or inside a `Match` block of a vendor
 file, `duplicate_setting` when a vendor file sets the keyword more than once, and `prior_too_large` for a line over
@@ -126,10 +128,15 @@ so it reports `invalid_config` too.
 ### 3. sshd is reloaded once, only where it runs, after a second validation
 
 After the family changed what sshd reads (a drop-in written or removed, a vendor line changed or written back), it
-validates the whole configuration again with `sshd -t`. When sshd refuses it, which only a concurrent change can cause
-after the first validation, the family rolls back what this run created: it writes back the vendor lines it changed,
-removes the drop-ins it created and forgets the ledger entries it recorded (a drop-in rewritten for a changed value
-keeps its new content), and fails without reloading, so a running sshd keeps its configuration. Otherwise it reads the
+validates the whole configuration again with `sshd -t`. sshd can refuse it when a run only cleans up, which validates
+nothing before it removes drop-ins, while another file is invalid, or after a concurrent change. The family then rolls
+back what this run created: it writes back the vendor lines it changed, removes the drop-ins it created and forgets
+the ledger entries it recorded. A drop-in rewritten for a changed value keeps its new content, and what the cleanup
+removed or wrote back stays as it is, with its entries forgotten, because that is the prior state. The family then
+fails without reloading, so a running sshd keeps its configuration. When sshd is not installed in a trusted directory
+(`available: false`), for example after openssh-server was removed with its configuration kept, the family reports
+that it could not validate, and it neither rolls back, fails nor reloads, so a cleanup on such a host succeeds.
+Otherwise it reads the
 services with `service_facts` and reloads `ssh.service` (Ubuntu) or `sshd.service` (RHEL) only when it is running. A
 reload keeps every open session, including the controller's; only new sessions use the new configuration. Where no
 service manager runs, as in the Molecule containers, nothing is reloaded. On Ubuntu 24.04 `ssh.socket` has
@@ -187,7 +194,7 @@ profile selects them, and on Ubuntu, which has no crypto policies, they are writ
 
 | Rules | Reason |
 |---|---|
-| `file_permissions_sshd_config`, `file_owner_sshd_config`, `file_groupowner_sshd_config`, `file_permissions_sshd_drop_in_config`, `file_owner_sshd_drop_in_config`, `file_groupowner_sshd_drop_in_config`, `directory_permissions_sshd_config_d`, `directory_owner_sshd_config_d`, `directory_groupowner_sshd_config_d`, `file_permissions_sshd_private_key`, `file_permissions_sshd_pub_key`, `file_ownership_sshd_private_key`, `file_ownership_sshd_pub_key`, `file_groupownership_sshd_private_key`, `file_groupownership_sshd_pub_key` | Modes and ownership of files that the packages and other tools own; they follow the per-attribute pattern of `banners` and are a follow-up. The containers drop every capability, so ownership changes need the libvirt scenarios (FREES-61). The collection's own drop-ins already have mode `0600` and owner root |
+| `file_permissions_sshd_config`, `file_owner_sshd_config`, `file_groupowner_sshd_config`, `file_permissions_sshd_drop_in_config`, `file_owner_sshd_drop_in_config`, `file_groupowner_sshd_drop_in_config`, `directory_permissions_sshd_config_d`, `directory_owner_sshd_config_d`, `directory_groupowner_sshd_config_d`, `file_permissions_sshd_private_key`, `file_permissions_sshd_pub_key`, `file_ownership_sshd_private_key`, `file_ownership_sshd_pub_key`, `file_groupownership_sshd_private_key`, `file_groupownership_sshd_pub_key` | Modes and ownership of files that the packages and other tools own; they follow the per-attribute pattern of `banners` and are a follow-up (FREES-177). The containers drop every capability, so ownership changes need the libvirt scenarios (FREES-61). The collection's own drop-ins already have mode `0600` and owner root |
 | `sshd_limit_user_access` | Needs `AllowUsers`, `AllowGroups`, `DenyUsers` or `DenyGroups` with site-specific names; any default would lock out every other user |
 | `sshd_rekey_limit` | Its check requires the setting in `sshd_config` itself and refuses it in every drop-in, and its value combines two profile values (`var_rekey_limit_size`, `var_rekey_limit_time`) that the catalogue cannot carry yet; a main-file method is a follow-up |
 | `sshd_use_directory_configuration` | Requires moving every `Match` block out of `sshd_config`, a structural rewrite of a file that the collection does not own |
@@ -221,7 +228,8 @@ every overridden rule of a pre-state with scans. The customised pre-state runs w
   (`applied` inside the pre-state), so that the overridden rule's drop-in is expected absent;
 - an `applied` expectation may name the same path once per platform, for a drop-in whose value differs per profile;
 - a pre-state may list the toggle `modes` in which its cycles run, and `audit` may list the platforms on which its
-  cycles scan.
+  cycles scan. Every driver of a topic must still run a pre-state in each mode, and a leg counts its topic as proven
+  only after a cycle of its own mode ran, so no toggle drops out of the proof.
 
 `shared/tasks/lifecycle_ssh_regressions.yml` runs in the `topic` leg of `ssh`: a drop-in that sshd refuses makes every
 rule `invalid_config` with nothing installed; an entry of another method is refused on apply and on cleanup; a change
@@ -234,6 +242,9 @@ checks that every occurrence that the check reads now has the compliant value, t
 that cleanup writes the vendor file back byte for byte; that a change by hand to the changed line is kept as
 `modified_since_apply` and, once restored by hand with other spacing, left alone while the rule is reported
 `restored`; and that a conflicting line inside a `Match` block is refused as `overridden` and not edited.
+`shared/tasks/lifecycle_ssh_rollback_regressions.yml` runs in the `rule` leg: a cleanup with an administrator's
+drop-in that sshd refuses fails at the final `sshd -t`, before the reload, with the cleanup kept, and a cleanup with
+the sshd binary removed succeeds.
 
 ## Benefits
 
@@ -259,8 +270,8 @@ with mode `0600`, which the CIS and STIG drop-in permission rules require.
 
 ## Operational consequences
 
-The Ubuntu and Rocky Linux Molecule images grow by openssh-server. The `ssh` `rule` leg runs two cycles, and the
-`topic` leg one cycle and both sets of regressions, narrowed to two rules (four with the vendor rules), so that each leg
-stays within the time budget of the merge queue. The larger images add about 45 seconds to every image build on
+The Ubuntu and Rocky Linux Molecule images grow by openssh-server. The `ssh` `rule` leg runs two cycles and the
+rollback regressions, and the `topic` leg one cycle and the other two sets of regressions, all narrowed to two rules
+(four with the vendor rules), so that each leg stays within the time budget of the merge queue. The larger images add about 45 seconds to every image build on
 Rocky Linux, which took the standard `molecule-docker` scenarios past their 8-minute limit, so that limit is now 13
 minutes, one and a half times their longest run as `docs/molecule.md` sets out.

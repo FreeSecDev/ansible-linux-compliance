@@ -144,6 +144,14 @@
         - "'topic' in lifecycle_run_modes"
         - "'ssh' in lifecycle_proven_families"
 
+    - name: Run the ssh rollback regressions for a cleanup that sshd refuses and a cleanup without sshd
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_ssh_rollback_regressions.yml
+      when:
+        - "'ssh' in lifecycle_run_families"
+        - "'rule' in lifecycle_run_modes"
+        - "'ssh' in lifecycle_proven_families"
+
     - name: Report the topics whose lifecycle was proven
       ansible.builtin.debug:
         msg: >-

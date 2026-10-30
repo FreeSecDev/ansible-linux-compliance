@@ -9,9 +9,9 @@ minor_changes:
     to the rule's value in place, recorded first and written back on cleanup; a conflicting line in an
     administrator's drop-in or a ``Match`` block, or an earlier setting, is reported ``overridden``. Every change is
     validated first with ``sshd -t`` on the whole effective configuration and again after it, with a rollback when
-    sshd refuses; ``Ciphers``, ``MACs`` and ``KexAlgorithms`` are left to the crypto policy on RHEL 9, and sshd is
-    reloaded only where it runs. The topic is disruptive and needs ``ssh`` in
-    ``linux_compliance_remediate_allow_disruptive``.
+    sshd refuses; a cleanup on a host without sshd is not validated and succeeds; ``Ciphers``, ``MACs`` and
+    ``KexAlgorithms`` are left to the crypto policy on RHEL 9, and sshd is reloaded only where it runs. The topic is
+    disruptive and needs ``ssh`` in ``linux_compliance_remediate_allow_disruptive``.
   - >-
     sshd_validate - new module that runs ``sshd -t -f /etc/ssh/sshd_config`` with ``-o`` settings through the
     audited process helper, whose allow-list gains ``sshd`` in test mode only, with the keywords of the native ssh

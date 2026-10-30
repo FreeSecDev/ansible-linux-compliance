@@ -184,6 +184,7 @@ class Declaration:
         self.skipped_platforms: set[str] = set()
         self.topic_drivers: frozenset[str] | None = None
         self.pre_state_drivers: list[frozenset[str] | None] = [None]
+        self.pre_state_modes: list[frozenset[str]] = [TOGGLE_MODES]
 
     def error(self, message: str) -> None:
         """Record a finding about this declaration."""
@@ -401,12 +402,16 @@ class Declaration:
         if "audit" in item and not isinstance(item["audit"], bool):
             self._audit_platforms(item["audit"], what)
         if "modes" not in item:
+            self.pre_state_modes.append(TOGGLE_MODES)
             return
         modes = _strings(item["modes"])
         if modes is None or len(set(modes)) != len(modes) or not set(modes) <= TOGGLE_MODES:
             self.error(
                 f"{what}.modes must be a non-empty list of distinct toggle modes: topic, rule"
             )
+            self.pre_state_modes.append(TOGGLE_MODES)
+            return
+        self.pre_state_modes.append(frozenset(modes))
 
     def _pre_state_content(self, item: dict[str, object], where: str) -> None:
         """Check a file that the pre-state writes, as root, before a cycle and removes after it."""
@@ -454,9 +459,28 @@ class Declaration:
         return dict.fromkeys(sorted(self.cycle_drivers()), running)
 
     def covered(self) -> None:
-        """Check that each driver of a cycle has a lifecycle scenario on every running platform."""
+        """Check that each driver of a cycle has a lifecycle scenario on every running platform.
+
+        Each driver must also run a pre-state in both toggle modes: the matrix plans a leg per
+        mode, and a leg whose mode no pre-state runs would prove nothing about that toggle.
+        """
         running = self.platforms - self.skipped_platforms
+        default = self.topic_drivers or UNRESTRICTED_DRIVERS
         for driver in sorted(self.cycle_drivers()):
+            modes = frozenset[str]().union(
+                *(
+                    modes
+                    for drivers, modes in zip(
+                        self.pre_state_drivers, self.pre_state_modes, strict=True
+                    )
+                    if driver in (drivers or default)
+                )
+            )
+            for mode in sorted(TOGGLE_MODES - modes):
+                self.error(
+                    f"no pre-state runs with {driver} in the {mode} mode, so the {mode} leg of "
+                    f"{driver} would run no cycle; give a pre-state of {driver} the {mode} mode"
+                )
             for platform in sorted(running - self.coverage.get(driver, frozenset())):
                 self.error(
                     f"the declaration requires {driver}, but no {driver} scenario in {MOLECULE} "
@@ -497,6 +521,7 @@ class Declaration:
         """Check the states from which the harness runs the cycles."""
         entries = self.sequence(value, "pre_states")
         self.pre_state_drivers = []
+        self.pre_state_modes = []
         if not entries:
             self.error("pre_states must not be empty; leave it out for the as-built state")
         names: set[str] = set()

@@ -395,7 +395,9 @@ Before anything is written, the module `freesecdev.linux_compliance.sshd_validat
 options first and keeps the first value, so this tests the whole effective configuration as it will be; when sshd
 refuses it, every rule to write is `invalid_config` with sshd's message and nothing is installed. After a change, a
 second `sshd -t` checks the whole configuration; when it refuses, the run rolls back the drop-ins, vendor lines and
-ledger entries that it created and fails. Otherwise sshd is reloaded once, only when `service_facts` reports
+ledger entries that it created and fails (what a cleanup removed or wrote back stays, because that is the prior state).
+When sshd is not installed, the second check and the reload are skipped, so a cleanup on such a host succeeds.
+Otherwise sshd is reloaded once, only when `service_facts` reports
 `ssh.service` or `sshd.service` running; a reload keeps open sessions. Where no service manager runs, as in the Molecule
 containers, nothing is reloaded, and check mode never reloads. A run that applies `PermitRootLogin no` or
 `prohibit-password` while it reaches the host over SSH as root prints a warning.

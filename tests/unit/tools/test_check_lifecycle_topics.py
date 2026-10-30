@@ -842,8 +842,42 @@ def test_an_invalid_audit_value_is_reported(tmp_path: Path, audit: object) -> No
 
 @pytest.mark.parametrize("modes", [["rule"], ["topic"], ["topic", "rule"]])
 def test_a_pre_state_may_run_its_cycles_in_some_modes(tmp_path: Path, modes: list[str]) -> None:
-    pre_states = [{"name": "as built", "modes": modes}]
+    pre_states = [{"name": "as built"}, {"name": "customised", "modes": modes}]
     assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+def test_pre_states_may_share_the_modes_between_them(tmp_path: Path) -> None:
+    pre_states = [{"name": "a", "modes": ["topic"]}, {"name": "b", "modes": ["rule"]}]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize(("modes", "missing"), [(["rule"], "topic"), (["topic"], "rule")])
+def test_a_mode_without_a_pre_state_is_reported(
+    tmp_path: Path, modes: list[str], missing: str
+) -> None:
+    pre_states = [{"name": "a", "modes": modes}, {"name": "b", "modes": modes}]
+    errors = errors_for(tmp_path, changed(pre_states=pre_states))
+    message = f"no pre-state runs with docker in the {missing} mode"
+    assert [error for error in errors if message in error] == errors, errors
+    assert len(errors) == 1
+
+
+def test_a_mode_is_checked_for_each_driver_of_the_topic(tmp_path: Path) -> None:
+    libvirt = {**LIBVIRT_PRE_STATE, "modes": ["rule"]}
+    pre_states = [*cast("list[object]", VALID["pre_states"]), libvirt]
+    errors = errors_for(tmp_path, changed(pre_states=pre_states))
+    assert len(errors) == 1
+    assert "no pre-state runs with libvirt in the topic mode" in errors[0]
+
+
+def test_a_mode_of_another_driver_does_not_cover_a_driver(tmp_path: Path) -> None:
+    libvirt = {**LIBVIRT_PRE_STATE, "modes": ["topic"]}
+    pre_states = [{"name": "as built", "modes": ["rule"]}, libvirt]
+    errors = errors_for(tmp_path, changed(pre_states=pre_states))
+    assert sorted(error.split(": ", 1)[1].split(",")[0] for error in errors) == [
+        "no pre-state runs with docker in the topic mode",
+        "no pre-state runs with libvirt in the rule mode",
+    ]
 
 
 @pytest.mark.parametrize("modes", ["rule", [], ["both"], ["rule", "rule"], [1]])

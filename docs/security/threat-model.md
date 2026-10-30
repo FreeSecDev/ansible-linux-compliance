@@ -290,7 +290,8 @@ root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-serve
   changes nothing.
 - **Residual:** the settings themselves are the profile's; a profile that forbids root logins locks out an operator who
   has no other account. The rollback restores drop-ins and vendor lines that the run created, not a drop-in that it
-  rewrote for a changed value. Containers cannot show a real login; the libvirt scenarios (FREES-61) are needed for
+  rewrote for a changed value; what a cleanup removed stays removed, which is the prior state. On a host without sshd
+  the configuration after a cleanup is not validated, because there is nothing to validate it with. Containers cannot show a real login; the libvirt scenarios (FREES-61) are needed for
   that.
 
 ### T-SSH-2: `sshd -t` is turned into something else

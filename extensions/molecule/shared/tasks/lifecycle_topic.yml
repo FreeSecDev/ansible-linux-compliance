@@ -102,9 +102,21 @@
 - name: Lifecycle topic | Decide whether a cycle of the topic runs with this driver and platform
   ansible.builtin.set_fact:
     lifecycle_runs: "{{ lifecycle_rules | length > 0 and lifecycle_pre_states | length > 0 }}"
-    lifecycle_proven_families: >-
-      {{ lifecycle_proven_families | default([]) + ([lifecycle_family]
-      if lifecycle_rules | length > 0 and lifecycle_pre_states | length > 0 else []) }}
+    lifecycle_cycles_run: []
+    lifecycle_modes_without_cycle: >-
+      {{ lifecycle_run_modes | reject('in', lifecycle_pre_states
+      | map(attribute='modes', default=lifecycle_toggle_modes) | flatten | unique | list) | list }}
+
+- name: Lifecycle topic | Refuse a topic whose pre-states of this driver leave a mode of the run without a cycle
+  ansible.builtin.assert:
+    that:
+      - lifecycle_modes_without_cycle | length == 0
+    fail_msg: >-
+      No pre-state of {{ lifecycle_family }} that runs with {{ molecule_target.driver }} runs in the
+      {{ lifecycle_modes_without_cycle | join(' and ') }} mode, so this run would prove nothing about that toggle.
+      tools/roles/check_lifecycle_topics.py refuses such a declaration.
+    quiet: true
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Report the pre-states whose cycles run with another driver, as declared
   ansible.builtin.debug:
@@ -187,4 +199,19 @@
     lifecycle_label: "{{ lifecycle_family }}"
     lifecycle_broad_step: the topic after every cycle
     lifecycle_broad_reference: "{{ lifecycle_broad_pristine }}"
+  when: lifecycle_runs | bool
+
+- name: Lifecycle topic | Refuse a run in which a mode of the run ran no cycle of the topic
+  ansible.builtin.assert:
+    that:
+      - lifecycle_run_modes | reject('in', lifecycle_cycles_run) | list | length == 0
+    fail_msg: >-
+      {{ lifecycle_family }} ran cycles in the modes {{ lifecycle_cycles_run | unique | list }} only, but the run
+      proves {{ lifecycle_run_modes }}.
+    quiet: true
+  when: lifecycle_runs | bool
+
+- name: Lifecycle topic | Count the topic as proven once a cycle of every mode of the run ran
+  ansible.builtin.set_fact:
+    lifecycle_proven_families: "{{ lifecycle_proven_families | default([]) + [lifecycle_family] }}"
   when: lifecycle_runs | bool

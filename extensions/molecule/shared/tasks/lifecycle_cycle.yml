@@ -2,6 +2,7 @@
 - name: Lifecycle cycle | Name the cycle and the toggle that switches the topic off
   ansible.builtin.set_fact:
     lifecycle_mode: "{{ lifecycle_cycle.0 }}"
+    lifecycle_cycles_run: "{{ lifecycle_cycles_run + [lifecycle_cycle.0] }}"
     lifecycle_pre_state: "{{ lifecycle_cycle.1 }}"
     lifecycle_audit: >-
       {{ lifecycle_cycle.1.audit | default(false) if lifecycle_cycle.1.audit | default(false) is boolean
