@@ -451,7 +451,15 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         dirs_exist_ok=True,
     )
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
+    assert native == [
+        "file_permissions",
+        "banners",
+        "ssh",
+        "pwquality",
+        "pwhistory",
+        "faillock",
+        "sudo",
+    ]
     assert errors == []
 
 
@@ -942,7 +950,7 @@ def test_regression_groups_are_planned_on_the_platforms_whose_docker_scenario_ru
     }
 
 
-def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() -> None:
+def test_the_repository_declares_regression_groups_of_every_native_topic() -> None:
     found = lifecycle.regression_platforms(REPOSITORY_ROOT)
     assert found["pwquality"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert found["sudo"] == {
@@ -954,8 +962,14 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "vendor": frozenset({"ubuntu", "rhel_compatible"}),
     }
+    assert found["faillock"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "stack": frozenset({"ubuntu", "rhel_compatible"}),
+        "profiles": frozenset({"ubuntu", "rhel_compatible"}),
+    }
+    assert found["pwhistory"] == {"changes": frozenset({"rhel_compatible"})}
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 9
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 13
 
 
 @pytest.mark.parametrize(

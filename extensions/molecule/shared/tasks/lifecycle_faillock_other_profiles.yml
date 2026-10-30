@@ -1,0 +1,101 @@
+---
+- name: Faillock other profiles | Refuse to run unless the faillock topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'faillock'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['faillock']
+    fail_msg: >-
+      The faillock rules of the other profiles reuse the facts of the faillock lifecycle, which must have just run;
+      the topic was {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Faillock other profiles | Name the profiles of this platform and the rules and lines they apply
+  ansible.builtin.set_fact:
+    fop_label: faillock rules of the other profiles
+    fop_profile: "{{ linux_compliance_discovered }}"
+    fop_remediate_profile: "{{ linux_compliance_remediate_profile }}"
+    fop_prefix: xccdf_org.ssgproject.content_rule_
+    fop_conf: /etc/security/faillock.conf
+    fop_cases: >-
+      {{ {'ubuntu': [
+            {'profile': 'stig',
+             'rules': ['accounts_passwords_pam_faillock_audit', 'accounts_passwords_pam_faillock_deny',
+                       'accounts_passwords_pam_faillock_interval', 'accounts_passwords_pam_faillock_silent',
+                       'accounts_passwords_pam_faillock_unlock_time'],
+             'lines': ['audit', 'deny = 3', 'fail_interval = 900', 'silent', 'unlock_time = 0']},
+            {'profile': 'cis_level2_server',
+             'rules': ['accounts_passwords_pam_faillock_deny', 'accounts_passwords_pam_faillock_root_unlock_time',
+                       'accounts_passwords_pam_faillock_unlock_time'],
+             'lines': ['deny = 4', 'root_unlock_time = 60', 'unlock_time = 900']}],
+          'rhel_compatible': [
+            {'profile': 'stig',
+             'rules': ['accounts_passwords_pam_faillock_audit', 'accounts_passwords_pam_faillock_deny',
+                       'accounts_passwords_pam_faillock_deny_root', 'accounts_passwords_pam_faillock_interval',
+                       'accounts_passwords_pam_faillock_unlock_time'],
+             'lines': ['audit', 'deny = 3', 'even_deny_root', 'fail_interval = 900', 'unlock_time = 0']},
+            {'profile': 'cis_workstation_l2',
+             'rules': ['accounts_passwords_pam_faillock_deny',
+                       'accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time',
+                       'accounts_passwords_pam_faillock_unlock_time'],
+             'lines': ['deny = 5', 'root_unlock_time = 60', 'unlock_time = 900']}]}[lifecycle_platform] }}
+
+- name: Faillock other profiles | Check that with the lifecycle the cases apply every rule this platform selects
+  ansible.builtin.assert:
+    that:
+      - >-
+        fop_cases | map(attribute='rules') | flatten | map('regex_replace', '^', fop_prefix) | list
+        | union(lifecycle_rule_ids) | unique | list | length == 6
+    fail_msg: "{{ fop_label }}: {{ fop_cases }} and {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Faillock other profiles | Take the state of the whole instance before these rules run
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Faillock other profiles | Remember the state of the whole instance before these rules run
+  ansible.builtin.set_fact:
+    fop_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Faillock other profiles | Read faillock.conf as built
+  ansible.builtin.slurp:
+    src: "{{ fop_conf }}"
+  register: fop_original
+
+- name: Faillock other profiles | Apply, repeat and clean up every profile of this platform
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_profile.yml
+  loop: "{{ fop_cases }}"
+  loop_control:
+    loop_var: fop_case
+    label: "{{ fop_case.profile }}"
+
+- name: Faillock other profiles | Give the profile of this platform back
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ fop_profile }}"
+    linux_compliance_remediate_profile: "{{ fop_remediate_profile }}"
+
+- name: Faillock other profiles | Read the ledger after these rules
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: fop_ledger_after
+
+- name: Faillock other profiles | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - fop_ledger_after.entries | selectattr('family', 'equalto', 'faillock') | list == []
+    fail_msg: "{{ fop_label }}: the ledger still holds {{ fop_ledger_after.entries }}"
+    quiet: true
+
+- name: Faillock other profiles | Assert that the whole instance is back to its state before these rules ran
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: faillock rules of the other profiles
+    lifecycle_broad_step: the rules of the other profiles
+    lifecycle_broad_reference: "{{ fop_broad_before }}"
+
+- name: Faillock other profiles | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: >-
+      {{ lifecycle_regression_files_run + ['lifecycle_faillock_other_profiles.yml'] }}

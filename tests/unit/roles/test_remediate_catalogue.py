@@ -46,9 +46,26 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "max_mode"},
         {"method", "path", "type", "attribute", "id"},
     ],
+    "pwhistory": [
+        {"setting", "comparison", "stack_checked"},
+        {"setting", "comparison", "stack_checked"} | PROFILE_VALUE_PARAMETERS,
+    ],
+    "faillock": [
+        {"setting", "comparison", "stack_checked"},
+        {"setting", "comparison", "stack_checked"} | PROFILE_VALUE_PARAMETERS,
+        {"setting", "comparison", "stack_checked", "alternative"} | PROFILE_VALUE_PARAMETERS,
+    ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
-DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality", "sudo"]
+NATIVE_FAMILIES = [
+    "file_permissions",
+    "banners",
+    "ssh",
+    "pwquality",
+    "pwhistory",
+    "faillock",
+    "sudo",
+]
+DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality", "pwhistory", "faillock", "sudo"]
 
 
 def load(path: Path) -> dict[str, object]:
@@ -255,6 +272,50 @@ def test_native_sudo_rules_write_only_drop_ins_that_sudo_reads_and_restrict_two_
     paths = [str(cast("dict[str, object]", rule["parameters"])["path"]) for rule in sudo]
     dropins = [path for path in paths if path.startswith("/etc/sudoers.d/")]
     assert len(dropins) == len(set(dropins)) == 4
+
+
+def test_native_faillock_and_pwhistory_rules_set_one_known_line_with_the_profile_value() -> None:
+    role_vars = load(ROLE / "vars" / "main.yml")
+    setting = re.compile(
+        str(role_vars["__linux_compliance_remediate_security_conf_setting_pattern"])
+    )
+    number = re.compile(str(role_vars["__linux_compliance_remediate_security_conf_number_pattern"]))
+    comparisons = cast(
+        "list[str]", role_vars["__linux_compliance_remediate_security_conf_comparisons"]
+    )
+    found: dict[str, list[str]] = {"faillock": [], "pwhistory": []}
+    for rule in native():
+        if rule["family"] not in found:
+            continue
+        parameters = cast("dict[str, object]", rule["parameters"])
+        assert rule["revert_strategy"] == "recorded_value"
+        assert setting.fullmatch(str(parameters["setting"]))
+        assert parameters["comparison"] in comparisons
+        assert isinstance(parameters["stack_checked"], bool)
+        assert (parameters["comparison"] == "present") is ("value_id" not in parameters)
+        if "alternative" in parameters:
+            assert setting.fullmatch(str(parameters["alternative"]))
+            assert parameters["alternative"] != parameters["setting"]
+        for entry in cast("list[dict[str, object]]", parameters.get("profile_values", [])):
+            value = "".join(cast("list[str]", entry["value"]))
+            assert number.fullmatch(value), (rule["rule_id"], value)
+            assert parameters["comparison"] != "at_most" or int(value) >= 1
+        found[str(rule["family"])].append(str(parameters["setting"]))
+    assert sorted(found["faillock"]) == [
+        "audit",
+        "deny",
+        "even_deny_root",
+        "fail_interval",
+        "root_unlock_time",
+        "root_unlock_time",
+        "silent",
+        "unlock_time",
+    ]
+    assert sorted(found["pwhistory"]) == ["enforce_for_root", "remember", "remember"]
+    assert role_vars["__linux_compliance_remediate_faillock_conf"] == "/etc/security/faillock.conf"
+    assert (
+        role_vars["__linux_compliance_remediate_pwhistory_conf"] == "/etc/security/pwhistory.conf"
+    )
 
 
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:

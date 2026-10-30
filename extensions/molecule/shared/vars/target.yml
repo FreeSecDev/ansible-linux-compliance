@@ -16,6 +16,8 @@ molecule_reference_toggle: linux_compliance_rule_file_permissions_crontab_enable
 molecule_reference_family: file_permissions
 molecule_other_native_topics:
   - banners
+  - faillock
+  - pwhistory
   - pwquality
   - ssh
   - sudo

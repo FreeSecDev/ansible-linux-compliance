@@ -1,0 +1,55 @@
+---
+family: pwhistory
+disruptive: true
+containment: >-
+  pwhistory only changes the lines of /etc/security/pwhistory.conf that the content's checks read (remember,
+  enforce_for_root), one recorded line per setting; it never edits the PAM stack, so pam_pwhistory takes the settings
+  only where the stack already loads it. A password reuse setting can at most reject a password change. The harness
+  never changes a password or authenticates: it connects with docker exec through the Docker API as root, without
+  sshd, PAM, sudo or a login shell, so neither the setting nor a PAM stack line that a regression adds can cut it off,
+  and the guard's connection test after every remediate run proves that it still reaches the same unprivileged
+  container. The allow-list names pwhistory only for the runs of this topic.
+unselected_platforms:
+  - platform: ubuntu
+    reason: >-
+      The Ubuntu 24.04 content checks the pwhistory rules only on the pam_pwhistory line of /etc/pam.d/common-password,
+      which pam-auth-update generates and which Ubuntu does not load, so none of them is native (ADR 0025) and the
+      CIS level 1 server profile selects no native pwhistory rule.
+state:
+  files:
+    - path: /etc/security/pwhistory.conf
+      rewritten: true
+    - path: /etc/pam.d/system-auth
+      rewritten: true
+    - path: /etc/pam.d/password-auth
+      rewritten: true
+  packages:
+    - name: pam
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/security/pwhistory.conf
+      checksum: 17a73afb8c5c8abc4e0417d5e2572426148ce6066b71febad5a3b30078ddb746
+pre_states:
+  - name: as built
+    audit: false
+  - name: customised remember
+    audit: false
+    files:
+      - path: /etc/security/pwhistory.conf
+        lines:
+          - regexp: "^# remember = 10$"
+            line: remember=5
+    applied:
+      files:
+        - path: /etc/security/pwhistory.conf
+          checksum: f97eaa697bee609b566f28f6291f6aabe046fb9b15299260a68ce30c004b6258
+regressions:
+  - name: changes
+    platforms:
+      - rhel_compatible
+    files:
+      - lifecycle_pwhistory_regressions.yml

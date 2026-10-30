@@ -1,0 +1,392 @@
+---
+- name: Faillock regressions | Refuse to run unless the faillock topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'faillock'
+      - lifecycle_rule_ids | length == 2
+      - lifecycle_allow_disruptive == ['faillock']
+    fail_msg: >-
+      The faillock regressions reuse the facts of the faillock lifecycle, which must have just run with the deny and
+      unlock_time rules; the topic was {{ lifecycle_topic.family | default('none') }} with {{ lifecycle_rule_ids }}.
+    quiet: true
+
+- name: Faillock regressions | Name the rules, the toggles and the lines of the regressions
+  ansible.builtin.set_fact:
+    regression_label: faillock regressions
+    regression_profile: "{{ linux_compliance_discovered }}"
+    regression_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    regression_deny: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
+    regression_unlock: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time
+    regression_conf: /etc/security/faillock.conf
+    regression_deny_line: "deny = {{ {'ubuntu': 4, 'rhel_compatible': 5}[lifecycle_platform] }}"
+    regression_unlock_line: unlock_time = 900
+    regression_newline: "\n"
+
+- name: Faillock regressions | Check that the lifecycle ran exactly the deny and unlock_time rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rule_ids | sort == [regression_deny, regression_unlock] | sort
+    fail_msg: "{{ regression_label }}: {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Faillock regressions | Read faillock.conf as built
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_original
+
+- name: Faillock regressions | Inspect faillock.conf as built
+  ansible.builtin.stat:
+    path: "{{ regression_conf }}"
+    follow: false
+  register: regression_original_stat
+
+- name: Faillock regressions | Keep the text as built and the text after the apply
+  ansible.builtin.set_fact:
+    regression_text: "{{ regression_original.content | b64decode }}"
+    regression_applied_text: >-
+      {{ regression_original.content | b64decode ~ regression_deny_line ~ regression_newline
+         ~ regression_unlock_line ~ regression_newline }}
+
+- name: Faillock regressions | Take the state of the whole instance before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Faillock regressions | Remember the state of the whole instance before the regressions
+  ansible.builtin.set_fact:
+    regression_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Faillock regressions | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock regressions | Apply the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock regressions | Read faillock.conf and the ledger after the apply
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_applied
+
+- name: Faillock regressions | Read the ledger after the apply
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_applied
+
+- name: Faillock regressions | Name the entries that the apply recorded
+  ansible.builtin.set_fact:
+    regression_recorded: >-
+      {{ regression_ledger_applied.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+         | sort(attribute='rule_id') }}
+
+- name: Faillock regressions | Check that both rules were applied, recorded and appended as the only change
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - regression_recorded | map(attribute='rule_id') | list == lifecycle_rule_ids | sort
+      - regression_applied.content | b64decode == regression_applied_text
+    fail_msg: "{{ regression_label }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock regressions | Pretend that another method recorded every entry, as after a change of method
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: faillock
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | combine({'method': 'dropin'}) | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ regression_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Faillock regressions | Apply over ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock regressions | Check that the apply refused every rule and changed nothing
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['method_changed']
+      - lifecycle_results | selectattr('reason', 'none') | list == []
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ regression_label }}, apply after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock regressions | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock regressions | Clean up ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock regressions | Read the ledger after the refused cleanup
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_refused
+
+- name: Faillock regressions | Read faillock.conf after the refused runs
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_refused
+
+- name: Faillock regressions | Check that the cleanup refused every rule, kept every entry and touched nothing
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['cleanup_incomplete']
+      - lifecycle_results | map(attribute='reason') | unique | list == ['method_changed']
+      - lifecycle_results | selectattr('changed') | list == []
+      - >-
+        regression_ledger_refused.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='rule_id') | sort == lifecycle_rule_ids | sort
+      - regression_refused.content | b64decode == regression_applied_text
+    fail_msg: "{{ regression_label }}, cleanup after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock regressions | Give every entry back the method that recorded it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: faillock
+    revert_strategy: recorded_value
+    prior_values: "{{ item.prior_values }}"
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ regression_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Faillock regressions | Make deny stricter by hand, as an administrator would
+  ansible.builtin.lineinfile:
+    path: "{{ regression_conf }}"
+    regexp: "^deny = "
+    line: deny = 2
+
+- name: Faillock regressions | Remove the unlock_time line by hand, so it already equals its recorded prior state
+  ansible.builtin.lineinfile:
+    path: "{{ regression_conf }}"
+    regexp: "^unlock_time = "
+    state: absent
+
+- name: Faillock regressions | Clean up the topic after the administrator's changes
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock regressions | Read faillock.conf after the cleanup that kept the administrator's change
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_admin
+
+- name: Faillock regressions | Read the ledger after the cleanup that kept the administrator's change
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_admin
+
+- name: Faillock regressions | Check that deny was kept as changed and unlock_time restored without a write
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_deny) | map(attribute='reason') | list
+        == ['modified_since_apply']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_unlock) | map(attribute='status') | list
+        == ['restored']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_unlock) | map(attribute='message') | first
+        is search('already as before')
+      - >-
+        regression_admin.content | b64decode
+        == regression_text ~ 'deny = 2' ~ regression_newline
+      - >-
+        regression_ledger_admin.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='rule_id') | list == [regression_deny]
+    fail_msg: "{{ regression_label }}, cleanup after changes by hand: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock regressions | Put back the deny line that the collection wrote
+  ansible.builtin.lineinfile:
+    path: "{{ regression_conf }}"
+    regexp: "^deny = "
+    line: "{{ regression_deny_line }}"
+
+- name: Faillock regressions | Clean up deny now that it is what the collection wrote
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock regressions | Read faillock.conf after the last cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_restored
+
+- name: Faillock regressions | Check that deny was restored and faillock.conf is byte for byte as built
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [regression_deny]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
+      - regression_restored.content | b64decode == regression_text
+    fail_msg: "{{ regression_label }}, cleanup after the line was put back: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock regressions | Apply and clean up each file that the family must refuse or rewrite exactly
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_case.yml
+  loop:
+    - name: deny set twice
+      text: "{{ regression_text }}deny = 3{{ regression_newline }}deny = 3{{ regression_newline }}"
+      statuses:
+        deny: duplicate_setting
+        unlock: applied
+      applied: >-
+        {{ regression_text }}deny = 3{{ regression_newline }}deny = 3{{ regression_newline
+        }}{{ regression_unlock_line }}{{ regression_newline }}
+    - name: a stricter deny with a zero and a trailing comment, rewritten in the form the check reads
+      text: "{{ regression_text }}deny = 03 # site{{ regression_newline }}unlock_time=1800{{ regression_newline }}"
+      statuses:
+        deny: applied
+        unlock: compliant
+      applied: >-
+        {{ regression_text }}deny = 3{{ regression_newline }}unlock_time=1800{{ regression_newline }}
+    - name: a looser unlock_time in a trailing comment and a commented deny
+      text: "{{ regression_text }}#deny = 1{{ regression_newline }}unlock_time = 60 # site{{ regression_newline }}"
+      statuses:
+        deny: applied
+        unlock: applied
+      applied: >-
+        {{ regression_text }}#deny = 1{{ regression_newline }}{{ regression_unlock_line }}{{ regression_newline
+        }}{{ regression_deny_line }}{{ regression_newline }}
+  loop_control:
+    loop_var: regression_case
+    label: "{{ regression_case.name }}"
+
+- name: Faillock regressions | Replace faillock.conf by a symbolic link to a copy
+  ansible.builtin.copy:
+    content: "{{ regression_text }}"
+    dest: /tmp/faillock-regression.conf
+    mode: "0644"
+
+- name: Faillock regressions | Put the symbolic link in place of faillock.conf
+  ansible.builtin.file:
+    path: "{{ regression_conf }}"
+    src: /tmp/faillock-regression.conf
+    state: link
+    force: true
+
+- name: Faillock regressions | Switch every rule of the topic on with the symbolic link in place
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock regressions | Apply through the symbolic link
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock regressions | Read the target of the symbolic link after the apply
+  ansible.builtin.slurp:
+    src: /tmp/faillock-regression.conf
+  register: regression_through_link
+
+- name: Faillock regressions | Check that both rules refused the symbolic link and nothing was written through it
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['not_regular_file']
+      - lifecycle_results | selectattr('changed') | list == []
+      - lifecycle_results | selectattr('reason', 'none') | list == []
+      - regression_through_link.content | b64decode == regression_text
+    fail_msg: "{{ regression_label }}, symbolic link: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock regressions | Remove the symbolic link and its target, so faillock.conf is missing
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ regression_conf }}"
+    - /tmp/faillock-regression.conf
+
+- name: Faillock regressions | Apply without faillock.conf
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock regressions | Inspect faillock.conf after the apply without it
+  ansible.builtin.stat:
+    path: "{{ regression_conf }}"
+    follow: false
+  register: regression_missing
+
+- name: Faillock regressions | Check that both rules are not applicable and nothing was created
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['notapplicable']
+      - lifecycle_results | selectattr('changed') | list == []
+      - not regression_missing.stat.exists
+    fail_msg: "{{ regression_label }}, missing file: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock regressions | Give faillock.conf its content, mode and ownership as built back
+  ansible.builtin.copy:
+    content: "{{ regression_text }}"
+    dest: "{{ regression_conf }}"
+    follow: false
+    mode: "{{ regression_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Faillock regressions | Switch every rule of the topic off after the regressions
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Faillock regressions | Give the profile of this platform back
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ regression_profile }}"
+
+- name: Faillock regressions | Read the ledger after the regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_after
+
+- name: Faillock regressions | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - regression_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ regression_label }}: the ledger still holds {{ regression_ledger_after.entries }}"
+    quiet: true
+
+- name: Faillock regressions | Assert that the whole instance is back to its state before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: faillock regressions
+    lifecycle_broad_step: the regressions
+    lifecycle_broad_reference: "{{ regression_broad_before }}"
+
+- name: Faillock regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_faillock_regressions.yml'] }}"

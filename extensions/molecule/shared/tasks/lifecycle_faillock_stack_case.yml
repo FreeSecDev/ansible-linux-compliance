@@ -1,0 +1,87 @@
+---
+- name: Faillock stack case | Load pam_faillock in the PAM stack, as authselect or a pam-auth-update profile would
+  ansible.builtin.copy:
+    content: "{{ item.1 | replace('{deny}', stack_case.deny) }}"
+    dest: "{{ item.0 }}"
+    follow: false
+    mode: "{{ item.2.stat.mode }}"
+    owner: root
+    group: root
+  loop: "{{ stack_files | zip(stack_contents, stack_original_stats.results) | list }}"
+  loop_control:
+    label: "{{ item.0 }}"
+
+- name: Faillock stack case | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ stack_toggles }}"
+
+- name: Faillock stack case | Apply the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock stack case | Check the status of each rule after the apply
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [stack_deny, stack_unlock]
+      - lifecycle_results | map(attribute='status') | list == stack_case.statuses
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'overridden') | map(attribute='reason')
+        | reject('search', stack_files | first) | list == []
+      - lifecycle_results | selectattr('status', 'equalto', 'overridden') | selectattr('changed') | list == []
+    fail_msg: "{{ stack_label }}, {{ stack_case.name }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Faillock stack case | Audit the applied topic with a real scan where the content applies
+  ansible.builtin.include_tasks:
+    file: audit.yml
+  vars:
+    audit_check_mode: false
+  when: stack_scan | bool
+
+- name: Faillock stack case | Check that the scan reports both rules pass, from the file or from the module line
+  vars:
+    stack_findings: >-
+      {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
+         | sort(attribute='rule_id') }}
+  ansible.builtin.assert:
+    that:
+      - stack_findings | map(attribute='rule_id') | list == [stack_deny, stack_unlock]
+      - stack_findings | map(attribute='outcome') | unique | list == ['pass']
+    fail_msg: >-
+      {{ stack_label }}, {{ stack_case.name }}: the scan reported
+      {{ stack_findings | items2dict(key_name='rule_id', value_name='outcome') }}
+    quiet: true
+  when: stack_scan | bool
+
+- name: Faillock stack case | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ stack_toggles }}"
+
+- name: Faillock stack case | Clean up the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: faillock
+
+- name: Faillock stack case | Read faillock.conf after the cleanup
+  ansible.builtin.slurp:
+    src: "{{ stack_conf }}"
+  register: stack_cleaned
+
+- name: Faillock stack case | Check that every applied rule was restored and faillock.conf is as built
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - >-
+        lifecycle_results | map(attribute='rule_id') | list
+        == ([stack_deny] if stack_case.statuses[0] == 'applied' else [])
+           + ([stack_unlock] if stack_case.statuses[1] == 'applied' else [])
+      - stack_cleaned.content == stack_original.results[0].content
+    fail_msg: "{{ stack_label }}, {{ stack_case.name }}, cleanup: {{ lifecycle_results }}"
+    quiet: true

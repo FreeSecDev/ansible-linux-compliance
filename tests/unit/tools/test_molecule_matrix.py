@@ -128,6 +128,7 @@ def test_the_repository_matrix_covers_every_native_topic_in_both_modes_on_every_
     topics = native_topics(REPOSITORY_ROOT)
     platforms = sorted(check_lifecycle_topics.platforms(REPOSITORY_ROOT))
     regressions = check_lifecycle_topics.regression_platforms(REPOSITORY_ROOT)
+    cycles = check_lifecycle_topics.cycle_platforms(REPOSITORY_ROOT)
     assert found["include"] == [
         {
             "platform": platform,
@@ -137,6 +138,7 @@ def test_the_repository_matrix_covers_every_native_topic_in_both_modes_on_every_
         }
         for platform in platforms
         for topic in topics
+        if platform in cycles[topic]["docker"]
         for mode in (
             "topic",
             "rule",
@@ -177,6 +179,7 @@ def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path)
     root = make_root(tmp_path)
     topics = native_topics(root)
     cycles = [leg for leg in matrix.legs(root) if leg["mode"] in matrix.MODES]
+    running = check_lifecycle_topics.cycle_platforms(root)
     assert cycles == [
         {
             "platform": platform,
@@ -186,8 +189,10 @@ def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path)
         }
         for platform in sorted(check_lifecycle_topics.platforms(root))
         for topic in topics
+        if platform in running[topic]["docker"]
         for mode in matrix.MODES
     ]
+    assert ("ubuntu", "pwhistory") not in {(leg["platform"], leg["topic"]) for leg in cycles}
     assert all(leg["topic"] for leg in matrix.legs(root))
 
 

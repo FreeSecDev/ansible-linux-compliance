@@ -10,7 +10,9 @@
     - vars/target.yml
   vars:
     linux_compliance_banners_enabled: false
+    linux_compliance_faillock_enabled: false
     linux_compliance_pwquality_enabled: false
+    linux_compliance_pwhistory_enabled: false
     linux_compliance_ssh_enabled: false
     linux_compliance_sudo_enabled: false
   tasks:

@@ -61,6 +61,8 @@ def test_the_promoted_rule_is_a_native_disruptive_rule_of_its_family(tmp_path: P
         "auditd",
         "ssh",
         "pwquality",
+        "pwhistory",
+        "faillock",
         "sudo",
     ]
 

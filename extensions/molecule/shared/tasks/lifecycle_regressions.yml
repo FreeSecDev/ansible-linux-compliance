@@ -44,6 +44,26 @@
     file: lifecycle_ssh_vendor_regressions.yml
   when: "'lifecycle_ssh_vendor_regressions.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the faillock regressions for a change of method, changes by hand and refusals
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_regressions.yml
+  when: "'lifecycle_faillock_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the faillock regressions with pam_faillock in the PAM stack, scanned for real
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_stack.yml
+  when: "'lifecycle_faillock_stack.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Apply and clean up the faillock rules that only other profiles select
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_other_profiles.yml
+  when: "'lifecycle_faillock_other_profiles.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the pwhistory regressions for a shared setting, changes by hand and the stack
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwhistory_regressions.yml
+  when: "'lifecycle_pwhistory_regressions.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Remember the regression group that ran
   ansible.builtin.set_fact:
     lifecycle_regressions_run: "{{ lifecycle_regressions_run + [lifecycle_family ~ ':' ~ lifecycle_regression.name] }}"

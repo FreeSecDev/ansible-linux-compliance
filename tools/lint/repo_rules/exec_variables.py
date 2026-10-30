@@ -132,6 +132,7 @@ PLAYBOOK_PYTHON_FILES: Final[tuple[str, ...]] = (
     "tests/playbooks/remediate-check-mode.yml",
     "tests/playbooks/remediate-disruptive.yml",
     "tests/playbooks/remediate-native-check.yml",
+    "tests/playbooks/remediate-pam-conf-check.yml",
     "tests/playbooks/remediate-skip-always.yml",
 )
 MOLECULE_DOCKER: Final[str] = "community.docker.docker"
