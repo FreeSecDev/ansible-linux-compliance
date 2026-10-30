@@ -308,7 +308,7 @@ def test_load_refuses_locked_rules_and_a_kernel_it_cannot_read(
     assert output["loaded"] is False
     assert output["ran"] is False
     assert words in str(output["message"])
-    assert all(executable == "auditctl" for executable, _ in fake.calls)
+    assert all(call[0] == "auditctl" for call in fake.calls)
 
 
 def test_load_in_check_mode_changes_nothing(

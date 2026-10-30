@@ -46,8 +46,9 @@ options:
 attributes:
   check_mode:
     support: partial
-    description: O(action=status) behaves exactly like a normal run; O(action=load) and
-      O(action=reload) change nothing and report what they would do.
+    description: Can run in check mode.
+    details: O(action=status) behaves exactly like a normal run; O(action=load) and
+      O(action=reload) change nothing and report RV(check_mode).
   diff_mode:
     support: none
     description: The module changes no file, so there is no difference to show.
