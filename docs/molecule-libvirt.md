@@ -297,7 +297,7 @@ no XML parser and the scenarios add no collection for it; the simulations below 
 
 ### Simulated bypass attempts
 
-`verify` of every scenario, Docker and libvirt, feeds 128 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
+`verify` of every scenario, Docker and libvirt, feeds 133 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
 to the same task files. The simulated domain is the definition of a running scenario domain as libvirt prints it.
 Accepted: that domain, without a video adapter, with a dynamic AppArmor label on an AppArmor host, with a dynamic
 SELinux label, with the RHEL family's emulator, with a watchdog that powers off, with a restart after a crash, with a bridge that has only its name, with a network element without attributes and with Molecule's control path. Refused: localhost, loopback, another
@@ -315,7 +315,9 @@ from host files, a backing file `/etc/shadow`, another disk driver, an `evdev` i
 random number generator on a TCP service (`127.0.0.1:2375`) or on `/dev/random` and a second one, another emulator,
 host audio, a serial log file, a redirected device, a host TPM, another resource partition, an fw_cfg `sysinfo`
 with an entry from `/etc/shadow` or an inline value, an SMBIOS entry from a host file or an additional one, the
-host's SMBIOS data, a watchdog that dumps guest memory on the host, a `file` attribute on any element outside a disk source, a `managed` attribute on any target, a crash action `coredump-destroy` or
+host's SMBIOS data, a watchdog that dumps guest memory on the host, a recorded host name that is loopback only after
+the brackets and trailing dots are stripped (`[::1]`, `localhost.`, `LOCALHOST..`, `127.0.0.1.`,
+`[::ffff:127.0.0.1]`), a `file` attribute on any element outside a disk source, a `managed` attribute on any target, a crash action `coredump-destroy` or
 `coredump-restart`, another power-off or reboot action, a lock failure action and an interface target with
 `managed='no'` or on a host device; a network with NAT,
 bridging, DHCP, DNS, a route, another bridge or address, a bridge in a firewalld zone or with another attribute, an address or network element with
