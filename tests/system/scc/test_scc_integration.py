@@ -20,7 +20,11 @@ real and once in check mode, and records the SHA-256 of every file below
   are mode 0600, read back with one entry per rule of the profile, DISA group IDs,
   titles and CCIs, and the statuses of ADR 0020 for every finding, and both contents
   give the same statuses. The checklists stay in the container and are never
-  committed.
+  committed;
+- the real run wrote exactly one application debug log, and the driver exported
+  it for ``make scc-own-expiry-check`` (FREES-179), which checks SCC's own
+  "Software expires in N days" against ``SCC_EXPIRES``. The test prints which of
+  SCC's logs mention the expiry.
 """
 
 from __future__ import annotations
@@ -147,3 +151,15 @@ def test_the_real_run_exports_honest_checklists(scan_report: dict[str, object]) 
     assert exports["results"]["ckl"] == exports["stream"]["ckl"]
     assert results.get("NotAFinding", 0) > 0
     assert results.get("Open", 0) > 0
+
+
+def test_the_real_run_exports_its_application_debug_log(scan_report: dict[str, object]) -> None:
+    expiry = cast("dict[str, object]", scan_report["expiry_log"])
+    harness.report_line("expiry log", expiry)
+    logs = cast("list[str]", expiry["application_logs"])
+    assert len(logs) == 1, logs
+    assert re.fullmatch(r"ApplicationLogs/[A-Za-z0-9_.-]+_Debug_Log_001\.txt", logs[0])
+    assert re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", str(expiry["start"])
+    )
+    assert expiry["exported"] is True

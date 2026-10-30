@@ -248,7 +248,9 @@ by the `scc-smoke` job and never published.
   version. The job runs only on `schedule` and dispatch on `main`, with `contents: read` and `issues: write` only,
   and the never-publish guard refuses `issues` on every other job. The token is sent only to `api.github.com`.
 - **Residual:** a hostile record can still open one issue for each version it names, which stays open while the
-  record names that version, and it can hide a real release by naming the pinned version. NIWC's README and the DISA
+  record names that version, and it can hide a real release by naming the pinned version. A hostile or wrong record
+  can also close an open, genuine `scc-release` issue by naming the pinned version or another one (`close_stale`,
+  `tools/scc/release_watch.py:507`); the issue reopens once the record is right again. NIWC's README and the DISA
   host remain the other sources, and the expiry issue and the hard stop do not depend on the record.
 
 ## SSH server remediation on a managed host
