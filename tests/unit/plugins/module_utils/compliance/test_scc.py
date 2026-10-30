@@ -644,6 +644,19 @@ class TestConfirmation:
         assert scc.expiry_days(confirmation(self.OPTIONS_PATH)) == 30
         assert scc.expiry_days("nothing\n") is None
 
+    @pytest.mark.parametrize(
+        ("message", "days"),
+        [
+            ("Software expires in 1 day.", 1),
+            ("Software expires in 1 day", 1),
+            ("Software expires in 0 days.", 0),
+            ("Software expires in 2 dayz", None),
+        ],
+    )
+    def test_the_last_day_is_read_in_the_singular(self, message: str, days: int | None) -> None:
+        log = log_line("SoftwareExpiration", message) + "\n"
+        assert scc.expiry_days(log) == days
+
 
 class TestOptionsDocument:
     """The per-run options file."""
