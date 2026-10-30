@@ -8,8 +8,11 @@
   downloaded, and checks the required versions afterwards. It refuses to run outside a
   GitHub-hosted runner. The tests run it with fake ``curl``, ``sudo``, ``apt-get``, ``dpkg`` and
   ``dpkg-query`` that record what they were asked.
+- ``resolve`` asks ``apt`` with a private configuration whose only source is the snapshot, signed
+  by the Ubuntu archive key, and prints the pins of the files that the host lacks from the
+  index; a pins file without a final newline keeps its last line.
 - The repository pins are well formed, the workflow restores and saves the verified packages
-  under a key of the pins, and the libvirt scenarios run with the per-task timing callback.
+  under a key of the pins, and the timings come from the job log, without a callback plugin.
 """
 
 from __future__ import annotations
@@ -60,6 +63,9 @@ FAKE_APT_GET = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "${FAKE_LOG}/apt-get"
 for argument in "$@"; do
   case "${argument}" in
+    Dir::Etc::SourceList=/dev/null) ;;
+    Dir::Etc::SourceList=*) cp "${argument#*=}" "${FAKE_LOG}/sources" ;;
+    --print-uris) cat "${FAKE_URIS}"; exit 0 ;;
     /*.deb)
       file="$(basename "${argument}")"
       name="${file%%_*}"
@@ -72,13 +78,19 @@ done
 FAKE_DPKG_QUERY = """#!/usr/bin/env bash
 format="$2"
 name="$3"
-version="$(awk -v name="${name}" '$1 == name { print $2 }' "${FAKE_STATUS}" | tail -n 1)"
-[[ -n "${version}" ]] || exit 1
+record="$(awk -v name="${name}" '$1 == name { print $2, ($3 == "" ? "ii" : $3) }' \\
+  "${FAKE_STATUS}" | tail -n 1)"
+[[ -n "${record}" ]] || exit 1
+version="${record% *}"
 if [[ "${format}" == *Status-Abbrev* ]]; then
-  printf 'ii %s' "${version}"
+  printf '%s %s' "${record#* }" "${version}"
 else
   printf '%s' "${version}"
 fi
+"""
+FAKE_APT_CACHE = """#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "${FAKE_LOG}/apt-cache"
+cat "${FAKE_RECORDS}"
 """
 FAKE_DPKG = """#!/usr/bin/env bash
 [[ "$1" == --compare-versions && "$3" == ge ]] || exit 2
@@ -106,6 +118,7 @@ class Host:
             "apt-get": FAKE_APT_GET,
             "dpkg-query": FAKE_DPKG_QUERY,
             "dpkg": FAKE_DPKG,
+            "apt-cache": FAKE_APT_CACHE,
         }.items():
             path = self.bin / name
             path.write_text(text, encoding="utf-8")
@@ -140,14 +153,20 @@ class Host:
         path.write_bytes(data)
         self.routes[url] = path
 
-    def pins(self, lines: list[str] | None = None) -> Path:
-        """Write the pins, by default the valid ones."""
+    def pins(self, lines: list[str] | None = None, *, final_newline: bool = True) -> Path:
+        """Write the pins, by default the valid ones, with or without a final newline."""
         path = self.root / "host.pins"
-        path.write_text("".join(f"{line}\n" for line in lines or self.lines), encoding="utf-8")
+        text = "\n".join(lines or self.lines)
+        path.write_text(text + "\n" if final_newline else text, encoding="utf-8")
         return path
 
     def run(
-        self, mode: str, lines: list[str] | None = None, environment: dict[str, str] | None = None
+        self,
+        mode: str,
+        lines: list[str] | None = None,
+        environment: dict[str, str] | None = None,
+        *,
+        final_newline: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         """Run the script in ``mode`` against the fake runner."""
         routes = self.root / "routes"
@@ -155,7 +174,13 @@ class Host:
             "".join(f"{url} {path}\n" for url, path in self.routes.items()), encoding="utf-8"
         )
         return subprocess.run(
-            [executable("bash"), str(SCRIPT), mode, str(self.pins(lines)), str(self.cache)],
+            [
+                executable("bash"),
+                str(SCRIPT),
+                mode,
+                str(self.pins(lines, final_newline=final_newline)),
+                str(self.cache),
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -166,6 +191,8 @@ class Host:
                 "FAKE_ROUTES": str(routes),
                 "FAKE_LOG": str(self.log),
                 "FAKE_STATUS": str(self.status),
+                "FAKE_URIS": str(self.root / "uris"),
+                "FAKE_RECORDS": str(self.root / "records"),
                 **(environment or {}),
             },
             cwd=self.root,
@@ -245,7 +272,10 @@ def test_install_uses_only_the_verified_files_that_the_runner_lacks(host: Host) 
     assert "-o Dir::Etc::SourceList=/dev/null" in call
     assert "Dir::State::Lists=" in call
     assert "--no-install-recommends" in call
-    assert call.endswith(f"-- {(host.cache / 'qemu-utils_8.2_amd64.deb').resolve()}")
+    installed = call.rsplit(" -- ", 1)[1].split()
+    assert len(installed) == 1
+    assert installed[0].endswith("/debs/qemu-utils_8.2_amd64.deb")
+    assert not installed[0].startswith(str(host.cache))
     second = host.run("install", environment=HOSTED)
     assert second.returncode == 0, second.stderr
     assert len(host.calls("apt-get")) == 1
@@ -367,3 +397,62 @@ def test_the_timings_come_from_the_job_log_without_a_callback_plugin() -> None:
         "list[dict[str, str]]", yaml.safe_load(REQUIREMENTS.read_text("utf-8"))["collections"]
     )
     assert "ansible.posix" not in {collection["name"] for collection in collections}
+
+
+def test_a_removed_package_with_its_configuration_left_is_not_installed(host: Host) -> None:
+    assert host.run("fetch").returncode == 0
+    host.status.write_text("pkg-config 1.8 rc\nlibfdt1 1.7 rc\n", encoding="utf-8")
+    result = host.run("install", environment=HOSTED)
+    assert result.returncode == 1
+    assert "pkg-config is missing, not the pinned 1.8" in result.stderr
+    [call] = host.calls("apt-get")
+    assert "/debs/libfdt1_1.7_amd64.deb" in call
+
+
+def test_pins_without_a_final_newline_keep_their_last_line(host: Host) -> None:
+    assert host.run("fetch").returncode == 0
+    lines = [*host.lines, "require libvirt-dev 10.0"]
+    result = host.run("install", lines=lines, environment=HOSTED, final_newline=False)
+    assert result.returncode == 1
+    assert "libvirt-dev is missing, not the pinned 10.0" in result.stderr
+    (host.cache / "libfdt1_1.7_amd64.deb").unlink()
+    result = host.run("fetch", final_newline=False)
+    assert result.returncode == 0, result.stderr
+    assert "downloaded and verified libfdt1_1.7_amd64.deb" in result.stdout
+
+
+def test_resolve_prints_the_pins_of_what_the_host_lacks_from_the_signed_index(host: Host) -> None:
+    (host.root / "uris").write_text(
+        f"'{ARCHIVE}pool/main/q/qemu/qemu-utils_1%3a8.2_amd64.deb' qemu-utils_1%3a8.2_amd64.deb"
+        " 10 SHA512:00\n",
+        encoding="utf-8",
+    )
+    (host.root / "records").write_text(
+        "Package: qemu-utils\nVersion: 1:8.2\n"
+        "Filename: pool/main/q/qemu/qemu-utils_8.2_amd64.deb\n"
+        f"Size: 10\nSHA256: {'a' * 64}\n\nPackage: other\nVersion: 2\n",
+        encoding="utf-8",
+    )
+    result = host.run("resolve")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        f"snapshot {SNAPSHOT}",
+        "require qemu-utils 8.2",
+        "require pkg-config 1.8",
+        f"deb qemu-utils 1:8.2 pool/main/q/qemu/qemu-utils_8.2_amd64.deb {'a' * 64} 10",
+    ]
+    assert host.calls("apt-cache")[0].endswith("show qemu-utils=1:8.2")
+    sources = (host.log / "sources").read_text(encoding="utf-8").splitlines()
+    for suite, line in zip(("noble", "noble-updates", "noble-security"), sources, strict=True):
+        assert line == (
+            "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] "
+            f"{ARCHIVE.rstrip('/')} {suite} main universe"
+        )
+    assert host.calls("sudo") == []
+
+
+def test_resolve_refuses_malformed_pins_before_asking_apt(host: Host) -> None:
+    result = host.run("resolve", lines=host.lines[1:])
+    assert result.returncode == 2
+    assert "must name a snapshot" in result.stderr
+    assert host.calls("apt-get") == []

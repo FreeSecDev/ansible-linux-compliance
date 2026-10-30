@@ -151,10 +151,11 @@ The GitHub-hosted runner lacks QEMU and libvirt. `tools/molecule/libvirt-host.pi
   SHA-256 and size match the pin. A file that is already there is reused only after the same check; one that fails it
   is downloaded again.
 - `install` (`make molecule-libvirt-host-install`) checks every pinned file again and installs nothing if one is
-  missing or differs. It skips the packages that the runner already has in the pinned or a later version and installs
-  the others with `apt-get` from the verified files alone: with no source list and an empty list directory, `apt`
+  missing or differs. It skips the packages that the runner already has installed (`ii`) in the pinned or a later
+  version, copies the others into a temporary directory of its own, checks the copies and installs them with
+  `apt-get` from those verified copies alone: with no source list and an empty list directory, `apt`
   resolves the dependencies from the installed packages and these files and cannot download anything, so an
-  unverified file never reaches `dpkg`. It then checks the version of every `require` package. It refuses to run
+  unverified file never reaches `dpkg`. It then checks that every `require` package is installed (`ii`) in its exact version. It refuses to run
   unless `GITHUB_ACTIONS` is `true` and `RUNNER_ENVIRONMENT` is `github-hosted`, so that it never changes the QEMU and
   libvirt of a developer host. When it fails, the target prints the pins that `resolve` computes on that runner.
 - `resolve` (`make molecule-libvirt-host-pins`) needs no root. It points a private `apt` configuration at the

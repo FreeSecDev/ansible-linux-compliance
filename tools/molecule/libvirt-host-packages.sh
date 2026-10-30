@@ -22,7 +22,7 @@ snapshot=""
 declare -a require_names=() require_versions=()
 declare -a deb_names=() deb_versions=() deb_paths=() deb_digests=() deb_sizes=()
 
-while read -r kind first second third fourth fifth sixth; do
+while read -r kind first second third fourth fifth sixth || [[ -n "${kind:-}" ]]; do
   [[ -z "${kind}" ]] && continue
   if [[ -n "${sixth}" ]]; then
     printf 'error: a line of %s has too many fields\n' "${pins}" >&2
@@ -119,8 +119,16 @@ fetch_all() {
   printf 'every pinned host package is verified in %s\n' "${directory}"
 }
 
+installed_version() {
+  local status
+  status="$(dpkg-query -W -f='${db:Status-Abbrev}${Version}' "$1" 2>/dev/null || true)"
+  if [[ "${status}" == "ii "* ]]; then
+    printf '%s' "${status#ii }"
+  fi
+}
+
 install_all() {
-  local index name target installed
+  local index name target copy installed
   local -a files=()
   if [[ "${GITHUB_ACTIONS:-}" != true || "${RUNNER_ENVIRONMENT:-}" != github-hosted ]]; then
     printf 'error: install changes the system packages and runs only on a GitHub-hosted runner\n' >&2
@@ -133,14 +141,22 @@ install_all() {
       exit 1
     fi
   done
+  chmod 0711 "${work_dir}"
+  mkdir -m 0755 "${work_dir}/debs"
   for index in "${!deb_names[@]}"; do
     name="${deb_names[${index}]}"
-    installed="$(dpkg-query -W -f='${db:Status-Abbrev}${Version}' "${name}" 2>/dev/null || true)"
-    if [[ "${installed}" == "ii "* ]] && dpkg --compare-versions "${installed#ii }" ge "${deb_versions[${index}]}"; then
-      printf 'keeping the installed %s %s\n' "${name}" "${installed#ii }"
+    installed="$(installed_version "${name}")"
+    if [[ -n "${installed}" ]] && dpkg --compare-versions "${installed}" ge "${deb_versions[${index}]}"; then
+      printf 'keeping the installed %s %s\n' "${name}" "${installed}"
       continue
     fi
-    files+=("$(realpath "${directory}/$(basename "${deb_paths[${index}]}")")")
+    copy="${work_dir}/debs/$(basename "${deb_paths[${index}]}")"
+    cp -- "${directory}/$(basename "${deb_paths[${index}]}")" "${copy}"
+    if ! is_verified "${copy}" "${deb_digests[${index}]}" "${deb_sizes[${index}]}"; then
+      printf 'error: the copy of %s does not match its pin; nothing was installed\n' "${name}" >&2
+      exit 1
+    fi
+    files+=("${copy}")
   done
   mkdir -p "${work_dir}/lists/partial" "${work_dir}/sources.list.d"
   if [[ ${#files[@]} -gt 0 ]]; then
@@ -149,7 +165,7 @@ install_all() {
       -o Dpkg::Use-Pty=0 install -y --no-install-recommends -- "${files[@]}"
   fi
   for index in "${!require_names[@]}"; do
-    installed="$(dpkg-query -W -f='${Version}' "${require_names[${index}]}" 2>/dev/null || true)"
+    installed="$(installed_version "${require_names[${index}]}")"
     if [[ "${installed}" != "${require_versions[${index}]}" ]]; then
       printf 'error: %s is %s, not the pinned %s\n' "${require_names[${index}]}" "${installed:-missing}" \
         "${require_versions[${index}]}" >&2

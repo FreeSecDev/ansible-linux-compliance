@@ -68,7 +68,7 @@ def tasks(lines: Iterable[str]) -> list[Task]:
         when = _timestamp(match.group(1), match.group(2))
         text = ESCAPE.sub("", match.group(3)).strip()
         task = TASK.match(text)
-        marker = ACTION.search(text)
+        marker = ACTION.search(text) if "Executing" in text or "Completed" in text else None
         if task is None and marker is None and OTHER_BANNER.match(text) is None:
             continue
         if current is not None:
