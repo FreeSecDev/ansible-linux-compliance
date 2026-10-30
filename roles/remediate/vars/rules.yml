@@ -1082,6 +1082,45 @@ __linux_compliance_remediate_rules:
       path: "/etc/motd"
       attribute: "content"
       forbidden_pattern: "(\\\\v|\\\\r|\\\\m|\\\\s|ubuntu2404|Ubuntu 24.04|rhel9|Red Hat Enterprise Linux 9)"
+  - rule_id: "xccdf_org.ssgproject.content_rule_directory_groupowner_etc_sudoersd"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_directory_groupowner_etc_sudoersd_enabled
+    runbook: null
+    parameters:
+      method: "attribute"
+      path: "/etc/sudoers.d"
+      type: "directory"
+      attribute: "group"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_directory_owner_etc_sudoersd"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_directory_owner_etc_sudoersd_enabled
+    runbook: null
+    parameters:
+      method: "attribute"
+      path: "/etc/sudoers.d"
+      type: "directory"
+      attribute: "owner"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_directory_permissions_etc_sudoersd"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_directory_permissions_etc_sudoersd_enabled
+    runbook: null
+    parameters:
+      method: "attribute"
+      path: "/etc/sudoers.d"
+      type: "directory"
+      attribute: "mode"
+      max_mode: "0750"
   - rule_id: "xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue"
     family: banners
     disruptive: false
@@ -1115,6 +1154,19 @@ __linux_compliance_remediate_rules:
       path: "/etc/motd"
       attribute: "group"
       id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_groupowner_etc_sudoers"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_groupowner_etc_sudoers_enabled
+    runbook: null
+    parameters:
+      method: "attribute"
+      path: "/etc/sudoers"
+      type: "file"
+      attribute: "group"
+      id: 0
   - rule_id: "xccdf_org.ssgproject.content_rule_file_owner_etc_issue"
     family: banners
     disruptive: false
@@ -1146,6 +1198,19 @@ __linux_compliance_remediate_rules:
     runbook: null
     parameters:
       path: "/etc/motd"
+      attribute: "owner"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_owner_etc_sudoers"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_owner_etc_sudoers_enabled
+    runbook: null
+    parameters:
+      method: "attribute"
+      path: "/etc/sudoers"
+      type: "file"
       attribute: "owner"
       id: 0
   - rule_id: "xccdf_org.ssgproject.content_rule_file_permissions_crontab"
@@ -1191,6 +1256,139 @@ __linux_compliance_remediate_rules:
       path: "/etc/motd"
       attribute: "mode"
       max_mode: "0644"
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_permissions_etc_sudoers"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_permissions_etc_sudoers_enabled
+    runbook: null
+    parameters:
+      method: "attribute"
+      path: "/etc/sudoers"
+      type: "file"
+      attribute: "mode"
+      max_mode: "0440"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sudo_add_use_pty"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sudo_add_use_pty_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      path: "/etc/sudoers.d/50-freesecdev-use_pty"
+      options:
+        - use_pty
+      lines:
+        - "Defaults use_pty"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sudo_custom_logfile"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sudo_custom_logfile_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      path: "/etc/sudoers.d/50-freesecdev-logfile"
+      options:
+        - logfile
+      lines:
+        - "Defaults logfile={value}"
+      value_pattern: "^/[A-Za-z0-9_-][A-Za-z0-9._/-]{0,254}$"
+      value_id: "var_sudo_logfile"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "/var/log/sudo.log"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+          value:
+            - "/var/log/sudo.log"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sudo_require_reauthentication"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sudo_require_reauthentication_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      path: "/etc/sudoers.d/50-freesecdev-timestamp_timeout"
+      options:
+        - timestamp_timeout
+      lines:
+        - "Defaults timestamp_timeout={value}"
+      value_pattern: "^[0-9]{1,4}$"
+      single: true
+      value_id: "var_sudo_timestamp_timeout"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "15"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - "pci-dss"
+          value:
+            - "5"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "15"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "0"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sudoers_validate_passwd"
+    family: sudo
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sudoers_validate_passwd_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      path: "/etc/sudoers.d/50-freesecdev-validate_passwd"
+      options:
+        - rootpw
+        - runaspw
+        - targetpw
+      lines:
+        - "Defaults !targetpw"
+        - "Defaults !rootpw"
+        - "Defaults !runaspw"
 __linux_compliance_remediate_audit_only:
   file_permissions:
     - "xccdf_org.ssgproject.content_rule_dir_group_ownership_library_dirs"
@@ -2242,28 +2440,18 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_no_netrc_files"
     - "xccdf_org.ssgproject.content_rule_no_nologin_in_shells"
   sudo:
-    - "xccdf_org.ssgproject.content_rule_directory_groupowner_etc_sudoersd"
-    - "xccdf_org.ssgproject.content_rule_directory_owner_etc_sudoersd"
-    - "xccdf_org.ssgproject.content_rule_directory_permissions_etc_sudoersd"
-    - "xccdf_org.ssgproject.content_rule_file_groupowner_etc_sudoers"
-    - "xccdf_org.ssgproject.content_rule_file_owner_etc_sudoers"
-    - "xccdf_org.ssgproject.content_rule_file_permissions_etc_sudoers"
     - "xccdf_org.ssgproject.content_rule_file_permissions_sudo"
     - "xccdf_org.ssgproject.content_rule_package_sudo_installed"
     - "xccdf_org.ssgproject.content_rule_sudo_add_noexec"
     - "xccdf_org.ssgproject.content_rule_sudo_add_requiretty"
-    - "xccdf_org.ssgproject.content_rule_sudo_add_use_pty"
-    - "xccdf_org.ssgproject.content_rule_sudo_custom_logfile"
     - "xccdf_org.ssgproject.content_rule_sudo_dedicated_group"
     - "xccdf_org.ssgproject.content_rule_sudo_remove_no_authenticate"
     - "xccdf_org.ssgproject.content_rule_sudo_remove_nopasswd"
     - "xccdf_org.ssgproject.content_rule_sudo_require_authentication"
-    - "xccdf_org.ssgproject.content_rule_sudo_require_reauthentication"
     - "xccdf_org.ssgproject.content_rule_sudo_restrict_privilege_elevation_to_authorized"
     - "xccdf_org.ssgproject.content_rule_sudoers_explicit_command_args"
     - "xccdf_org.ssgproject.content_rule_sudoers_no_command_negation"
     - "xccdf_org.ssgproject.content_rule_sudoers_no_root_target"
-    - "xccdf_org.ssgproject.content_rule_sudoers_validate_passwd"
   selinux:
     - "xccdf_org.ssgproject.content_rule_directory_groupowner_etc_selinux"
     - "xccdf_org.ssgproject.content_rule_directory_owner_etc_selinux"

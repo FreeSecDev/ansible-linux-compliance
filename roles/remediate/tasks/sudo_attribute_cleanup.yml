@@ -1,0 +1,142 @@
+---
+- name: Sudo | Refuse to restore an attribute that the dispatcher did not plan to clean up
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'sudo'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'sudo'
+      - __linux_compliance_remediate_rule.parameters.method == 'attribute'
+      - __linux_compliance_remediate_rule.parameters.attribute in ['mode', 'owner', 'group']
+      - >-
+        __linux_compliance_remediate_rule.parameters.path
+        in [__linux_compliance_remediate_sudo_main, __linux_compliance_remediate_sudo_directory]
+      - __linux_compliance_remediate_rule.ledger_entry is mapping
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'sudo') | list | first | default({}))).cleanup | default([])
+    fail_msg: >-
+      sudo_attribute_cleanup.yml runs only for a rule that the remediate dispatcher planned to clean
+      up from its ledger entry, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Sudo | Inspect the file or directory before restoring its attribute
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_sd_stat
+  tags:
+    - always
+
+- name: Sudo | Read the recorded prior attribute, the one written and the current one
+  vars:
+    __linux_compliance_remediate_sd_recorded: >-
+      {{ __linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+         | items2dict(key_name='name', value_name='value') }}
+    __linux_compliance_remediate_sd_kind_matches: >-
+      {{ (__linux_compliance_remediate_sd_stat.stat.isreg | default(false))
+         if __linux_compliance_remediate_rule.parameters.type == 'file'
+         else (__linux_compliance_remediate_sd_stat.stat.isdir | default(false)) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_attr: "{{ __linux_compliance_remediate_rule.parameters.attribute }}"
+    __linux_compliance_remediate_sd_prior: >-
+      {{ __linux_compliance_remediate_sd_recorded[__linux_compliance_remediate_rule.parameters.attribute]
+         | default(none) }}
+    __linux_compliance_remediate_sd_written: "{{ __linux_compliance_remediate_sd_recorded.written | default(none) }}"
+    __linux_compliance_remediate_sd_entry_method: >-
+      {{ __linux_compliance_remediate_sd_recorded.method | default('unknown') }}
+    __linux_compliance_remediate_sd_kind: "{{ __linux_compliance_remediate_sd_kind_matches }}"
+    __linux_compliance_remediate_sd_current_value: >-
+      {{ none if not __linux_compliance_remediate_sd_kind_matches
+         else {'mode': __linux_compliance_remediate_sd_stat.stat.mode,
+               'owner': __linux_compliance_remediate_sd_stat.stat.uid | string,
+               'group': __linux_compliance_remediate_sd_stat.stat.gid | string}
+              [__linux_compliance_remediate_rule.parameters.attribute] }}
+  tags:
+    - always
+
+- name: Sudo | Name the reason a restore is impossible, or that the attribute is already as before
+  vars:
+    __linux_compliance_remediate_sd_form: >-
+      {{ '^[0-7]{4}$' if __linux_compliance_remediate_sd_attr == 'mode' else '^[0-9]{1,10}$' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_reason: >-
+      {{ 'method_changed' if __linux_compliance_remediate_sd_entry_method != 'attribute'
+         else 'target_absent' if not __linux_compliance_remediate_sd_stat.stat.exists
+         else ('not_regular_file' if __linux_compliance_remediate_rule.parameters.type == 'file' else 'not_directory')
+              if not __linux_compliance_remediate_sd_kind
+         else 'invalid_record' if not (__linux_compliance_remediate_sd_prior is string
+              and __linux_compliance_remediate_sd_prior is match(__linux_compliance_remediate_sd_form)
+              and __linux_compliance_remediate_newline not in __linux_compliance_remediate_sd_prior
+              and __linux_compliance_remediate_sd_written is string
+              and __linux_compliance_remediate_sd_written is match(__linux_compliance_remediate_sd_form)
+              and __linux_compliance_remediate_newline not in __linux_compliance_remediate_sd_written)
+         else none if __linux_compliance_remediate_sd_current_value == __linux_compliance_remediate_sd_prior
+         else 'modified_since_apply' if __linux_compliance_remediate_sd_current_value
+              != __linux_compliance_remediate_sd_written
+         else none }}
+    __linux_compliance_remediate_sd_already: >-
+      {{ __linux_compliance_remediate_sd_current_value is not none
+         and __linux_compliance_remediate_sd_current_value == __linux_compliance_remediate_sd_prior }}
+  tags:
+    - always
+
+- name: Sudo | Restore the recorded prior attribute
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    state: "{{ __linux_compliance_remediate_rule.parameters.type }}"
+    follow: false
+    mode: "{{ __linux_compliance_remediate_sd_prior if __linux_compliance_remediate_sd_attr == 'mode' else omit }}"
+    owner: "{{ __linux_compliance_remediate_sd_prior if __linux_compliance_remediate_sd_attr == 'owner' else omit }}"
+    group: "{{ __linux_compliance_remediate_sd_prior if __linux_compliance_remediate_sd_attr == 'group' else omit }}"
+  register: __linux_compliance_remediate_sd_restored
+  when:
+    - __linux_compliance_remediate_sd_reason is none
+    - not __linux_compliance_remediate_sd_already
+  tags:
+    - always
+
+- name: Sudo | Forget the rule in the state ledger after the restore
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  register: __linux_compliance_remediate_sd_forget
+  when: __linux_compliance_remediate_sd_reason is none
+  tags:
+    - always
+
+- name: Sudo | Add the result of the cleanup
+  vars:
+    __linux_compliance_remediate_sd_cleanup_status: >-
+      {{ 'restored' if __linux_compliance_remediate_sd_reason is none else 'cleanup_incomplete' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'cleanup',
+           'status': __linux_compliance_remediate_sd_cleanup_status,
+           'reason': __linux_compliance_remediate_sd_reason,
+           'changed': (__linux_compliance_remediate_sd_restored is changed)
+                      or (__linux_compliance_remediate_sd_forget is changed),
+           'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_sd_cleanup_status
+                      ~ ((' (' ~ __linux_compliance_remediate_sd_reason ~ ': '
+                          ~ __linux_compliance_remediate_rule.parameters.path
+                          ~ '; the attribute and the ledger entry are kept and the cleanup is retried on the next run)')
+                         if __linux_compliance_remediate_sd_reason
+                         else ' (the attribute was already as before; only the ledger entry was removed)'
+                         if __linux_compliance_remediate_sd_already else '')
+         }] }}
+  tags:
+    - always

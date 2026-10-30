@@ -68,7 +68,9 @@
           - PASS_MAX_DAYS 365
           - UMASK 077
       - name: a maximum age with a trailing comment, which shadow-utils does not read as a number
-        text: "{{ ldf_original.content | b64decode | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30 # site') }}"
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30 # site') }}
         expected:
           max: applied
           umask: applied

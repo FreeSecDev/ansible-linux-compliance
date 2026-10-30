@@ -126,7 +126,9 @@
       - >-
         lifecycle_results | selectattr('rule_id', 'in', [ldr_max, ldr_umask]) | map(attribute='status') | unique
         | list == ['method_changed']
-      - lifecycle_results | selectattr('status', 'equalto', 'method_changed') | selectattr('reason', 'none') | list == []
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'method_changed') | selectattr('reason', 'none')
+        | list == []
       - lifecycle_results | selectattr('changed') | list == []
     fail_msg: "{{ ldr_label }}, apply after a change of method: {{ lifecycle_results }}"
     quiet: true

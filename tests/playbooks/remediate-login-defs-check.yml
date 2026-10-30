@@ -9,7 +9,8 @@
     linux_compliance_remediate_allow_disruptive:
       - login_defs
     login_defs_prefix: xccdf_org.ssgproject.content_rule_
-    login_defs_manifest: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml }}"
+    login_defs_manifest: >-
+      {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml }}
     login_defs_cases:
       - name: the Ubuntu 24.04 CIS level 2 server profile
         profile: cis_level2_server
@@ -122,12 +123,6 @@
     - name: Include each file without the opt-in and check that its first task refuses it
       ansible.builtin.include_tasks:
         file: tasks/login_defs_direct_use.yml
-      loop:
-        - login_defs.yml
-        - login_defs_apply.yml
-        - login_defs_cleanup.yml
-      loop_control:
-        loop_var: login_defs_file
 
 - name: Login defaults in check mode | A ledger entry of another method or a malformed one is refused, never forgotten
   hosts: localhost

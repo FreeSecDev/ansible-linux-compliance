@@ -6,7 +6,9 @@ reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogu
 (cleanup per family). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendments of
 FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
-banners and password quality). How to make a further topic native is in the
+banners and password quality), [ADR 0022](adr/0022-native-sudo-drop-ins.md) (sudo, FREES-175),
+[ADR 0024](adr/0024-native-login-defs.md) (login.defs, FREES-185). How to make a further
+topic native is in the
 [native remediation guide](native-remediation-guide.md).
 
 Remediation changes managed hosts. It never runs ComplianceAsCode playbooks, Bash fixes or `oscap --remediate`; every
@@ -15,11 +17,11 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 
 ## Status
 
-The dispatcher, the safety model and three native families are implemented. The catalogue holds every rule that a
-pinned profile selects, 1203 rules in 55 families (FREES-53), generated from the digest-verified content and listed in
-the [control family reference](control-families.md). 30 rules have a native remediation: the reference rule
-`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners` and 14
-of `pwquality` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
+The dispatcher, the safety model and five native families are implemented. The catalogue holds every rule that a
+pinned profile selects, 1203 rules in 56 families (FREES-53), generated from the digest-verified content and listed in
+the [control family reference](control-families.md). 47 rules have a native remediation: the reference rule
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners`, 14
+of `pwquality`, 7 of `login_defs` and 10 of `sudo` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
 switched off per rule and per topic, the audit excludes it and reports it as `disabled`, and remediation reports it as
 `not_implemented` and never changes anything for it. The native remediations land topic by topic on top of this
 catalogue, following the [native remediation guide](native-remediation-guide.md). Every native topic is exercised for
@@ -307,10 +309,14 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 ## Native families
 
-Besides the reference family, two topics are native ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md)).
+Besides the reference family, four topics are native
+([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
+[ADR 0024](adr/0024-native-login-defs.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
-family before anything changes.
+family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
+sets `profile_value_source: fix` in `content/catalogue.yml`, and the value is the one the fixes substitute
+(`sudo_require_reauthentication`).
 
 ### Banners
 
@@ -373,6 +379,85 @@ nothing else is in it. Without `/etc/security/pwquality.conf` libpwquality is no
 `accounts_password_pam_retry` (its check reads the PAM arguments first and never the drop-ins) and
 `package_pam_pwquality_installed` (package state, and on Ubuntu the package changes the PAM stack). That the Ubuntu
 checks ignore the drop-in directory, which libpwquality reads, is an upstream gap recorded in ADR 0021.
+
+### Sudo
+
+`sudo` is disruptive, so it is applied and cleaned up only with `sudo` in `linux_compliance_remediate_allow_disruptive`.
+The checks of both pinned datastreams read `/etc/sudoers` and every file of `/etc/sudoers.d`, so every setting rule
+writes one drop-in on both platforms ([ADR 0022](adr/0022-native-sudo-drop-ins.md),
+`tests/unit/tools/test_content_golden_native.py` checks it against the OVAL of both datastreams).
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| `sudo_add_use_pty`, `sudo_custom_logfile`, `sudo_require_reauthentication`, `sudoers_validate_passwd` | `/etc/sudoers.d/50-freesecdev-<setting>` with a header that names the rule and `Defaults use_pty`, `Defaults logfile=<var_sudo_logfile>`, `Defaults timestamp_timeout=<var_sudo_timestamp_timeout>` (from the content's fix) or the three `Defaults !targetpw`, `!rootpw`, `!runaspw` lines; mode `0440`, owner and group root, written with `copy` and `validate: /usr/sbin/visudo -cf %s`. `/etc/sudoers` and other drop-ins are never written | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+| `file_permissions_etc_sudoers`, `file_owner_etc_sudoers`, `file_groupowner_etc_sudoers` | `/etc/sudoers` at most `0440` (a stricter mode is kept), uid 0, gid 0 | `recorded_value` of `method` (`attribute`), the prior `mode`, `owner` or `group` and `written`; cleanup restores the prior attribute when the current one is still `written` |
+| `directory_permissions_etc_sudoersd`, `directory_owner_etc_sudoersd`, `directory_groupowner_etc_sudoersd` | `/etc/sudoers.d` at most `0750`, uid 0, gid 0 | as above |
+
+The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `notapplicable` (apply) | `/etc/sudoers` does not exist (sudo is not installed), or the path of an attribute rule does not exist |
+| `not_regular_file`, `not_directory` | `/etc/sudoers`, the drop-in or the path of an attribute rule is a symbolic link or of the wrong type, or `/etc/sudoers.d` is missing or not a directory; nothing is written through a link |
+| `not_included` (apply) | `/etc/sudoers` has no `@includedir` or `#includedir` line for `/etc/sudoers.d`, so sudo would not read the drop-in |
+| `validator_missing` (apply) | `/usr/sbin/visudo` is not a regular file |
+| `invalid_sudoers` (apply) | `visudo` refused the drop-in; nothing is installed and the entry recorded for it is removed |
+| `conflicting_setting` (apply) | Another file of `/etc/sudoers` or `/etc/sudoers.d` sets one of the rule's options in another form, or `timestamp_timeout` more than once; the collection does not edit files it does not own |
+| `not_owned` | A file at the drop-in's path does not carry the collection's header |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The drop-in's content or the attribute is no longer what the collection wrote; an administrator's later change is never overwritten |
+| `invalid_record`, `target_absent` (cleanup) | The record is malformed, or the path of an attribute rule is gone |
+
+The family reads every file that the content's checks read, including names that sudo skips (a `.` or a trailing
+`~`) and symbolic links to regular files, which sudo follows, and joins lines continued with `\`. Conflicts are
+decided over all of them; `compliant` without a drop-in only over the files that sudo reads. A rule whose setting
+those files already hold exactly (the `Defaults use_pty` of the Ubuntu 24.04 `/etc/sudoers`) is `compliant` and
+writes nothing; a setting only in `hardening.conf` or `site~` never is. When the state already equals the recorded prior state at cleanup (the drop-in was
+removed by hand, the attribute already has its prior value), the rule is `restored`, its entry is removed and nothing
+is written (FREES-173). Kept `audit_only`, with the reasons in ADR 0022: the rules that remove other people's
+`!authenticate`, `NOPASSWD` or user specifications (`sudo_remove_no_authenticate`, `sudo_remove_nopasswd`,
+`sudo_require_authentication`, `sudo_restrict_privilege_elevation_to_authorized`, `sudoers_explicit_command_args`,
+`sudoers_no_command_negation`, `sudoers_no_root_target`), `sudo_add_noexec` and `sudo_add_requiretty` (they break
+`become` and so the run that would revert them), `sudo_dedicated_group` and `file_permissions_sudo` (they limit who may
+run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
+
+### Account defaults in login.defs
+
+`login_defs` is disruptive (umbrella `accounts`), so it is applied and cleaned up only with `login_defs` or `accounts`
+in `linux_compliance_remediate_allow_disruptive`. Every check of the pinned content reads the setting from
+`/etc/login.defs` alone on both platforms, so the family edits one line per setting there
+([ADR 0024](adr/0024-native-login-defs.md); `tests/unit/tools/test_content_golden_login_defs.py` pins each check's
+pattern, comparison and value against the OVAL of both datastreams). The tags `password_aging`, `umask` and
+`user_sessions` keep the toggles of the families that held these rules before, and the tag `login_defs` lets the topic
+toggle also switch off `set_password_hashing_algorithm_logindefs`, which stays in `pam`.
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| `accounts_maximum_age_login_defs` (`PASS_MAX_DAYS`, at most the value), `accounts_minimum_age_login_defs` (`PASS_MIN_DAYS`), `accounts_password_warn_age_login_defs` (`PASS_WARN_AGE`), `accounts_password_minlen_login_defs` (`PASS_MIN_LEN`), `accounts_logon_fail_delay` (`FAIL_DELAY`, each at least the value) | `<NAME> <value>` with the profile's value, written with `lineinfile` in place of the one line of the setting (found in any case), or appended when the setting is absent; a stricter value in the strict form is kept | `recorded_value` of `method` (`line`), `setting_line` (the prior line, or `null`), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup writes the prior line back in its place, or removes the line when the setting was absent |
+| `accounts_umask_etc_login_defs` (`UMASK`) | Three octal digits with every bit that the profile requires; the bits of the current value are kept (`UMASK 0077` becomes `077` under 027) | as above |
+| `accounts_have_homedir_login_defs` (`CREATE_HOME`) | `CREATE_HOME yes` | as above |
+
+The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `notapplicable` (apply) | `/etc/login.defs` does not exist (shadow-utils is not installed) |
+| `not_regular_file` | `/etc/login.defs` is a symbolic link or not a regular file; nothing is written through a link |
+| `not_directory` (apply) | `/etc/login.defs.d` exists but is a symbolic link or not a directory |
+| `overridden` (apply) | A drop-in `/etc/login.defs.d/*.defs`, which libeconf builds of shadow-utils read, sets the name |
+| `duplicate_setting` (apply) | The name is set on more than one line, in any case |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The setting is not exactly the line the collection wrote any more (changed or removed by hand), or the file's mode or ownership changed; an administrator's later change is never overwritten |
+| `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `/etc/login.defs` is gone |
+
+A line counts as compliant only in the form that both shadow-utils and the check read: the name in upper case, one
+value and no trailing comment (shadow-utils does not read `PASS_MAX_DAYS 30 # site` as a number). Commented lines are
+never touched. When the file already holds the recorded prior state at cleanup (an added line removed again by hand),
+the rule is `restored`, its entry is removed and nothing is written (FREES-173). Kept `audit_only`, with the reasons in
+ADR 0024: `set_password_hashing_algorithm_logindefs` (`pam`: its CIS value accepts two algorithms and must agree with
+the `pam_unix` hashing of the PAM stack), `no_shelllogin_for_systemaccounts` (it changes shells in `/etc/passwd`) and
+the rules of `password_aging` that change existing accounts in `/etc/shadow` (password hashes that cannot be recorded,
+no exact revert, and immediate expiry of existing passwords).
 
 ## Results
 
@@ -458,7 +543,11 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_generate_catalogue_tags.py` | The tag derivation against synthetic datastreams: rule patterns and groups, exclusions, the drift check for untagged families, unused entries and stale exclusions, the rendering into the catalogue and the reference, and every invalid source | `make test-coverage` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
 | `tests/playbooks/remediate-native-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS profile and `pwquality` allow-listed, every banner and password quality rule gets exactly one result, `changed` exactly when it is `applied`, and the banner and pwquality files are unchanged; a banner text with a getty escape, an operating system name, an empty text, the default text under the STIG profile and a content without catalogued values fail at the text check, and the short DoD notice passes it; a pwquality rule without a profile value fails before any change; every banner and pwquality file and helper refuses to run without the opt-in | `make test-remediate-check`, CI job `test` |
-| `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements, exports and the values that fixes substitute, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration, including `profile_value_source`. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), and every attribute rule restricts the path and the mode bits that the OVAL checks | `make test-content-golden`, CI job `test` |
+| `tests/playbooks/remediate-native-check.yml`, sudo | A sudo rule without a profile value fails before any sudoers file is read, and every sudo family file and helper refuses to run without the opt-in. The sudo rules are not run against localhost, because `/etc/sudoers` is readable only by root | `make test-remediate-check`, CI job `test-playbooks` |
+| `tests/unit/tools/test_content_golden_login_defs.py` | With the pinned content: every native login_defs rule reads only `/etc/login.defs` (and, for `CREATE_HOME`, `/etc/login.defs.d/*.defs`) with the pinned object pattern, its comparison is the operation of the check's state and its value the external variable of the check, on both platforms; and every selected rule whose check reads `/etc/login.defs` is native or one of the two documented `audit_only` rules | `make test-content-golden`, CI job `test` |
+| `tests/playbooks/remediate-login-defs-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS level 2, RHEL 9 STIG and RHEL 9 ANSSI enhanced profiles every login_defs rule gets exactly one result, `changed` exactly when it is `applied`, a reason for every refusal, and `/etc/login.defs` is unchanged; a rule without a profile value fails before login.defs is read; the family file and helpers refuse to run without the opt-in; a ledger entry of another method or without one, a written line of another setting, a prior line over two lines and a malformed mode are refused and kept | `make test-remediate-check`, CI job `test-playbooks` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
 `/var/lib/freesecdev/linux_compliance` already exists and is root-only it fails instead of reading it.

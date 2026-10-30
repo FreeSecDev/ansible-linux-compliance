@@ -851,6 +851,110 @@ native_rules:
       setting: ucredit
       main_file_benchmarks:
         - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+  - rule_id: xccdf_org.ssgproject.content_rule_sudo_add_use_pty
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: dropin
+      path: /etc/sudoers.d/50-freesecdev-use_pty
+      options:
+        - use_pty
+      lines:
+        - Defaults use_pty
+  - rule_id: xccdf_org.ssgproject.content_rule_sudo_custom_logfile
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_sudo_logfile
+    parameters:
+      method: dropin
+      path: /etc/sudoers.d/50-freesecdev-logfile
+      options:
+        - logfile
+      lines:
+        - Defaults logfile={value}
+      value_pattern: '^/[A-Za-z0-9_-][A-Za-z0-9._/-]{0,254}$'
+  - rule_id: xccdf_org.ssgproject.content_rule_sudo_require_reauthentication
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_sudo_timestamp_timeout
+    profile_value_source: fix
+    parameters:
+      method: dropin
+      path: /etc/sudoers.d/50-freesecdev-timestamp_timeout
+      options:
+        - timestamp_timeout
+      lines:
+        - Defaults timestamp_timeout={value}
+      value_pattern: '^[0-9]{1,4}$'
+      single: true
+  - rule_id: xccdf_org.ssgproject.content_rule_sudoers_validate_passwd
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: dropin
+      path: /etc/sudoers.d/50-freesecdev-validate_passwd
+      options:
+        - rootpw
+        - runaspw
+        - targetpw
+      lines:
+        - Defaults !targetpw
+        - Defaults !rootpw
+        - Defaults !runaspw
+  - rule_id: xccdf_org.ssgproject.content_rule_file_permissions_etc_sudoers
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: attribute
+      path: /etc/sudoers
+      type: file
+      attribute: mode
+      max_mode: "0440"
+  - rule_id: xccdf_org.ssgproject.content_rule_file_owner_etc_sudoers
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: attribute
+      path: /etc/sudoers
+      type: file
+      attribute: owner
+      id: 0
+  - rule_id: xccdf_org.ssgproject.content_rule_file_groupowner_etc_sudoers
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: attribute
+      path: /etc/sudoers
+      type: file
+      attribute: group
+      id: 0
+  - rule_id: xccdf_org.ssgproject.content_rule_directory_permissions_etc_sudoersd
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: attribute
+      path: /etc/sudoers.d
+      type: directory
+      attribute: mode
+      max_mode: "0750"
+  - rule_id: xccdf_org.ssgproject.content_rule_directory_owner_etc_sudoersd
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: attribute
+      path: /etc/sudoers.d
+      type: directory
+      attribute: owner
+      id: 0
+  - rule_id: xccdf_org.ssgproject.content_rule_directory_groupowner_etc_sudoersd
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: attribute
+      path: /etc/sudoers.d
+      type: directory
+      attribute: group
+      id: 0
 untagged_families:
   - family: auditd
     reason: >-

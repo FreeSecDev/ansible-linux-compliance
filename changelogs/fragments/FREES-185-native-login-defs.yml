@@ -1,0 +1,26 @@
+---
+minor_changes:
+  - >-
+    remediate - the new ``login_defs`` topic (umbrella ``accounts``, disruptive, toggle
+    ``linux_compliance_login_defs_enabled``) is native for seven rules: ``PASS_MAX_DAYS``, ``PASS_MIN_DAYS``,
+    ``PASS_WARN_AGE``, ``PASS_MIN_LEN``, ``UMASK``, ``FAIL_DELAY`` and ``CREATE_HOME`` in ``/etc/login.defs``, with
+    the selected profile's values. Each rule replaces the one line of its setting in place, or appends it, and records
+    the prior line; switching the rule or the topic off writes that line back or removes the added one, never
+    overwrites a later change (``modified_since_apply``) and only forgets the entry when the line is already as before.
+    A stricter value is kept, the umask keeps the bits it already has, and duplicate lines (``duplicate_setting``), a
+    drop-in in ``/etc/login.defs.d`` (``overridden``) and symbolic links refuse without a change.
+    ``set_password_hashing_algorithm_logindefs`` (``pam``), ``no_shelllogin_for_systemaccounts`` and the
+    existing-account rules of ``/etc/shadow`` stay ``audit_only`` (ADR 0024).
+breaking_changes:
+  - >-
+    catalogue - the seven login.defs rules move from the families ``password_aging``, ``umask`` and ``user_sessions``
+    to ``login_defs``; the ``family`` of these rules in the plan, the results and the report changes, and
+    ``linux_compliance_remediate_allow_disruptive`` allows them with ``login_defs`` or ``accounts``. The former
+    toggles keep switching them off through the subsystem tags ``password_aging``, ``umask`` and ``user_sessions``.
+    The tag ``login_defs`` also lets ``linux_compliance_login_defs_enabled: false`` and
+    ``linux_compliance_accounts_enabled: false`` switch off ``set_password_hashing_algorithm_logindefs``.
+trivial:
+  - >-
+    Molecule - a lifecycle pre-state may set ``lines`` of a declared file that the topic rewrites; the harness puts
+    the content back after the cycle. The ``login_defs`` lifecycle runs on Ubuntu 24.04 and Rocky Linux 9 from the
+    as-built and an administrator's ``login.defs``, with the regression groups ``changes`` and ``profiles``.

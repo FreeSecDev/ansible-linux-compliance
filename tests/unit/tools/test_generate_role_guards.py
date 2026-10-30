@@ -16,7 +16,7 @@ from tools.roles import generate_toggles, run_start
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 SENTINEL = "__linux_compliance_unset__"
 SECOND_SENTINEL = "__linux_compliance_unset_again__"
-NATIVE_FAMILIES = ("file_permissions", "banners", "pwquality", "login_defs")
+NATIVE_FAMILIES = ("file_permissions", "banners", "pwquality", "login_defs", "sudo")
 
 
 def copy_roles(root: Path) -> Path:

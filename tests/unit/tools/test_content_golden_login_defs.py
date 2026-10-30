@@ -1,4 +1,4 @@
-"""Golden tests of the native login_defs rules against the OVAL of the pinned datastreams (FREES-185).
+"""Golden tests of the native login_defs rules against the pinned OVAL (FREES-185).
 
 The family file ``roles/remediate/tasks/login_defs.yml`` writes one line per setting into
 ``/etc/login.defs`` and decides ``compliant`` by mirroring each check: the comparison of the
@@ -172,6 +172,24 @@ def login_defs_rules() -> dict[str, dict[str, object]]:
     }
 
 
+def assert_mirrors(rule_id: str, parameters: dict[str, object], check: Check) -> None:
+    setting = str(parameters["setting"])
+    main = {item for item in check.files if item[0] == LOGIN_DEFS}
+    assert main == {(LOGIN_DEFS, "", PATTERNS[setting])}, (rule_id, main)
+    others = {item[:2] for item in check.files} - {(LOGIN_DEFS, "")}
+    expected_others = {(DROPIN_DIRECTORY, r".*\.defs$")} if setting == "CREATE_HOME" else set()
+    assert others == expected_others, (rule_id, others)
+    comparison = str(parameters["comparison"])
+    if comparison == "equal":
+        assert check.operations == frozenset(), (rule_id, check.operations)
+        assert check.externals == frozenset()
+        assert "value_id" not in parameters
+        return
+    assert check.operations == {OPERATIONS[comparison]}, (rule_id, check.operations)
+    value_id = str(parameters["value_id"])
+    assert check.externals == {f"{VALUE_PREFIX}{value_id}:var:1"}, rule_id
+
+
 def test_every_native_login_defs_rule_mirrors_the_check_of_each_pinned_datastream() -> None:
     rules = login_defs_rules()
     assert {str(parameters["setting"]) for parameters in rules.values()} == set(PATTERNS)
@@ -185,23 +203,7 @@ def test_every_native_login_defs_rule_mirrors_the_check_of_each_pinned_datastrea
             short = toggles.rule_short_id(rule_id)
             check = reach(collector, f"oval:ssg-{short}:def:1")
             assert collector.rule_checks[rule_id] >= {f"oval:ssg-{short}:def:1"}
-            setting = str(parameters["setting"])
-            main = {item for item in check.files if item[0] == LOGIN_DEFS}
-            assert main == {(LOGIN_DEFS, "", PATTERNS[setting])}, (rule_id, benchmark, main)
-            others = {item[:2] for item in check.files} - {(LOGIN_DEFS, "")}
-            expected_others = (
-                {(DROPIN_DIRECTORY, r".*\.defs$")} if setting == "CREATE_HOME" else set()
-            )
-            assert others == expected_others, (rule_id, benchmark, others)
-            comparison = str(parameters["comparison"])
-            if comparison == "equal":
-                assert check.operations == frozenset(), (rule_id, check.operations)
-                assert check.externals == frozenset()
-                assert "value_id" not in parameters
-            else:
-                assert check.operations == {OPERATIONS[comparison]}, (rule_id, check.operations)
-                value_id = str(parameters["value_id"])
-                assert check.externals == {f"{VALUE_PREFIX}{value_id}:var:1"}, rule_id
+            assert_mirrors(rule_id, parameters, check)
             checked[benchmark] = checked.get(benchmark, 0) + 1
     assert checked == NATIVE_PER_BENCHMARK
 

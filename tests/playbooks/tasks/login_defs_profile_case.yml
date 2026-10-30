@@ -45,7 +45,8 @@
 
 - name: Login defaults case | Check that every rule was reported once, with a reason for a refusal, and nothing changed
   vars:
-    login_defs_results: "{{ linux_compliance_remediated.results | selectattr('family', 'equalto', 'login_defs') | list }}"
+    login_defs_results: >-
+      {{ linux_compliance_remediated.results | selectattr('family', 'equalto', 'login_defs') | list }}
   ansible.builtin.assert:
     that:
       - linux_compliance_remediated.check_mode is true

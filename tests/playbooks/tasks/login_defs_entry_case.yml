@@ -35,10 +35,17 @@
     __linux_compliance_remediate_ld_dropin_texts: {}
     __linux_compliance_remediate_ld_not_directory: false
 
-- name: Login defaults entry | Run the helper of the case
+- name: Login defaults entry | Run the apply helper
   ansible.builtin.include_role:
     name: freesecdev.linux_compliance.remediate
-    tasks_from: "{{ login_defs_entry_case.helper }}"
+    tasks_from: login_defs_apply.yml
+  when: login_defs_entry_case.helper == 'login_defs_apply.yml'
+
+- name: Login defaults entry | Run the cleanup helper
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: login_defs_cleanup.yml
+  when: login_defs_entry_case.helper == 'login_defs_cleanup.yml'
 
 - name: Login defaults entry | Check that the helper refused the entry and changed nothing
   ansible.builtin.assert:

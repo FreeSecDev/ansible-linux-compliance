@@ -54,3 +54,17 @@
   when: __linux_compliance_remediate_family.name == 'login_defs'
   tags:
     - always
+
+- name: Remediate | Dispatch the sudo family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/sudo.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'sudo'
+  tags:
+    - always
