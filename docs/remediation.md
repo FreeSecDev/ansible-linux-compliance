@@ -6,7 +6,8 @@ reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogu
 (cleanup per family). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendments of
 FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
-banners and password quality). How to make a further topic native is in the
+banners and password quality), [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109). How to
+make a further topic native is in the
 [native remediation guide](native-remediation-guide.md).
 
 Remediation changes managed hosts. It never runs ComplianceAsCode playbooks, Bash fixes or `oscap --remediate`; every
@@ -15,11 +16,11 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 
 ## Status
 
-The dispatcher, the safety model and three native families are implemented. The catalogue holds every rule that a
+The dispatcher, the safety model and four native families are implemented. The catalogue holds every rule that a
 pinned profile selects, 1203 rules in 55 families (FREES-53), generated from the digest-verified content and listed in
-the [control family reference](control-families.md). 30 rules have a native remediation: the reference rule
-`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners` and 14
-of `pwquality` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
+the [control family reference](control-families.md). 64 rules have a native remediation: the reference rule
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners`, 14
+of `pwquality` and 34 of `ssh` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
 switched off per rule and per topic, the audit excludes it and reports it as `disabled`, and remediation reports it as
 `not_implemented` and never changes anything for it. The native remediations land topic by topic on top of this
 catalogue, following the [native remediation guide](native-remediation-guide.md). Every native topic is exercised for
@@ -307,7 +308,9 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 ## Native families
 
-Besides the reference family, two topics are native ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md)).
+Besides the reference family, three topics are native
+([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md),
+[ADR 0023](adr/0023-native-ssh-server-configuration.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes.
@@ -373,6 +376,54 @@ nothing else is in it. Without `/etc/security/pwquality.conf` libpwquality is no
 `accounts_password_pam_retry` (its check reads the PAM arguments first and never the drop-ins) and
 `package_pam_pwquality_installed` (package state, and on Ubuntu the package changes the PAM stack). That the Ubuntu
 checks ignore the drop-in directory, which libpwquality reads, is an upstream gap recorded in ADR 0021.
+
+### SSH server
+
+`ssh` is disruptive, so it is applied and cleaned up only with `ssh` in `linux_compliance_remediate_allow_disruptive`
+([ADR 0023](adr/0023-native-ssh-server-configuration.md)). Both pinned contents check `/etc/ssh/sshd_config` and every
+`/etc/ssh/sshd_config.d/*.conf` and require every occurrence of the keyword to comply, and sshd uses the first value it
+reads, with the drop-ins read before the rest of the main file; `tests/unit/tools/test_content_golden_ssh.py` checks
+this against the OVAL of both datastreams.
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| `disable_host_auth`, `sshd_disable_compression`, `_empty_passwords`, `_forwarding`, `_gssapi_auth`, `_kerb_auth`, `_rhosts`, `_root_login`, `_root_password_login`, `_tcp_forwarding`, `_user_known_hosts`, `_x11_forwarding`, `sshd_do_not_permit_user_env`, `sshd_enable_pam`, `_pubkey_auth`, `_strictmodes`, `_warning_banner`, `_warning_banner_net`, `sshd_print_last_log`, `sshd_set_loglevel_info`, `_loglevel_verbose`, `sshd_x11_use_localhost`, `sshd_use_strong_ciphers` and the ordered STIG `Ciphers`, `KexAlgorithms` and `MACs` rules | `/etc/ssh/sshd_config.d/00-freesecdev-<rule>.conf`, mode `0600`, owner and group root, with a header that names the rule and the one line `<Keyword> <value>` that the check requires | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist), `dropin_sha256` and `written_line`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+| `sshd_set_idle_timeout`, `_keepalive`, `_login_grace_time`, `_max_auth_tries`, `_max_sessions`, `_maxstartups`, `sshd_use_strong_kex`, `_macs` | The same, with the profile's value (`sshd_idle_timeout_value`, `var_sshd_set_keepalive`, `var_sshd_set_login_grace_time`, `sshd_max_auth_tries_value`, `var_sshd_max_sessions`, `var_sshd_set_maxstartups`, `sshd_strong_kex`, `sshd_strong_macs`) | As above |
+
+Before anything is written, the module `freesecdev.linux_compliance.sshd_validate` runs
+`sshd -t -f /etc/ssh/sshd_config` with every setting to write as `-o <Keyword>=<value>`. sshd reads command-line
+options first and keeps the first value, so this tests the whole effective configuration as it will be; when sshd
+refuses it, every rule to write is `invalid_config` with sshd's message and nothing is installed. After a change, sshd
+is reloaded once, only when `service_facts` reports `ssh.service` or `sshd.service` running and a second `sshd -t`
+accepts the configuration; a reload keeps open sessions. Where no service manager runs, as in the Molecule containers,
+nothing is reloaded, and check mode never reloads.
+
+The statuses that refuse to act, with nothing changed and the ledger entry kept, each with a reason:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `overridden` (apply) | `sshd_config` sets the keyword before its `Include`, or a drop-in that sorts earlier sets it, includes other files or cannot be read |
+| `not_included` (apply) | `sshd_config` does not include `/etc/ssh/sshd_config.d/*.conf` before its first `Match` block |
+| `crypto_policy` (apply) | `Ciphers`, `MACs` or `KexAlgorithms` on RHEL 9, where the crypto policy governs them |
+| `invalid_config` (apply) | `sshd -t` refuses the configuration with the settings to write |
+| `method_changed` | The ledger entry was recorded by another method |
+| `not_directory` | `sshd_config.d` exists but is not a directory, for example a symbolic link |
+| `not_regular_file` | The drop-in path, or `sshd_config` itself, is a symbolic link or another non-regular file |
+| `not_owned` | A file at the drop-in path does not carry the collection's header |
+| `invalid_record` (cleanup) | The recorded SHA-256 is missing or malformed |
+| `modified_since_apply` (cleanup) | The drop-in's content is no longer what the collection wrote; an administrator's change is never removed |
+
+A drop-in that no longer exists at cleanup is the recorded prior state: the rule is `restored`, its entry dropped and
+nothing written (FREES-173). Where `sshd_config.d` does not exist, the first drop-in creates it with mode `0700` and the
+marker `.freesecdev-created`, removed with the directory once nothing else is in it. A later line that sets the same
+keyword in a file the collection does not own (Ubuntu's `X11Forwarding yes`, `GSSAPIAuthentication yes` in RHEL's
+`50-redhat.conf`) is ignored by sshd but read by the content's check; the result message names it, and that rule still
+fails the audit. The sshd `Banner` keyword is native; the banner files belong to `banners`. Kept `audit_only`, with
+the reasons in ADR 0023: the modes and ownership of the configuration, the drop-ins and the host keys,
+`sshd_limit_user_access` (site-specific user lists), `sshd_rekey_limit` (its check refuses every drop-in and it needs
+two values), `sshd_use_directory_configuration`, `sshd_include_crypto_policy`, `sshd_allow_only_protocol2` (OpenSSH 7.0
+or older only), `file_sshd_50_redhat_exists`, the package, service and firewall rules, the client rules and
+`ssh_keys_passphrase_protected`.
 
 ## Results
 
@@ -440,7 +491,7 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/roles/test_remediate_tasks.py` | Every task in `roles/remediate/tasks/*.yml`, including tasks in blocks, is tagged exactly `[always]`; the only exceptions are the three guard tasks of `main.yml`. Every include applies exactly `always` and loads a file below `{{ role_path }}/tasks/`. The completeness check asserts the `remediation_unaccounted` result of the plan and runs before the dispatch is marked complete | `make test-coverage` |
 | `tests/unit/tools/test_check_role_specs.py` | The guard tag is accepted only, and alone, on a top-level `assert`, `fail` or the `__linux_compliance_<role>_dispatched: false` `set_fact` of the role's `tasks/main.yml`. It is refused on other modules, a `set_fact` with other keys, includes, imports, blocks, conditions, loops, nested tasks, `apply`, other task files and another role's name | `make test-coverage` |
 | `tests/playbooks/remediate-check-mode.yml` | Against localhost, in check mode and without `become`. Nothing happens without the opt-in: the ledger read and the profile check are skipped. The reference rule is planned and the host is unchanged. Invalid toggles, allow-list entries, a profile mismatch and an empty profile fail. The `file_permissions` helpers, called with synthetic planned rules against `tests/playbooks/fixtures/remediate/` (a regular file and a symbolic link): the prior mode is recorded only without a ledger entry, a symbolic link or an absent target is never changed, invalid recorded modes (`abc`, `06440`, a trailing newline, no mode) and absent or non-regular targets keep the entry as `cleanup_incomplete`, and the family file and helpers refuse to run without the opt-in or for a rule the dispatcher did not plan. Every play refuses to run without `--check`. The target runs it twice, the second time with `--skip-tags file_permissions` | `make test-remediate-check`, CI job `test` |
-| `tests/playbooks/remediate-disruptive.yml` | The real remediate role in check mode against a copy of the collection in which `sshd_disable_root_login` is a native `ssh` rule (`tools/roles/promote_native_rule.py`). With the default toggles and allow-list the rule is `skip` with `disruptive_not_allowed`, one notice names it and no family is dispatched; with `ssh` on the allow-list it is planned for `apply` and the role fails closed at the completeness check because the copy has no `ssh` task file. Refuses to run without `--check` (FREES-153) | `make test-remediate-disruptive`, run by `make test-remediate-check`, CI job `test` |
+| `tests/playbooks/remediate-disruptive.yml` | The real remediate role in check mode against a copy of the collection in which `audit_rules_immutable` is a native `auditd` rule (`tools/roles/promote_native_rule.py`). With the default toggles and allow-list the rule is `skip` with `disruptive_not_allowed`, one notice names it and no family is dispatched; with `auditd` on the allow-list it is planned for `apply` and the role fails closed at the completeness check because the copy has no `auditd` task file. Refuses to run without `--check` (FREES-153) | `make test-remediate-disruptive`, run by `make test-remediate-check`, CI job `test` |
 | `tests/unit/plugins/module_utils/compliance/test_toggles.py`, `tests/unit/plugins/filter/test_audit_disabled_rules.py` | Toggle resolution: a rule toggle overriding its family in both directions, a family switched off, the controlling variable, non-boolean values (including an unresolved template string), unknown and reserved toggle names, and that `remediation_plan` and `audit_disabled_rules` agree on the disabled rules for the same toggles, also with the generated defaults templated in | `make test-coverage` |
 | `tests/unit/tools/test_generate_toggles.py` | The generated defaults, argument specifications and reference equal the files in the repository; drift is reported with a diff and nothing is written in `--check` mode; stale toggles are removed; a new rule gets its toggle; an invalid catalogue fails; the YAML renderer round-trips and refuses what it cannot render within 120 characters. 100% line and branch coverage | `make test-coverage`, `make lint-toggles` |
 | `tests/playbooks/remediate-check-mode.yml`, toggle plays | In check mode, with the generated defaults: a single rule switched off and a whole topic switched off are not applied, name the rule toggle or the topic toggle as `disabled_by`, and the audit role's `toggles.yml` resolves the same disabled rules; a rule switched back on inside a disabled topic is applied and disabled in neither role; the audit fails before any scan on `linux_compliance_audit_enabled`, a string toggle and a catalogued rule in `linux_compliance_audit_disabled_rules`, and keeps explicit entries for uncatalogued rules | `make test-remediate-check`, CI job `test` |
@@ -448,7 +499,7 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/playbooks/audit-toggles-oscap.yml` | The `discover` and `audit` roles, with `become` and a real `oscap`, on the pinned Ubuntu 24.04 `cis_level2_server` content with `linux_compliance_auditd_enabled: false` and `linux_compliance_rule_file_permissions_crontab_enabled: false`: every auditd rule of the catalogue that the profile selects comes back `disabled` and names the topic toggle, the crontab rule names its rule toggle, and the number of `disabled` findings equals the catalogue count plus one | `make test-oscap-integration`, CI job `oscap-integration` |
 | `tests/unit/tools/test_generate_catalogue.py` | The catalogue generator against synthetic datastreams: each rule gets exactly one family by topic group, rule prefix and fallback group; a rule below two topic groups, a rule that nothing decides, two datastreams that disagree, a group mapped twice, overlapping prefixes, unused mapping entries and a native rule outside every profile fail; the compact rendering expands back to the full entries; the repository mapping covers the required topics and its disruptive families are the pinned ones. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_content_golden.py` | With the fetched pinned content, the generated catalogue and `docs/control-families.md` equal the files in the repository and every rule of every pinned profile is catalogued; `make test-content-golden` also runs `generate_catalogue --check` | `make test-content-golden`, CI job `test` |
-| `tests/playbooks/remediate-check-mode.yml`, full-catalogue plays | With every catalogued rule in the profile: `linux_compliance_auditd_enabled: false` switches off every auditd rule in both roles with the topic toggle as `disabled_by` and no warning; with the opt-in and `ssh` allow-listed, every `audit_only` rule gets exactly one `not_implemented` result with `changed: false`, only the reference rule is dispatched, and one notice counts them | `make test-remediate-check`, CI job `test` |
+| `tests/playbooks/remediate-check-mode.yml`, full-catalogue plays | With every catalogued rule in the profile: `linux_compliance_auditd_enabled: false` switches off every auditd rule in both roles with the topic toggle as `disabled_by` and no warning; with the opt-in and `auditd` allow-listed, every `audit_only` rule gets exactly one `not_implemented` result with `changed: false`, only the reference rule is dispatched, and one notice counts them | `make test-remediate-check`, CI job `test` |
 | `tests/unit/plugins/module_utils/compliance/test_toggle_umbrellas.py`, `tests/unit/plugins/filter/test_remediation_plan_umbrellas.py` | Umbrella precedence: an umbrella toggle that is `false` switches off every family it groups and a family toggle cannot switch one back on, a family toggle narrows its umbrella, a rule toggle wins over both, `disabled_by` names the most general toggle that is off, a family that heads an umbrella (`pam`) switches off its own and its families' rules, an allow-listed umbrella allows every disruptive family it groups, invalid and nested umbrellas fail, and the empty-topic warning covers umbrellas | `make test-coverage`, CI job `test` |
 | `tests/unit/roles/test_topic_toggles.py` | On the real catalogue: every umbrella groups the subsystems it was split into, `auditd`, `ssh`, `sudo` and `pam` stay topics, every topic and umbrella toggle switches off exactly its rules and the rules tagged with its families in both filters, and for every toggle of the 21 families before the split (recorded in `tests/fixtures/catalog/legacy-families.yml`) its families hold exactly its former rules, it switches off exactly those plus the rules that tags add (pinned in the fixture and listed in the control family reference), keeps its disruptive flag and its allow-list entry, and is a declared default of both roles | `make test-coverage`, CI job `test` |
 | `tests/unit/tools/test_content_golden.py`, topic toggles | With the pinned content, every topic and umbrella toggle switches off exactly its rules and its tagged rules in each of the 25 pinned profiles and warns exactly when it excludes nothing, and each reviewed example follows its subsystem toggle in every profile that selects it while the audit watches on MAC policy do not | `make test-content-golden`, CI job `test` |
@@ -458,6 +509,9 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_generate_catalogue_tags.py` | The tag derivation against synthetic datastreams: rule patterns and groups, exclusions, the drift check for untagged families, unused entries and stale exclusions, the rendering into the catalogue and the reference, and every invalid source | `make test-coverage` |
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test` |
 | `tests/playbooks/remediate-native-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS profile and `pwquality` allow-listed, every banner and password quality rule gets exactly one result, `changed` exactly when it is `applied`, and the banner and pwquality files are unchanged; a banner text with a getty escape, an operating system name, an empty text, the default text under the STIG profile and a content without catalogued values fail at the text check, and the short DoD notice passes it; a pwquality rule without a profile value fails before any change; every banner and pwquality file and helper refuses to run without the opt-in | `make test-remediate-check`, CI job `test` |
+| `tests/unit/tools/test_content_golden_ssh.py` | With the pinned content: the check of every native ssh rule on both platforms reads `sshd_config` and the rule's own drop-in with `check="all"`, each fixed value satisfies the check's state and each profile value is exported by the check, no pinned profile selects two native ssh rules for one keyword, the crypto rules carry the RHEL 9 refusal, every drop-in sorts before the distributions' drop-ins, and `sshd_rekey_limit` refuses every drop-in | `make test-content-golden`, CI job `test` |
+| `tests/unit/plugins/modules/test_sshd_validate.py`, `test_process.py` | The `sshd_validate` module passes only the keywords of the native rules and one-word values as `-o` options of `sshd -t -f /etc/ssh/sshd_config`, reports a refusal with sshd's bounded message, a timeout and a missing executable, and changes nothing in check mode; the process policy refuses every other sshd command line. 100% line and branch coverage | `make test-coverage` |
+| `tests/playbooks/remediate-native-check.yml`, ssh plays | Against localhost in check mode with the Ubuntu 24.04 CIS rules of `ssh` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/ssh` is unchanged (as a user that cannot read a drop-in, the run must stop at the read); a rule without its profile value fails before any change; `ssh.yml` refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration. 100% line and branch coverage | `make test-coverage` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where

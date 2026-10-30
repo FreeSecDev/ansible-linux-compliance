@@ -32,8 +32,15 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "setting", "main_file_benchmarks"},
         {"path", "setting", "main_file_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
+    "ssh": [
+        {"path", "keyword", "value"},
+        {"path", "keyword", "value", "crypto_policy_benchmarks"},
+        {"path", "keyword"} | PROFILE_VALUE_PARAMETERS,
+        {"path", "keyword", "crypto_policy_benchmarks"} | PROFILE_VALUE_PARAMETERS,
+    ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality"]
+NATIVE_FAMILIES = ["file_permissions", "banners", "ssh", "pwquality"]
+DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality"]
 
 
 def load(path: Path) -> dict[str, object]:
@@ -285,7 +292,7 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
     result = plan()
     summary = cast("dict[str, int]", result["summary"])
     disruptive = [rule for rule in native() if rule["disruptive"] is True]
-    assert {str(rule["family"]) for rule in disruptive} == {"pwquality"}
+    assert {str(rule["family"]) for rule in disruptive} == set(DISRUPTIVE_NATIVE_FAMILIES)
     assert summary["apply"] == len(native()) - len(disruptive)
     assert summary["skip"] == len(disruptive)
     assert summary["not_implemented"] == len(rules()) - len(native())
@@ -293,7 +300,7 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
         "file_permissions",
         "banners",
     ]
-    allowed = plan(allow_disruptive=["pwquality"])
+    allowed = plan(allow_disruptive=DISRUPTIVE_NATIVE_FAMILIES)
     assert cast("dict[str, int]", allowed["summary"])["apply"] == len(native())
     results = cast("list[dict[str, object]]", result["not_implemented"])
     assert len(results) == summary["not_implemented"]
@@ -350,5 +357,7 @@ def test_only_families_with_native_rules_are_dispatched_and_have_task_files() ->
         family for family in catalogue.families if (ROLE / "tasks" / f"{family}.yml").is_file()
     ]
     assert families_with_files == generate_toggles.native_families(catalogue)
-    planned = cast("list[dict[str, object]]", plan(allow_disruptive=["pwquality"])["families"])
+    planned = cast(
+        "list[dict[str, object]]", plan(allow_disruptive=DISRUPTIVE_NATIVE_FAMILIES)["families"]
+    )
     assert [family["name"] for family in planned] == generate_toggles.native_families(catalogue)

@@ -15,7 +15,9 @@ a disruptive topic without a containment note, a declaration without an ``applie
 expectation, an expectation or a pre-state for an item that is not declared, an unknown
 attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
-status other than ``compliant`` or ``notapplicable``, or ``unselected_platforms`` that name
+status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
+``content`` is not a non-empty text or that also sets an owner or group, a pre-state ``applied``
+override that the top-level ``applied`` would refuse, or ``unselected_platforms`` that name
 every platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
 topic. The harness repeats the coverage check at run time and fails on a platform that skips
@@ -90,11 +92,16 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 }
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
-PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files", "unchanged"})
+PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
+    {"name", "audit", "files", "unchanged", "applied"}
+)
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
-UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable"})
+UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
 REWRITTEN_KEY: Final[str] = "rewritten"
-PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset({"path", "mode", "owner", "group"})
+PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset(
+    {"path", "mode", "owner", "group", "content"}
+)
+MAX_CONTENT: Final[int] = 4096
 UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
 CHANGES_KEY: Final[str] = "changes"
@@ -243,17 +250,25 @@ class Declaration:
 
     def applied(self, value: object) -> None:
         """Check the expectations after the topic is applied."""
-        applied = self.mapping(value, "applied")
+        if self.expectations(value, "applied") == 0:
+            self.error(
+                "applied declares no expectation; the state after apply is the evidence that the "
+                "remediation works when a container audit cannot show it"
+            )
+
+    def expectations(self, value: object, where: str) -> int:
+        """Check the expectations in ``value`` and return how many there are."""
+        applied = self.mapping(value, where)
         if applied is None:
-            return
-        self.keys(applied, frozenset(CATEGORY_KEYS), "applied")
+            return -1
+        self.keys(applied, frozenset(CATEGORY_KEYS), where)
         expectations = 0
         for category in CATEGORY_KEYS:
             if category not in applied:
                 continue
-            seen: set[str] = set()
-            for index, entry in enumerate(self.sequence(applied[category], f"applied.{category}")):
-                what = f"applied.{category}[{index}]"
+            seen: dict[str, set[str]] = {}
+            for index, entry in enumerate(self.sequence(applied[category], f"{where}.{category}")):
+                what = f"{where}.{category}[{index}]"
                 item = self.mapping(entry, what)
                 if item is None:
                     continue
@@ -264,15 +279,12 @@ class Declaration:
                     continue
                 if key not in self.items[category]:
                     self.error(f"{what} expects {key}, which state.{category} does not declare")
-                if key in seen:
-                    self.error(f"{what} expects {key} twice")
-                seen.add(key)
+                covered = set(_strings(item.get(PLATFORMS_KEY)) or self.platforms)
+                if seen.get(key, set()) & covered:
+                    self.error(f"{what} expects {key} twice for a platform")
+                seen.setdefault(key, set()).update(covered)
                 expectations += 1
-        if expectations == 0:
-            self.error(
-                "applied declares no expectation; the state after apply is the evidence that the "
-                "remediation works when a container audit cannot show it"
-            )
+        return expectations
 
     def unselected(self, value: object) -> None:
         """Check the platforms whose profile selects no native rule of the topic."""
@@ -325,7 +337,9 @@ class Declaration:
             key = self.key_value("files", item, where)
             if key is not None and key not in self.items["files"]:
                 self.error(f"{where} sets {key}, which state.files does not declare")
-            if len(set(item) & {"mode", "owner", "group"}) == 0:
+            if "content" in item:
+                self.pre_state_content(item, where)
+            elif len(set(item) & {"mode", "owner", "group"}) == 0:
                 self.error(f"{where} sets no mode, owner or group")
             mode = item.get("mode")
             if "mode" in item and (not isinstance(mode, str) or MODE.fullmatch(mode) is None):
@@ -335,6 +349,15 @@ class Declaration:
                     isinstance(item[owner], str) and NAME.fullmatch(str(item[owner]))
                 ):
                     self.error(f"{where} needs a valid {owner}")
+
+    def pre_state_content(self, item: dict[str, object], where: str) -> None:
+        """Check a file that the pre-state writes, as root, before a cycle and removes after it."""
+        content = item["content"]
+        if not _text(content) or len(str(content)) > MAX_CONTENT:
+            self.error(f"{where} needs a non-empty content of at most {MAX_CONTENT} characters")
+        for owner in ("owner", "group"):
+            if owner in item:
+                self.error(f"{where} writes its content as root and cannot set the {owner}")
 
     def pre_state_unchanged(self, value: object, what: str) -> None:
         """Check the rules that a pre-state already satisfies, so that they change nothing."""
@@ -354,7 +377,7 @@ class Declaration:
             else:
                 seen.add(rule)
             if item.get("status") not in UNCHANGED_STATUSES:
-                self.error(f"{where} needs the status compliant or notapplicable")
+                self.error(f"{where} needs the status compliant, notapplicable or overridden")
 
     def pre_states(self, value: object) -> None:
         """Check the states from which the harness runs the cycles."""
@@ -381,6 +404,8 @@ class Declaration:
                 self.pre_state_files(item["files"], what)
             if "unchanged" in item:
                 self.pre_state_unchanged(item["unchanged"], what)
+            if "applied" in item and self.expectations(item["applied"], f"{what}.applied") == 0:
+                self.error(f"{what}.applied declares no expectation; leave it out instead")
 
 
 def _identity(

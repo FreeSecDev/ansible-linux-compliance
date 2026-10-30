@@ -113,6 +113,13 @@
         - lifecycle_run_families | last == 'pwquality'
         - lifecycle_run_modes | last == 'rule'
 
+    - name: Run the ssh regressions for an invalid configuration, a change of method, a change by hand and the directory
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_ssh_regressions.yml
+      when:
+        - "'ssh' in lifecycle_run_families"
+        - "'topic' in lifecycle_run_modes"
+
     - name: Report the topics whose lifecycle was proven
       ansible.builtin.debug:
         msg: >-

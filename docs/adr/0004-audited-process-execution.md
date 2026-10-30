@@ -989,3 +989,19 @@ adds an exemption, and no lint limit was raised.
     `exceptions_apply.yml`, `evaluation.yml`, `defer.yml`) and the remediate family files can still be included
     directly with `tasks_from`, which skips the guard, the same residual as the remediate family files above: such a
     caller can do no more than call the modules itself.
+
+## Amendment 2026-10-30: the sshd configuration test (FREES-109)
+
+The `ssh` topic ([ADR 0023](0023-native-ssh-server-configuration.md)) must not install a configuration that sshd
+refuses, and the `validate` parameter of the file modules stays refused (FREES-159). The module
+`freesecdev.linux_compliance.sshd_validate` is the third caller of the helper, and the allow-list gains one policy:
+
+- `sshd`, resolved in the trusted directories like `oscap`, with the one command prefix
+  `-t -f /etc/ssh/sshd_config` (`SSHD_CONFIG_PATH`) and the one option `-o`. sshd's test mode reads the configuration,
+  every file it includes and the host keys, and exits; it never starts a daemon or binds a port. Every other command
+  line is refused: `-T`, `-D`, `-d`, `-h`, `-E`, `-C`, an `-o` joined to its value, a bare `-t`, and another
+  configuration file (`tests/unit/plugins/module_utils/compliance/test_process.py`).
+- The module passes only `-o <Keyword>=<value>` pairs whose keyword is one of the 28 keywords of the native ssh rules
+  (so not `Include`, `AuthorizedKeysCommand`, `HostKey` or `PidFile`) and whose value is one word of letters, digits
+  and `@.,:/_+-` that does not start with `-`; at most 30 pairs, a 30-second timeout and 64 KiB of output. A missing
+  executable is reported as `available: false`, never as an error of the run.

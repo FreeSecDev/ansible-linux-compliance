@@ -213,8 +213,10 @@ class TestCommandSpec:
 class TestPolicy:
     """Executable and option allow-list policy."""
 
-    def test_default_allow_list_is_only_oscap_and_the_scc_command_line(self) -> None:
-        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc"}
+    def test_default_allow_list_is_only_oscap_the_scc_command_line_and_sshd_test_mode(
+        self,
+    ) -> None:
+        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc", "sshd"}
         assert process.ALLOWED_EXECUTABLES["oscap"].fixed_path is None
         options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
         assert {
@@ -225,6 +227,41 @@ class TestPolicy:
             "--tailoring-file",
         } <= options
         assert not options & process.FORBIDDEN_OPTIONS
+
+    def test_sshd_runs_only_in_test_mode_on_the_main_configuration(self) -> None:
+        policy = process.ALLOWED_EXECUTABLES["sshd"]
+        assert policy.fixed_path is None
+        assert policy.allowed_options == frozenset({"-o"})
+        assert policy.command_prefixes == (("-t", "-f", "/etc/ssh/sshd_config"),)
+        assert policy.standalone_commands == ()
+        for arguments in (
+            ("-t", "-f", "/etc/ssh/sshd_config"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin=no"),
+        ):
+            spec = process.CommandSpec("sshd", arguments, 1)
+            assert process.check_policy(spec).name == "sshd"
+
+    @pytest.mark.parametrize(
+        "arguments",
+        [
+            (),
+            ("-t",),
+            ("-T", "-f", "/etc/ssh/sshd_config"),
+            ("-D",),
+            ("-t", "-f", "/srv/sshd_config"),
+            ("-f", "/etc/ssh/sshd_config", "-t"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-D"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-d"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-h", "/srv/key"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-E", "/srv/log"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-C", "user=root"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-oPermitRootLogin=yes"),
+        ],
+    )
+    def test_sshd_refuses_every_other_command_line(self, arguments: tuple[str, ...]) -> None:
+        spec = process.CommandSpec("sshd", arguments, 1)
+        with pytest.raises(process.ProcessPolicyError):
+            process.check_policy(spec)
 
     def test_default_trusted_directories_are_fixed(self) -> None:
         assert process.TRUSTED_DIRECTORIES == ("/usr/bin", "/usr/sbin", "/bin", "/sbin")

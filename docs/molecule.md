@@ -72,8 +72,8 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`) |
-| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`; Python 3.9 comes with the base image |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs) |
+| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one); Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
 distribution archive drops a pinned version, the image build fails and the pin must be updated by hand; no Renovate
@@ -372,7 +372,10 @@ way a profile that selects only them would, and restores the verified profile ri
 the next topic see it unchanged. A run that applies or cleans up a rule outside the topic fails. Without the narrowing,
 the cycles of one topic would apply every other native topic as well and its cleanup could not be compared exactly.
 
-A pre-state may declare rules `unchanged`: rules that it already satisfies (`compliant`, such as the mode of an
+A pre-state may add files with `content` (the harness writes them as root, mode `0600` unless the pre-state names a
+mode, before the cycle and removes them after it; they must be declared and absent before the topic), and may replace
+expectations of `applied` for the files whose state it changes, such as the absent drop-in of a rule that an earlier
+setting overrides. A pre-state may declare rules `unchanged`: rules that it already satisfies (`compliant`, such as the mode of an
 `/etc/issue` that is already `0644`) or that do not apply (`notapplicable`), optionally per platform. In the steps
 below such a rule must report exactly that status and `changed: false` in check mode, on apply and on the second
 apply, is not recorded in the ledger, is planned `none` when the topic is switched off and reports no cleanup. Every
@@ -380,7 +383,7 @@ other rule must be `applied` and changed, and at least one rule of a pre-state m
 
 For each topic, for the topic toggle and then the rule toggles, and for each declared pre-state:
 
-1. The pre-state is set (only file modes and ownership), the topic is switched on and the **declared state** is
+1. The pre-state is set (file modes and ownership, and the files it adds), the topic is switched on and the **declared state** is
    recorded: per file existence, type, mode, owner, group, uid, gid, inode, mtime, `lsattr` attributes, SHA-256 and
    link target (`stat` without following links); per package whether it is installed and its versions (`package_facts`); per service whether it exists, its
    state and its status (`service_facts`); per kernel parameter its value (`slurp` of `/proc/sys`); per user and group
@@ -472,6 +475,23 @@ with its state before the regressions.
 The regressions run when the run ends with `pwquality` in the rule mode: after every topic and mode in a full run,
 and in the `pwquality` rule leg in CI.
 
+The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states: the as-built
+configuration with real scans, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads before
+the collection's drop-ins and which sets `MaxAuthTries` first (that rule is `overridden`, its drop-in is expected
+absent and it is neither recorded nor cleaned up), and `60-site.conf`, which sshd reads after them and which sets
+`LoginGraceTime` and `ClientAliveInterval` (those rules are applied, and the cleanup leaves both site files alone).
+The two site files share one pre-state so that each leg runs two cycles. `shared/tasks/lifecycle_ssh_regressions.yml` runs after the topic when the run
+includes `ssh` in the topic mode, so in CI in the `ssh` `topic` leg, narrowed like a profile to
+`sshd_set_max_auth_tries` and `sshd_set_login_grace_time` so that each run stays short: a drop-in with a keyword that sshd does not know
+makes every rule `invalid_config` with nothing installed and nothing recorded; a ledger entry of another method makes
+the rule `method_changed` on apply and `cleanup_incomplete` (`method_changed`) on cleanup while the other rules apply
+and restore; a change by hand to a drop-in is kept as `modified_since_apply` with its entry, and the cleanup restores
+once the content is put back; a drop-in removed by hand is reported `restored` without a write and its entry dropped;
+and on Ubuntu, whose `sshd_config.d` is empty as built, a missing directory is created with mode `0700` and the
+marker, removed again by the cleanup, and a symbolic link in its place makes every rule `not_directory` with nothing
+written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
+only. The regressions end with the whole-instance comparison.
+
 ### CI legs
 
 With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
@@ -558,9 +578,9 @@ pre_states:
 | `disruptive` | yes | Must equal the flag of the family in the registry |
 | `containment` | for disruptive topics only | What the topic can break in the container and why the harness still reaches it; see below |
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
-| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
+| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files) and `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant` or that are `notapplicable`, optionally with `platforms`); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`) and `applied` (expectations that replace those of the declaration in this pre-state, by item); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
@@ -590,7 +610,7 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality` is the first disruptive family with native rules; the others (`ssh`, `pam`, `sssd`, `sudo`, `faillock`
+`pwquality` and `ssh` are the disruptive families with native rules; the others (`pam`, `sssd`, `sudo`, `faillock`
 and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the

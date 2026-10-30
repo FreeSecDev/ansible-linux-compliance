@@ -17,6 +17,7 @@ molecule_reference_family: file_permissions
 molecule_other_native_topics:
   - banners
   - pwquality
+  - ssh
 molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
 molecule_native_results: >-
   {{ linux_compliance_remediated.results | rejectattr('status', 'equalto', 'not_implemented') | list }}

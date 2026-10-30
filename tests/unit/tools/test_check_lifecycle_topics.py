@@ -414,7 +414,7 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
     }
     root = make_root(tmp_path, declarations, catalogue=REPOSITORY_ROOT / generate_toggles.CATALOGUE)
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "pwquality"]
+    assert native == ["file_permissions", "banners", "ssh", "pwquality"]
     assert errors == []
 
 
@@ -492,7 +492,7 @@ def test_a_rewritten_file_and_unchanged_rules_are_accepted(tmp_path: Path) -> No
                     }
                 ]
             ),
-            "pre_states[0].unchanged[0] needs the status compliant or notapplicable",
+            "pre_states[0].unchanged[0] needs the status compliant, notapplicable or overridden",
         ),
         (
             changed(
@@ -583,3 +583,84 @@ def test_the_module_runs_as_a_script(
         runpy.run_module("tools.roles.check_lifecycle_topics", run_name="__main__")
     assert exit_info.value.code == 0
     assert "file_permissions" in capsys.readouterr().out
+
+
+def test_pre_states_that_add_files_override_expectations_and_leave_rules_overridden(
+    tmp_path: Path,
+) -> None:
+    declaration = changed(
+        state={"files": [{"path": "/etc/crontab"}, {"path": "/etc/cron.d/site"}]},
+        applied={
+            "files": [
+                {"path": "/etc/crontab", "mode": "0600", "platforms": ["ubuntu"]},
+                {"path": "/etc/crontab", "mode": "0400", "platforms": ["rhel_compatible"]},
+            ]
+        },
+        pre_states=[
+            {
+                "name": "earlier setting",
+                "files": [{"path": "/etc/cron.d/site", "content": "x\n", "mode": "0644"}],
+                "unchanged": [{"rule": "file_permissions_crontab", "status": "overridden"}],
+                "applied": {"files": [{"path": "/etc/crontab", "mode": "0644"}]},
+            }
+        ],
+    )
+    assert errors_for(tmp_path, declaration) == []
+
+
+@pytest.mark.parametrize(
+    ("pre_state", "message"),
+    [
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": ""}]},
+            "pre_states[0].files[0] needs a non-empty content of at most 4096 characters",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": "x" * 4097}]},
+            "pre_states[0].files[0] needs a non-empty content of at most 4096 characters",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": 1}]},
+            "pre_states[0].files[0] needs a non-empty content of at most 4096 characters",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": "x", "owner": "root"}]},
+            "pre_states[0].files[0] writes its content as root and cannot set the owner",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": "x", "group": "root"}]},
+            "pre_states[0].files[0] writes its content as root and cannot set the group",
+        ),
+        (
+            {"name": "a", "applied": {"files": NO_ITEMS}},
+            "pre_states[0].applied declares no expectation; leave it out instead",
+        ),
+        ({"name": "a", "applied": []}, "pre_states[0].applied must be a mapping"),
+        (
+            {"name": "a", "applied": {"files": [{"path": "/etc/passwd", "mode": "0600"}]}},
+            "pre_states[0].applied.files[0] expects /etc/passwd, which state.files does not",
+        ),
+        (
+            {"name": "a", "applied": {"mounts": NO_ITEMS}},
+            "pre_states[0].applied has the unknown key 'mounts'",
+        ),
+    ],
+)
+def test_an_invalid_pre_state_file_or_override_is_reported(
+    tmp_path: Path, pre_state: dict[str, object], message: str
+) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[pre_state]))
+    assert any(message in error for error in errors), errors
+
+
+def test_an_item_expected_twice_for_one_platform_is_reported(tmp_path: Path) -> None:
+    declaration = changed(
+        applied={
+            "files": [
+                {"path": "/etc/crontab", "mode": "0600", "platforms": ["ubuntu"]},
+                {"path": "/etc/crontab", "mode": "0400"},
+            ]
+        }
+    )
+    errors = errors_for(tmp_path, declaration)
+    assert any("applied.files[1] expects /etc/crontab twice for a platform" in e for e in errors)

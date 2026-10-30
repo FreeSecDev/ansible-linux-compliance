@@ -1,0 +1,13 @@
+---
+minor_changes:
+  - >-
+    remediate - the ``ssh`` topic is native for 34 sshd keyword rules (FREES-109, ADR 0023). Each rule writes one
+    drop-in ``/etc/ssh/sshd_config.d/00-freesecdev-<rule>.conf`` that sshd reads before every other file, with the
+    value of the check or of the selected profile, and records its method, SHA-256 and line in the state ledger;
+    switching the rule or the topic off removes exactly that drop-in. Every change is validated first with
+    ``sshd -t`` on the whole effective configuration, an earlier setting is reported ``overridden``, ``Ciphers``,
+    ``MACs`` and ``KexAlgorithms`` are left to the crypto policy on RHEL 9, and sshd is reloaded only where it runs.
+    The topic is disruptive and needs ``ssh`` in ``linux_compliance_remediate_allow_disruptive``.
+  - >-
+    sshd_validate - new module that runs ``sshd -t -f /etc/ssh/sshd_config`` with ``-o`` settings through the
+    audited process helper, whose allow-list gains ``sshd`` in test mode only.

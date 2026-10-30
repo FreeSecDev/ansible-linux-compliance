@@ -1,0 +1,306 @@
+---
+family: ssh
+disruptive: true
+containment: >-
+  ssh writes one drop-in per rule below /etc/ssh/sshd_config.d, which sshd reads first, and validates every
+  change with sshd -t before it writes it. The harness never uses sshd: it connects with docker exec through the
+  Docker API as root, without sshd, PAM or a login shell, so PermitRootLogin, MaxAuthTries or a cipher list
+  cannot cut it off, and the guard's connection test after every remediate run proves that it still reaches the
+  same unprivileged container. No sshd runs in the containers (no service manager), so nothing is reloaded; the
+  images ship openssh-server with host keys so that sshd -t can test the configuration. The allow-list names ssh
+  only for the runs of this topic.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    The RHEL 9 datastream does not recognise Rocky Linux, so every rule is notapplicable there; on Ubuntu 24.04
+    the sshd rules have no platform restriction and must pass. The drop-ins with their checksums under applied
+    are the evidence on both platforms. Both pinned datastreams read /etc/ssh/sshd_config and every
+    /etc/ssh/sshd_config.d/*.conf and require every occurrence to comply
+    (tests/unit/tools/test_content_golden_ssh.py checks this against the OVAL of both datastreams).
+state:
+  files:
+    - path: /etc/ssh/sshd_config
+    - path: /etc/ssh/sshd_config.d
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/.freesecdev-created
+    - path: /etc/ssh/sshd_config.d/00-admin.conf
+    - path: /etc/ssh/sshd_config.d/60-site.conf
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-disable-host-auth.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-empty-passwords.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-rhosts.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-root-login.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-do-not-permit-user-env.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-pam.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-warning-banner-net.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-idle-timeout.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-keepalive.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-login-grace-time.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-info.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-verbose.conf
+      rewritten: true
+      platforms:
+        - rhel_compatible
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-sessions.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-maxstartups.conf
+      rewritten: true
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-ciphers.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-kex.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-macs.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+  packages:
+    - name: openssh-server
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-disable-host-auth.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 6ed8ab49414bd3f580e0e80626e977a33827ea6ac6095fbccf12f1f19ac7324c
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-empty-passwords.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 3dc6011b866e6f893a481ce4f3d0b9885d240e5e00cf1246aedd53d5ff941c4c
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-rhosts.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: f7095684b92e688ab86f33fc50e349c81e78a5e2fc844a524344cad1388dfc57
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-root-login.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: ce4892b8bd38aa121db3cbbe378e6c5c03206c09ce8fe3dafda347c9ad8949d9
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-do-not-permit-user-env.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: df55c40c9120d0d0d6104b1507113e44d2f65bc7faca1efb3b17eab504a4af17
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-pam.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: c7f179b9195a46cf078e40ce2e2ad5b75ea0b6c04fc77007a3e87485a6831aa1
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-warning-banner-net.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 20d6f74f0379cf40f4db10f2ec30b51ebcfb548c3b65b6c6623740b3b1208c91
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-idle-timeout.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 6757d7ed0eef8f10a72cd4d9c98a84ac4fa08b1287d374fb58bb7a4b3ae306a1
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-keepalive.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 29d2ae14b7d4712b9af3daee66b15ee43da1c266ab11aabb722b4656d6a682c7
+      platforms:
+        - rhel_compatible
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-keepalive.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: de027629671d423082738a9bc8467c7d849d5793b1fd5afbf09078f5eb3b2044
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-login-grace-time.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 3d5d96969a8d0ce47e36eb14b09c0fa74076ee40f0555d1fc56bd3212421e919
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-info.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: edd2cbd3f97b7dc4819e94da7672c577c31d7cb3a73d84641719d33822875e94
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-verbose.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 7ad3d2c11c27c650bdc68d721cbe236bee61eb7450c74ee64901b5e605a96d80
+      platforms:
+        - rhel_compatible
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 432f99594278a997b60a6cfbf6f8aa02d409e8dc8b74079a85789573f1064823
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-sessions.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: d31926cdd62656bd688b15d22ffd741f9bafcd5cfe679ebfb80f9d87adf36f57
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-maxstartups.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: b551240b751852d0d9fec05bbaf68eaaa95efff5e41ea9a0c181e53a9bc415cf
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-ciphers.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 544171ff2f5229560fe32ade9c032ac40643eb2207c007908d94b41c197a75b5
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-kex.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: ecf2f97e05e86f9700ac431c69c45a59ca2ac59a476d88617b87fda12057575b
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-macs.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 13a71079556bb29de9b4de85509f16bbfb5dc974e933f9b2b15138526eeea12c
+      platforms:
+        - ubuntu
+pre_states:
+  - name: as built
+    audit: true
+  - name: site drop-ins, one read before the collection's and one after
+    audit: false
+    files:
+      - path: /etc/ssh/sshd_config.d/00-admin.conf
+        content: |
+          MaxAuthTries 6
+      - path: /etc/ssh/sshd_config.d/60-site.conf
+        content: |
+          LoginGraceTime 120
+          ClientAliveInterval 900
+    unchanged:
+      - rule: sshd_set_max_auth_tries
+        status: overridden
+    applied:
+      files:
+        - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf
+          exists: false

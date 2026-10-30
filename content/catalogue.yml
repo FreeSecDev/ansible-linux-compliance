@@ -784,6 +784,260 @@ native_rules:
       setting: ucredit
       main_file_benchmarks:
         - xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+  - rule_id: xccdf_org.ssgproject.content_rule_disable_host_auth
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-disable-host-auth.conf
+      keyword: HostbasedAuthentication
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_compression
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-compression.conf
+      keyword: Compression
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-empty-passwords.conf
+      keyword: PermitEmptyPasswords
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_forwarding
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-forwarding.conf
+      keyword: DisableForwarding
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_gssapi_auth
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-gssapi-auth.conf
+      keyword: GSSAPIAuthentication
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_kerb_auth
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-kerb-auth.conf
+      keyword: KerberosAuthentication
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_rhosts
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-rhosts.conf
+      keyword: IgnoreRhosts
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-root-login.conf
+      keyword: PermitRootLogin
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_root_password_login
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-root-password-login.conf
+      keyword: PermitRootLogin
+      value: prohibit-password
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_tcp_forwarding
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-tcp-forwarding.conf
+      keyword: AllowTcpForwarding
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_user_known_hosts
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-user-known-hosts.conf
+      keyword: IgnoreUserKnownHosts
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-x11-forwarding.conf
+      keyword: X11Forwarding
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-do-not-permit-user-env.conf
+      keyword: PermitUserEnvironment
+      value: "no"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_enable_pam
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-pam.conf
+      keyword: UsePAM
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-pubkey-auth.conf
+      keyword: PubkeyAuthentication
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_enable_strictmodes
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-strictmodes.conf
+      keyword: StrictModes
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-warning-banner.conf
+      keyword: Banner
+      value: /etc/issue
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner_net
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-warning-banner-net.conf
+      keyword: Banner
+      value: /etc/issue.net
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_print_last_log
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-print-last-log.conf
+      keyword: PrintLastLog
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: sshd_idle_timeout_value
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-idle-timeout.conf
+      keyword: ClientAliveInterval
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_keepalive
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_sshd_set_keepalive
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-keepalive.conf
+      keyword: ClientAliveCountMax
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_login_grace_time
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_sshd_set_login_grace_time
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-login-grace-time.conf
+      keyword: LoginGraceTime
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_loglevel_info
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-info.conf
+      keyword: LogLevel
+      value: INFO
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_loglevel_verbose
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-verbose.conf
+      keyword: LogLevel
+      value: VERBOSE
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_max_auth_tries
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: sshd_max_auth_tries_value
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf
+      keyword: MaxAuthTries
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_max_sessions
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_sshd_max_sessions
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-sessions.conf
+      keyword: MaxSessions
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_set_maxstartups
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_sshd_set_maxstartups
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-maxstartups.conf
+      keyword: MaxStartups
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_use_approved_ciphers_ordered_stig
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-approved-ciphers-ordered-stig.conf
+      keyword: Ciphers
+      value: aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
+      crypto_policy_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_RHEL-9
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_use_approved_kex_ordered_stig
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-approved-kex-ordered-stig.conf
+      keyword: KexAlgorithms
+      value:
+        - ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,
+        - diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group14-sha256
+      crypto_policy_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_RHEL-9
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_use_approved_macs_ordered_stig
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-approved-macs-ordered-stig.conf
+      keyword: MACs
+      value: hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+      crypto_policy_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_RHEL-9
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_use_strong_ciphers
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-ciphers.conf
+      keyword: Ciphers
+      value:
+        - aes128-ctr,aes192-ctr,aes256-ctr,chacha20-poly1305@openssh.com,
+        - aes256-gcm@openssh.com,aes128-gcm@openssh.com
+      crypto_policy_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_RHEL-9
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_use_strong_kex
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: sshd_strong_kex
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-kex.conf
+      keyword: KexAlgorithms
+      crypto_policy_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_RHEL-9
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_use_strong_macs
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: sshd_strong_macs
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-macs.conf
+      keyword: MACs
+      crypto_policy_benchmarks:
+        - xccdf_org.ssgproject.content_benchmark_RHEL-9
+  - rule_id: xccdf_org.ssgproject.content_rule_sshd_x11_use_localhost
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-x11-use-localhost.conf
+      keyword: X11UseLocalhost
+      value: "yes"
 untagged_families:
   - family: auditd
     reason: >-

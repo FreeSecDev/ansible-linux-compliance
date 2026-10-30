@@ -14,6 +14,11 @@ consulted. Every argument that starts with ``-`` must be an option that the
 allow-list of that executable names, and remote resource fetching is always
 refused.
 
+The OpenSSH server is allow-listed only in its configuration test mode,
+``sshd -t -f /etc/ssh/sshd_config`` followed by ``-o keyword=value`` options
+(FREES-109): it reads the configuration and the host keys and exits, and never
+starts a daemon.
+
 An executable that does not live in a trusted directory, such as the SCAP
 Compliance Checker at ``/opt/scc/cscc`` (ADR 0019), is permitted only through a
 policy that names its one absolute path (``fixed_path``). That path is vetted
@@ -71,6 +76,7 @@ ROOT_UID: Final[int] = 0
 PATH_ARGUMENT: Final[str] = "<path>"
 FIXED_ENVIRONMENT_NAMES: Final[frozenset[str]] = frozenset({"TZ", "HOME"})
 SCC_EXECUTABLE_PATH: Final[str] = "/opt/scc/cscc"
+SSHD_CONFIG_PATH: Final[str] = "/etc/ssh/sshd_config"
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
 FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})
@@ -166,6 +172,11 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
             fixed_path=SCC_EXECUTABLE_PATH,
             argument_forms=(("-o", PATH_ARGUMENT, "-u", PATH_ARGUMENT, "-q", "-d"),),
             environment=(("TZ", "UTC0"),),
+        ),
+        "sshd": ExecutablePolicy(
+            "sshd",
+            frozenset({"-o"}),
+            command_prefixes=(("-t", "-f", SSHD_CONFIG_PATH),),
         ),
     }
 )
