@@ -1,0 +1,100 @@
+---
+family: sudo
+disruptive: true
+containment: >-
+  sudo only writes drop-ins below /etc/sudoers.d, each checked by visudo before it is moved into place, and restricts
+  the mode, owner and group of /etc/sudoers and /etc/sudoers.d; it never edits /etc/sudoers or another drop-in, so a
+  wrong setting can at most change how sudo prompts, logs or times out. The harness never uses sudo: it connects with
+  docker exec through the Docker API as root, without sshd, PAM, sudo or a login shell, so a sudo setting cannot cut it
+  off, and the guard's connection test after every remediate run proves that it still reaches the same unprivileged
+  container. The allow-list names sudo only for the runs of this topic.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    The RHEL 9 datastream's platform checks do not recognise Rocky Linux, so every rule of the profile is notapplicable
+    there; the drop-ins with their checksums, mode and ownership under applied are the evidence. On Ubuntu 24.04 the
+    rules apply to a container with sudo installed, and the audit after apply must report them pass or fixed.
+state:
+  files:
+    - path: /etc/sudoers
+    - path: /etc/sudoers.d
+      rewritten: true
+    - path: /etc/sudoers.d/50-freesecdev-use_pty
+      rewritten: true
+    - path: /etc/sudoers.d/50-freesecdev-logfile
+      rewritten: true
+    - path: /etc/sudoers.d/50-freesecdev-timestamp_timeout
+      rewritten: true
+  packages:
+    - name: sudo
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/sudoers.d/50-freesecdev-use_pty
+      exists: true
+      attributes: []
+      type: file
+      mode: "0440"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 8ed5673eef0d204978481611ac7667d317ee1b6674828a39316766e3097770a7
+      platforms:
+        - rhel_compatible
+    - path: /etc/sudoers.d/50-freesecdev-logfile
+      exists: true
+      attributes: []
+      type: file
+      mode: "0440"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: e109ef616b53be1301c38e9b83364c67b44127aeffb09853f7d39938fd372690
+    - path: /etc/sudoers.d/50-freesecdev-timestamp_timeout
+      exists: true
+      attributes: []
+      type: file
+      mode: "0440"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 4d8cf4e62d9cda189ff97ff1e280ef3984a6140dd2530cb7a24f50716588b671
+pre_states:
+  - name: as built
+    audit: true
+    unchanged:
+      - rule: sudo_add_use_pty
+        status: compliant
+        platforms:
+          - ubuntu
+  - name: customised mode
+    audit: false
+    files:
+      - path: /etc/sudoers
+        mode: "0400"
+    unchanged:
+      - rule: sudo_add_use_pty
+        status: compliant
+        platforms:
+          - ubuntu
+regressions:
+  - name: changes
+    files:
+      - lifecycle_sudo_regressions.yml
+      - lifecycle_sudo_refusals.yml
+  - name: profiles
+    files:
+      - lifecycle_sudo_other_profiles.yml
+  - name: files
+    platforms:
+      - ubuntu
+    files:
+      - lifecycle_sudo_states.yml
+      - lifecycle_sudo_effective.yml

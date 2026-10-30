@@ -1,0 +1,393 @@
+---
+- name: Sudo states | Refuse to run unless the sudo topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'sudo'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['sudo']
+    fail_msg: >-
+      The sudo refusal states reuse the facts of the sudo lifecycle, which must have just run; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Sudo states | Name the rules, paths and toggles of the states
+  ansible.builtin.set_fact:
+    states_label: sudo refusal states
+    states_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    states_logfile: xccdf_org.ssgproject.content_rule_sudo_custom_logfile
+    states_timestamp: xccdf_org.ssgproject.content_rule_sudo_require_reauthentication
+    states_mode_rule: xccdf_org.ssgproject.content_rule_file_permissions_etc_sudoers
+    states_mode_toggle: linux_compliance_rule_file_permissions_etc_sudoers_enabled
+    states_logfile_dropin: /etc/sudoers.d/50-freesecdev-logfile
+    states_timestamp_dropin: /etc/sudoers.d/50-freesecdev-timestamp_timeout
+    states_visudo_copy: /tmp/freesecdev-states-visudo
+    states_rule_ids: >-
+      {{ (lifecycle_rule_ids | list) + ['xccdf_org.ssgproject.content_rule_file_permissions_etc_sudoers'] }}
+    states_items: >-
+      {{ lifecycle_items | combine({'files': lifecycle_items.files + [{'path': '/usr/sbin/visudo'}]}) }}
+    states_rewritten: "{{ lifecycle_rewritten + ['/etc/sudoers', '/usr/sbin/visudo'] }}"
+
+- name: Sudo states | Read the main sudoers file and visudo, to put them back as they are
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/sudoers
+    - /usr/sbin/visudo
+  register: states_built
+
+- name: Sudo states | Read the content of the main sudoers file
+  ansible.builtin.slurp:
+    src: /etc/sudoers
+  register: states_sudoers
+
+- name: Sudo states | Take the state of the whole instance before the states
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+  vars:
+    lifecycle_items: "{{ states_items }}"
+    lifecycle_rewritten: "{{ states_rewritten }}"
+
+- name: Sudo states | Remember the state of the whole instance before the states
+  ansible.builtin.set_fact:
+    states_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Sudo states | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ states_toggles }}"
+
+- name: Sudo states | Change the main sudoers file and visudo, and put both back whatever happens
+  block:
+    - name: Sudo states | Remove the line that includes the drop-in directory from the main sudoers file
+      ansible.builtin.copy:
+        content: >-
+          {{ states_sudoers.content | b64decode
+             | regex_replace('(?m)^[@#]includedir[ \t]+/etc/sudoers\.d[ \t]*\n', '') }}
+        dest: /etc/sudoers
+        mode: "{{ states_built.results[0].stat.mode }}"
+        owner: root
+        group: root
+
+    - name: Sudo states | Apply the topic with a main sudoers file that does not read the drop-ins
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo states | Check that every rule refused, as sudo would not read the drop-in
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='status') | unique | list == ['not_included']
+          - lifecycle_results | selectattr('reason', 'none') | list == []
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ states_label }}, not included: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Sudo states | Put the main sudoers file back
+      ansible.builtin.copy:
+        content: "{{ states_sudoers.content | b64decode }}"
+        dest: /etc/sudoers
+        mode: "{{ states_built.results[0].stat.mode }}"
+        owner: root
+        group: root
+
+    - name: Sudo states | Keep visudo aside and remove it
+      ansible.builtin.copy:
+        src: /usr/sbin/visudo
+        dest: "{{ states_visudo_copy }}"
+        remote_src: true
+        mode: preserve
+
+    - name: Sudo states | Remove visudo
+      ansible.builtin.file:
+        path: /usr/sbin/visudo
+        state: absent
+
+    - name: Sudo states | Apply the topic without visudo
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo states | Check that every rule refused without a validator
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='status') | unique | list == ['validator_missing']
+          - lifecycle_results | selectattr('reason', 'none') | list == []
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ states_label }}, validator missing: {{ lifecycle_results }}"
+        quiet: true
+  always:
+    - name: Sudo states | Look for the copy of visudo
+      ansible.builtin.stat:
+        path: "{{ states_visudo_copy }}"
+        follow: false
+      register: states_visudo_kept
+
+    - name: Sudo states | Put visudo back when it was kept aside
+      ansible.builtin.copy:
+        src: "{{ states_visudo_copy }}"
+        dest: /usr/sbin/visudo
+        remote_src: true
+        mode: preserve
+      when: states_visudo_kept.stat.exists
+
+    - name: Sudo states | Put the main sudoers file back
+      ansible.builtin.copy:
+        content: "{{ states_sudoers.content | b64decode }}"
+        dest: /etc/sudoers
+        mode: "{{ states_built.results[0].stat.mode }}"
+        owner: root
+        group: root
+
+    - name: Sudo states | Remove the copy of visudo
+      ansible.builtin.file:
+        path: "{{ states_visudo_copy }}"
+        state: absent
+
+- name: Sudo states | Check that visudo is back as it was
+  ansible.builtin.stat:
+    path: /usr/sbin/visudo
+    follow: false
+    get_checksum: true
+  register: states_visudo_after
+
+- name: Sudo states | Assert that visudo is back with its mode
+  ansible.builtin.assert:
+    that:
+      - states_visudo_after.stat.isreg
+      - states_visudo_after.stat.mode == states_built.results[1].stat.mode
+    quiet: true
+
+- name: Sudo states | Occupy two drop-in paths, one by a file without the header and one by a symbolic link
+  block:
+    - name: Sudo states | Put a file of the administrator at the logfile drop-in path
+      ansible.builtin.copy:
+        content: "Defaults logfile=/var/log/sudo.log\n"
+        dest: "{{ states_logfile_dropin }}"
+        mode: "0440"
+        owner: root
+        group: root
+
+    - name: Sudo states | Put a symbolic link at the timestamp_timeout drop-in path
+      ansible.builtin.file:
+        path: "{{ states_timestamp_dropin }}"
+        src: /dev/null
+        state: link
+
+    - name: Sudo states | Apply the topic over the occupied paths
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo states | Check that the file without the header and the link were refused and left alone
+      vars:
+        states_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
+      ansible.builtin.assert:
+        that:
+          - states_statuses[states_logfile] == 'not_owned'
+          - states_statuses[states_timestamp] == 'not_regular_file'
+          - >-
+            lifecycle_results | selectattr('rule_id', 'in', [states_logfile, states_timestamp])
+            | selectattr('reason', 'none') | list == []
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ states_label }}, occupied paths: {{ lifecycle_results }}"
+        quiet: true
+  always:
+    - name: Sudo states | Remove the file and the link of the administrator
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ states_logfile_dropin }}"
+        - "{{ states_timestamp_dropin }}"
+
+- name: Sudo states | Apply the topic, so the ledger records both drop-ins
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: sudo
+
+- name: Sudo states | Read the ledger and the logfile drop-in after the apply
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: states_ledger_applied
+
+- name: Sudo states | Read the logfile drop-in that the collection wrote
+  ansible.builtin.slurp:
+    src: "{{ states_logfile_dropin }}"
+  register: states_logfile_written
+
+- name: Sudo states | Name the timestamp_timeout entry
+  ansible.builtin.set_fact:
+    states_timestamp_entry: >-
+      {{ states_ledger_applied.entries | selectattr('rule_id', 'equalto', states_timestamp) | first }}
+
+- name: Sudo states | Remove the header from the logfile drop-in and break the recorded checksum of the other
+  block:
+    - name: Sudo states | Rewrite the logfile drop-in without the header of the collection
+      ansible.builtin.copy:
+        content: "Defaults logfile=/var/log/sudo.log\n"
+        dest: "{{ states_logfile_dropin }}"
+        mode: "0440"
+        owner: root
+        group: root
+
+    - name: Sudo states | Record a malformed checksum for the timestamp_timeout drop-in
+      freesecdev.linux_compliance.control_state:
+        action: record
+        rule_id: "{{ states_timestamp }}"
+        family: sudo
+        revert_strategy: recorded_value
+        prior_values: >-
+          {{ states_timestamp_entry.prior_values | items2dict(key_name='name', value_name='value')
+             | combine({'dropin_sha256': 'not-a-checksum'}) | dict2items(key_name='name', value_name='value') }}
+        collection_version: "{{ states_timestamp_entry.collection_version }}"
+        replace: true
+
+    - name: Sudo states | Switch every rule of the topic off
+      ansible.builtin.set_fact:
+        "{{ item }}": false
+      loop: "{{ states_toggles }}"
+
+    - name: Sudo states | Clean up the topic with the header missing and a malformed record
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo states | Check that both cleanups refused, kept their entries and changed nothing
+      vars:
+        states_reasons: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='reason') }}"
+      ansible.builtin.assert:
+        that:
+          - states_reasons[states_logfile] == 'not_owned'
+          - states_reasons[states_timestamp] == 'invalid_record'
+          - lifecycle_results | map(attribute='status') | unique | list == ['cleanup_incomplete']
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ states_label }}, refused cleanups: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Sudo states | Move the main sudoers file away for a moment
+      ansible.builtin.file:
+        path: /etc/sudoers
+        state: absent
+
+    - name: Sudo states | Record an attribute entry for /etc/sudoers, as if the rule had restricted the mode
+      freesecdev.linux_compliance.control_state:
+        action: record
+        rule_id: "{{ states_mode_rule }}"
+        family: sudo
+        revert_strategy: recorded_value
+        prior_values:
+          - name: method
+            value: attribute
+          - name: mode
+            value: "0640"
+          - name: written
+            value: "0440"
+        collection_version: "{{ states_timestamp_entry.collection_version }}"
+
+    - name: Sudo states | Switch the mode rule off
+      ansible.builtin.set_fact:
+        "{{ states_mode_toggle }}": false
+
+    - name: Sudo states | Clean up the mode rule while /etc/sudoers is gone
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+        lifecycle_rule_ids: "{{ states_rule_ids }}"
+
+    - name: Sudo states | Check that the attribute cleanup kept its entry because the file is gone
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_results | selectattr('rule_id', 'equalto', states_mode_rule) | map(attribute='reason') | list
+            == ['target_absent']
+          - lifecycle_results | map(attribute='status') | unique | list == ['cleanup_incomplete']
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ states_label }}, target absent: {{ lifecycle_results }}"
+        quiet: true
+  always:
+    - name: Sudo states | Put the main sudoers file back
+      ansible.builtin.copy:
+        content: "{{ states_sudoers.content | b64decode }}"
+        dest: /etc/sudoers
+        mode: "{{ states_built.results[0].stat.mode }}"
+        owner: root
+        group: root
+
+    - name: Sudo states | Forget the attribute entry that the states recorded
+      freesecdev.linux_compliance.control_state:
+        action: remove
+        rule_id: "{{ states_mode_rule }}"
+
+    - name: Sudo states | Give the timestamp_timeout entry back its checksum
+      freesecdev.linux_compliance.control_state:
+        action: record
+        rule_id: "{{ states_timestamp }}"
+        family: sudo
+        revert_strategy: recorded_value
+        prior_values: >-
+          {{ states_timestamp_entry.prior_values | items2dict(key_name='name', value_name='value')
+             | dict2items(key_name='name', value_name='value') }}
+        collection_version: "{{ states_timestamp_entry.collection_version }}"
+        replace: true
+
+    - name: Sudo states | Put back the logfile drop-in that the collection wrote
+      ansible.builtin.copy:
+        content: "{{ states_logfile_written.content | b64decode }}"
+        dest: "{{ states_logfile_dropin }}"
+        mode: "0440"
+        owner: root
+        group: root
+
+- name: Sudo states | Clean up the topic now that both drop-ins are what the collection wrote
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: sudo
+
+- name: Sudo states | Check that both drop-ins were removed
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | sort == [states_logfile, states_timestamp] | sort
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+    fail_msg: "{{ states_label }}, final cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Sudo states | Read the ledger after the states
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: states_ledger_after
+
+- name: Sudo states | Check that the ledger records no sudo rule any more
+  ansible.builtin.assert:
+    that:
+      - states_ledger_after.entries | selectattr('family', 'equalto', 'sudo') | list == []
+    fail_msg: "{{ states_label }}: the ledger still holds {{ states_ledger_after.entries }}"
+    quiet: true
+
+- name: Sudo states | Assert that the whole instance is back to its state before the states
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: sudo refusal states
+    lifecycle_broad_step: the refusal states
+    lifecycle_broad_reference: "{{ states_broad_before }}"
+    lifecycle_items: "{{ states_items }}"
+    lifecycle_rewritten: "{{ states_rewritten }}"
+
+- name: Sudo states | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_sudo_states.yml'] }}"

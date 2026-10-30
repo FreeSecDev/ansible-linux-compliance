@@ -85,12 +85,40 @@ def make_root(
         target = root / lifecycle.MOLECULE / config.parent.name / config.name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(config, target)
+    write_dispatch(root, [])
     topics = root / lifecycle.TOPICS
     topics.mkdir(parents=True)
     for family, content in declarations.items():
         text = content if isinstance(content, str) else "---\n" + yaml.safe_dump(content)
         (topics / f"{family}.yml").write_text(text, encoding="utf-8")
     return root
+
+
+def record_task(file: str) -> str:
+    value = "{{ lifecycle_regression_files_run + ['" + file + "'] }}"
+    return (
+        "- name: Record that this regression file ran to its end\n"
+        "  ansible.builtin.set_fact:\n"
+        f'    lifecycle_regression_files_run: "{value}"\n'
+    )
+
+
+def include_task(file: str, when: str | None = None, extra: str = "") -> str:
+    condition = f"'{file}' in lifecycle_regression.files" if when is None else when
+    return (
+        f"- name: Run {file}\n  ansible.builtin.include_tasks:\n    file: {file}\n"
+        f'  when: "{condition}"\n{extra}'
+    )
+
+
+def write_dispatch(root: Path, files: list[str], *, text: str | None = None) -> None:
+    """Write a dispatch that includes ``files`` and a regression task file for each of them."""
+    dispatch = root / lifecycle.REGRESSION_DISPATCH
+    dispatch.parent.mkdir(parents=True, exist_ok=True)
+    body = "".join(include_task(file) for file in files) if text is None else text
+    dispatch.write_text("---\n" + (body or "[]\n"), encoding="utf-8")
+    for file in files:
+        (dispatch.parent / file).write_text("---\n" + record_task(file), encoding="utf-8")
 
 
 def changed(**updates: object) -> dict[str, object]:
@@ -417,8 +445,13 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         for path in sorted(topics.glob("*.yml"))
     }
     root = make_root(tmp_path, declarations, catalogue=REPOSITORY_ROOT / generate_toggles.CATALOGUE)
+    shutil.copytree(
+        REPOSITORY_ROOT / lifecycle.REGRESSION_DISPATCH.parent,
+        root / lifecycle.REGRESSION_DISPATCH.parent,
+        dirs_exist_ok=True,
+    )
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "ssh", "pwquality"]
+    assert native == ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
     assert errors == []
 
 
@@ -885,3 +918,182 @@ def test_an_invalid_modes_value_is_reported(tmp_path: Path, modes: object) -> No
     errors = errors_for(tmp_path, changed(pre_states=[{"name": "a", "modes": modes}]))
     message = "pre_states[0].modes must be a non-empty list of distinct toggle modes: topic, rule"
     assert any(message in error for error in errors), errors
+
+
+GROUP = {"name": "changes", "files": ["lifecycle_sudo_regressions.yml"]}
+FILES = ["lifecycle_sudo_regressions.yml", "lifecycle_sudo_states.yml"]
+
+
+def grouped_root(tmp_path: Path, groups: object, files: list[str] | None = None) -> Path:
+    root = make_root(tmp_path, {"file_permissions": changed(regressions=groups)})
+    write_dispatch(root, FILES if files is None else files)
+    return root
+
+
+def test_regression_groups_are_planned_on_the_platforms_whose_docker_scenario_runs_them(
+    tmp_path: Path,
+) -> None:
+    states = {"name": "states", "files": ["lifecycle_sudo_states.yml"], "platforms": ["ubuntu"]}
+    root = grouped_root(tmp_path, [GROUP, states])
+    assert lifecycle.check(root)[1] == []
+    assert lifecycle.regression_platforms(root)["file_permissions"] == {
+        "changes": frozenset({"ubuntu"}),
+        "states": frozenset({"ubuntu"}),
+    }
+
+
+def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() -> None:
+    found = lifecycle.regression_platforms(REPOSITORY_ROOT)
+    assert found["pwquality"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert found["sudo"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "files": frozenset({"ubuntu"}),
+        "profiles": frozenset({"ubuntu", "rhel_compatible"}),
+    }
+    assert found["ssh"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "vendor": frozenset({"ubuntu", "rhel_compatible"}),
+    }
+    assert found["file_permissions"] == {}
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 9
+
+
+@pytest.mark.parametrize(
+    ("groups", "message"),
+    [
+        (NO_ITEMS, "regressions must not be empty"),
+        ({"name": "x"}, "regressions must be a list"),
+        (["changes"], "regressions[0] must be a mapping"),
+        ([{**GROUP, "extra": 1}], "regressions[0] has the unknown key 'extra'"),
+        ([{**GROUP, "name": "Bad-Name"}], "regressions[0] needs a name of lower-case"),
+        ([GROUP, GROUP], "regressions[1] repeats the name 'changes'"),
+        ([{"name": "changes"}], "regressions[0] needs a non-empty list of files"),
+        (
+            [{**GROUP, "files": ["../escape.yml"]}],
+            "regressions[0] names the file '../escape.yml', not a lifecycle task file",
+        ),
+        (
+            [{**GROUP, "files": ["lifecycle_unknown.yml"]}],
+            "regressions[0] names lifecycle_unknown.yml, which",
+        ),
+        ([{**GROUP, "platforms": ["solaris"]}], "regressions[0] names the unknown platform"),
+        (
+            [{**GROUP, "platforms": ["rhel_compatible"]}],
+            "regressions changes runs on no platform with a docker lifecycle scenario",
+        ),
+    ],
+)
+def test_an_invalid_regression_group_is_reported(
+    tmp_path: Path, groups: object, message: str
+) -> None:
+    root = grouped_root(tmp_path, groups)
+    found = lifecycle.check(root)[1]
+    assert any(message in error for error in found), found
+
+
+def test_a_dispatched_file_that_no_group_names_is_reported(tmp_path: Path) -> None:
+    root = grouped_root(tmp_path, [GROUP])
+    expected = (
+        f"{lifecycle.REGRESSION_DISPATCH}: lifecycle_sudo_states.yml is included, "
+        "but no regression group of a topic names it"
+    )
+    assert lifecycle.check(root)[1] == [expected]
+
+
+def test_without_any_group_every_dispatched_file_is_an_orphan(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": VALID})
+    write_dispatch(root, FILES)
+    assert len(lifecycle.check(root)[1]) == len(FILES)
+
+
+RECORDED = "lifecycle_sudo_regressions.yml"
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("{}\n", "must be a list of tasks"),
+        ("- just text\n", "every task must be a mapping"),
+        (
+            include_task(RECORDED, extra="  tags:\n    - never\n"),
+            "an include must have exactly the keys",
+        ),
+        (
+            f"- name: x\n  ansible.builtin.include_tasks:\n    file: {RECORDED}\n",
+            "an include must have exactly the keys",
+        ),
+        (include_task(RECORDED, when="false"), f"the include of {RECORDED} must run when"),
+        (
+            include_task(
+                RECORDED, when="'lifecycle_sudo_regression.yml' in lifecycle_regression.files"
+            ),
+            f"the include of {RECORDED} must run when",
+        ),
+        (
+            include_task(RECORDED, when=f"'{RECORDED}' in lifecycle_regression.files and true"),
+            f"the include of {RECORDED} must run when",
+        ),
+        (
+            '- name: x\n  ansible.builtin.include_tasks:\n    file: "{{ x }}"\n  when: "x"\n',
+            "every include must name one literal file",
+        ),
+        (
+            f'- name: x\n  ansible.builtin.include_tasks: {RECORDED}\n  when: "x"\n',
+            "every include must name one literal file",
+        ),
+        (
+            (
+                "- name: x\n  ansible.builtin.include_tasks:\n"
+                f"    file: {RECORDED}\n    apply: {{}}\n"
+                '  when: "x"\n'
+            ),
+            "every include must name one literal file",
+        ),
+    ],
+)
+def test_an_invalid_regression_dispatch_stops_the_check(
+    tmp_path: Path, text: str, message: str
+) -> None:
+    root = make_root(tmp_path, {"file_permissions": changed(regressions=[GROUP])})
+    write_dispatch(root, [RECORDED])
+    (root / lifecycle.REGRESSION_DISPATCH).write_text("---\n" + text, encoding="utf-8")
+    with pytest.raises(lifecycle.GenerationError, match=message):
+        lifecycle.check(root)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "[]\n",
+        "- name: x\n  ansible.builtin.debug:\n    msg: x\n",
+        record_task("lifecycle_other.yml"),
+        record_task(RECORDED).replace(
+            "  ansible.builtin.set_fact:", "  when: false\n  ansible.builtin.set_fact:"
+        ),
+    ],
+)
+def test_a_dispatched_file_must_end_by_recording_that_it_ran(tmp_path: Path, content: str) -> None:
+    root = make_root(tmp_path, {"file_permissions": changed(regressions=[GROUP])})
+    write_dispatch(root, [RECORDED])
+    (root / lifecycle.REGRESSION_DISPATCH.parent / RECORDED).write_text(
+        "---\n" + content, encoding="utf-8"
+    )
+    with pytest.raises(lifecycle.GenerationError, match="must end with a set_fact that adds"):
+        lifecycle.check(root)
+
+
+def test_the_dispatch_accepts_other_tasks_than_includes(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": VALID})
+    write_dispatch(root, [RECORDED])
+    dispatch = root / lifecycle.REGRESSION_DISPATCH
+    dispatch.write_text(
+        dispatch.read_text(encoding="utf-8") + "- name: y\n  ansible.builtin.set_fact:\n    z: 1\n",
+        encoding="utf-8",
+    )
+    assert lifecycle.dispatched_regressions(root) == frozenset({RECORDED})
+
+
+def test_regression_platforms_fail_on_an_invalid_declaration(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": changed(regressions=NO_ITEMS)})
+    with pytest.raises(lifecycle.GenerationError, match="regressions must not be empty"):
+        lifecycle.regression_platforms(root)

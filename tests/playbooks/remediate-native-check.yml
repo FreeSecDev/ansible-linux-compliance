@@ -416,6 +416,50 @@
                 is search('generated from the pinned content')
             quiet: true
 
+- name: Native families in check mode | A sudo rule without a profile value fails before anything is read or changed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - sudo
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+      content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_sudo_require_reauthentication
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role and expect the value check to stop it
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because a sudo rule without its profile value was not refused
+          ansible.builtin.fail:
+            msg: REMEDIATE-NATIVE-SUDO-PROFILE-VALUE-NOT-REFUSED
+      rescue:
+        - name: Check that the role stopped at the sudo value check, before it read a sudoers file
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Sudo | Refuse an unwritable rule or a missing profile value before any change'
+              - >-
+                ansible_failed_result.results | map(attribute='msg') | join(' ')
+                is search('generated from the pinned content')
+            quiet: true
+
 - name: Native families in check mode | The family files and helpers refuse direct use
   hosts: localhost
   connection: local

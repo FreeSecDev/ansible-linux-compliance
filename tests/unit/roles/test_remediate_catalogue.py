@@ -38,9 +38,17 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "keyword"} | PROFILE_VALUE_PARAMETERS,
         {"path", "keyword", "crypto_policy_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
+    "sudo": [
+        {"method", "path", "options", "lines"},
+        {"method", "path", "options", "lines", "value_pattern"} | PROFILE_VALUE_PARAMETERS,
+        {"method", "path", "options", "lines", "value_pattern", "single"}
+        | PROFILE_VALUE_PARAMETERS,
+        {"method", "path", "type", "attribute", "max_mode"},
+        {"method", "path", "type", "attribute", "id"},
+    ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "ssh", "pwquality"]
-DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality"]
+NATIVE_FAMILIES = ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
+DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality", "sudo"]
 
 
 def load(path: Path) -> dict[str, object]:
@@ -213,6 +221,40 @@ def test_native_file_permission_rules_have_an_absolute_path_and_an_octal_maximum
         assert ".." not in parameters["path"]
         maximum = parameters["max_mode"]
         assert restricted_mode.restricted_mode(maximum, maximum) == maximum.zfill(4)
+
+
+def test_native_sudo_rules_write_only_drop_ins_that_sudo_reads_and_restrict_two_paths() -> None:
+    sudo = [rule for rule in native() if rule["family"] == "sudo"]
+    assert len(sudo) == 10
+    role_vars = load(ROLE / "vars" / "main.yml")
+    dropin = re.compile(str(role_vars["__linux_compliance_remediate_sudo_dropin_pattern"]))
+    line = re.compile(str(role_vars["__linux_compliance_remediate_sudo_line_pattern"]))
+    option = re.compile(str(role_vars["__linux_compliance_remediate_sudo_option_pattern"]))
+    for rule in sudo:
+        parameters = cast("dict[str, object]", rule["parameters"])
+        assert rule["revert_strategy"] == "recorded_value"
+        path = str(parameters["path"])
+        if parameters["method"] == "attribute":
+            assert path in {"/etc/sudoers", "/etc/sudoers.d"}
+            assert parameters["type"] == ("file" if path == "/etc/sudoers" else "directory")
+            continue
+        assert dropin.fullmatch(path), path
+        assert "." not in path.rpartition("/")[2]
+        assert not path.endswith("~")
+        options = cast("list[str]", parameters["options"])
+        lines = cast("list[str]", parameters["lines"])
+        assert all(option.fullmatch(name) for name in options)
+        assert all(line.fullmatch(text) for text in lines)
+        assert sorted({text.split()[1].lstrip("!").split("=")[0] for text in lines}) == options
+        assert ("{value}" in "".join(lines)) is ("value_id" in parameters)
+        entries = cast("list[dict[str, object]]", parameters.get("profile_values", []))
+        for entry in entries:
+            value = "".join(cast("list[str]", entry["value"]))
+            assert re.fullmatch(str(parameters["value_pattern"]), value), (path, value)
+            assert "\n" not in value
+    paths = [str(cast("dict[str, object]", rule["parameters"])["path"]) for rule in sudo]
+    dropins = [path for path in paths if path.startswith("/etc/sudoers.d/")]
+    assert len(dropins) == len(set(dropins)) == 4
 
 
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:

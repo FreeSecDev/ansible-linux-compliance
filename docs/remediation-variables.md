@@ -181,7 +181,7 @@ through subsystem tags.
 | `linux_compliance_smartcard_enabled` | `smartcard` | `accounts` | yes | `true` | 9 | 0 | 9 | 2 |
 | `linux_compliance_console_access_enabled` | `console_access` | `accounts` | yes | `true` | 7 | 0 | 7 | 0 |
 | `linux_compliance_user_accounts_enabled` | `user_accounts` | `accounts` | yes | `true` | 24 | 0 | 24 | 0 |
-| `linux_compliance_sudo_enabled` | `sudo` | none | yes | `true` | 22 | 0 | 22 | 3 |
+| `linux_compliance_sudo_enabled` | `sudo` | none | yes | `true` | 22 | 10 | 12 | 3 |
 | `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | umbrella | yes | `true` | 33 | 0 | 33 | 1 |
 | `linux_compliance_selinux_enabled` | `selinux` | `mandatory_access_control` | yes | `true` | 27 | 0 | 27 | 1 |
 | `linux_compliance_apparmor_enabled` | `apparmor` | `mandatory_access_control` | yes | `true` | 6 | 0 | 6 | 0 |
@@ -1578,28 +1578,28 @@ families through their subsystem tags:
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_directory_groupowner_etc_sudoersd_enabled` | `directory_groupowner_etc_sudoersd` | `audit_only` |
-| `linux_compliance_rule_directory_owner_etc_sudoersd_enabled` | `directory_owner_etc_sudoersd` | `audit_only` |
-| `linux_compliance_rule_directory_permissions_etc_sudoersd_enabled` | `directory_permissions_etc_sudoersd` | `audit_only` |
-| `linux_compliance_rule_file_groupowner_etc_sudoers_enabled` | `file_groupowner_etc_sudoers` | `audit_only` |
-| `linux_compliance_rule_file_owner_etc_sudoers_enabled` | `file_owner_etc_sudoers` | `audit_only` |
-| `linux_compliance_rule_file_permissions_etc_sudoers_enabled` | `file_permissions_etc_sudoers` | `audit_only` |
+| `linux_compliance_rule_directory_groupowner_etc_sudoersd_enabled` | `directory_groupowner_etc_sudoersd` | `recorded_value` |
+| `linux_compliance_rule_directory_owner_etc_sudoersd_enabled` | `directory_owner_etc_sudoersd` | `recorded_value` |
+| `linux_compliance_rule_directory_permissions_etc_sudoersd_enabled` | `directory_permissions_etc_sudoersd` | `recorded_value` |
+| `linux_compliance_rule_file_groupowner_etc_sudoers_enabled` | `file_groupowner_etc_sudoers` | `recorded_value` |
+| `linux_compliance_rule_file_owner_etc_sudoers_enabled` | `file_owner_etc_sudoers` | `recorded_value` |
+| `linux_compliance_rule_file_permissions_etc_sudoers_enabled` | `file_permissions_etc_sudoers` | `recorded_value` |
 | `linux_compliance_rule_file_permissions_sudo_enabled` | `file_permissions_sudo` | `audit_only` |
 | `linux_compliance_rule_package_sudo_installed_enabled` | `package_sudo_installed` | `audit_only` |
 | `linux_compliance_rule_sudo_add_noexec_enabled` | `sudo_add_noexec` | `audit_only` |
 | `linux_compliance_rule_sudo_add_requiretty_enabled` | `sudo_add_requiretty` | `audit_only` |
-| `linux_compliance_rule_sudo_add_use_pty_enabled` | `sudo_add_use_pty` | `audit_only` |
-| `linux_compliance_rule_sudo_custom_logfile_enabled` | `sudo_custom_logfile` | `audit_only` |
+| `linux_compliance_rule_sudo_add_use_pty_enabled` | `sudo_add_use_pty` | `recorded_value` |
+| `linux_compliance_rule_sudo_custom_logfile_enabled` | `sudo_custom_logfile` | `recorded_value` |
 | `linux_compliance_rule_sudo_dedicated_group_enabled` | `sudo_dedicated_group` | `audit_only` |
 | `linux_compliance_rule_sudo_remove_no_authenticate_enabled` | `sudo_remove_no_authenticate` | `audit_only` |
 | `linux_compliance_rule_sudo_remove_nopasswd_enabled` | `sudo_remove_nopasswd` | `audit_only` |
 | `linux_compliance_rule_sudo_require_authentication_enabled` | `sudo_require_authentication` | `audit_only` |
-| `linux_compliance_rule_sudo_require_reauthentication_enabled` | `sudo_require_reauthentication` | `audit_only` |
+| `linux_compliance_rule_sudo_require_reauthentication_enabled` | `sudo_require_reauthentication` | `recorded_value` |
 | `linux_compliance_rule_sudo_restrict_privilege_elevation_to_authorized_enabled` | `sudo_restrict_privilege_elevation_to_authorized` | `audit_only` |
 | `linux_compliance_rule_sudoers_explicit_command_args_enabled` | `sudoers_explicit_command_args` | `audit_only` |
 | `linux_compliance_rule_sudoers_no_command_negation_enabled` | `sudoers_no_command_negation` | `audit_only` |
 | `linux_compliance_rule_sudoers_no_root_target_enabled` | `sudoers_no_root_target` | `audit_only` |
-| `linux_compliance_rule_sudoers_validate_passwd_enabled` | `sudoers_validate_passwd` | `audit_only` |
+| `linux_compliance_rule_sudoers_validate_passwd_enabled` | `sudoers_validate_passwd` | `recorded_value` |
 
 `linux_compliance_sudo_enabled: false` also switches off these rules of other
 families through their subsystem tags:

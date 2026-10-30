@@ -37,6 +37,7 @@ make test-molecule-libvirt MOLECULE_LIBVIRT_SCENARIOS=libvirt-ubuntu-lifecycle M
 make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt
 make test-molecule-libvirt-selftest
 make molecule-libvirt-images
+make molecule-task-timings MOLECULE_TIMINGS_LOG=<GitHub Actions job log> MOLECULE_TIMINGS_TOP=15
 ```
 
 `test-molecule-libvirt` installs the pinned collections (`make molecule-dependencies`), fetches the datastreams
@@ -131,6 +132,43 @@ To update a pin, take a vendor release at least seven days old, verify its check
 the image line, then boot it and determine the missing packages again. When Rocky Linux moves 9.8 to its vault, the
 package URLs stop working and must be updated by hand, as for the Docker images. Renovate does not read the pins file
 yet (FREES-81).
+
+## Host packages of the CI runner
+
+The GitHub-hosted runner lacks QEMU and libvirt. `tools/molecule/libvirt-host.pins` records what CI installs on it
+(FREES-180):
+
+| Line | Fields |
+|---|---|
+| `snapshot <id>` | The Ubuntu archive snapshot, `20261027T000000Z`; every package comes from `https://snapshot.ubuntu.com/ubuntu/<id>/` |
+| `require <package> <version>` | A package that the scenarios need, in this exact version: `qemu-system-x86` and `qemu-utils` 1:8.2.2+ds-0ubuntu1.18, `libvirt-daemon-system` and `libvirt-dev` 10.0.0-2ubuntu8.19, `pkg-config` 1.8.1-2build1 |
+| `deb <package> <version> <pool path> <sha256> <size>` | One of the 26 `.deb` files (22.7 MB) that the `ubuntu-24.04` runner image lacks for the required versions |
+
+`tools/molecule/libvirt-host-packages.sh` has three modes:
+
+- `fetch` (`make molecule-libvirt-host-fetch`) downloads every pinned file over HTTPS from the snapshot's pool into
+  `build/molecule-libvirt/host-packages/`, with five retries 30 seconds apart, and keeps a file only after its
+  SHA-256 and size match the pin. A file that is already there is reused only after the same check; one that fails it
+  is downloaded again.
+- `install` (`make molecule-libvirt-host-install`) checks every pinned file again and installs nothing if one is
+  missing or differs. It skips the packages that the runner already has installed (`ii`) in the pinned or a later
+  version, copies the others into a temporary directory of its own, checks the copies and installs them with
+  `apt-get` from those verified copies alone: with no source list and an empty list directory, `apt`
+  resolves the dependencies from the installed packages and these files and cannot download anything, so an
+  unverified file never reaches `dpkg`. It then checks that every `require` package is installed (`ii`) in its exact version. It refuses to run
+  unless `GITHUB_ACTIONS` is `true` and `RUNNER_ENVIRONMENT` is `github-hosted`, so that it never changes the QEMU and
+  libvirt of a developer host. When it fails, the target prints the pins that `resolve` computes on that runner.
+- `resolve` (`make molecule-libvirt-host-pins`) needs no root. It points a private `apt` configuration at the
+  snapshot, with the Ubuntu archive key of `/usr/share/keyrings/ubuntu-archive-keyring.gpg` as the only signer, lets
+  `apt` work out which files this host lacks for the `require` lines, and prints the pins with the pool path,
+  SHA-256 and size that the signed index of the snapshot lists for each.
+
+The SHA-256 of each file was taken from the signed `Packages` index of the snapshot and checked against the
+downloaded file. To refresh the pins, for a newer snapshot, newer versions or a runner image that lacks other
+packages: change the `snapshot` and `require` lines, run `make molecule-libvirt-host-pins` on an `ubuntu-24.04` runner
+(a failed `install` prints the same output in the job log) or on a host with the same packages installed, replace the
+`deb` lines with its output and push; the cache key changes with the pins file. A newer runner image that lacks a
+library which the pins assume installed makes `install` fail rather than fetch the library from a mirror.
 
 ## What a run creates
 
@@ -397,9 +435,13 @@ to the workflow, and each leg holds one machine, one topic and one mode. Each le
 1. fails with an error annotation when `/dev/kvm` is missing, and prints it otherwise;
 2. installs the udev rule that GitHub documents for hosted runners
    (`KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"`) and waits for udev;
-3. installs exact versions of `qemu-system-x86`, `qemu-utils`, `libvirt-daemon-system`, `libvirt-dev` and
-   `pkg-config` from a fixed Ubuntu archive snapshot (`apt-get --snapshot`), checks the installed versions and adds the
-   runner user to the `libvirt` group;
+3. restores the verified QEMU and libvirt packages (`build/molecule-libvirt/host-packages`, keyed by the SHA-256 of
+   `tools/molecule/libvirt-host.pins`) with `actions/cache/restore`, except in a pull request from a fork; runs
+   `make molecule-libvirt-host-fetch`, which checks every restored file against its pin and downloads only what is
+   missing or wrong from the Ubuntu archive snapshot; on a cache miss saves the verified files with
+   `actions/cache/save` right away, so that a later failure of the leg does not lose them; then runs
+   `make molecule-libvirt-host-install`, which installs from those files alone and checks the versions
+   ([host packages](#host-packages-of-the-ci-runner)), and adds the runner user to the `libvirt` group;
 4. restores `build/molecule-libvirt/cache`, which holds the cloud image and the pinned packages of the platform, keyed
    by the platform and the SHA-256 of the pins file (so every pinned digest), except in a pull request from a fork, as
    for the SCC download; the fetch script checks the SHA-256 of every restored file again and downloads only what is
@@ -433,6 +475,32 @@ records of the machine, each a `find` with a SHA-256 of every file below `/etc`,
 plus the warm-up scan. The same steps took up to 1.7 times as long on a slow runner as on a fast one, which explains
 the spread between legs that do the same work. The job's `timeout-minutes` is 28, about one and a half times the
 slowest observed leg, and stays within the merge queue's 30 minutes.
+
+Before and after the [host package cache](#host-packages-of-the-ci-runner) (FREES-180), in minutes. The two runs of
+`main` installed QEMU and libvirt with `apt-get --snapshot`; the pull request run 41071337240 found the cache empty
+and filled it, run 41074930703 restored it.
+
+| Leg | `main` 41048149375 | `main` 41045982865 | Cache miss, 41071337240 | Cache hit, 41074930703 |
+|---|---|---|---|---|
+| `libvirt-ubuntu` | 12.7 | 11.1 | 4.4 | 8.0 |
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `topic` | 26.0 | 24.7 | 19.4 | 14.2 |
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `rule` | 15.9 | 23.8 | 19.2 | 19.4 |
+| `libvirt-rhel-compatible` | 3.9 | 8.9 | 4.5 | 3.3 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `topic` | 13.0 | 13.4 | 7.7 | 9.3 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `rule` | 14.3 | 18.5 | 8.1 | 9.6 |
+| `libvirt-selftest` | 11.1 | 12.8 | 5.0 | 4.1 |
+
+The package steps took 0.9 to 7.5 minutes per leg with `apt-get --snapshot` (6.4 minutes on the slow runs, where the
+snapshot answered at 128 to 239 kB/s), 44 to 85 seconds on the cache miss (download, check and install) and 12 to 25
+seconds on a cache hit (restore up to 5 seconds, check of the 26 files up to 1 second, install 11 to 18 seconds). The
+rest of a leg did not change: the scenario of an Ubuntu lifecycle leg still took 14 to 18 minutes, so those legs
+remain at about 19 minutes on a slow runner until the snapshots are made cheaper.
+
+`make molecule-task-timings` attributes that time. In the `topic` leg of run 41071337240, 15.8 of 17.6 minutes of
+task time were the lifecycle (`side_effect`): the seven no-change snapshots (`find` 231 seconds, recording the lines
+147 seconds), the four whole-instance records (`find` with SHA-256 175 seconds, normalising 105 seconds, sorting 21
+seconds) and the warm-up scan (69 seconds), about three quarters of the leg. The slow runs of `main` show the same
+order.
 
 ## Troubleshooting
 

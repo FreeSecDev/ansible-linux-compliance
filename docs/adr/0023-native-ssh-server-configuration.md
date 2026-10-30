@@ -237,18 +237,20 @@ every overridden rule of a pre-state with scans. The customised pre-state runs w
   cycles scan. Every driver of a topic must still run a pre-state in each mode, and a leg counts its topic as proven
   only after a cycle of its own mode ran, so no toggle drops out of the proof.
 
-`shared/tasks/lifecycle_ssh_regressions.yml` runs in the `topic` leg of `ssh`: a drop-in that sshd refuses makes every
+The regressions are two regression groups of the `ssh` declaration (the mechanism of FREES-175), each a Docker CI
+leg of its own on both platforms: `changes` runs `shared/tasks/lifecycle_ssh_regressions.yml` and
+`shared/tasks/lifecycle_ssh_rollback_regressions.yml`, and `vendor` runs
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml`. In the first, a drop-in that sshd refuses makes every
 rule `invalid_config` with nothing installed; an entry of another method is refused on apply and on cleanup; a change
 by hand is kept as `modified_since_apply`; a drop-in removed by hand is restored without a write; and, on Ubuntu, where
 the directory is empty as built, a missing directory is created with the marker and removed again, and a symbolic link
 in its place makes every rule `not_directory` with nothing written through it.
-`shared/tasks/lifecycle_ssh_vendor_regressions.yml` also runs in the `topic` leg, which runs one cycle against the
-two of the `rule` leg, so that the legs stay of similar length: it adds `sshd_disable_x11_forwarding` (and on RHEL `sshd_disable_gssapi_auth`) to the profile, applies them and
+The vendor regressions add `sshd_disable_x11_forwarding` (and on RHEL `sshd_disable_gssapi_auth`) to the profile, applies them and
 checks that every occurrence that the check reads now has the compliant value, that a second apply is compliant, and
 that cleanup writes the vendor file back byte for byte; that a change by hand to the changed line is kept as
 `modified_since_apply` and, once restored by hand with other spacing, left alone while the rule is reported
 `restored`; and that a conflicting line inside a `Match` block is refused as `overridden` and not edited.
-`shared/tasks/lifecycle_ssh_rollback_regressions.yml` runs in the `rule` leg: a cleanup with an administrator's
+In the rollback regressions, a cleanup with an administrator's
 drop-in that sshd refuses fails at the final `sshd -t`, before the reload, with the cleanup kept, and a cleanup with
 the sshd binary removed succeeds.
 
@@ -277,5 +279,5 @@ with mode `0600`, which the CIS and STIG drop-in permission rules require.
 ## Operational consequences
 
 The Ubuntu and Rocky Linux Molecule images grow by openssh-server. The `ssh` `rule` leg runs two cycles and the
-rollback regressions, and the `topic` leg one cycle and the other two sets of regressions, all narrowed to two rules
-(four with the vendor rules), so that each leg stays within the time budget of the merge queue.
+`topic` leg one; the two regression groups run in legs of their own, narrowed to two rules (four with the vendor
+rules), so that each leg stays within the time budget of the merge queue.

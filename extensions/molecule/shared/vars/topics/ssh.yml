@@ -332,3 +332,11 @@ pre_states:
           exists: false
         - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf
           exists: false
+regressions:
+  - name: changes
+    files:
+      - lifecycle_ssh_regressions.yml
+      - lifecycle_ssh_rollback_regressions.yml
+  - name: vendor
+    files:
+      - lifecycle_ssh_vendor_regressions.yml

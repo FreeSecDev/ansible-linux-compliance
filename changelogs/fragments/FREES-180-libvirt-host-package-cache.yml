@@ -1,0 +1,10 @@
+---
+trivial:
+  - >-
+    CI: the libvirt legs install QEMU and libvirt from the 26 .deb files that tools/molecule/libvirt-host.pins pins by
+    SHA-256 and size in the Ubuntu archive snapshot 20261027T000000Z. make molecule-libvirt-host-fetch downloads them
+    once into an actions/cache entry keyed by the pins and checks every file before it is reused or saved; make
+    molecule-libvirt-host-install installs only verified files, with apt-get given no package source, and checks the
+    required versions; make molecule-libvirt-host-pins prints the pins for a runner from the signed snapshot index.
+    The legs no longer download the archive indexes and packages from the snapshot on every run. make
+    molecule-task-timings prints the slowest Ansible tasks of a Molecule run from its GitHub Actions job log.

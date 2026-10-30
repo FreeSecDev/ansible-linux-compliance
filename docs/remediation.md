@@ -6,8 +6,9 @@ reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogu
 (cleanup per family). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendments of
 FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
-banners and password quality), [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109). How to
-make a further topic native is in the
+banners and password quality), [ADR 0022](adr/0022-native-sudo-drop-ins.md) (sudo, FREES-175),
+[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109). How to make a further topic
+native is in the
 [native remediation guide](native-remediation-guide.md).
 
 Remediation changes managed hosts. It never runs ComplianceAsCode playbooks, Bash fixes or `oscap --remediate`; every
@@ -18,9 +19,9 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 
 The dispatcher, the safety model and four native families are implemented. The catalogue holds every rule that a
 pinned profile selects, 1203 rules in 55 families (FREES-53), generated from the digest-verified content and listed in
-the [control family reference](control-families.md). 64 rules have a native remediation: the reference rule
+the [control family reference](control-families.md). 74 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners`, 14
-of `pwquality` and 34 of `ssh` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
+of `pwquality`, 34 of `ssh` and 10 of `sudo` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
 switched off per rule and per topic, the audit excludes it and reports it as `disabled`, and remediation reports it as
 `not_implemented` and never changes anything for it. The native remediations land topic by topic on top of this
 catalogue, following the [native remediation guide](native-remediation-guide.md). Every native topic is exercised for
@@ -309,11 +310,13 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 ## Native families
 
 Besides the reference family, three topics are native
-([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md),
+([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
-family before anything changes.
+family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
+sets `profile_value_source: fix` in `content/catalogue.yml`, and the value is the one the fixes substitute
+(`sudo_require_reauthentication`).
 
 ### Banners
 
@@ -439,6 +442,47 @@ two values), `sshd_use_directory_configuration`, `sshd_include_crypto_policy`, `
 or older only), `file_sshd_50_redhat_exists`, the package, service and firewall rules, the client rules and
 `ssh_keys_passphrase_protected`.
 
+### Sudo
+
+`sudo` is disruptive, so it is applied and cleaned up only with `sudo` in `linux_compliance_remediate_allow_disruptive`.
+The checks of both pinned datastreams read `/etc/sudoers` and every file of `/etc/sudoers.d`, so every setting rule
+writes one drop-in on both platforms ([ADR 0022](adr/0022-native-sudo-drop-ins.md),
+`tests/unit/tools/test_content_golden_native.py` checks it against the OVAL of both datastreams).
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| `sudo_add_use_pty`, `sudo_custom_logfile`, `sudo_require_reauthentication`, `sudoers_validate_passwd` | `/etc/sudoers.d/50-freesecdev-<setting>` with a header that names the rule and `Defaults use_pty`, `Defaults logfile=<var_sudo_logfile>`, `Defaults timestamp_timeout=<var_sudo_timestamp_timeout>` (from the content's fix) or the three `Defaults !targetpw`, `!rootpw`, `!runaspw` lines; mode `0440`, owner and group root, written with `copy` and `validate: /usr/sbin/visudo -cf %s`. `/etc/sudoers` and other drop-ins are never written | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+| `file_permissions_etc_sudoers`, `file_owner_etc_sudoers`, `file_groupowner_etc_sudoers` | `/etc/sudoers` at most `0440` (a stricter mode is kept), uid 0, gid 0 | `recorded_value` of `method` (`attribute`), the prior `mode`, `owner` or `group` and `written`; cleanup restores the prior attribute when the current one is still `written` |
+| `directory_permissions_etc_sudoersd`, `directory_owner_etc_sudoersd`, `directory_groupowner_etc_sudoersd` | `/etc/sudoers.d` at most `0750`, uid 0, gid 0 | as above |
+
+The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `notapplicable` (apply) | `/etc/sudoers` does not exist (sudo is not installed), or the path of an attribute rule does not exist |
+| `not_regular_file`, `not_directory` | `/etc/sudoers`, the drop-in or the path of an attribute rule is a symbolic link or of the wrong type, or `/etc/sudoers.d` is missing or not a directory; nothing is written through a link |
+| `not_included` (apply) | `/etc/sudoers` has no `@includedir` or `#includedir` line for `/etc/sudoers.d`, so sudo would not read the drop-in |
+| `validator_missing` (apply) | `/usr/sbin/visudo` is not a regular file |
+| `invalid_sudoers` (apply) | `visudo` refused the drop-in; nothing is installed and the entry recorded for it is removed |
+| `conflicting_setting` (apply) | Another file of `/etc/sudoers` or `/etc/sudoers.d` sets one of the rule's options in another form, or `timestamp_timeout` more than once; the collection does not edit files it does not own |
+| `not_owned` | A file at the drop-in's path does not carry the collection's header |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The drop-in's content or the attribute is no longer what the collection wrote; an administrator's later change is never overwritten |
+| `invalid_record`, `target_absent` (cleanup) | The record is malformed, or the path of an attribute rule is gone |
+
+The family reads every file that the content's checks read, including names that sudo skips (a `.` or a trailing
+`~`) and symbolic links to regular files, which sudo follows, and joins lines continued with `\`. Conflicts are
+decided over all of them; `compliant` without a drop-in only over the files that sudo reads. A rule whose setting
+those files already hold exactly (the `Defaults use_pty` of the Ubuntu 24.04 `/etc/sudoers`) is `compliant` and
+writes nothing; a setting only in `hardening.conf` or `site~` never is. When the state already equals the recorded prior state at cleanup (the drop-in was
+removed by hand, the attribute already has its prior value), the rule is `restored`, its entry is removed and nothing
+is written (FREES-173). Kept `audit_only`, with the reasons in ADR 0022: the rules that remove other people's
+`!authenticate`, `NOPASSWD` or user specifications (`sudo_remove_no_authenticate`, `sudo_remove_nopasswd`,
+`sudo_require_authentication`, `sudo_restrict_privilege_elevation_to_authorized`, `sudoers_explicit_command_args`,
+`sudoers_no_command_negation`, `sudoers_no_root_target`), `sudo_add_noexec` and `sudo_add_requiretty` (they break
+`become` and so the run that would revert them), `sudo_dedicated_group` and `file_permissions_sudo` (they limit who may
+run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
+
 ## Results
 
 The role publishes `linux_compliance_remediated`:
@@ -526,7 +570,9 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_content_golden_ssh.py` | With the pinned content: the check of every native ssh rule on both platforms reads `sshd_config` and the rule's own drop-in with `check="all"`, each fixed value satisfies the check's state and each profile value is exported by the check, no pinned profile selects two native ssh rules for one keyword, the crypto rules carry the RHEL 9 refusal, every drop-in sorts before the distributions' drop-ins, and `sshd_rekey_limit` refuses every drop-in | `make test-content-golden`, CI job `test` |
 | `tests/unit/plugins/modules/test_sshd_validate.py`, `test_process.py` | The `sshd_validate` module passes only the keywords of the native rules and one-word values as `-o` options of `sshd -t -f /etc/ssh/sshd_config`, reports a refusal with sshd's bounded message, a timeout and a missing executable, and changes nothing in check mode; the process policy refuses every other sshd command line. 100% line and branch coverage | `make test-coverage` |
 | `tests/playbooks/remediate-native-check.yml`, ssh plays | Against localhost in check mode with the Ubuntu 24.04 CIS rules of `ssh` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/ssh` is unchanged (as a user that cannot read a drop-in, the run must stop at the read); a rule without its profile value fails before any change; `ssh.yml` refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
-| `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements, exports and the values that fixes substitute, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration, including `profile_value_source`. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), and every attribute rule restricts the path and the mode bits that the OVAL checks | `make test-content-golden`, CI job `test` |
+| `tests/playbooks/remediate-native-check.yml`, sudo | A sudo rule without a profile value fails before any sudoers file is read, and every sudo family file and helper refuses to run without the opt-in. The sudo rules are not run against localhost, because `/etc/sudoers` is readable only by root | `make test-remediate-check`, CI job `test-playbooks` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
 `/var/lib/freesecdev/linux_compliance` already exists and is root-only it fails instead of reading it.

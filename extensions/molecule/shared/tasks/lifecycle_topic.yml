@@ -215,3 +215,21 @@
   ansible.builtin.set_fact:
     lifecycle_proven_families: "{{ lifecycle_proven_families | default([]) + [lifecycle_family] }}"
   when: lifecycle_runs | bool
+- name: Lifecycle topic | Run the regression groups of the topic that this run selects, in the Docker scenarios
+  ansible.builtin.include_tasks:
+    file: lifecycle_regressions.yml
+  loop: >-
+    {{ lifecycle_topic.regressions | default([])
+       | selectattr('name', 'in', lifecycle_run_regressions
+                    if lifecycle_run_regressions is not none
+                    else lifecycle_topic.regressions | default([]) | map(attribute='name') | list)
+       | list }}
+  loop_control:
+    loop_var: lifecycle_regression
+    label: "{{ lifecycle_regression.name }}"
+  when:
+    - lifecycle_runs | bool
+    - molecule_target.driver == 'docker'
+    - >-
+      lifecycle_regression.platforms is not defined
+      or lifecycle_platform in lifecycle_regression.platforms

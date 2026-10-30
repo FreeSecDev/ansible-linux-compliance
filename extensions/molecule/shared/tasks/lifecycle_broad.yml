@@ -1,14 +1,11 @@
 ---
-- name: Lifecycle broad | Find every entry below the watched paths, with a SHA-256 of every regular file
-  ansible.builtin.find:
-    paths: "{{ lifecycle_broad_paths }}"
-    file_type: any
-    recurse: true
-    hidden: true
-    follow: false
-    get_checksum: true
-    checksum_algorithm: sha256
-  register: lifecycle_broad_files
+- name: Lifecycle broad | Find every entry below the watched paths, with a SHA-256 of every file that root can read
+  ansible.builtin.include_tasks:
+    file: find_with_checksums.yml
+  vars:
+    find_paths: "{{ lifecycle_broad_paths }}"
+    find_checksum_algorithm: sha256
+    find_watched_directories: "{{ lifecycle_items.files | map(attribute='path') | map('dirname') | unique | list }}"
 
 - name: Lifecycle broad | Read every kernel parameter that the instance may read
   ansible.builtin.find:
@@ -46,7 +43,10 @@
     lifecycle_broad_declared: "{{ lifecycle_items.files | map(attribute='path') | list }}"
     lifecycle_broad_rewritten: "{{ lifecycle_rewritten | default([]) }}"
     lifecycle_broad_raw:
-      files: "{{ lifecycle_broad_files.files }}"
+      files: >-
+        {{ find_whole.files + find_extra if find_aborted | length == 0
+           else (find_whole.files | rejectattr('path', 'match', find_under) | list) + find_listed.files }}
+      checksums: "{{ find_sums }}"
       sysctl: "{{ lifecycle_broad_sysctl.files }}"
       packages: "{{ ansible_facts.packages }}"
       services: "{{ none if lifecycle_broad_services is skipped else ansible_facts.services | default(none) }}"

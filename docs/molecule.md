@@ -74,8 +74,8 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs) |
-| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one); Python 3.9 comes with the base image |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs) |
+| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle), `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one); Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
 distribution archive drops a pinned version, the image build fails and the pin must be updated by hand; no Renovate
@@ -93,8 +93,10 @@ controller, then copies it into the instance as `/usr/share/freesecdev-molecule/
 
 - Containers are unprivileged: `privileged: false`, `cap_drop: ALL`, `no-new-privileges`, no network
   (`network_mode: none`), a private cgroup namespace, a process and memory limit, and an init process. The scenarios
-  run as root inside the container without `sudo`, so they pass `ansible_become=false`. Remote temporary files go to
-  `/tmp`.
+  run as root inside the container without `sudo`, so they pass `ansible_become=false`. sudo itself cannot run in
+  them: without `CAP_SETUID` it fails with `PERM_SUDOERS: setresuid(-1, 1, -1): Operation not permitted` before it
+  reads its policy, so that sudo still works with the `sudo` topic's drop-ins is proven by `visudo` and the golden
+  tests here, and by a real `become` only in the libvirt scenarios (FREES-61). Remote temporary files go to `/tmp`.
 - `create.yml` refuses platforms that are privileged, use `network_mode` `host` or `container:*`, declare `volumes`,
   `mounts` or `devices`, or add capabilities without a `capabilities_reason`.
 - The run id is generated once, as the first fact of `create.yml`, and persisted in the instance config. A repeated
@@ -276,7 +278,21 @@ the failure of a task inside the role.
 `/etc`, `/usr`, `/root`, `/home`, `/var/spool`, `/var/log`, `/opt`, `/srv`, `/var/lib/dpkg`, `/var/lib/rpm`,
 `/var/lib/linux_compliance` and
 `/var/lib/freesecdev`. The state ledger and the evidence directory are part of it. On a mismatch the assertion prints
-up to 20 differing entries.
+up to 20 differing entries. Both this snapshot and the whole-instance record take their entries from
+`shared/tasks/find_with_checksums.yml` (FREES-175): one `find` with checksums, as before. Root in the Docker
+containers has no capabilities, and a file that it cannot read (`/etc/shadow` on Rocky Linux, `/usr/bin/sudo` with
+mode `4111`) stops that `find`'s walk of its whole path, so every later entry of the path would be missing. For a
+path whose walk stopped that way, and only for it, the task lists the entries again without reading content and takes
+the checksums in a second `find` of the regular files whose owner may read them, and fails when that second pass
+stops early as well. It then remembers, per set of paths, the names of the files that root cannot read: later
+records leave those names out of the one walk and list the entries of such a name with two `find`s that do not
+recurse, one without content and one with the checksums that their owner may read, which is how they stay one walk on
+Rocky Linux too. Those two `find`s look in the directories that held such an entry in the first record and, for the
+whole-instance record, in the parent directory of every path that the topic declares, so a new entry of one of those
+names next to a declared path is seen. A walk that stops again, because a file that root cannot read appeared, takes
+the second pass over every path and refreshes the names. A new entry with one of those names in any other directory
+after the first record is not seen; the names are those of the shadow files and the sudo binaries. Paths whose walk
+did not stop, and every path on the libvirt drivers, where root keeps its capabilities, cost one walk as before.
 
 Two exceptions are recorded explicitly, and a virtual machine has a third, for the system logs and service state files
 that a running system rewrites by itself ([libvirt guide](molecule-libvirt.md#differences-that-only-a-virtual-machine-has)):
@@ -432,7 +448,7 @@ and the state after the cleanup and after the last cycle must equal it:
 
 - every entry below `/etc`, `/usr`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib`
   (`find` without following links): path, type, mode, uid, gid, size, inode, mtime, ctime and the SHA-256 of every
-  regular file;
+  regular file that root can read, through the same task as the [no-change snapshot](#the-no-change-snapshot);
 - every kernel parameter that the instance may read (`find` over `/proc/sys` with a SHA-256 of each value);
 - every installed package with its versions (`package_facts`), every user and group with its entry (`getent`), and
   every service where a service manager runs (`service_facts`; the containers have none, which is recorded as such).
@@ -478,8 +494,41 @@ rules are restored; on Ubuntu it puts a symbolic link in place of `pwquality.con
 checks that every rule is `not_directory` and nothing is written through the link; and it compares the whole instance
 with its state before the regressions.
 
-The regressions run when the run ends with `pwquality` in the rule mode: after every topic and mode in a full run,
-and in the `pwquality` rule leg in CI.
+A topic declares its regressions as named groups under `regressions` (FREES-175); each group lists task files of
+`shared/tasks` that the static dispatch `shared/tasks/lifecycle_regressions.yml` includes, optionally for some
+`platforms` only. `make lint-lifecycle` requires every include of the dispatch to run exactly when its own file is
+in the group (no other condition, no tags), every dispatched file to be named by some group and to end by adding its
+name to `lifecycle_regression_files_run`, and the harness fails a regression leg in which a file of its group did not
+run to its end. A group runs at the end of its topic, with the topic's facts, on the Docker driver: in a full run
+after every cycle, and in CI in a leg of its own, `MOLECULE_LIFECYCLE_MODE=regressions-<group>`, which runs no cycle
+(see [CI legs](#ci-legs)). `pwquality` has one group, `changes`, with the regressions above.
+
+`sudo` has three groups. In `changes` (both platforms), `shared/tasks/lifecycle_sudo_regressions.yml` does the same
+for `sudo`: it applies the topic, records every ledger entry as if another method had written it and checks that apply
+reports `method_changed` and cleanup `cleanup_incomplete` (`method_changed`) with every entry kept and no drop-in
+touched; it changes the `timestamp_timeout` drop-in by hand and removes the `logfile` drop-in, and checks that cleanup
+keeps the change as `modified_since_apply` and reports the removed one `restored` without a write.
+In the same group, `shared/tasks/lifecycle_sudo_refusals.yml` puts a `timestamp_timeout` of its own into `/etc/sudoers.d` and replaces `/usr/sbin/visudo` with a copy of
+`false` (after giving root, which cannot override modes there, the write bit on `/usr/sbin`), and checks
+that the rule is `conflicting_setting`, that every other drop-in is `invalid_sudoers` and that nothing was installed or
+recorded; and it replaces `/etc/sudoers.d` by a symbolic link and checks that every rule is `not_directory` and nothing
+is written through the link. `visudo`, `/usr/sbin`, `/etc/sudoers.d` and its `README` are put back with their content,
+mode and ownership, so the whole-instance comparison after the refusals treats them as rewritten (new inodes and times
+only). The group `files` runs on Ubuntu only. `shared/tasks/lifecycle_sudo_states.yml` takes the `@includedir` line out of `/etc/sudoers` (`not_included`), removes `visudo` (`validator_missing`),
+occupies one drop-in path with a file without the header (`not_owned`) and another with a symbolic link
+(`not_regular_file`), and, after an apply, removes the header (`not_owned` at cleanup), records a malformed checksum
+(`invalid_record`) and cleans up an attribute entry while `/etc/sudoers` is gone (`target_absent`), each time with
+nothing changed and every entry kept. `shared/tasks/lifecycle_sudo_effective.yml` covers the files that
+sudo reads: a rule's exact line only in `hardening.conf` or `admin~`, which sudo skips, never makes it `compliant`
+(`applied`, and `conflicting_setting` for `timestamp_timeout`), and a `Defaults` line continued with `\` or a linked
+drop-in that names an option is `conflicting_setting`, and so is an option right after a full-line comment that
+ends in `\`, which sudo does not continue. Every swap of these files is undone in an `always` section, so
+a failure does not leave `visudo`, `/usr/sbin` or `/etc/sudoers.d` changed. `shared/tasks/lifecycle_sudo_other_profiles.yml`
+(group `profiles`, both platforms) applies, repeats and cleans up for real the
+seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,
+owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`) and `/etc/sudoers.d` (`0755`, as Ubuntu ships it): the stricter mode an
+administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
+a directory mode put back by hand is `restored` without a write.
 
 The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states, both with real
 scans (the customised one on Ubuntu only, `audit: [ubuntu]`, because every rule is `notapplicable` on Rocky
@@ -489,11 +538,11 @@ and which sets `LoginGraceTime 120` and `ClientAliveInterval 900`. The three rul
 expected absent, they are neither recorded nor cleaned up, and the scan must report them `fail` (on Rocky Linux,
 `notapplicable`), which the harness checks for every overridden rule of a pre-state with scans; every other rule is
 applied and passes, and the cleanup leaves both site files alone. The two site files share one pre-state, which runs with the rule
-toggle only (`modes: [rule]`): the `rule` leg runs two cycles and the `topic` leg one cycle and both sets of
-regressions. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
-because no rule of the lifecycle profiles conflicts with their lines. `shared/tasks/lifecycle_ssh_regressions.yml`
-runs after the topic when the run
-includes `ssh` in the topic mode, so in CI in the `ssh` `topic` leg, narrowed like a profile to
+toggle only (`modes: [rule]`): the `rule` leg runs two cycles and the `topic` leg one. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
+because no rule of the lifecycle profiles conflicts with their lines. `ssh` has two regression groups, each a Docker leg of its own
+on both platforms: `changes` (`lifecycle_ssh_regressions.yml` and `lifecycle_ssh_rollback_regressions.yml`) and
+`vendor` (`lifecycle_ssh_vendor_regressions.yml`). `shared/tasks/lifecycle_ssh_regressions.yml` is narrowed like a
+profile to
 `sshd_set_max_auth_tries` and `sshd_set_login_grace_time` so that each run stays short: a drop-in with a keyword that sshd does not know
 makes every rule `invalid_config` with nothing installed and nothing recorded; a ledger entry of another method makes
 the rule `method_changed` on apply and `cleanup_incomplete` (`method_changed`) on cleanup while the other rule
@@ -504,8 +553,7 @@ marker, removed again by the cleanup, and a symbolic link in its place makes eve
 written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
 only. The regressions end with the whole-instance comparison.
 
-`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs after them in the same `ssh` `topic` leg, which runs one cycle
-against the two of the `rule` leg, so that both legs stay well under the 18 minutes of the job. It adds
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml`, the `vendor` group, adds
 `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the lifecycle profiles do not
 select, to the verified profile and checks the vendor-line method of ADR 0023 on `/etc/ssh/sshd_config` (Ubuntu) and
 `/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux). For the first apply, the vendor `X11Forwarding yes` line gets a
@@ -516,7 +564,8 @@ changed line is kept as `modified_since_apply`, and once the line is restored by
 leaves it alone and reports the rule `restored`; and a conflicting line inside a `Match` block is `overridden` and not
 edited. It ends with the whole-instance comparison.
 
-`shared/tasks/lifecycle_ssh_rollback_regressions.yml` runs in the `ssh` `rule` leg, narrowed to the same two rules,
+`shared/tasks/lifecycle_ssh_rollback_regressions.yml` runs after the regressions in the `changes` group, narrowed
+to the same two rules,
 and reaches the end of the family that the cycles never reach. With an administrator's drop-in in place that sshd
 refuses, a cleanup removes the two drop-ins and forgets their entries, which validates nothing first; the final `sshd
 -t` then refuses the configuration and the run fails at the task that stops it, before the reload, with the cleanup
@@ -565,6 +614,14 @@ approaches 20 minutes should be split further, for example per pre-state, rather
 no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
+
+With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
+group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
+modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
+`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
+group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
+19 minutes on slow runners.
 
 ### Declaring a topic
 
@@ -619,6 +676,7 @@ pre_states:
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
+| `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration

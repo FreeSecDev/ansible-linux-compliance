@@ -63,11 +63,14 @@
         that:
           - (lifecycle_selected_topic | length > 0) is sameas (lifecycle_selected_mode | length > 0)
           - lifecycle_selected_topic | length == 0 or lifecycle_selected_topic in lifecycle_native_families
-          - lifecycle_selected_mode | length == 0 or lifecycle_selected_mode in lifecycle_toggle_modes
+          - >-
+            lifecycle_selected_mode | length == 0 or lifecycle_selected_mode in lifecycle_toggle_modes
+            or lifecycle_selected_mode is match(lifecycle_regression_mode_pattern)
         fail_msg: >-
           MOLECULE_LIFECYCLE_TOPIC and MOLECULE_LIFECYCLE_MODE must be set together, to a native topic
-          ({{ lifecycle_native_families }}) and a toggle mode ({{ lifecycle_toggle_modes }}), or both left empty to
-          run every topic in every mode. Got '{{ lifecycle_selected_topic }}' and '{{ lifecycle_selected_mode }}'.
+          ({{ lifecycle_native_families }}) and a toggle mode ({{ lifecycle_toggle_modes }}) or a regression group
+          (regressions-<group> of the topic's declaration), or both left empty to run every topic in every mode and
+          every regression group. Got '{{ lifecycle_selected_topic }}' and '{{ lifecycle_selected_mode }}'.
         quiet: true
 
     - name: Name the topics and modes that this run proves
@@ -75,7 +78,14 @@
         lifecycle_run_families: >-
           {{ [lifecycle_selected_topic] if lifecycle_selected_topic | length > 0 else lifecycle_native_families }}
         lifecycle_run_modes: >-
-          {{ [lifecycle_selected_mode] if lifecycle_selected_mode | length > 0 else lifecycle_toggle_modes }}
+          {{ [] if lifecycle_selected_mode is match(lifecycle_regression_mode_pattern)
+             else [lifecycle_selected_mode] if lifecycle_selected_mode | length > 0 else lifecycle_toggle_modes }}
+        lifecycle_run_regressions: >-
+          {{ [lifecycle_selected_mode | regex_replace(lifecycle_regression_mode_pattern, '')]
+             if lifecycle_selected_mode is match(lifecycle_regression_mode_pattern)
+             else none if lifecycle_selected_mode | length == 0 else [] }}
+        lifecycle_regressions_run: []
+        lifecycle_regression_files_run: []
         lifecycle_proven_families: []
 
     - name: Scan once before any state is recorded, so that the first write of the scanner happens before the reference
@@ -110,13 +120,32 @@
       loop_control:
         loop_var: lifecycle_family
 
-    - name: Run the pwquality regressions for a change of method, a change by hand and a symbolic link
-      ansible.builtin.include_tasks:
-        file: tasks/lifecycle_pwquality_regressions.yml
-      when:
-        - lifecycle_run_families | last == 'pwquality'
-        - lifecycle_run_modes | last == 'rule'
-        - "'pwquality' in lifecycle_proven_families"
+    - name: Refuse a regression leg whose group did not run
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_run_regressions is none or lifecycle_run_regressions | length == 0
+            or (lifecycle_selected_topic ~ ':' ~ lifecycle_run_regressions[0]) in lifecycle_regressions_run
+        fail_msg: >-
+          The leg selects the regression group {{ lifecycle_run_regressions }} of {{ lifecycle_selected_topic }},
+          but it did not run on {{ molecule_target.instance }}: the declaration does not name the group, or limits it
+          to other platforms. make molecule-matrix plans a regression leg only for a declared group and platform.
+        quiet: true
+
+    - name: Refuse a regression leg in which a file of its group did not run to its end
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_run_regressions is none or lifecycle_run_regressions | length == 0
+            or (lifecycle_topic.regressions | default([])
+                | selectattr('name', 'equalto', lifecycle_run_regressions[0])
+                | map(attribute='files') | first | default([])
+                | difference(lifecycle_regression_files_run) | length == 0)
+        fail_msg: >-
+          The regression group {{ lifecycle_run_regressions }} of {{ lifecycle_selected_topic }} declares files that
+          did not run to their end on {{ molecule_target.instance }}; ran {{ lifecycle_regression_files_run }}. Every
+          file of a group must be included by shared/tasks/lifecycle_regressions.yml and end by recording that it ran.
+        quiet: true
 
     - name: Refuse a CI leg whose topic runs no cycle with this driver on this platform
       ansible.builtin.assert:
@@ -127,30 +156,6 @@
           }} driver on {{ molecule_target.instance }}, so the leg would prove nothing. make molecule-matrix plans a leg
           only for a driver and platform that run a cycle of the topic.
         quiet: true
-
-    - name: Run the ssh regressions for an invalid configuration, a change of method, a change by hand and the directory
-      ansible.builtin.include_tasks:
-        file: tasks/lifecycle_ssh_regressions.yml
-      when:
-        - "'ssh' in lifecycle_run_families"
-        - "'topic' in lifecycle_run_modes"
-        - "'ssh' in lifecycle_proven_families"
-
-    - name: Run the ssh vendor regressions for the conflicting lines of the files that the packages ship
-      ansible.builtin.include_tasks:
-        file: tasks/lifecycle_ssh_vendor_regressions.yml
-      when:
-        - "'ssh' in lifecycle_run_families"
-        - "'topic' in lifecycle_run_modes"
-        - "'ssh' in lifecycle_proven_families"
-
-    - name: Run the ssh rollback regressions for a cleanup that sshd refuses and a cleanup without sshd
-      ansible.builtin.include_tasks:
-        file: tasks/lifecycle_ssh_rollback_regressions.yml
-      when:
-        - "'ssh' in lifecycle_run_families"
-        - "'rule' in lifecycle_run_modes"
-        - "'ssh' in lifecycle_proven_families"
 
     - name: Report the topics whose lifecycle was proven
       ansible.builtin.debug:

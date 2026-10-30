@@ -361,3 +361,7 @@
     lifecycle_label: ssh regressions
     lifecycle_broad_step: the regressions
     lifecycle_broad_reference: "{{ regression_broad_before }}"
+
+- name: SSH regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_ssh_regressions.yml'] }}"

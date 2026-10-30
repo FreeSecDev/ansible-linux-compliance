@@ -990,11 +990,49 @@ adds an exemption, and no lint limit was raised.
     directly with `tasks_from`, which skips the guard, the same residual as the remediate family files above: such a
     caller can do no more than call the modules itself.
 
+## Amendment 2026-10-30: external configuration validators (FREES-175)
+
+A remediation that writes a service's configuration must check it with the service's own validator before the
+service can read it. The general rule is that such a validator runs through the audited process helper
+(`plugins/module_utils/compliance/process.py`), from a module of this collection, with an explicit argument list, a
+resolved absolute binary, a minimal environment, a timeout and bounded output, like any other external executable of
+this ADR. The `validate` parameter of the file modules stays refused (FREES-159).
+
+There is one exception. The native `sudo` topic ([ADR 0022](0022-native-sudo-drop-ins.md)) writes drop-ins below
+`/etc/sudoers.d`, and sudo refuses every command when one file of its configuration does not parse. The check must run
+on the temporary file before it is renamed into place, so that a drop-in that sudo cannot parse is never in
+`/etc/sudoers.d`, not even briefly. The `validate` parameter of `ansible.builtin.copy` does that inside the module's
+atomic write. A module of this collection could do the same, writing a temporary file, checking it through the audited
+helper and renaming it, but that would be a new module that writes files on managed hosts, which this exception avoids. `tools/lint/repo_rules/exec_modules.py`
+therefore keeps a reviewed exception list, `ALLOWED_PARAMETERS`, of entries by file, module, parameter and exact
+value, with exactly one entry: `validate: /usr/sbin/visudo -cf %s` of `copy` in
+`roles/remediate/tasks/sudo_dropin_apply.yml`. What counts is the exact literal value of the `validate` key of that
+module's own parameters, with aliases resolved: the literal also passes under an anchor or an alias to the same value,
+an aliased mapping of the whole module, a `!!str` or `!unsafe` tag, a plain scalar folded over several lines, the
+`action` and `local_action` mapping forms and a nested `block`, all of which give the same literal. A templated,
+block (`|`, `>`), quoted or merged value, a free-form argument, `args`, `module_defaults`, any other value, module or
+file is refused as before. The executable is a fixed absolute path, the
+only argument besides the flags is the temporary file that the module created, and no variable can change either.
+`tests/unit/tools/test_check_repo_rules_exec_validate.py` checks that the list holds exactly this entry, that its file
+uses it once, and that every other form is refused.
+
+Residual risk, accepted: `copy` runs the validator through `AnsibleModule.run_command`, not through the audited helper,
+so it has no timeout of this ADR, inherits the module's environment and does not bound the output it captures. That is acceptable because `visudo -cf` only
+parses one small local file (at most a few lines of fixed `Defaults` names and pattern-checked values) and the
+executable and its arguments cannot be chosen by a variable; a hanging `visudo` would stop the run, not change the
+host. A validator that has to check a whole configuration (as `sshd -t` does) goes through a module on the audited
+helper instead.
+
 ## Amendment 2026-10-30: the sshd configuration test (FREES-109)
 
 The `ssh` topic ([ADR 0023](0023-native-ssh-server-configuration.md)) must not install a configuration that sshd
-refuses, and the `validate` parameter of the file modules stays refused (FREES-159). The module
-`freesecdev.linux_compliance.sshd_validate` is the third caller of the helper, and the allow-list gains one policy:
+refuses. It follows the general rule of the amendment on external configuration validators (FREES-175): its
+validator runs through the audited process helper, from a module of this collection, with an explicit argument list.
+The one `validate` exception of that amendment, `validate: /usr/sbin/visudo -cf %s` of `copy` in
+`roles/remediate/tasks/sudo_dropin_apply.yml`, does not extend to sshd: `sshd -t` has to check the whole effective
+configuration with the new settings, not one temporary file, so it cannot run as the `validate` of a file module. The
+module `freesecdev.linux_compliance.sshd_validate` is the third caller of the helper, and the allow-list gains one
+policy:
 
 - `sshd`, resolved in the trusted directories like `oscap`, with the one command prefix
   `-t -f /etc/ssh/sshd_config` (`SSHD_CONFIG_PATH`). sshd's test mode reads the configuration, every file it includes

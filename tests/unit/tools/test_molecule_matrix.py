@@ -66,6 +66,10 @@ def make_root(
     shutil.copytree(
         REPOSITORY_ROOT / check_lifecycle_topics.TOPICS, root / check_lifecycle_topics.TOPICS
     )
+    shutil.copytree(
+        REPOSITORY_ROOT / check_lifecycle_topics.REGRESSION_DISPATCH.parent,
+        root / check_lifecycle_topics.REGRESSION_DISPATCH.parent,
+    )
     for family, declaration in (declarations or {}).items():
         path = root / check_lifecycle_topics.TOPICS / f"{family}.yml"
         path.write_text("---\n" + yaml.safe_dump(declaration), encoding="utf-8")
@@ -123,6 +127,7 @@ def test_the_repository_matrix_covers_every_native_topic_in_both_modes_on_every_
     found = cast("dict[str, list[dict[str, str]]]", json.loads(capsys.readouterr().out))
     topics = native_topics(REPOSITORY_ROOT)
     platforms = sorted(check_lifecycle_topics.platforms(REPOSITORY_ROOT))
+    regressions = check_lifecycle_topics.regression_platforms(REPOSITORY_ROOT)
     assert found["include"] == [
         {
             "platform": platform,
@@ -132,8 +137,23 @@ def test_the_repository_matrix_covers_every_native_topic_in_both_modes_on_every_
         }
         for platform in platforms
         for topic in topics
-        for mode in ("topic", "rule")
+        for mode in (
+            "topic",
+            "rule",
+            *(
+                matrix.REGRESSION_MODE_PREFIX + name
+                for name, chosen in regressions[topic].items()
+                if platform in chosen
+            ),
+        )
     ]
+    sudo = {(leg["platform"], leg["mode"]) for leg in found["include"] if leg["topic"] == "sudo"}
+    assert {mode for _, mode in sudo if mode.startswith(matrix.REGRESSION_MODE_PREFIX)} == {
+        "regressions-changes",
+        "regressions-files",
+        "regressions-profiles",
+    }
+    assert ("rhel_compatible", "regressions-files") not in sudo
     declared = sorted(
         path.stem for path in (REPOSITORY_ROOT / check_lifecycle_topics.TOPICS).glob("*.yml")
     )
@@ -156,7 +176,8 @@ def test_the_scenario_of_a_platform_follows_the_scenario_names() -> None:
 def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path) -> None:
     root = make_root(tmp_path)
     topics = native_topics(root)
-    assert matrix.legs(root) == [
+    cycles = [leg for leg in matrix.legs(root) if leg["mode"] in matrix.MODES]
+    assert cycles == [
         {
             "platform": platform,
             "scenario": matrix.scenario_of(platform),
@@ -167,6 +188,14 @@ def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path)
         for topic in topics
         for mode in matrix.MODES
     ]
+    assert all(leg["topic"] for leg in matrix.legs(root))
+
+
+def test_regression_groups_get_docker_legs_only(tmp_path: Path) -> None:
+    root = make_root(tmp_path)
+    docker = [leg for leg in matrix.legs(root) if leg["mode"].startswith("regressions-")]
+    assert {(leg["topic"], leg["mode"]) for leg in docker} >= {("sudo", "regressions-files")}
+    assert all(not leg["mode"].startswith("regressions-") for leg in matrix.legs(root, "libvirt"))
 
 
 def test_a_topic_that_requires_libvirt_has_no_docker_leg(tmp_path: Path) -> None:
