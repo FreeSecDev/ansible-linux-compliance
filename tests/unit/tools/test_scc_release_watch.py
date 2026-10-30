@@ -28,6 +28,7 @@ PINS = REPOSITORY_ROOT / "extensions" / "ci" / "scc" / "scc.pins"
 CHECK_EXPIRY = REPOSITORY_ROOT / "tools" / "scc" / "check-expiry.sh"
 EXPIRY_STATE = REPOSITORY_ROOT / "tools" / "scc" / "expiry-state.sh"
 REPOSITORY = "FreeSecDev/ansible-linux-compliance"
+BOT = {"login": "github-actions[bot]"}
 TOKEN = "ghs_" + "a" * 36
 EXPIRES = date(2026, 11, 25)
 CURRENT_DAY = date(2026, 10, 30)
@@ -88,19 +89,23 @@ class FakeGitHub:
         if request.method == "POST" and path == "/issues":
             number = len(self.issues) + 1
             labels = cast("list[str]", payload["labels"])
-            self.issues.append({**payload, "number": number, "state": "open", "labels": labels})
+            self.issues.append(
+                {**payload, "number": number, "state": "open", "labels": labels, "user": BOT}
+            )
             return watch.HttpResponse(201, json.dumps({"number": number}).encode())
         number = int(path.removeprefix("/issues/"))
-        self.issues[number - 1]["state"] = payload["state"]
+        self.issues[number - 1].update(payload)
         return watch.HttpResponse(200, b"{}")
 
     def _listing(self, query: dict[str, list[str]]) -> watch.HttpResponse:
-        label, state = query["labels"][0], query["state"][0]
+        assert "labels" not in query
+        assert query["creator"] == [BOT["login"]]
+        state = query["state"][0]
         page, size = int(query["page"][0]), int(query["per_page"][0])
         matching = [
             issue
             for issue in self.issues
-            if issue["state"] == state and label in cast("list[str]", issue["labels"])
+            if state in ("all", issue["state"]) and issue.get("user") == BOT
         ]
         return watch.HttpResponse(
             200, json.dumps(matching[(page - 1) * size : page * size]).encode()
@@ -199,6 +204,7 @@ def test_a_release_record_that_is_not_served_fails(status: int) -> None:
         ("5.15.1", "5.15", True),
         ("6.0", "5.15", True),
         ("5.14.1", "5.15", False),
+        ("5.15.1", "5.15.0", True),
     ],
 )
 def test_a_different_version_is_a_release_finding(released: str, pinned: str, newer: bool) -> None:
@@ -215,8 +221,22 @@ def test_a_different_version_is_a_release_finding(released: str, pinned: str, ne
     assert watch.FALLBACK_ANCHOR in finding.body
 
 
-def test_the_same_version_is_no_release_finding() -> None:
-    assert watch.release_finding("5.15", watch.Release("5.15", None), REPOSITORY) is None
+@pytest.mark.parametrize(
+    ("released", "pinned"),
+    [("5.15", "5.15"), ("5.15.0", "5.15"), ("5.15", "5.15.0"), ("5.15.0.0", "5.15")],
+)
+def test_the_same_version_is_no_release_finding(released: str, pinned: str) -> None:
+    assert watch.release_finding(pinned, watch.Release(released, None), REPOSITORY) is None
+
+
+@pytest.mark.parametrize(
+    ("version", "key"),
+    [("5.15", (5, 15)), ("5.15.0", (5, 15)), ("5.0.1", (5, 0, 1)), ("5.0", (5,)), ("0.0", ())],
+)
+def test_trailing_zero_components_do_not_change_a_version(
+    version: str, key: tuple[int, ...]
+) -> None:
+    assert watch.version_key(version) == key
 
 
 def test_the_issue_body_carries_no_text_from_the_release_record() -> None:
@@ -289,6 +309,12 @@ def test_a_new_release_opens_exactly_one_issue_across_runs() -> None:
     assert watch.RELEASE_LABEL in github.labels
 
 
+def test_a_newer_patch_release_with_a_trailing_zero_pin_is_not_a_step_back() -> None:
+    github = FakeGitHub(record_body=record("5.15.0"))
+    assert watch.watch(settings(), github) == watch.EXIT_OK
+    assert github.issues == []
+
+
 def test_a_closed_issue_is_reopened_not_duplicated() -> None:
     github = FakeGitHub(record_body=record("5.16"))
     watch.watch(settings(), github)
@@ -313,19 +339,25 @@ def test_issues_without_the_marker_or_that_are_pull_requests_do_not_count() -> N
     assert finding is not None
     github = FakeGitHub(record_body=record("5.16"), labels={watch.RELEASE_LABEL})
     github.issues = [
-        {"number": 1, "state": "open", "labels": [watch.RELEASE_LABEL], "body": None},
-        {"number": 2, "state": "open", "labels": [watch.RELEASE_LABEL], "body": "other"},
+        {"number": 1, "state": "open", "user": BOT, "body": None},
+        {"number": 2, "state": "open", "user": BOT, "body": "other"},
         {
             "number": 3,
             "state": "open",
             "labels": [watch.RELEASE_LABEL],
+            "user": BOT,
             "body": finding.body,
             "pull_request": {},
         },
+        {"number": 4, "state": "open", "user": {"login": "someone"}, "body": finding.body},
+        {"number": 5, "state": "open", "body": finding.body},
+        {"number": 6, "state": "open", "user": BOT, "body": f"text\n{finding.marker}"},
     ]
     watch.watch(settings(), github)
     assert len(github.created()) == 1
-    assert github.issues[-1]["number"] == 4
+    assert github.issues[-1]["number"] == 7
+    assert [issue["state"] for issue in github.issues[:6]] == ["open"] * 6
+    assert [request for request in github.requests if request.method == "PATCH"] == []
 
 
 def test_the_duplicate_search_follows_pages() -> None:
@@ -333,11 +365,18 @@ def test_the_duplicate_search_follows_pages() -> None:
     assert finding is not None
     github = FakeGitHub(record_body=record("5.16"), labels={watch.RELEASE_LABEL})
     github.issues = [
-        {"number": number, "state": "open", "labels": [watch.RELEASE_LABEL], "body": "other"}
+        {"number": number, "state": "open", "user": BOT, "body": "other"}
         for number in range(1, watch.PAGE_SIZE + 1)
     ]
     github.issues.append(
-        {"number": 101, "state": "open", "labels": [watch.RELEASE_LABEL], "body": finding.body}
+        {
+            "number": 101,
+            "state": "open",
+            "labels": [watch.RELEASE_LABEL],
+            "user": BOT,
+            "title": finding.title,
+            "body": finding.body,
+        }
     )
     watch.watch(settings(), github)
     assert github.created() == []
@@ -346,11 +385,121 @@ def test_the_duplicate_search_follows_pages() -> None:
 def test_a_listing_longer_than_the_page_limit_fails_closed() -> None:
     github = FakeGitHub(record_body=record("5.16"), labels={watch.RELEASE_LABEL})
     github.issues = [
-        {"number": number, "state": "open", "labels": [watch.RELEASE_LABEL], "body": "other"}
+        {"number": number, "state": "open", "user": BOT, "body": "other"}
         for number in range(1, watch.PAGE_SIZE * watch.MAX_PAGES + 1)
     ]
     assert watch.watch(settings(), github) == watch.EXIT_ERROR
     assert github.created() == []
+
+
+def patches(github: FakeGitHub) -> list[dict[str, object]]:
+    return [
+        cast("dict[str, object]", json.loads(request.body or b"{}"))
+        for request in github.requests
+        if request.method == "PATCH"
+    ]
+
+
+def test_a_persisting_finding_rewrites_the_issue_body_on_every_run() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    marker = watch.release_finding("5.15", watch.parse_release_record(record("5.16")), REPOSITORY)
+    assert marker is not None
+    github.issues[0]["body"] = f"{marker.marker}\n\nstale text"
+    watch.watch(settings(), github)
+    assert len(github.issues) == 1
+    assert github.issues[0]["body"] == marker.body
+    assert patches(github) == [{"body": marker.body}]
+    watch.watch(settings(), github)
+    assert len(patches(github)) == 1
+
+
+def test_a_persisting_expiry_finding_is_updated_when_the_stop_text_changes() -> None:
+    github = FakeGitHub()
+    watch.watch(settings(date(2026, 11, 4)), github)
+    github.issues[0]["title"] = "old title"
+    github.issues[0]["state"] = "closed"
+    watch.watch(settings(date(2026, 11, 5)), github)
+    assert github.issues[0]["state"] == "open"
+    assert str(github.issues[0]["title"]).startswith("SCC 5.15 expires on 2026-11-25")
+    assert set(patches(github)[0]) == {"state", "title"}
+
+
+def test_a_removed_label_does_not_cause_a_duplicate_and_is_put_back() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    github.issues[0]["labels"] = []
+    watch.watch(settings(), github)
+    assert len(github.created()) == 1
+    assert github.issues[0]["labels"] == [watch.RELEASE_LABEL]
+    github.issues[0]["labels"] = [{"name": "bug"}]
+    watch.watch(settings(), github)
+    assert github.issues[0]["labels"] == ["bug", watch.RELEASE_LABEL]
+    assert len(github.issues) == 1
+
+
+def test_a_bumped_pin_closes_the_release_issue() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    assert watch.watch(settings(pinned="5.16"), github) == watch.EXIT_OK
+    assert github.issues[0]["state"] == "closed"
+    assert github.issues[0]["state_reason"] == "completed"
+    assert len(github.issues) == 1
+    watch.watch(settings(pinned="5.16"), github)
+    assert len(patches(github)) == 1
+
+
+def test_a_newer_release_closes_the_issue_of_the_older_one_and_opens_its_own() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    github.record_body = record("5.17")
+    watch.watch(settings(), github)
+    assert [issue["state"] for issue in github.issues] == ["closed", "open"]
+    assert "5.17" in str(github.issues[1]["title"])
+
+
+def test_an_expiry_that_is_no_longer_near_closes_the_expiry_issue() -> None:
+    github = FakeGitHub()
+    watch.watch(settings(date(2026, 11, 4)), github)
+    assert [issue["state"] for issue in github.issues] == ["open"]
+    assert watch.watch(settings(date(2026, 10, 30)), github) == watch.EXIT_OK
+    assert [issue["state"] for issue in github.issues] == ["closed"]
+    watch.watch(settings(date(2026, 11, 4)), github)
+    assert [issue["state"] for issue in github.issues] == ["open"]
+
+
+def test_a_bumped_expiry_closes_the_old_expiry_issue() -> None:
+    github = FakeGitHub()
+    watch.watch(settings(date(2026, 11, 4)), github)
+    bumped = watch.WatchSettings(
+        pinned="5.16",
+        expires=date(2027, 2, 20),
+        today=date(2026, 11, 4),
+        manage_issues=True,
+        repository=REPOSITORY,
+        token=TOKEN,
+    )
+    github.record_body = record("5.16")
+    assert watch.watch(bumped, github) == watch.EXIT_OK
+    assert github.issues[0]["state"] == "closed"
+    assert len(github.issues) == 1
+
+
+def test_an_unreadable_release_record_closes_no_release_issue() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    github.record_error = "the request failed"
+    assert watch.watch(settings(pinned="5.16"), github) == watch.EXIT_ERROR
+    assert github.issues[0]["state"] == "open"
+
+
+def test_an_unmanaged_run_closes_and_updates_nothing() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    github.requests.clear()
+    assert watch.watch(settings(pinned="5.16", manage=False), github) == watch.EXIT_OK
+    assert github.issues[0]["state"] == "open"
+    assert [request.url for request in github.requests] == [watch.RELEASE_RECORD_URL]
 
 
 def test_the_expiry_issue_is_opened_in_the_warning_phase_without_failing() -> None:
@@ -384,7 +533,9 @@ def test_a_new_release_and_the_hard_stop_keep_one_issue_each() -> None:
 def test_no_finding_touches_no_issue(capsys: pytest.CaptureFixture[str]) -> None:
     github = FakeGitHub()
     assert watch.watch(settings(), github) == watch.EXIT_OK
-    assert [request.url for request in github.requests] == [watch.RELEASE_RECORD_URL]
+    assert [request.method for request in github.requests] == ["GET", "GET"]
+    assert github.requests[0].url == watch.RELEASE_RECORD_URL
+    assert github.issues == []
     assert "nothing to report" in capsys.readouterr().out
 
 
@@ -461,6 +612,11 @@ class ScriptedApi:
         return self.response
 
 
+def listing(**extra: object) -> bytes:
+    issue = {"user": BOT, "body": "<!-- scc-release-watch: release 5.16 -->", **extra}
+    return json.dumps([issue]).encode()
+
+
 @pytest.mark.parametrize(
     ("body", "message"),
     [
@@ -468,21 +624,23 @@ class ScriptedApi:
         (b"\xff", "malformed JSON"),
         (b"{}", "not a list"),
         (b"[1]", "not an object"),
-        (b'[{"body": "<!-- m -->", "number": true}]', "valid number"),
-        (b'[{"body": "<!-- m -->", "number": 0}]', "valid number"),
-        (b'[{"body": "<!-- m -->"}]', "valid number"),
+        (listing(number=True), "valid number"),
+        (listing(number=0), "valid number"),
+        (listing(), "valid number"),
     ],
 )
 def test_a_malformed_issue_listing_is_refused(body: bytes, message: str) -> None:
     issues = watch.GitHubIssues(REPOSITORY, TOKEN, ScriptedApi(watch.HttpResponse(200, body)))
     with pytest.raises(watch.WatchError, match=message):
-        issues.find(watch.RELEASE_LABEL, "<!-- m -->", "open")
+        issues.list_marked()
 
 
 @pytest.mark.parametrize("body", [b"", b"[]", b'{"number": "7"}'])
 def test_a_created_issue_without_a_number_is_refused(body: bytes) -> None:
     issues = watch.GitHubIssues(REPOSITORY, TOKEN, ScriptedApi(watch.HttpResponse(201, body)))
-    finding = watch.Finding(watch.RELEASE_LABEL, "<!-- m -->", "t", "b")
+    finding = watch.Finding(
+        watch.RELEASE_LABEL, "<!-- scc-release-watch: release 5.16 -->", "t", "b"
+    )
     with pytest.raises(watch.WatchError, match="valid number"):
         issues.create(finding)
 
@@ -669,3 +827,32 @@ def test_the_pins_name_a_version_the_watch_accepts() -> None:
     )
     assert watch.version_key(values["SCC_VERSION"])
     assert date.fromisoformat(values["SCC_EXPIRES"])
+
+
+@pytest.mark.parametrize(
+    ("labels", "names"),
+    [
+        (None, ()),
+        ("scc-release", ()),
+        ([{"name": "a"}, "b", {"name": 3}, {}, 7, None], ("a", "b")),
+    ],
+)
+def test_only_label_names_that_are_strings_are_read(labels: object, names: tuple[str, ...]) -> None:
+    item = {"number": 4, "user": BOT, "body": f"{watch.MARKER_PREFIX} x -->", "labels": labels}
+    issues = watch.GitHubIssues(
+        REPOSITORY, TOKEN, ScriptedApi(watch.HttpResponse(200, json.dumps([item]).encode()))
+    ).list_marked()
+    assert [entry.labels for entry in issues] == [names]
+
+
+def test_the_issue_listing_is_limited_to_the_bot_and_has_no_label_filter() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    listings = [
+        request.url
+        for request in github.requests
+        if request.method == "GET" and "/issues?" in request.url
+    ]
+    assert len(listings) == 1
+    assert "state=all&creator=github-actions%5Bbot%5D&" in listings[0]
+    assert "labels=" not in listings[0]

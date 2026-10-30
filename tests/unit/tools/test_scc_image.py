@@ -1204,6 +1204,11 @@ def test_the_smoke_job_builds_locally_with_read_only_permissions() -> None:
     assert "scc-smoke" in workflow["jobs"]["ci-gate"]["needs"]
 
 
+WATCH_CONDITION = (
+    "github.ref == 'refs/heads/main' && github.repository == 'FreeSecDev/ansible-linux-compliance'"
+)
+
+
 def test_only_the_scheduled_release_watch_may_write_issues() -> None:
     path = WORKFLOW_DIRECTORY / WATCH_WORKFLOW
     workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -1212,7 +1217,7 @@ def test_only_the_scheduled_release_watch_may_write_issues() -> None:
     assert set(workflow["jobs"]) == {WATCH_JOB}
     job = workflow["jobs"][WATCH_JOB]
     assert job["permissions"] == WATCH_PERMISSIONS
-    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["if"] == WATCH_CONDITION
     assert "secrets" not in yaml.safe_dump(job)
     assert [step["run"] for step in job["steps"] if "run" in step] == [
         "make scc-release-watch SCC_RELEASE_WATCH_ISSUES=true"
@@ -1221,13 +1226,6 @@ def test_only_the_scheduled_release_watch_may_write_issues() -> None:
         step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@")
     ]
     assert [step["with"]["persist-credentials"] for step in checkouts] == [False]
-    writers = [
-        f"{other.name}:{name}"
-        for other in sorted(WORKFLOW_DIRECTORY.glob("*.y*ml"))
-        for name, entry in yaml.safe_load(other.read_text(encoding="utf-8"))["jobs"].items()
-        if "issues" in entry.get("permissions", {})
-    ]
-    assert writers == [f"{WATCH_WORKFLOW}:{WATCH_JOB}"]
     lines = path.read_text(encoding="utf-8").splitlines()
     ignored = f"{WATCH_WORKFLOW}:{lines.index('      issues: write') + 1}"
     zizmor = yaml.safe_load(

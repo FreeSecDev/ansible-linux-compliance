@@ -499,6 +499,14 @@ def test_the_expiry_state_of_the_tracked_pins_matches_the_expiry_check() -> None
         (pins_text(), pins_text("5.16", "2026-11-25")),
         (pins_text(), pins_text("5.15", "2027-03-01")),
         (pins_text("5.15", "2027-03-01"), pins_text()),
+        (pins_text(), pins_text() + "SCC_BUNDLE_SHA256 := " + "0" * 64 + "\n"),
+        (
+            pins_text() + "SCC_DEB_SHA256 := " + "a" * 64 + "\n",
+            pins_text() + "SCC_DEB_SHA256 := " + "b" * 64 + "\n",
+        ),
+        (pins_text() + "SCC_CONTENT_FILE := a.zip\n", pins_text() + "SCC_CONTENT_FILE := b.zip\n"),
+        (pins_text() + "SCC_SIZE := 1\n", pins_text() + "SCC_SIZE := 2\n"),
+        (pins_text(), pins_text() + "\n"),
         (pins_text(), pins_text() + "SCC_VERSION := 5.15\n"),
         (pins_text() + "SCC_EXPIRES := 2026-11-25\n", pins_text()),
         (pins_text("5.15; true"), pins_text("5.15; true")),
@@ -514,6 +522,15 @@ def test_the_expiry_state_is_current_unless_both_pins_name_the_same_expired_rele
 ) -> None:
     (tmp_path / "base").write_text(base, encoding="utf-8")
     (tmp_path / "head").write_text(head, encoding="utf-8")
+    assert expiry_state(tmp_path / "base", tmp_path / "head", "2026-11-20") == "current\n"
+
+
+def test_the_expiry_state_requires_byte_identical_pins(tmp_path: Path) -> None:
+    pins = pins_text() + "SCC_CONTENT_SHA256 := " + "c" * 64 + "\n"
+    (tmp_path / "base").write_text(pins, encoding="utf-8")
+    (tmp_path / "head").write_text(pins, encoding="utf-8")
+    assert expiry_state(tmp_path / "base", tmp_path / "head", "2026-11-20") == "expired\n"
+    (tmp_path / "head").write_text(pins.replace("c" * 64, "d" * 64), encoding="utf-8")
     assert expiry_state(tmp_path / "base", tmp_path / "head", "2026-11-20") == "current\n"
 
 

@@ -392,12 +392,13 @@ The expiry is enforced on the SCC path, not in every pull request:
   which are exact. It no longer uses `inside()`, which matches substrings and so accepted an output of `""`, `ru`
   or `fals` and an event named `pull`, `merge` or `merge_grou` (FREES-152).
 - **Early warning.** A plain unit test only checks that the publication date is before the expiry date. The
-  scheduled check of FREES-149 fails loudly and opens or updates an issue from 21 days before `SCC_EXPIRES`, and also
-  reports a newer release in `scc_release.xml`.
+  scheduled release watch (FREES-149, FREES-176) opens or updates an issue from 21 days before `SCC_EXPIRES`, and
+  also reports a newer release in `scc_release.xml`. Its own run starts to fail, and `make scc-expiry-check` starts
+  to stop the SCC path, 7 days before `SCC_EXPIRES`.
 - **Effect.** After the cutoff, only pull requests and merge groups that touch an SCC path are blocked until the
   pin is bumped. Unrelated pull requests keep passing `ci-gate` and keep flowing through the merge queue. The push
-  runs on `main` and the daily scheduled run always run `scc-smoke`, so they go red and fail loudly. The FREES-149
-  warning starts 21 days before expiry, so the bump can happen before the cutoff.
+  runs on `main` and the daily scheduled run always run `scc-smoke`, so they go red and fail loudly. The release
+  watch opens its issue 21 days before expiry, so the bump can happen before the cutoff 7 days before it.
 
 ### 8. STIG to ComplianceAsCode mapping (FREES-146)
 
@@ -1257,7 +1258,8 @@ changes of all three scans stay within the accepted residual.
 ### Decision 1: a scheduled release watch
 
 - **A workflow of its own,** `.github/workflows/scc-release-watch.yml`, not a job of `ci.yml`. It runs daily at 05:43
-  UTC and on manual dispatch, and its one job `scc-release-watch` runs only on `main`. The reasons for a separate
+  UTC and on manual dispatch, and its one job `scc-release-watch` runs only on `main` of `FreeSecDev/ansible-linux-compliance`
+  (`github.repository` is checked in the job's `if`, so a fork never opens issues). The reasons for a separate
   workflow:
   - `issues: write` then exists only in a workflow that never runs for `pull_request` or `merge_group`, so no run
     of pull request code is handed a token that can write issues;
@@ -1284,14 +1286,22 @@ changes of all three scans stay within the accepted residual.
     seven-day wait; an older one is reported as a suspicious step back that must not be followed without review.
   - From 21 days before `SCC_EXPIRES` the pinned release is a finding labelled `scc-expiry` that names the hard stop
     and links this amendment. That is the early warning that decision 7 planned for FREES-149.
-- **Exactly one issue per finding.** Each issue body starts with a marker, for example
-  `<!-- scc-release-watch: release 5.16 -->`. The tool creates the label if it is missing, then searches the open
-  issues with the label for the marker, then the closed ones. An open issue is left alone, a closed one is reopened,
-  and only when neither exists is an issue created. A renamed issue is still found. A listing longer than ten pages of
-  100 issues fails the run instead of risking a duplicate.
+- **Exactly one issue per finding, kept current.** Each issue body starts with a marker, for example
+  `<!-- scc-release-watch: release 5.16 -->`. The tool creates the label if it is missing, then lists the issues of
+  the repository in every state and with any label, asking the API only for those created by
+  `github-actions[bot]` (`creator=`), and keeps those whose body starts with a watch marker and that
+  `github-actions[bot]` opened (an issue of another author is never edited). Only the marker finds an issue, so
+  removing a label or renaming the issue cannot cause a duplicate.
+  - While the finding holds, every run rewrites the title and body, reopens a closed issue and puts a removed label
+    back; an issue that is already current is not touched. Only when no issue has the marker is one created.
+  - The issue is closed once the finding no longer holds: the pin was bumped to the released version, a newer release
+    replaced the one in the marker, or the expiry is no longer near (the pin and `SCC_EXPIRES` changed, or the
+    marker names an older pin). A release issue is judged only on a run that read the release record.
+  - Version comparison drops trailing `.0` components, so `5.15.0` is the same release as `5.15`.
+  - A listing longer than ten pages of 100 issues fails the run instead of risking a duplicate.
 - **Exit status.** 0 when the run worked and the pin is before its hard stop; 1 from the hard stop on, so the daily
   run fails every day until the pin is bumped; 2 when the record or the API could not be used. A network failure
-  therefore fails the run, opens no release issue, and still opens or reopens the expiry issue.
+  therefore fails the run, opens or closes no release issue, and still opens or updates the expiry issue.
 
 ### Decision 2: after the hard stop, a named skip and never a pass
 
@@ -1305,7 +1315,8 @@ changes of all three scans stay within the accepted residual.
   - the event is `pull_request` or `merge_group` and the base SHA is 40 hexadecimal digits;
   - both pin files are regular files that each set `SCC_VERSION` and `SCC_EXPIRES` exactly once, in the expected
     form, with a real calendar date;
-  - both name the same `SCC_VERSION`, so no newer pin exists in the change;
+  - the two pin files are byte-identical (`cmp`), so the change touches no pin: not the version, `SCC_EXPIRES`, the
+    bundle, deb or `cscc` SHA-256, a size, `SCC_CONTENT_FILE` or `SCC_CONTENT_SHA256`;
   - on the run's UTC date, both are on or after their hard stop (`SCC_EXPIRES` minus seven days, the same margin as
     `check-expiry.sh`; a test keeps the margins equal).
 

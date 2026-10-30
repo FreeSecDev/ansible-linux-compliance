@@ -39,6 +39,7 @@ head_version="$(pin "${head_pins}" SCC_VERSION "${VERSION}")" || current
 base_expires="$(pin "${base_pins}" SCC_EXPIRES "${DATE}")" || current
 head_expires="$(pin "${head_pins}" SCC_EXPIRES "${DATE}")" || current
 [[ "${base_version}" == "${head_version}" ]] || current
+cmp --silent -- "${base_pins}" "${head_pins}" || current
 stopped "${base_expires}" || current
 stopped "${head_expires}" || current
 printf 'expired\n'
