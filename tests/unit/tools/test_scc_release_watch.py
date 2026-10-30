@@ -456,12 +456,11 @@ def test_a_newer_release_closes_the_issue_of_the_older_one_and_opens_its_own() -
 def test_an_expiry_that_is_no_longer_near_closes_the_expiry_issue() -> None:
     github = FakeGitHub()
     watch.watch(settings(date(2026, 11, 4)), github)
-    assert github.issues[0]["state"] == "open"
+    assert [issue["state"] for issue in github.issues] == ["open"]
     assert watch.watch(settings(date(2026, 10, 30)), github) == watch.EXIT_OK
-    assert github.issues[0]["state"] == "closed"
+    assert [issue["state"] for issue in github.issues] == ["closed"]
     watch.watch(settings(date(2026, 11, 4)), github)
-    assert len(github.issues) == 1
-    assert github.issues[0]["state"] == "open"
+    assert [issue["state"] for issue in github.issues] == ["open"]
 
 
 def test_a_bumped_expiry_closes_the_old_expiry_issue() -> None:
