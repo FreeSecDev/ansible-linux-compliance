@@ -12,6 +12,8 @@
 
 - name: Find with checksums | Name the paths whose walk stopped at a file that root cannot read
   ansible.builtin.set_fact:
+    find_under: "^$"
+    find_sums: {}
     find_aborted: >-
       {{ find_whole.skipped_paths | default({}) | dict2items
          | selectattr('key', 'in', find_paths) | rejectattr('value', 'search', 'Errno 2\]')
@@ -55,18 +57,9 @@
     quiet: true
   when: find_aborted | length > 0
 
-- name: Find with checksums | Join the entries, with the checksums of the second pass for the paths walked twice
+- name: Find with checksums | Keep the checksums of the second pass and the paths it replaces
   ansible.builtin.set_fact:
-    find_files: >-
-      {%- if find_aborted | length == 0 -%}
-      {{ find_whole.files }}
-      {%- else -%}
-      {%- set under = '^(' ~ (find_aborted | map('regex_escape') | join('|')) ~ ')(/|$)' -%}
-      {%- set sums = dict(find_summed.files | map(attribute='path')
-            | zip(find_summed.files | map(attribute='checksum'))) -%}
-      {%- set joined = find_whole.files | rejectattr('path', 'match', under) | list -%}
-      {%- for entry in find_listed.files -%}
-      {%- set _ = joined.append(entry | combine({'checksum': sums[entry.path]} if entry.path in sums else {})) -%}
-      {%- endfor -%}
-      {{ joined }}
-      {%- endif -%}
+    find_under: "{{ '^(' ~ (find_aborted | map('regex_escape') | join('|')) ~ ')(/|$)' }}"
+    find_sums: >-
+      {{ dict(find_summed.files | map(attribute='path') | zip(find_summed.files | map(attribute='checksum'))) }}
+  when: find_aborted | length > 0

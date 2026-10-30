@@ -42,7 +42,10 @@
     lifecycle_broad_declared: "{{ lifecycle_items.files | map(attribute='path') | list }}"
     lifecycle_broad_rewritten: "{{ lifecycle_rewritten | default([]) }}"
     lifecycle_broad_raw:
-      files: "{{ find_files }}"
+      files: >-
+        {{ find_whole.files if find_aborted | length == 0
+           else (find_whole.files | rejectattr('path', 'match', find_under) | list) + find_listed.files }}
+      checksums: "{{ find_sums }}"
       sysctl: "{{ lifecycle_broad_sysctl.files }}"
       packages: "{{ ansible_facts.packages }}"
       services: "{{ none if lifecycle_broad_services is skipped else ansible_facts.services | default(none) }}"

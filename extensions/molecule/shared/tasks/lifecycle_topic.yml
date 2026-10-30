@@ -233,11 +233,11 @@
     - lifecycle_run_modes | first == 'topic'
     - lifecycle_platform != 'ubuntu'
 
-- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select, on Rocky Linux
+- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select, on Ubuntu
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_other_profiles.yml
   when:
     - lifecycle_family == 'sudo'
     - lifecycle_runs | bool
     - lifecycle_run_modes | last == 'rule'
-    - lifecycle_platform != 'ubuntu'
+    - lifecycle_platform == 'ubuntu'
