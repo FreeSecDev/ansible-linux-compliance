@@ -379,7 +379,11 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          BASE_REF: ${{ github.event.merge_group.base_ref }}
         run: |
+          if [[ "$EVENT_NAME" == merge_group ]]; then
+            BASE_SHA="$(git merge-base HEAD "refs/remotes/origin/${BASE_REF#refs/heads/}" 2>/dev/null)" || BASE_SHA=""
+          fi
           docker="$RUNNER_TEMP/docker.json"
           libvirt="$RUNNER_TEMP/libvirt.json"
           plan="$(jq -c -n --slurpfile d "$docker" --slurpfile l "$libvirt" \
@@ -400,11 +404,9 @@ jobs:
             plan="$decided"
           fi
           rm -f "$planner"
-          jq -r '"scope: \(.scope)", "topics: \(.topics | join(", "))", (.reasons[] | "  \(.)")' <<<"$plan"
-          printf 'matrix=%s\n' "$(jq -c .docker <<<"$plan")" >> "$GITHUB_OUTPUT"
-          printf 'libvirt=%s\n' "$(jq -c .libvirt <<<"$plan")" >> "$GITHUB_OUTPUT"
-          printf 'scope=%s\n' "$(jq -r .scope <<<"$plan")" >> "$GITHUB_OUTPUT"
-          printf 'lifecycle_legs=%s\n' "$(jq -r '.docker.include | length' <<<"$plan")" >> "$GITHUB_OUTPUT"
+          jq -r '"scope: \(.scope | tojson)", "topics: \(.topics | tojson)", (.reasons[] | "  \(tojson)")' <<<"$plan"
+          jq -r '"matrix=\(.docker | tojson)", "libvirt=\(.libvirt | tojson)", "scope=\(.scope)",
+            "lifecycle_legs=\(.docker.include | length)"' <<<"$plan" >> "$GITHUB_OUTPUT"
 
   molecule-lifecycle:
     name: molecule-lifecycle (${{ matrix.platform }}, ${{ matrix.topic }}, ${{ matrix.mode }})

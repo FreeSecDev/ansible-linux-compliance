@@ -796,7 +796,7 @@ refinements apply ([Molecule guide](../molecule.md#affected-legs-on-pull-request
   and generator inputs (`content/catalogue.yml`) have no effect of their own: the required `lint` and `test` jobs
   check them against their generators, and their effect is classified through the files they are generated from. An
   argument-spec change that only rewrites descriptions has no effect. Documentation, changelog fragments, unit tests,
-  check-mode playbooks and the reporting, lint, docs, IaC and SCC tools have no lifecycle effect. Everything else plans
+  check-mode playbooks and the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions have no lifecycle effect. Everything else plans
   the full matrix: the shared harness and its tasks, the images and their pins, plugins and `module_utils`, role
   defaults and entry points, the content pins, everything below `tools/roles` and `tools/molecule`, `ci.yml`, the
   `Makefile`, the Python lock, a symbolic link, and any path that the mapping does not know.
@@ -808,6 +808,10 @@ refinements apply ([Molecule guide](../molecule.md#affected-legs-on-pull-request
   merges. The step uses the answer only when it is a well-formed plan whose legs all come from the full matrices and
   that keeps every leg without a topic; any other answer, a failure, and a base revision without the planner (the pull
   request that introduces it) run the full matrices.
+- **The queue diffs against the target branch.** In a merge group the base is the merge base of the group's head with
+  the target branch, not the event's `base_sha`, which is the head of the previous group when pull requests queue
+  behind each other. The diff then holds every pull request of the queue ahead of this one, and the planner comes from
+  the target branch, never from a group that has not merged.
 - **`ci-gate` stays the only required check.** It accepts the scope `affected` only for `pull_request` and
   `merge_group`, and a skipped `molecule-lifecycle` only when the plan of such an event has the scope `affected` and
   exactly zero lifecycle legs. Every planned leg must succeed; a leg that the plan leaves out is not a check at all.
@@ -821,9 +825,15 @@ Residual risk, accepted for the throughput it buys:
 - **The full matrix itself comes from the head revision**, as before this amendment: a pull request that edits
   `make molecule-matrix` runs the full matrix that its own tool plans. Such a change plans the full scope and is
   reviewed like any other change of `tools/roles`.
+- **The workflow and the head's code are trusted by review.** On `pull_request` GitHub runs the head's `ci.yml`, and
+  the head's `make molecule-matrix` runs in the same job before the base planner. The base revision's planner protects
+  against a careless or unnoticed change to the mapping, not against a pull request that rewrites the workflow; that is
+  what review of every change to `.github/workflows` and `tools/roles` is for.
 - **Only literal includes are seen.** The mapping finds includes by the file name in the text of the YAML files of
   `roles`, `extensions/molecule` and `playbooks` of both revisions. A file that a shared file includes only through a
-  templated name, and that a topic also owns by its name, is attributed to that topic alone. The family dispatch and the
+  templated name, and that a topic also owns by its name, is attributed to that topic alone. Every literal form counts:
+  the file name after any directory or template, and the stem after `tasks_from`. A role variable that another role
+  variable uses plans the full matrix. The family dispatch and the
   regression dispatch name their files literally, and `make lint-lifecycle` and `make lint-role-guards` keep them so.
 - **Generated files rely on their drift checks.** A generated file whose sources did not change in the same way is
   refused by the required `lint` or `test` job of the same run, so such a pull request cannot merge; the plan of that

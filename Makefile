@@ -344,7 +344,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
-	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix molecule-affected molecule-plan test-molecule-dockertest-molecule-docker-selftest test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix molecule-affected molecule-plan test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
 	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -420,7 +420,7 @@ molecule-plan: require-uv collection-link
 	@mkdir -p '$(MOLECULE_PLAN_DIR)'
 	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver docker > '$(MOLECULE_PLAN_DIR)/docker.json'
 	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver libvirt > '$(MOLECULE_PLAN_DIR)/libvirt.json'
-	@tools/molecule/plan-lifecycle.sh pull_request "$$(git rev-parse --verify '$(MOLECULE_PLAN_BASE)^{commit}')" '' \
+	@tools/molecule/plan-lifecycle.sh pull_request "$$(git merge-base HEAD '$(MOLECULE_PLAN_BASE)')" '' \
 		'$(MOLECULE_PLAN_DIR)/docker.json' '$(MOLECULE_PLAN_DIR)/libvirt.json'
 
 lock-check: require-uv

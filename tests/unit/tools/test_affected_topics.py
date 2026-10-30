@@ -37,6 +37,8 @@ SPECS = "roles/remediate/meta/argument_specs.yml"
 
 
 class Trees:
+    """A base and a head copy of the files that the mapping reads; tests change the head."""
+
     def __init__(self, root: Path) -> None:
         self.base = root / "base"
         self.head = root / "head"
@@ -110,7 +112,6 @@ def first_rule(data: dict[str, object], family: str) -> dict[str, object]:
         "tests/sanity/ignore-2.20.txt",
         "tools/reporting/dashboard.py",
         "tools/lint/check_repo_rules.py",
-        "tools/scc/needs-smoke.sh",
         "infra/account/main.tf",
         "extensions/ci/scc/scc.pins",
         ".github/workflows/scc-release-watch.yml",
@@ -146,6 +147,7 @@ def test_a_path_without_a_lifecycle_effect_plans_no_topic(trees: Trees, relative
         "tools/roles/generate_toggles.py",
         "tools/molecule/plan-lifecycle.sh",
         "tools/content/fetch_content.py",
+        "tools/scc/needs-smoke.sh",
         "plugins/modules/control_state.py",
         "plugins/module_utils/compliance/toggles.py",
         "plugins/filter/scc_toggles.py",
@@ -239,7 +241,7 @@ def test_a_role_file_included_by_a_shared_file_plans_the_full_matrix(trees: Tree
     )
     decision = trees.decide(SUDO_DROPIN)
     assert decision.full
-    assert "roles/remediate/tasks/main.yml" in decision.reasons[0]
+    assert decision.reasons[0].endswith("is shared: full matrix")
 
 
 def test_a_reference_in_the_base_revision_counts_as_well(trees: Trees) -> None:
@@ -250,14 +252,30 @@ def test_a_reference_in_the_base_revision_counts_as_well(trees: Trees) -> None:
     assert trees.decide(SUDO_DROPIN).full
 
 
-def test_a_same_named_file_of_another_directory_is_not_a_reference(trees: Trees) -> None:
-    trees.append(
-        "extensions/molecule/shared/lifecycle.yml",
-        "\n# vars/topics/sudo.yml and roles/remediate/defaults/sudo.yml\n",
-    )
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "file: sudo.yml",
+        "file: ./sudo.yml",
+        "file: sub/sudo.yml",
+        'file: "{{ directory }}/sudo.yml"',
+        "tasks_from: sudo",
+        "tasks_from: sudo.yml",
+        "tasks_from: 'tasks/sudo'",
+    ],
+)
+def test_every_literal_form_of_an_include_is_a_reference(trees: Trees, reference: str) -> None:
     assert topics_of(trees.decide(SUDO_TASKS)) == {"sudo"}
-    trees.append("extensions/molecule/shared/lifecycle.yml", "\n# tasks/sudo.yml\n")
+    trees.append("extensions/molecule/shared/lifecycle.yml", f"\n# {reference}\n")
     assert trees.decide(SUDO_TASKS).full
+
+
+@pytest.mark.parametrize(
+    "text", ["lifecycle_sudo.yml", "sudo.yml.j2", "tasks_from: sudo_other", "the sudo family"]
+)
+def test_a_longer_name_is_not_a_reference(trees: Trees, text: str) -> None:
+    trees.append("extensions/molecule/shared/lifecycle.yml", f"\n# {text}\n")
+    assert topics_of(trees.decide(SUDO_TASKS)) == {"sudo"}
 
 
 def test_a_new_role_file_of_a_family_belongs_to_it_even_if_not_yet_native(trees: Trees) -> None:
@@ -541,6 +559,27 @@ def test_a_new_role_variable_used_by_a_topic_file_affects_that_topic(trees: Tree
     assert topics_of(trees.decide(affected.ROLE_VARIABLES)) == {"sudo"}
     trees.append("roles/remediate/tasks/main.yml", "\n# __linux_compliance_remediate_sudo_new\n")
     assert trees.decide(affected.ROLE_VARIABLES).full
+
+
+def test_a_role_variable_that_another_variable_uses_plans_the_full_matrix(trees: Trees) -> None:
+    def change(data: dict[str, object]) -> None:
+        data["__linux_compliance_remediate_sshd_main"] = (
+            "{{ __linux_compliance_remediate_sudo_main }}"
+        )
+
+    shared = trees.base / affected.ROLE_VARIABLES
+    trees.edit(affected.ROLE_VARIABLES, change)
+    shared.write_text(
+        (trees.head / affected.ROLE_VARIABLES).read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
+    def value(data: dict[str, object]) -> None:
+        data["__linux_compliance_remediate_sudo_main"] = "/etc/sudoers.changed"
+
+    trees.edit(affected.ROLE_VARIABLES, value)
+    decision = trees.decide(affected.ROLE_VARIABLES)
+    assert decision.full
+    assert "another role variable uses" in decision.reasons[0]
 
 
 def test_role_variables_that_are_not_a_mapping_plan_the_full_matrix(trees: Trees) -> None:

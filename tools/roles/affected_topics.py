@@ -11,7 +11,7 @@ Nothing is listed by hand: every path is classified from the topic declarations,
 the file names. A path that the mapping cannot confine to topics plans the full matrix (fail safe):
 
 * **No lifecycle effect.** Documentation, changelog fragments, unit tests and fixtures, the
-  check-mode playbooks, the reporting, lint, docs, IaC and SCC tools, and the configuration of
+  check-mode playbooks, the reporting, lint, docs and IaC tools, and the configuration of
   linters and bots. None of them is read by a Molecule scenario.
 * **Generated and checked for drift.** The role guards and the family dispatch
   (``make lint-role-guards``) are a function of files that are classified themselves, by
@@ -104,7 +104,6 @@ NO_LIFECYCLE_PREFIXES: Final[tuple[str, ...]] = (
     "tools/skills/",
     "tools/lint/",
     "tools/iac/",
-    "tools/scc/",
     "infra/",
     "typings/",
     "extensions/ci/",
@@ -178,8 +177,13 @@ class Catalogue(NamedTuple):
 
 
 def _file_reference(name: str) -> re.Pattern[str]:
-    """Match ``name`` as a file name on its own or below a ``tasks`` directory."""
-    return re.compile(r"(?:(?<=tasks/)|(?<![\w./-]))" + re.escape(name) + r"(?![\w.-])")
+    """Match ``name`` as a file name below any directory, or its stem after ``tasks_from``."""
+    stem = re.escape(PurePosixPath(name).stem)
+    return re.compile(
+        r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])"
+        r"|\btasks_from:\s*['\"]?(?:[^\s'\"]*/)?" + stem + r"['\"]?\s*$",
+        re.MULTILINE,
+    )
 
 
 class Tree:
@@ -582,6 +586,15 @@ class Context:
         }
         found: set[str] = set()
         for key in sorted(changed):
+            pattern = re.compile(r"(?<![\w])" + re.escape(key) + r"(?![\w])")
+            if any(
+                pattern.search(json.dumps(value)) is not None
+                for values in (before, after)
+                for other, value in values.items()
+                if other != key
+            ):
+                message = f"another role variable uses {key}"
+                raise FullMatrixError(message)
             found.update(self.users(key, ROLE_VARIABLES))
         return frozenset(found)
 

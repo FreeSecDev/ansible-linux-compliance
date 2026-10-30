@@ -56,7 +56,6 @@ DOCKER = {"include": [SUDO_TOPIC, SUDO_RULE, BANNERS_TOPIC]}
 LIBVIRT = {"include": [UBUNTU_BASE, SELFTEST]}
 FAKE_MAKE = """#!/usr/bin/env bash
 printf '%s\\n' "$@" > "$FAKE_RECORD/arguments"
-printf '%s\\n' "${MAKEFLAGS-unset}" > "$FAKE_RECORD/makeflags"
 ls -A "$2" > "$FAKE_RECORD/listing"
 for argument in "$@"; do
   case "$argument" in
@@ -109,6 +108,8 @@ def gate_script() -> str:
 
 @dataclass
 class Scratch:
+    """A scratch Git repository with a fake make on the PATH that records its arguments."""
+
     root: Path
 
     @property
@@ -201,7 +202,7 @@ def test_the_planner_runs_the_base_revision_s_make_target_over_the_head(scratch:
         ["pull_request", base, head],
         ["merge_group", base, head],
     ):
-        result = run_planner(scratch, arguments, {"MAKEFLAGS": "-j9 FAKE=1"})
+        result = run_planner(scratch, arguments)
         assert result.returncode == 0, result.stderr
         assert result.stdout == "planned\n"
         recorded = scratch.record("arguments").splitlines()
@@ -220,7 +221,6 @@ def test_the_planner_runs_the_base_revision_s_make_target_over_the_head(scratch:
             "moved/file.txt",
             "renamed.txt",
         ]
-        assert scratch.record("makeflags").strip() == "unset"
     assert not list(scratch.home.glob("tmp.*"))
 
 
@@ -298,6 +298,7 @@ def run_step(scratch: Scratch, event: str, base: str, head: str = "") -> dict[st
             "EVENT_NAME": event,
             "BASE_SHA": base,
             "HEAD_SHA": head,
+            "BASE_REF": "refs/heads/main" if event == "merge_group" else "",
             "RUNNER_TEMP": str(runner),
             "GITHUB_OUTPUT": str(output),
         },
@@ -330,12 +331,26 @@ def test_the_step_keeps_the_legs_that_the_base_planner_selects(scratch: Scratch)
         scratch, affected_plan([SUDO_TOPIC, SUDO_RULE], [UBUNTU_BASE, SELFTEST])
     )
     head = scratch.commit("head")
+    scratch.git("update-ref", "refs/remotes/origin/main", base)
     for event, head_sha in (("pull_request", ""), ("merge_group", head)):
         found = run_step(scratch, event, base, head_sha)
         assert found["scope"] == "affected"
         assert json.loads(found["matrix"]) == {"include": [SUDO_TOPIC, SUDO_RULE]}
         assert json.loads(found["libvirt"]) == LIBVIRT
         assert found["lifecycle_legs"] == "2"
+
+
+def test_the_queue_decides_with_the_planner_and_diff_of_the_target_branch(scratch: Scratch) -> None:
+    main = commit_base_planner(scratch, full_plan())
+    scratch.git("update-ref", "refs/remotes/origin/main", main)
+    earlier = commit_base_planner(scratch, affected_plan([], [UBUNTU_BASE, SELFTEST]))
+    head = scratch.commit("a later pull request in the queue")
+    assert_full(run_step(scratch, "merge_group", earlier, head))
+    scratch.git("update-ref", "-d", "refs/remotes/origin/main")
+    assert_full(run_step(scratch, "merge_group", earlier, head))
+    scratch.git("update-ref", "refs/remotes/origin/main", earlier)
+    found = run_step(scratch, "merge_group", main, head)
+    assert found["scope"] == "affected"
 
 
 def test_the_step_may_plan_no_lifecycle_leg(scratch: Scratch) -> None:

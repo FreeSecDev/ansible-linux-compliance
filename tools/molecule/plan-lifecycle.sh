@@ -36,7 +36,7 @@ git diff --no-renames --name-only -z "${base}" "${head}" -- > "${work}/changed" 
 mkdir "${work}/base"
 git archive --format=tar "${base}" | tar -xf - -C "${work}/base" || refuse "the base revision cannot be exported"
 
-env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL make -C "${work}/base" --no-print-directory -s molecule-affected \
+make -C "${work}/base" --no-print-directory -s molecule-affected \
   MOLECULE_AFFECTED_HEAD="${PWD}" \
   MOLECULE_AFFECTED_CHANGED="${work}/changed" \
   MOLECULE_AFFECTED_DOCKER="$(realpath "${docker}")" \

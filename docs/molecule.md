@@ -651,7 +651,7 @@ deletion and an addition. Nothing is listed per topic by hand:
 | `roles/remediate/vars/main.yml` | the topics of the files that use each changed key; a key that no file or a shared file uses plans the full matrix |
 | `roles/{audit,remediate}/meta/argument_specs.yml` | none when only descriptions changed, else the full matrix |
 | the role guards, `roles/remediate/tasks/dispatch.yml`, `playbooks/run_start.yml`, `content/catalogue.yml` | none: they are generated or a generator's input, checked for drift by the required `lint` and `test` jobs, and their effect is classified through their sources |
-| documentation, changelog fragments, unit tests and fixtures, check-mode playbooks, the reporting, lint, docs, IaC and SCC tools, linter and bot configuration | none |
+| documentation, changelog fragments, unit tests and fixtures, check-mode playbooks, the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions, linter and bot configuration | none |
 | anything else: the shared harness and tasks, images and pins, scenarios, plugins and `module_utils`, role defaults and entry points, content pins, `tools/roles`, `tools/molecule`, `ci.yml`, the `Makefile`, the Python lock, a symbolic link, an unknown path | the full matrix |
 
 The base revision decides, as for the [SCC smoke test](adr/0019-scc-scanner-backend-and-ci-image.md):
