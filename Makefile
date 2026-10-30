@@ -20,6 +20,12 @@ MOLECULE_LIFECYCLE_TOPIC ?=
 MOLECULE_LIFECYCLE_MODE ?=
 export MOLECULE_LIFECYCLE_TOPIC MOLECULE_LIFECYCLE_MODE
 MOLECULE_MATRIX_DRIVER ?= docker
+MOLECULE_AFFECTED_HEAD ?=
+MOLECULE_AFFECTED_CHANGED ?=
+MOLECULE_AFFECTED_DOCKER ?=
+MOLECULE_AFFECTED_LIBVIRT ?=
+MOLECULE_PLAN_BASE ?= origin/main
+MOLECULE_PLAN_DIR := $(CURDIR)/build/molecule-plan
 MOLECULE_DOCKER_SELFTEST ?= true
 MOLECULE_SELFTEST_DIR := $(CURDIR)/build/molecule-selftest
 MOLECULE_SELFTEST_CONFIG := $(MOLECULE_SELFTEST_DIR)/instance_config.yml
@@ -287,6 +293,8 @@ Tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
   test-molecule-docker-selftest Guard bypass attempts and the destroy fallback against real containers
   molecule-matrix       Print the CI matrix of the toggle lifecycle legs of MOLECULE_MATRIX_DRIVER (docker or libvirt)
+  molecule-plan         Print the legs that a pull request against MOLECULE_PLAN_BASE runs, as the base's planner decides
+  molecule-affected     Keep the legs of the topics that a change affects (run by the base revision's planner in CI)
   test-molecule-libvirt Molecule libvirt scenarios on KVM virtual machines and their self-test (requires KVM and libvirt)
   test-molecule-libvirt-selftest Guard bypass attempts, decoys, strangers and the destroy fallback against real libvirt objects
   molecule-libvirt-images Fetch the pinned cloud images and packages and check the vendors' signed checksum files
@@ -336,7 +344,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
-	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix molecule-affected molecule-plan test-molecule-dockertest-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
 	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -403,6 +411,17 @@ lint-lifecycle: require-uv collection-link
 
 molecule-matrix: require-uv collection-link
 	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver '$(MOLECULE_MATRIX_DRIVER)'
+
+molecule-affected: require-uv collection-link
+	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.affected_topics --head-root '$(MOLECULE_AFFECTED_HEAD)' \
+		--changed '$(MOLECULE_AFFECTED_CHANGED)' --docker '$(MOLECULE_AFFECTED_DOCKER)' --libvirt '$(MOLECULE_AFFECTED_LIBVIRT)'
+
+molecule-plan: require-uv collection-link
+	@mkdir -p '$(MOLECULE_PLAN_DIR)'
+	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver docker > '$(MOLECULE_PLAN_DIR)/docker.json'
+	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver libvirt > '$(MOLECULE_PLAN_DIR)/libvirt.json'
+	@tools/molecule/plan-lifecycle.sh pull_request "$$(git rev-parse --verify '$(MOLECULE_PLAN_BASE)^{commit}')" '' \
+		'$(MOLECULE_PLAN_DIR)/docker.json' '$(MOLECULE_PLAN_DIR)/libvirt.json'
 
 lock-check: require-uv
 	uv lock --check
