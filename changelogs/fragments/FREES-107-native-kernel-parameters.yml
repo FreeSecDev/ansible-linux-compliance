@@ -7,7 +7,8 @@ minor_changes:
     after every file of the distributions, and, where the check rejects the running value, sets that as well and
     records the value before, which cleanup sets back (for the forwarding rules together with the flag of every
     interface). A conflicting line of an Ubuntu procps file in ``/etc/sysctl.d`` (``rp_filter=2`` in
-    ``10-network-security.conf``) is set to the rule's value, recorded first and written back on cleanup; a
+    ``10-network-security.conf``) or of ufw's ``/etc/ufw/sysctl.conf`` is set to the rule's value, recorded first
+    and written back on cleanup; a
     conflicting setting in an administrator's file is reported ``overridden`` or ``conflicting_setting`` and never
     edited. ``ipv4_parameters`` and ``ipv6_parameters`` stay disruptive and need the family or ``network`` in
     ``linux_compliance_remediate_allow_disruptive``. Eleven rules stay ``audit_only`` with their reasons in ADR 0024,

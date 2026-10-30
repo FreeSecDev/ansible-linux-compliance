@@ -16,10 +16,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 MODULE_FILE = Path(__file__).resolve().parents[4] / "plugins" / "modules" / "sysctl_runtime.py"
-REAL_READ = sysctl.read
-REAL_WRITE = sysctl.write
-REAL_WRITABLE = sysctl.writable
-REAL_EXPAND = sysctl.expand
+real_read = sysctl.read
+real_write = sysctl.write
+real_writable = sysctl.writable
+real_expand = sysctl.expand
 IO_ERROR = "io_error"
 
 
@@ -38,10 +38,10 @@ def proc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         path = root.joinpath(*parts)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(value, encoding="ascii")
-    monkeypatch.setattr(sysctl, "read", functools.partial(REAL_READ, proc_root=root))
-    monkeypatch.setattr(sysctl, "write", functools.partial(REAL_WRITE, proc_root=root))
-    monkeypatch.setattr(sysctl, "writable", functools.partial(REAL_WRITABLE, proc_root=root))
-    monkeypatch.setattr(sysctl, "expand", functools.partial(REAL_EXPAND, proc_root=root))
+    monkeypatch.setattr(sysctl, "read", functools.partial(real_read, proc_root=root))
+    monkeypatch.setattr(sysctl, "write", functools.partial(real_write, proc_root=root))
+    monkeypatch.setattr(sysctl, "writable", functools.partial(real_writable, proc_root=root))
+    monkeypatch.setattr(sysctl, "expand", functools.partial(real_expand, proc_root=root))
     return root
 
 
@@ -111,10 +111,10 @@ def test_each_value_is_read_just_before_it_is_set(
     proc: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def propagating(name: str, value: str) -> None:
-        REAL_WRITE(name, value, proc_root=proc)
+        real_write(name, value, proc_root=proc)
         if name == "net.ipv4.ip_forward":
             for interface in ("all", "lo", "eth0"):
-                REAL_WRITE(f"net.ipv4.conf.{interface}.forwarding", value, proc_root=proc)
+                real_write(f"net.ipv4.conf.{interface}.forwarding", value, proc_root=proc)
 
     monkeypatch.setattr(sysctl, "write", propagating)
     code, outcome = run(
@@ -178,7 +178,7 @@ def test_a_value_that_the_kernel_does_not_keep_is_written_back(
     proc: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def clamping(name: str, value: str) -> None:
-        REAL_WRITE(name, "5" if value == "9" else value, proc_root=proc)
+        real_write(name, "5" if value == "9" else value, proc_root=proc)
 
     monkeypatch.setattr(sysctl, "write", clamping)
     code, outcome = run(capsys, {"set": [{"name": "kernel.dmesg_restrict", "value": "9"}]})
@@ -195,7 +195,7 @@ def test_a_value_that_cannot_be_written_back_is_reported_as_changed(
     def one_way(name: str, value: str) -> None:
         if value == "0":
             raise sysctl.SysctlError(IO_ERROR, f"cannot write {name}: Invalid argument")
-        REAL_WRITE(name, "5", proc_root=proc)
+        real_write(name, "5", proc_root=proc)
 
     monkeypatch.setattr(sysctl, "write", one_way)
     code, outcome = run(capsys, {"set": [{"name": "kernel.dmesg_restrict", "value": "1"}]})
@@ -229,7 +229,7 @@ def test_a_read_error_while_setting_fails(
         calls.append(name)
         if len(calls) > 1:
             raise sysctl.SysctlError(IO_ERROR, f"cannot read {name}")
-        return REAL_READ(name, proc_root=proc)
+        return real_read(name, proc_root=proc)
 
     monkeypatch.setattr(sysctl, "read", failing)
     code, outcome = run(capsys, {"set": [{"name": "kernel.dmesg_restrict", "value": "1"}]})

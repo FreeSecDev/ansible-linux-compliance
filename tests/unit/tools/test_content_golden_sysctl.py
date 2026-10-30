@@ -298,6 +298,17 @@ def check_static(
     check_files(
         leaves(items, user_object.attributes["object_ref"]), benchmark, line_pattern(parameters)
     )
+    check_package(items, package, parameters, benchmark, static_states)
+    return static_states
+
+
+def check_package(
+    items: dict[str, Node],
+    package: str,
+    parameters: dict[str, object],
+    benchmark: str,
+    static_states: States,
+) -> None:
     package_test = items[package]
     assert bool(parameters.get("absent_accepted")) is package.endswith("_pkg_not_wrong:tst:1")
     if not parameters.get("absent_accepted"):
@@ -313,7 +324,6 @@ def check_static(
         role_vars()["__linux_compliance_remediate_sysctl_checked"],
     )[benchmark]
     assert [found_path.text] == checked["package_directories"]
-    return static_states
 
 
 def check_accepted(states: States, parameters: dict[str, object], benchmark: str) -> None:

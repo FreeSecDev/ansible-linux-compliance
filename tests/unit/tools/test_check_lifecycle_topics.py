@@ -992,8 +992,10 @@ def test_a_regression_group_may_require_libvirt(tmp_path: Path) -> None:
     [
         (
             changed(regressions=[LIBVIRT_GROUP]),
-            "regressions changes runs on no platform with a libvirt lifecycle scenario that runs a"
-            " cycle of the topic",
+            (
+                "regressions changes runs on no platform with a libvirt lifecycle scenario"
+                " that runs a cycle of the topic"
+            ),
         ),
         (
             changed(regressions=[{**GROUP, "requires": "libvirt"}]),

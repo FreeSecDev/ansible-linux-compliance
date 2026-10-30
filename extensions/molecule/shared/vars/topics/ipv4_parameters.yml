@@ -293,6 +293,14 @@ pre_states:
         status: compliant
         platforms:
           - rhel_compatible
+      - rule: sysctl_net_ipv4_icmp_echo_ignore_broadcasts
+        status: compliant
+        platforms:
+          - ubuntu
+      - rule: sysctl_net_ipv4_icmp_ignore_bogus_error_responses
+        status: compliant
+        platforms:
+          - ubuntu
     applied:
       files:
         - path: /etc/sysctl.d
@@ -460,29 +468,11 @@ pre_states:
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-echo-ignore-broadcasts.conf
-          exists: true
-          type: file
-          attributes:
-            - extents
-          mode: "0644"
-          owner: root
-          group: root
-          uid: 0
-          gid: 0
-          checksum: 0dfd69ed0385356342ebf3599d2bfea536c279c6f31d94cc4f1e029eb2b4f88e
+          exists: false
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-ignore-bogus-error-responses.conf
-          exists: true
-          type: file
-          attributes:
-            - extents
-          mode: "0644"
-          owner: root
-          group: root
-          uid: 0
-          gid: 0
-          checksum: 8fbe7886a7d10930a4e3c20e73f7374810436ea8387c1f662a828c501f61cee0
+          exists: false
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-ip-forward.conf

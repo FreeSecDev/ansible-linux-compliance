@@ -379,7 +379,8 @@
             or (prior.runtime_prior is defined and not (prior.runtime_prior is string
                 and prior.runtime_written is string))
             or (companions | length > 0 and prior.runtime_prior is not defined)
-            or companions | map('extract', prior) | reject('string') | list | length > 0 -%}
+            or prior.keys() | select('match', '^companion:') | map('extract', prior) | reject('string') | list
+               | length > 0 -%}
       {%- set ns.reason = 'invalid_record' -%}
       {%- set ns.detail = 'the ledger entry does not record a drop-in checksum and a complete running value' -%}
       {%- elif entry is not none and entry.checksum != sha -%}
