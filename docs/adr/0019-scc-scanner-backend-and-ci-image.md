@@ -665,6 +665,9 @@ depends on the FREES-146 mapping for `oscap` results.
       from the application debug log of the real scan of `make scc-integration`. `make scc-own-expiry-check`
       fails when that line is missing or ambiguous, or when the run date plus N is earlier than `SCC_EXPIRES`
       (decision 7, step 4).
+    - Observed in CI by the pull request for FREES-179: the real scan of 2026-10-30 (started 11:03 UTC) logged
+      "Software expires in 26 days" in its application debug log, and in no other log of its `-u` directory. That
+      gives 2026-11-25, the pinned `SCC_EXPIRES`, as the scans of 2026-10-26 did.
     - Decided by the [FREES-176 amendment](#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176): a
       scheduled watch reports a new release, and after the hard stop pull requests and merge groups report a named
       skip of the smoke test instead of deadlocking, while the expiry check still refuses to build or run SCC.
