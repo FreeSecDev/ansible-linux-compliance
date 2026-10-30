@@ -11,6 +11,9 @@ ansible:
       pipelining: true
   executor:
     backend: ansible-playbook
+    args:
+      ansible_playbook:
+        - --extra-vars=ansible_become=false
   playbooks:
     create: ../shared/create.yml
     prepare: ../shared/prepare.yml

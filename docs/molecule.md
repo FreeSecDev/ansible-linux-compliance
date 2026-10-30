@@ -91,10 +91,10 @@ controller, then copies it into the instance as `/usr/share/freesecdev-molecule/
 
 - Containers are unprivileged: `privileged: false`, `cap_drop: ALL`, `no-new-privileges`, no network
   (`network_mode: none`), a private cgroup namespace, a process and memory limit, and an init process. The scenarios
-  run as root inside the container without `sudo`; the standard scenarios pass `ansible_become=false`. The lifecycle
-  scenarios do not, because the `sudo` regressions run one task with `become: true` to prove that sudo still parses
-  its policy with the collection's drop-ins (FREES-175); no other task of the harness or the roles asks for `become`.
-  Remote temporary files go to `/tmp`.
+  run as root inside the container without `sudo`, so they pass `ansible_become=false`. sudo itself cannot run in
+  them: without `CAP_SETUID` it fails with `PERM_SUDOERS: setresuid(-1, 1, -1): Operation not permitted` before it
+  reads its policy, so that sudo still works with the `sudo` topic's drop-ins is proven by `visudo` and the golden
+  tests here, and by a real `become` only in the libvirt scenarios (FREES-61). Remote temporary files go to `/tmp`.
 - `create.yml` refuses platforms that are privileged, use `network_mode` `host` or `container:*`, declare `volumes`,
   `mounts` or `devices`, or add capabilities without a `capabilities_reason`.
 - The run id is generated once, as the first fact of `create.yml`, and persisted in the instance config. A repeated
@@ -481,9 +481,7 @@ The regressions of a topic run at the end of that topic, with its facts, when th
 run: in a full run and in the topic's rule leg in CI.
 
 `shared/tasks/lifecycle_sudo_regressions.yml` does the same for `sudo` (FREES-175) on both platforms, in the rule
-mode: it applies the topic, runs a module with `become: true`, which proves that sudo still parses its whole policy
-with the drop-ins and logs to the `logfile` that a drop-in set, records every ledger entry as if another method had
-written it and checks that apply
+mode: it applies the topic, records every ledger entry as if another method had written it and checks that apply
 reports `method_changed` and cleanup `cleanup_incomplete` (`method_changed`) with every entry kept and no drop-in
 touched; it changes the `timestamp_timeout` drop-in by hand and removes the `logfile` drop-in, and checks that cleanup
 keeps the change as `modified_since_apply` and reports the removed one `restored` without a write.

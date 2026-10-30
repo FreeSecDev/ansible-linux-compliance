@@ -177,6 +177,7 @@ and one removed by hand, and `shared/tasks/lifecycle_sudo_refusals.yml` (topic l
 `visudo` that refuses every file and a symbolic link in place of `/etc/sudoers.d`. On Ubuntu,
 `lifecycle_sudo_states.yml` covers `not_included`, `validator_missing`, `not_owned` at apply and at cleanup,
 `not_regular_file` for a drop-in path, `invalid_record` and `target_absent`, and `lifecycle_sudo_effective.yml` the
-files that sudo skips, continued lines and a linked drop-in. After an apply, a module runs with `become: true`, which
-proves that sudo still parses the whole policy and writes the `logfile` that the drop-in set. The containers drop every capability, so the owner and group rules are
+files that sudo skips, continued lines and a linked drop-in. sudo itself cannot run in the containers (without `CAP_SETUID`
+it stops at `setresuid` before it reads its policy), so a `become` through the applied policy is left to the libvirt
+scenarios (FREES-61); here `visudo` checks every drop-in and the golden tests check what the content reads. The containers drop every capability, so the owner and group rules are
 proven compliant on the root-owned files and are not changed there.

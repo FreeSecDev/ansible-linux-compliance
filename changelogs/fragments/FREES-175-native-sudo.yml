@@ -8,8 +8,10 @@ minor_changes:
     ``/etc/sudoers.d`` restrict the attribute and record its prior value. Switching a rule or the topic off removes the
     drop-in or restores the attribute, and never overwrites a later change (``modified_since_apply``). A drop-in that
     ``visudo`` refuses is not installed (``invalid_sudoers``); a setting that another file already sets differently is
-    left alone (``conflicting_setting``). The rules that would remove other people's ``NOPASSWD``, ``!authenticate``
-    or user specifications, ``noexec``, ``requiretty``, the ``/usr/bin/sudo`` group and mode, and the package stay
+    left alone (``conflicting_setting``). Continued lines are joined, symbolic links to files are followed as sudo does,
+    and a setting only in a file that sudo skips (a name with a ``.`` or a trailing ``~``) never counts as compliant.
+    The rules that would remove other people's ``NOPASSWD``, ``!authenticate`` or user specifications, ``noexec``,
+    ``requiretty``, the ``/usr/bin/sudo`` group and mode, and the package stay
     ``audit_only`` (ADR 0022). ``sudo`` stays disruptive and needs ``sudo`` in
     ``linux_compliance_remediate_allow_disruptive``.
   - >-
