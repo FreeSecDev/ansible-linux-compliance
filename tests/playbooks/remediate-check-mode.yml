@@ -101,8 +101,11 @@
           - applied | map(attribute='rule_id') | list == [crontab_rule]
           - linux_compliance_remediated.summary.not_implemented == 0
           - >-
-            linux_compliance_remediated.rules | rejectattr('action', 'equalto', 'apply')
+            linux_compliance_remediated.rules | rejectattr('action', 'in', ['apply', 'skip'])
             | map(attribute='reason') | unique | list == ['not_in_profile']
+          - >-
+            linux_compliance_remediated.rules | selectattr('action', 'equalto', 'skip')
+            | map(attribute='reason') | unique | list == ['disruptive_not_allowed']
           - linux_compliance_remediated.results | length == 1
           - crontab_result.action == 'apply'
           - crontab_result.status in ['applied', 'compliant', 'notapplicable', 'not_regular_file']
@@ -582,7 +585,8 @@
         full_profile:
           profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
           rule_ids: >-
-            {{ (full_catalogue.__linux_compliance_remediate_rules | map(attribute='rule_id') | list)
+            {{ (full_catalogue.__linux_compliance_remediate_rules | selectattr('family', 'equalto', 'file_permissions')
+                | map(attribute='rule_id') | list)
                + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
                   | map(attribute='value') | ansible.builtin.flatten) }}
 
@@ -652,7 +656,8 @@
         full_profile:
           profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
           rule_ids: >-
-            {{ (full_catalogue.__linux_compliance_remediate_rules | map(attribute='rule_id') | list)
+            {{ (full_catalogue.__linux_compliance_remediate_rules | selectattr('family', 'equalto', 'file_permissions')
+                | map(attribute='rule_id') | list)
                + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
                   | map(attribute='value') | ansible.builtin.flatten) }}
 
@@ -878,7 +883,8 @@
         full_profile:
           profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
           rule_ids: >-
-            {{ (full_catalogue.__linux_compliance_remediate_rules | map(attribute='rule_id') | list)
+            {{ (full_catalogue.__linux_compliance_remediate_rules | selectattr('family', 'equalto', 'file_permissions')
+                | map(attribute='rule_id') | list)
                + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
                   | map(attribute='value') | ansible.builtin.flatten) }}
 

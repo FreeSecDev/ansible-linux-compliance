@@ -8,16 +8,19 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 
 ## Status
 
-Dispatcher and safety model implemented (FREES-52), with one reference rule with a native remediation:
-`xccdf_org.ssgproject.content_rule_file_permissions_crontab` in the `file_permissions` family. The catalogue
-`vars/rules.yml` holds every rule of the 25 pinned profiles, 1203 rules in 21 families, generated from the pinned
-content (FREES-53, [control families](../../docs/control-families.md)); every rule without a native remediation has
-the strategy `audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated
-from the catalogue (FREES-55). The native remediations of the other families follow. The intended platforms in
-`meta/main.yml` (Ubuntu 24.04 and RHEL
-9 compatible, per [ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested
-support: the reference rule runs in the Docker Molecule scenarios on Ubuntu 24.04 and Rocky Linux 9, whose toggle
-lifecycle step applies and cleans up every topic with a native rule (FREES-60, `docs/molecule.md`).
+Dispatcher and safety model implemented (FREES-52). 30 rules have a native remediation: the reference rule
+`xccdf_org.ssgproject.content_rule_file_permissions_crontab` (`file_permissions`), 15 rules of `banners` (the text,
+mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`) and 14 rules of `pwquality` (one line per
+setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks), with the values of the selected profile
+([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md)). The catalogue `vars/rules.yml` holds
+every rule of the 25 pinned profiles, 1203 rules in 55 families, generated from the pinned content (FREES-53,
+[control families](../../docs/control-families.md)); every rule without a native remediation has the strategy
+`audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated from the
+catalogue (FREES-55). Further topics follow the [native remediation guide](../../docs/native-remediation-guide.md).
+The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL 9 compatible, per
+[ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested support: every native
+topic runs in the Docker Molecule scenarios on Ubuntu 24.04 and Rocky Linux 9, whose toggle lifecycle step applies and
+cleans it up from every declared pre-state (FREES-60, `docs/molecule.md`).
 
 ## Safety
 
@@ -50,6 +53,7 @@ choices in both files are generated from `vars/rules.yml` with `make toggles`; `
 | `linux_compliance_remediate_enabled` | `bool` | `false` | Global opt-in. When false the role neither reads nor changes the host, cleanup included (ADR 0011). |
 | `linux_compliance_remediate_allow_disruptive` | `list` | `[]` | Disruptive families that may be applied or cleaned up; only the disruptive families of the registry are accepted. |
 | `linux_compliance_remediate_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. With the opt-in it must equal the profile the `discover` role verified. A profile is never substituted silently. |
+| `linux_compliance_remediate_banner_text` | `str` | `"Authorized users only. All activity may be monitored and reported."` | Text of the login banners and the message of the day. It must not contain a backslash, control characters other than newline and tab, or the operating system name, and must match the profile's XCCDF value where the profile requires one (the STIG profiles require the DoD notice). |
 
 Toggles ([ADR 0011](../../docs/adr/0011-control-toggles-and-cleanup.md)) are flat booleans:
 `linux_compliance_<family>_enabled` for a whole topic, default `true`, and `linux_compliance_rule_<rule_short_id>_enabled`

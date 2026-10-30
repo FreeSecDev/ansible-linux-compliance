@@ -13,8 +13,10 @@ a native rule, and when a declaration does not follow the format of ``docs/molec
 unknown keys, a family or disruptive flag that disagrees with the file name or the registry,
 a disruptive topic without a containment note, a declaration without an ``applied``
 expectation, an expectation or a pre-state for an item that is not declared, an unknown
-attribute or platform, a malformed mode, or ``unselected_platforms`` that name every
-platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
+attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
+pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
+status other than ``compliant`` or ``notapplicable``, or ``unselected_platforms`` that name
+every platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
 topic. The harness repeats the coverage check at run time and fails on a platform that skips
 a topic without the declaration saying so.
@@ -35,7 +37,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final, NamedTuple, cast
 
 import yaml
 
@@ -103,7 +105,12 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 }
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
-PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files", "requires"})
+PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
+    {"name", "audit", "files", "unchanged", "requires"}
+)
+UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
+UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable"})
+REWRITTEN_KEY: Final[str] = "rewritten"
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset({"path", "mode", "owner", "group"})
 UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
@@ -132,6 +139,17 @@ def _strings(value: object) -> list[str] | None:
     return [str(item) for item in items]
 
 
+class Context(NamedTuple):
+    """What a declaration is checked against besides the platforms.
+
+    ``coverage`` maps each driver to the platforms of its lifecycle scenarios (``None``: every
+    driver runs every platform); ``rules`` holds the short identifiers of the topic's native rules.
+    """
+
+    coverage: dict[str, frozenset[str]] | None = None
+    rules: frozenset[str] = frozenset()
+
+
 class Declaration:
     """The validation of one topic declaration; ``errors`` collects every finding."""
 
@@ -140,17 +158,20 @@ class Declaration:
         where: str,
         platforms: frozenset[str],
         coverage: dict[str, frozenset[str]] | None = None,
+        rules: frozenset[str] = frozenset(),
     ) -> None:
-        """Start the validation of ``where`` for the known ``platforms`` and driver ``coverage``.
+        """Start the validation of ``where`` for the platforms, driver coverage and native rules.
 
-        ``coverage`` maps each driver to the platforms that its scenarios run; without it every
-        driver counts as running every platform.
+        ``coverage`` maps each driver to the platforms that its lifecycle scenarios run; without it
+        every driver counts as running every platform. ``rules`` holds the short identifiers of the
+        native rules of the topic, which a pre-state may declare ``unchanged``.
         """
         self.where = where
         self.platforms = platforms
         self.coverage: dict[str, frozenset[str]] = (
             coverage if coverage is not None else dict.fromkeys(DRIVERS, platforms)
         )
+        self.rules = rules
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
         self.drivers: frozenset[str] = frozenset(DRIVERS)
@@ -204,13 +225,21 @@ class Declaration:
             return None
         return value
 
+    def state_item_keys(self, category: str, item: dict[str, object], what: str) -> frozenset[str]:
+        """Return the keys that a state item of ``category`` may have; check a file's flag."""
+        if category != "files":
+            return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY})
+        if not isinstance(item.get(REWRITTEN_KEY, False), bool):
+            self.error(f"{what}.{REWRITTEN_KEY} must be a boolean")
+        return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY, REWRITTEN_KEY})
+
     def state(self, value: object) -> None:
         """Check the items whose state the harness records."""
         state = self.mapping(value, "state")
         if state is None:
             return
         self.keys(state, frozenset(CATEGORY_KEYS), "state")
-        for category, key_field in CATEGORY_KEYS.items():
+        for category in CATEGORY_KEYS:
             if category not in state:
                 continue
             for index, entry in enumerate(self.sequence(state[category], f"state.{category}")):
@@ -218,7 +247,7 @@ class Declaration:
                 item = self.mapping(entry, what)
                 if item is None:
                     continue
-                self.keys(item, frozenset({key_field, PLATFORMS_KEY}), what)
+                self.keys(item, self.state_item_keys(category, item, what), what)
                 self.platform_list(item, what)
                 key = self.key_value(category, item, what)
                 if key is None:
@@ -394,6 +423,36 @@ class Declaration:
                     f"runs the platform {platform}, which unselected_platforms does not list"
                 )
 
+    def pre_state_unchanged(self, value: object, what: str) -> None:
+        """Check the rules that a pre-state already satisfies, so that they change nothing."""
+        seen: set[str] = set()
+        for index, entry in enumerate(self.sequence(value, f"{what}.unchanged")):
+            where = f"{what}.unchanged[{index}]"
+            item = self.mapping(entry, where)
+            if item is None:
+                continue
+            self.keys(item, UNCHANGED_KEYS, where)
+            self.platform_list(item, where)
+            rule = item.get("rule")
+            if not isinstance(rule, str) or rule not in self.rules:
+                self.error(f"{where} needs the short identifier of a native rule of the topic")
+            elif rule in seen:
+                self.error(f"{where} lists {rule} twice")
+            else:
+                seen.add(rule)
+            if item.get("status") not in UNCHANGED_STATUSES:
+                self.error(f"{where} needs the status compliant or notapplicable")
+
+    def pre_state_requires(self, item: dict[str, object], what: str) -> None:
+        """Record the drivers of a pre-state, which must be drivers of its topic."""
+        if REQUIRES_KEY not in item:
+            self.pre_state_drivers.append(None)
+            return
+        drivers = self.driver_list(item[REQUIRES_KEY], f"{what}.requires") or frozenset()
+        for driver in sorted(drivers - self.drivers):
+            self.error(f"{what} requires {driver}, which the topic does not require")
+        self.pre_state_drivers.append(drivers & self.drivers or None)
+
     def pre_states(self, value: object) -> None:
         """Check the states from which the harness runs the cycles."""
         entries = self.sequence(value, "pre_states")
@@ -418,13 +477,9 @@ class Declaration:
                 self.error(f"{what}.audit must be a boolean")
             if "files" in item:
                 self.pre_state_files(item["files"], what)
-            if REQUIRES_KEY in item:
-                drivers = self.driver_list(item[REQUIRES_KEY], f"{what}.requires") or frozenset()
-                for driver in sorted(drivers - self.drivers):
-                    self.error(f"{what} requires {driver}, which the topic does not require")
-                self.pre_state_drivers.append(drivers & self.drivers or None)
-            else:
-                self.pre_state_drivers.append(None)
+            self.pre_state_requires(item, what)
+            if "unchanged" in item:
+                self.pre_state_unchanged(item["unchanged"], what)
 
 
 def _identity(
@@ -450,21 +505,21 @@ def check_declaration(
     platforms: frozenset[str],
     *,
     disruptive: bool,
-    coverage: dict[str, frozenset[str]] | None = None,
+    context: Context | None = None,
 ) -> list[str]:
-    """Return the findings for the declaration of ``family`` in ``path``."""
-    return _declaration(path, family, platforms, disruptive=disruptive, coverage=coverage).errors
+    """Return the findings for the declaration of ``family`` in ``path``.
+
+    ``context`` holds the driver coverage of the scenarios and the short identifiers of the
+    native rules of ``family``.
+    """
+    return _declaration(path, family, platforms, disruptive=disruptive, context=context).errors
 
 
 def _declaration(
-    path: Path,
-    family: str,
-    platforms: frozenset[str],
-    *,
-    disruptive: bool,
-    coverage: dict[str, frozenset[str]] | None,
+    path: Path, family: str, platforms: frozenset[str], *, disruptive: bool, context: Context | None
 ) -> Declaration:
-    declaration = Declaration(str(path), platforms, coverage)
+    found = context if context is not None else Context()
+    declaration = Declaration(str(path), platforms, found.coverage, found.rules)
     data = declaration.mapping(_load(path), "the declaration")
     if data is None:
         return declaration
@@ -530,6 +585,15 @@ def _runs_lifecycle(data: dict[str, object] | None) -> bool:
     return playbooks is not None and playbooks.get("side_effect") == LIFECYCLE_PLAYBOOK
 
 
+def native_rules(catalogue: toggles.Catalogue, family: str) -> frozenset[str]:
+    """Return the short identifiers of the native rules of ``family``."""
+    return frozenset(
+        toggles.rule_short_id(str(rule["rule_id"]))
+        for rule in catalogue.rules
+        if rule["family"] == family and toggles.is_native(rule)
+    )
+
+
 def check(root: Path) -> tuple[list[str], list[str]]:
     """Return the native topics and every finding about their declarations below ``root``."""
     catalogue = generate_toggles.load_catalogue(root / generate_toggles.CATALOGUE)
@@ -557,7 +621,7 @@ def check(root: Path) -> tuple[list[str], list[str]]:
                     family,
                     known,
                     disruptive=catalogue.families[family],
-                    coverage=coverage,
+                    context=Context(coverage, native_rules(catalogue, family)),
                 )
             )
     return native, errors
@@ -581,7 +645,7 @@ def cycle_platforms(root: Path) -> dict[str, dict[str, frozenset[str]]]:
             family,
             known,
             disruptive=catalogue.families[family],
-            coverage=None,
+            context=Context(None, native_rules(catalogue, family)),
         ).cycle_platforms()
         for family in native
     }

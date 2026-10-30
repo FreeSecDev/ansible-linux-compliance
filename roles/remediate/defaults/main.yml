@@ -2,6 +2,7 @@
 linux_compliance_remediate_enabled: false
 linux_compliance_remediate_allow_disruptive: []
 linux_compliance_remediate_profile: "cis_level1_server"
+linux_compliance_remediate_banner_text: "Authorized users only. All activity may be monitored and reported."
 linux_compliance_file_permissions_enabled: true
 linux_compliance_sysctl_enabled: true
 linux_compliance_logging_enabled: true

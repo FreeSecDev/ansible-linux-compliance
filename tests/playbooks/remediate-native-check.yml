@@ -1,0 +1,346 @@
+---
+- name: Native families in check mode | Banners and password quality report every rule and change nothing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - pwquality
+    native_prefix: xccdf_org.ssgproject.content_rule_
+    native_short_ids:
+      - accounts_password_pam_dcredit
+      - accounts_password_pam_dictcheck
+      - accounts_password_pam_difok
+      - accounts_password_pam_enforce_root
+      - accounts_password_pam_enforcing
+      - accounts_password_pam_lcredit
+      - accounts_password_pam_maxrepeat
+      - accounts_password_pam_maxsequence
+      - accounts_password_pam_minclass
+      - accounts_password_pam_minlen
+      - accounts_password_pam_ocredit
+      - accounts_password_pam_ucredit
+      - banner_etc_issue_cis
+      - banner_etc_issue_net_cis
+      - banner_etc_motd_cis
+      - file_groupowner_etc_issue
+      - file_groupowner_etc_issue_net
+      - file_groupowner_etc_motd
+      - file_owner_etc_issue
+      - file_owner_etc_issue_net
+      - file_owner_etc_motd
+      - file_permissions_etc_issue
+      - file_permissions_etc_issue_net
+      - file_permissions_etc_motd
+    native_statuses:
+      - applied
+      - compliant
+      - notapplicable
+      - not_regular_file
+      - overridden
+      - not_owned
+      - prior_too_large
+      - duplicate_setting
+    watched_paths:
+      - /etc/issue
+      - /etc/issue.net
+      - /etc/motd
+      - /etc/security/pwquality.conf
+      - /etc/security/pwquality.conf.d
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Describe the Ubuntu 24.04 cis_level1_server profile with the native rules it selects in both families
+      ansible.builtin.set_fact:
+        native_rules: "{{ native_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+        native_profile:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+          content_sha256: >-
+            {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml).datastreams
+               | selectattr('name', 'equalto', 'ubuntu2404') | map(attribute='sha256') | first }}
+          rule_ids: "{{ native_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+
+    - name: Inspect the watched files before the role runs
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      loop: "{{ watched_paths }}"
+      register: native_before
+
+    - name: Run the remediate role with both families in the profile and pwquality allow-listed
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_discovered: "{{ native_profile }}"
+
+    - name: Inspect the watched files after the role ran
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+        get_mime: false
+        get_attributes: false
+      loop: "{{ watched_paths }}"
+      register: native_after
+
+    - name: Check that every rule was planned and reported once and that nothing changed
+      vars:
+        native_results: "{{ linux_compliance_remediated.results | selectattr('rule_id', 'in', native_rules) | list }}"
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.check_mode is true
+          - __linux_compliance_remediate_plan.families | map(attribute='name') | list == ['banners', 'pwquality']
+          - native_results | map(attribute='rule_id') | sort == native_rules | sort
+          - native_results | map(attribute='action') | unique | list == ['apply']
+          - native_results | map(attribute='status') | difference(native_statuses) | list == []
+          - >-
+            native_results | selectattr('status', 'equalto', 'applied') | rejectattr('changed') | list == []
+          - >-
+            native_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+          - >-
+            native_before.results | map(attribute='stat') | map('ansible.builtin.dict2items')
+            | map('rejectattr', 'key', 'in', ['atime']) | map('items2dict') | list
+            == native_after.results | map(attribute='stat') | map('ansible.builtin.dict2items')
+            | map('rejectattr', 'key', 'in', ['atime']) | map('items2dict') | list
+        fail_msg: "{{ native_results | to_json }}"
+        quiet: true
+
+- name: Native families in check mode | A banner text that the profile rejects fails before anything changes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    native_rhel_sha256: >-
+      {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml).datastreams
+         | selectattr('name', 'equalto', 'rhel9') | map(attribute='sha256') | first }}
+    native_stig_profile:
+      profile_id: xccdf_org.ssgproject.content_profile_stig
+      content_sha256: "{{ native_rhel_sha256 }}"
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_banner_etc_issue
+    native_cases:
+      - name: the default text under the DoD notice of the STIG profile
+        text: Authorized users only. All activity may be monitored and reported.
+        profile: stig
+        sha256: "{{ native_rhel_sha256 }}"
+        rule: banner_etc_issue
+        message: must match the XCCDF value login_banner_text that the profile stig requires
+      - name: a text with a getty escape
+        text: Welcome to \n on \l
+        profile: cis_server_l1
+        sha256: "{{ native_rhel_sha256 }}"
+        rule: banner_etc_issue_cis
+        message: without a backslash
+      - name: a text that names the operating system
+        text: Red Hat Enterprise Linux 9 server
+        profile: cis_server_l1
+        sha256: "{{ native_rhel_sha256 }}"
+        rule: banner_etc_issue_cis
+        message: must not name the operating system
+      - name: an empty text
+        text: "  "
+        profile: cis_server_l1
+        sha256: "{{ native_rhel_sha256 }}"
+        rule: banner_etc_issue_cis
+        message: non-empty string
+      - name: content that the catalogue holds no profile value for
+        text: Authorized users only. All activity may be monitored and reported.
+        profile: stig
+        sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+        rule: banner_etc_issue
+        message: the catalogue must hold the value login_banner_text of the profile stig
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run each rejected case and check that it fails at the banner text check
+      ansible.builtin.include_tasks:
+        file: tasks/native_banner_case.yml
+      loop: "{{ native_cases }}"
+      loop_control:
+        loop_var: native_case
+        label: "{{ native_case.name }}"
+
+    - name: Run the STIG profile with the short DoD notice, which its value accepts
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_discovered: "{{ native_stig_profile }}"
+        linux_compliance_remediate_profile: stig
+        linux_compliance_remediate_banner_text: I've read & consent to terms in IS user agreem't.
+
+    - name: Check that the STIG banner rule passed the text check and was reported
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_remediated.results | map(attribute='rule_id') | list == native_stig_profile.rule_ids
+          - linux_compliance_remediated.results | map(attribute='action') | list == ['apply']
+        quiet: true
+
+- name: Native families in check mode | A password quality rule without a profile value fails before any change
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - pam
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+      content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role and expect the value check to stop it
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because a rule without its profile value was not refused
+          ansible.builtin.fail:
+            msg: REMEDIATE-NATIVE-PROFILE-VALUE-NOT-REFUSED
+      rescue:
+        - name: Check that the role stopped at the profile value check
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Password quality | Refuse a rule without its profile value before anything changes'
+              - >-
+                ansible_failed_result.results | map(attribute='msg') | join(' ')
+                is search('generated from the pinned content')
+            quiet: true
+
+- name: Native families in check mode | The family files and helpers refuse direct use
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Include each file without the opt-in and check that its first task refuses it
+      ansible.builtin.include_tasks:
+        file: tasks/native_direct_use.yml
+
+- name: Native families in check mode | A ledger entry of the other pwquality method is refused, never forgotten
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    native_ubuntu: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+    native_rhel: xccdf_org.ssgproject.content_benchmark_RHEL-9
+    native_main_entry:
+      - name: group
+        value: "0"
+      - name: method
+        value: main_file
+      - name: mode
+        value: "0644"
+      - name: owner
+        value: "0"
+      - name: setting_line
+        value: minlen = 9
+      - name: sha256
+        value: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: written_line
+        value: minlen = 14
+    native_dropin_entry:
+      - name: dropin
+        value: null
+      - name: dropin_sha256
+        value: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: method
+        value: dropin
+    native_method_cases:
+      - name: a main file entry cleaned up where the content checks the drop-ins
+        helper: dropin_cleanup
+        benchmark: "{{ native_rhel }}"
+        prior_values: "{{ native_main_entry }}"
+        status: cleanup_incomplete
+        reason: method_changed
+      - name: a drop-in entry cleaned up where the content checks only the main file
+        helper: main_cleanup
+        benchmark: "{{ native_ubuntu }}"
+        prior_values: "{{ native_dropin_entry }}"
+        status: cleanup_incomplete
+        reason: method_changed
+      - name: a main file entry applied over where the content checks the drop-ins
+        helper: dropin_apply
+        benchmark: "{{ native_rhel }}"
+        prior_values: "{{ native_main_entry }}"
+        status: method_changed
+        reason: recorded by the main_file method
+      - name: a drop-in entry applied over where the content checks only the main file
+        helper: main_apply
+        benchmark: "{{ native_ubuntu }}"
+        prior_values: "{{ native_dropin_entry }}"
+        status: method_changed
+        reason: recorded by the dropin method
+      - name: an entry without a recorded method
+        helper: dropin_cleanup
+        benchmark: "{{ native_rhel }}"
+        prior_values:
+          - name: dropin
+            value: null
+        status: cleanup_incomplete
+        reason: method_changed
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Load the minlen rule of the catalogue
+      ansible.builtin.set_fact:
+        native_minlen: >-
+          {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/remediate/vars/rules.yml')
+             | from_yaml).__linux_compliance_remediate_rules
+             | selectattr('rule_id', 'equalto', 'xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen')
+             | first }}
+
+    - name: Run every direction of a change of method
+      ansible.builtin.include_tasks:
+        file: tasks/native_method_changed.yml
+      loop: "{{ native_method_cases }}"
+      loop_control:
+        loop_var: native_method_case
+        label: "{{ native_method_case.name }}"

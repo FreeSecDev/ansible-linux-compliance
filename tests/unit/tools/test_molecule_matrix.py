@@ -116,6 +116,30 @@ def test_the_repository_libvirt_matrix_has_a_base_leg_the_libvirt_cycles_and_the
     }
 
 
+def test_the_repository_matrix_covers_every_native_topic_in_both_modes_on_every_platform(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert matrix.main(["--root", str(REPOSITORY_ROOT)]) == 0
+    found = cast("dict[str, list[dict[str, str]]]", json.loads(capsys.readouterr().out))
+    topics = native_topics(REPOSITORY_ROOT)
+    platforms = sorted(check_lifecycle_topics.platforms(REPOSITORY_ROOT))
+    assert found["include"] == [
+        {
+            "platform": platform,
+            "scenario": matrix.scenario_of(platform),
+            "topic": topic,
+            "mode": mode,
+        }
+        for platform in platforms
+        for topic in topics
+        for mode in ("topic", "rule")
+    ]
+    declared = sorted(
+        path.stem for path in (REPOSITORY_ROOT / check_lifecycle_topics.TOPICS).glob("*.yml")
+    )
+    assert sorted({leg["topic"] for leg in found["include"]}) == declared
+
+
 def test_the_scenario_of_a_platform_follows_the_scenario_names() -> None:
     assert matrix.scenario_of("ubuntu") == "docker-ubuntu-lifecycle"
     assert matrix.scenario_of("rhel_compatible") == "docker-rhel-compatible-lifecycle"

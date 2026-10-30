@@ -475,7 +475,12 @@ def test_ci_runs_every_scenario_of_each_driver_and_gates_on_it() -> None:
     docker = cast("dict[str, dict[str, list[str]]]", jobs["molecule-docker"]["strategy"])
     libvirt = cast("dict[str, dict[str, str]]", jobs["molecule-libvirt"]["strategy"])
     docker_scenarios = {path.parent.name for path in MOLECULE.glob("docker-*/molecule.yml")}
-    assert set(docker["matrix"]["scenario"]) == docker_scenarios | {"docker-selftest"}
+    docker_lifecycle = {leg["scenario"] for leg in matrix.legs(REPOSITORY_ROOT, "docker")}
+    assert set(docker["matrix"]["scenario"]) == docker_scenarios - docker_lifecycle | {
+        "docker-selftest"
+    }
+    lifecycle = cast("dict[str, dict[str, str]]", jobs["molecule-lifecycle"]["strategy"])
+    assert lifecycle["matrix"] == "${{ fromJSON(needs.molecule-plan.outputs.matrix) }}"
     assert libvirt["matrix"] == "${{ fromJSON(needs.molecule-plan.outputs.libvirt) }}"
     assert jobs["molecule-libvirt"]["needs"] == "molecule-plan"
     plan = cast("list[dict[str, str]]", jobs["molecule-plan"]["steps"])
@@ -497,7 +502,7 @@ def test_ci_runs_every_scenario_of_each_driver_and_gates_on_it() -> None:
             }
             assert images == {entry["platform"]}
     needs = cast("list[str]", jobs["ci-gate"]["needs"])
-    assert {"molecule-plan", "molecule-libvirt"} <= set(needs)
+    assert {"molecule-plan", "molecule-lifecycle", "molecule-libvirt"} <= set(needs)
     assert jobs["molecule-libvirt"]["permissions"] == {"contents": "read"}
     assert jobs["molecule-plan"]["permissions"] == {"contents": "read"}
 

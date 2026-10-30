@@ -1,0 +1,127 @@
+---
+- name: Banners | Refuse to write a banner that the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'banners'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'banners'
+      - __linux_compliance_remediate_rule.parameters.attribute == 'content'
+      - __linux_compliance_remediate_bn_text is string
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'banners') | list | first | default({}))).apply | default([])
+    fail_msg: >-
+      banners_content_apply.yml runs only for a rule that the remediate dispatcher planned to apply,
+      with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Banners | Inspect the banner file without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_bn_stat
+  tags:
+    - always
+
+- name: Banners | Decide whether the current content can be read and recorded
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_exists: "{{ __linux_compliance_remediate_bn_stat.stat.exists }}"
+    __linux_compliance_remediate_bn_regular: "{{ __linux_compliance_remediate_bn_stat.stat.isreg | default(false) }}"
+    __linux_compliance_remediate_bn_small: >-
+      {{ (__linux_compliance_remediate_bn_stat.stat.size | default(0))
+         <= __linux_compliance_remediate_prior_content_max_bytes }}
+  tags:
+    - always
+
+- name: Banners | Read the current content of the banner file
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+  register: __linux_compliance_remediate_bn_current
+  when:
+    - __linux_compliance_remediate_bn_regular
+    - __linux_compliance_remediate_bn_small
+  tags:
+    - always
+
+- name: Banners | Decide whether the banner text must be written and what to record
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_prior: >-
+      {{ __linux_compliance_remediate_bn_current.content
+         if __linux_compliance_remediate_bn_current is not skipped else none }}
+    __linux_compliance_remediate_bn_status: >-
+      {{ 'not_regular_file' if __linux_compliance_remediate_bn_exists and not __linux_compliance_remediate_bn_regular
+         else 'prior_too_large' if __linux_compliance_remediate_bn_exists and not __linux_compliance_remediate_bn_small
+         else 'compliant' if __linux_compliance_remediate_bn_exists
+              and __linux_compliance_remediate_bn_current.content == (__linux_compliance_remediate_bn_text | b64encode)
+         else 'applied' }}
+  tags:
+    - always
+
+- name: Banners | Record the prior content, or that the file did not exist, before writing it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values:
+      - name: content_base64
+        value: "{{ __linux_compliance_remediate_bn_prior }}"
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+  register: __linux_compliance_remediate_bn_record
+  when:
+    - __linux_compliance_remediate_bn_status == 'applied'
+    - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: Banners | Write the banner text, creating a missing file with mode 0644 owned by root
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_bn_text }}"
+    dest: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    force: true
+    mode: "{{ omit if __linux_compliance_remediate_bn_exists else '0644' }}"
+    owner: "{{ omit if __linux_compliance_remediate_bn_exists else 'root' }}"
+    group: "{{ omit if __linux_compliance_remediate_bn_exists else 'root' }}"
+  register: __linux_compliance_remediate_bn_write
+  when: __linux_compliance_remediate_bn_status == 'applied'
+  tags:
+    - always
+
+- name: Banners | Remember a banner file that this run creates, for the rules on its mode and owner
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_created: >-
+      {{ __linux_compliance_remediate_bn_created
+         | combine({__linux_compliance_remediate_rule.parameters.path: true}) }}
+  when:
+    - __linux_compliance_remediate_bn_status == 'applied'
+    - not __linux_compliance_remediate_bn_exists
+  tags:
+    - always
+
+- name: Banners | Add the result of the rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'apply',
+           'status': __linux_compliance_remediate_bn_status,
+           'reason': none,
+           'changed': __linux_compliance_remediate_bn_write is changed,
+           'message': __linux_compliance_remediate_rule.parameters.path ~ ': ' ~ __linux_compliance_remediate_bn_status
+         }] }}
+  tags:
+    - always

@@ -54,7 +54,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     toggles,
 )
 from tools.content import fetch_content
-from tools.roles import generate_toggles
+from tools.roles import generate_toggles, profile_values
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -90,6 +90,9 @@ UMBRELLA_KEY: Final[str] = toggles.UMBRELLA_KEY
 NATIVE_KEYS: Final[frozenset[str]] = frozenset(
     {"rule_id", "revert_strategy", "runbook", "parameters"}
 )
+PROFILE_VALUE_KEY: Final[str] = "profile_value"
+GENERATED_PARAMETERS: Final[tuple[str, ...]] = ("value_id", "profile_values")
+VALUE_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_]{0,127}")
 TIERS: Final[tuple[str, ...]] = ("topic_groups", "rule_prefixes", "fallback_groups")
 GROUP_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 PREFIX_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}_")
@@ -182,6 +185,7 @@ class StreamRules:
     version: str
     profiles: dict[str, tuple[str, ...]]
     groups: dict[str, tuple[str, ...]]
+    values: profile_values.StreamValues | None = None
 
 
 @dataclass(frozen=True)
@@ -254,8 +258,22 @@ def _family(raw: object, index: int) -> Family:
 def _native(raw: object, index: int) -> tuple[str, dict[str, object]]:
     where = f"native_rules[{index}]"
     table = toggles.as_mapping(raw)
-    if table is None or frozenset(table) != NATIVE_KEYS:
-        message = f"{where} must be a mapping with exactly {sorted(NATIVE_KEYS)}"
+    if table is None or frozenset(table) - {PROFILE_VALUE_KEY} != NATIVE_KEYS:
+        message = (
+            f"{where} must be a mapping with exactly {sorted(NATIVE_KEYS)} "
+            f"and an optional {PROFILE_VALUE_KEY!r}"
+        )
+        raise _fail(message)
+    value = table.get(PROFILE_VALUE_KEY)
+    if PROFILE_VALUE_KEY in table and not (isinstance(value, str) and VALUE_NAME.fullmatch(value)):
+        message = f"{where}.{PROFILE_VALUE_KEY} must be the short identifier of an XCCDF value"
+        raise _fail(message)
+    parameters = toggles.as_mapping(table["parameters"])
+    if parameters is None or set(parameters) & set(GENERATED_PARAMETERS):
+        message = (
+            f"{where}.parameters must be a mapping without the generated keys "
+            f"{list(GENERATED_PARAMETERS)}"
+        )
         raise _fail(message)
     strategy = table["revert_strategy"]
     if strategy == toggles.AUDIT_ONLY or strategy not in toggles.STRATEGIES:
@@ -266,6 +284,8 @@ def _native(raw: object, index: int) -> tuple[str, dict[str, object]]:
         message = f"{where}.rule_id is not a ComplianceAsCode rule identifier"
         raise _fail(message)
     details = {key: table[key] for key in ("revert_strategy", "runbook", "parameters")}
+    if value is not None:
+        details[PROFILE_VALUE_KEY] = value
     return str(rule_id), details
 
 
@@ -444,7 +464,12 @@ def read_stream(stream: Stream) -> StreamRules:
         rule.rule_id: tuple(group.removeprefix(GROUP_PREFIX) for group in rule.groups)
         for rule in benchmark.rules
     }
-    return StreamRules(stream.name, benchmark.version, profiles, groups)
+    try:
+        values = profile_values.read_values(str(stream.path), stream.sha256)
+    except profile_values.ProfileValueError as error:
+        message = f"{stream.name}: {error}"
+        raise _fail(message) from error
+    return StreamRules(stream.name, benchmark.version, profiles, groups, values)
 
 
 def _index(source: Source, tier: str) -> dict[str, str]:
@@ -613,7 +638,36 @@ def rule_groups(streams: Sequence[StreamRules]) -> dict[str, frozenset[str]]:
     return {rule_id: frozenset(names) for rule_id, names in found.items()}
 
 
-def catalogue_entry(rule_id: str, family: Family, source: Source) -> dict[str, object]:
+def native_parameters(
+    rule_id: str, native: Mapping[str, object], streams: Sequence[StreamRules]
+) -> dict[str, object]:
+    """Return the parameters of a native rule, with its profile values when it names a value.
+
+    A rule with ``profile_value`` gets ``value_id`` and ``profile_values``: per datastream that
+    selects it, the profiles that share one value and that value (:func:`profile_values.resolve`).
+    """
+    parameters = dict(cast("Mapping[str, object]", native["parameters"]))
+    value = native.get(PROFILE_VALUE_KEY)
+    if value is None:
+        return parameters
+    sources: list[profile_values.StreamProfiles] = []
+    for stream in streams:
+        if stream.values is None:
+            message = f"{stream.name}: the values of the datastream were not read"
+            raise _fail(message)
+        sources.append(profile_values.StreamProfiles(stream.name, stream.values, stream.profiles))
+    try:
+        resolved = profile_values.resolve(sources, rule_id, str(value))
+    except profile_values.ProfileValueError as error:
+        raise _fail(str(error)) from error
+    parameters["value_id"] = value
+    parameters["profile_values"] = resolved
+    return parameters
+
+
+def catalogue_entry(
+    rule_id: str, family: Family, source: Source, streams: Sequence[StreamRules] = ()
+) -> dict[str, object]:
     """Return the full catalogue entry of a rule in ``family``, native or ``audit_only``."""
     native = source.native_rules.get(rule_id)
     strategy = toggles.AUDIT_ONLY if native is None else str(native["revert_strategy"])
@@ -625,7 +679,7 @@ def catalogue_entry(rule_id: str, family: Family, source: Source) -> dict[str, o
         "revert_strategy": strategy,
         "toggle": toggles.rule_toggle_name(rule_id),
         "runbook": None if native is None else native["runbook"],
-        "parameters": {} if native is None else native["parameters"],
+        "parameters": {} if native is None else native_parameters(rule_id, native, streams),
     }
 
 
@@ -650,7 +704,7 @@ def build(source: Source, streams: Sequence[StreamRules]) -> Catalogue:
     tags = derive_tags(source, assigned, rule_groups(streams))
     families = {family.name: family for family in source.families}
     rules = [
-        catalogue_entry(rule_id, families[assigned[rule_id]], source)
+        catalogue_entry(rule_id, families[assigned[rule_id]], source, streams)
         for rule_id in sorted(assigned)
     ]
     errors = toggles.Errors()

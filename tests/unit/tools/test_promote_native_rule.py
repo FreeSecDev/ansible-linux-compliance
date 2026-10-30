@@ -53,7 +53,12 @@ def test_the_promoted_rule_is_a_native_disruptive_rule_of_its_family(tmp_path: P
     assert audit_only["ssh"] == [rule for rule in original_audit_only["ssh"] if rule != SSH_RULE]
     assert data[generate_toggles.FAMILIES_KEY] == original[generate_toggles.FAMILIES_KEY]
     catalogue = generate_toggles.load_catalogue(target)
-    assert generate_toggles.native_families(catalogue) == ["file_permissions", "ssh"]
+    assert generate_toggles.native_families(catalogue) == [
+        "file_permissions",
+        "banners",
+        "ssh",
+        "pwquality",
+    ]
 
 
 def test_the_repository_catalogue_is_never_rewritten(

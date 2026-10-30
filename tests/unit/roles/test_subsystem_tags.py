@@ -205,7 +205,10 @@ def test_the_cron_toggle_cleans_up_the_native_crontab_rule_without_the_allow_lis
     assert crontab["reason"] == "disabled_by_toggle"
     assert crontab["disabled_by"] == toggle("cron")
     families = cast("list[dict[str, object]]", result["families"])
-    assert [item["name"] for item in families] == ["file_permissions"]
+    assert [item["name"] for item in families if item["disruptive"] is True] == []
+    file_permissions = next(item for item in families if item["name"] == "file_permissions")
+    cleanup = cast("list[dict[str, object]]", file_permissions["cleanup"])
+    assert [item["rule_id"] for item in cleanup] == [CRONTAB]
 
 
 def test_a_disruptive_tag_does_not_put_a_rule_behind_the_allow_list() -> None:

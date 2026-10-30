@@ -1,0 +1,26 @@
+---
+minor_changes:
+  - >-
+    remediate - the ``banners`` topic is native: the text of ``/etc/issue``, ``/etc/issue.net``
+    and ``/etc/motd`` (new variable ``linux_compliance_remediate_banner_text``, validated against the
+    profile's XCCDF value) and their mode, owner and group, each rule recording and restoring only the
+    attribute it changes.
+  - >-
+    remediate - the ``pwquality`` topic is native, with the value of the selected profile, written where
+    the pinned content of the platform checks it: one line per setting in ``/etc/security/pwquality.conf``
+    on Ubuntu 24.04 and one drop-in per setting below ``/etc/security/pwquality.conf.d`` on RHEL 9. Switching
+    the rule or topic off restores the recorded line or removes the drop-in, but only while it is still what the
+    collection wrote: a later change by hand is ``modified_since_apply``, a ledger entry of the other method is
+    ``method_changed``, and a symbolic link in place of ``pwquality.conf.d`` is ``not_directory``; each keeps the
+    entry and changes nothing. It is disruptive and needs ``pwquality`` or ``pam`` in
+    ``linux_compliance_remediate_allow_disruptive``.
+  - >-
+    catalogue - native rules take the values of the XCCDF ``Value`` their check exports from the pinned
+    content, per content and profile (``profile_value`` in ``content/catalogue.yml``, ``value_id`` and
+    ``profile_values`` in the rule parameters).
+trivial:
+  - >-
+    CI - the Molecule toggle lifecycle runs in the new ``docker-ubuntu-lifecycle`` and
+    ``docker-rhel-compatible-lifecycle`` scenarios, as one required CI leg per platform, native topic and toggle
+    mode that ``make molecule-matrix`` derives from the catalogue, and the ``test`` job is split into ``test`` and
+    ``test-playbooks``, so that every required job stays well below the merge queue's 30-minute limit.

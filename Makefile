@@ -15,7 +15,7 @@ ANSIBLE_HOME ?= $(CURDIR)/build/ansible-home
 ANSIBLE_COLLECTIONS_PATH ?= $(CURDIR)/build/collections
 ANSIBLE_TEST_HOME ?= $(CURDIR)/build/ansible-test-home
 export ANSIBLE_HOME ANSIBLE_COLLECTIONS_PATH
-MOLECULE_DOCKER_SCENARIOS := docker-ubuntu docker-rhel-compatible
+MOLECULE_DOCKER_SCENARIOS := docker-ubuntu docker-rhel-compatible docker-ubuntu-lifecycle docker-rhel-compatible-lifecycle
 MOLECULE_LIFECYCLE_TOPIC ?=
 MOLECULE_LIFECYCLE_MODE ?=
 export MOLECULE_LIFECYCLE_TOPIC MOLECULE_LIFECYCLE_MODE
@@ -462,7 +462,7 @@ test-coverage: require-uv collection-link
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 
 test-content-golden: require-uv collection-link content
-	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py --no-cov
+	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py --no-cov
 	$(GENERATE_CATALOGUE) --check
 	$(GENERATE_STIG_MAPPING) --check
 
@@ -600,6 +600,7 @@ test-remediate-disruptive: require-uv collection-link
 test-remediate-check: require-uv collection-link test-remediate-disruptive
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
+	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-native-check.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
 
 ROLE_GUARDS_DIR := build/test-role-guards

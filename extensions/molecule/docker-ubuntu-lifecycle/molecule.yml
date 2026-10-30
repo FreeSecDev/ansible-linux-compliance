@@ -1,0 +1,39 @@
+---
+ansible:
+  cfg:
+    defaults:
+      host_key_checking: false
+      remote_tmp: /tmp/.ansible-molecule
+      stdout_callback: ansible.builtin.default
+      result_format: yaml
+      fact_caching: memory
+    ssh_connection:
+      pipelining: true
+  executor:
+    backend: ansible-playbook
+    args:
+      ansible_playbook:
+        - --extra-vars=ansible_become=false
+  playbooks:
+    create: ../shared/create.yml
+    prepare: ../shared/prepare.yml
+    side_effect: ../shared/lifecycle.yml
+    destroy: ../shared/destroy.yml
+
+driver:
+  name: default
+  options:
+    managed: true
+
+platforms:
+  - name: ubuntu-2404
+    image: ubuntu
+    network_mode: none
+
+scenario:
+  name: docker-ubuntu-lifecycle
+  test_sequence:
+    - create
+    - prepare
+    - side_effect
+    - destroy

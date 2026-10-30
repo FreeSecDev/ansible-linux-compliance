@@ -1,0 +1,112 @@
+---
+- name: Banners | Refuse to restore a banner file attribute that the dispatcher did not plan to clean up
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'banners'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'banners'
+      - __linux_compliance_remediate_rule.parameters.attribute in ['mode', 'owner', 'group']
+      - __linux_compliance_remediate_rule.ledger_entry is mapping
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'banners') | list | first | default({}))).cleanup | default([])
+    fail_msg: >-
+      banners_attribute_cleanup.yml runs only for a rule that the remediate dispatcher planned to clean
+      up from its ledger entry, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Banners | Inspect the banner file before restoring its attribute
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_bn_stat
+  tags:
+    - always
+
+- name: Banners | Read the recorded prior attribute
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_attr: "{{ __linux_compliance_remediate_rule.parameters.attribute }}"
+    __linux_compliance_remediate_bn_prior: >-
+      {{ __linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+         | selectattr('name', 'equalto', __linux_compliance_remediate_rule.parameters.attribute)
+         | map(attribute='value') | first | default(none) }}
+    __linux_compliance_remediate_bn_exists: "{{ __linux_compliance_remediate_bn_stat.stat.exists }}"
+    __linux_compliance_remediate_bn_regular: "{{ __linux_compliance_remediate_bn_stat.stat.isreg | default(false) }}"
+  tags:
+    - always
+
+- name: Banners | Name the reason a restore is impossible
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_reason: >-
+      {{ 'target_absent' if not __linux_compliance_remediate_bn_exists
+         else 'not_regular_file' if not __linux_compliance_remediate_bn_regular
+         else 'invalid_record' if not (__linux_compliance_remediate_bn_prior is string
+              and __linux_compliance_remediate_bn_prior is match(
+                '^[0-7]{4}$' if __linux_compliance_remediate_bn_attr == 'mode' else '^[0-9]{1,10}$')
+              and __linux_compliance_remediate_newline not in __linux_compliance_remediate_bn_prior)
+         else none }}
+  tags:
+    - always
+
+- name: Banners | Decide whether the prior attribute can be restored
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_restorable: "{{ __linux_compliance_remediate_bn_reason is none }}"
+  tags:
+    - always
+
+- name: Banners | Restore the recorded prior attribute
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    state: file
+    follow: false
+    mode: "{{ __linux_compliance_remediate_bn_prior if __linux_compliance_remediate_bn_attr == 'mode' else omit }}"
+    owner: "{{ __linux_compliance_remediate_bn_prior if __linux_compliance_remediate_bn_attr == 'owner' else omit }}"
+    group: "{{ __linux_compliance_remediate_bn_prior if __linux_compliance_remediate_bn_attr == 'group' else omit }}"
+  register: __linux_compliance_remediate_bn_restored
+  when: __linux_compliance_remediate_bn_restorable
+  tags:
+    - always
+
+- name: Banners | Forget the rule in the state ledger after the restore
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  register: __linux_compliance_remediate_bn_forget
+  when: __linux_compliance_remediate_bn_restorable
+  tags:
+    - always
+
+- name: Banners | Add the result of the cleanup
+  vars:
+    __linux_compliance_remediate_bn_cleanup_status: >-
+      {{ 'restored' if __linux_compliance_remediate_bn_restorable else 'cleanup_incomplete' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'cleanup',
+           'status': __linux_compliance_remediate_bn_cleanup_status,
+           'reason': __linux_compliance_remediate_bn_reason,
+           'changed': (__linux_compliance_remediate_bn_restored is changed)
+                      or (__linux_compliance_remediate_bn_forget is changed),
+           'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_bn_cleanup_status
+                      ~ ((' (' ~ __linux_compliance_remediate_bn_reason ~ ': '
+                          ~ __linux_compliance_remediate_rule.parameters.path
+                          ~ '; the ledger entry is kept and the cleanup is retried on the next run)')
+                         if __linux_compliance_remediate_bn_reason else '')
+         }] }}
+  tags:
+    - always

@@ -170,6 +170,24 @@ lifecycle_broad_selfcheck_cases:
         - "{{ lifecycle_broad_selfcheck_crontab }}"
         - "{{ lifecycle_broad_selfcheck_ledger }}"
     refused: true
+  - name: declared file rewritten by its topic, with another inode
+    rewritten:
+      - /etc/crontab
+    after:
+      files:
+        - "{{ lifecycle_broad_selfcheck_file }}"
+        - "{{ lifecycle_broad_selfcheck_crontab | combine({'inode': 103, 'mtime': 2.0}) }}"
+        - "{{ lifecycle_broad_selfcheck_ledger }}"
+    refused: false
+  - name: rewritten declared file left with other content
+    rewritten:
+      - /etc/crontab
+    after:
+      files:
+        - "{{ lifecycle_broad_selfcheck_file }}"
+        - "{{ lifecycle_broad_selfcheck_crontab | combine({'inode': 103, 'checksum': 'b'}) }}"
+        - "{{ lifecycle_broad_selfcheck_ledger }}"
+    refused: true
   - name: declared file replaced by another inode
     after:
       files:
@@ -296,6 +314,37 @@ lifecycle_selfcheck_cases:
         /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'exists': false}) }}"
     expected: {}
     mismatch: "files /etc/selfcheck: exists changed from True to False;"
+  - name: rewritten file restored with another inode and time
+    rewritten:
+      - /etc/selfcheck
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'inode': 1, 'mtime': 1.0}) }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'inode': 2, 'mtime': 2.0}) }}"
+    expected: {}
+    mismatch: ""
+  - name: rewritten file restored with other content
+    rewritten:
+      - /etc/selfcheck
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'inode': 1}) }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'inode': 2, 'checksum': 'b'}) }}"
+    expected: {}
+    mismatch: "files /etc/selfcheck: checksum changed from a to b;"
+  - name: file that is not rewritten restored with another inode
+    before:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'inode': 1}) }}"
+    after:
+      files:
+        /etc/selfcheck: "{{ lifecycle_selfcheck_file | combine({'inode': 2}) }}"
+    expected: {}
+    mismatch: "files /etc/selfcheck: inode changed from 1 to 2;"
   - name: declared change that did not happen
     before:
       files:

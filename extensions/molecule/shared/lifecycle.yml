@@ -78,6 +78,12 @@
           {{ [lifecycle_selected_mode] if lifecycle_selected_mode | length > 0 else lifecycle_toggle_modes }}
         lifecycle_proven_families: []
 
+    - name: Scan once before any state is recorded, so that the first write of the scanner happens before the reference
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: false
+
     - name: Check that the state comparison finds missing controls, stray changes and leftovers
       ansible.builtin.include_tasks:
         file: tasks/lifecycle_selfcheck.yml
@@ -100,6 +106,14 @@
       loop: "{{ lifecycle_run_families }}"
       loop_control:
         loop_var: lifecycle_family
+
+    - name: Run the pwquality regressions for a change of method, a change by hand and a symbolic link
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_pwquality_regressions.yml
+      when:
+        - lifecycle_run_families | last == 'pwquality'
+        - lifecycle_run_modes | last == 'rule'
+        - "'pwquality' in lifecycle_proven_families"
 
     - name: Refuse a CI leg whose topic runs no cycle with this driver on this platform
       ansible.builtin.assert:

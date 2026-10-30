@@ -51,13 +51,33 @@ VALID: dict[str, object] = {
 }
 
 
+def reference_only(target: Path) -> Path:
+    """Write the repository catalogue with only the reference rule native, the rest audit_only."""
+    data = cast(
+        "dict[str, object]",
+        yaml.safe_load((REPOSITORY_ROOT / generate_toggles.CATALOGUE).read_text(encoding="utf-8")),
+    )
+    rules = cast("list[dict[str, object]]", data[generate_toggles.RULES_KEY])
+    audit_only = cast("dict[str, list[str]]", data[generate_toggles.AUDIT_ONLY_KEY])
+    for rule in rules:
+        if rule["family"] != "file_permissions":
+            family = str(rule["family"])
+            audit_only[family] = sorted([*audit_only[family], str(rule["rule_id"])])
+    data[generate_toggles.RULES_KEY] = [
+        rule for rule in rules if rule["family"] == "file_permissions"
+    ]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("---\n" + yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    return target
+
+
 def make_root(
     tmp_path: Path, declarations: dict[str, object], *, catalogue: Path | None = None
 ) -> Path:
     root = tmp_path / "repository"
     rules = root / generate_toggles.CATALOGUE
     rules.parent.mkdir(parents=True)
-    shutil.copyfile(catalogue or REPOSITORY_ROOT / generate_toggles.CATALOGUE, rules)
+    shutil.copyfile(catalogue or reference_only(tmp_path / "reference" / "rules.yml"), rules)
     versions = root / lifecycle.VERSIONS
     versions.parent.mkdir(parents=True)
     shutil.copyfile(REPOSITORY_ROOT / lifecycle.VERSIONS, versions)
@@ -129,8 +149,7 @@ def test_a_declaration_for_a_topic_without_a_native_rule_fails(tmp_path: Path) -
 
 
 def test_a_new_native_topic_needs_its_own_declaration(tmp_path: Path) -> None:
-    catalogue = tmp_path / "rules.yml"
-    shutil.copyfile(REPOSITORY_ROOT / generate_toggles.CATALOGUE, catalogue)
+    catalogue = reference_only(tmp_path / "rules.yml")
     assert promote.main(["--catalogue", str(catalogue), "--rule", SSH_RULE]) == 0
     root = make_root(tmp_path, {"file_permissions": VALID}, catalogue=catalogue)
     native, errors = lifecycle.check(root)
@@ -141,8 +160,7 @@ def test_a_new_native_topic_needs_its_own_declaration(tmp_path: Path) -> None:
 
 
 def test_a_disruptive_topic_must_describe_its_containment(tmp_path: Path) -> None:
-    catalogue = tmp_path / "rules.yml"
-    shutil.copyfile(REPOSITORY_ROOT / generate_toggles.CATALOGUE, catalogue)
+    catalogue = reference_only(tmp_path / "rules.yml")
     assert promote.main(["--catalogue", str(catalogue), "--rule", SSH_RULE]) == 0
     ssh = {
         "family": "ssh",
@@ -392,6 +410,133 @@ def test_a_minimal_declaration_needs_family_disruptive_state_and_applied(tmp_pat
     assert errors_for(tmp_path, minimal) == []
 
 
+def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_path: Path) -> None:
+    topics = REPOSITORY_ROOT / lifecycle.TOPICS
+    declarations = {
+        path.stem: cast("object", yaml.safe_load(path.read_text(encoding="utf-8")))
+        for path in sorted(topics.glob("*.yml"))
+    }
+    root = make_root(tmp_path, declarations, catalogue=REPOSITORY_ROOT / generate_toggles.CATALOGUE)
+    native, errors = lifecycle.check(root)
+    assert native == ["file_permissions", "banners", "pwquality"]
+    assert errors == []
+
+
+def test_a_rewritten_file_and_unchanged_rules_are_accepted(tmp_path: Path) -> None:
+    declaration = changed(
+        state={"files": [{"path": "/etc/crontab", "rewritten": True}]},
+        applied={"files": [{"path": "/etc/crontab", "mode": "0600"}]},
+        pre_states=[
+            {
+                "name": "compliant",
+                "unchanged": [
+                    {"rule": "file_permissions_crontab", "status": "compliant"},
+                ],
+            },
+            {
+                "name": "missing on one platform",
+                "unchanged": [
+                    {
+                        "rule": "file_permissions_crontab",
+                        "status": "notapplicable",
+                        "platforms": ["ubuntu"],
+                    }
+                ],
+            },
+        ],
+    )
+    assert errors_for(tmp_path, declaration) == []
+
+
+@pytest.mark.parametrize(
+    ("declaration", "message"),
+    [
+        (
+            changed(state={"files": [{"path": "/etc/crontab", "rewritten": "yes"}]}),
+            "state.files[0].rewritten must be a boolean",
+        ),
+        (
+            changed(state={"users": [{"name": "root", "rewritten": True}]}, applied=REMOVE),
+            "state.users[0] has the unknown key 'rewritten'",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "unchanged": NO_KEYS}]),
+            "pre_states[0].unchanged must be a list",
+        ),
+        (
+            changed(pre_states=[{"name": "a", "unchanged": ["x"]}]),
+            "pre_states[0].unchanged[0] must be a mapping",
+        ),
+        (
+            changed(
+                pre_states=[{"name": "a", "unchanged": [{"rule": "sshd_x", "status": "compliant"}]}]
+            ),
+            "pre_states[0].unchanged[0] needs the short identifier of a native rule of the topic",
+        ),
+        (
+            changed(
+                pre_states=[
+                    {
+                        "name": "a",
+                        "unchanged": [
+                            {"rule": "file_permissions_crontab", "status": "compliant"},
+                            {"rule": "file_permissions_crontab", "status": "compliant"},
+                        ],
+                    }
+                ]
+            ),
+            "pre_states[0].unchanged[1] lists file_permissions_crontab twice",
+        ),
+        (
+            changed(
+                pre_states=[
+                    {
+                        "name": "a",
+                        "unchanged": [{"rule": "file_permissions_crontab", "status": "applied"}],
+                    }
+                ]
+            ),
+            "pre_states[0].unchanged[0] needs the status compliant or notapplicable",
+        ),
+        (
+            changed(
+                pre_states=[
+                    {
+                        "name": "a",
+                        "unchanged": [
+                            {"rule": "file_permissions_crontab", "status": "compliant", "x": 1}
+                        ],
+                    }
+                ]
+            ),
+            "pre_states[0].unchanged[0] has the unknown key 'x'",
+        ),
+        (
+            changed(
+                pre_states=[
+                    {
+                        "name": "a",
+                        "unchanged": [
+                            {
+                                "rule": "file_permissions_crontab",
+                                "status": "compliant",
+                                "platforms": ["debian"],
+                            }
+                        ],
+                    }
+                ]
+            ),
+            "pre_states[0].unchanged[0] names the unknown platform 'debian'",
+        ),
+    ],
+)
+def test_an_invalid_rewritten_flag_or_unchanged_rule_is_reported(
+    tmp_path: Path, declaration: object, message: str
+) -> None:
+    errors = errors_for(tmp_path, declaration)
+    assert any(message in error for error in errors), errors
+
+
 def test_identity_attributes_of_a_file_may_be_expected(tmp_path: Path) -> None:
     expectation = {"path": "/etc/crontab", "inode": 5, "mtime": 1.0, "attributes": ["e"]}
     assert errors_for(tmp_path, changed(applied={"files": [expectation]})) == []
@@ -555,7 +700,7 @@ def test_a_declaration_without_a_requirement_needs_no_driver_coverage(tmp_path: 
 
 def test_a_pre_state_without_a_requirement_runs_in_the_docker_scenarios(tmp_path: Path) -> None:
     root = make_root(tmp_path, {"file_permissions": changed(unselected_platforms=REMOVE)})
-    without_scenario(root, "docker-rhel-compatible")
+    without_scenario(root, "docker-rhel-compatible-lifecycle")
     errors = lifecycle.check(root)[1]
     assert len(errors) == 1
     assert "requires docker, but no docker scenario" in errors[0]
@@ -565,8 +710,8 @@ def test_a_pre_state_without_a_requirement_runs_in_the_docker_scenarios(tmp_path
 def test_a_topic_requirement_applies_to_its_pre_states_without_one(tmp_path: Path) -> None:
     declaration = changed(requires=["libvirt"], unselected_platforms=REMOVE)
     root = make_root(tmp_path, {"file_permissions": declaration})
-    without_scenario(root, "docker-ubuntu")
-    without_scenario(root, "docker-rhel-compatible")
+    without_scenario(root, "docker-ubuntu-lifecycle")
+    without_scenario(root, "docker-rhel-compatible-lifecycle")
     assert lifecycle.check(root)[1] == []
 
 

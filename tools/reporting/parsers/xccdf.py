@@ -17,8 +17,19 @@ XCCDF and ARF files carry no off-platform marker (FREES-161). A file named
 off-platform run, is refused, and so is a file whose own directory or the directory
 above it holds a ``scan-run.json`` that carries the marker, or one that cannot be read.
 Such a run is reported through its ``scan-run.json``, which carries the marker.
+
+A copy taken out of its bundle is also refused by its content (FREES-164). A TestResult
+that SCC wrote (``test-system`` ``cpe:/a:niwc:scc``) lists, as ``platform`` children,
+the platforms that SCC matched to the target. When the benchmark declares operating system
+platforms (``cpe:/o:``) and none of them is listed in the TestResult, SCC ignored the
+platform test, so the results belong to another release than the benchmark and are
+refused. SCC 5.15 observed on 2026-10-29 lists the benchmark's ``cpe:/o:canonical:ubuntu_linux``
+platform on an Ubuntu 24.04 host and omits it on an Ubuntu 26.04 host with the platform
+test ignored. Its ``os_name`` and ``os_version`` target facts are no evidence: they read
+``Debian Variant`` and ``Unknown`` on both.
 """
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
@@ -51,6 +62,14 @@ TEST_RESULT_TAG: Final[str] = "{http://checklists.nist.gov/xccdf/1.2}TestResult"
 FQDN_FACT: Final[str] = "urn:xccdf:fact:asset:identifier:fqdn"
 OFF_PLATFORM_SUFFIX: Final[str] = ".off-platform.xml"
 SCAN_RUN_NAME: Final[str] = "scan-run.json"
+NIWC_TEST_SYSTEM_PREFIXES: Final[tuple[str, ...]] = ("cpe:/a:niwc:scc", "cpe:2.3:a:niwc:scc")
+NIWC_NAME: Final[re.Pattern[str]] = re.compile(r"(?<![a-z])(?:niwc|scc)(?![a-z])")
+OS_PLATFORM_PREFIXES: Final[tuple[str, ...]] = ("cpe:/o:", "cpe:2.3:o:")
+PLATFORM_REFUSAL: Final[str] = (
+    "the SCC results do not list any operating system platform of their benchmark, so the "
+    "scanned host was not matched to the benchmark platform; these are the results of an "
+    "off-platform scan, which carry no off-platform marker and are never figured"
+)
 OFF_PLATFORM_REFUSAL: Final[str] = (
     "these are the raw results of an off-platform scan run, which carry no off-platform "
     "marker and are never figured; report the run's scan-run.json instead"
@@ -96,6 +115,72 @@ def _asset_names(tree: XmlNode) -> set[str]:
     return names
 
 
+def _os_platforms(nodes: list[XmlNode]) -> set[str]:
+    listed = (
+        node.attributes.get("idref", "").strip().lower()
+        for node in nodes
+        if node.local == "platform"
+    )
+    return {idref for idref in listed if idref.startswith(OS_PLATFORM_PREFIXES)}
+
+
+def _outside_results(tree: XmlNode) -> list[XmlNode]:
+    kept: list[XmlNode] = []
+    pending: list[XmlNode] = [tree]
+    while pending:
+        node = pending.pop()
+        if node.local != "TestResult":
+            kept.append(node)
+            pending.extend(node.children)
+    return kept
+
+
+def _is_niwc_result(result: XmlNode) -> bool:
+    system = result.attributes.get("test-system", "").strip().lower()
+    if system.startswith(NIWC_TEST_SYSTEM_PREFIXES):
+        return True
+    if NIWC_NAME.search(system):
+        message = "the test-system names SCC in a form this report does not recognise"
+        raise InvalidInputError(message)
+    return False
+
+
+def _declared_platforms(tree: XmlNode, result: XmlNode) -> set[str]:
+    references = [node for node in result.children if node.local == "benchmark"]
+    wanted = references[0].attributes.get("id", "") if references else ""
+    benchmarks = [
+        node
+        for node in tree.descendants()
+        if node.local == "Benchmark" and wanted and node.attributes.get("id") == wanted
+    ]
+    scope = benchmarks or [tree]
+    declared: set[str] = set()
+    for node in scope:
+        declared |= _os_platforms(_outside_results(node))
+    return declared
+
+
+def refuse_platform_mismatch(tree: XmlNode) -> None:
+    """Refuse SCC results whose TestResult does not list a platform of their benchmark.
+
+    The platforms are those of the Benchmark that the TestResult names in its own
+    ``benchmark`` element; when no Benchmark of the document has that ID, those of the
+    whole document. CPE 2.2 URIs and CPE 2.3 formatted strings are both recognised.
+
+    Raises:
+        InvalidInputError: If a TestResult written by SCC lists none of the operating
+            system platforms that the benchmark declares, or if its ``test-system``
+            names SCC in a form that is not recognised.
+    """
+    results = [
+        node for node in tree.descendants() if node.local == "TestResult" and _is_niwc_result(node)
+    ]
+    for result in results:
+        declared = _declared_platforms(tree, result)
+        if declared and not declared & _os_platforms(result.descendants()):
+            raise InvalidInputError(PLATFORM_REFUSAL)
+
+
 def _convert(document: str, kind: str, reported_host: str | None, digest: str) -> ComplianceData:
     try:
         parsed = openscap.parse_results(document)
@@ -129,13 +214,14 @@ def _convert(document: str, kind: str, reported_host: str | None, digest: str) -
 
 
 def _build_xccdf(data: bytes) -> ComplianceData:
-    return _convert(
-        decode_text(data), "xccdf", _first(_host_names(parse_xml(data))), sha256_hex(data)
-    )
+    tree = parse_xml(data)
+    refuse_platform_mismatch(tree)
+    return _convert(decode_text(data), "xccdf", _first(_host_names(tree)), sha256_hex(data))
 
 
 def _build_arf(data: bytes) -> ComplianceData:
     tree = parse_xml(data)
+    refuse_platform_mismatch(tree)
     root = fromstring(data, forbid_dtd=True)
     if root.tag != ARF_ROOT_TAG:
         message = "the root element is not an ARF 1.1 asset-report-collection"
