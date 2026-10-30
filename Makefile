@@ -185,10 +185,11 @@ GENERATE_STIG_MAPPING := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python 
 SCC_FETCH_ENV := SCC_VERSION='$(SCC_VERSION)' SCC_BUNDLE='$(SCC_BUNDLE)' SCC_BUNDLE_URL='$(SCC_BUNDLE_URL)' \
 	SCC_BUNDLE_SIZE='$(SCC_BUNDLE_SIZE)' SCC_BUNDLE_SHA256='$(SCC_BUNDLE_SHA256)' SCC_CHECKSUMS_URL='$(SCC_CHECKSUMS_URL)' \
 	SCC_DEB_MEMBER='$(SCC_DEB_MEMBER)' SCC_DEB_SHA256='$(SCC_DEB_SHA256)' SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)'
+SCC_RELEASE_WATCH_ISSUES ?= false
 HADOLINT := build/tools/hadolint
 SHELL_SCRIPTS := build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/browser/fetch-test-deps.sh \
 	tools/lint/fetch-hadolint.sh tools/scc/fetch-scc.sh tools/scc/smoke-test.sh tools/scc/check-expiry.sh \
-	tools/scc/needs-smoke.sh
+	tools/scc/needs-smoke.sh tools/scc/expiry-state.sh
 
 INDEX_MODES := build/lint-repo-index-modes
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/
@@ -280,6 +281,8 @@ Images and AWS
   oscap-image           Build OSCAP_IMAGE, the CI-only OpenSCAP image on the SCC image's base, locally; never pushed
   scc-integration       Run real SCC scans through compliance_scan, the egress test, the 26.04 case and the OpenSCAP STIG checklist export
   scc-image-clean       Remove the local SCC_IMAGE, SCC_IMAGE_UBUNTU2604 and OSCAP_IMAGE
+  scc-release-watch     Compare NIWC's SCC release record with SCC_VERSION and report the expiry; downloads no SCC
+                        (SCC_RELEASE_WATCH_ISSUES=true also opens or reopens one GitHub issue per finding)
 
 Reporting, docs and release
   report                Write the normalized report JSON and the HTML dashboard from REPORT_ARGS
@@ -299,7 +302,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
-	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
+	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
@@ -872,6 +875,10 @@ scc-image-clean:
 	@printf '%s' '$(SCC_IMAGE_UBUNTU2604)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE_UBUNTU2604 must be a localhost/ tag\n' >&2; exit 2; }
 	@printf '%s' '$(OSCAP_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: OSCAP_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
 	$(DOCKER) image rm --force '$(SCC_IMAGE)' '$(SCC_IMAGE_UBUNTU2604)' '$(OSCAP_IMAGE)'
+
+scc-release-watch: require-uv
+	$(RUN) --no-dev python -m tools.scc.release_watch --pinned-version '$(SCC_VERSION)' --expires '$(SCC_EXPIRES)' \
+		--manage-issues '$(SCC_RELEASE_WATCH_ISSUES)'
 
 REPORT_SCOPE ?=
 REPORT_ARGS ?=

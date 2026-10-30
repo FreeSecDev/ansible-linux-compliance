@@ -8,7 +8,10 @@ never redistributed:
 - The image carries a ``localhost/`` tag.
 - The SCC identifiers (the image name, the SCC paths, the ``SCC_*`` variables, the
   SCC make targets and ``cscc``) appear only in an allow-list of places: the
-  ``scc-smoke`` job, the SCC variables and targets of the Makefile, ``tools/scc``,
+  ``scc-changes``, ``scc-smoke`` and ``ci-gate`` jobs of ``ci.yml`` and the
+  ``scc-release-watch`` job of its own workflow (FREES-176, the only SCC job that may
+  hold ``issues: write``, next to ``contents: read``), the SCC variables and targets
+  of the Makefile, ``tools/scc``,
   ``extensions/ci/scc``, the two audited plugin files that run SCC (``scc.py`` and
   ``process.py`` in ``plugins/module_utils/compliance``),
   documentation and tests. None of those places pushes,
@@ -118,9 +121,15 @@ SCC_IDENTIFIER = re.compile(
     r"freesecdev-scc|build/scc|extensions/ci/scc|tools/scc|scc\.pins|\bcscc\b"
     r"|\bSCC_[A-Z][A-Z0-9_]*\b|\bscc-(?:expiry-check|fetch|image-clean|image|smoke|integration)\b"
 )
-SCC_WORKFLOW = "ci.yml"
-SCC_JOBS = frozenset({"scc-changes", "scc-smoke", "ci-gate"})
+WATCH_WORKFLOW = "scc-release-watch.yml"
+WATCH_JOB = "scc-release-watch"
+SCC_WORKFLOW_JOBS: dict[str, frozenset[str]] = {
+    "ci.yml": frozenset({"scc-changes", "scc-smoke", "ci-gate"}),
+    WATCH_WORKFLOW: frozenset({WATCH_JOB}),
+}
+SCC_JOBS = frozenset(job for jobs in SCC_WORKFLOW_JOBS.values() for job in jobs)
 SCC_JOB_PERMISSIONS: tuple[dict[str, str], ...] = ({}, {"contents": "read"})
+WATCH_PERMISSIONS = {"contents": "read", "issues": "write"}
 SCC_TARGETS = frozenset(
     {
         "scc-expiry-check",
@@ -130,6 +139,7 @@ SCC_TARGETS = frozenset(
         "scc-smoke",
         "scc-image-clean",
         "scc-integration",
+        "scc-release-watch",
     }
 )
 GUARD_MODULE = "tests/unit/tools/test_scc_image.py"
@@ -532,7 +542,7 @@ def makefile_violations(
 
 
 def _job_violations(name: str, job_name: str, job: dict[str, object]) -> list[str]:
-    if name == SCC_WORKFLOW and job_name in SCC_JOBS:
+    if job_name in SCC_WORKFLOW_JOBS.get(name, frozenset()):
         violations = [
             f"{name}:{job_name}: publishing step"
             for step in cast("list[dict[str, object]]", job.get("steps", []))
@@ -540,8 +550,10 @@ def _job_violations(name: str, job_name: str, job: dict[str, object]) -> list[st
             or publishing_line(str(step.get("run", ""))) is not None
         ]
         permissions = cast("dict[str, str]", job.get("permissions", {}))
-        if permissions not in SCC_JOB_PERMISSIONS:
-            violations.append(f"{name}:{job_name}: permissions other than contents: read")
+        watch = name == WATCH_WORKFLOW and job_name == WATCH_JOB
+        allowed = (WATCH_PERMISSIONS,) if watch else SCC_JOB_PERMISSIONS
+        if permissions not in allowed:
+            violations.append(f"{name}:{job_name}: permissions other than the allowed ones")
         return violations
     rest = {key: value for key, value in job.items() if key != "needs"}
     needs = job.get("needs", [])
@@ -1173,7 +1185,9 @@ def test_the_smoke_job_builds_locally_with_read_only_permissions() -> None:
     assert {"pull_request", "push", "merge_group", "schedule"} <= set(triggers)
     job = workflow["jobs"]["scc-smoke"]
     assert job["needs"] == ["scc-changes"]
-    assert job["if"] == "needs.scc-changes.outputs.scc != 'false'"
+    assert job["if"] == (
+        "needs.scc-changes.outputs.scc != 'false' && needs.scc-changes.outputs.expiry != 'expired'"
+    )
     assert workflow["jobs"]["scc-changes"]["permissions"] == {"contents": "read"}
     assert {"scc-changes", "scc-smoke"} <= set(workflow["jobs"]["ci-gate"]["needs"])
     assert job["permissions"] == {"contents": "read"}
@@ -1188,6 +1202,60 @@ def test_the_smoke_job_builds_locally_with_read_only_permissions() -> None:
     assert len(cache) == 1
     assert cache[0]["with"]["path"] == "build/scc/download"
     assert "scc-smoke" in workflow["jobs"]["ci-gate"]["needs"]
+
+
+def test_only_the_scheduled_release_watch_may_write_issues() -> None:
+    path = WORKFLOW_DIRECTORY / WATCH_WORKFLOW
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert set(workflow[True]) == {"schedule", "workflow_dispatch"}
+    assert workflow["permissions"] == {}
+    assert set(workflow["jobs"]) == {WATCH_JOB}
+    job = workflow["jobs"][WATCH_JOB]
+    assert job["permissions"] == WATCH_PERMISSIONS
+    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert "secrets" not in yaml.safe_dump(job)
+    assert [step["run"] for step in job["steps"] if "run" in step] == [
+        "make scc-release-watch SCC_RELEASE_WATCH_ISSUES=true"
+    ]
+    checkouts = [
+        step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@")
+    ]
+    assert [step["with"]["persist-credentials"] for step in checkouts] == [False]
+    writers = [
+        f"{other.name}:{name}"
+        for other in sorted(WORKFLOW_DIRECTORY.glob("*.y*ml"))
+        for name, entry in yaml.safe_load(other.read_text(encoding="utf-8"))["jobs"].items()
+        if "issues" in entry.get("permissions", {})
+    ]
+    assert writers == [f"{WATCH_WORKFLOW}:{WATCH_JOB}"]
+    lines = path.read_text(encoding="utf-8").splitlines()
+    ignored = f"{WATCH_WORKFLOW}:{lines.index('      issues: write') + 1}"
+    zizmor = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github" / "zizmor.yml").read_text(encoding="utf-8")
+    )
+    assert ignored in zizmor["rules"]["undocumented-permissions"]["ignore"]
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job", "permissions"),
+    [
+        (WATCH_WORKFLOW, WATCH_JOB, {"contents": "write", "issues": "write"}),
+        (WATCH_WORKFLOW, WATCH_JOB, {"contents": "read", "issues": "write", "packages": "write"}),
+        (WATCH_WORKFLOW, WATCH_JOB, {"contents": "read"}),
+        ("ci.yml", "scc-smoke", WATCH_PERMISSIONS),
+        ("ci.yml", "scc-changes", {"contents": "read", "issues": "write"}),
+    ],
+)
+def test_the_guard_refuses_other_permissions_for_the_scc_jobs(
+    workflow: str, job: str, permissions: dict[str, str]
+) -> None:
+    path = WORKFLOW_DIRECTORY / workflow
+    document = cast("dict[str, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
+    cast("dict[str, dict[str, object]]", document["jobs"])[job]["permissions"] = permissions
+    assert workflow_violations(workflow, path.read_text(encoding="utf-8")) == []
+    assert workflow_violations(workflow, yaml.safe_dump(document)) == [
+        f"{workflow}:{job}: permissions other than the allowed ones"
+    ]
 
 
 SCC_CACHE_CONDITION = (
