@@ -105,7 +105,12 @@
         - name: Check that every auditd rule of the profile and the crontab rule came back disabled
           vars:
             audit_toggles_auditd: >-
-              {{ audit_toggles_catalogue.__linux_compliance_remediate_audit_only.auditd
+              {{ ((['auditd', 'auditd_conf', 'auditd_rules_time']
+                   | map('extract', audit_toggles_catalogue.__linux_compliance_remediate_audit_only)
+                   | map('default', []) | ansible.builtin.flatten)
+                  + (audit_toggles_catalogue.__linux_compliance_remediate_rules
+                     | selectattr('family', 'in', ['auditd', 'auditd_conf', 'auditd_rules_time'])
+                     | map(attribute='rule_id') | list))
                  | select('in', linux_compliance_discovered.rule_ids) | sort }}
             audit_toggles_auditd_findings: >-
               {{ linux_compliance_audited.scan_run.findings
