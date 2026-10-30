@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import cast
 
@@ -157,3 +158,230 @@ def test_each_pwquality_rule_writes_where_the_content_of_each_platform_checks() 
         "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04": 12,
         "xccdf_org.ssgproject.content_benchmark_RHEL-9": 13,
     }
+
+
+OVAL_DEFINITIONS = "{http://oval.mitre.org/XMLSchema/oval-definitions-5}"
+OVAL_UNIX = "{http://oval.mitre.org/XMLSchema/oval-definitions-5#unix}"
+OVAL_NAMESPACES = (OVAL, OVAL_UNIX, OVAL_DEFINITIONS)
+SUDO_FIELDS = frozenset({"filepath", "path", "filename", "pattern", "filter"})
+SUDO_MAIN = "/etc/sudoers"
+MODE_BITS = {
+    "suid": 0o4000,
+    "sgid": 0o2000,
+    "sticky": 0o1000,
+    "uread": 0o400,
+    "uwrite": 0o200,
+    "uexec": 0o100,
+    "gread": 0o40,
+    "gwrite": 0o20,
+    "gexec": 0o10,
+    "oread": 0o4,
+    "owrite": 0o2,
+    "oexec": 0o1,
+}
+
+
+class OvalCollector:
+    """Keeps the definitions, tests, objects and states of an OVAL document that sudo needs."""
+
+    def __init__(self) -> None:
+        self.definitions: dict[str, list[str]] = {}
+        self.extends: dict[str, list[str]] = {}
+        self.tests: dict[str, dict[str, str]] = {}
+        self.objects: dict[str, dict[str, list[str]]] = {}
+        self.states: dict[str, dict[str, str]] = {}
+        self.definition = ""
+        self.test = ""
+        self.item = ""
+        self.state = ""
+        self.field = ""
+        self.parts: list[str] = []
+
+    @staticmethod
+    def _local(name: str) -> tuple[str, str]:
+        for namespace in OVAL_NAMESPACES:
+            if name.startswith(namespace):
+                return namespace, name[len(namespace) :]
+        return "", name
+
+    def start(self, name: str, attributes: dict[str, str], /) -> None:
+        namespace, local = self._local(name)
+        if name == f"{OVAL_DEFINITIONS}definition":
+            self.definition = attributes.get("id", "")
+            self.definitions[self.definition] = []
+            self.extends[self.definition] = []
+        elif name == f"{OVAL_DEFINITIONS}criterion" and self.definition:
+            self.definitions[self.definition].append(attributes.get("test_ref", ""))
+        elif name == f"{OVAL_DEFINITIONS}extend_definition" and self.definition:
+            self.extends[self.definition].append(attributes.get("definition_ref", ""))
+        elif namespace and local.endswith("_test"):
+            self.test = attributes.get("id", "")
+            self.tests[self.test] = {"check_existence": attributes.get("check_existence", "")}
+        elif namespace and self.test and local in {"object", "state"}:
+            self.tests[self.test][local] = attributes.get(f"{local}_ref", "")
+        elif namespace and local.endswith("_object"):
+            self.item = attributes.get("id", "")
+            self.objects[self.item] = {}
+        elif namespace and local.endswith("_state"):
+            self.state = attributes.get("id", "")
+            self.states[self.state] = {}
+        elif namespace and self.item and local in SUDO_FIELDS:
+            self.field = local
+            self.parts = []
+        elif namespace and self.state:
+            self.field = local
+            self.parts = []
+            self.states[self.state][local] = attributes.get("var_ref", "")
+
+    def end(self, name: str, /) -> None:
+        _, local = self._local(name)
+        if self.field and self.item and local == self.field:
+            self.objects[self.item].setdefault(self.field, []).append("".join(self.parts))
+            self.field = ""
+        elif self.field and self.state and local == self.field:
+            text = "".join(self.parts).strip()
+            if text:
+                self.states[self.state][self.field] = text
+            self.field = ""
+        elif name == f"{OVAL_DEFINITIONS}definition":
+            self.definition = ""
+        elif local.endswith("_test"):
+            self.test = ""
+        elif local.endswith("_object"):
+            self.item = ""
+        elif local.endswith("_state"):
+            self.state = ""
+
+    def text(self, data: str, /) -> None:
+        if self.field:
+            self.parts.append(data)
+
+    def tests_of(self, definition: str) -> list[dict[str, str]]:
+        found = [self.tests[test] for test in self.definitions[definition]]
+        for extended in self.extends[definition]:
+            found.extend(self.tests_of(extended))
+        return found
+
+
+def oval(path: str) -> OvalCollector:
+    collector = OvalCollector()
+    xmlsafe.parse_chunks(xmlsafe.iter_file_chunks(path, profile_values.MAX_BYTES), collector)
+    return collector
+
+
+def sudo_rules(method: str) -> dict[str, dict[str, object]]:
+    return {
+        rule_id: parameters
+        for rule_id, parameters in native_parameters().items()
+        if parameters.get("method") == method
+        and str(parameters.get("path", "")).startswith(SUDO_MAIN)
+    }
+
+
+def reads(item: dict[str, list[str]], path: str) -> bool:
+    if "filepath" in item:
+        return any(re.search(pattern, path) is not None for pattern in item["filepath"])
+    directory, _, name = path.rpartition("/")
+    return item.get("path") == [directory] and any(
+        re.search(pattern, name) is not None for pattern in item.get("filename", [])
+    )
+
+
+def dropin_contents(
+    rule_id: str, parameters: dict[str, object], sha256: str
+) -> list[tuple[str, str]]:
+    entries = cast("list[dict[str, object]]", parameters.get("profile_values", []))
+    values = [
+        "".join(cast("list[str]", entry["value"]))
+        for entry in entries
+        if entry["content_sha256"] == sha256
+    ] or ([""] if "value_id" not in parameters else [])
+    header = (
+        f"# Managed by freesecdev.linux_compliance for {rule_id}.\n"
+        "# Switching the rule or the sudo topic off removes this file.\n"
+    )
+    lines = cast("list[str]", parameters["lines"])
+    return [
+        (value, header + "".join(line.replace("{value}", value) + "\n" for line in lines))
+        for value in values
+    ]
+
+
+def satisfies(test: dict[str, str], item: dict[str, list[str]], value: str, content: str) -> bool:
+    found = [
+        match
+        for pattern in item["pattern"]
+        for match in re.finditer(pattern, content, re.MULTILINE)
+    ]
+    if test["check_existence"] == "none_exist":
+        return found == []
+    if test["check_existence"] == "only_one_exists" and len(found) != 1:
+        return False
+    if "state" in test and {match.group(1) for match in found} != {value}:
+        return False
+    return bool(found)
+
+
+def test_each_sudo_drop_in_satisfies_the_checks_of_every_platform_that_selects_it() -> None:
+    rules = sudo_rules("dropin")
+    assert len(rules) == 4
+    checked: dict[str, set[str]] = {}
+    for path, sha256, benchmark in pinned_benchmarks():
+        profile_values.read_values(path, sha256)
+        collector = oval(path)
+        for rule_id, parameters in rules.items():
+            dropin = str(parameters["path"])
+            assert "." not in dropin.rpartition("/")[2]
+            assert not dropin.endswith("~")
+            definition = f"oval:ssg-{toggles.rule_short_id(rule_id)}:def:1"
+            if definition not in collector.definitions:
+                continue
+            contents = dropin_contents(rule_id, parameters, sha256)
+            assert contents, (rule_id, benchmark)
+            for test in collector.tests_of(definition):
+                item = collector.objects[test["object"]]
+                assert reads(item, dropin), (rule_id, benchmark, item)
+                assert reads(item, SUDO_MAIN), (rule_id, benchmark, item)
+                for value, content in contents:
+                    assert satisfies(test, item, value, content), (rule_id, benchmark)
+            checked.setdefault(benchmark, set()).add(rule_id)
+    assert {benchmark: len(found) for benchmark, found in checked.items()} == {
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04": 3,
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9": 4,
+    }
+
+
+def test_each_sudo_attribute_rule_restricts_what_the_content_checks() -> None:
+    rules = sudo_rules("attribute")
+    assert len(rules) == 6
+    checked = 0
+    for path, sha256, _ in pinned_benchmarks():
+        profile_values.read_values(path, sha256)
+        collector = oval(path)
+        for rule_id, parameters in rules.items():
+            definition = f"oval:ssg-{toggles.rule_short_id(rule_id)}:def:1"
+            if definition not in collector.definitions:
+                continue
+            (test,) = collector.tests_of(definition)
+            assert test["check_existence"] == "none_exist"
+            item = collector.objects[test["object"]]
+            target = str(parameters["path"])
+            if parameters["type"] == "file":
+                assert item["filepath"] == [target], rule_id
+            else:
+                assert item["path"] == [target], rule_id
+            states = [collector.states[state] for state in item["filter"]]
+            assert any(state.get("type") == "symbolic link" for state in states), rule_id
+            compared = [state for state in states if state.get("type") != "symbolic link"]
+            assert len(compared) == 1, rule_id
+            if parameters["attribute"] == "mode":
+                denied = sum(
+                    MODE_BITS[name] for name, flag in compared[0].items() if flag == "false"
+                )
+                assert 0o7777 & ~denied == int(str(parameters["max_mode"]), 8), rule_id
+            else:
+                field = "user_id" if parameters["attribute"] == "owner" else "group_id"
+                assert field in compared[0], rule_id
+                assert parameters["id"] == 0
+            checked += 1
+    assert checked == 6

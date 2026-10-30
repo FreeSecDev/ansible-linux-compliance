@@ -228,7 +228,7 @@ def _yaml_violations(path: Path, data: bytes, relative: Path | None) -> list[Vio
         *check_yaml_comments(path, text),
         *check_banned_modules(path, text),
         *yaml_setting_findings(path, text, executed=executed),
-        *module_parameter_findings(path, documents),
+        *module_parameter_findings(path, documents, relative),
         *target_findings(path, relative, documents),
         *yaml_variable_findings(path, relative, documents),
     ]

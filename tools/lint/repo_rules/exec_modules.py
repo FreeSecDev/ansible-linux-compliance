@@ -7,10 +7,17 @@ that they run: ``validate`` of the file modules, ``dpkg_options`` (``--pre-invok
 (``ProxyCommand``), the ``reboot`` commands, ``fact_path`` (executable facts), the ``use``
 backend of ``package`` and ``service`` (any module) and ``conf_file`` of ``dnf`` (a plugin
 path). They are refused in every form in which a task can pass them (ADR 0004).
+
+``ALLOWED_PARAMETERS`` lists the reviewed exceptions by file, module, parameter and exact literal
+value. The only one is the ``visudo`` check of the sudo drop-ins (ADR 0022, FREES-175): sudo
+stops reading its whole configuration at a syntax error, so a drop-in is moved into place only
+after ``/usr/sbin/visudo -cf`` accepted the temporary file. A templated value, another value,
+another module or another file is refused as before.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 import yaml
@@ -20,7 +27,6 @@ from tools.lint.repo_rules.common import Violation
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-    from pathlib import Path
 
 VALIDATE: Final[frozenset[str]] = frozenset({"validate"})
 MODULE_PARAMETERS: Final[dict[str, frozenset[str]]] = {
@@ -48,6 +54,16 @@ MODULE_PARAMETERS: Final[dict[str, frozenset[str]]] = {
 ALL_PARAMETERS: Final[frozenset[str]] = frozenset(
     parameter for parameters in MODULE_PARAMETERS.values() for parameter in parameters
 )
+ALLOWED_PARAMETERS: Final[frozenset[tuple[Path, str, str, str]]] = frozenset(
+    {
+        (
+            Path("roles/remediate/tasks/sudo_dropin_apply.yml"),
+            "copy",
+            "validate",
+            "/usr/sbin/visudo -cf %s",
+        )
+    }
+)
 PLAY_KEYWORDS: Final[frozenset[str]] = frozenset({"fact_path"})
 ARGS_KEY: Final[str] = "args"
 MODULE_KEY: Final[str] = "module"
@@ -70,12 +86,29 @@ def _free_form_names(text: str) -> Iterator[str]:
             yield name
 
 
-def _parameter_nodes(value: yaml.Node) -> Iterator[tuple[yaml.Node, str]]:
+def _parameter_nodes(value: yaml.Node) -> Iterator[tuple[yaml.Node, str, yaml.Node | None]]:
+    """Yield ``(key, name, value)`` per parameter; the value is ``None`` unless the key is direct.
+
+    A parameter that comes from a merge key (``<<``) or a free-form argument has no value here,
+    so no reviewed exception can apply to it.
+    """
     if isinstance(value, yaml.MappingNode):
-        for name, key, _ in scalar_items(value):
-            yield key, name
+        direct = [key for key, _ in value.value]
+        for name, key, inner in scalar_items(value):
+            yield key, name, inner if any(key is item for item in direct) else None
     elif isinstance(value, yaml.ScalarNode):
-        yield from ((value, name) for name in _free_form_names(str(value.value)))
+        yield from ((value, name, None) for name in _free_form_names(str(value.value)))
+
+
+def _allowed(relative: Path | None, module: str, parameter: str, value: yaml.Node | None) -> bool:
+    """Return whether the reviewed exception list allows ``parameter`` with this exact value.
+
+    Only a plain scalar of the mapping form counts: a quoted, templated, free-form or
+    non-scalar value is never allowed.
+    """
+    if relative is None or not isinstance(value, yaml.ScalarNode) or value.style is not None:
+        return False
+    return (relative, module_name(module), parameter, str(value.value)) in ALLOWED_PARAMETERS
 
 
 def _action_module(value: yaml.Node) -> tuple[str, list[yaml.Node]] | None:
@@ -91,7 +124,9 @@ def _action_module(value: yaml.Node) -> tuple[str, list[yaml.Node]] | None:
     return None
 
 
-def _task_findings(task: yaml.MappingNode) -> Iterator[tuple[yaml.Node, str]]:
+def _task_findings(
+    task: yaml.MappingNode, relative: Path | None
+) -> Iterator[tuple[yaml.Node, str]]:
     items = list(scalar_items(task))
     modules: list[tuple[str, list[yaml.Node]]] = []
     for name, key, value in items:
@@ -105,11 +140,19 @@ def _task_findings(task: yaml.MappingNode) -> Iterator[tuple[yaml.Node, str]]:
                 modules.append(found)
     arguments = [value for name, _, value in items if name == ARGS_KEY]
     for module, sources in modules:
-        refused = MODULE_PARAMETERS[module_name(module)]
-        for source in (*sources, *arguments):
-            for node, parameter in _parameter_nodes(source):
-                if parameter in refused:
-                    yield node, _problem(module, parameter)
+        yield from _module_findings(module, sources, arguments, relative)
+
+
+def _module_findings(
+    module: str, sources: list[yaml.Node], arguments: list[yaml.Node], relative: Path | None
+) -> Iterator[tuple[yaml.Node, str]]:
+    """Yield the refused parameters of one module, allowing only reviewed values of its own."""
+    refused = MODULE_PARAMETERS[module_name(module)]
+    for source in (*sources, *arguments):
+        own = any(source is item for item in sources)
+        for node, parameter, given in _parameter_nodes(source):
+            if parameter in refused and not (own and _allowed(relative, module, parameter, given)):
+                yield node, _problem(module, parameter)
 
 
 def _defaults_findings(value: yaml.Node) -> Iterator[tuple[yaml.Node, str]]:
@@ -122,26 +165,34 @@ def _defaults_findings(value: yaml.Node) -> Iterator[tuple[yaml.Node, str]]:
                 refused = ALL_PARAMETERS
             else:
                 refused = MODULE_PARAMETERS.get(module_name(module.strip()), frozenset())
-            for node, parameter in _parameter_nodes(parameters):
+            for node, parameter, _ in _parameter_nodes(parameters):
                 if parameter in refused:
                     yield node, _problem(module, parameter)
 
 
-def _all_findings(documents: Iterable[yaml.Node]) -> Iterator[tuple[yaml.Node, str]]:
+def _all_findings(
+    documents: Iterable[yaml.Node], relative: Path | None
+) -> Iterator[tuple[yaml.Node, str]]:
     for document in documents:
         if isinstance(document, yaml.SequenceNode):
             for task in task_mappings(document):
-                yield from _task_findings(task)
+                yield from _task_findings(task, relative)
                 for name, _, value in scalar_items(task):
                     if name == DEFAULTS_KEY:
                         yield from _defaults_findings(value)
 
 
-def module_parameter_findings(path: Path, documents: Iterable[yaml.Node]) -> list[Violation]:
-    """Reject module parameters that run a command, an executable or its options."""
+def module_parameter_findings(
+    path: Path, documents: Iterable[yaml.Node], relative: Path | None = None
+) -> list[Violation]:
+    """Reject module parameters that run a command, an executable or its options.
+
+    ``relative`` is the path below the repository root; only there can an entry of
+    :data:`ALLOWED_PARAMETERS` apply.
+    """
     return sorted(
         {
             Violation(path, node.start_mark.line + 1, message)
-            for node, message in _all_findings(documents)
+            for node, message in _all_findings(documents, relative)
         }
     )

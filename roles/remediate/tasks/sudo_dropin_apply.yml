@@ -1,0 +1,274 @@
+---
+- name: Sudo | Refuse to write a drop-in that the dispatcher did not plan
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'sudo'
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == 'sudo'
+      - __linux_compliance_remediate_rule.parameters.method == 'dropin'
+      - __linux_compliance_remediate_rule.parameters.path in __linux_compliance_remediate_sd_owned
+      - __linux_compliance_remediate_rule.parameters.path is match(__linux_compliance_remediate_sudo_dropin_pattern)
+      - __linux_compliance_remediate_sd_values[__linux_compliance_remediate_rule.rule_id] is string
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'sudo') | list | first | default({}))).apply | default([])
+    fail_msg: >-
+      sudo_dropin_apply.yml runs only for a rule that the remediate dispatcher planned to apply,
+      with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Sudo | Read the method and the content that the ledger entry of the rule records
+  vars:
+    __linux_compliance_remediate_sd_recorded: >-
+      {{ (__linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+          | items2dict(key_name='name', value_name='value'))
+         if __linux_compliance_remediate_rule.ledger_entry is mapping else {} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_entry: "{{ __linux_compliance_remediate_sd_recorded }}"
+    __linux_compliance_remediate_sd_entry_method: >-
+      {{ none if __linux_compliance_remediate_rule.ledger_entry is not mapping
+         else __linux_compliance_remediate_sd_recorded.method | default('unknown') }}
+  tags:
+    - always
+
+- name: Sudo | Inspect the drop-in without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_sd_stat
+  when: __linux_compliance_remediate_sd_directory_stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Sudo | Read the drop-in when it exists
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+  register: __linux_compliance_remediate_sd_current
+  when:
+    - __linux_compliance_remediate_sd_stat is not skipped
+    - __linux_compliance_remediate_sd_stat.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Sudo | Compose the drop-in and find every other Defaults line that names one of its options
+  vars:
+    __linux_compliance_remediate_sd_value: >-
+      {{ __linux_compliance_remediate_sd_values[__linux_compliance_remediate_rule.rule_id] }}
+    __linux_compliance_remediate_sd_option_search: >-
+      {{ '(^|[^A-Za-z0-9_])(' ~ (__linux_compliance_remediate_rule.parameters.options | join('|'))
+         ~ ')([^A-Za-z0-9_]|$)' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_header: >-
+      {{ '# Managed by freesecdev.linux_compliance for ' ~ __linux_compliance_remediate_rule.rule_id ~ '.' }}
+    __linux_compliance_remediate_sd_lines: >-
+      {{ __linux_compliance_remediate_rule.parameters.lines
+         | map('replace', '{value}', __linux_compliance_remediate_sd_value) | list }}
+    __linux_compliance_remediate_sd_elsewhere: >-
+      {{ __linux_compliance_remediate_sd_defaults
+         | rejectattr('path', 'equalto', __linux_compliance_remediate_rule.parameters.path)
+         | selectattr('line', 'search', __linux_compliance_remediate_sd_option_search) | list }}
+  tags:
+    - always
+
+- name: Sudo | Compose the drop-in content and decide whether it must be written
+  vars:
+    __linux_compliance_remediate_sd_lines_wanted: "{{ __linux_compliance_remediate_sd_lines | unique | sort }}"
+    __linux_compliance_remediate_sd_single: "{{ __linux_compliance_remediate_rule.parameters.single | default(false) }}"
+    __linux_compliance_remediate_sd_existing: >-
+      {{ (__linux_compliance_remediate_sd_current.content | b64decode)
+         if __linux_compliance_remediate_sd_current is not skipped else none }}
+    __linux_compliance_remediate_sd_differ: >-
+      {{ __linux_compliance_remediate_sd_elsewhere
+         | rejectattr('line', 'in', __linux_compliance_remediate_sd_lines_wanted) | list }}
+    __linux_compliance_remediate_sd_too_many: >-
+      {{ __linux_compliance_remediate_sd_single
+         and (__linux_compliance_remediate_sd_elsewhere | length > 1
+              or (__linux_compliance_remediate_sd_elsewhere | length == 1
+                  and (__linux_compliance_remediate_sd_existing is not none
+                       or not __linux_compliance_remediate_sd_elsewhere[0].read))) }}
+    __linux_compliance_remediate_sd_conflicts: >-
+      {{ __linux_compliance_remediate_sd_differ if __linux_compliance_remediate_sd_differ | length > 0
+         else __linux_compliance_remediate_sd_elsewhere if __linux_compliance_remediate_sd_too_many else [] }}
+    __linux_compliance_remediate_sd_satisfied_elsewhere: >-
+      {{ __linux_compliance_remediate_sd_existing is none
+         and (__linux_compliance_remediate_sd_elsewhere | selectattr('read') | map(attribute='line') | unique | sort)
+             == __linux_compliance_remediate_sd_lines_wanted }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_content: >-
+      {{ __linux_compliance_remediate_sd_header ~ __linux_compliance_remediate_newline
+         ~ '# Switching the rule or the sudo topic off removes this file.' ~ __linux_compliance_remediate_newline
+         ~ (__linux_compliance_remediate_sd_lines | join(__linux_compliance_remediate_newline))
+         ~ __linux_compliance_remediate_newline }}
+    __linux_compliance_remediate_sd_status: >-
+      {{ 'method_changed' if __linux_compliance_remediate_sd_entry_method not in [none, 'dropin']
+         else 'notapplicable' if not (__linux_compliance_remediate_sd_main_stat.exists | default(false))
+         else 'not_regular_file' if not (__linux_compliance_remediate_sd_main_stat.isreg | default(false))
+         else 'not_directory' if not (__linux_compliance_remediate_sd_directory_stat.isdir | default(false))
+         else 'not_included' if not __linux_compliance_remediate_sd_included
+         else 'validator_missing' if not (__linux_compliance_remediate_sd_validator_stat.isreg | default(false))
+         else 'not_regular_file' if __linux_compliance_remediate_sd_stat.stat.exists
+              and not __linux_compliance_remediate_sd_stat.stat.isreg
+         else 'not_owned' if __linux_compliance_remediate_sd_existing is not none
+              and not __linux_compliance_remediate_sd_existing.startswith(__linux_compliance_remediate_sd_header)
+         else 'conflicting_setting' if __linux_compliance_remediate_sd_conflicts | length > 0
+         else 'compliant' if __linux_compliance_remediate_sd_satisfied_elsewhere
+         else 'pending' }}
+    __linux_compliance_remediate_sd_existing_text: "{{ __linux_compliance_remediate_sd_existing }}"
+    __linux_compliance_remediate_sd_conflicting: "{{ __linux_compliance_remediate_sd_conflicts }}"
+  tags:
+    - always
+
+- name: Sudo | Decide between compliant and applied and name the reason of a refusal
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_content_sha256: "{{ __linux_compliance_remediate_sd_content | hash('sha256') }}"
+    __linux_compliance_remediate_sd_status: >-
+      {{ __linux_compliance_remediate_sd_status if __linux_compliance_remediate_sd_status != 'pending'
+         else 'compliant' if __linux_compliance_remediate_sd_existing_text == __linux_compliance_remediate_sd_content
+         else 'applied' }}
+    __linux_compliance_remediate_sd_reason: >-
+      {{ {'method_changed': 'the ledger entry was recorded by the ' ~ __linux_compliance_remediate_sd_entry_method
+                            ~ ' method; clean it up first',
+          'notapplicable': __linux_compliance_remediate_sudo_main ~ ' does not exist: sudo is not installed',
+          'not_regular_file': (__linux_compliance_remediate_sudo_main
+                               if not (__linux_compliance_remediate_sd_main_stat.isreg | default(false))
+                               else __linux_compliance_remediate_rule.parameters.path)
+                              ~ ' is a symbolic link or another non-regular file',
+          'not_directory': __linux_compliance_remediate_sudo_directory
+                           ~ ' is missing, a symbolic link or not a directory',
+          'not_included': __linux_compliance_remediate_sudo_main ~ ' does not include '
+                          ~ __linux_compliance_remediate_sudo_directory ~ ', so sudo would not read the drop-in',
+          'validator_missing': __linux_compliance_remediate_sudo_validator
+                               ~ ' is missing, so the drop-in cannot be validated',
+          'not_owned': __linux_compliance_remediate_rule.parameters.path
+                       ~ ' exists without the header of the collection',
+          'conflicting_setting': 'set differently, or more often than the content allows, by '
+                                 ~ (__linux_compliance_remediate_sd_conflicting | map(attribute='path') | unique
+                                    | join(', '))
+                                 ~ ', which the collection does not edit'}
+         [__linux_compliance_remediate_sd_status] | default(none) }}
+  tags:
+    - always
+
+- name: Sudo | Record that the drop-in did not exist and what it will hold before writing it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values:
+      - name: method
+        value: dropin
+      - name: dropin
+        value: null
+      - name: dropin_sha256
+        value: "{{ __linux_compliance_remediate_sd_content_sha256 }}"
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+  register: __linux_compliance_remediate_sd_record
+  when:
+    - __linux_compliance_remediate_sd_status == 'applied'
+    - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: Sudo | Write the drop-in only when visudo accepts it
+  tags:
+    - always
+  block:
+    - name: Sudo | Write the drop-in, mode 0440, owned by root, validated by visudo before it is moved in place
+      ansible.builtin.copy:
+        content: "{{ __linux_compliance_remediate_sd_content }}"
+        dest: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+        follow: false
+        force: true
+        mode: "0440"
+        owner: root
+        group: root
+        validate: /usr/sbin/visudo -cf %s
+      register: __linux_compliance_remediate_sd_write
+      when: __linux_compliance_remediate_sd_status == 'applied'
+      tags:
+        - always
+
+    - name: Sudo | Keep the recorded prior state and record the new content when the profile value changed
+      freesecdev.linux_compliance.control_state:
+        action: record
+        rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+        family: "{{ __linux_compliance_remediate_rule.family }}"
+        revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+        prior_values: >-
+          {{ __linux_compliance_remediate_sd_entry
+             | combine({'dropin_sha256': __linux_compliance_remediate_sd_content_sha256})
+             | dict2items(key_name='name', value_name='value') }}
+        collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+        replace: true
+      register: __linux_compliance_remediate_sd_rerecord
+      when:
+        - __linux_compliance_remediate_sd_status == 'applied'
+        - __linux_compliance_remediate_sd_entry_method == 'dropin'
+        - >-
+          __linux_compliance_remediate_sd_entry.dropin_sha256 | default(none)
+          != __linux_compliance_remediate_sd_content_sha256
+      tags:
+        - always
+  rescue:
+    - name: Sudo | Fail on any error other than visudo refusing the drop-in
+      ansible.builtin.fail:
+        msg: >-
+          {{ __linux_compliance_remediate_rule.rule_id }}: {{ ansible_failed_task.name | default('') }} failed:
+          {{ ansible_failed_result.msg | default('') }}
+      when: >-
+        ansible_failed_task.name | default('')
+        != 'Sudo | Write the drop-in, mode 0440, owned by root, validated by visudo before it is moved in place'
+        or ansible_failed_result.msg | default('') != 'failed to validate'
+      tags:
+        - always
+
+    - name: Sudo | Forget the ledger entry that this run recorded for the drop-in that visudo refused
+      freesecdev.linux_compliance.control_state:
+        action: remove
+        rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+      when: __linux_compliance_remediate_rule.ledger_entry is none
+      tags:
+        - always
+
+    - name: Sudo | Report that visudo refused the drop-in and that nothing was installed
+      ansible.builtin.set_fact:
+        __linux_compliance_remediate_sd_status: invalid_sudoers
+        __linux_compliance_remediate_sd_reason: >-
+          {{ 'visudo refused the drop-in, so nothing was installed: '
+             ~ (ansible_failed_result.stderr | default(ansible_failed_result.stdout | default('')) | string
+                | truncate(512)) }}
+        __linux_compliance_remediate_sd_write: {}
+        __linux_compliance_remediate_sd_rerecord: {}
+      tags:
+        - always
+
+- name: Sudo | Add the result of the rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'apply',
+           'status': __linux_compliance_remediate_sd_status,
+           'reason': __linux_compliance_remediate_sd_reason,
+           'changed': (__linux_compliance_remediate_sd_write is changed)
+                      or (__linux_compliance_remediate_sd_rerecord is changed),
+           'message': __linux_compliance_remediate_rule.parameters.path ~ ': ' ~ __linux_compliance_remediate_sd_status
+                      ~ ((' (' ~ __linux_compliance_remediate_sd_reason ~ '; nothing was changed)')
+                         if __linux_compliance_remediate_sd_reason else '')
+         }] }}
+  tags:
+    - always
