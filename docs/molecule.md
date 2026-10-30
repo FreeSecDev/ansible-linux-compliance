@@ -475,12 +475,16 @@ with its state before the regressions.
 The regressions run when the run ends with `pwquality` in the rule mode: after every topic and mode in a full run,
 and in the `pwquality` rule leg in CI.
 
-The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states: the as-built
-configuration with real scans, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads before
-the collection's drop-ins and which sets `MaxAuthTries` first (that rule is `overridden`, its drop-in is expected
-absent and it is neither recorded nor cleaned up), and `60-site.conf`, which sshd reads after them and which sets
-`LoginGraceTime` and `ClientAliveInterval` (those rules are applied, and the cleanup leaves both site files alone).
-The two site files share one pre-state so that each leg runs two cycles. `shared/tasks/lifecycle_ssh_regressions.yml` runs after the topic when the run
+The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states, both with real
+scans: the as-built configuration, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads
+before the collection's drop-ins and which sets `MaxAuthTries` first, and `60-site.conf`, which sshd reads after them
+and which sets `LoginGraceTime 120` and `ClientAliveInterval 900`. The three rules are `overridden`: their drop-ins are
+expected absent, they are neither recorded nor cleaned up, and the scan must report them `fail` (on Rocky Linux,
+`notapplicable`), which the harness checks for every overridden rule of a pre-state with scans; every other rule is
+applied and passes, and the cleanup leaves both site files alone. The two site files share one pre-state so that each
+leg runs two cycles. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
+because no rule of the lifecycle profiles conflicts with their lines. `shared/tasks/lifecycle_ssh_regressions.yml`
+runs after the topic when the run
 includes `ssh` in the topic mode, so in CI in the `ssh` `topic` leg, narrowed like a profile to
 `sshd_set_max_auth_tries` and `sshd_set_login_grace_time` so that each run stays short: a drop-in with a keyword that sshd does not know
 makes every rule `invalid_config` with nothing installed and nothing recorded; a ledger entry of another method makes
@@ -491,6 +495,16 @@ and on Ubuntu, whose `sshd_config.d` is empty as built, a missing directory is c
 marker, removed again by the cleanup, and a symbolic link in its place makes every rule `not_directory` with nothing
 written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
 only. The regressions end with the whole-instance comparison.
+
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs in the `ssh` `rule` leg, so that the two legs stay of
+similar length. It adds `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the
+lifecycle profiles do not select, to the verified profile and checks the vendor-line method of ADR 0023 on
+`/etc/ssh/sshd_config` (Ubuntu) and `/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux): after the apply every
+occurrence that the content's check reads has the value `no` and the ledger records the original line; a second apply
+is compliant; the cleanup writes the vendor file back byte for byte; a change by hand to the changed line is kept as
+`modified_since_apply` and restored once the line is put back; a line restored by hand with other spacing is left
+alone; and a conflicting line inside a `Match` block is `overridden` and not edited. It ends with the whole-instance
+comparison.
 
 ### CI legs
 

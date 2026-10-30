@@ -77,6 +77,38 @@ PATH_ARGUMENT: Final[str] = "<path>"
 FIXED_ENVIRONMENT_NAMES: Final[frozenset[str]] = frozenset({"TZ", "HOME"})
 SCC_EXECUTABLE_PATH: Final[str] = "/opt/scc/cscc"
 SSHD_CONFIG_PATH: Final[str] = "/etc/ssh/sshd_config"
+SSHD_KEYWORDS: Final[tuple[str, ...]] = (
+    "AllowTcpForwarding",
+    "Banner",
+    "Ciphers",
+    "ClientAliveCountMax",
+    "ClientAliveInterval",
+    "Compression",
+    "DisableForwarding",
+    "GSSAPIAuthentication",
+    "HostbasedAuthentication",
+    "IgnoreRhosts",
+    "IgnoreUserKnownHosts",
+    "KerberosAuthentication",
+    "KexAlgorithms",
+    "LogLevel",
+    "LoginGraceTime",
+    "MACs",
+    "MaxAuthTries",
+    "MaxSessions",
+    "MaxStartups",
+    "PermitEmptyPasswords",
+    "PermitRootLogin",
+    "PermitUserEnvironment",
+    "PrintLastLog",
+    "PubkeyAuthentication",
+    "StrictModes",
+    "UsePAM",
+    "X11Forwarding",
+    "X11UseLocalhost",
+)
+SSHD_VALUE: Final[str] = r"[A-Za-z0-9@.,:/_+][A-Za-z0-9@.,:/_+-]{0,1023}"
+SSHD_SETTING: Final[str] = "(?:" + "|".join(SSHD_KEYWORDS) + ")=" + SSHD_VALUE
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
 FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})
@@ -147,6 +179,11 @@ class ExecutablePolicy:
             consulted.
         environment: Fixed ``(name, value)`` pairs added to the child
             environment. Names must be in :data:`FIXED_ENVIRONMENT_NAMES`.
+        option_values: ``(option, pattern)`` pairs. When any is given, every
+            argument after the command prefix must be one of these options as
+            its own argument, followed by one argument that matches its
+            pattern in full; ``allowed_options`` and positional arguments are
+            then not accepted.
     """
 
     name: str
@@ -156,6 +193,7 @@ class ExecutablePolicy:
     fixed_path: str | None = None
     argument_forms: tuple[tuple[str, ...], ...] = ()
     environment: tuple[tuple[str, str], ...] = ()
+    option_values: tuple[tuple[str, str], ...] = ()
 
 
 ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
@@ -175,8 +213,8 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
         ),
         "sshd": ExecutablePolicy(
             "sshd",
-            frozenset({"-o"}),
             command_prefixes=(("-t", "-f", SSHD_CONFIG_PATH),),
+            option_values=(("-o", SSHD_SETTING),),
         ),
     }
 )
@@ -656,6 +694,18 @@ class _Runner(Protocol):
     ) -> CommandResult: ...
 
 
+def _match_option_values(rest: tuple[str, ...], policy: ExecutablePolicy) -> None:
+    patterns = dict(policy.option_values)
+    if len(rest) % 2:
+        _deny(f"every option of {policy.name} needs exactly one value: {_safe(' '.join(rest))}")
+    for index in range(0, len(rest), 2):
+        option, value = rest[index], rest[index + 1]
+        if option not in patterns:
+            _deny(f"option is not allow-listed for {policy.name}: {_safe(option)}")
+        if re.fullmatch(patterns[option], value) is None:
+            _deny(f"value of {_safe(option)} is not allowed for {policy.name}: {_safe(value)}")
+
+
 def _check_arguments(
     args: tuple[str, ...], policy: ExecutablePolicy, forbidden_options: frozenset[str]
 ) -> None:
@@ -663,6 +713,9 @@ def _check_arguments(
         _match_form(args, policy)
         return
     prefix = _matching_prefix(args, policy)
+    if policy.option_values:
+        _match_option_values(args[len(prefix) :], policy)
+        return
     for argument in args[len(prefix) :]:
         if not argument.startswith("-"):
             continue
@@ -682,6 +735,7 @@ def _copy_policy(policy: ExecutablePolicy) -> ExecutablePolicy:
         policy.fixed_path,
         tuple(tuple(form) for form in policy.argument_forms),
         tuple((pair[0], pair[1]) for pair in policy.environment),
+        tuple((pair[0], pair[1]) for pair in policy.option_values),
     )
     _check_policy_environment(copied)
     return copied

@@ -231,12 +231,25 @@ class TestPolicy:
     def test_sshd_runs_only_in_test_mode_on_the_main_configuration(self) -> None:
         policy = process.ALLOWED_EXECUTABLES["sshd"]
         assert policy.fixed_path is None
-        assert policy.allowed_options == frozenset({"-o"})
+        assert policy.allowed_options == frozenset()
         assert policy.command_prefixes == (("-t", "-f", "/etc/ssh/sshd_config"),)
         assert policy.standalone_commands == ()
+        assert policy.option_values == (("-o", process.SSHD_SETTING),)
+        assert len(process.SSHD_KEYWORDS) == len(set(process.SSHD_KEYWORDS)) == 28
         for arguments in (
             ("-t", "-f", "/etc/ssh/sshd_config"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin=no"),
+            (
+                "-t",
+                "-f",
+                "/etc/ssh/sshd_config",
+                "-o",
+                "Ciphers=aes256-gcm@openssh.com,aes128-ctr",
+                "-o",
+                "MaxStartups=10:30:60",
+                "-o",
+                "Banner=/etc/issue.net",
+            ),
         ):
             spec = process.CommandSpec("sshd", arguments, 1)
             assert process.check_policy(spec).name == "sshd"
@@ -256,6 +269,18 @@ class TestPolicy:
             ("-t", "-f", "/etc/ssh/sshd_config", "-E", "/srv/log"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-C", "user=root"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-oPermitRootLogin=yes"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o=Include=/srv/x"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "Include=/srv/x"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "HostKey=/root/.ssh/id_rsa"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "AuthorizedKeysCommand=/bin/sh -c id"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin=-T"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin=no yes"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "permitrootlogin=no"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin="),
+            ("-t", "-f", "/etc/ssh/sshd_config", "stray"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "stray", "-o"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-o", "UsePAM=yes", "-o"),
         ],
     )
     def test_sshd_refuses_every_other_command_line(self, arguments: tuple[str, ...]) -> None:

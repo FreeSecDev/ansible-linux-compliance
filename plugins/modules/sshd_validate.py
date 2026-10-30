@@ -53,6 +53,9 @@ notes:
   - sshd refuses the test when it finds no host key or, on Debian and Ubuntu, when its privilege
     separation directory C(/run/sshd) is missing. The module then reports C(valid=false) with the
     message of sshd; it never creates either.
+  - Only an sshd that is not found in the trusted directories is reported as C(available=false). An
+    sshd that the helper refuses to run (wrong owner, writable by group or others, a symbolic link
+    that leaves the trusted directories) or that cannot be started makes the module fail.
 seealso:
   - module: freesecdev.linux_compliance.control_state
 """
@@ -102,39 +105,8 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     process,
 )
 
-KEYWORDS: Final[frozenset[str]] = frozenset(
-    {
-        "AllowTcpForwarding",
-        "Banner",
-        "Ciphers",
-        "ClientAliveCountMax",
-        "ClientAliveInterval",
-        "Compression",
-        "DisableForwarding",
-        "GSSAPIAuthentication",
-        "HostbasedAuthentication",
-        "IgnoreRhosts",
-        "IgnoreUserKnownHosts",
-        "KerberosAuthentication",
-        "KexAlgorithms",
-        "LogLevel",
-        "LoginGraceTime",
-        "MACs",
-        "MaxAuthTries",
-        "MaxSessions",
-        "MaxStartups",
-        "PermitEmptyPasswords",
-        "PermitRootLogin",
-        "PermitUserEnvironment",
-        "PrintLastLog",
-        "PubkeyAuthentication",
-        "StrictModes",
-        "UsePAM",
-        "X11Forwarding",
-        "X11UseLocalhost",
-    }
-)
-VALUE: Final[str] = r"[A-Za-z0-9@.,:/_+][A-Za-z0-9@.,:/_+-]{0,1023}"
+KEYWORDS: Final[frozenset[str]] = frozenset(process.SSHD_KEYWORDS)
+VALUE: Final[str] = process.SSHD_VALUE
 MAX_SETTINGS: Final[int] = 30
 TIMEOUT_SECONDS: Final[float] = 30.0
 MAX_OUTPUT_BYTES: Final[int] = 65536
@@ -144,6 +116,10 @@ UNPRINTABLE: Final[str] = r"[^\x20-\x7e]+"
 
 class SettingError(ValueError):
     """A setting that the module does not pass to sshd."""
+
+
+class ValidationError(RuntimeError):
+    """sshd could not be run safely; nothing was validated."""
 
 
 def arguments(settings: object) -> list[str]:
@@ -187,9 +163,15 @@ def validate(options: list[str]) -> dict[str, object]:
         "sshd", tuple(args), TIMEOUT_SECONDS, max_output_bytes=MAX_OUTPUT_BYTES
     )
     try:
-        result = process.run(spec)
+        process.resolve_executable("sshd")
     except process.ProcessExecutionError as error:
         return {"available": False, "valid": False, "message": printable(str(error))}
+    except process.ProcessPolicyError as error:
+        raise ValidationError(printable(str(error))) from error
+    try:
+        result = process.run(spec)
+    except process.ProcessError as error:
+        raise ValidationError(printable(str(error))) from error
     text = printable((result.stderr + b"\n" + result.stdout).decode("utf-8", "replace"))
     if result.timed_out:
         return {
@@ -220,7 +202,10 @@ def main() -> None:
         options = arguments(module.params["settings"])
     except SettingError as error:
         module.fail_json(msg=str(error), changed=False)
-    outcome = validate(options)
+    try:
+        outcome = validate(options)
+    except ValidationError as error:
+        module.fail_json(msg=f"sshd could not be run safely: {error}", changed=False)
     module.exit_json(
         changed=False,
         arguments=options,

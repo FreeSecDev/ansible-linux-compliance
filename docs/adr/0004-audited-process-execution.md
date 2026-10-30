@@ -997,11 +997,20 @@ refuses, and the `validate` parameter of the file modules stays refused (FREES-1
 `freesecdev.linux_compliance.sshd_validate` is the third caller of the helper, and the allow-list gains one policy:
 
 - `sshd`, resolved in the trusted directories like `oscap`, with the one command prefix
-  `-t -f /etc/ssh/sshd_config` (`SSHD_CONFIG_PATH`) and the one option `-o`. sshd's test mode reads the configuration,
-  every file it includes and the host keys, and exits; it never starts a daemon or binds a port. Every other command
-  line is refused: `-T`, `-D`, `-d`, `-h`, `-E`, `-C`, an `-o` joined to its value, a bare `-t`, and another
-  configuration file (`tests/unit/plugins/module_utils/compliance/test_process.py`).
-- The module passes only `-o <Keyword>=<value>` pairs whose keyword is one of the 28 keywords of the native ssh rules
-  (so not `Include`, `AuthorizedKeysCommand`, `HostKey` or `PidFile`) and whose value is one word of letters, digits
-  and `@.,:/_+-` that does not start with `-`; at most 30 pairs, a 30-second timeout and 64 KiB of output. A missing
-  executable is reported as `available: false`, never as an error of the run.
+  `-t -f /etc/ssh/sshd_config` (`SSHD_CONFIG_PATH`). sshd's test mode reads the configuration, every file it includes
+  and the host keys, and exits; it never starts a daemon or binds a port.
+- The policy model gains `ExecutablePolicy.option_values`, `(option, pattern)` pairs. When a policy has them, every
+  argument after the command prefix must be one of these options as its own argument followed by exactly one argument
+  that matches the option's pattern in full; other options, `allowed_options` and positional arguments are refused.
+  Every existing policy leaves it empty and behaves as before. The `sshd` policy has one pair: `-o` with
+  `SSHD_SETTING`, `<Keyword>=<value>` where the keyword is one of the 28 keywords of the native ssh rules
+  (`SSHD_KEYWORDS`) and the value one word of letters, digits and `@.,:/_+-` that does not start with `-`
+  (`SSHD_VALUE`). The helper itself therefore refuses `-T`, `-D`, `-d`, `-h`, `-E`, `-C`, `-oX=Y` and `-o=X=Y`, a bare
+  `-o`, another configuration file, positional arguments, and `-o` with `Include`, `HostKey`, `AuthorizedKeysCommand`,
+  `PidFile`, a value with a space or a value that starts with `-`
+  (`tests/unit/plugins/module_utils/compliance/test_process.py`).
+- The module checks the same keywords and value pattern before it builds the command (it imports them from the
+  helper), passes at most 30 pairs, and runs with a 30-second timeout and 64 KiB of output. Only an sshd that is not
+  found in the trusted directories is reported as `available: false`; an sshd that the helper refuses (wrong owner,
+  writable by group or others, a symbolic link out of the trusted directories) or that cannot be started fails the
+  module with `fail_json`.

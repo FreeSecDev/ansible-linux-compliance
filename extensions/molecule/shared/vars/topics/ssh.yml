@@ -21,11 +21,16 @@ audit:
 state:
   files:
     - path: /etc/ssh/sshd_config
+      rewritten: true
     - path: /etc/ssh/sshd_config.d
       rewritten: true
     - path: /etc/ssh/sshd_config.d/.freesecdev-created
     - path: /etc/ssh/sshd_config.d/00-admin.conf
     - path: /etc/ssh/sshd_config.d/60-site.conf
+    - path: /etc/ssh/sshd_config.d/50-redhat.conf
+      rewritten: true
+      platforms:
+        - rhel_compatible
     - path: /etc/ssh/sshd_config.d/00-freesecdev-disable-host-auth.conf
       rewritten: true
     - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-empty-passwords.conf
@@ -80,6 +85,18 @@ state:
     - name: root
 applied:
   files:
+    - path: /etc/ssh/sshd_config
+      checksum: 64325541513d33ea1d2ccd19c77750d458e67e7967fd2e7ef81d92f0aa2ffe21
+      platforms:
+        - ubuntu
+    - path: /etc/ssh/sshd_config
+      checksum: a7329525af126b8280fd52036f81df62a8f893ce8d917d787ac06ad6d6d1adaf
+      platforms:
+        - rhel_compatible
+    - path: /etc/ssh/sshd_config.d/50-redhat.conf
+      checksum: ceebc4775844077d58f4148f36eceeaea12c0e51cd5d14efcde8c703d32c66eb
+      platforms:
+        - rhel_compatible
     - path: /etc/ssh/sshd_config.d/00-freesecdev-disable-host-auth.conf
       exists: true
       type: file
@@ -288,7 +305,7 @@ pre_states:
   - name: as built
     audit: true
   - name: site drop-ins, one read before the collection's and one after
-    audit: false
+    audit: true
     files:
       - path: /etc/ssh/sshd_config.d/00-admin.conf
         content: |
@@ -298,9 +315,17 @@ pre_states:
           LoginGraceTime 120
           ClientAliveInterval 900
     unchanged:
+      - rule: sshd_set_idle_timeout
+        status: overridden
+      - rule: sshd_set_login_grace_time
+        status: overridden
       - rule: sshd_set_max_auth_tries
         status: overridden
     applied:
       files:
+        - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-idle-timeout.conf
+          exists: false
+        - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-login-grace-time.conf
+          exists: false
         - path: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf
           exists: false

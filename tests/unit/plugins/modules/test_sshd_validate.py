@@ -51,7 +51,13 @@ class FakeRun:
         return self.answer()
 
 
+def found(name: str) -> str:
+    assert name == "sshd"
+    return "/usr/sbin/sshd"
+
+
 def install(monkeypatch: pytest.MonkeyPatch, fake: FakeRun) -> FakeRun:
+    monkeypatch.setattr(process, "resolve_executable", found)
     monkeypatch.setattr(process, "run", fake)
     return fake
 
@@ -171,17 +177,52 @@ def test_a_timeout_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_a_missing_sshd_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    def missing() -> process.CommandResult:
-        message = "executable not found in trusted directories: 'sshd'"
+    def missing(name: str) -> str:
+        message = f"executable not found in the trusted directories: {name!r}"
         raise process.ProcessExecutionError(message)
 
-    install(monkeypatch, FakeRun(missing))
+    fake = install(monkeypatch, FakeRun(result))
+    monkeypatch.setattr(process, "resolve_executable", missing)
     outcome = sshd_validate.validate([])
     assert outcome == {
         "available": False,
         "valid": False,
-        "message": "executable not found in trusted directories: 'sshd'",
+        "message": "executable not found in the trusted directories: 'sshd'",
     }
+    assert fake.specs == []
+
+
+def test_an_unsafe_sshd_fails_the_module(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unsafe(name: str) -> str:
+        message = f"executable is writable by group or others: {name!r}"
+        raise process.ProcessPolicyError(message)
+
+    fake = install(monkeypatch, FakeRun(result))
+    monkeypatch.setattr(process, "resolve_executable", unsafe)
+    code, outcome = run(capsys, {})
+    assert code == 1
+    assert outcome["failed"] is True
+    assert outcome["changed"] is False
+    assert "could not be run safely" in str(outcome["msg"])
+    assert "writable by group or others" in str(outcome["msg"])
+    assert fake.specs == []
+
+
+def test_an_sshd_that_cannot_start_fails_the_module(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def cannot_start() -> process.CommandResult:
+        message = "cannot start 'sshd': Permission denied"
+        raise process.ProcessExecutionError(message)
+
+    install(monkeypatch, FakeRun(cannot_start))
+    code, outcome = run(capsys, {})
+    assert code == 1
+    assert outcome["failed"] is True
+    assert "cannot start" in str(outcome["msg"])
+    assert "available" not in outcome
 
 
 def test_the_module_reports_without_change(

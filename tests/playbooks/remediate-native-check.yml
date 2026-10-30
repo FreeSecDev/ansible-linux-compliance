@@ -156,6 +156,8 @@
       - not_owned
       - overridden
       - invalid_config
+      - duplicate_setting
+      - prior_too_large
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:

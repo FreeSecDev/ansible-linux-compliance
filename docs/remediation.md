@@ -387,22 +387,35 @@ this against the OVAL of both datastreams.
 
 | Rules | What is applied | Record and cleanup |
 |---|---|---|
-| `disable_host_auth`, `sshd_disable_compression`, `_empty_passwords`, `_forwarding`, `_gssapi_auth`, `_kerb_auth`, `_rhosts`, `_root_login`, `_root_password_login`, `_tcp_forwarding`, `_user_known_hosts`, `_x11_forwarding`, `sshd_do_not_permit_user_env`, `sshd_enable_pam`, `_pubkey_auth`, `_strictmodes`, `_warning_banner`, `_warning_banner_net`, `sshd_print_last_log`, `sshd_set_loglevel_info`, `_loglevel_verbose`, `sshd_x11_use_localhost`, `sshd_use_strong_ciphers` and the ordered STIG `Ciphers`, `KexAlgorithms` and `MACs` rules | `/etc/ssh/sshd_config.d/00-freesecdev-<rule>.conf`, mode `0600`, owner and group root, with a header that names the rule and the one line `<Keyword> <value>` that the check requires | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist), `dropin_sha256` and `written_line`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+| `disable_host_auth`, `sshd_disable_compression`, `_empty_passwords`, `_forwarding`, `_gssapi_auth`, `_kerb_auth`, `_rhosts`, `_root_login`, `_root_password_login`, `_tcp_forwarding`, `_user_known_hosts`, `_x11_forwarding`, `sshd_do_not_permit_user_env`, `sshd_enable_pam`, `_pubkey_auth`, `_strictmodes`, `_warning_banner`, `_warning_banner_net`, `sshd_print_last_log`, `sshd_set_loglevel_info`, `_loglevel_verbose`, `sshd_x11_use_localhost`, `sshd_use_strong_ciphers` and the ordered STIG `Ciphers`, `KexAlgorithms` and `MACs` rules | `/etc/ssh/sshd_config.d/00-freesecdev-<rule>.conf`, mode `0600`, owner and group root, with a header that names the rule and the one line `<Keyword> <value>` that the check requires | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist), `dropin_sha256` and `written_line`, and for each vendor line changed (below) `vendor_line:<path>`, `vendor_written:<path>` and `vendor_number:<path>`; cleanup removes the drop-in when it carries the header and still has that SHA-256, and writes each original vendor line back |
 | `sshd_set_idle_timeout`, `_keepalive`, `_login_grace_time`, `_max_auth_tries`, `_max_sessions`, `_maxstartups`, `sshd_use_strong_kex`, `_macs` | The same, with the profile's value (`sshd_idle_timeout_value`, `var_sshd_set_keepalive`, `var_sshd_set_login_grace_time`, `sshd_max_auth_tries_value`, `var_sshd_max_sessions`, `var_sshd_set_maxstartups`, `sshd_strong_kex`, `sshd_strong_macs`) | As above |
 
 Before anything is written, the module `freesecdev.linux_compliance.sshd_validate` runs
 `sshd -t -f /etc/ssh/sshd_config` with every setting to write as `-o <Keyword>=<value>`. sshd reads command-line
 options first and keeps the first value, so this tests the whole effective configuration as it will be; when sshd
-refuses it, every rule to write is `invalid_config` with sshd's message and nothing is installed. After a change, sshd
-is reloaded once, only when `service_facts` reports `ssh.service` or `sshd.service` running and a second `sshd -t`
-accepts the configuration; a reload keeps open sessions. Where no service manager runs, as in the Molecule containers,
-nothing is reloaded, and check mode never reloads.
+refuses it, every rule to write is `invalid_config` with sshd's message and nothing is installed. After a change, a
+second `sshd -t` checks the whole configuration; when it refuses, the run rolls back the drop-ins, vendor lines and
+ledger entries that it created and fails. Otherwise sshd is reloaded once, only when `service_facts` reports
+`ssh.service` or `sshd.service` running; a reload keeps open sessions. Where no service manager runs, as in the Molecule
+containers, nothing is reloaded, and check mode never reloads. A run that applies `PermitRootLogin no` or
+`prohibit-password` while it reaches the host over SSH as root prints a warning.
+
+The content's check reads every occurrence of the keyword, so a later line with another value would still fail it,
+although sshd uses the drop-in's value. A later line with the same value is left alone. A conflicting later line in a
+vendor file (`/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/50-redhat.conf`; for example Ubuntu's `X11Forwarding yes`
+and RHEL's `X11Forwarding yes` and `GSSAPIAuthentication yes`) is set to the rule's value in place with `lineinfile`,
+outside any `Match` block and only where the file sets the keyword once; the original line is recorded first and
+written back on cleanup while the file still has the line written. Every other conflicting later line, in an
+administrator's drop-in or inside a `Match` block, makes the rule `overridden`: nothing is written, because the rule
+could not pass.
 
 The statuses that refuse to act, with nothing changed and the ledger entry kept, each with a reason:
 
 | Status (apply) or reason (cleanup) | When |
 |---|---|
-| `overridden` (apply) | `sshd_config` sets the keyword before its `Include`, or a drop-in that sorts earlier sets it, includes other files or cannot be read |
+| `overridden` (apply) | `sshd_config` sets the keyword or includes another file before its drop-in `Include`, or a drop-in that sorts earlier sets it, includes other files or cannot be read, or a later line that the collection does not change sets another value |
+| `duplicate_setting` (apply) | A vendor file sets the keyword more than once |
+| `prior_too_large` (apply) | The conflicting vendor line is longer than 1024 characters |
 | `not_included` (apply) | `sshd_config` does not include `/etc/ssh/sshd_config.d/*.conf` before its first `Match` block |
 | `crypto_policy` (apply) | `Ciphers`, `MACs` or `KexAlgorithms` on RHEL 9, where the crypto policy governs them |
 | `invalid_config` (apply) | `sshd -t` refuses the configuration with the settings to write |
@@ -410,15 +423,14 @@ The statuses that refuse to act, with nothing changed and the ledger entry kept,
 | `not_directory` | `sshd_config.d` exists but is not a directory, for example a symbolic link |
 | `not_regular_file` | The drop-in path, or `sshd_config` itself, is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in path does not carry the collection's header |
-| `invalid_record` (cleanup) | The recorded SHA-256 is missing or malformed |
-| `modified_since_apply` (cleanup) | The drop-in's content is no longer what the collection wrote; an administrator's change is never removed |
+| `invalid_record` (cleanup) | The recorded SHA-256 is missing or malformed, or a recorded vendor line is not a line of the keyword |
+| `target_absent` (cleanup) | A vendor file whose line the collection changed no longer exists |
+| `modified_since_apply` (cleanup) | The drop-in's content is no longer what the collection wrote, or a vendor file no longer sets the keyword on exactly the line written; an administrator's change is never overwritten |
 
 A drop-in that no longer exists at cleanup is the recorded prior state: the rule is `restored`, its entry dropped and
-nothing written (FREES-173). Where `sshd_config.d` does not exist, the first drop-in creates it with mode `0700` and the
-marker `.freesecdev-created`, removed with the directory once nothing else is in it. A later line that sets the same
-keyword in a file the collection does not own (Ubuntu's `X11Forwarding yes`, `GSSAPIAuthentication yes` in RHEL's
-`50-redhat.conf`) is ignored by sshd but read by the content's check; the result message names it, and that rule still
-fails the audit. The sshd `Banner` keyword is native; the banner files belong to `banners`. Kept `audit_only`, with
+nothing written (FREES-173); so is a vendor line that already equals its recorded original, compared without case
+and with runs of spaces or `=` read as one separator. Where `sshd_config.d` does not exist, the first drop-in creates it with mode `0700` and the
+marker `.freesecdev-created`, removed with the directory once nothing else is in it. The sshd `Banner` keyword is native; the banner files belong to `banners`. Kept `audit_only`, with
 the reasons in ADR 0023: the modes and ownership of the configuration, the drop-ins and the host keys,
 `sshd_limit_user_access` (site-specific user lists), `sshd_rekey_limit` (its check refuses every drop-in and it needs
 two values), `sshd_use_directory_configuration`, `sshd_include_crypto_policy`, `sshd_allow_only_protocol2` (OpenSSH 7.0

@@ -120,6 +120,13 @@
         - "'ssh' in lifecycle_run_families"
         - "'topic' in lifecycle_run_modes"
 
+    - name: Run the ssh vendor regressions for the conflicting lines of the files that the packages ship
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_ssh_vendor_regressions.yml
+      when:
+        - "'ssh' in lifecycle_run_families"
+        - "'rule' in lifecycle_run_modes"
+
     - name: Report the topics whose lifecycle was proven
       ansible.builtin.debug:
         msg: >-

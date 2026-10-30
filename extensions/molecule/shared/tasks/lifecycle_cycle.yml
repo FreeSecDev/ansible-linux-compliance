@@ -236,17 +236,26 @@
     that:
       - lifecycle_findings | map(attribute='rule_id') | list == lifecycle_rule_ids
       - >-
-        lifecycle_findings | map(attribute='outcome') | difference(lifecycle_applied_outcomes
-        + (lifecycle_topic.audit | default({})).applied_outcomes | default([])) | length == 0
+        lifecycle_findings | rejectattr('rule_id', 'in', lifecycle_overridden_ids) | map(attribute='outcome')
+        | difference(lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes
+        | default([])) | length == 0
+      - >-
+        lifecycle_findings | selectattr('rule_id', 'in', lifecycle_overridden_ids) | map(attribute='outcome')
+        | difference(['fail'] + (lifecycle_topic.audit | default({})).applied_outcomes | default([]))
+        | length == 0
     fail_msg: >-
       {{ lifecycle_label }}: the audit after apply reported
       {{ lifecycle_findings | items2dict(key_name='rule_id', value_name='outcome') }}; expected
-      {{ lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes | default([]) }}.
+      {{ lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes | default([]) }}, and
+      fail for the overridden rules {{ lifecycle_overridden_ids }}.
     quiet: true
   vars:
     lifecycle_findings: >-
       {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
       | sort(attribute='rule_id') }}
+    lifecycle_overridden_ids: >-
+      {{ lifecycle_unchanged | dict2items | selectattr('value', 'equalto', 'overridden') | map(attribute='key')
+      | list }}
   when: lifecycle_pre_state.audit | default(false) | bool
 
 - name: Lifecycle cycle | Take the no-change snapshot of the applied topic

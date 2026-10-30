@@ -178,45 +178,50 @@
   tags:
     - always
 
-- name: SSH server | Read the main file and every drop-in whose content the collection does not know
+- name: SSH server | Read the main file, the vendor drop-ins and every drop-in whose content is not known
   ansible.builtin.slurp:
     src: "{{ __linux_compliance_remediate_ssh_source }}"
   loop: >-
     {{ ([__linux_compliance_remediate_sshd_main]
-        if (__linux_compliance_remediate_ssh_main_stat.isreg | default(false))
-           and __linux_compliance_remediate_family.apply | length > 0 else [])
+        if (__linux_compliance_remediate_ssh_main_stat.isreg | default(false)) else [])
        + (__linux_compliance_remediate_ssh_dropins
           | select('in', __linux_compliance_remediate_ssh_entries
                          | dict2items | selectattr('value.isreg') | map(attribute='key') | list)
           | select('in', __linux_compliance_remediate_ssh_dropins
                          if __linux_compliance_remediate_family.apply | length > 0
-                         else __linux_compliance_remediate_ssh_owned)
+                         else __linux_compliance_remediate_ssh_owned + __linux_compliance_remediate_sshd_vendor_files)
           | list) }}
   loop_control:
     loop_var: __linux_compliance_remediate_ssh_source
   register: __linux_compliance_remediate_ssh_read
   when: >-
-    __linux_compliance_remediate_ssh_source == __linux_compliance_remediate_sshd_main
+    __linux_compliance_remediate_ssh_source in __linux_compliance_remediate_sshd_vendor_files
     or __linux_compliance_remediate_ssh_source not in __linux_compliance_remediate_ssh_known
     or __linux_compliance_remediate_ssh_entries[__linux_compliance_remediate_ssh_source].checksum | default('')
        != __linux_compliance_remediate_ssh_known[__linux_compliance_remediate_ssh_source]
   tags:
     - always
 
-- name: SSH server | Keep the text of the files that were read
-  ansible.builtin.set_fact:
-    __linux_compliance_remediate_ssh_texts: >-
+- name: SSH server | Keep the text and the lines of the files that were read
+  vars:
+    __linux_compliance_remediate_ssh_read_texts: >-
       {{ dict(__linux_compliance_remediate_ssh_read.results | default([]) | rejectattr('skipped', 'defined')
               | map(attribute='__linux_compliance_remediate_ssh_source')
               | zip(__linux_compliance_remediate_ssh_read.results | default([]) | rejectattr('skipped', 'defined')
                     | map(attribute='content') | map('b64decode'))) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ssh_texts: "{{ __linux_compliance_remediate_ssh_read_texts }}"
+    __linux_compliance_remediate_ssh_files: >-
+      {{ dict(__linux_compliance_remediate_ssh_read_texts.keys()
+              | zip(__linux_compliance_remediate_ssh_read_texts.values()
+                    | map('split', __linux_compliance_remediate_newline))) }}
   tags:
     - always
 
-- name: SSH server | Name the reason each drop-in of a rule that is no longer effective cannot be removed
+- name: SSH server | Name the reason each rule that is no longer effective cannot be reverted, and the lines to restore
   ansible.builtin.set_fact:
-    __linux_compliance_remediate_ssh_cleanup_reasons: >-
-      {%- set reasons = {} -%}
+    __linux_compliance_remediate_ssh_cleanup_plan: >-
+      {%- set plan = {} -%}
       {%- for rule in __linux_compliance_remediate_family.cleanup -%}
       {%- set prior = __linux_compliance_remediate_ssh_records[rule.rule_id] | default({}, true) -%}
       {%- set entry = __linux_compliance_remediate_ssh_entries[rule.parameters.path] | default(none) -%}
@@ -224,7 +229,9 @@
       {%- set header = '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' -%}
       {%- set sha = prior.dropin_sha256 | default(none) -%}
       {%- set valid_sha = sha is string and sha is match('^[0-9a-f]{64}$') -%}
-      {%- set reason =
+      {%- set setting = '(?i)^[ \t]*' ~ rule.parameters.keyword ~ '([ \t]*=|[ \t]+)' -%}
+      {%- set ns = namespace(reason=none, restores=[]) -%}
+      {%- set ns.reason =
             'method_changed' if prior.method | default('unknown') != 'dropin'
             else 'not_directory' if (__linux_compliance_remediate_ssh_directory_stat.exists | default(false))
                  and not (__linux_compliance_remediate_ssh_directory_stat.isdir | default(false))
@@ -234,9 +241,43 @@
             else 'invalid_record' if not valid_sha
             else 'modified_since_apply' if entry is not none and entry.checksum | default('') != sha
             else none -%}
-      {%- set _ = reasons.update({rule.rule_id: reason}) -%}
+      {%- for vendor in prior.keys() | select('match', '^vendor_line:') | map('regex_replace', '^vendor_line:', '')
+            | list if ns.reason is none -%}
+      {%- set original = prior['vendor_line:' ~ vendor] -%}
+      {%- set written = prior['vendor_written:' ~ vendor] | default(none) -%}
+      {%- set lines = __linux_compliance_remediate_ssh_files[vendor] | default(none) -%}
+      {%- set found = (lines | select('match', setting) | list) if lines is not none else [] -%}
+      {%- set exists = (__linux_compliance_remediate_ssh_main_stat.exists | default(false))
+            if vendor == __linux_compliance_remediate_sshd_main
+            else vendor in __linux_compliance_remediate_ssh_entries -%}
+      {%- if ns.reason is not none -%}
+      {%- elif vendor not in __linux_compliance_remediate_sshd_vendor_files
+            or original is not string or written is not string
+            or __linux_compliance_remediate_newline in original ~ written
+            or original is not match(setting) or written is not match(setting) -%}
+      {%- set ns.reason = 'invalid_record' -%}
+      {%- elif lines is none -%}
+      {%- set ns.reason = 'not_regular_file' if exists else 'target_absent' -%}
+      {%- elif found == [written] -%}
+      {%- set ns.restores = ns.restores + [{'path': vendor, 'regexp': setting, 'line': original}] -%}
+      {%- elif found | length == 1 and (found[0] | regex_replace('[ \t]*=[ \t]*|[ \t]+', ' ') | trim | lower)
+            == (original | regex_replace('[ \t]*=[ \t]*|[ \t]+', ' ') | trim | lower) -%}
+      {%- else -%}
+      {%- set ns.reason = 'modified_since_apply' -%}
+      {%- endif -%}
       {%- endfor -%}
-      {{ reasons }}
+      {%- set _ = plan.update({rule.rule_id: {'reason': ns.reason,
+                                              'restores': ns.restores if ns.reason is none else []}}) -%}
+      {%- endfor -%}
+      {{ plan }}
+  tags:
+    - always
+
+- name: SSH server | Name the rules whose prior state can be restored
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ssh_reverted_ids: >-
+      {{ __linux_compliance_remediate_ssh_cleanup_plan | dict2items | rejectattr('value.reason')
+         | map(attribute='key') | list }}
   tags:
     - always
 
@@ -246,8 +287,7 @@
     state: absent
   loop: >-
     {{ __linux_compliance_remediate_family.cleanup
-       | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_cleanup_reasons | dict2items
-                                     | rejectattr('value') | map(attribute='key') | list)
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_reverted_ids)
        | selectattr('parameters.path', 'in', __linux_compliance_remediate_ssh_entries.keys() | list) | list }}
   loop_control:
     loop_var: __linux_compliance_remediate_ssh_rule
@@ -256,14 +296,30 @@
   tags:
     - always
 
-- name: SSH server | Forget the rules in the state ledger whose drop-in is gone
+- name: SSH server | Write back the lines of the vendor files that the collection changed
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_ssh_restore.path }}"
+    regexp: "{{ __linux_compliance_remediate_ssh_restore.regexp }}"
+    line: "{{ __linux_compliance_remediate_ssh_restore.line }}"
+    state: present
+    create: false
+  loop: >-
+    {{ __linux_compliance_remediate_ssh_reverted_ids | map('extract', __linux_compliance_remediate_ssh_cleanup_plan)
+       | map(attribute='restores') | flatten }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ssh_restore
+    label: "{{ __linux_compliance_remediate_ssh_restore.path }}"
+  register: __linux_compliance_remediate_ssh_restored
+  tags:
+    - always
+
+- name: SSH server | Forget the rules in the state ledger whose prior state is back
   freesecdev.linux_compliance.control_state:
     action: remove
     rule_id: "{{ __linux_compliance_remediate_ssh_rule.rule_id }}"
   loop: >-
     {{ __linux_compliance_remediate_family.cleanup
-       | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_cleanup_reasons | dict2items
-                                     | rejectattr('value') | map(attribute='key') | list) | list }}
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_reverted_ids) | list }}
   loop_control:
     loop_var: __linux_compliance_remediate_ssh_rule
     label: "{{ __linux_compliance_remediate_ssh_rule.rule_id }}"
@@ -273,36 +329,37 @@
 
 - name: SSH server | Add the result of every cleanup and remember the drop-ins that this run removes
   vars:
-    __linux_compliance_remediate_ssh_removed_ids: >-
-      {{ __linux_compliance_remediate_ssh_removal.results | default([]) | selectattr('changed')
-         | map(attribute='__linux_compliance_remediate_ssh_rule.rule_id') | list }}
-    __linux_compliance_remediate_ssh_forgotten_ids: >-
-      {{ __linux_compliance_remediate_ssh_forget.results | default([]) | selectattr('changed')
-         | map(attribute='__linux_compliance_remediate_ssh_rule.rule_id') | list }}
+    __linux_compliance_remediate_ssh_changed_ids: >-
+      {{ (__linux_compliance_remediate_ssh_removal.results | default([]) | selectattr('changed')
+          | map(attribute='__linux_compliance_remediate_ssh_rule.rule_id') | list)
+         + (__linux_compliance_remediate_ssh_forget.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_ssh_rule.rule_id') | list) }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ssh_removed: >-
       {{ __linux_compliance_remediate_family.cleanup
-         | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_cleanup_reasons | dict2items
-                                       | rejectattr('value') | map(attribute='key') | list)
+         | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_reverted_ids)
          | map(attribute='parameters.path') | list }}
     __linux_compliance_remediate_results: >-
       {%- set results = [] -%}
       {%- for rule in __linux_compliance_remediate_family.cleanup -%}
-      {%- set reason = __linux_compliance_remediate_ssh_cleanup_reasons[rule.rule_id] -%}
+      {%- set planned = __linux_compliance_remediate_ssh_cleanup_plan[rule.rule_id] -%}
       {%- set present = rule.parameters.path in __linux_compliance_remediate_ssh_entries -%}
       {%- set _ = results.append({
             'rule_id': rule.rule_id,
             'family': rule.family,
             'action': 'cleanup',
-            'status': 'restored' if reason is none else 'cleanup_incomplete',
-            'reason': reason,
-            'changed': rule.rule_id in __linux_compliance_remediate_ssh_removed_ids
-                       or rule.rule_id in __linux_compliance_remediate_ssh_forgotten_ids,
+            'status': 'restored' if planned.reason is none else 'cleanup_incomplete',
+            'reason': planned.reason,
+            'changed': rule.rule_id in __linux_compliance_remediate_ssh_changed_ids,
             'message': rule.parameters.path ~ ': '
-                       ~ (('restored (the drop-in was removed)' if present
-                           else 'restored (the drop-in no longer existed, which is the recorded prior state;'
-                                ~ ' nothing was written)') if reason is none
-                          else 'cleanup_incomplete (' ~ reason
+                       ~ (('restored (the drop-in was removed' if present
+                           else 'restored (the drop-in no longer existed, which is the recorded prior state, so'
+                                ~ ' nothing was written to it')
+                          ~ ((', and the original line was written back to '
+                              ~ planned.restores | map(attribute='path') | join(', '))
+                             if planned.restores | length > 0 else '')
+                          ~ ')' if planned.reason is none
+                          else 'cleanup_incomplete (' ~ planned.reason
                                ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
                                ~ ' next run)')}) -%}
       {%- endfor -%}
@@ -310,69 +367,146 @@
   tags:
     - always
 
-- name: SSH server | Find where the main file includes the drop-ins and what it sets before and after them
+- name: SSH server | Read the vendor files again after lines were written back to them
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_ssh_source }}"
+  loop: >-
+    {{ __linux_compliance_remediate_ssh_restored.results | default([]) | selectattr('changed')
+       | map(attribute='__linux_compliance_remediate_ssh_restore.path') | unique | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ssh_source
+  register: __linux_compliance_remediate_ssh_reread
+  when: not ansible_check_mode
+  tags:
+    - always
+
+- name: SSH server | Keep the text and the lines of the vendor files as they are now
+  vars:
+    __linux_compliance_remediate_ssh_reread_texts: >-
+      {{ dict(__linux_compliance_remediate_ssh_reread.results | default([]) | rejectattr('skipped', 'defined')
+              | map(attribute='__linux_compliance_remediate_ssh_source')
+              | zip(__linux_compliance_remediate_ssh_reread.results | default([]) | rejectattr('skipped', 'defined')
+                    | map(attribute='content') | map('b64decode'))) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ssh_texts: >-
+      {{ __linux_compliance_remediate_ssh_texts | combine(__linux_compliance_remediate_ssh_reread_texts) }}
+    __linux_compliance_remediate_ssh_files: >-
+      {{ __linux_compliance_remediate_ssh_files
+         | combine(dict(__linux_compliance_remediate_ssh_reread_texts.keys()
+                        | zip(__linux_compliance_remediate_ssh_reread_texts.values()
+                              | map('split', __linux_compliance_remediate_newline)))) }}
+  tags:
+    - always
+
+- name: SSH server | Find where the main file includes the drop-ins and where each file read opens its first Match block
   vars:
     __linux_compliance_remediate_ssh_main_lines: >-
-      {{ (__linux_compliance_remediate_ssh_texts[__linux_compliance_remediate_sshd_main] | default(''))
-         .split(__linux_compliance_remediate_newline) }}
+      {{ __linux_compliance_remediate_ssh_files[__linux_compliance_remediate_sshd_main] | default([]) }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ssh_layout: >-
-      {%- set ns = namespace(include=-1, match=-1) -%}
+      {%- set ns = namespace(include=-1) -%}
       {%- for line in __linux_compliance_remediate_ssh_main_lines -%}
-      {%- if ns.match < 0 and line is match('(?i)[ \t]*match[ \t]') -%}
-      {%- set ns.match = loop.index0 -%}
-      {%- endif -%}
       {%- if ns.include < 0 and line is match('(?i)[ \t]*include[ \t]')
             and line.split()[1:] | select('in', [__linux_compliance_remediate_sshd_directory ~ '/*.conf',
                                                  'sshd_config.d/*.conf']) | list | length > 0 -%}
       {%- set ns.include = loop.index0 -%}
       {%- endif -%}
       {%- endfor -%}
-      {{ {'included': ns.include >= 0 and (ns.match < 0 or ns.include < ns.match),
-          'before': (__linux_compliance_remediate_ssh_main_lines[:ns.include]
-                     | join(__linux_compliance_remediate_newline)) if ns.include >= 0 else '',
-          'after': (__linux_compliance_remediate_ssh_main_lines[ns.include + 1:]
-                    | join(__linux_compliance_remediate_newline)) if ns.include >= 0 else ''} }}
+      {%- set matches = {} -%}
+      {%- for path, lines in __linux_compliance_remediate_ssh_files.items() -%}
+      {%- set found = namespace(index=lines | length) -%}
+      {%- for line in lines -%}
+      {%- if found.index == lines | length and line is match('(?i)[ \t]*match([ \t]|$)') -%}
+      {%- set found.index = loop.index0 -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- set _ = matches.update({path: found.index}) -%}
+      {%- endfor -%}
+      {{ {'include': ns.include,
+          'included': ns.include >= 0 and ns.include
+                      < matches[__linux_compliance_remediate_sshd_main] | default(ns.include + 1),
+          'matches': matches} }}
   tags:
     - always
 
-- name: SSH server | Decide for every rule to apply whether its drop-in can be written and would take effect
+- name: SSH server | Decide for every rule to apply whether its drop-in can be written and would satisfy the check
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ssh_plan: >-
       {%- set plan = {} -%}
       {%- set layout = __linux_compliance_remediate_ssh_layout -%}
+      {%- set main = __linux_compliance_remediate_sshd_main -%}
+      {%- set files = __linux_compliance_remediate_ssh_files -%}
+      {%- set include = '(?i)^[ \t]*include([ \t]*=|[ \t]+)' -%}
       {%- set remaining = __linux_compliance_remediate_ssh_dropins
             | reject('in', __linux_compliance_remediate_ssh_removed) | list -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
       {%- set path = rule.parameters.path -%}
       {%- set name = path | basename -%}
-      {%- set setting = '(?im)^[ \t]*' ~ rule.parameters.keyword ~ '([ \t]*=|[ \t]+)' -%}
+      {%- set keyword = rule.parameters.keyword -%}
+      {%- set setting = '(?i)^[ \t]*' ~ keyword ~ '([ \t]*=|[ \t]+)' -%}
+      {%- set wanted = __linux_compliance_remediate_ssh_values[rule.rule_id] -%}
+      {%- set written = __linux_compliance_remediate_ssh_lines[rule.rule_id] -%}
       {%- set prior = __linux_compliance_remediate_ssh_records[rule.rule_id] -%}
       {%- set entry = __linux_compliance_remediate_ssh_entries[path] | default(none) -%}
       {%- set text = __linux_compliance_remediate_ssh_texts[path] | default('') -%}
       {%- set header = '# Managed by freesecdev.linux_compliance for ' ~ rule.rule_id ~ '.' -%}
       {%- set sha = __linux_compliance_remediate_ssh_contents[rule.rule_id] | hash('sha256') -%}
-      {%- set earlier = [] -%}
-      {%- set later = [] -%}
-      {%- if layout.before is search(setting) -%}
-      {%- set _ = earlier.append(__linux_compliance_remediate_sshd_main) -%}
-      {%- endif -%}
-      {%- for other in remaining if other != path -%}
-      {%- set known = __linux_compliance_remediate_ssh_texts[other]
-            | default(__linux_compliance_remediate_ssh_contents[(__linux_compliance_remediate_family.apply
-                      | selectattr('parameters.path', 'equalto', other) | map(attribute='rule_id') | first
-                      | default(''))] | default(none)) -%}
-      {%- set sets = known is none or known is search(setting)
-            or ((other | basename) < name and known is search('(?im)^[ \t]*include([ \t]*=|[ \t]+)')) -%}
-      {%- if sets and (other | basename) < name -%}
-      {%- set _ = earlier.append(other) -%}
-      {%- elif sets -%}
-      {%- set _ = later.append(other) -%}
+      {%- set ns = namespace(earlier=[], later=[], conflicts=[]) -%}
+      {%- for line in files[main] | default([]) -%}
+      {%- if loop.index0 < layout.include and (line is match(setting) or line is match(include))
+            and main not in ns.earlier -%}
+      {%- set ns.earlier = ns.earlier + [main] -%}
+      {%- elif loop.index0 > layout.include and layout.include >= 0 and line is match(setting) -%}
+      {%- set ns.conflicts = ns.conflicts + [{'path': main, 'index': loop.index0, 'line': line}] -%}
       {%- endif -%}
       {%- endfor -%}
-      {%- if layout.after is search(setting) -%}
-      {%- set _ = later.append(__linux_compliance_remediate_sshd_main) -%}
+      {%- for other in remaining if other != path -%}
+      {%- set own = __linux_compliance_remediate_family.apply | selectattr('parameters.path', 'equalto', other)
+            | map(attribute='rule_id') | first | default('') -%}
+      {%- set lines = files[other] | default(
+            (__linux_compliance_remediate_ssh_contents[own].split(__linux_compliance_remediate_newline))
+            if own else none) -%}
+      {%- if lines is none -%}
+      {%- if (other | basename) < name -%}
+      {%- set ns.earlier = ns.earlier + [other] -%}
+      {%- else -%}
+      {%- set ns.later = ns.later + [other ~ ' cannot be read'] -%}
       {%- endif -%}
+      {%- elif (other | basename) < name -%}
+      {%- if lines | select('match', setting) | list | length > 0
+            or lines | select('match', include) | list | length > 0 -%}
+      {%- set ns.earlier = ns.earlier + [other] -%}
+      {%- endif -%}
+      {%- else -%}
+      {%- for line in lines -%}
+      {%- if line is match(setting) -%}
+      {%- set ns.conflicts = ns.conflicts + [{'path': other, 'index': loop.index0, 'line': line}] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- set cs = namespace(edits=[], duplicate=[], large=[], blockers=[]) -%}
+      {%- for conflict in ns.conflicts -%}
+      {%- set value = conflict.line | regex_replace(setting, '') | regex_replace('^[ \t]*=?[ \t]*', '')
+            | regex_replace('[ \t]*(#.*)?$', '') -%}
+      {%- set count = files[conflict.path] | default([]) | select('match', setting) | list | length -%}
+      {%- set in_match = conflict.index > layout.matches[conflict.path] | default(conflict.index + 1) -%}
+      {%- if value == wanted -%}
+      {%- elif conflict.path not in __linux_compliance_remediate_sshd_vendor_files -%}
+      {%- set cs.blockers = cs.blockers + [conflict.path ~ ' sets ' ~ keyword ~ ' ' ~ value
+            ~ ' after the drop-in, and the content check reads every occurrence'] -%}
+      {%- elif in_match -%}
+      {%- set cs.blockers = cs.blockers + [conflict.path ~ ' sets ' ~ keyword ~ ' inside a Match block'] -%}
+      {%- elif count > 1 -%}
+      {%- set cs.duplicate = cs.duplicate + [conflict.path ~ ' sets ' ~ keyword ~ ' ' ~ count ~ ' times'] -%}
+      {%- elif conflict.line | length > 1024 -%}
+      {%- set cs.large = cs.large + [conflict.path ~ ': the line of ' ~ keyword ~ ' is too long to record'] -%}
+      {%- else -%}
+      {%- set cs.edits = cs.edits + [{'path': conflict.path, 'number': conflict.index + 1,
+                                      'original': conflict.line, 'written': written, 'regexp': setting}] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- set blockers = cs.blockers + ns.later -%}
       {%- set status =
             'method_changed' if prior is mapping and prior.method | default('unknown') != 'dropin'
             else 'notapplicable' if not (__linux_compliance_remediate_ssh_main_stat.exists | default(false))
@@ -385,28 +519,34 @@
             else 'not_regular_file' if entry is not none and not entry.isreg
             else 'not_owned' if entry is not none and entry.checksum | default('') != sha
                  and not text.startswith(header)
-            else 'overridden' if earlier | length > 0
-            else 'compliant' if entry is not none and entry.checksum | default('') == sha
+            else 'overridden' if ns.earlier | length > 0
+            else 'duplicate_setting' if cs.duplicate | length > 0
+            else 'prior_too_large' if cs.large | length > 0
+            else 'overridden' if blockers | length > 0
+            else 'compliant' if entry is not none and entry.checksum | default('') == sha and cs.edits | length == 0
             else 'applied' -%}
       {%- set reason =
             ('the ledger entry was recorded by the ' ~ prior.method | default('unknown')
              ~ ' method; clean it up first') if status == 'method_changed'
-            else (__linux_compliance_remediate_sshd_main ~ ' does not exist; sshd is not installed')
-                 if status == 'notapplicable'
-            else (__linux_compliance_remediate_sshd_main ~ ' is not a regular file')
+            else (main ~ ' does not exist; sshd is not installed') if status == 'notapplicable'
+            else (main ~ ' is not a regular file')
                  if status == 'not_regular_file'
                     and not (__linux_compliance_remediate_ssh_main_stat.isreg | default(false))
-            else (rule.parameters.keyword ~ ' is governed by the system-wide crypto policy on this platform'
+            else (keyword ~ ' is governed by the system-wide crypto policy on this platform'
                   ~ ' (rule sshd_include_crypto_policy, topic crypto_policy)') if status == 'crypto_policy'
             else (__linux_compliance_remediate_sshd_directory ~ ' is not a directory') if status == 'not_directory'
-            else (__linux_compliance_remediate_sshd_main ~ ' does not include '
-                  ~ __linux_compliance_remediate_sshd_directory ~ '/*.conf before its first Match block')
-                 if status == 'not_included'
+            else (main ~ ' does not include ' ~ __linux_compliance_remediate_sshd_directory
+                  ~ '/*.conf before its first Match block') if status == 'not_included'
             else (path ~ ' is not a regular file') if status == 'not_regular_file'
             else (path ~ ' does not carry the header of the collection') if status == 'not_owned'
-            else ('set first by ' ~ earlier | join(', ')) if status == 'overridden'
+            else ('set or included first by ' ~ ns.earlier | join(', ')) if status == 'overridden'
+                 and ns.earlier | length > 0
+            else (cs.duplicate | join('; ')) if status == 'duplicate_setting'
+            else (cs.large | join('; ')) if status == 'prior_too_large'
+            else (blockers | join('; ')) if status == 'overridden'
             else none -%}
-      {%- set _ = plan.update({rule.rule_id: {'status': status, 'reason': reason, 'later': later}}) -%}
+      {%- set _ = plan.update({rule.rule_id: {'status': status, 'reason': reason,
+                                              'edits': cs.edits if status == 'applied' else []}}) -%}
       {%- endfor -%}
       {{ plan }}
   tags:
@@ -438,17 +578,15 @@
   tags:
     - always
 
-- name: SSH server | Refuse every drop-in when sshd is missing or would not accept the configuration
+- name: SSH server | Refuse every change when sshd is missing or would not accept the configuration
   vars:
     __linux_compliance_remediate_ssh_refusal: >-
-      {{ {'status': 'notapplicable', 'reason': 'sshd is not installed: '
-                                               ~ __linux_compliance_remediate_ssh_validation.message,
-          'later': []}
+      {{ {'status': 'notapplicable', 'edits': [],
+          'reason': 'sshd is not installed: ' ~ __linux_compliance_remediate_ssh_validation.message}
          if not __linux_compliance_remediate_ssh_validation.available
-         else {'status': 'invalid_config',
+         else {'status': 'invalid_config', 'edits': [],
                'reason': 'sshd -t refuses the configuration with these settings: '
-                         ~ __linux_compliance_remediate_ssh_validation.message,
-               'later': []} }}
+                         ~ __linux_compliance_remediate_ssh_validation.message} }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ssh_plan: >-
       {{ __linux_compliance_remediate_ssh_plan
@@ -459,6 +597,44 @@
   when:
     - __linux_compliance_remediate_ssh_validation is not skipped
     - not __linux_compliance_remediate_ssh_validation.valid
+  tags:
+    - always
+
+- name: SSH server | Name the vendor lines to neutralise and the ledger records to write before any change
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ssh_edits: >-
+      {%- set edits = [] -%}
+      {%- for rule in __linux_compliance_remediate_ssh_to_write -%}
+      {%- for edit in __linux_compliance_remediate_ssh_plan[rule.rule_id].edits -%}
+      {%- set _ = edits.append(edit | combine({'rule_id': rule.rule_id})) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ edits }}
+    __linux_compliance_remediate_ssh_record_values: >-
+      {%- set records = {} -%}
+      {%- for rule in __linux_compliance_remediate_ssh_to_write
+            + (__linux_compliance_remediate_family.apply
+               | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_plan | dict2items
+                                             | selectattr('value.status', 'equalto', 'compliant')
+                                             | map(attribute='key') | list) | list) -%}
+      {%- set prior = __linux_compliance_remediate_ssh_records[rule.rule_id] -%}
+      {%- set base = {'method': 'dropin', 'dropin': none} if prior is none else prior -%}
+      {%- set vendor = {} -%}
+      {%- for edit in __linux_compliance_remediate_ssh_plan[rule.rule_id].edits
+            if ('vendor_line:' ~ edit.path) not in base -%}
+      {%- set _ = vendor.update({'vendor_line:' ~ edit.path: edit.original,
+                                 'vendor_written:' ~ edit.path: edit.written,
+                                 'vendor_number:' ~ edit.path: edit.number | string}) -%}
+      {%- endfor -%}
+      {%- set values = base | combine(vendor)
+            | combine({'dropin_sha256': __linux_compliance_remediate_ssh_contents[rule.rule_id] | hash('sha256'),
+                       'written_line': __linux_compliance_remediate_ssh_lines[rule.rule_id]}) -%}
+      {%- if (prior is none and __linux_compliance_remediate_ssh_plan[rule.rule_id].status == 'applied')
+            or (prior is mapping and prior.method | default('') == 'dropin' and values != prior) -%}
+      {%- set _ = records.update({rule.rule_id: values}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ records }}
   tags:
     - always
 
@@ -498,68 +674,24 @@
   tags:
     - always
 
-- name: SSH server | Record that each drop-in did not exist, and what the collection writes, before writing it
-  freesecdev.linux_compliance.control_state:
-    action: record
-    rule_id: "{{ __linux_compliance_remediate_ssh_rule.rule_id }}"
-    family: "{{ __linux_compliance_remediate_ssh_rule.family }}"
-    revert_strategy: "{{ __linux_compliance_remediate_ssh_rule.revert_strategy }}"
-    prior_values:
-      - name: method
-        value: dropin
-      - name: dropin
-        value: null
-      - name: dropin_sha256
-        value: >-
-          {{ __linux_compliance_remediate_ssh_contents[__linux_compliance_remediate_ssh_rule.rule_id]
-             | hash('sha256') }}
-      - name: written_line
-        value: "{{ __linux_compliance_remediate_ssh_lines[__linux_compliance_remediate_ssh_rule.rule_id] }}"
-    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
-  loop: "{{ __linux_compliance_remediate_ssh_to_write | selectattr('ledger_entry', 'none') | list }}"
-  loop_control:
-    loop_var: __linux_compliance_remediate_ssh_rule
-    label: "{{ __linux_compliance_remediate_ssh_rule.rule_id }}"
-  register: __linux_compliance_remediate_ssh_record
-  tags:
-    - always
-
-- name: SSH server | Keep the recorded prior state and record the new content when the value changed
+- name: SSH server | Record the prior state of each rule, the vendor lines it changes and what it writes, before writing
   freesecdev.linux_compliance.control_state:
     action: record
     rule_id: "{{ __linux_compliance_remediate_ssh_rule.rule_id }}"
     family: "{{ __linux_compliance_remediate_ssh_rule.family }}"
     revert_strategy: "{{ __linux_compliance_remediate_ssh_rule.revert_strategy }}"
     prior_values: >-
-      {{ __linux_compliance_remediate_ssh_records[__linux_compliance_remediate_ssh_rule.rule_id]
-         | combine({'dropin_sha256': __linux_compliance_remediate_ssh_contents[
-                      __linux_compliance_remediate_ssh_rule.rule_id] | hash('sha256'),
-                    'written_line': __linux_compliance_remediate_ssh_lines[
-                      __linux_compliance_remediate_ssh_rule.rule_id]})
+      {{ __linux_compliance_remediate_ssh_record_values[__linux_compliance_remediate_ssh_rule.rule_id]
          | dict2items(key_name='name', value_name='value') }}
     collection_version: "{{ __linux_compliance_remediate_collection_version }}"
-    replace: true
+    replace: "{{ __linux_compliance_remediate_ssh_rule.ledger_entry is mapping }}"
   loop: >-
     {{ __linux_compliance_remediate_family.apply
-       | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_plan | dict2items
-                                     | selectattr('value.status', 'in', ['applied', 'compliant'])
-                                     | map(attribute='key') | list)
-       | rejectattr('ledger_entry', 'none') | list }}
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_ssh_record_values.keys() | list) | list }}
   loop_control:
     loop_var: __linux_compliance_remediate_ssh_rule
     label: "{{ __linux_compliance_remediate_ssh_rule.rule_id }}"
-  register: __linux_compliance_remediate_ssh_rerecord
-  when:
-    - >-
-      (__linux_compliance_remediate_ssh_records[__linux_compliance_remediate_ssh_rule.rule_id] | default({}, true))
-      .method | default('') == 'dropin'
-    - >-
-      (__linux_compliance_remediate_ssh_records[__linux_compliance_remediate_ssh_rule.rule_id] | default({}, true))
-      .dropin_sha256 | default('')
-      != __linux_compliance_remediate_ssh_contents[__linux_compliance_remediate_ssh_rule.rule_id] | hash('sha256')
-      or (__linux_compliance_remediate_ssh_records[__linux_compliance_remediate_ssh_rule.rule_id]
-          | default({}, true)).written_line | default('')
-         != __linux_compliance_remediate_ssh_lines[__linux_compliance_remediate_ssh_rule.rule_id]
+  register: __linux_compliance_remediate_ssh_record
   tags:
     - always
 
@@ -581,12 +713,29 @@
   tags:
     - always
 
+- name: SSH server | Set the compliant value on the one conflicting line of a vendor file, outside any Match block
+  ansible.builtin.lineinfile:
+    path: "{{ __linux_compliance_remediate_ssh_edit.path }}"
+    regexp: "{{ __linux_compliance_remediate_ssh_edit.regexp }}"
+    line: "{{ __linux_compliance_remediate_ssh_edit.written }}"
+    state: present
+    create: false
+  loop: "{{ __linux_compliance_remediate_ssh_edits }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_ssh_edit
+    label: "{{ __linux_compliance_remediate_ssh_edit.path }}"
+  register: __linux_compliance_remediate_ssh_edited
+  tags:
+    - always
+
 - name: SSH server | Add the result of every rule to apply and remember the drop-ins that this run writes
   vars:
     __linux_compliance_remediate_ssh_changed_ids: >-
       {{ (__linux_compliance_remediate_ssh_write.results | default([]) | selectattr('changed')
           | map(attribute='__linux_compliance_remediate_ssh_rule.rule_id') | list)
-         + (__linux_compliance_remediate_ssh_rerecord.results | default([]) | selectattr('changed')
+         + (__linux_compliance_remediate_ssh_edited.results | default([]) | selectattr('changed')
+            | map(attribute='__linux_compliance_remediate_ssh_edit.rule_id') | list)
+         + (__linux_compliance_remediate_ssh_record.results | default([]) | selectattr('changed')
             | map(attribute='__linux_compliance_remediate_ssh_rule.rule_id') | list)
          + ((__linux_compliance_remediate_ssh_to_write | map(attribute='rule_id') | list)
             if __linux_compliance_remediate_ssh_directory_created is changed else []) }}
@@ -606,10 +755,9 @@
             'changed': rule.rule_id in __linux_compliance_remediate_ssh_changed_ids,
             'message': rule.parameters.path ~ ': ' ~ planned.status
                        ~ ((' (' ~ planned.reason ~ '; nothing was changed)') if planned.reason else '')
-                       ~ ((' (' ~ rule.parameters.keyword ~ ' is also set by ' ~ planned.later | join(', ')
-                           ~ ', which sshd reads later and ignores for this keyword; the content check reads every'
-                           ~ ' occurrence)') if planned.status in ['applied', 'compliant']
-                                                and planned.later | length > 0 else '')}) -%}
+                       ~ ((' (the conflicting line of ' ~ planned.edits | map(attribute='path') | join(', ')
+                           ~ ' now sets ' ~ rule.parameters.keyword ~ ' to the same value; the original line is'
+                           ~ ' recorded and written back on cleanup)') if planned.edits | length > 0 else '')}) -%}
       {%- endfor -%}
       {{ __linux_compliance_remediate_results + results }}
   tags:
@@ -676,10 +824,79 @@
     __linux_compliance_remediate_ssh_reload: >-
       {{ not ansible_check_mode
          and (__linux_compliance_remediate_ssh_write is changed
+              or __linux_compliance_remediate_ssh_edited is changed
               or __linux_compliance_remediate_ssh_removal is changed
+              or __linux_compliance_remediate_ssh_restored is changed
               or __linux_compliance_remediate_ssh_tidy_removal is changed) }}
   tags:
     - always
+
+- name: SSH server | Validate the whole effective configuration once more after the changes of this run
+  freesecdev.linux_compliance.sshd_validate:
+  register: __linux_compliance_remediate_ssh_final
+  when: __linux_compliance_remediate_ssh_reload
+  tags:
+    - always
+
+- name: SSH server | Roll back the changes of this run when sshd refuses the configuration after them
+  when:
+    - __linux_compliance_remediate_ssh_final is not skipped
+    - not __linux_compliance_remediate_ssh_final.valid
+  tags:
+    - always
+  block:
+    - name: SSH server | Write back the vendor lines that this run changed
+      ansible.builtin.lineinfile:
+        path: "{{ __linux_compliance_remediate_ssh_undo.path }}"
+        regexp: "{{ __linux_compliance_remediate_ssh_undo.regexp }}"
+        line: "{{ __linux_compliance_remediate_ssh_undo.original }}"
+        state: present
+        create: false
+      loop: >-
+        {{ __linux_compliance_remediate_ssh_edited.results | default([]) | selectattr('changed')
+           | map(attribute='__linux_compliance_remediate_ssh_edit') | list }}
+      loop_control:
+        loop_var: __linux_compliance_remediate_ssh_undo
+        label: "{{ __linux_compliance_remediate_ssh_undo.path }}"
+      tags:
+        - always
+
+    - name: SSH server | Remove the drop-ins that this run created
+      ansible.builtin.file:
+        path: "{{ __linux_compliance_remediate_ssh_undo_rule.parameters.path }}"
+        state: absent
+      loop: >-
+        {{ __linux_compliance_remediate_ssh_write.results | default([]) | selectattr('changed')
+           | map(attribute='__linux_compliance_remediate_ssh_rule')
+           | rejectattr('parameters.path', 'in', __linux_compliance_remediate_ssh_entries.keys() | list) | list }}
+      loop_control:
+        loop_var: __linux_compliance_remediate_ssh_undo_rule
+        label: "{{ __linux_compliance_remediate_ssh_undo_rule.rule_id }}"
+      tags:
+        - always
+
+    - name: SSH server | Forget the ledger entries that this run created
+      freesecdev.linux_compliance.control_state:
+        action: remove
+        rule_id: "{{ __linux_compliance_remediate_ssh_undo_rule.rule_id }}"
+      loop: >-
+        {{ __linux_compliance_remediate_ssh_record.results | default([]) | selectattr('changed')
+           | map(attribute='__linux_compliance_remediate_ssh_rule') | selectattr('ledger_entry', 'none') | list }}
+      loop_control:
+        loop_var: __linux_compliance_remediate_ssh_undo_rule
+        label: "{{ __linux_compliance_remediate_ssh_undo_rule.rule_id }}"
+      tags:
+        - always
+
+    - name: SSH server | Stop because sshd refuses the configuration after this run
+      ansible.builtin.fail:
+        msg: >-
+          sshd -t refuses the configuration after this run: {{ __linux_compliance_remediate_ssh_final.message }}.
+          The drop-ins, vendor lines and ledger entries that this run created were rolled back and sshd was not
+          reloaded; a drop-in rewritten for a changed value keeps its new content. Fix the configuration before the
+          next restart of sshd.
+      tags:
+        - always
 
 - name: SSH server | Read the services, to reload sshd only where it runs
   ansible.builtin.service_facts:
@@ -703,30 +920,29 @@
   tags:
     - always
 
-- name: SSH server | Validate the whole effective configuration once more before sshd reloads it
-  freesecdev.linux_compliance.sshd_validate:
-  register: __linux_compliance_remediate_ssh_final
-  when: __linux_compliance_remediate_ssh_running
-  tags:
-    - always
-
-- name: SSH server | Refuse to reload sshd with a configuration that it would not accept
-  ansible.builtin.assert:
-    that:
-      - __linux_compliance_remediate_ssh_final.valid
-    fail_msg: >-
-      sshd -t refuses the configuration after this run, so sshd was not reloaded and keeps its running
-      configuration: {{ __linux_compliance_remediate_ssh_final.message }}. The changes of this run are in place and
-      recorded in the ledger; fix the configuration or switch the rules off before the next restart of sshd.
-    quiet: true
-  when: __linux_compliance_remediate_ssh_running
-  tags:
-    - always
-
 - name: SSH server | Reload sshd, which keeps every open session, so new sessions use the validated configuration
   ansible.builtin.service:
     name: "{{ __linux_compliance_remediate_ssh_service }}"
     state: reloaded
   when: __linux_compliance_remediate_ssh_running
+  tags:
+    - always
+
+- name: SSH server | Warn that root logins over SSH end when this play itself connects as root over SSH
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ inventory_hostname }} was reached over SSH as root, and this run applied
+      PermitRootLogin {{ __linux_compliance_remediate_ssh_values[__linux_compliance_remediate_ssh_root_rule] }}
+      ({{ __linux_compliance_remediate_ssh_root_rule }}). The open session continues, but the next run must connect
+      as another user with become, or switch the rule off first.
+  loop: >-
+    {{ __linux_compliance_remediate_ssh_to_write | map(attribute='rule_id')
+       | select('in', ['xccdf_org.ssgproject.content_rule_sshd_disable_root_login',
+                       'xccdf_org.ssgproject.content_rule_sshd_disable_root_password_login']) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ssh_root_rule
+  when:
+    - ansible_connection | default('') is search('ssh')
+    - (ansible_user | default(ansible_ssh_user | default(''))) == 'root'
   tags:
     - always
