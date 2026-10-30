@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
@@ -62,8 +61,10 @@ class Element:
 
     tag: str
     attributes: dict[str, str]
-    leaves: list[tuple[str, dict[str, str], str]] = field(default_factory=list)
-    references: set[str] = field(default_factory=set)
+    leaves: list[tuple[str, dict[str, str], str]] = field(
+        default_factory=list[tuple[str, dict[str, str], str]]
+    )
+    references: set[str] = field(default_factory=set[str])
 
 
 class OvalCollector:
@@ -177,7 +178,9 @@ def assert_mirrors(rule_id: str, parameters: dict[str, object], check: Check) ->
     main = {item for item in check.files if item[0] == LOGIN_DEFS}
     assert main == {(LOGIN_DEFS, "", PATTERNS[setting])}, (rule_id, main)
     others = {item[:2] for item in check.files} - {(LOGIN_DEFS, "")}
-    expected_others = {(DROPIN_DIRECTORY, r".*\.defs$")} if setting == "CREATE_HOME" else set()
+    expected_others: set[tuple[str, str]] = (
+        {(DROPIN_DIRECTORY, r".*\.defs$")} if setting == "CREATE_HOME" else set()
+    )
     assert others == expected_others, (rule_id, others)
     comparison = str(parameters["comparison"])
     if comparison == "equal":
@@ -221,5 +224,5 @@ def test_every_rule_whose_check_reads_login_defs_is_native_or_a_documented_excep
                 if reads_login_defs(reach(collector, definition)):
                     found.add(toggles.rule_short_id(rule_id))
     assert found == native | AUDIT_ONLY_READERS
-    catalogue = cast("dict[str, dict[str, object]]", native_parameters())
+    catalogue = native_parameters()
     assert not {RULE_PREFIX + short for short in AUDIT_ONLY_READERS} & set(catalogue)
