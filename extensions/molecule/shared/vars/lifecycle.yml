@@ -18,6 +18,8 @@ lifecycle_recorded_strategies:
 lifecycle_known_drivers:
   - docker
   - libvirt
+lifecycle_unrestricted_drivers:
+  - docker
 lifecycle_toggle_modes:
   - topic
   - rule

@@ -1,0 +1,87 @@
+---
+- name: Guard the scenario targets
+  ansible.builtin.import_playbook: guard.yml
+
+- name: Show on a real machine that remediation moves the reference rule from its failing to its passing outcome
+  hosts: all
+  gather_facts: true
+  vars_files:
+    - vars/versions.yml
+    - vars/target.yml
+    - vars/libvirt.yml
+  vars:
+    converge_outcomes: "{{ molecule_libvirt_reference_outcomes[molecule_target.image] }}"
+  tasks:
+    - name: Discover the pinned datastream and the profile of this platform
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+
+    - name: Check what the discover role verified
+      ansible.builtin.assert:
+        that:
+          - linux_compliance_discovered.profile_id == molecule_profile_id
+          - linux_compliance_discovered.content_sha256 == molecule_datastream.sha256
+          - molecule_reference_rule in linux_compliance_discovered.rule_ids
+        fail_msg: >-
+          The discover role did not verify {{ molecule_profile_id }} of {{ molecule_datastream.name }} with the
+          reference rule {{ molecule_reference_rule }}.
+        quiet: true
+
+    - name: Inspect the reference file before remediation
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+      register: converge_reference_before
+
+    - name: Audit the machine before remediation with a real scan
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: false
+
+    - name: Remember the outcome of the reference rule before remediation
+      ansible.builtin.set_fact:
+        converge_outcome_before: >-
+          {{ (linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'equalto', molecule_reference_rule)
+          | first).outcome }}
+
+    - name: Remediate the reference rule with the opt-in on
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_remediate_enabled: true
+
+    - name: Inspect the reference file after remediation
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+      register: converge_reference_after
+
+    - name: Audit the machine again after remediation with a real scan
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: false
+
+    - name: Check that remediation set the mode and moved the reference rule to its passing outcome
+      ansible.builtin.assert:
+        that:
+          - molecule_native_results | length == 1
+          - converge_result.rule_id == molecule_reference_rule
+          - converge_result.status == ('compliant' if converge_reference_before.stat.mode == '0600' else 'applied')
+          - converge_reference_after.stat.mode == '0600'
+          - converge_reference_after.stat.pw_name == converge_reference_before.stat.pw_name
+          - converge_reference_after.stat.checksum == converge_reference_before.stat.checksum
+          - >-
+            converge_outcome_before == (converge_outcomes.after if converge_reference_before.stat.mode == '0600'
+            else converge_outcomes.before)
+          - converge_outcome_after == converge_outcomes.after
+        fail_msg: >-
+          {{ molecule_reference_rule }} on {{ molecule_target.instance }}: mode
+          {{ converge_reference_before.stat.mode }} before and {{ converge_reference_after.stat.mode }} after, outcome
+          {{ converge_outcome_before }} before and {{ converge_outcome_after }} after, expected
+          {{ converge_outcomes }}; results {{ linux_compliance_remediated.results }}.
+        quiet: true
+      vars:
+        converge_result: "{{ molecule_native_results | first | default({}) }}"
+        converge_outcome_after: >-
+          {{ (linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'equalto', molecule_reference_rule)
+          | first).outcome }}

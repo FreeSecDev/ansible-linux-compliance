@@ -24,6 +24,8 @@ from typing import cast
 import pytest
 import yaml
 
+from tools.roles import molecule_matrix as matrix
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 MOLECULE = REPOSITORY_ROOT / "extensions" / "molecule"
 PINS = MOLECULE / "shared" / "images" / "cloud-images.pins"
@@ -418,7 +420,7 @@ def test_the_libvirt_scenarios_use_the_ssh_options_that_the_guard_expects() -> N
         option.replace("@KNOWN_HOSTS@", KNOWN_HOSTS)
         for option in cast("list[str]", load(LIBVIRT_VARS)["molecule_libvirt_ssh_options"])
     ]
-    assert len(libvirt_scenarios()) == 2
+    assert len(libvirt_scenarios()) == 4
     for path in libvirt_scenarios():
         config = load(path)
         driver = cast("dict[str, object]", config["driver"])
@@ -427,17 +429,41 @@ def test_the_libvirt_scenarios_use_the_ssh_options_that_the_guard_expects() -> N
         assert ansible["cfg"]["defaults"]["host_key_checking"] is True, path
 
 
-def test_the_libvirt_scenarios_differ_only_in_their_platform_and_name() -> None:
-    configs = [load(path) for path in libvirt_scenarios()]
-    for config, path in zip(configs, libvirt_scenarios(), strict=True):
+BASE_SEQUENCE = ["create", "prepare", "converge", "idempotence", "verify", "destroy"]
+LIFECYCLE_SEQUENCE = ["create", "prepare", "side_effect", "destroy"]
+
+
+def test_the_libvirt_scenarios_differ_only_in_their_platform_name_and_steps() -> None:
+    kinds: dict[bool, list[dict[str, object]]] = {True: [], False: []}
+    for path in libvirt_scenarios():
+        config = load(path)
         scenario = cast("dict[str, object]", config["scenario"])
         assert scenario["name"] == path.parent.name
         playbooks = cast("dict[str, dict[str, str]]", config["ansible"])["playbooks"]
         assert playbooks["create"] == "../shared/create_libvirt.yml"
         assert playbooks["destroy"] == "../shared/destroy_libvirt.yml"
+        lifecycle = path.parent.name.endswith(matrix.SCENARIO_SUFFIX)
+        if lifecycle:
+            assert scenario["test_sequence"] == LIFECYCLE_SEQUENCE, path
+            assert playbooks["side_effect"] == "../shared/lifecycle.yml", path
+            assert "converge" not in playbooks, path
+            assert (
+                path.parent.parent / path.parent.name.removesuffix(matrix.SCENARIO_SUFFIX)
+            ).is_dir()
+        else:
+            assert scenario["test_sequence"] == BASE_SEQUENCE, path
+            assert playbooks["converge"] == "../shared/converge_libvirt.yml", path
+            assert playbooks["verify"] == "../shared/verify_libvirt.yml", path
+            assert "side_effect" not in playbooks, path
+        for key in ("converge", "verify", "side_effect"):
+            playbooks.pop(key, None)
         config.pop("platforms")
         scenario.pop("name")
-    assert configs[0] == configs[1]
+        scenario.pop("test_sequence")
+        kinds[lifecycle].append(config)
+    configs = kinds[True] + kinds[False]
+    assert len(kinds[True]) == len(kinds[False]) == 2
+    assert all(config == configs[0] for config in configs)
 
 
 def ci_jobs() -> dict[str, dict[str, object]]:
@@ -447,12 +473,17 @@ def ci_jobs() -> dict[str, dict[str, object]]:
 def test_ci_runs_every_scenario_of_each_driver_and_gates_on_it() -> None:
     jobs = ci_jobs()
     docker = cast("dict[str, dict[str, list[str]]]", jobs["molecule-docker"]["strategy"])
-    libvirt = cast(
-        "dict[str, dict[str, list[dict[str, str]]]]", jobs["molecule-libvirt"]["strategy"]
-    )
+    libvirt = cast("dict[str, dict[str, str]]", jobs["molecule-libvirt"]["strategy"])
     docker_scenarios = {path.parent.name for path in MOLECULE.glob("docker-*/molecule.yml")}
     assert set(docker["matrix"]["scenario"]) == docker_scenarios | {"docker-selftest"}
-    included = libvirt["matrix"]["include"]
+    assert libvirt["matrix"] == "${{ fromJSON(needs.molecule-plan.outputs.libvirt) }}"
+    assert jobs["molecule-libvirt"]["needs"] == "molecule-plan"
+    plan = cast("list[dict[str, str]]", jobs["molecule-plan"]["steps"])
+    assert any(
+        "make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt" in step.get("run", "")
+        for step in plan
+    )
+    included = matrix.legs(REPOSITORY_ROOT, "libvirt")
     assert {entry["scenario"] for entry in included} == {
         path.parent.name for path in libvirt_scenarios()
     } | {"libvirt-selftest"}
@@ -465,8 +496,10 @@ def test_ci_runs_every_scenario_of_each_driver_and_gates_on_it() -> None:
                 )
             }
             assert images == {entry["platform"]}
-    assert "molecule-libvirt" in cast("list[str]", jobs["ci-gate"]["needs"])
+    needs = cast("list[str]", jobs["ci-gate"]["needs"])
+    assert {"molecule-plan", "molecule-libvirt"} <= set(needs)
     assert jobs["molecule-libvirt"]["permissions"] == {"contents": "read"}
+    assert jobs["molecule-plan"]["permissions"] == {"contents": "read"}
 
 
 def test_the_makefile_runs_every_libvirt_scenario() -> None:

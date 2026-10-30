@@ -123,9 +123,27 @@
         host_key_checking: true
       guard_label_prefix: ".*"
       guard_disk_source: ".*"
-      guard_forbidden_devices: "^$"
-      guard_forbidden_device_alternatives:
-        - "^$"
+      guard_domain_elements: []
+      guard_domain_sources: []
+      guard_domain_seclabels:
+        - "<seclabel type='dynamic' model='apparmor' relabel='yes'>"
+      guard_domain_labels: []
+      guard_domain_allowed_elements: "{{ selftest_probe_xml | regex_findall('<([A-Za-z][A-Za-z0-9:_.-]*)') | unique }}"
+      guard_network_allowed_elements: []
+      guard_pool_allowed_elements: []
+      guard_allowed_source_alternatives:
+        - ".*"
+      guard_allowed_sources: ".*"
+      guard_allowed_driver: ".*"
+      guard_allowed_emulator: ".*"
+      guard_allowed_input: ".*"
+      guard_allowed_seclabel: ".*"
+      guard_allowed_label_alternatives:
+        - ".*"
+      guard_allowed_label: ".*"
+      guard_host_apparmor: false
+      guard_default_control_path_dir: /tmp
+      guard_molecule_control_path: /tmp/selftest
       guard_default_ssh_args: ""
       guard_libvirt_identity:
         results: []

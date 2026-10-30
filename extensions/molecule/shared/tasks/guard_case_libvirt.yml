@@ -41,6 +41,7 @@
           {{ edited.xml }}
         guard_metadata_namespace: "{{ molecule_libvirt_metadata_namespace }}"
         guard_pool_parent: "{{ molecule_libvirt_pool_parent }}"
+        guard_host_apparmor: "{{ guard_case.apparmor | default(false) }}"
         guard_ssh_settings: >-
           {{ guard_libvirt_simulation.good_ssh_settings | combine(guard_case.ssh_settings | default({})) }}
 

@@ -24,3 +24,5 @@ selftest_strangers:
       {{ selftest_label_template | replace('@SCENARIO@', selftest_scenario) | replace('@RUN@', selftest_stranger_run) }}
     removed_by_fallback: false
 selftest_stranger_network: "fsd-mol-{{ selftest_scenario }}-{{ selftest_stranger_run }}"
+selftest_stranger_pool: "fsd-mol-{{ selftest_scenario }}-{{ selftest_stranger_run }}"
+selftest_stranger_pool_path: "{{ molecule_selftest_dir }}/stranger-pool"

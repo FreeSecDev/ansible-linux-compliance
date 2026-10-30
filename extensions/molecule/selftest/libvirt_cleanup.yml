@@ -31,6 +31,12 @@
         name: "{{ selftest_stranger_network }}"
         state: absent
 
+    - name: Undefine the stranger pool without touching its path
+      community.libvirt.virt_pool:
+        uri: qemu:///system
+        name: "{{ selftest_stranger_pool }}"
+        state: undefined
+
     - name: List every domain again
       community.libvirt.virt:
         uri: qemu:///system

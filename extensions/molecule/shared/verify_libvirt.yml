@@ -1,0 +1,49 @@
+---
+- name: Guard the scenario targets
+  ansible.builtin.import_playbook: guard.yml
+
+- name: Clean up the reference rule on the machine, so that the toggle lifecycle starts from the state before it
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - vars/versions.yml
+    - vars/target.yml
+  tasks:
+    - name: Discover the pinned datastream and the profile of this platform
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.discover
+
+    - name: Clean up the reference rule by switching its toggle off with the opt-in on
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_remediate_enabled: true
+        linux_compliance_rule_file_permissions_crontab_enabled: false
+
+    - name: Inspect the reference file after the cleanup
+      ansible.builtin.stat:
+        path: "{{ molecule_reference_path }}"
+        get_checksum: false
+      register: verify_reference_cleaned
+
+    - name: Read the state ledger after the cleanup
+      freesecdev.linux_compliance.control_state:
+        action: list
+      register: verify_ledger_cleaned
+
+    - name: Check that the cleanup restored the recorded mode and forgot the rule
+      ansible.builtin.assert:
+        that:
+          - molecule_native_results | length == 1
+          - verify_cleanup.rule_id == molecule_reference_rule
+          - verify_cleanup.action == 'cleanup'
+          - verify_cleanup.status == 'restored'
+          - verify_reference_cleaned.stat.mode == '0644'
+          - verify_ledger_cleaned.entries == []
+        fail_msg: >-
+          The cleanup did not restore {{ molecule_reference_path }}: mode
+          {{ verify_reference_cleaned.stat.mode | default('missing') }}, results
+          {{ linux_compliance_remediated.results }}, ledger {{ verify_ledger_cleaned.entries }}
+        quiet: true
+      vars:
+        verify_cleanup: "{{ molecule_native_results | first | default({}) }}"

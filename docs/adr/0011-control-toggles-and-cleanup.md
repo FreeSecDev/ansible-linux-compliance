@@ -719,15 +719,18 @@ The FREES-60 amendment left open where the lifecycle of a family runs whose cont
 init system. The libvirt scenarios of ADR 0009 answer it ([libvirt guide](../molecule-libvirt.md#driver-requirements-of-a-topic)).
 
 - **Declared requirement.** A lifecycle declaration may name the drivers its topic needs (`requires: [libvirt]`), and a
-  pre-state may do the same. A topic with `requires` runs only in the scenarios of those drivers and is reported as
-  skipped elsewhere. The harness itself is unchanged; it selects the pre-states and skips the cycles by the driver of
-  the instance that the guard verified.
-- **Tight coverage.** `make lint-lifecycle` fails when a declaration requires a driver for which no scenario runs every
-  platform that the topic does not list under `unselected_platforms`, so a native topic that requires libvirt must run
-  in a libvirt scenario on each of its platforms, and CI runs every scenario of each driver.
+  pre-state may do the same. Each cycle runs with one set of drivers: the pre-state's, else the topic's, else Docker
+  only. The virtual machines therefore run only the cycles that a container cannot prove; the harness selects the
+  pre-states by the driver of the instance that the guard verified and skips a topic, with its whole-instance records,
+  on a driver that runs none of its cycles. A CI leg selects one topic and mode (`MOLECULE_LIFECYCLE_TOPIC`,
+  `MOLECULE_LIFECYCLE_MODE`), and a leg whose topic runs no cycle with its driver fails, because it would prove nothing.
+- **Tight coverage.** `make lint-lifecycle` fails when a cycle's driver has no lifecycle scenario on every platform
+  that the topic does not list under `unselected_platforms`, so every declared cycle is exercised by some driver.
+  `make molecule-matrix` plans the CI legs of each driver from the same map, so each such cycle runs in a leg that
+  gates merges.
 - **A virtual machine has more state than a container.** For a libvirt instance the whole-instance comparison ignores
   the contents and inode, but not the existence, mode or owner, of the system logs, the login accounting, the journal and
   three service state files that a running system rewrites by itself; the list and its reasons are in the libvirt guide.
 - **A VM-only case.** The `file_permissions` declaration gains a pre-state that changes the owner and group of
   `/etc/crontab` and requires libvirt, because a container without `CAP_CHOWN` cannot set it. It proves that cleanup
-  restores the recorded mode and leaves the ownership alone.
+  restores the recorded mode and leaves the ownership alone. Its other cycles run in the Docker scenarios only.

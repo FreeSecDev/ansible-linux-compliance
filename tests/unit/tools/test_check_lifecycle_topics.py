@@ -477,6 +477,7 @@ def test_the_harness_knows_the_drivers_of_the_check() -> None:
         ),
     )
     assert harness["lifecycle_known_drivers"] == list(lifecycle.DRIVERS)
+    assert harness["lifecycle_unrestricted_drivers"] == sorted(lifecycle.UNRESTRICTED_DRIVERS)
 
 
 def test_a_topic_may_require_libvirt(tmp_path: Path) -> None:
@@ -517,7 +518,7 @@ def test_a_required_driver_must_run_every_selected_platform(tmp_path: Path) -> N
     root = make_root(
         tmp_path, {"file_permissions": changed(requires=["libvirt"], unselected_platforms=REMOVE)}
     )
-    without_scenario(root, "libvirt-rhel-compatible")
+    without_scenario(root, "libvirt-rhel-compatible-lifecycle")
     assert lifecycle.check(root)[1] == [
         (
             f"{root / lifecycle.TOPICS / 'file_permissions.yml'}: the declaration requires "
@@ -529,7 +530,7 @@ def test_a_required_driver_must_run_every_selected_platform(tmp_path: Path) -> N
 
 def test_a_required_driver_need_not_run_an_unselected_platform(tmp_path: Path) -> None:
     root = make_root(tmp_path, {"file_permissions": changed(requires=["libvirt"])})
-    without_scenario(root, "libvirt-rhel-compatible")
+    without_scenario(root, "libvirt-rhel-compatible-lifecycle")
     assert lifecycle.check(root)[1] == []
 
 
@@ -539,7 +540,7 @@ def test_a_pre_state_driver_must_run_every_selected_platform(tmp_path: Path) -> 
         tmp_path,
         {"file_permissions": changed(pre_states=pre_states, unselected_platforms=REMOVE)},
     )
-    without_scenario(root, "libvirt-ubuntu")
+    without_scenario(root, "libvirt-ubuntu-lifecycle")
     errors = lifecycle.check(root)[1]
     assert len(errors) == 1
     assert "no libvirt scenario in extensions/molecule runs the platform ubuntu" in errors[0]
@@ -547,8 +548,25 @@ def test_a_pre_state_driver_must_run_every_selected_platform(tmp_path: Path) -> 
 
 def test_a_declaration_without_a_requirement_needs_no_driver_coverage(tmp_path: Path) -> None:
     root = make_root(tmp_path, {"file_permissions": changed(unselected_platforms=REMOVE)})
-    without_scenario(root, "libvirt-ubuntu")
-    without_scenario(root, "libvirt-rhel-compatible")
+    without_scenario(root, "libvirt-ubuntu-lifecycle")
+    without_scenario(root, "libvirt-rhel-compatible-lifecycle")
+    assert lifecycle.check(root)[1] == []
+
+
+def test_a_pre_state_without_a_requirement_runs_in_the_docker_scenarios(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": changed(unselected_platforms=REMOVE)})
+    without_scenario(root, "docker-rhel-compatible")
+    errors = lifecycle.check(root)[1]
+    assert len(errors) == 1
+    assert "requires docker, but no docker scenario" in errors[0]
+    assert "rhel_compatible" in errors[0]
+
+
+def test_a_topic_requirement_applies_to_its_pre_states_without_one(tmp_path: Path) -> None:
+    declaration = changed(requires=["libvirt"], unselected_platforms=REMOVE)
+    root = make_root(tmp_path, {"file_permissions": declaration})
+    without_scenario(root, "docker-ubuntu")
+    without_scenario(root, "docker-rhel-compatible")
     assert lifecycle.check(root)[1] == []
 
 

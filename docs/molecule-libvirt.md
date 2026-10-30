@@ -10,8 +10,12 @@ Jira: FREES-61. The Docker scenarios, the shared playbooks and the toggle lifecy
 The Docker containers drop every capability and share the host kernel, so controls that need a real kernel, init
 system, boot loader or root with full capabilities cannot be proven there: kernel parameters, kernel modules,
 services, mounts, the boot loader, auditd and even a change of file ownership (`CAP_CHOWN`). The libvirt scenarios run
-the same playbooks against a full virtual machine. A topic whose controls need one declares
-`requires: [libvirt]` (see [driver requirements](#driver-requirements-of-a-topic)).
+only what a container cannot prove: the cycles of the toggle lifecycle that declare `requires: [libvirt]`
+([driver requirements](#driver-requirements-of-a-topic)), the move of the reference rule from `fail` to `pass` in a real
+scan, one idempotence pass and the guard on a real machine. Everything a container can prove stays in the Docker
+scenarios, so the libvirt legs stay short as native topics are added. As for Docker, each platform has a base scenario
+and a lifecycle scenario, and CI runs the lifecycle as one leg per topic and toggle mode
+([CI](#ci)).
 
 ## Run the scenarios
 
@@ -28,6 +32,9 @@ Prerequisites:
 make test-molecule-libvirt
 make test-molecule-libvirt MOLECULE_LIBVIRT_SCENARIOS=libvirt-ubuntu MOLECULE_LIBVIRT_PLATFORMS=ubuntu \
   MOLECULE_LIBVIRT_SELFTEST=false
+make test-molecule-libvirt MOLECULE_LIBVIRT_SCENARIOS=libvirt-ubuntu-lifecycle MOLECULE_LIBVIRT_PLATFORMS=ubuntu \
+  MOLECULE_LIBVIRT_SELFTEST=false MOLECULE_LIFECYCLE_TOPIC=file_permissions MOLECULE_LIFECYCLE_MODE=rule
+make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt
 make test-molecule-libvirt-selftest
 make molecule-libvirt-images
 ```
@@ -38,10 +45,11 @@ that KVM and `qemu:///system` are usable (`make molecule-libvirt-preflight`), ru
 scenario and stops at the first failure, and then runs the self-test. `molecule test` runs `destroy` after a failed
 step too.
 
-On a WSL2 workstation with nested KVM, with the images cached, `libvirt-ubuntu` took 69 minutes (most of it the six
-lifecycle cycles, because the whole-instance comparison hashes about 80,000 entries below `/usr` each time),
-`libvirt-rhel-compatible` 24 minutes and the self-test 2.5 minutes. Run one scenario at a time on a host: two Molecule
-runs in the same checkout share `ANSIBLE_HOME` and collide when they install the collection.
+`MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one native topic and one toggle mode of the
+lifecycle, as for Docker ([Molecule guide](molecule.md)); left empty, the lifecycle scenario runs every topic in both
+modes. A selected topic that runs no cycle with the libvirt driver on the platform fails the run, because the leg
+would prove nothing. Run one scenario at a time on a host: two Molecule runs in the same checkout share `ANSIBLE_HOME`
+and collide when they install the collection. The [measured durations](#durations) are below.
 
 Record the libvirt objects of your host before and after a local run and compare them:
 
@@ -58,15 +66,28 @@ libvirt creates when it builds the first pool and does not remove when it delete
 
 | Scenario | Cloud image | Datastream and profile |
 |---|---|---|
-| `libvirt-ubuntu` | Ubuntu 24.04 LTS server cloud image, release 20260926 | `ubuntu2404`, `cis_level1_server` |
-| `libvirt-rhel-compatible` | Rocky Linux 9.8 GenericCloud Base, 20260525.0 | `rhel9`, `cis_server_l1` |
+| `libvirt-ubuntu`, `libvirt-ubuntu-lifecycle` | Ubuntu 24.04 LTS server cloud image, release 20260926 | `ubuntu2404`, `cis_level1_server` |
+| `libvirt-rhel-compatible`, `libvirt-rhel-compatible-lifecycle` | Rocky Linux 9.8 GenericCloud Base, 20260525.0 | `rhel9`, `cis_server_l1` |
 
-Each scenario runs `create`, `prepare`, `converge`, `idempotence`, `verify`, `side_effect` (the
-[toggle lifecycle](molecule.md#toggle-lifecycle-of-every-native-topic)) and `destroy`, the same playbooks as the Docker
-scenarios except `create_libvirt.yml` and `destroy_libvirt.yml`. The platform keys are those of the Docker scenarios
-(`ubuntu`, `rhel_compatible` in `shared/vars/versions.yml`), so a topic declaration that names a platform applies to
-both drivers. A platform takes `memory_mib` (1024 to 4096, default 2048), `vcpus` (1 to 4, default 2) and `disk_gib` (8
-to 16, default 12); any other key is refused.
+The base scenarios run `create`, `prepare`, `converge`, `idempotence`, `verify` and `destroy`; the lifecycle scenarios
+run `create`, `prepare`, `side_effect` and `destroy`. Apart from these steps and their names, the four configurations
+are identical but for the platform, which a unit test checks.
+
+| Step | Playbook | What it proves on the machine |
+|---|---|---|
+| `create`, `destroy` | `create_libvirt.yml`, `destroy_libvirt.yml` | below |
+| `prepare` | `prepare.yml` (shared) | the guard, the pinned scanner, the quieted schedulers, the datastream |
+| `converge` (base) | `converge_libvirt.yml` | a real scan, remediation of the reference rule and a second scan; the outcome moves from `molecule_libvirt_reference_outcomes[platform].before` to `.after` (`fail` to `pass` on Ubuntu) |
+| `idempotence` (base) | `converge_libvirt.yml` again | the second remediation finds the rule compliant and nothing changes |
+| `verify` (base) | `verify_libvirt.yml` | the cleanup restores `0644` and empties the ledger |
+| `side_effect` (lifecycle) | `lifecycle.yml` (shared) | the cycles of the selected topic and mode that require libvirt |
+
+The no-change snapshots around the run without the opt-in, the check-mode runs, the invalid inputs, the simulated guard
+cases and every cycle that does not require libvirt are container-capable and run in the Docker scenarios only. The
+platform keys are those of the Docker scenarios (`ubuntu`, `rhel_compatible` in `shared/vars/versions.yml`), so a topic
+declaration that names a platform applies to both drivers. A platform takes `memory_mib` (1024 to 4096, default 2048;
+the scenarios use 4096, so that `/usr` stays in the page cache between the snapshots), `vcpus` (1 to 4, default 2) and
+`disk_gib` (8 to 16, default 12); any other key is refused.
 
 As for Docker, Rocky Linux stands in for RHEL and the RHEL 9 datastream reports every rule `notapplicable` there
 ([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)). On Ubuntu the virtual machine is a `machine` platform, so
@@ -150,12 +171,26 @@ and the pool of that run exist with its labels, it creates nothing and only wait
 them exist, it refuses to continue and asks for `molecule destroy`.
 
 `destroy_libvirt.yml` lists the domains, networks and pools whose names match this scenario's pattern, reads each
-definition, and removes only those whose labels (for a pool: its directory) belong to a run that the instance config
-records, or, when the config is empty or missing, to any run of this scenario. It powers off and undefines the
-domains, stops and undefines the networks, deletes every volume of each pool, deletes and undefines the pool, removes
-the run's keys and resets the instance config. An object whose name does not match is never read, and one whose
-labels do not match is never touched. Domains are undefined without libvirt's `delete_volumes` flag, so undefining a
-domain never deletes a disk that another domain may name; only the deletion of the run's own pool removes files.
+definition, and removes only those whose labels belong to a run that the instance config records, or, when the config
+is empty or missing, to any run of this scenario. It powers off and undefines the domains, stops and undefines the
+networks, deletes every volume of each pool, deletes and undefines the pool, removes the run's keys and resets the
+instance config. An object whose name does not match is never read, and one whose labels do not match is never
+touched. Domains are undefined without libvirt's `delete_volumes` flag, so undefining a domain never deletes a disk
+that another domain may name; only the deletion of the run's own pool removes files.
+
+A libvirt storage pool has no metadata element, so a pool cannot carry the labels. A pool belongs to a run only when
+both its name and its directory are the run's: the name `fsd-mol-<scenario>-<run id>` and exactly the directory
+`/var/lib/libvirt/freesecdev-molecule/<that name>`. A pool named like the scenario anywhere else is never touched;
+the self-test defines one.
+
+The keys are deleted only from `$MOLECULE_EPHEMERAL_DIRECTORY/libvirt`, and only when `MOLECULE_EPHEMERAL_DIRECTORY` is
+an absolute path without `.` or `..` components whose last component ends with the scenario name (Molecule's own
+`molecule.<key>.<scenario>`; the self-test uses `build/molecule-libvirt-selftest/ephemeral/libvirt-selftest`), and both
+it and `libvirt` are real directories, not symbolic links, with the same owner.
+
+The fallback with an empty or missing instance config removes every labelled run of the scenario. Two concurrent runs
+of the same scenario on one host (two checkouts, for example) would therefore remove each other's objects if one of
+them lost its instance config; run one scenario at a time per host, as above.
 
 ## Isolation
 
@@ -170,6 +205,10 @@ domain never deletes a disk that another domain may name; only the deletion of t
   loopback addresses; the scenarios therefore use `qemu:///system` with a network of their own.
 - SSH runs with `-F /dev/null`, the run's `known_hosts` and `StrictHostKeyChecking=yes`, so a connection succeeds only
   against the host key that `create` generated for this instance, whatever `~/.ssh/config` says.
+- The scenarios add no libvirt `nwfilter` that would limit the machine to SSH from the host. `community.libvirt` has
+  no module for network filters, and defining one would need `virsh` through a command module, which the collection's
+  rules forbid. The isolated network already confines the machine to the host's address on the bridge; a filter
+  remains a possible hardening for services that the host exposes on every address.
 
 ## Guard
 
@@ -184,16 +223,27 @@ variables. Then, for a libvirt target:
    address of the scenario's subnet range and not a loopback form; the connection is `ssh`; `ansible_user` is `root`,
    `ansible_port` is 22, `ansible_private_key_file` is the run's key and `ansible_ssh_common_args` is exactly the
    options above with the run's `known_hosts`; no `ansible_ssh_*` other than the common arguments, `ansible_scp_*`,
-   `ansible_sftp_*`, `ansible_password`, `ansible_host_key_checking`, `ansible_become_*` or Docker variable is set.
-2. From the controller, through `community.libvirt` with the literal URI `qemu:///system`: the domain carries the run's
-   labels and marker, has exactly two disks, both files in the run's pool directory (the disk and the seed), exactly one
-   interface, of type `network` on the run's network with the recorded MAC address, and none of `hostdev`,
-   `filesystem`, `shmem`, `redirdev`, `smartcard`, `channel`, `graphics`, `vsock`, `iommu`, `parallel`, `hub`,
-   `lease`, `sound`, `tpm`, a serial port or console other than a pseudo terminal, or QEMU command-line arguments. The
-   network carries the run's labels, has no `<forward>`, DHCP, route or second address, has DNS disabled and the
-   recorded bridge and gateway. The pool is a directory pool at the run's directory. The effective Ansible
-   configuration has host key checking on, the default `ssh_args`, no extra SSH, SCP or SFTP arguments and the `ssh`
-   executable.
+   `ansible_sftp_*`, `ansible_password`, `ansible_host_key_checking`, `ansible_control_path`,
+   `ansible_control_path_dir`, `ansible_become_*` or Docker variable is set.
+2. From the controller, through `community.libvirt` with the literal URI `qemu:///system`, an allow-list of the
+   domain: every element must be one that `create_libvirt.yml` defines or libvirt adds to a running domain (the
+   controllers, `memballoon`, mouse and keyboard `input` without a source, `watchdog`, `panic`, aliases and addresses),
+   and only the `fsd` namespace may appear. That refuses, among others, `hostdev`, `filesystem`, `shmem`, `channel`,
+   `graphics`, `redirdev`, `tpm`, `<os><kernel>`, `<initrd>`, `<cmdline>`, `<loader>`, `<nvram>`, `memoryBacking`,
+   QEMU command-line arguments and a serial log file. Within the allowed elements: the run's labels and marker; every
+   `<source>` is one of the two files of the run's pool directory (the disk and the seed), the run's network or a
+   pseudo terminal; exactly two `file` disks without a backing file and with the plain QEMU driver; exactly one
+   interface, of type `network` on the run's network with the recorded MAC address; a plain memory size; exactly one
+   emulator, `/usr/bin/qemu-system-x86_64` or `/usr/libexec/qemu-kvm`; a serial port and console on a pseudo terminal;
+   audio of type `none`; exactly one random number generator, on `/dev/urandom`; the resource partition `/machine`;
+   and at least one security label, each `type='dynamic'` with `relabel='yes'`, with labels that are neither root nor
+   unconfined (a DAC label of a non-zero user and group, `libvirt-<uuid>` or an `svirt` context). On a host with
+   AppArmor (`/sys/module/apparmor/parameters/enabled` is `Y`, as on the GitHub runners), a dynamic AppArmor label is
+   required. The network may hold only its name, UUID, labels, bridge, MAC address, DNS switched off and one IPv4
+   address, without `<forward>`, DHCP or a route; the pool only the elements of a directory pool at the run's
+   directory. The effective Ansible configuration has host key checking on, the default `ssh_args`, no extra SSH, SCP
+   or SFTP arguments, the `ssh` executable, the default control path directory and either no control path or
+   Molecule's `%(directory)s/%%h-%%p-%%r`, so no setting can point the connection at another master socket.
 3. Over the real connection: `/sys/class/dmi/id/product_serial` is the marker, `product_uuid` is the UUID of the
    inspected domain, and the boot id and the machine id differ from the controller's, so the connection reaches the
    recorded virtual machine and not the controller itself. The lifecycle repeats this check after every remediate run.
@@ -203,17 +253,27 @@ no XML parser and the scenarios add no collection for it; the simulations below 
 
 ### Simulated bypass attempts
 
-`verify` of every scenario, Docker and libvirt, feeds 60 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
-to the same task files: an accepted virtual machine, with and without a video adapter, and refusals for localhost,
-loopback, another address, a Docker connection, a proxy command, switched-off host key checking in the arguments, a
-variable or the configuration, extra arguments, another executable, port, user, key, a password, another become
-method, a domain of another scenario or run, without labels, with another marker or name, a second, bridged, direct or
-user-mode interface, another network or MAC address, a shared host directory, a passed-through device, shared memory,
-a host socket channel, a graphical console, a TCP serial port, QEMU arguments, a disk from a host file, another run's directory or a pool volume, or
-a host block device, a network with NAT, bridging, DHCP, DNS, a route, another bridge or address, a second address
-family or another run's labels, a pool outside the run's directory or on a block device, and a connection whose boot
-id or machine id is the controller's or whose SMBIOS serial or UUID differs. Each refusal must start with "Refusing to
-run".
+`verify` of every scenario, Docker and libvirt, feeds 99 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
+to the same task files. The simulated domain is the definition of a running scenario domain as libvirt prints it.
+Accepted: that domain, without a video adapter, with a dynamic AppArmor label on an AppArmor host, with a dynamic
+SELinux label, with the RHEL family's emulator and with Molecule's control path. Refused: localhost, loopback, another
+address, a Docker connection, a proxy command, switched-off host key checking in the arguments, a variable or the
+configuration, extra arguments, another executable, port, user, key, a password, another become method, a control
+path or control path directory from a variable or the configuration; a domain of another scenario or run, without
+labels, with another marker or name, a second, bridged, direct or user-mode interface, another network or MAC address,
+a shared host directory, a passed-through device, shared memory, a host socket channel, a graphical console, a TCP
+serial port, QEMU arguments, an element of another namespace, a disk from a host file, another run's directory, a pool
+volume or a host block device; security labels of type `none`, a static DAC label of root, a dynamic label of root by
+number or name, labels without relabelling, no security label, a static or dynamic unconfined AppArmor profile, an
+AppArmor host without an AppArmor label and a disk label that switches relabelling off; NVDIMM memory backed by
+`/etc/shadow`, memory backed by a shared file, direct kernel boot with `init=/bin/sh`, a firmware loader and variables
+from host files, a backing file `/etc/shadow`, another disk driver, an `evdev` input device from `/dev/input/event0`, a
+random number generator on a TCP service (`127.0.0.1:2375`) or on `/dev/random` and a second one, another emulator,
+host audio, a serial log file, a redirected device, a host TPM and another resource partition; a network with NAT,
+bridging, DHCP, DNS, a route, another bridge or address, a second address family, a port group, an unknown element or
+another run's labels; a pool outside the run's directory, on a block device, with a host device as its source or of
+another name; and a connection whose boot id or machine id is the controller's or whose SMBIOS serial or UUID differs.
+Each refusal must start with "Refusing to run".
 
 ### Self-test against real libvirt objects
 
@@ -227,8 +287,9 @@ Molecule as scenario `libvirt-selftest`, with its state in `build/molecule-libvi
    bypass attempt and one extra-variable attempt per variable the libvirt guard relies on (every `guard_*` name in
    `guard.yml`, `tasks/guard.yml` and the `tasks/guard_libvirt_*.yml` files, plus the outside names). It fails when one
    has no attempt. `libvirt_strangers.yml` defines a domain named like this scenario without labels, one with another
-   scenario's labels, a labelled orphan of an unrecorded run, a domain named outside the prefix and an unlabelled
-   network named like this scenario.
+   scenario's labels, a labelled orphan of an unrecorded run, a domain named outside the prefix, an unlabelled
+   network named like this scenario and a pool named like this scenario whose directory is outside
+   `/var/lib/libvirt/freesecdev-molecule`.
 3. The guard accepts the real probe over SSH and refuses every attempt with "Refusing to run": the decoys with "is not
    isolated", `ANSIBLE_HOST_KEY_CHECKING=False` likewise, and every extra variable as "supplied from outside".
 4. `destroy_libvirt.yml` with the recorded run must remove the probe and the decoys and leave the orphan and every
@@ -278,7 +339,7 @@ requires:
   - libvirt
 pre_states:
   - name: customised ownership
-    audit: true
+    audit: false
     requires:
       - libvirt
     files:
@@ -287,40 +348,61 @@ pre_states:
         group: adm
 ```
 
-The drivers are the prefixes of the scenario directories, `docker` and `libvirt`. A topic without `requires` runs in
-every scenario. A topic with `requires` runs only in the scenarios of those drivers and is reported as skipped in the
-others; a pre-state with `requires` likewise. `make lint-lifecycle` refuses an unknown or repeated driver, a pre-state
-that requires a driver that its topic does not, and a declaration that requires a driver for which no scenario runs
-every platform that the topic does not list under `unselected_platforms`, so a topic that requires libvirt must run in
-a libvirt scenario on each of its platforms. A unit test checks that CI runs every scenario of each driver.
+The drivers are the prefixes of the scenario directories, `docker` and `libvirt`. Each cycle runs with one set of
+drivers: a pre-state runs with the drivers it `requires`, else with those its topic `requires`, else in the Docker
+scenarios only. A topic with `requires: [libvirt]` therefore runs every cycle in the libvirt scenarios, and a topic
+without `requires` runs its plain pre-states in Docker and only its libvirt pre-states in the virtual machines. The
+harness skips the topic, including its whole-instance records, on a driver that runs none of its cycles.
+`make lint-lifecycle` refuses an unknown or repeated driver, a pre-state that requires a driver that its topic does
+not, and a declaration with a cycle whose driver has no lifecycle scenario (one whose `side_effect` is the harness) on
+every platform that the topic does not list under `unselected_platforms`, so every declared cycle is exercised by some
+driver. `make molecule-matrix` plans the CI legs from the same map, so every such cycle also runs in a leg that gates
+merges.
 
 The `file_permissions` declaration has the pre-state above. It changes the owner and group of `/etc/crontab`, which a
 container without `CAP_CHOWN` cannot do, and proves that the remediation sets only the mode, that cleanup restores the
 recorded mode without touching the ownership, and that the harness gives the file back its original owner and group.
-Each libvirt scenario therefore runs six cycles (topic and rule toggle from the as-built state, a customised mode and a
-customised ownership), the Docker scenarios four.
+The Docker scenarios run its other four cycles (topic and rule toggle from the as-built state and a customised mode),
+each libvirt lifecycle scenario the two ownership cycles, one per CI leg (`file_permissions` with `topic` and with
+`rule`). The ownership pre-state runs no scan: no assertion
+about it needs one, and the real scans of `converge` already show the outcome on the machine.
+
+Running every cycle on the virtual machines as well would repeat what the Docker scenarios prove: the mode change, its
+cleanup and the whole-instance comparison do not depend on the kernel, so the extra hour per platform would add no
+evidence. A cycle that does depend on the machine declares `requires: [libvirt]` and runs there.
 
 ## CI
 
-The `molecule-libvirt` job of `.github/workflows/ci.yml` runs on the GitHub-hosted `ubuntu-24.04` runners, one matrix
-entry per scenario plus `libvirt-selftest`, and is part of `ci-gate`. It:
+The `molecule-libvirt` job of `.github/workflows/ci.yml` runs on the GitHub-hosted `ubuntu-24.04` runners and is part
+of `ci-gate`, which the merge queue requires within its 30-minute check timeout. Its matrix comes from the
+`molecule-plan` job, which runs `make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt`
+(`tools/roles/molecule_matrix.py`) and is part of `ci-gate` too. The plan holds, per platform, the base leg
+(`libvirt-<platform>`), one lifecycle leg (`libvirt-<platform>-lifecycle` with `MOLECULE_LIFECYCLE_TOPIC` and
+`MOLECULE_LIFECYCLE_MODE`) per native topic with a cycle that requires libvirt on that platform and per toggle mode,
+and the `libvirt-selftest` leg. A new topic or pre-state that requires libvirt therefore gets its legs without a change
+to the workflow, and each leg holds one machine, one topic and one mode. Each leg:
 
 1. fails with an error annotation when `/dev/kvm` is missing, and prints it otherwise;
 2. installs the udev rule that GitHub documents for hosted runners
-   (`KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"`) and reloads it;
+   (`KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"`) and waits for udev;
 3. installs exact versions of `qemu-system-x86`, `qemu-utils`, `libvirt-daemon-system`, `libvirt-dev` and
    `pkg-config` from a fixed Ubuntu archive snapshot (`apt-get --snapshot`), checks the installed versions and adds the
    runner user to the `libvirt` group;
-4. restores `build/molecule-libvirt/cache` keyed by the platform and the SHA-256 of the pins file, except in a pull
-   request from a fork, as for the SCC download; the fetch script
-   checks every restored file again;
-5. runs the make target under `sg libvirt`, because the group membership is new, with a timeout of 240 minutes, and
-   prints the libvirt objects afterwards.
+4. restores `build/molecule-libvirt/cache`, which holds the cloud image and the pinned packages of the platform, keyed
+   by the platform and the SHA-256 of the pins file (so every pinned digest), except in a pull request from a fork, as
+   for the SCC download; the fetch script checks the SHA-256 of every restored file again and downloads only what is
+   missing or wrong;
+5. runs the make target under `sg libvirt`, because the group membership is new, and prints the libvirt objects
+   afterwards. The job's timeout is about one and a half times the slowest observed leg.
 
 If a hosted runner does not expose `/dev/kvm`, the job fails at its first step and says so; it does not fall back to
 emulation, and `ci-gate` fails with it. The fallback is a self-hosted or larger runner with KVM, or a developer host
 with KVM that runs `make test-molecule-libvirt` and records the result on the Jira issue; the scenarios must not be
 reported as passing otherwise.
+
+### Durations
+
+DURATIONS_TABLE
 
 ## Troubleshooting
 

@@ -33,7 +33,8 @@
           - selftest_left_domains | sort == selftest_expected_domains | sort
           - selftest_networks.list_nets | select('match', '^fsd-mol-' ~ selftest_scenario ~ '-') | list
             == [selftest_stranger_network]
-          - selftest_pools.list_pools | select('match', '^fsd-mol-' ~ selftest_scenario ~ '-') | list == []
+          - selftest_pools.list_pools | select('match', '^fsd-mol-' ~ selftest_scenario ~ '-') | list
+            == [selftest_stranger_pool]
           - selftest_instance_config == []
         fail_msg: >-
           destroy left the domains {{ selftest_left_domains }} (expected {{ selftest_expected_domains }}), the

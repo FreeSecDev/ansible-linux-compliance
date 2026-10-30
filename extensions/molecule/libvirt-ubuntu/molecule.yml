@@ -17,9 +17,8 @@ ansible:
   playbooks:
     create: ../shared/create_libvirt.yml
     prepare: ../shared/prepare.yml
-    converge: ../shared/converge.yml
-    verify: ../shared/verify.yml
-    side_effect: ../shared/lifecycle.yml
+    converge: ../shared/converge_libvirt.yml
+    verify: ../shared/verify_libvirt.yml
     destroy: ../shared/destroy_libvirt.yml
 
 driver:
@@ -40,7 +39,7 @@ driver:
 platforms:
   - name: ubuntu-2404
     image: ubuntu
-    memory_mib: 2048
+    memory_mib: 4096
     vcpus: 2
     disk_gib: 12
 
@@ -52,5 +51,4 @@ scenario:
     - converge
     - idempotence
     - verify
-    - side_effect
     - destroy

@@ -102,8 +102,29 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: Libvirt remove | Delete the ephemeral keys and known hosts of the scenario
+- name: Libvirt remove | Inspect the ephemeral directory and its key directory without following links
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: false
+  loop:
+    - "{{ libvirt_remove_ephemeral }}"
+    - "{{ libvirt_remove_ephemeral }}/libvirt"
+  register: libvirt_remove_key_dirs
+  when: libvirt_remove_ephemeral_ok | bool
+  vars:
+    libvirt_remove_ephemeral: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    libvirt_remove_ephemeral_ok: >-
+      {{ libvirt_remove_ephemeral is match('^/([^/]+/)*[^/]*' ~ libvirt_remove_scenario | regex_escape ~ '$')
+      and libvirt_remove_ephemeral is not search('(^|/)\.\.?(/|$)') }}
+
+- name: Libvirt remove | Delete the ephemeral keys and known hosts only from the run's own real directory
   ansible.builtin.file:
-    path: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/libvirt"
+    path: "{{ libvirt_remove_key_dirs.results[1].stat.path }}"
     state: absent
-  when: lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') is match('^/.+')
+  when:
+    - libvirt_remove_key_dirs.results is defined
+    - libvirt_remove_key_dirs.results | map(attribute='stat') | selectattr('exists') | list | length == 2
+    - libvirt_remove_key_dirs.results | map(attribute='stat') | selectattr('isdir') | list | length == 2
+    - libvirt_remove_key_dirs.results | map(attribute='stat') | selectattr('islnk') | list | length == 0
+    - libvirt_remove_key_dirs.results[0].stat.uid == libvirt_remove_key_dirs.results[1].stat.uid

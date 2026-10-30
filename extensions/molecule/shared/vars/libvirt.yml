@@ -21,6 +21,13 @@ molecule_libvirt_bounds:
     maximum: 16
     default: 12
 molecule_libvirt_boot_timeout: 900
+molecule_libvirt_reference_outcomes:
+  ubuntu:
+    before: fail
+    after: pass
+  rhel_compatible:
+    before: notapplicable
+    after: notapplicable
 molecule_libvirt_rpm_keys:
   rhel_compatible:
     path: /etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9

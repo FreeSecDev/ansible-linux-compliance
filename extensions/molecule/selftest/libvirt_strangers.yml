@@ -26,3 +26,12 @@
         xml: >-
           <network><name>{{ selftest_stranger_network }}</name>
           <bridge name='fsdx{{ selftest_stranger_run }}'/></network>
+
+    - name: Define, but never build or start, a pool named like one of this scenario outside the pool directory
+      community.libvirt.virt_pool:
+        uri: qemu:///system
+        command: define
+        name: "{{ selftest_stranger_pool }}"
+        xml: >-
+          <pool type='dir'><name>{{ selftest_stranger_pool }}</name><target><path>{{
+          selftest_stranger_pool_path }}</path></target></pool>

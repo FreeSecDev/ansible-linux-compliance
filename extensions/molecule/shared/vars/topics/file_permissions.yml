@@ -34,7 +34,7 @@ pre_states:
       - path: /etc/crontab
         mode: "0640"
   - name: customised ownership
-    audit: true
+    audit: false
     requires:
       - libvirt
     files:

@@ -13,7 +13,7 @@
       {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MOLECULE_INSTANCE_CONFIG'))
       | from_yaml | default([], true) }}
     guard_connection_variable_pattern: >-
-      ^(ansible_(host|connection|port|user|private_key_file|password|host_key_checking|ssh_.*|scp_.*|sftp_.*|docker_.*|become_.+)|docker_.*)$
+      ^(ansible_(host|connection|port|user|private_key_file|password|host_key_checking|control_path(_dir)?|ssh_.*|scp_.*|sftp_.*|docker_.*|become_.+)|docker_.*)$
     guard_marker_variable: FREESECDEV_MOLECULE_MARKER
   tasks:
     - name: Refuse guard variables that were supplied from outside the guard
@@ -138,6 +138,9 @@
             guard_pool_xml: "{{ guard_pool.get_xml | default('') }}"
             guard_metadata_namespace: "{{ molecule_libvirt_metadata_namespace }}"
             guard_pool_parent: "{{ molecule_libvirt_pool_parent }}"
+            guard_host_apparmor: >-
+              {{ lookup('ansible.builtin.fileglob', '/sys/module/apparmor/parameters/enabled', wantlist=True)
+              | length > 0 and lookup('ansible.builtin.file', '/sys/module/apparmor/parameters/enabled') == 'Y' }}
             guard_ssh_settings:
               host_key_checking: "{{ lookup('ansible.builtin.config', 'HOST_KEY_CHECKING') }}"
               plugin_host_key_checking: >-
@@ -152,6 +155,10 @@
                 {{ lookup('ansible.builtin.config', 'sftp_extra_args', plugin_type='connection', plugin_name='ssh') }}
               ssh_executable: >-
                 {{ lookup('ansible.builtin.config', 'ssh_executable', plugin_type='connection', plugin_name='ssh') }}
+              control_path: >-
+                {{ lookup('ansible.builtin.config', 'control_path', plugin_type='connection', plugin_name='ssh') }}
+              control_path_dir: >-
+                {{ lookup('ansible.builtin.config', 'control_path_dir', plugin_type='connection', plugin_name='ssh') }}
 
         - name: Remember the UUID of the inspected virtual machine
           ansible.builtin.set_fact:

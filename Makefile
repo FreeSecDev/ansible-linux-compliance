@@ -16,6 +16,10 @@ ANSIBLE_COLLECTIONS_PATH ?= $(CURDIR)/build/collections
 ANSIBLE_TEST_HOME ?= $(CURDIR)/build/ansible-test-home
 export ANSIBLE_HOME ANSIBLE_COLLECTIONS_PATH
 MOLECULE_DOCKER_SCENARIOS := docker-ubuntu docker-rhel-compatible
+MOLECULE_LIFECYCLE_TOPIC ?=
+MOLECULE_LIFECYCLE_MODE ?=
+export MOLECULE_LIFECYCLE_TOPIC MOLECULE_LIFECYCLE_MODE
+MOLECULE_MATRIX_DRIVER ?= docker
 MOLECULE_DOCKER_SELFTEST ?= true
 MOLECULE_SELFTEST_DIR := $(CURDIR)/build/molecule-selftest
 MOLECULE_SELFTEST_CONFIG := $(MOLECULE_SELFTEST_DIR)/instance_config.yml
@@ -25,7 +29,7 @@ MOLECULE_SELFTEST = MOLECULE_INSTANCE_CONFIG='$(MOLECULE_SELFTEST_CONFIG)' $(MOL
 	-e molecule_instance_config='$(MOLECULE_SELFTEST_CONFIG)'
 MOLECULE_SELFTEST_REFUSED := docker_host extra_args privileged local localhost loopback unknown mounted unmasked seccomp
 RUN_LIBVIRT := uv run --frozen --group libvirt
-MOLECULE_LIBVIRT_SCENARIOS := libvirt-ubuntu libvirt-rhel-compatible
+MOLECULE_LIBVIRT_SCENARIOS := libvirt-ubuntu libvirt-rhel-compatible libvirt-ubuntu-lifecycle libvirt-rhel-compatible-lifecycle
 MOLECULE_LIBVIRT_PLATFORMS ?= ubuntu rhel_compatible
 MOLECULE_LIBVIRT_SELFTEST ?= true
 MOLECULE_LIBVIRT_PINS := extensions/molecule/shared/images/cloud-images.pins
@@ -33,7 +37,7 @@ MOLECULE_LIBVIRT_CACHE := $(CURDIR)/build/molecule-libvirt/cache
 MOLECULE_LIBVIRT_SELFTEST_DIR := $(CURDIR)/build/molecule-libvirt-selftest
 MOLECULE_LIBVIRT_SELFTEST_CONFIG := $(MOLECULE_LIBVIRT_SELFTEST_DIR)/instance_config.yml
 MOLECULE_LIBVIRT_SELFTEST_PLAYBOOK = MOLECULE_SCENARIO_NAME=libvirt-selftest \
-	MOLECULE_EPHEMERAL_DIRECTORY='$(MOLECULE_LIBVIRT_SELFTEST_DIR)/ephemeral' $(RUN_LIBVIRT) ansible-playbook \
+	MOLECULE_EPHEMERAL_DIRECTORY='$(MOLECULE_LIBVIRT_SELFTEST_DIR)/ephemeral/libvirt-selftest' $(RUN_LIBVIRT) ansible-playbook \
 	-e molecule_no_log=false -e molecule_selftest_dir='$(MOLECULE_LIBVIRT_SELFTEST_DIR)' \
 	-e @extensions/molecule/selftest/vars/libvirt_platforms.yml
 MOLECULE_LIBVIRT_SELFTEST_RUN = MOLECULE_INSTANCE_CONFIG='$(MOLECULE_LIBVIRT_SELFTEST_CONFIG)' \
@@ -274,6 +278,7 @@ Tests
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
   test-molecule-docker-selftest Guard bypass attempts and the destroy fallback against real containers
+  molecule-matrix       Print the CI matrix of the toggle lifecycle legs of MOLECULE_MATRIX_DRIVER (docker or libvirt)
   test-molecule-libvirt Molecule libvirt scenarios on KVM virtual machines and their self-test (requires KVM and libvirt)
   test-molecule-libvirt-selftest Guard bypass attempts, decoys, strangers and the destroy fallback against real libvirt objects
   molecule-libvirt-images Fetch the pinned cloud images and packages and check the vendors' signed checksum files
@@ -316,7 +321,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
-	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
@@ -379,6 +384,9 @@ lint-role-guards: require-uv collection-link
 
 lint-lifecycle: require-uv collection-link
 	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.check_lifecycle_topics
+
+molecule-matrix: require-uv collection-link
+	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix --driver '$(MOLECULE_MATRIX_DRIVER)'
 
 lock-check: require-uv
 	uv lock --check
@@ -831,7 +839,7 @@ test-molecule-libvirt: require-uv molecule-dependencies molecule-content molecul
 
 test-molecule-libvirt-selftest: require-uv molecule-dependencies molecule-libvirt-images molecule-libvirt-preflight
 	rm -rf '$(MOLECULE_LIBVIRT_SELFTEST_DIR)'
-	mkdir -p '$(MOLECULE_LIBVIRT_SELFTEST_DIR)/host-directory' '$(MOLECULE_LIBVIRT_SELFTEST_DIR)/ephemeral'
+	mkdir -p '$(MOLECULE_LIBVIRT_SELFTEST_DIR)/host-directory' '$(MOLECULE_LIBVIRT_SELFTEST_DIR)/ephemeral/libvirt-selftest'
 	status=0; dir='$(MOLECULE_LIBVIRT_SELFTEST_DIR)'; \
 	$(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/shared/create_libvirt.yml || status=1; \
 	if [ $$status -eq 0 ]; then $(MOLECULE_LIBVIRT_SELFTEST_RUN) extensions/molecule/shared/create_libvirt.yml || status=1; fi; \

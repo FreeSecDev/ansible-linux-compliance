@@ -149,6 +149,7 @@
       guard_pool_xml: ""
       guard_metadata_namespace: ""
       guard_pool_parent: /
+      guard_host_apparmor: false
       guard_ssh_settings:
         host_key_checking: true
       molecule_target: "{{ selftest_probe }}"

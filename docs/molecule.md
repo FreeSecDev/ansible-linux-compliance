@@ -496,14 +496,16 @@ pre_states:
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
-| `requires` | no | The drivers whose scenarios run the topic, `docker` or `libvirt`; without it, every scenario runs it ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
+| `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
 with services fails there with a clear message. A topic whose remediation must write kernel parameters, mounts or
 the boot loader cannot apply them in these containers either (see below); its declaration names
-`requires: [libvirt]`, so its lifecycle runs in the [libvirt scenarios](molecule-libvirt.md) only, and
-`make lint-lifecycle` requires that a libvirt scenario runs each of its platforms. The `file_permissions` declaration
-has one pre-state that requires libvirt: an ownership change, which a container without `CAP_CHOWN` cannot make.
+`requires: [libvirt]`, so its lifecycle runs in the [libvirt lifecycle scenarios](molecule-libvirt.md) only, and
+`make lint-lifecycle` requires that a libvirt lifecycle scenario runs each of its platforms. A pre-state runs with the
+drivers it requires, else with those of its topic, else in Docker only, so the virtual machines run only what a
+container cannot prove. The `file_permissions` declaration has one pre-state that requires libvirt: an ownership
+change, which a container without `CAP_CHOWN` cannot make.
 
 ### The coverage gate
 

@@ -309,22 +309,42 @@ jobs:
         if: matrix.scenario == 'docker-selftest'
         run: make test-molecule-docker-selftest
 
-  molecule-libvirt:
-    name: molecule-libvirt (${{ matrix.scenario }})
+  molecule-plan:
+    name: molecule-plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      libvirt: ${{ steps.plan.outputs.libvirt }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Plan the libvirt base, lifecycle and self-test legs
+        id: plan
+        run: |
+          libvirt="$(make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt)"
+          printf 'libvirt=%s\n' "$libvirt" >> "$GITHUB_OUTPUT"
+
+  molecule-libvirt:
+    name: >-
+      molecule-libvirt (${{ matrix.scenario }}${{ matrix.topic && format(', {0}, {1}', matrix.topic, matrix.mode)
+      || '' }})
+    needs: molecule-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     permissions:
       contents: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - scenario: libvirt-ubuntu
-            platform: ubuntu
-          - scenario: libvirt-rhel-compatible
-            platform: rhel_compatible
-          - scenario: libvirt-selftest
-            platform: ubuntu
+      matrix: ${{ fromJSON(needs.molecule-plan.outputs.libvirt) }}
     env:
       UBUNTU_SNAPSHOT: 20261027T000000Z
       QEMU_VERSION: 1:8.2.2+ds-0ubuntu1.18
@@ -381,6 +401,8 @@ jobs:
         env:
           MOLECULE_SCENARIO: ${{ matrix.scenario }}
           MOLECULE_PLATFORM: ${{ matrix.platform }}
+          MOLECULE_LIFECYCLE_TOPIC: ${{ matrix.topic }}
+          MOLECULE_LIFECYCLE_MODE: ${{ matrix.mode }}
         run: >-
           sg libvirt -c "make test-molecule-libvirt MOLECULE_LIBVIRT_SCENARIOS=$MOLECULE_SCENARIO
           MOLECULE_LIBVIRT_PLATFORMS=$MOLECULE_PLATFORM MOLECULE_LIBVIRT_SELFTEST=false"
@@ -413,6 +435,7 @@ jobs:
       - collection
       - iac
       - molecule-docker
+      - molecule-plan
       - molecule-libvirt
     runs-on: ubuntu-24.04
     timeout-minutes: 5
