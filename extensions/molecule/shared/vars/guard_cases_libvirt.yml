@@ -1,4 +1,5 @@
 ---
+guard_libvirt_sim_pool_path: /var/lib/libvirt/freesecdev-molecule/fsd-mol-libvirt-sim-abcd1234
 guard_libvirt_simulation:
   scenario: libvirt-sim
   instances:
@@ -67,11 +68,11 @@ guard_libvirt_simulation:
         </system>
       </sysinfo>
       <devices>
-        <disk type='volume' device='disk'>
-          <source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2' index='2'/>
+        <disk type='file' device='disk'>
+          <source file='{{ guard_libvirt_sim_pool_path }}/fsd-mol-libvirt-sim-abcd1234-probe.qcow2' index='2'/>
         </disk>
-        <disk type='volume' device='cdrom'>
-          <source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-probe-seed.iso' index='1'/>
+        <disk type='file' device='cdrom'>
+          <source file='{{ guard_libvirt_sim_pool_path }}/fsd-mol-libvirt-sim-abcd1234-probe-seed.iso' index='1'/>
           <readonly/>
         </disk>
         <interface type='network'>
@@ -273,16 +274,17 @@ guard_libvirt_cases:
     refused: true
   - name: disk from a host file outside the run's pool
     domain_edits:
-      - ["<disk type='volume' device='disk'>", "<disk type='file' device='disk'>"]
-      - - >-
-          <source pool='fsd-mol-libvirt-sim-abcd1234'
-          volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2' index='2'/>
-        - "<source file='/var/lib/libvirt/images/adlab-ubuntu.qcow2'/>"
+      - - "fsd-mol-libvirt-sim-abcd1234/fsd-mol-libvirt-sim-abcd1234-probe.qcow2"
+        - "../images/adlab-ubuntu.qcow2"
     refused: true
-  - name: disk from another pool
+  - name: disk of another run's directory
     domain_edits:
-      - - "<source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2'"
-        - "<source pool='default' volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2'"
+      - - "fsd-mol-libvirt-sim-abcd1234/fsd-mol-libvirt-sim-abcd1234-probe.qcow2"
+        - "fsd-mol-libvirt-sim-zzzz9999/fsd-mol-libvirt-sim-abcd1234-probe.qcow2"
+    refused: true
+  - name: disk from a storage pool volume
+    domain_edits:
+      - ["<disk type='file' device='disk'>", "<disk type='volume' device='disk'>"]
     refused: true
   - name: third disk with a host block device
     domain_edits:

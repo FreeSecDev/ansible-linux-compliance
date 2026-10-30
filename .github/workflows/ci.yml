@@ -349,6 +349,7 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle --timeout=30
           test -r /dev/kvm && test -w /dev/kvm
       - name: Install the pinned QEMU and libvirt from a fixed Ubuntu archive snapshot
         run: |
@@ -389,6 +390,10 @@ jobs:
       - name: Show what libvirt holds after the run
         if: always()
         run: |
+          if ! command -v virsh >/dev/null; then
+            echo 'libvirt was not installed'
+            exit 0
+          fi
           sudo virsh -c qemu:///system list --all
           sudo virsh -c qemu:///system net-list --all
           sudo virsh -c qemu:///system pool-list --all

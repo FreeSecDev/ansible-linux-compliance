@@ -80,14 +80,14 @@ molecule_libvirt_domain_xml: |
     <on_reboot>restart</on_reboot>
     <on_crash>destroy</on_crash>
     <devices>
-      <disk type='volume' device='disk'>
+      <disk type='file' device='disk'>
         <driver name='qemu' type='qcow2'/>
-        <source pool='{{ libvirt_domain.pool }}' volume='{{ libvirt_domain.disk }}'/>
+        <source file='{{ libvirt_domain.pool_path }}/{{ libvirt_domain.disk }}'/>
         <target dev='vda' bus='virtio'/>
       </disk>
-      <disk type='volume' device='cdrom'>
+      <disk type='file' device='cdrom'>
         <driver name='qemu' type='raw'/>
-        <source pool='{{ libvirt_domain.pool }}' volume='{{ libvirt_domain.seed }}'/>
+        <source file='{{ libvirt_domain.pool_path }}/{{ libvirt_domain.seed }}'/>
         <target dev='sda' bus='sata'/>
         <readonly/>
       </disk>

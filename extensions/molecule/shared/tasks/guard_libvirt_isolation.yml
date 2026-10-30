@@ -13,7 +13,7 @@
       - guard_domain_xml is search("<mac address='" ~ guard_instance.mac | regex_escape ~ "'/>")
       - guard_domain_xml is search("<source network='" ~ guard_instance.network | regex_escape ~ "'[ />]")
       - guard_domain_xml | regex_findall('<disk ') | length == 2
-      - guard_domain_xml | regex_findall("<disk type='volume' ") | length == 2
+      - guard_domain_xml | regex_findall("<disk type='file' ") | length == 2
       - guard_domain_xml | regex_findall(guard_disk_source) | length == 2
       - guard_domain_xml is not search(guard_forbidden_devices)
       - guard_network_xml is search('<name>' ~ guard_instance.network | regex_escape ~ '</name>')
@@ -53,7 +53,7 @@
       guard_instance.scenario | regex_escape }}</fsd:scenario>\s*<fsd:run>{{
       guard_instance.run_id | regex_escape }}</fsd:run>
     guard_disk_source: >-
-      <source pool='{{ guard_instance.pool | regex_escape }}' volume='({{ guard_instance.disk | regex_escape }}|{{
+      <source file='{{ guard_instance.pool_path | regex_escape }}/({{ guard_instance.disk | regex_escape }}|{{
       guard_instance.seed | regex_escape }})'
     guard_forbidden_device_alternatives:
       - <(hostdev|filesystem|shmem|redirdev|smartcard|channel|graphics|vsock|iommu|parallel|hub|lease|sound|tpm)[ >/]

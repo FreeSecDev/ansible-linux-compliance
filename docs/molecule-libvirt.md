@@ -132,10 +132,12 @@ back from inside the virtual machine.
    disk to its `disk_gib` and creates the cloud-init seed (`community.libvirt.virt_volume` `create_cidata_cdrom`). The
    seed authorises the client key for root only, installs the host key, sets no password, creates no other user, and
    gives the interface a static address.
-4. Defines the domain (q35, BIOS, host CPU, the disk and the seed from the pool, one virtio interface on the run's
+4. Defines the domain (q35, BIOS, host CPU, the disk and the seed as files of the pool directory, one virtio interface on the run's
    network, a serial console on a pseudo terminal, a VGA adapter without any graphical console, a virtio random number
    generator) and boots it, then waits up to 15 minutes for SSH. The Rocky image does not boot without a video
-   adapter; a VGA adapter has no channel to the host.
+   adapter; a VGA adapter has no channel to the host. The disks are `type='file'` with their path in the pool
+   directory, not `type='volume'`, because the AppArmor helper of libvirt on Ubuntu (`virt-aa-helper`) does not
+   resolve pool volumes, so QEMU is denied a volume disk on a host with AppArmor, such as the GitHub runners.
 5. If any step fails, removes everything of the run and fails.
 
 `destroy_libvirt.yml` lists the domains, networks and pools whose names match this scenario's pattern, reads each
@@ -174,7 +176,7 @@ variables. Then, for a libvirt target:
    options above with the run's `known_hosts`; no `ansible_ssh_*` other than the common arguments, `ansible_scp_*`,
    `ansible_sftp_*`, `ansible_password`, `ansible_host_key_checking`, `ansible_become_*` or Docker variable is set.
 2. From the controller, through `community.libvirt` with the literal URI `qemu:///system`: the domain carries the run's
-   labels and marker, has exactly two disks, both volumes of the run's pool (the disk and the seed), exactly one
+   labels and marker, has exactly two disks, both files in the run's pool directory (the disk and the seed), exactly one
    interface, of type `network` on the run's network with the recorded MAC address, and none of `hostdev`,
    `filesystem`, `shmem`, `redirdev`, `smartcard`, `channel`, `graphics`, `vsock`, `iommu`, `parallel`, `hub`,
    `lease`, `sound`, `tpm`, a serial port or console other than a pseudo terminal, or QEMU command-line arguments. The
@@ -191,13 +193,13 @@ no XML parser and the scenarios add no collection for it; the simulations below 
 
 ### Simulated bypass attempts
 
-`verify` of every scenario, Docker and libvirt, feeds 59 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
+`verify` of every scenario, Docker and libvirt, feeds 60 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
 to the same task files: an accepted virtual machine, with and without a video adapter, and refusals for localhost,
 loopback, another address, a Docker connection, a proxy command, switched-off host key checking in the arguments, a
 variable or the configuration, extra arguments, another executable, port, user, key, a password, another become
 method, a domain of another scenario or run, without labels, with another marker or name, a second, bridged, direct or
 user-mode interface, another network or MAC address, a shared host directory, a passed-through device, shared memory,
-a host socket channel, a graphical console, a TCP serial port, QEMU arguments, a disk from a host file, another pool or
+a host socket channel, a graphical console, a TCP serial port, QEMU arguments, a disk from a host file, another run's directory or a pool volume, or
 a host block device, a network with NAT, bridging, DHCP, DNS, a route, another bridge or address, a second address
 family or another run's labels, a pool outside the run's directory or on a block device, and a connection whose boot
 id or machine id is the controller's or whose SMBIOS serial or UUID differs. Each refusal must start with "Refusing to

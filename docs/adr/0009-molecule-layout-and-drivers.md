@@ -76,6 +76,8 @@ which build on these. These refinements apply.
   `known_hosts` and `StrictHostKeyChecking=yes`. Simulated cases run in every scenario's `verify`, and
   `make test-molecule-libvirt-selftest` tests decoys, extra variables, strangers and the destroy fallback against real
   libvirt objects.
+- **File disks.** The disks are files in the run's pool directory (`type='file'`), because `virt-aa-helper`, which writes
+  the AppArmor profile of a domain on Ubuntu, does not resolve pool volumes.
 - **A video adapter.** The Rocky Linux 9 cloud image does not boot without one, so every domain has a VGA adapter. It
   has no graphical console (`<graphics>` is refused), so it opens no channel to the host.
 - **CI.** The `molecule-libvirt` job runs every libvirt scenario and the self-test on GitHub-hosted `ubuntu-24.04`
