@@ -4,3 +4,6 @@ trivial:
     CI: the molecule-docker job timeout is 18 minutes instead of 8, the same as molecule-lifecycle. Over the 15 latest
     runs 7 of 42 molecule-docker jobs were cancelled at the old limit, and building the Rocky Linux instance image alone
     once took 9 minutes on a slow package mirror.
+  - >-
+    CI: tools/iac/install-tofu.sh reads the first line of tofu version without a pipe into head, which under pipefail
+    could fail the iac job with exit code 141 (SIGPIPE) when tofu wrote after head had exited.
