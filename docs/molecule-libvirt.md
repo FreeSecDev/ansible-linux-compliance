@@ -238,11 +238,14 @@ variables. Then, for a libvirt target:
    audio of type `none`; exactly one random number generator, on `/dev/urandom`; the resource partition `/machine`;
    exactly one `<sysinfo type='smbios'>` with only the manufacturer, product and serial entries, `<smbios
    mode='sysinfo'/>`, no `file` attribute outside a disk source, and a watchdog only with the action `reset`,
-   `poweroff` or `none`;
+   `poweroff` or `none`, the lifecycle actions `destroy` on power off, `restart` on reboot and `destroy` or `restart`
+   on a crash (never `coredump-*`, which makes libvirt write guest memory to the host), and an interface target
+   `vnet<N>` without `managed`;
    and at least one security label, each `type='dynamic'` with `relabel='yes'`, with labels that are neither root nor
    unconfined (a DAC label of a non-zero user and group, `libvirt-<uuid>` or an `svirt` context). On a host with
    AppArmor (`/sys/module/apparmor/parameters/enabled` is `Y`, as on the GitHub runners), a dynamic AppArmor label is
-   required. The network may hold only its name, UUID, labels, bridge, MAC address, DNS switched off and one IPv4
+   required. The network may hold only its name, UUID, labels, the bridge (name, `stp` and `delay` only, no `zone`), MAC
+   address, DNS switched off and one IPv4
    address, without `<forward>`, DHCP, a route or `ipv6='yes'`; the pool only the elements of a directory pool at
    the run's directory, with mode `0711` and owned by the user that owns the run's key. The effective Ansible configuration has host key checking on, the default `ssh_args`, no extra SSH, SCP
    or SFTP arguments, the `ssh` executable, the default control path directory and either no control path or
@@ -256,10 +259,10 @@ no XML parser and the scenarios add no collection for it; the simulations below 
 
 ### Simulated bypass attempts
 
-`verify` of every scenario, Docker and libvirt, feeds 111 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
+`verify` of every scenario, Docker and libvirt, feeds 124 simulated libvirt cases (`shared/vars/guard_cases_libvirt.yml`)
 to the same task files. The simulated domain is the definition of a running scenario domain as libvirt prints it.
 Accepted: that domain, without a video adapter, with a dynamic AppArmor label on an AppArmor host, with a dynamic
-SELinux label, with the RHEL family's emulator, with a watchdog that powers off and with Molecule's control path. Refused: localhost, loopback, another
+SELinux label, with the RHEL family's emulator, with a watchdog that powers off, with a restart after a crash, with a bridge that has only its name and with Molecule's control path. Refused: localhost, loopback, another
 address, a Docker connection, a proxy command, switched-off host key checking in the arguments, a variable or the
 configuration, extra arguments, another executable, port, user, key, a password, another become method, a control
 path or control path directory from a variable or the configuration; a domain of another scenario or run, without
@@ -274,8 +277,11 @@ from host files, a backing file `/etc/shadow`, another disk driver, an `evdev` i
 random number generator on a TCP service (`127.0.0.1:2375`) or on `/dev/random` and a second one, another emulator,
 host audio, a serial log file, a redirected device, a host TPM, another resource partition, an fw_cfg `sysinfo`
 with an entry from `/etc/shadow` or an inline value, an SMBIOS entry from a host file or an additional one, the
-host's SMBIOS data and a watchdog that dumps guest memory on the host; a network with NAT,
-bridging, DHCP, DNS, a route, another bridge or address, a second address family, `ipv6='yes'`, a port group, an
+host's SMBIOS data, a watchdog that dumps guest memory on the host, a crash action `coredump-destroy` or
+`coredump-restart`, another power-off or reboot action, a lock failure action and an interface target with
+`managed='no'` or on a host device; a network with NAT,
+bridging, DHCP, DNS, a route, another bridge or address, a bridge in a firewalld zone or with another attribute, an address or network element with
+another attribute, a second address family, `ipv6='yes'`, a port group, an
 unknown element or
 another run's labels; a pool outside the run's directory, on a block device, with a host device as its source, of
 another name, with mode `0777`, owned by another user or without permissions; and a connection whose boot id or machine id is the controller's or whose SMBIOS serial or UUID differs.

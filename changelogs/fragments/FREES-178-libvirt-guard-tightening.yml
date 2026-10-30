@@ -1,0 +1,7 @@
+---
+trivial:
+  - >-
+    Molecule libvirt guard: the domain may crash only to ``destroy`` or ``restart`` (never ``coredump-*``) and has
+    only the power-off, reboot and lock-failure actions of the template; the network bridge, address and network
+    element must match exactly with the listed attributes only (no firewalld ``zone``); the interface target is
+    ``vnet<N>`` without ``managed``. Thirteen simulated cases are added, 124 in total.

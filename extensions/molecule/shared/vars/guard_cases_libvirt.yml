@@ -570,6 +570,58 @@ guard_libvirt_cases:
       - - "<interface type='network'>"
         - "<disk type='block' device='disk'><source dev='/dev/sda'/></disk><interface type='network'>"
     refused: true
+  - name: virtual machine that dumps its memory on the host and destroys itself after a crash
+    domain_edits:
+      - ["<on_crash>destroy</on_crash>", "<on_crash>coredump-destroy</on_crash>"]
+    refused: true
+  - name: virtual machine that dumps its memory on the host and restarts after a crash
+    domain_edits:
+      - ["<on_crash>destroy</on_crash>", "<on_crash>coredump-restart</on_crash>"]
+    refused: true
+  - name: virtual machine that restarts after a crash
+    domain_edits:
+      - ["<on_crash>destroy</on_crash>", "<on_crash>restart</on_crash>"]
+    refused: false
+  - name: virtual machine that restarts after a power off
+    domain_edits:
+      - ["<on_poweroff>destroy</on_poweroff>", "<on_poweroff>restart</on_poweroff>"]
+    refused: true
+  - name: virtual machine that is destroyed on a reboot
+    domain_edits:
+      - ["<on_reboot>restart</on_reboot>", "<on_reboot>destroy</on_reboot>"]
+    refused: true
+  - name: virtual machine with a lock failure action
+    domain_edits:
+      - ["<on_crash>", "<on_lockfailure>poweroff</on_lockfailure><on_crash>"]
+    refused: true
+  - name: interface target that libvirt does not manage
+    domain_edits:
+      - ["<target dev='vnet3'/>", "<target dev='vnet3' managed='no'/>"]
+    refused: true
+  - name: interface target on a host device
+    domain_edits:
+      - ["<target dev='vnet3'/>", "<target dev='eth0'/>"]
+    refused: true
+  - name: network bridge in a firewalld zone
+    network_edits:
+      - ["stp='on' delay='0'/>", "stp='on' delay='0' zone='trusted'/>"]
+    refused: true
+  - name: network bridge with an attribute outside the allow-list
+    network_edits:
+      - ["stp='on' delay='0'/>", "stp='on' delay='0' macTableManager='libvirt'/>"]
+    refused: true
+  - name: network bridge with only its name
+    network_edits:
+      - ["<bridge name='fsdmabcd1234' stp='on' delay='0'/>", "<bridge name='fsdmabcd1234'/>"]
+    refused: false
+  - name: network address with an attribute outside the allow-list
+    network_edits:
+      - ["netmask='255.255.255.0'>", "netmask='255.255.255.0' localPtr='yes'>"]
+    refused: true
+  - name: network element with an attribute outside the allow-list
+    network_edits:
+      - ["<network connections='1'>", "<network connections='1' trustGuestRxFilters='yes'>"]
+    refused: true
   - name: network that forwards with NAT
     network_edits:
       - ["<bridge ", "<forward mode='nat'/><bridge "]

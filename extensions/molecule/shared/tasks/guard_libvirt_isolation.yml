@@ -15,6 +15,9 @@
         == ['manufacturer', 'product', 'serial']
       - guard_domain_xml | regex_findall('<smbios[ />][^>]*>') == ["<smbios mode='sysinfo'/>"]
       - guard_domain_xml | regex_findall("<(?!source )[A-Za-z][A-Za-z0-9:_.-]*\\s[^>]*\\bfile=") | length == 0
+      - >-
+        guard_domain_xml | regex_findall('<on_[A-Za-z_]+[^>]*>[^<]*</on_[A-Za-z_]+>')
+        | reject('match', guard_allowed_lifecycle) | list | length == 0
       - guard_domain_xml | regex_findall('<watchdog[ />][^>]*>') | reject('match', guard_allowed_watchdog) | list
         | length == 0
       - guard_domain_xml is not search('xmlns:(?!fsd=)')
@@ -25,6 +28,8 @@
       - guard_domain_xml is search("<interface type='network'>")
       - guard_domain_xml is search("<mac address='" ~ guard_instance.mac | regex_escape ~ "'/>")
       - guard_domain_xml is search("<source network='" ~ guard_instance.network | regex_escape ~ "'[ />]")
+      - guard_domain_xml | regex_findall('<target[ />][^>]*\bmanaged=') | length == 0
+      - guard_domain_interface_targets | reject('match', guard_allowed_vnet_target) | list | length == 0
       - guard_domain_xml | regex_findall('<disk ') | length == 2
       - guard_domain_xml | regex_findall("<disk type='file' device='(disk|cdrom)'>") | length == 2
       - guard_domain_xml | regex_findall(guard_disk_source) | length == 2
@@ -61,12 +66,15 @@
       - guard_network_xml is not search('<forward')
       - guard_network_xml is not search('ipv6=')
       - guard_network_xml is not search('<(dhcp|route|portgroup|virtualport|tftp|bootp)[ >/]')
-      - guard_network_xml is search("<bridge name='" ~ guard_instance.bridge | regex_escape ~ "'")
+      - guard_network_xml | regex_findall('<network[ >/][^>]*>') | reject('match', guard_allowed_network_tag) | list
+        | length == 0
+      - guard_network_xml | regex_findall('<bridge[ >/][^>]*>') | length == 1
+      - >-
+        guard_network_xml | regex_findall('<bridge[ >/][^>]*>') | select('match', guard_allowed_bridge) | list
+        | length == 1
       - guard_network_xml is search("<dns enable='no'/>")
       - guard_network_xml | regex_findall('<ip ') | length == 1
-      - >-
-        guard_network_xml is search("<ip address='" ~ guard_instance.gateway | regex_escape
-        ~ "' netmask='255.255.255.0'")
+      - guard_network_xml | regex_findall('<ip[ >/][^>]*>') | select('match', guard_allowed_ip) | list | length == 1
       - guard_instance.gateway is match('^10\.2[0-4][0-9]\.[0-9]{1,3}\.1$')
       - guard_instance.address | regex_replace('\.[0-9]+$', '.1') == guard_instance.gateway
       - guard_instance.address != guard_instance.gateway
@@ -93,8 +101,10 @@
       only the elements and devices that create_libvirt.yml defines and libvirt adds: this run's labels and marker, the
       recorded disk and seed as files of the run's pool without backing files, one interface on the run's network, a
       pseudo-terminal console, the random number generator on /dev/urandom, the pinned emulator and dynamic security
-      labels with relabelling{{ ' under AppArmor' if guard_host_apparmor | bool else '' }}. The network must have
-      only the recorded bridge and IPv4 address, without forwarding, DHCP or DNS, and the pool its own directory
+      labels with relabelling{{ ' under AppArmor' if guard_host_apparmor | bool else '' }}. The lifecycle actions
+      are destroy on power off, restart on reboot and destroy or restart on a crash, and the interface target has no
+      managed attribute. The network must have only the recorded bridge (name, spanning tree and delay only) and IPv4
+      address, without forwarding, DHCP or DNS, and the pool its own directory
       with mode 0711, owned by the user that owns the run's key. Host key checking must be on, and the SSH
       arguments, executable, control path and copy arguments of the Ansible configuration must be the defaults.
       Elements outside the allow-list: {{ guard_domain_elements | difference(guard_domain_allowed_elements) }}.
@@ -109,6 +119,9 @@
       guard_instance.seed | regex_escape }})'
     guard_domain_elements: "{{ guard_domain_xml | regex_findall('<([A-Za-z][A-Za-z0-9:_.-]*)') | unique }}"
     guard_domain_sources: "{{ guard_domain_xml | regex_findall('<source[ />][^>]*>') }}"
+    guard_domain_interface_targets: >-
+      {{ guard_domain_xml | regex_findall('(?s)<interface .*?</interface>') | join('')
+      | regex_findall('<target[ />][^>]*>') }}
     guard_domain_seclabels: "{{ guard_domain_xml | regex_findall('<seclabel[ >][^>]*>') }}"
     guard_domain_labels: "{{ guard_domain_xml | regex_findall('<(?:label|imagelabel|baselabel)[ >/][^<]*') }}"
     guard_allowed_source_alternatives:
@@ -122,6 +135,14 @@
     guard_allowed_sources: "^({{ guard_allowed_source_alternatives | join('|') }})$"
     guard_allowed_driver: "^<driver name='qemu' type='(qcow2|raw)'/>$"
     guard_allowed_emulator: '^<emulator>(/usr/bin/qemu-system-x86_64|/usr/libexec/qemu-kvm)</emulator>$'
+    guard_allowed_lifecycle: >-
+      ^<(on_poweroff>destroy</on_poweroff|on_reboot>restart</on_reboot|on_crash>(destroy|restart)</on_crash)>$
+    guard_allowed_vnet_target: "^<target dev='vnet[0-9]+'/>$"
+    guard_allowed_network_tag: "^<network( connections='[0-9]+')?>$"
+    guard_allowed_bridge: >-
+      ^<bridge name='{{ guard_instance.bridge | regex_escape }}'( stp='(on|off)')?( delay='[0-9]+')?/>$
+    guard_allowed_ip: >-
+      ^<ip address='{{ guard_instance.gateway | regex_escape }}' netmask='255\.255\.255\.0'/?>$
     guard_allowed_watchdog: "^<watchdog model='[a-z0-9-]+' action='(reset|poweroff|none)'/?>$"
     guard_allowed_input: "^<input type='(mouse|keyboard|tablet)' bus='(ps2|usb|virtio)'/?>$"
     guard_allowed_seclabel: "^<seclabel type='dynamic' model='(dac|apparmor|selinux)' relabel='yes'>$"
