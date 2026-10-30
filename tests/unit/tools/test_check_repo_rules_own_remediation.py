@@ -121,11 +121,15 @@ def test_the_checklist_fix_text_is_the_pinned_exception(tmp_path: Path) -> None:
     assert findings(tmp_path, "tools/reporting/checklist.py", f'TEXT = "{FIX}text"\n') != []
 
 
-def test_a_pinned_exception_that_is_gone_is_reported(tmp_path: Path) -> None:
-    messages = findings(tmp_path, "tools/reporting/stig_content.py", 'TEXT = "title"\n')
-    assert len(messages) == 1
-    assert PIN in messages[0]
-    assert "expected ['fixtext'], found []" in messages[0]
+def test_a_file_without_its_pinned_exception_passes(tmp_path: Path) -> None:
+    assert findings(tmp_path, "tools/reporting/stig_content.py", 'TEXT = "title"\n') == []
+
+
+def test_every_pinned_exception_matches_the_repository_file_exactly() -> None:
+    for (relative, kind), pinned in own.PINNED_EXCEPTIONS.items():
+        data = (rules.REPO_ROOT / relative).read_bytes()
+        found = own._python_findings(relative, data)[kind]
+        assert sorted(text for _, text in found) == sorted(pinned), (relative, kind)
 
 
 def test_the_process_helper_keeps_its_forbidden_words(tmp_path: Path) -> None:
@@ -139,7 +143,8 @@ def test_the_process_helper_keeps_its_forbidden_words(tmp_path: Path) -> None:
     assert_refused(findings(tmp_path, relative, extra), RUNS)
     fewer = f'FORBIDDEN_WORDS = frozenset({{"remediate", "{REMEDIATE_OPTION}"}})\n'
     messages = findings(tmp_path, relative, fewer)
-    assert any(PIN in message for message in messages)
+    assert any(PIN in message and "invocation" in message for message in messages)
+    assert not any(PIN in message and "fix_reader" in message for message in messages)
 
 
 def test_the_grype_fix_object_is_pinned_exactly(tmp_path: Path) -> None:

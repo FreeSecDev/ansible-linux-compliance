@@ -9,10 +9,11 @@ another tool. This rule group makes that decision a check:
   constant that is ``fix`` or ``fixtext`` with an optional namespace, prefix or path (an
   f-string counts with its placeholders), a ``fix`` tag in markup, a ``local-name()`` test for it
   or an XCCDF fix system URN. ``PINNED_EXCEPTIONS`` lists the only constants that may remain,
-  exactly and with their number per file: the STIG checklist export shows ``fixtext`` to the
-  reader (``tools/reporting/stig_content.py``), the process helper refuses the ``generate fix``
-  sequence and the remediation words (``process.py``), and the Grype parser reads the ``fix``
-  object of a Grype vulnerability, which is not XCCDF.
+  exactly and with their number per file (a file that no longer has any of them passes): the
+  STIG checklist export shows ``fixtext`` to the reader (``tools/reporting/stig_content.py``),
+  the process helper refuses the ``generate fix`` sequence and the remediation words
+  (``process.py``), and the Grype parser reads the ``fix`` object of a Grype vulnerability,
+  which is not XCCDF.
 * No file of the repository may be remediation content of ComplianceAsCode or OpenSCAP: a file
   named ``ssg-*``, ``*-playbook-*.yml`` or ``*-script-*.sh`` as the release archive names them,
   ``*-ks.cfg``, a path below ``scap-security-guide*``, a generated Bash fix, a generated
@@ -290,10 +291,14 @@ def _text_findings(relative: Path, data: bytes) -> dict[str, set[tuple[int, str]
 def _pinned(
     path: Path, relative: Path, kind: str, found: set[tuple[int, str]], message: str
 ) -> list[Violation]:
-    """Return the violations of one kind, dropping exactly the pinned exception of the file."""
+    """Return the violations of one kind, dropping exactly the pinned exception of the file.
+
+    A file without any finding passes: dropping an exception only makes the rule stricter, and a
+    unit test keeps the pins equal to the repository's files.
+    """
     pinned = PINNED_EXCEPTIONS.get((relative, kind))
     texts = Counter(text for _, text in found)
-    if pinned is not None and texts == Counter(pinned):
+    if not texts or (pinned is not None and texts == Counter(pinned)):
         return []
     violations = [Violation(path, line, message.format(text=text)) for line, text in found]
     if pinned is not None:
