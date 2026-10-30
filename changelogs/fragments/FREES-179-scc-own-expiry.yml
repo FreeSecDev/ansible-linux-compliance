@@ -5,3 +5,7 @@ trivial:
     debug log, and make scc-own-expiry-check fails when that log does not say "Software expires in N days" exactly
     once, or when the scan's UTC start day (from the log's name) plus N is earlier than SCC_EXPIRES in
     extensions/ci/scc/scc.pins. One day early is accepted, with a warning, for a scan started at or after 12:00 UTC.
+bugfixes:
+  - >-
+    compliance_scan with backend scc - SCC's last-day message "Software expires in 1 day" is now read as one day
+    left, like "Software expires in N days"; before, the backend did not recognise the singular form.
