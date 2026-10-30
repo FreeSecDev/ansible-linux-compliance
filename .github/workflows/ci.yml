@@ -3,7 +3,7 @@ name: ci
 
 on:
   pull_request:
-    branches: [main, 'ci/FREES-189-*']
+    branches: [main]
   push:
     branches: [main]
   merge_group:
