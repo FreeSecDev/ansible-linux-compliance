@@ -15,6 +15,8 @@
     regression_label: ssh regressions
     regression_rule: xccdf_org.ssgproject.content_rule_sshd_set_max_auth_tries
     regression_dropin: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf
+    regression_other: xccdf_org.ssgproject.content_rule_sshd_set_login_grace_time
+    regression_other_dropin: /etc/ssh/sshd_config.d/00-freesecdev-sshd-set-login-grace-time.conf
     regression_directory: /etc/ssh/sshd_config.d
     regression_broken: /etc/ssh/sshd_config.d/99-freesecdev-regression-broken.conf
     regression_marker: /etc/ssh/sshd_config.d/.freesecdev-created
@@ -130,7 +132,7 @@
     follow: false
   register: regression_flip_dropin
 
-- name: SSH regressions | Check that the rule was refused as method_changed and the others applied
+- name: SSH regressions | Check that the rule was refused as method_changed and the other rule applied
   ansible.builtin.assert:
     that:
       - >-
@@ -141,87 +143,24 @@
         | select('search', 'main_file') | list | length == 1
       - lifecycle_results | selectattr('rule_id', 'equalto', regression_rule) | selectattr('changed') | list == []
       - >-
-        lifecycle_results | rejectattr('rule_id', 'equalto', regression_rule) | map(attribute='status') | unique
-        | list == ['applied']
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_other) | map(attribute='status') | list
+        == ['applied']
       - not regression_flip_dropin.stat.exists
     fail_msg: "{{ regression_label }}, apply after a change of method: {{ lifecycle_results }}"
     quiet: true
+
+- name: SSH regressions | Change LoginGraceTime in the drop-in of the other rule by hand, as an administrator would
+  ansible.builtin.lineinfile:
+    path: "{{ regression_other_dropin }}"
+    regexp: "^LoginGraceTime "
+    line: LoginGraceTime 30
 
 - name: SSH regressions | Switch every rule of the topic off
   ansible.builtin.set_fact:
     "{{ item }}": false
   loop: "{{ regression_toggles }}"
 
-- name: SSH regressions | Clean up with the entry of the other method in the ledger
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-
-- name: SSH regressions | Read the ledger after the cleanup with the entry of the other method
-  freesecdev.linux_compliance.control_state:
-    action: list
-  register: regression_ledger_flip
-
-- name: SSH regressions | Check that the entry of the other method was kept and the others restored
-  ansible.builtin.assert:
-    that:
-      - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', regression_rule) | map(attribute='reason') | list
-        == ['method_changed']
-      - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', regression_rule) | map(attribute='status') | list
-        == ['cleanup_incomplete']
-      - lifecycle_results | selectattr('rule_id', 'equalto', regression_rule) | selectattr('changed') | list == []
-      - >-
-        lifecycle_results | rejectattr('rule_id', 'equalto', regression_rule) | map(attribute='status') | unique
-        | list == ['restored']
-      - >-
-        regression_ledger_flip.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | map(attribute='rule_id')
-        | list == [regression_rule]
-    fail_msg: "{{ regression_label }}, cleanup after a change of method: {{ lifecycle_results }}"
-    quiet: true
-
-- name: SSH regressions | Remove the entry of the other method, as an operator would after the review
-  freesecdev.linux_compliance.control_state:
-    action: remove
-    rule_id: "{{ regression_rule }}"
-
-- name: SSH regressions | Switch every rule of the topic on again
-  ansible.builtin.set_fact:
-    "{{ item }}": true
-  loop: "{{ regression_toggles }}"
-
-- name: SSH regressions | Apply the topic
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-
-- name: SSH regressions | Read the drop-in that the collection wrote, to put it back later
-  ansible.builtin.slurp:
-    src: "{{ regression_dropin }}"
-  register: regression_written
-
-- name: SSH regressions | Check that every rule was applied
-  ansible.builtin.assert:
-    that:
-      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
-    fail_msg: "{{ regression_label }}, apply: {{ lifecycle_results }}"
-    quiet: true
-
-- name: SSH regressions | Change MaxAuthTries in the drop-in by hand, as an administrator would
-  ansible.builtin.lineinfile:
-    path: "{{ regression_dropin }}"
-    regexp: "^MaxAuthTries "
-    line: MaxAuthTries 2
-
-- name: SSH regressions | Switch every rule of the topic off after the change by hand
-  ansible.builtin.set_fact:
-    "{{ item }}": false
-  loop: "{{ regression_toggles }}"
-
-- name: SSH regressions | Clean up the topic after the change by hand
+- name: SSH regressions | Clean up with the entry of the other method and the change by hand
   ansible.builtin.include_tasks:
     file: lifecycle_remediate.yml
   vars:
@@ -229,77 +168,38 @@
 
 - name: SSH regressions | Read the drop-in that the administrator changed
   ansible.builtin.slurp:
-    src: "{{ regression_dropin }}"
+    src: "{{ regression_other_dropin }}"
   register: regression_admin
 
-- name: SSH regressions | Read the ledger after the cleanup that kept the change by hand
+- name: SSH regressions | Read the ledger after the refused cleanup
   freesecdev.linux_compliance.control_state:
     action: list
-  register: regression_ledger_admin
+  register: regression_ledger_refused
 
-- name: SSH regressions | Check that only the changed rule was refused, its change and entry kept
+- name: SSH regressions | Check that both rules were refused, the change by hand and both entries kept
   ansible.builtin.assert:
     that:
       - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', regression_rule) | map(attribute='reason') | list
-        == ['modified_since_apply']
+        lifecycle_results | items2dict(key_name='rule_id', value_name='reason')
+        == {regression_rule: 'method_changed', regression_other: 'modified_since_apply'}
+      - lifecycle_results | map(attribute='status') | unique | list == ['cleanup_incomplete']
+      - lifecycle_results | selectattr('changed') | list == []
+      - regression_admin.content | b64decode is search('(?m)^LoginGraceTime 30$')
       - >-
-        lifecycle_results | rejectattr('rule_id', 'equalto', regression_rule) | map(attribute='status') | unique
-        | list == ['restored']
-      - regression_admin.content | b64decode is search('(?m)^MaxAuthTries 2$')
-      - >-
-        regression_ledger_admin.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | map(attribute='rule_id')
-        | list == [regression_rule]
-    fail_msg: "{{ regression_label }}, cleanup after a change by hand: {{ lifecycle_results }}"
+        regression_ledger_refused.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='rule_id') | sort == lifecycle_rule_ids | sort
+    fail_msg: "{{ regression_label }}, cleanup after a change of method and by hand: {{ lifecycle_results }}"
     quiet: true
 
-- name: SSH regressions | Put back the drop-in that the collection wrote
-  ansible.builtin.copy:
-    content: "{{ regression_written.content | b64decode }}"
-    dest: "{{ regression_dropin }}"
-    mode: "0600"
-    owner: root
-    group: root
+- name: SSH regressions | Remove the entry of the other method, as an operator would after the review
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ regression_rule }}"
 
-- name: SSH regressions | Clean up the rule now that its drop-in is what the collection wrote
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-
-- name: SSH regressions | Check that the rule was restored by removing its drop-in
-  ansible.builtin.assert:
-    that:
-      - lifecycle_results | map(attribute='rule_id') | list == [regression_rule]
-      - lifecycle_results | map(attribute='status') | list == ['restored']
-      - lifecycle_results | map(attribute='message') | select('search', 'was removed') | list | length == 1
-    fail_msg: "{{ regression_label }}, cleanup after the drop-in was put back: {{ lifecycle_results }}"
-    quiet: true
-
-- name: SSH regressions | Switch the rule on and apply it once more
-  ansible.builtin.set_fact:
-    "{{ regression_rules_toggle }}": true
-  vars:
-    regression_rules_toggle: >-
-      {{ lifecycle_rules | selectattr('rule_id', 'equalto', regression_rule) | map(attribute='toggle') | first }}
-
-- name: SSH regressions | Apply the rule
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-
-- name: SSH regressions | Remove the drop-in by hand, which is the state that the ledger records as prior
+- name: SSH regressions | Remove the changed drop-in by hand, which is the state that the ledger records as prior
   ansible.builtin.file:
-    path: "{{ regression_dropin }}"
+    path: "{{ regression_other_dropin }}"
     state: absent
-
-- name: SSH regressions | Switch the rule off again
-  ansible.builtin.set_fact:
-    "{{ regression_rules_toggle }}": false
-  vars:
-    regression_rules_toggle: >-
-      {{ lifecycle_rules | selectattr('rule_id', 'equalto', regression_rule) | map(attribute='toggle') | first }}
 
 - name: SSH regressions | Clean up a rule whose prior state already holds
   ansible.builtin.include_tasks:
@@ -315,6 +215,7 @@
 - name: SSH regressions | Check that the rule was reported restored without a write and its entry dropped
   ansible.builtin.assert:
     that:
+      - lifecycle_results | map(attribute='rule_id') | list == [regression_other]
       - lifecycle_results | map(attribute='status') | list == ['restored']
       - lifecycle_results | map(attribute='reason') | list == [none]
       - lifecycle_results | map(attribute='message') | select('search', 'nothing was written') | list | length == 1

@@ -229,8 +229,8 @@ in its place makes every rule `not_directory` with nothing written through it.
 length: it adds `sshd_disable_x11_forwarding` (and on RHEL `sshd_disable_gssapi_auth`) to the profile, applies them and
 checks that every occurrence that the check reads now has the compliant value, that a second apply is compliant, and
 that cleanup writes the vendor file back byte for byte; that a change by hand to the changed line is kept as
-`modified_since_apply` and restored once the line is put back; that a line restored by hand with other spacing is left
-alone; and that a conflicting line inside a `Match` block is refused as `overridden` and not edited.
+`modified_since_apply` and, once restored by hand with other spacing, left alone while the rule is reported
+`restored`; and that a conflicting line inside a `Match` block is refused as `overridden` and not edited.
 
 ## Benefits
 

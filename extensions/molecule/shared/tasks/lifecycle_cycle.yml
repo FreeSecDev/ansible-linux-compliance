@@ -3,6 +3,9 @@
   ansible.builtin.set_fact:
     lifecycle_mode: "{{ lifecycle_cycle.0 }}"
     lifecycle_pre_state: "{{ lifecycle_cycle.1 }}"
+    lifecycle_audit: >-
+      {{ lifecycle_cycle.1.audit | default(false) if lifecycle_cycle.1.audit | default(false) is boolean
+      else lifecycle_platform in lifecycle_cycle.1.audit }}
     lifecycle_label: >-
       {{ lifecycle_family }} with the {{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state
     lifecycle_disabled_by: >-
@@ -229,7 +232,7 @@
     file: audit.yml
   vars:
     audit_check_mode: false
-  when: lifecycle_pre_state.audit | default(false) | bool
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Check the audit outcome of every applied rule
   ansible.builtin.assert:
@@ -256,7 +259,7 @@
     lifecycle_overridden_ids: >-
       {{ lifecycle_unchanged | dict2items | selectattr('value', 'equalto', 'overridden') | map(attribute='key')
       | list }}
-  when: lifecycle_pre_state.audit | default(false) | bool
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Take the no-change snapshot of the applied topic
   ansible.builtin.include_tasks:
@@ -368,7 +371,7 @@
     file: audit.yml
   vars:
     audit_check_mode: false
-  when: lifecycle_pre_state.audit | default(false) | bool
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Check that the audit reports every switched-off rule as disabled by its toggle
   ansible.builtin.assert:
@@ -382,7 +385,7 @@
     lifecycle_findings: >-
       {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
       | sort(attribute='rule_id') }}
-  when: lifecycle_pre_state.audit | default(false) | bool
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Take the no-change snapshot of the switched-off topic
   ansible.builtin.include_tasks:

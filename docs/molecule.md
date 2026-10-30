@@ -482,7 +482,8 @@ The regressions run when the run ends with `pwquality` in the rule mode: after e
 and in the `pwquality` rule leg in CI.
 
 The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states, both with real
-scans: the as-built configuration, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads
+scans (the customised one on Ubuntu only, `audit: [ubuntu]`, because every rule is `notapplicable` on Rocky
+Linux): the as-built configuration, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads
 before the collection's drop-ins and which sets `MaxAuthTries` first, and `60-site.conf`, which sshd reads after them
 and which sets `LoginGraceTime 120` and `ClientAliveInterval 900`. The three rules are `overridden`: their drop-ins are
 expected absent, they are neither recorded nor cleaned up, and the scan must report them `fail` (on Rocky Linux,
@@ -494,9 +495,9 @@ runs after the topic when the run
 includes `ssh` in the topic mode, so in CI in the `ssh` `topic` leg, narrowed like a profile to
 `sshd_set_max_auth_tries` and `sshd_set_login_grace_time` so that each run stays short: a drop-in with a keyword that sshd does not know
 makes every rule `invalid_config` with nothing installed and nothing recorded; a ledger entry of another method makes
-the rule `method_changed` on apply and `cleanup_incomplete` (`method_changed`) on cleanup while the other rules apply
-and restore; a change by hand to a drop-in is kept as `modified_since_apply` with its entry, and the cleanup restores
-once the content is put back; a drop-in removed by hand is reported `restored` without a write and its entry dropped;
+the rule `method_changed` on apply and `cleanup_incomplete` (`method_changed`) on cleanup while the other rule
+applies; in the same cleanup a change by hand to the other rule's drop-in is kept as `modified_since_apply` with its
+entry; once that drop-in is removed by hand, the next cleanup reports it `restored` without a write and drops its entry;
 and on Ubuntu, whose `sshd_config.d` is empty as built, a missing directory is created with mode `0700` and the
 marker, removed again by the cleanup, and a symbolic link in its place makes every rule `not_directory` with nothing
 written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
@@ -508,8 +509,8 @@ lifecycle profiles do not select, to the verified profile and checks the vendor-
 `/etc/ssh/sshd_config` (Ubuntu) and `/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux): after the apply every
 occurrence that the content's check reads has the value `no` and the ledger records the original line; a second apply
 is compliant; the cleanup writes the vendor file back byte for byte; a change by hand to the changed line is kept as
-`modified_since_apply` and restored once the line is put back; a line restored by hand with other spacing is left
-alone; and a conflicting line inside a `Match` block is `overridden` and not edited. It ends with the whole-instance
+`modified_since_apply`, and once the line is restored by hand with other spacing, the cleanup leaves it alone and
+reports the rule `restored`; and a conflicting line inside a `Match` block is `overridden` and not edited. It ends with the whole-instance
 comparison.
 
 ### CI legs
@@ -600,7 +601,7 @@ pre_states:
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 

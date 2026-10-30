@@ -826,3 +826,15 @@ def test_an_invalid_scenario_stops_the_check(
     (scenario / "molecule.yml").write_text(config, encoding="utf-8")
     assert lifecycle.main(["--root", str(root)]) == 2
     assert message in capsys.readouterr().err
+
+
+def test_a_pre_state_may_run_its_scans_on_some_platforms(tmp_path: Path) -> None:
+    pre_states = [{"name": "as built", "audit": ["ubuntu"]}]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize("audit", ["yes", [], ["debian"], [1]])
+def test_an_invalid_audit_value_is_reported(tmp_path: Path, audit: object) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[{"name": "a", "audit": audit}]))
+    message = "pre_states[0].audit must be a boolean or a non-empty list of known platforms"
+    assert any(message in error for error in errors), errors

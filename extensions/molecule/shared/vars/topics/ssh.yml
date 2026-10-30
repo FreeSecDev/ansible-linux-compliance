@@ -305,7 +305,8 @@ pre_states:
   - name: as built
     audit: true
   - name: site drop-ins, one read before the collection's and one after
-    audit: true
+    audit:
+      - ubuntu
     files:
       - path: /etc/ssh/sshd_config.d/00-admin.conf
         content: |

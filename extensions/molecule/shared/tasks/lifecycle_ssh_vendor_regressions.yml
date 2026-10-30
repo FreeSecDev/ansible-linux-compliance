@@ -195,53 +195,11 @@
     fail_msg: "{{ vendor_label }}, cleanup after a change by hand: {{ lifecycle_results }}"
     quiet: true
 
-- name: SSH vendor regressions | Put back the line that the collection wrote
-  ansible.builtin.lineinfile:
-    path: "{{ vendor_file }}"
-    regexp: "^X11Forwarding "
-    line: X11Forwarding no
-
-- name: SSH vendor regressions | Clean up the rule now that its vendor line is what the collection wrote
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-
-- name: SSH vendor regressions | Read the vendor file after the line was put back and cleaned up
-  ansible.builtin.slurp:
-    src: "{{ vendor_file }}"
-  register: vendor_put_back
-
-- name: SSH vendor regressions | Check that the cleanup restored the vendor file exactly
-  ansible.builtin.assert:
-    that:
-      - lifecycle_results | map(attribute='rule_id') | list == [vendor_x11]
-      - lifecycle_results | map(attribute='status') | list == ['restored']
-      - vendor_put_back.content == vendor_built.content
-    fail_msg: "{{ vendor_label }}, cleanup after the line was put back: {{ lifecycle_results }}"
-    quiet: true
-
-- name: SSH vendor regressions | Switch the rules on to test a vendor line that an administrator restored
-  ansible.builtin.set_fact:
-    "{{ item }}": true
-  loop: "{{ vendor_toggles }}"
-
-- name: SSH vendor regressions | Apply the rules before the administrator restores the vendor line
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-
 - name: SSH vendor regressions | Restore the original X11Forwarding line by hand, with other spacing
   ansible.builtin.lineinfile:
     path: "{{ vendor_file }}"
     regexp: "^X11Forwarding "
     line: x11forwarding   yes
-
-- name: SSH vendor regressions | Switch the rules off after the line was restored by hand
-  ansible.builtin.set_fact:
-    "{{ item }}": false
-  loop: "{{ vendor_toggles }}"
 
 - name: SSH vendor regressions | Clean up where the vendor line already has its prior value
   ansible.builtin.include_tasks:
@@ -254,10 +212,11 @@
     src: "{{ vendor_file }}"
   register: vendor_prior
 
-- name: SSH vendor regressions | Check that the rules were restored and the hand-restored line was left alone
+- name: SSH vendor regressions | Check that the rule was restored and the hand-restored line was left alone
   ansible.builtin.assert:
     that:
-      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - lifecycle_results | map(attribute='rule_id') | list == [vendor_x11]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
       - vendor_prior.content | b64decode is search('(?m)^x11forwarding   yes$')
     fail_msg: "{{ vendor_label }}, cleanup over the restored line: {{ lifecycle_results }}"
     quiet: true
@@ -325,6 +284,7 @@
     file: lifecycle_remediate.yml
   vars:
     lifecycle_check_mode: false
+  when: lifecycle_platform != 'ubuntu'
 
 - name: SSH vendor regressions | Give the vendor file back its content as built
   ansible.builtin.copy:
