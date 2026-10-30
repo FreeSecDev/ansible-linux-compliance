@@ -1,5 +1,6 @@
 ---
 trivial:
   - >-
-    CI: the molecule-docker job timeout is 13 minutes instead of 8. The standard scenarios now take 6 to 7 minutes on
-    GitHub's runners, and the old limit cancelled four of 31 jobs in twelve runs, on pull requests and on main alike.
+    CI: the molecule-docker job timeout is 18 minutes instead of 8, the same as molecule-lifecycle. Over the 15 latest
+    runs 7 of 42 molecule-docker jobs were cancelled at the old limit, and building the Rocky Linux instance image alone
+    once took 9 minutes on a slow package mirror.

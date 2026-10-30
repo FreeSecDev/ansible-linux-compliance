@@ -508,11 +508,13 @@ lists no leg fails the gate.
 On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
-duration: 18 for `molecule-lifecycle`, 13 for `molecule-docker` (one [scanner timeout](#scanner-hangs) and its retry
-add three minutes; raised from 8 on 2026-10-30, when the standard scenarios took 6 to 7 minutes and four of 31 jobs
-in the last twelve CI runs were cancelled at 8 or 9 minutes), 17 for `test` (11.2) and 16 for `test-playbooks`
-(10.8). A leg that approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that no required job comes
-near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
+duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 17 for `test` (11.2) and 16 for `test-playbooks`
+(10.8). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
+on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
+in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
+Building the instance images once per run and reusing them in every leg is tracked as FREES-182. A leg that
+approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
+no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
 
