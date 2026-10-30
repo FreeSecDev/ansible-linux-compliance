@@ -151,4 +151,7 @@ Galaxy answered HTTP 500, cut downloads short, failed TLS or left its cache inco
   plugins stay free of `subprocess` outside the audited process helper, and playbooks use no `shell` or `command`.
   The tag computation, which needs YAML, is the pure Python `tools/molecule/instance_images.py`.
 
-FREES182_ADR_DURATIONS
+- **Measured.** Before, on runs 41112773853 and 41113885988, the Docker legs spent a median of 27 to 29 seconds
+  building images and up to 472 when the mirror was slow, and every Molecule job and `lint` spent a median of 17 to 18
+  seconds installing collections from Galaxy. The durations after the change are in the
+  [Molecule guide](../molecule.md#durations).

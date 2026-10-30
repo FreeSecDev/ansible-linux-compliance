@@ -168,7 +168,20 @@ files and needs no network once they are there. When Renovate raises a version i
 
 ### Durations
 
-FREES182_DURATIONS
+Before, on two runs at the base of this change (seconds; a leg is one `molecule-docker`, `molecule-lifecycle` or
+`molecule-libvirt` job, from the GitHub API; the steps are timed from the job logs with
+`make molecule-task-timings` and the log timestamps):
+
+| Run | Legs | Lifecycle median / max | Docker median / max | libvirt median / max | Image build per Docker leg, median / max | Galaxy install per job, median / max |
+|---|---|---|---|---|---|---|
+| 41112773853 (merge group of #68, bf23ba9) | 33 | 487 / 767 | 439 / 571 | 572 / 1019 | 27 / 81 (26 legs, 770 in all) | 17.8 / 22.4 (34 jobs, 606 in all) |
+| 41113885988 (pull request #70, b4f4ee1) | 43 | 503 / 927 | 385 / 543 | 483 / 1187 | 29 / 472 (36 legs, 2089 in all) | 17.0 / 21.4 (44 jobs, 745 in all) |
+
+In the second run the Rocky Linux mirror was slow for six legs: one build took 472 seconds and another 421, and those
+two legs took 819 and 927 seconds of their 18-minute limit. Every one of the 76 Docker legs built an image and every
+one of the 78 jobs that installed collections downloaded them from Galaxy.
+
+After this change, on the runs of its pull request: pending the first runs.
 
 The datastreams are the ones pinned in `content/manifest.yml`. `prepare` checks the SHA-256 of the fetched file on the
 controller, then copies it into the instance as `/usr/share/freesecdev-molecule/content/<file>` (root-owned, directory
