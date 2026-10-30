@@ -107,13 +107,13 @@ def test_settings_that_are_not_passed_to_sshd(settings: object, message: str) ->
 
 def test_every_keyword_of_the_catalogue_is_accepted() -> None:
     root = Path(__file__).resolve().parents[4]
-    text = (root / "content" / "catalogue.yml").read_text(encoding="utf-8")
+    text = (root / "roles" / "remediate" / "vars" / "rules.yml").read_text(encoding="utf-8")
     keywords = {
-        line.split(":", 1)[1].strip()
+        line.split(":", 1)[1].strip().strip('"')
         for line in text.splitlines()
         if line.strip().startswith("keyword:")
     }
-    assert keywords
+    assert len(keywords) == len(sshd_validate.KEYWORDS)
     assert keywords <= sshd_validate.KEYWORDS
 
 
