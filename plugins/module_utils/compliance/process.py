@@ -19,6 +19,13 @@ The OpenSSH server is allow-listed only in its configuration test mode,
 (FREES-109): it reads the configuration and the host keys and exits, and never
 starts a daemon.
 
+The audit tools are allow-listed for the auditd topics (FREES-110) in exact argument forms only:
+``auditctl -s`` and ``auditctl -l`` read the kernel's audit status and loaded rules,
+``auditctl --signal reload`` asks a running auditd to read ``/etc/audit/auditd.conf`` again, and
+``augenrules --load`` builds ``/etc/audit/audit.rules`` from ``/etc/audit/rules.d`` and loads it,
+exactly as ``auditd.service`` does when it starts. No rule, file or option is ever passed on the
+command line.
+
 An executable that does not live in a trusted directory, such as the SCAP
 Compliance Checker at ``/opt/scc/cscc`` (ADR 0019), is permitted only through a
 policy that names its one absolute path (``fixed_path``). That path is vetted
@@ -109,6 +116,8 @@ SSHD_KEYWORDS: Final[tuple[str, ...]] = (
 )
 SSHD_VALUE: Final[str] = r"[A-Za-z0-9@.,:/_+][A-Za-z0-9@.,:/_+-]{0,1023}"
 SSHD_SETTING: Final[str] = "(?:" + "|".join(SSHD_KEYWORDS) + ")=" + SSHD_VALUE
+AUDITCTL_FORMS: Final[tuple[tuple[str, ...], ...]] = (("-s",), ("-l",), ("--signal", "reload"))
+AUGENRULES_FORMS: Final[tuple[tuple[str, ...], ...]] = (("--load",),)
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
 FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})
@@ -216,6 +225,8 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
             command_prefixes=(("-t", "-f", SSHD_CONFIG_PATH),),
             option_values=(("-o", SSHD_SETTING),),
         ),
+        "auditctl": ExecutablePolicy("auditctl", argument_forms=AUDITCTL_FORMS),
+        "augenrules": ExecutablePolicy("augenrules", argument_forms=AUGENRULES_FORMS),
     }
 )
 

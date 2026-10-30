@@ -75,52 +75,54 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 8 | `software_integrity` | `integrity` | Package verification, prelink and a vendor-supported operating system | no | Verifies installed packages and removes prelink; no session or workload is stopped | 5 | 0 | 5 |
 | 9 | `endpoint_security` | `integrity` | Endpoint security software (antivirus, host intrusion detection) | no | Checks that endpoint security software is installed; no session or workload is stopped | 3 | 0 | 3 |
 | 10 | `kernel_build_config` | none | Kernel build configuration | no | Checks the configuration the running kernel was built with; there is nothing to remediate on the host | 67 | 0 | 67 |
-| 11 | `auditd` | none | Audit daemon and audit rules | yes | Audit settings can halt the host or drop it to single-user mode when the audit log fills, and immutable rules need a reboot to change | 206 | 0 | 206 |
-| 12 | `sssd` | `services` | SSSD, its LDAP and smart card authentication and cached credentials | yes | SSSD authenticates directory users; a wrong certificate, TLS or PAM service setting locks out every directory user, including administrators | 12 | 0 | 12 |
-| 13 | `time_sync` | `services` | Time synchronisation (chrony, ntpd, systemd-timesyncd) | yes | Switching the time service or its servers can leave the clock unsynchronised, which breaks Kerberos, TLS certificate checks and log correlation | 19 | 0 | 19 |
-| 14 | `mail` | `services` | Mail transfer agents (postfix, sendmail) and the mail client | yes | Removing an MTA or closing its network listener stops mail delivery that applications rely on | 8 | 0 | 8 |
-| 15 | `cron` | `services` | cron and at, and who may use them | yes | Restricting cron and at to allow-listed users stops the scheduled jobs of every other user | 7 | 0 | 7 |
-| 16 | `nfs` | `services` | NFS client and server and rpcbind | yes | Removing NFS or rpcbind, or changing exports, cuts off network file systems that workloads use | 6 | 0 | 6 |
-| 17 | `usbguard` | `services` | USBGuard device authorisation | yes | An enforced USB policy can block keyboards, smart card readers and storage that the host needs | 5 | 0 | 5 |
-| 18 | `fapolicyd` | `services` | fapolicyd application allow-listing | yes | A default-deny execution policy stops every program that the policy does not list | 3 | 0 | 3 |
-| 19 | `network_services` | `services` | Network and other services (telnet, tftp, rsh, NIS, FTP, HTTP, DNS, DHCP, Samba, SNMP, LDAP, IMAP, proxy, printing, Avahi, X11, kdump, apport) | yes | Disabling, masking or removing services can stop workloads the host exists for | 59 | 0 | 59 |
-| 20 | `package_updates` | `packages` | Package updates and automatic updates | yes | Installing updates can restart or break software | 6 | 0 | 6 |
-| 21 | `package_sources` | `packages` | Package repositories and signature checking (gpgcheck, EPEL, apt authentication) | yes | Disabling repositories or enforcing signatures stops installs from sources that the host relies on | 6 | 0 | 6 |
-| 22 | `system_packages` | `packages` | Required and unwanted system packages | yes | Installing or removing system packages such as tuned or gssproxy can change or break running software | 12 | 0 | 12 |
-| 23 | `desktop` | none | Graphical desktop (GNOME and the display manager) | yes | Removing the display manager or forcing screen locks ends graphical sessions | 21 | 0 | 21 |
-| 24 | `ipv4_parameters` | `network` | IPv4 kernel network parameters | yes | Forwarding, redirects and source routing settings can cut routers, container hosts and VPN gateways off | 26 | 0 | 26 |
-| 25 | `ipv6_parameters` | `network` | IPv6 kernel network parameters | yes | Router advertisement, autoconfiguration and forwarding settings can cut IPv6 hosts and routers off | 19 | 0 | 19 |
-| 26 | `ipsec` | `network` | IPsec (Libreswan) | yes | Changing IPsec configuration or approved tunnels can drop VPN connections | 11 | 0 | 11 |
-| 27 | `wireless` | `network` | Wireless interfaces and Bluetooth | yes | Disabling wireless interfaces or Bluetooth cuts hosts that are connected through them off | 3 | 0 | 3 |
-| 28 | `network_settings` | `network` | Network configuration (name resolution, NetworkManager, promiscuous mode, certificates) | yes | Name resolution, NetworkManager and certificate settings can cut the host off from its services | 7 | 0 | 7 |
-| 29 | `filesystem_modules` | `kernel_modules` | File system and USB storage kernel modules | yes | Blacklisting overlay, squashfs, udf or usb-storage breaks container runtimes, snaps, optical media and USB storage that depend on them | 9 | 0 | 9 |
-| 30 | `protocol_modules` | `kernel_modules` | Uncommon network protocol kernel modules (ATM, CAN, DCCP, FireWire, RDS, SCTP, TIPC) | yes | Blacklisting SCTP, CAN or RDS breaks telecom, automotive and cluster software that uses them | 7 | 0 | 7 |
-| 31 | `wireless_modules` | `kernel_modules` | Wireless and Bluetooth kernel modules | yes | Blacklisting wireless or Bluetooth modules disconnects hosts and devices that use them | 5 | 0 | 5 |
-| 32 | `firewalld` | `firewall` | firewalld | yes | A default-deny zone or removed services can cut every remote session | 10 | 0 | 10 |
-| 33 | `nftables` | `firewall` | nftables | yes | A default-deny base chain can cut every remote session | 11 | 0 | 11 |
-| 34 | `iptables` | `firewall` | iptables and ip6tables | yes | A default-drop policy can cut every remote session | 12 | 0 | 12 |
-| 35 | `ufw` | `firewall` | Uncomplicated Firewall (ufw) | yes | A default-deny policy can cut every remote session | 9 | 0 | 9 |
-| 36 | `ssh` | none | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 34 | 29 |
-| 37 | `pam` | none | PAM stack, pam_unix, password hashing and the PAM packages | yes | The module stack and the password hashing settings can lock out every user, including root | 15 | 0 | 15 |
-| 38 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 14 | 5 |
-| 39 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 0 | 7 |
-| 40 | `faillock` | `pam` | Account lock-out after failed logins (pam_faillock, pam_faildelay) | yes | Lock-out after failed logins can lock out every user, including root | 14 | 0 | 14 |
-| 41 | `password_aging` | `accounts` | Password ageing (login.defs and existing accounts) | yes | Maximum password ages and inactivity settings can expire the passwords of operators and service accounts | 9 | 0 | 9 |
-| 42 | `root_access` | `accounts` | Root logins, su, UID 0 accounts and the root PATH | yes | Restricting root logins, su and system account shells can lock out administrators and break services | 19 | 0 | 19 |
-| 43 | `umask` | `accounts` | Default umask of users and shells | yes | A stricter umask changes the modes of files that applications and users create and can break sharing | 6 | 0 | 6 |
-| 44 | `user_sessions` | `accounts` | Login sessions, shell time-outs, home directories and polyinstantiation | yes | Session time-outs and limits end sessions, and polyinstantiated directories change what processes see | 14 | 0 | 14 |
-| 45 | `smartcard` | `accounts` | Smart card login (pcscd, OpenSC, PAM smart card authentication) | yes | Requiring smart card authentication locks out every user without a working card and reader | 9 | 0 | 9 |
-| 46 | `console_access` | `accounts` | Physical console access (Ctrl-Alt-Del, single-user and emergency mode, console locking) | yes | Requiring authentication for single-user and emergency mode can leave a broken host unrecoverable | 7 | 0 | 7 |
-| 47 | `user_accounts` | `accounts` | User and group accounts (unique identifiers, expiry, password storage, authselect) | yes | Expiring accounts, locking accounts without passwords and switching to authselect can lock out operators | 24 | 0 | 24 |
-| 48 | `sudo` | none | sudo | yes | Can remove administrative access | 22 | 10 | 12 |
-| 49 | `selinux` | `mandatory_access_control` | SELinux | yes | Enforcing SELinux or changing its policy can stop services and needs a relabel or reboot | 27 | 0 | 27 |
-| 50 | `apparmor` | `mandatory_access_control` | AppArmor | yes | Enforcing AppArmor profiles can stop services that the profiles do not allow | 6 | 0 | 6 |
-| 51 | `crypto_policy` | none | Cryptographic policy and FIPS mode | yes | Can break TLS and SSH with older peers; FIPS mode needs a reboot | 17 | 0 | 17 |
-| 52 | `autofs` | `mounts` | autofs automounter | yes | Removing autofs stops the on-demand mounts, such as home directories, that users rely on | 2 | 0 | 2 |
-| 53 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
-| 54 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
-| 55 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 74 | 1129 |
+| 11 | `auditd_rules_time` | `auditd` | Audit rules for changes of the system time and time zone | yes | Loading the rules reloads the whole rule set of /etc/audit/rules.d, and with the panic failure mode of the audit system more events can stop the host when the backlog overflows | 5 | 5 | 0 |
+| 12 | `auditd_conf` | `auditd` | Audit daemon settings in /etc/audit/auditd.conf (log size, retention and disk space actions) | yes | The disk space and disk error actions can halt the host or drop it to single-user mode when the audit log fills or fails | 24 | 20 | 4 |
+| 13 | `auditd` | none | Audit daemon and audit rules | yes | Audit settings can halt the host or drop it to single-user mode when the audit log fills, and immutable rules need a reboot to change | 177 | 0 | 177 |
+| 14 | `sssd` | `services` | SSSD, its LDAP and smart card authentication and cached credentials | yes | SSSD authenticates directory users; a wrong certificate, TLS or PAM service setting locks out every directory user, including administrators | 12 | 0 | 12 |
+| 15 | `time_sync` | `services` | Time synchronisation (chrony, ntpd, systemd-timesyncd) | yes | Switching the time service or its servers can leave the clock unsynchronised, which breaks Kerberos, TLS certificate checks and log correlation | 19 | 0 | 19 |
+| 16 | `mail` | `services` | Mail transfer agents (postfix, sendmail) and the mail client | yes | Removing an MTA or closing its network listener stops mail delivery that applications rely on | 8 | 0 | 8 |
+| 17 | `cron` | `services` | cron and at, and who may use them | yes | Restricting cron and at to allow-listed users stops the scheduled jobs of every other user | 7 | 0 | 7 |
+| 18 | `nfs` | `services` | NFS client and server and rpcbind | yes | Removing NFS or rpcbind, or changing exports, cuts off network file systems that workloads use | 6 | 0 | 6 |
+| 19 | `usbguard` | `services` | USBGuard device authorisation | yes | An enforced USB policy can block keyboards, smart card readers and storage that the host needs | 5 | 0 | 5 |
+| 20 | `fapolicyd` | `services` | fapolicyd application allow-listing | yes | A default-deny execution policy stops every program that the policy does not list | 3 | 0 | 3 |
+| 21 | `network_services` | `services` | Network and other services (telnet, tftp, rsh, NIS, FTP, HTTP, DNS, DHCP, Samba, SNMP, LDAP, IMAP, proxy, printing, Avahi, X11, kdump, apport) | yes | Disabling, masking or removing services can stop workloads the host exists for | 59 | 0 | 59 |
+| 22 | `package_updates` | `packages` | Package updates and automatic updates | yes | Installing updates can restart or break software | 6 | 0 | 6 |
+| 23 | `package_sources` | `packages` | Package repositories and signature checking (gpgcheck, EPEL, apt authentication) | yes | Disabling repositories or enforcing signatures stops installs from sources that the host relies on | 6 | 0 | 6 |
+| 24 | `system_packages` | `packages` | Required and unwanted system packages | yes | Installing or removing system packages such as tuned or gssproxy can change or break running software | 12 | 0 | 12 |
+| 25 | `desktop` | none | Graphical desktop (GNOME and the display manager) | yes | Removing the display manager or forcing screen locks ends graphical sessions | 21 | 0 | 21 |
+| 26 | `ipv4_parameters` | `network` | IPv4 kernel network parameters | yes | Forwarding, redirects and source routing settings can cut routers, container hosts and VPN gateways off | 26 | 0 | 26 |
+| 27 | `ipv6_parameters` | `network` | IPv6 kernel network parameters | yes | Router advertisement, autoconfiguration and forwarding settings can cut IPv6 hosts and routers off | 19 | 0 | 19 |
+| 28 | `ipsec` | `network` | IPsec (Libreswan) | yes | Changing IPsec configuration or approved tunnels can drop VPN connections | 11 | 0 | 11 |
+| 29 | `wireless` | `network` | Wireless interfaces and Bluetooth | yes | Disabling wireless interfaces or Bluetooth cuts hosts that are connected through them off | 3 | 0 | 3 |
+| 30 | `network_settings` | `network` | Network configuration (name resolution, NetworkManager, promiscuous mode, certificates) | yes | Name resolution, NetworkManager and certificate settings can cut the host off from its services | 7 | 0 | 7 |
+| 31 | `filesystem_modules` | `kernel_modules` | File system and USB storage kernel modules | yes | Blacklisting overlay, squashfs, udf or usb-storage breaks container runtimes, snaps, optical media and USB storage that depend on them | 9 | 0 | 9 |
+| 32 | `protocol_modules` | `kernel_modules` | Uncommon network protocol kernel modules (ATM, CAN, DCCP, FireWire, RDS, SCTP, TIPC) | yes | Blacklisting SCTP, CAN or RDS breaks telecom, automotive and cluster software that uses them | 7 | 0 | 7 |
+| 33 | `wireless_modules` | `kernel_modules` | Wireless and Bluetooth kernel modules | yes | Blacklisting wireless or Bluetooth modules disconnects hosts and devices that use them | 5 | 0 | 5 |
+| 34 | `firewalld` | `firewall` | firewalld | yes | A default-deny zone or removed services can cut every remote session | 10 | 0 | 10 |
+| 35 | `nftables` | `firewall` | nftables | yes | A default-deny base chain can cut every remote session | 11 | 0 | 11 |
+| 36 | `iptables` | `firewall` | iptables and ip6tables | yes | A default-drop policy can cut every remote session | 12 | 0 | 12 |
+| 37 | `ufw` | `firewall` | Uncomplicated Firewall (ufw) | yes | A default-deny policy can cut every remote session | 9 | 0 | 9 |
+| 38 | `ssh` | none | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 34 | 29 |
+| 39 | `pam` | none | PAM stack, pam_unix, password hashing and the PAM packages | yes | The module stack and the password hashing settings can lock out every user, including root | 15 | 0 | 15 |
+| 40 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 14 | 5 |
+| 41 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 0 | 7 |
+| 42 | `faillock` | `pam` | Account lock-out after failed logins (pam_faillock, pam_faildelay) | yes | Lock-out after failed logins can lock out every user, including root | 14 | 0 | 14 |
+| 43 | `password_aging` | `accounts` | Password ageing (login.defs and existing accounts) | yes | Maximum password ages and inactivity settings can expire the passwords of operators and service accounts | 9 | 0 | 9 |
+| 44 | `root_access` | `accounts` | Root logins, su, UID 0 accounts and the root PATH | yes | Restricting root logins, su and system account shells can lock out administrators and break services | 19 | 0 | 19 |
+| 45 | `umask` | `accounts` | Default umask of users and shells | yes | A stricter umask changes the modes of files that applications and users create and can break sharing | 6 | 0 | 6 |
+| 46 | `user_sessions` | `accounts` | Login sessions, shell time-outs, home directories and polyinstantiation | yes | Session time-outs and limits end sessions, and polyinstantiated directories change what processes see | 14 | 0 | 14 |
+| 47 | `smartcard` | `accounts` | Smart card login (pcscd, OpenSC, PAM smart card authentication) | yes | Requiring smart card authentication locks out every user without a working card and reader | 9 | 0 | 9 |
+| 48 | `console_access` | `accounts` | Physical console access (Ctrl-Alt-Del, single-user and emergency mode, console locking) | yes | Requiring authentication for single-user and emergency mode can leave a broken host unrecoverable | 7 | 0 | 7 |
+| 49 | `user_accounts` | `accounts` | User and group accounts (unique identifiers, expiry, password storage, authselect) | yes | Expiring accounts, locking accounts without passwords and switching to authselect can lock out operators | 24 | 0 | 24 |
+| 50 | `sudo` | none | sudo | yes | Can remove administrative access | 22 | 10 | 12 |
+| 51 | `selinux` | `mandatory_access_control` | SELinux | yes | Enforcing SELinux or changing its policy can stop services and needs a relabel or reboot | 27 | 0 | 27 |
+| 52 | `apparmor` | `mandatory_access_control` | AppArmor | yes | Enforcing AppArmor profiles can stop services that the profiles do not allow | 6 | 0 | 6 |
+| 53 | `crypto_policy` | none | Cryptographic policy and FIPS mode | yes | Can break TLS and SSH with older peers; FIPS mode needs a reboot | 17 | 0 | 17 |
+| 54 | `autofs` | `mounts` | autofs automounter | yes | Removing autofs stops the on-demand mounts, such as home directories, that users rely on | 2 | 0 | 2 |
+| 55 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
+| 56 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
+| 57 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
+|  | All |  |  |  |  | 1203 | 99 | 1104 |
 
 ## Umbrellas
 
@@ -132,6 +134,7 @@ entry that names an umbrella allows every disruptive family it groups.
 |---|---|---|
 | `linux_compliance_logging_enabled` | `journald`, `rsyslog`, `logrotate` | 41 |
 | `linux_compliance_integrity_enabled` | `aide`, `software_integrity`, `endpoint_security` | 21 |
+| `linux_compliance_auditd_enabled` | `auditd_rules_time`, `auditd_conf`, `auditd` | 206 |
 | `linux_compliance_services_enabled` | `sssd`, `time_sync`, `mail`, `cron`, `nfs`, `usbguard`, `fapolicyd`, `network_services` | 119 |
 | `linux_compliance_packages_enabled` | `package_updates`, `package_sources`, `system_packages` | 24 |
 | `linux_compliance_network_enabled` | `ipv4_parameters`, `ipv6_parameters`, `ipsec`, `wireless`, `network_settings` | 66 |
@@ -141,6 +144,12 @@ entry that names an umbrella allows every disruptive family it groups.
 | `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | 88 |
 | `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | 33 |
 | `linux_compliance_mounts_enabled` | `autofs`, `mount_options`, `partitioning` | 48 |
+
+`auditd` is both a topic and an umbrella: `linux_compliance_auditd_enabled: false`
+switches off its own rules and those of `auditd_rules_time`, `auditd_conf`, and the allow-list entry
+`auditd` allows all of them. There is no toggle or allow-list entry for the
+rules of `auditd` alone; to remediate only those, allow `auditd` and switch
+the grouped families off with their own toggles.
 
 `pam` is both a topic and an umbrella: `linux_compliance_pam_enabled: false`
 switches off its own rules and those of `pwquality`, `pwhistory`, `faillock`, and the allow-list entry
@@ -175,6 +184,8 @@ rules are never tagged and no exclusion lists it, so a new rule of the content c
 drift past a decision. The rules of these families are never tagged:
 
 - `auditd`: Audit rules record changes to a subsystem; they do not configure it. An operator who stops the collection from managing a subsystem still needs its changes audited, so only the auditd toggles switch audit rules off.
+- `auditd_rules_time`: Audit rules record changes to a subsystem; they do not configure it, so only the auditd toggles switch them off.
+- `auditd_conf`: The settings of the audit daemon configure auditd itself, so only the auditd toggles switch them off.
 
 | Tag | Rule patterns | Groups | Tagged rules |
 |---|---|---|---|
@@ -394,7 +405,9 @@ or datastreams is one catalogue entry with one toggle.
 | `software_integrity` | 1 | 1 | 1 | 1 | 1 |
 | `endpoint_security` | 0 | 0 | 0 | 0 | 0 |
 | `kernel_build_config` | 0 | 0 | 0 | 0 | 0 |
-| `auditd` | 0 | 0 | 80 | 80 | 91 |
+| `auditd_rules_time` | 0 | 0 | 4 | 4 | 0 |
+| `auditd_conf` | 0 | 0 | 7 | 7 | 6 |
+| `auditd` | 0 | 0 | 69 | 69 | 85 |
 | `sssd` | 0 | 0 | 0 | 0 | 7 |
 | `time_sync` | 10 | 10 | 10 | 10 | 7 |
 | `mail` | 2 | 2 | 2 | 2 | 0 |
@@ -440,7 +453,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 45 | 47 | 47 | 47 | 21 |
+| Native remediation | 45 | 47 | 58 | 58 | 24 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -456,7 +469,9 @@ or datastreams is one catalogue entry with one toggle.
 | `software_integrity` | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 2 | 3 | 0 | 2 | 1 | 1 |
 | `endpoint_security` | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `kernel_build_config` | 0 | 67 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| `auditd` | 52 | 52 | 3 | 0 | 42 | 39 | 26 | 34 | 83 | 0 | 0 | 83 | 51 | 32 | 72 | 38 | 51 | 55 | 99 | 99 |
+| `auditd_rules_time` | 4 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 4 | 0 | 5 | 5 | 5 | 0 | 5 | 0 | 0 |
+| `auditd_conf` | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 1 | 7 | 0 | 0 | 7 | 4 | 6 | 1 | 6 | 4 | 5 | 15 | 15 |
+| `auditd` | 48 | 48 | 3 | 0 | 42 | 38 | 25 | 33 | 72 | 0 | 0 | 72 | 47 | 21 | 66 | 27 | 47 | 45 | 84 | 84 |
 | `sssd` | 5 | 5 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 |
 | `time_sync` | 2 | 2 | 0 | 0 | 0 | 3 | 0 | 3 | 3 | 3 | 3 | 3 | 2 | 0 | 0 | 3 | 2 | 3 | 8 | 8 |
 | `mail` | 3 | 3 | 3 | 1 | 0 | 0 | 0 | 0 | 3 | 2 | 2 | 3 | 0 | 0 | 1 | 0 | 0 | 2 | 6 | 6 |
@@ -502,7 +517,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 14 | 14 | 14 | 6 | 13 | 13 | 12 | 13 | 39 | 37 | 39 | 39 | 11 | 9 | 9 | 15 | 11 | 25 | 33 | 33 |
+| Native remediation | 18 | 18 | 14 | 6 | 13 | 14 | 13 | 14 | 50 | 37 | 39 | 50 | 15 | 20 | 15 | 26 | 15 | 34 | 47 | 47 |
 
 ## Mapping
 
@@ -518,6 +533,8 @@ or datastreams is one catalogue entry with one toggle.
 | `software_integrity` | `software-integrity` | none | `integrity` |
 | `endpoint_security` | none | none | `endpoint_security_software` |
 | `kernel_build_config` | `kernel_build_config` | none | none |
+| `auditd_rules_time` | `audit_time_rules` | none | none |
+| `auditd_conf` | `configure_auditd_data_retention` | none | none |
 | `auditd` | `auditing` | none | none |
 | `sssd` | none | none | `sssd` |
 | `time_sync` | none | none | `ntp` |

@@ -1,0 +1,78 @@
+---
+family: auditd_conf
+disruptive: true
+containment: >-
+  auditd_conf only edits lines of /etc/audit/auditd.conf and asks a running auditd to read the file again. The
+  containers run no auditd, so a disk space or disk error action (single, halt) can never fire there; the harness
+  connects with docker exec through the Docker API as root, without sshd, PAM, sudo or a login shell, and the guard's
+  connection test after every remediate run proves that it still reaches the same unprivileged container. The
+  allow-list names auditd_conf only for the runs of this topic.
+profiles:
+  ubuntu: cis_level2_server
+  rhel_compatible: stig
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    The RHEL 9 datastream's platform checks do not recognise Rocky Linux, so every rule of the profile is notapplicable
+    there; the lines of /etc/audit/auditd.conf under applied are the evidence. On Ubuntu 24.04 the rules apply to a
+    container with auditd installed, and the audit after apply must report them pass or fixed.
+state:
+  files:
+    - path: /etc/audit/auditd.conf
+      rewritten: true
+  packages:
+    - name: auditd
+      platforms:
+        - ubuntu
+    - name: audit
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/audit/auditd.conf
+      exists: true
+      type: file
+      mode: "0640"
+      owner: root
+      group: root
+      changes:
+        - checksum
+pre_states:
+  - name: as built
+    audit: true
+    unchanged:
+      - rule: auditd_data_retention_action_mail_acct
+        status: compliant
+      - rule: auditd_data_retention_max_log_file
+        status: compliant
+        platforms:
+          - ubuntu
+      - rule: auditd_local_events
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_log_format
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_overflow_action
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_write_logs
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_data_retention_max_log_file_action_stig
+        status: compliant
+        platforms:
+          - rhel_compatible
+regressions:
+  - name: changes
+    files:
+      - lifecycle_auditd_conf_regressions.yml

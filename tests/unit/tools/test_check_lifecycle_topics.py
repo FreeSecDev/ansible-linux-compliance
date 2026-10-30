@@ -81,6 +81,9 @@ def make_root(
     versions = root / lifecycle.VERSIONS
     versions.parent.mkdir(parents=True)
     shutil.copyfile(REPOSITORY_ROOT / lifecycle.VERSIONS, versions)
+    manifest = root / lifecycle.MANIFEST
+    manifest.parent.mkdir(parents=True)
+    shutil.copyfile(REPOSITORY_ROOT / lifecycle.MANIFEST, manifest)
     for config in (REPOSITORY_ROOT / lifecycle.MOLECULE).glob("*/molecule.yml"):
         target = root / lifecycle.MOLECULE / config.parent.name / config.name
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -451,7 +454,15 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         dirs_exist_ok=True,
     )
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
+    assert native == [
+        "file_permissions",
+        "banners",
+        "auditd_rules_time",
+        "auditd_conf",
+        "ssh",
+        "pwquality",
+        "sudo",
+    ]
     assert errors == []
 
 
@@ -955,7 +966,9 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "vendor": frozenset({"ubuntu", "rhel_compatible"}),
     }
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 9
+    assert found["auditd_conf"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert found["auditd_rules_time"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 11
 
 
 @pytest.mark.parametrize(
@@ -1097,3 +1110,104 @@ def test_regression_platforms_fail_on_an_invalid_declaration(tmp_path: Path) -> 
     root = make_root(tmp_path, {"file_permissions": changed(regressions=NO_ITEMS)})
     with pytest.raises(lifecycle.GenerationError, match="regressions must not be empty"):
         lifecycle.regression_platforms(root)
+
+
+AUDIT_LINE = "-a always,exit -F arch=b64 -S adjtimex -k time-change"
+
+
+def test_a_topic_may_name_the_profile_of_its_cycles_per_platform(tmp_path: Path) -> None:
+    assert errors_for(tmp_path, changed(profiles={"ubuntu": "cis_level2_server"})) == []
+    assert (
+        errors_for(
+            tmp_path / "both",
+            changed(profiles={"ubuntu": "stig", "rhel_compatible": "pci-dss"}),
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("profiles", "message"),
+    [
+        (["stig"], "profiles must be a mapping"),
+        (NO_KEYS, "profiles must name at least one platform"),
+        ({"solaris": "stig"}, "profiles.solaris names an unknown platform"),
+        ({"ubuntu": "Bad Profile"}, "profiles.ubuntu needs the short identifier of a profile"),
+        ({"ubuntu": 3}, "profiles.ubuntu needs the short identifier of a profile"),
+        ({"ubuntu": "pci-dss"}, "profiles.ubuntu names pci-dss, which the datastream of ubuntu"),
+    ],
+)
+def test_an_invalid_topic_profile_is_reported(
+    tmp_path: Path, profiles: object, message: str
+) -> None:
+    found = errors_for(tmp_path, changed(profiles=profiles))
+    assert any(message in error for error in found), found
+
+
+def test_the_profiles_of_each_platform_come_from_the_manifest() -> None:
+    found = lifecycle.platform_profiles(REPOSITORY_ROOT)
+    assert {"cis_level1_server", "cis_level2_server", "stig"} <= found["ubuntu"]
+    assert {"cis", "cis_server_l1", "pci-dss", "stig"} <= found["rhel_compatible"]
+    assert "pci-dss" not in found["ubuntu"]
+
+
+def test_profiles_need_the_versions_and_the_manifest(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": VALID})
+    (root / lifecycle.MANIFEST).write_text("---\ndatastreams: []\n", encoding="utf-8")
+    with pytest.raises(generate_toggles.GenerationError, match="lists no platform or datastream"):
+        lifecycle.platform_profiles(root)
+
+
+def test_without_profiles_any_profile_is_accepted() -> None:
+    declaration = lifecycle.Declaration("x", frozenset({"ubuntu"}))
+    lifecycle.topic_profiles(declaration, {"ubuntu": "anything"})
+    assert declaration.errors == []
+
+
+def test_loaded_audit_rules_may_be_declared_for_the_libvirt_driver(tmp_path: Path) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    applied = cast("dict[str, object]", VALID["applied"])
+    declaration = changed(
+        state={**state, "audit_rules": [{"line": AUDIT_LINE, "drivers": ["libvirt"]}]},
+        applied={
+            **applied,
+            "audit_rules": [{"line": AUDIT_LINE, "loaded": True, "drivers": ["libvirt"]}],
+        },
+    )
+    assert errors_for(tmp_path, declaration) == []
+
+
+@pytest.mark.parametrize(
+    ("item", "message"),
+    [
+        ({"line": AUDIT_LINE}, "state.audit_rules[0].drivers needs a non-empty list of drivers"),
+        (
+            {"line": AUDIT_LINE, "drivers": ["docker"]},
+            "state.audit_rules[0] cannot be recorded with docker",
+        ),
+        (
+            {"line": AUDIT_LINE, "drivers": ["libvirt", "docker"]},
+            "state.audit_rules[0] cannot be recorded with docker",
+        ),
+        ({"line": "w /x", "drivers": ["libvirt"]}, "state.audit_rules[0] needs a valid line"),
+        (
+            {"line": AUDIT_LINE, "drivers": ["libvirt"], "rewritten": True},
+            "state.audit_rules[0] has the unknown key 'rewritten'",
+        ),
+    ],
+)
+def test_an_invalid_audit_rule_item_is_reported(
+    tmp_path: Path, item: dict[str, object], message: str
+) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    found = errors_for(tmp_path, changed(state={**state, "audit_rules": [item]}))
+    assert any(message in error for error in found), found
+
+
+def test_drivers_are_only_for_items_that_need_a_kernel(tmp_path: Path) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    found = errors_for(
+        tmp_path,
+        changed(state={**state, "files": [{"path": "/etc/crontab", "drivers": ["libvirt"]}]}),
+    )
+    assert any("state.files[0] has the unknown key 'drivers'" in error for error in found), found

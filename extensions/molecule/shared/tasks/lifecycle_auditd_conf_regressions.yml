@@ -1,0 +1,399 @@
+---
+- name: Auditd settings regressions | Refuse to run unless the auditd_conf topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'auditd_conf'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['auditd_conf']
+    fail_msg: >-
+      The auditd settings regressions reuse the facts of the auditd_conf lifecycle, which must have just run; the
+      topic was {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Auditd settings regressions | Name the rules, the file and the toggles of the regressions
+  ansible.builtin.set_fact:
+    regression_label: auditd settings regressions
+    regression_profile: "{{ linux_compliance_discovered }}"
+    regression_conf: /etc/audit/auditd.conf
+    regression_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    regression_space: xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_action
+    regression_admin: xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_action
+    regression_items: "{{ lifecycle_items }}"
+    regression_rewritten: "{{ lifecycle_rewritten }}"
+    regression_newline: "\n"
+
+- name: Auditd settings regressions | Check that both disk space action rules are in the profile of the lifecycle
+  ansible.builtin.assert:
+    that:
+      - regression_space in lifecycle_rule_ids
+      - regression_admin in lifecycle_rule_ids
+    fail_msg: "{{ regression_label }}: {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Auditd settings regressions | Read the configuration file as built
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_built
+
+- name: Auditd settings regressions | Keep the lines of the configuration file as built
+  ansible.builtin.set_fact:
+    regression_built_text: "{{ regression_built.content | b64decode }}"
+    regression_space_line: >-
+      {{ (regression_built.content | b64decode).split(regression_newline)
+         | select('match', '^space_left_action ') | first }}
+    regression_admin_line: >-
+      {{ (regression_built.content | b64decode).split(regression_newline)
+         | select('match', '^admin_space_left_action ') | first }}
+
+- name: Auditd settings regressions | Take the state of the whole instance before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+  vars:
+    lifecycle_items: "{{ regression_items }}"
+    lifecycle_rewritten: "{{ regression_rewritten }}"
+
+- name: Auditd settings regressions | Remember the state of the whole instance before the regressions
+  ansible.builtin.set_fact:
+    regression_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Auditd settings regressions | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Auditd settings regressions | Apply the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings regressions | Read the ledger after the apply
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_applied
+
+- name: Auditd settings regressions | Name the rules that the apply recorded and their entries
+  ansible.builtin.set_fact:
+    regression_recorded: >-
+      {{ regression_ledger_applied.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+         | sort(attribute='rule_id') }}
+    regression_applied_ids: >-
+      {{ lifecycle_results | selectattr('status', 'equalto', 'applied') | map(attribute='rule_id') | list }}
+
+- name: Auditd settings regressions | Check that every rule was applied or compliant and every applied rule recorded
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | difference(['applied', 'compliant']) | list == []
+      - regression_space in regression_applied_ids
+      - regression_admin in regression_applied_ids
+      - regression_recorded | map(attribute='rule_id') | list == regression_applied_ids
+    fail_msg: "{{ regression_label }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings regressions | Read the configuration file after the apply
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_applied
+
+- name: Auditd settings regressions | Pretend that another method recorded every entry, as after a change of method
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: auditd_conf
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | combine({'method': 'rules_file'}) | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ regression_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Auditd settings regressions | Apply over ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings regressions | Check that the apply refused every recorded rule and changed nothing
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', regression_applied_ids) | map(attribute='status') | unique
+        | list == ['method_changed']
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'method_changed') | selectattr('reason', 'none')
+        | list == []
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ regression_label }}, apply after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings regressions | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Auditd settings regressions | Clean up ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings regressions | Read the configuration file after the refused cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_refused
+
+- name: Auditd settings regressions | Check that the cleanup refused every rule, kept every entry and changed no line
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['cleanup_incomplete']
+      - lifecycle_results | map(attribute='reason') | unique | list == ['method_changed']
+      - lifecycle_results | selectattr('changed') | list == []
+      - regression_refused.content == regression_applied.content
+    fail_msg: "{{ regression_label }}, cleanup after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings regressions | Give every entry back the method that recorded it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: auditd_conf
+    revert_strategy: recorded_value
+    prior_values: "{{ item.prior_values | items2dict(key_name='name', value_name='value')
+      | dict2items(key_name='name', value_name='value') }}"
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ regression_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Auditd settings regressions | Change space_left_action by hand, as an administrator would
+  ansible.builtin.lineinfile:
+    path: "{{ regression_conf }}"
+    regexp: "^space_left_action "
+    line: space_left_action = rotate
+
+- name: Auditd settings regressions | Put admin_space_left_action back by hand, so it equals its recorded prior state
+  ansible.builtin.lineinfile:
+    path: "{{ regression_conf }}"
+    regexp: "^admin_space_left_action "
+    line: "{{ regression_admin_line }}"
+
+- name: Auditd settings regressions | Clean up the topic after the administrator's changes
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings regressions | Read the configuration file and the ledger after that cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_after_admin
+
+- name: Auditd settings regressions | Read the ledger after the cleanup that kept the administrator's change
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_admin
+
+- name: Auditd settings regressions | Check that only space_left_action was kept and admin_space_left_action restored
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_space)
+        | map(attribute='reason') | list == ['modified_since_apply']
+      - >-
+        lifecycle_results | rejectattr('rule_id', 'equalto', regression_space)
+        | map(attribute='status') | unique | list == ['restored']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_admin) | map(attribute='message') | first
+        is search('already back')
+      - regression_after_admin.content | b64decode is search('(?m)^space_left_action = rotate$')
+      - >-
+        regression_ledger_admin.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='rule_id') | list == [regression_space]
+    fail_msg: "{{ regression_label }}, cleanup after a change by hand: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings regressions | Put space_left_action back by hand as it was before the apply
+  ansible.builtin.lineinfile:
+    path: "{{ regression_conf }}"
+    regexp: "^space_left_action "
+    line: "{{ regression_space_line }}"
+
+- name: Auditd settings regressions | Clean up space_left_action now that it is back at its prior state
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings regressions | Read the configuration file after every cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_cleaned
+
+- name: Auditd settings regressions | Check that space_left_action was restored without a write and the file is as built
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [regression_space]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
+      - lifecycle_results | map(attribute='message') | first is search('already back')
+      - regression_cleaned.content | b64decode == regression_built_text
+    fail_msg: "{{ regression_label }}, cleanup after the line was put back: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings regressions | Set space_left_action twice, as a file edited by two tools would
+  ansible.builtin.copy:
+    content: "{{ regression_built_text ~ 'space_left_action = syslog' ~ regression_newline }}"
+    dest: "{{ regression_conf }}"
+    mode: preserve
+
+- name: Auditd settings regressions | Switch every rule of the topic on with the repeated setting
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Auditd settings regressions | Apply with the repeated setting
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings regressions | Check that the repeated setting is refused and the other rules applied
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_space) | map(attribute='status') | list
+        == ['duplicate_setting']
+      - lifecycle_results | selectattr('rule_id', 'equalto', regression_space) | selectattr('changed') | list == []
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_admin) | map(attribute='status') | list
+        == ['applied']
+    fail_msg: "{{ regression_label }}, apply with a repeated setting: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings regressions | Switch every rule of the topic off after the repeated setting
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Auditd settings regressions | Clean up after the repeated setting
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+
+- name: Auditd settings regressions | Read the configuration file after the cleanup of the repeated setting
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_after_repeated
+
+- name: Auditd settings regressions | Check that the cleanup restored every other line and kept the repeated setting
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - >-
+        regression_after_repeated.content | b64decode
+        == regression_built_text ~ 'space_left_action = syslog' ~ regression_newline
+    fail_msg: "{{ regression_label }}, cleanup after a repeated setting: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings regressions | Refuse settings that auditd would refuse together, where the profile sets both
+  when: >-
+    'xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_percentage' in lifecycle_rule_ids
+  block:
+    - name: Auditd settings regressions | Set an admin_space_left that is not below the profile's space_left
+      ansible.builtin.copy:
+        content: >-
+          {{ regression_built_text | regex_replace('(?m)^admin_space_left = .*$', 'admin_space_left = 90%') }}
+        dest: "{{ regression_conf }}"
+        mode: preserve
+
+    - name: Auditd settings regressions | Leave admin_space_left alone and switch the other rules on
+      ansible.builtin.set_fact:
+        "{{ item }}": "{{ item != 'linux_compliance_rule_auditd_data_retention_admin_space_left_percentage_enabled' }}"
+      loop: "{{ regression_toggles }}"
+
+    - name: Auditd settings regressions | Apply with an admin_space_left that auditd would refuse
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: auditd_conf
+
+    - name: Auditd settings regressions | Read the ledger after the refused apply
+      freesecdev.linux_compliance.control_state:
+        action: list
+      register: regression_ledger_invalid
+
+    - name: Auditd settings regressions | Check that every line to write was refused and nothing was recorded
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | selectattr('status', 'equalto', 'invalid_config') | list | length > 0
+          - lifecycle_results | selectattr('status', 'equalto', 'applied') | list == []
+          - >-
+            lifecycle_results | selectattr('status', 'equalto', 'invalid_config') | map(attribute='reason') | first
+            is search('admin_space_left 90%')
+          - lifecycle_results | selectattr('changed') | list == []
+          - regression_ledger_invalid.entries | selectattr('family', 'equalto', 'auditd_conf') | list == []
+        fail_msg: "{{ regression_label }}, apply with settings that auditd refuses: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Auditd settings regressions | Switch every rule of the topic off after the refused apply
+      ansible.builtin.set_fact:
+        "{{ item }}": false
+      loop: "{{ regression_toggles }}"
+
+- name: Auditd settings regressions | Put the configuration file back as built
+  ansible.builtin.copy:
+    content: "{{ regression_built_text }}"
+    dest: "{{ regression_conf }}"
+    mode: preserve
+
+- name: Auditd settings regressions | Apply and clean up the rules that only the other profiles of the datastream select
+  ansible.builtin.include_tasks:
+    file: lifecycle_auditd_conf_profiles.yml
+  loop: "{{ regression_other_profiles[lifecycle_platform] }}"
+  loop_control:
+    loop_var: regression_other_profile
+  vars:
+    regression_other_profiles:
+      ubuntu:
+        - stig
+      rhel_compatible:
+        - cis
+        - ospp
+
+- name: Auditd settings regressions | Read the ledger after the regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_after
+
+- name: Auditd settings regressions | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - regression_ledger_after.entries | selectattr('family', 'equalto', 'auditd_conf') | list == []
+    fail_msg: "{{ regression_label }}: the ledger still holds {{ regression_ledger_after.entries }}"
+    quiet: true
+
+- name: Auditd settings regressions | Assert that the whole instance is back to its state before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: auditd settings regressions
+    lifecycle_broad_step: the regressions
+    lifecycle_broad_reference: "{{ regression_broad_before }}"
+    lifecycle_items: "{{ regression_items }}"
+    lifecycle_rewritten: "{{ regression_rewritten }}"
+
+- name: Auditd settings regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_auditd_conf_regressions.yml'] }}"

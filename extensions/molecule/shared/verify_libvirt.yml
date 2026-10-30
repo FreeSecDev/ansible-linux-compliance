@@ -9,6 +9,8 @@
     - vars/versions.yml
     - vars/target.yml
   vars:
+    linux_compliance_auditd_conf_enabled: false
+    linux_compliance_auditd_rules_time_enabled: false
     linux_compliance_banners_enabled: false
     linux_compliance_pwquality_enabled: false
     linux_compliance_ssh_enabled: false

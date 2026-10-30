@@ -1,0 +1,17 @@
+---
+minor_changes:
+  - >-
+    remediate - the ``auditd`` umbrella gains its first fine-grained topics (FREES-110, ADR 0024). ``auditd_rules_time``
+    makes the five time change rules native: each writes one drop-in ``/etc/audit/rules.d/50-freesecdev-<rule>.rules``
+    with the collection's own ``b32`` and ``b64`` lines (or the watch form that each benchmark checks), refuses a rule
+    that another file already holds in part (``duplicate_rule``) and is ``compliant`` when another file holds it in
+    full. Where auditd runs, the rule set is checked for repeated rules, loaded with ``augenrules --load`` and verified
+    with ``auditctl -l``; a failed load is rolled back. ``auditd_conf`` (disruptive) makes 20 settings of
+    ``/etc/audit/auditd.conf`` native with the profile's values, one line per setting with its prior line recorded,
+    refuses settings that auditd would refuse together (``invalid_config``) and asks a running auditd to read the file
+    again. Switching a rule or topic off reverts exactly what it changed.
+  - >-
+    audit_control - new module that reads the audit status, the loaded rules and the rule files, loads the rules of
+    ``/etc/audit/rules.d`` with ``augenrules --load`` after checking them for repeated rules, and reloads auditd,
+    through the audited process helper, whose allow-list gains ``auditctl`` (``-s``, ``-l``, ``--signal reload``) and
+    ``augenrules`` (``--load``) in these exact forms only.

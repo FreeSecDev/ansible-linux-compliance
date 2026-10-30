@@ -46,9 +46,23 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "max_mode"},
         {"method", "path", "type", "attribute", "id"},
     ],
+    "auditd_rules_time": [{"method", "path", "lines"}],
+    "auditd_conf": [
+        {"method", "setting", "compare", "value"},
+        {"method", "setting", "compare", "value", "absent_compliant"},
+        {"method", "setting", "compare"} | PROFILE_VALUE_PARAMETERS,
+    ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
-DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality", "sudo"]
+NATIVE_FAMILIES = [
+    "file_permissions",
+    "banners",
+    "auditd_rules_time",
+    "auditd_conf",
+    "ssh",
+    "pwquality",
+    "sudo",
+]
+DISRUPTIVE_NATIVE_FAMILIES = ["auditd_rules_time", "auditd_conf", "ssh", "pwquality", "sudo"]
 
 
 def load(path: Path) -> dict[str, object]:
@@ -323,7 +337,11 @@ def test_every_rule_toggle_is_unique_and_a_valid_variable_name() -> None:
 
 def test_a_disabled_topic_excludes_every_catalogued_rule_of_its_family() -> None:
     result = plan(toggles={"linux_compliance_auditd_enabled": False})
-    auditd = {str(rule["rule_id"]) for rule in rules() if rule["family"] == "auditd"}
+    auditd = {
+        str(rule["rule_id"])
+        for rule in rules()
+        if rule["family"] in {"auditd", "auditd_conf", "auditd_rules_time"}
+    }
     disabled = cast("list[dict[str, object]]", result["disabled_rules"])
     assert len(auditd) > 100
     assert {str(item["rule_id"]) for item in disabled} == auditd

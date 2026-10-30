@@ -9,6 +9,7 @@ lifecycle_state_keys:
   sysctl: name
   users: name
   groups: name
+  audit_rules: line
 lifecycle_applied_outcomes:
   - pass
   - fixed

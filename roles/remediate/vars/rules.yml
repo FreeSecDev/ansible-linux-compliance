@@ -26,6 +26,12 @@ __linux_compliance_remediate_families:
     umbrella: integrity
   - name: kernel_build_config
     disruptive: false
+  - name: auditd_rules_time
+    disruptive: true
+    umbrella: auditd
+  - name: auditd_conf
+    disruptive: true
+    umbrella: auditd
   - name: auditd
     disruptive: true
   - name: sssd
@@ -640,6 +646,545 @@ __linux_compliance_remediate_rules:
             - stig_gui
           value:
             - "-1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_audit_rules_time_adjtimex"
+    family: auditd_rules_time
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_audit_rules_time_adjtimex_enabled
+    runbook: null
+    parameters:
+      method: "rules_file"
+      path: "/etc/audit/rules.d/50-freesecdev-audit-rules-time-adjtimex.rules"
+      lines:
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "-a always,exit -F arch=b32 -S adjtimex -k time-change"
+          - "-a always,exit -F arch=b64 -S adjtimex -k time-change"
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "-a always,exit -F arch=b32 -S adjtimex -k time-change"
+          - "-a always,exit -F arch=b64 -S adjtimex -k time-change"
+  - rule_id: "xccdf_org.ssgproject.content_rule_audit_rules_time_clock_settime"
+    family: auditd_rules_time
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_audit_rules_time_clock_settime_enabled
+    runbook: null
+    parameters:
+      method: "rules_file"
+      path: "/etc/audit/rules.d/50-freesecdev-audit-rules-time-clock-settime.rules"
+      lines:
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "-a always,exit -F arch=b32 -S clock_settime -F a0=0x0 -k time-change"
+          - "-a always,exit -F arch=b64 -S clock_settime -F a0=0x0 -k time-change"
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "-a always,exit -F arch=b32 -S clock_settime -F a0=0x0 -k time-change"
+          - "-a always,exit -F arch=b64 -S clock_settime -F a0=0x0 -k time-change"
+  - rule_id: "xccdf_org.ssgproject.content_rule_audit_rules_time_settimeofday"
+    family: auditd_rules_time
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_audit_rules_time_settimeofday_enabled
+    runbook: null
+    parameters:
+      method: "rules_file"
+      path: "/etc/audit/rules.d/50-freesecdev-audit-rules-time-settimeofday.rules"
+      lines:
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "-a always,exit -F arch=b32 -S settimeofday -k time-change"
+          - "-a always,exit -F arch=b64 -S settimeofday -k time-change"
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "-a always,exit -F arch=b32 -S settimeofday -k time-change"
+          - "-a always,exit -F arch=b64 -S settimeofday -k time-change"
+  - rule_id: "xccdf_org.ssgproject.content_rule_audit_rules_time_stime"
+    family: auditd_rules_time
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_audit_rules_time_stime_enabled
+    runbook: null
+    parameters:
+      method: "rules_file"
+      path: "/etc/audit/rules.d/50-freesecdev-audit-rules-time-stime.rules"
+      lines:
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "-a always,exit -F arch=b32 -S stime -k time-change"
+  - rule_id: "xccdf_org.ssgproject.content_rule_audit_rules_time_watch_localtime"
+    family: auditd_rules_time
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_audit_rules_time_watch_localtime_enabled
+    runbook: null
+    parameters:
+      method: "rules_file"
+      path: "/etc/audit/rules.d/50-freesecdev-audit-rules-time-watch-localtime.rules"
+      lines:
+        "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04":
+          - "-w /etc/localtime -p wa -k time-change"
+        "xccdf_org.ssgproject.content_benchmark_RHEL-9":
+          - "-a always,exit -F arch=b32 -F path=/etc/localtime -F perm=wa -k time-change"
+          - "-a always,exit -F arch=b64 -F path=/etc/localtime -F perm=wa -k time-change"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_disk_error_action_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "disk_error_action"
+      compare: "choice"
+      value_id: "var_auditd_disk_error_action"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "syslog|single|halt"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_workstation_l2
+          value:
+            - "syslog|single|halt"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action_stig"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_disk_error_action_stig_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "disk_error_action"
+      compare: "choice"
+      value: "syslog|single|halt"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_disk_full_action_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "disk_full_action"
+      compare: "choice"
+      value_id: "var_auditd_disk_full_action"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "halt|single"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_workstation_l2
+          value:
+            - "halt|single"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action_stig"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_disk_full_action_stig_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "disk_full_action"
+      compare: "choice"
+      value: "syslog|single|halt"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_action_mail_acct"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_action_mail_acct_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "action_mail_acct"
+      compare: "exact"
+      value_id: "var_auditd_action_mail_acct"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - root
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - root
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_action"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_admin_space_left_action_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "admin_space_left_action"
+      compare: "choice"
+      value_id: "var_auditd_admin_space_left_action"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - halt
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_workstation_l2
+          value:
+            - "single|halt"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - single
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_percentage"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_admin_space_left_percentage_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "admin_space_left"
+      compare: "percent"
+      value_id: "var_auditd_admin_space_left_percentage"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "5"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_flush"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_flush_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "flush"
+      compare: "choice"
+      value_id: "var_auditd_flush"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cui
+            - e8
+            - ism_o
+            - ospp
+          value:
+            - incremental_async
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - hipaa
+          value:
+            - data
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_max_log_file_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "max_log_file"
+      compare: "minimum"
+      value_id: "var_auditd_max_log_file"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "6"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_workstation_l2
+          value:
+            - "6"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_max_log_file_action_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "max_log_file_action"
+      compare: "choice"
+      value_id: "var_auditd_max_log_file_action"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - keep_logs
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - rotate
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_workstation_l2
+          value:
+            - keep_logs
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action_stig"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_max_log_file_action_stig_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "max_log_file_action"
+      compare: "choice"
+      value: "rotate|single"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_space_left_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "space_left"
+      compare: "minimum"
+      value_id: "var_auditd_space_left"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - "pci-dss"
+          value:
+            - "100"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_action"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_space_left_action_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "space_left_action"
+      compare: "choice"
+      value_id: "var_auditd_space_left_action"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - email
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_workstation_l2
+          value:
+            - "email|exec|single|halt"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - email
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_percentage"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_data_retention_space_left_percentage_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "space_left"
+      compare: "percent"
+      value_id: "var_auditd_space_left_percentage"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - stig
+          value:
+            - "25"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "25"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_freq"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_freq_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "freq"
+      compare: "number"
+      value_id: "var_auditd_freq"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cui
+            - e8
+            - ism_o
+            - ospp
+          value:
+            - "50"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "100"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_local_events"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_local_events_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "local_events"
+      compare: "choice"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_log_format"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_log_format_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "log_format"
+      compare: "choice"
+      value: "ENRICHED"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_name_format"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_name_format_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "name_format"
+      compare: "choice"
+      value_id: "var_auditd_name_format"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cui
+            - e8
+            - ism_o
+            - ospp
+          value:
+            - hostname
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - "pci-dss"
+          value:
+            - fqd
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "hostname|fqd|numeric"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_overflow_action"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_overflow_action_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "overflow_action"
+      compare: "choice"
+      value: "syslog|single|halt"
+  - rule_id: "xccdf_org.ssgproject.content_rule_auditd_write_logs"
+    family: auditd_conf
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_auditd_write_logs_enabled
+    runbook: null
+    parameters:
+      method: "conf_line"
+      setting: "write_logs"
+      compare: "choice"
+      value: "yes"
+      absent_compliant: true
   - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_issue"
     family: banners
     disruptive: false
@@ -2050,6 +2595,12 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_kernel_config_unmap_kernel_at_el0"
     - "xccdf_org.ssgproject.content_rule_kernel_config_vmap_stack"
     - "xccdf_org.ssgproject.content_rule_kernel_config_x86_vsyscall_emulation"
+  auditd_rules_time: []
+  auditd_conf:
+    - "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_remote_server"
+    - "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_sufficiently_large_partition"
+    - "xccdf_org.ssgproject.content_rule_auditd_audispd_syslog_plugin_activated"
+    - "xccdf_org.ssgproject.content_rule_auditd_offload_logs"
   auditd:
     - "xccdf_org.ssgproject.content_rule_audit_access_failed"
     - "xccdf_org.ssgproject.content_rule_audit_access_failed_aarch64"
@@ -2184,11 +2735,6 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_audit_rules_suid_privilege_function"
     - "xccdf_org.ssgproject.content_rule_audit_rules_sysadmin_actions"
     - "xccdf_org.ssgproject.content_rule_audit_rules_system_shutdown"
-    - "xccdf_org.ssgproject.content_rule_audit_rules_time_adjtimex"
-    - "xccdf_org.ssgproject.content_rule_audit_rules_time_clock_settime"
-    - "xccdf_org.ssgproject.content_rule_audit_rules_time_settimeofday"
-    - "xccdf_org.ssgproject.content_rule_audit_rules_time_stime"
-    - "xccdf_org.ssgproject.content_rule_audit_rules_time_watch_localtime"
     - "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_creat"
     - "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_ftruncate"
     - "xccdf_org.ssgproject.content_rule_audit_rules_unsuccessful_file_modification_open"
@@ -2206,30 +2752,6 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_audit_rules_var_log_journal"
     - "xccdf_org.ssgproject.content_rule_audit_rules_var_spool_cron"
     - "xccdf_org.ssgproject.content_rule_audit_sudo_log_events"
-    - "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_remote_server"
-    - "xccdf_org.ssgproject.content_rule_auditd_audispd_configure_sufficiently_large_partition"
-    - "xccdf_org.ssgproject.content_rule_auditd_audispd_syslog_plugin_activated"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action_stig"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action_stig"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_action_mail_acct"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_action"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_percentage"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_flush"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action_stig"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_action"
-    - "xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_percentage"
-    - "xccdf_org.ssgproject.content_rule_auditd_freq"
-    - "xccdf_org.ssgproject.content_rule_auditd_local_events"
-    - "xccdf_org.ssgproject.content_rule_auditd_log_format"
-    - "xccdf_org.ssgproject.content_rule_auditd_name_format"
-    - "xccdf_org.ssgproject.content_rule_auditd_offload_logs"
-    - "xccdf_org.ssgproject.content_rule_auditd_overflow_action"
-    - "xccdf_org.ssgproject.content_rule_auditd_write_logs"
     - "xccdf_org.ssgproject.content_rule_directory_access_var_log_audit"
     - "xccdf_org.ssgproject.content_rule_directory_group_ownership_var_log_audit"
     - "xccdf_org.ssgproject.content_rule_directory_ownership_var_log_audit"

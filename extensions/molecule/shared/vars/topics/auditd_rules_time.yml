@@ -1,0 +1,245 @@
+---
+family: auditd_rules_time
+disruptive: true
+containment: >-
+  auditd_rules_time only writes its own drop-ins below /etc/audit/rules.d and loads the rule set where auditd runs,
+  after refusing a set that holds a rule twice. The containers run no auditd and load nothing; in the virtual machines
+  the rules only record time changes, and the failure mode of the images (-f 1) logs a lost event instead of stopping
+  the kernel. The harness connects with docker exec through the Docker API, or over SSH as root to a disposable virtual
+  machine, neither of which an audit rule can block, and the guard's connection test after every remediate run proves
+  that it still reaches the same instance. The allow-list names auditd_rules_time only for the runs of this topic.
+profiles:
+  ubuntu: cis_level2_server
+  rhel_compatible: e8
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    The RHEL 9 datastream's platform checks do not recognise Rocky Linux, so every rule of the profile is notapplicable
+    there; the drop-ins with their checksums, mode and ownership under applied are the evidence. On Ubuntu 24.04 the
+    rules apply to a container with auditd installed, and the audit after apply must report them pass or fixed.
+state:
+  files:
+    - path: /etc/audit/rules.d
+      rewritten: true
+    - path: /etc/audit/audit.rules
+      rewritten: true
+    - path: /etc/audit/audit.rules.prev
+      rewritten: true
+    - path: /etc/audit/rules.d/40-site.rules
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-adjtimex.rules
+      rewritten: true
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-clock-settime.rules
+      rewritten: true
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-settimeofday.rules
+      rewritten: true
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-stime.rules
+      rewritten: true
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-watch-localtime.rules
+      rewritten: true
+  packages:
+    - name: auditd
+      platforms:
+        - ubuntu
+    - name: audit
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+  audit_rules:
+    - line: '-a always,exit -F arch=b32 -S adjtimex -k time-change'
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b64 -S adjtimex -k time-change'
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b32 -S clock_settime -F a0=0x0 -k time-change'
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b64 -S clock_settime -F a0=0x0 -k time-change'
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b32 -S settimeofday -k time-change'
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b64 -S settimeofday -k time-change'
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b32 -S stime -k time-change'
+      drivers:
+        - libvirt
+      platforms:
+        - rhel_compatible
+    - line: '-a always,exit -F arch=b32 -F path=/etc/localtime -F perm=wa -k time-change'
+      drivers:
+        - libvirt
+      platforms:
+        - rhel_compatible
+    - line: '-a always,exit -F arch=b64 -F path=/etc/localtime -F perm=wa -k time-change'
+      drivers:
+        - libvirt
+      platforms:
+        - rhel_compatible
+    - line: '-w /etc/localtime -p wa -k time-change'
+      drivers:
+        - libvirt
+      platforms:
+        - ubuntu
+applied:
+  files:
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-adjtimex.rules
+      exists: true
+      type: file
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      changes:
+        - attributes
+      checksum: 01dcafb5b7bb5d62965e2fe8bde816d241dcc654c249da51f285b208d9a19455
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-clock-settime.rules
+      exists: true
+      type: file
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      changes:
+        - attributes
+      checksum: c7d3545a74843c73960c7236a1212b23ec259736b1c2ef2557de5766bc54f68a
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-settimeofday.rules
+      exists: true
+      type: file
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      changes:
+        - attributes
+      checksum: 656882caa2ab27264ce61e8206e81633cf88aa3650a6cd3971addc45e3133543
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-stime.rules
+      exists: true
+      type: file
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      changes:
+        - attributes
+      checksum: b7703a3b97405759a6eee758b1debd6297eab947c38dda71cfeacd323d02aaa8
+      platforms:
+        - rhel_compatible
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-watch-localtime.rules
+      exists: true
+      type: file
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      changes:
+        - attributes
+      checksum: 721b0f6ef0c8c5023f9c29a6ac6bda581d0ba5b59eb033b3cfbd4366a7211864
+      platforms:
+        - rhel_compatible
+    - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-watch-localtime.rules
+      exists: true
+      type: file
+      mode: "0600"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      changes:
+        - attributes
+      checksum: f821cf72125ff86071abca8550f1b0fcf8bd08f414749af423c130eada1e74fa
+      platforms:
+        - ubuntu
+  audit_rules:
+    - line: '-a always,exit -F arch=b32 -S adjtimex -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b64 -S adjtimex -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b32 -S clock_settime -F a0=0x0 -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b64 -S clock_settime -F a0=0x0 -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b32 -S settimeofday -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b64 -S settimeofday -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+    - line: '-a always,exit -F arch=b32 -S stime -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+      platforms:
+        - rhel_compatible
+    - line: '-a always,exit -F arch=b32 -F path=/etc/localtime -F perm=wa -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+      platforms:
+        - rhel_compatible
+    - line: '-a always,exit -F arch=b64 -F path=/etc/localtime -F perm=wa -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+      platforms:
+        - rhel_compatible
+    - line: '-w /etc/localtime -p wa -k time-change'
+      loaded: true
+      drivers:
+        - libvirt
+      platforms:
+        - ubuntu
+pre_states:
+  - name: as built
+    audit: true
+  - name: an administrator's file with the time zone watch
+    audit: false
+    modes:
+      - rule
+    files:
+      - path: /etc/audit/rules.d/40-site.rules
+        content: |
+          -w /etc/localtime -p wa -k time-change
+          -a always,exit -F arch=b32 -F path=/etc/localtime -F perm=wa -k time-change
+          -a always,exit -F arch=b64 -F path=/etc/localtime -F perm=wa -k time-change
+    unchanged:
+      - rule: audit_rules_time_watch_localtime
+        status: compliant
+    applied:
+      files:
+        - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-watch-localtime.rules
+          exists: false
+  - name: auditd running in a virtual machine
+    audit: false
+    requires:
+      - libvirt
+    applied:
+      files:
+        - path: /etc/audit/audit.rules
+          changes:
+            - checksum
+regressions:
+  - name: changes
+    files:
+      - lifecycle_auditd_rules_regressions.yml

@@ -24,3 +24,31 @@ __linux_compliance_remediate_sudo_option_pattern: '^[a-z_]{1,32}$'
 __linux_compliance_remediate_sudo_include_pattern: '(?m)^[ \t]*[@#]includedir[ \t]+/etc/sudoers\.d/?[ \t]*$'
 __linux_compliance_remediate_sudo_backslash: '\'
 __linux_compliance_remediate_sudo_read_name: '^[^.]*[^.~]$'
+__linux_compliance_remediate_audit_rules_families:
+  - auditd_rules_time
+__linux_compliance_remediate_audit_rules_directory: /etc/audit/rules.d
+__linux_compliance_remediate_audit_rules_previous: /etc/audit/audit.rules.prev
+__linux_compliance_remediate_audit_dropin_pattern: '^/etc/audit/rules\.d/50-freesecdev-[a-z0-9-]{1,80}\.rules$'
+__linux_compliance_remediate_audit_line_pattern: >-
+  ^(-w /[A-Za-z0-9._/-]{1,255} -p [rwxa]{1,4} -k [A-Za-z0-9_-]{1,31}|-a always,exit( -F arch=b(32|64))?( -S
+  [a-z0-9_]{1,32})?( -F (path|dir)=/[A-Za-z0-9._/-]{1,255}| -F perm=[rwxa]{1,4}| -F a[0-3]=0x[0-9a-f]{1,8}| -F
+  auid>=1000| -F auid!=unset| -F exit=-E[A-Z]{1,16}| -F success=[01])* -k [A-Za-z0-9_-]{1,31})$
+__linux_compliance_remediate_audit_machines:
+  - x86_64
+__linux_compliance_remediate_auditd_conf: /etc/audit/auditd.conf
+__linux_compliance_remediate_auditd_choice_order:
+  - syslog
+  - email
+  - rotate
+  - keep_logs
+  - hostname
+  - fqd
+  - numeric
+  - single
+  - halt
+__linux_compliance_remediate_auditd_defaults:
+  space_left: "75"
+  admin_space_left: "50"
+  flush: incremental_async
+  freq: "50"
+  log_file: /var/log/audit/audit.log

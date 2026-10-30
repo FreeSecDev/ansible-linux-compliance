@@ -52,6 +52,8 @@ DISRUPTIVE_FAMILIES: Final[frozenset[str]] = frozenset(
     {
         "apparmor",
         "auditd",
+        "auditd_conf",
+        "auditd_rules_time",
         "autofs",
         "bootloader",
         "console_access",

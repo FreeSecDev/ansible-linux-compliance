@@ -138,7 +138,9 @@ through subsystem tags.
 | `linux_compliance_software_integrity_enabled` | `software_integrity` | `integrity` | no | `true` | 5 | 0 | 5 | 0 |
 | `linux_compliance_endpoint_security_enabled` | `endpoint_security` | `integrity` | no | `true` | 3 | 0 | 3 | 0 |
 | `linux_compliance_kernel_build_config_enabled` | `kernel_build_config` | none | no | `true` | 67 | 0 | 67 | 0 |
-| `linux_compliance_auditd_enabled` | `auditd` | none | yes | `true` | 206 | 0 | 206 | 0 |
+| `linux_compliance_auditd_rules_time_enabled` | `auditd_rules_time` | `auditd` | yes | `true` | 5 | 5 | 0 | 0 |
+| `linux_compliance_auditd_conf_enabled` | `auditd_conf` | `auditd` | yes | `true` | 24 | 20 | 4 | 0 |
+| `linux_compliance_auditd_enabled` | `auditd` | none | yes | `true` | 206 | 25 | 181 | 0 |
 | `linux_compliance_services_enabled` | `sssd`, `time_sync`, `mail`, `cron`, `nfs`, `usbguard`, `fapolicyd`, `network_services` | umbrella | yes | `true` | 119 | 0 | 119 | 36 |
 | `linux_compliance_sssd_enabled` | `sssd` | `services` | yes | `true` | 12 | 0 | 12 | 3 |
 | `linux_compliance_time_sync_enabled` | `time_sync` | `services` | yes | `true` | 19 | 0 | 19 | 3 |
@@ -590,6 +592,45 @@ families through their subsystem tags:
 | `linux_compliance_rule_kernel_config_vmap_stack_enabled` | `kernel_config_vmap_stack` | `audit_only` |
 | `linux_compliance_rule_kernel_config_x86_vsyscall_emulation_enabled` | `kernel_config_x86_vsyscall_emulation` | `audit_only` |
 
+### `auditd_rules_time`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_audit_rules_time_adjtimex_enabled` | `audit_rules_time_adjtimex` | `recorded_value` |
+| `linux_compliance_rule_audit_rules_time_clock_settime_enabled` | `audit_rules_time_clock_settime` | `recorded_value` |
+| `linux_compliance_rule_audit_rules_time_settimeofday_enabled` | `audit_rules_time_settimeofday` | `recorded_value` |
+| `linux_compliance_rule_audit_rules_time_stime_enabled` | `audit_rules_time_stime` | `recorded_value` |
+| `linux_compliance_rule_audit_rules_time_watch_localtime_enabled` | `audit_rules_time_watch_localtime` | `recorded_value` |
+
+### `auditd_conf`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_auditd_audispd_configure_remote_server_enabled` | `auditd_audispd_configure_remote_server` | `audit_only` |
+| `linux_compliance_rule_auditd_audispd_configure_sufficiently_large_partition_enabled` | `auditd_audispd_configure_sufficiently_large_partition` | `audit_only` |
+| `linux_compliance_rule_auditd_audispd_syslog_plugin_activated_enabled` | `auditd_audispd_syslog_plugin_activated` | `audit_only` |
+| `linux_compliance_rule_auditd_data_disk_error_action_enabled` | `auditd_data_disk_error_action` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_disk_error_action_stig_enabled` | `auditd_data_disk_error_action_stig` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_disk_full_action_enabled` | `auditd_data_disk_full_action` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_disk_full_action_stig_enabled` | `auditd_data_disk_full_action_stig` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_action_mail_acct_enabled` | `auditd_data_retention_action_mail_acct` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_admin_space_left_action_enabled` | `auditd_data_retention_admin_space_left_action` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_admin_space_left_percentage_enabled` | `auditd_data_retention_admin_space_left_percentage` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_flush_enabled` | `auditd_data_retention_flush` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_max_log_file_enabled` | `auditd_data_retention_max_log_file` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_max_log_file_action_enabled` | `auditd_data_retention_max_log_file_action` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_max_log_file_action_stig_enabled` | `auditd_data_retention_max_log_file_action_stig` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_space_left_enabled` | `auditd_data_retention_space_left` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_space_left_action_enabled` | `auditd_data_retention_space_left_action` | `recorded_value` |
+| `linux_compliance_rule_auditd_data_retention_space_left_percentage_enabled` | `auditd_data_retention_space_left_percentage` | `recorded_value` |
+| `linux_compliance_rule_auditd_freq_enabled` | `auditd_freq` | `recorded_value` |
+| `linux_compliance_rule_auditd_local_events_enabled` | `auditd_local_events` | `recorded_value` |
+| `linux_compliance_rule_auditd_log_format_enabled` | `auditd_log_format` | `recorded_value` |
+| `linux_compliance_rule_auditd_name_format_enabled` | `auditd_name_format` | `recorded_value` |
+| `linux_compliance_rule_auditd_offload_logs_enabled` | `auditd_offload_logs` | `audit_only` |
+| `linux_compliance_rule_auditd_overflow_action_enabled` | `auditd_overflow_action` | `recorded_value` |
+| `linux_compliance_rule_auditd_write_logs_enabled` | `auditd_write_logs` | `recorded_value` |
+
 ### `auditd`
 
 | Variable | Rule | Strategy |
@@ -727,11 +768,6 @@ families through their subsystem tags:
 | `linux_compliance_rule_audit_rules_suid_privilege_function_enabled` | `audit_rules_suid_privilege_function` | `audit_only` |
 | `linux_compliance_rule_audit_rules_sysadmin_actions_enabled` | `audit_rules_sysadmin_actions` | `audit_only` |
 | `linux_compliance_rule_audit_rules_system_shutdown_enabled` | `audit_rules_system_shutdown` | `audit_only` |
-| `linux_compliance_rule_audit_rules_time_adjtimex_enabled` | `audit_rules_time_adjtimex` | `audit_only` |
-| `linux_compliance_rule_audit_rules_time_clock_settime_enabled` | `audit_rules_time_clock_settime` | `audit_only` |
-| `linux_compliance_rule_audit_rules_time_settimeofday_enabled` | `audit_rules_time_settimeofday` | `audit_only` |
-| `linux_compliance_rule_audit_rules_time_stime_enabled` | `audit_rules_time_stime` | `audit_only` |
-| `linux_compliance_rule_audit_rules_time_watch_localtime_enabled` | `audit_rules_time_watch_localtime` | `audit_only` |
 | `linux_compliance_rule_audit_rules_unsuccessful_file_modification_creat_enabled` | `audit_rules_unsuccessful_file_modification_creat` | `audit_only` |
 | `linux_compliance_rule_audit_rules_unsuccessful_file_modification_ftruncate_enabled` | `audit_rules_unsuccessful_file_modification_ftruncate` | `audit_only` |
 | `linux_compliance_rule_audit_rules_unsuccessful_file_modification_open_enabled` | `audit_rules_unsuccessful_file_modification_open` | `audit_only` |
@@ -749,30 +785,6 @@ families through their subsystem tags:
 | `linux_compliance_rule_audit_rules_var_log_journal_enabled` | `audit_rules_var_log_journal` | `audit_only` |
 | `linux_compliance_rule_audit_rules_var_spool_cron_enabled` | `audit_rules_var_spool_cron` | `audit_only` |
 | `linux_compliance_rule_audit_sudo_log_events_enabled` | `audit_sudo_log_events` | `audit_only` |
-| `linux_compliance_rule_auditd_audispd_configure_remote_server_enabled` | `auditd_audispd_configure_remote_server` | `audit_only` |
-| `linux_compliance_rule_auditd_audispd_configure_sufficiently_large_partition_enabled` | `auditd_audispd_configure_sufficiently_large_partition` | `audit_only` |
-| `linux_compliance_rule_auditd_audispd_syslog_plugin_activated_enabled` | `auditd_audispd_syslog_plugin_activated` | `audit_only` |
-| `linux_compliance_rule_auditd_data_disk_error_action_enabled` | `auditd_data_disk_error_action` | `audit_only` |
-| `linux_compliance_rule_auditd_data_disk_error_action_stig_enabled` | `auditd_data_disk_error_action_stig` | `audit_only` |
-| `linux_compliance_rule_auditd_data_disk_full_action_enabled` | `auditd_data_disk_full_action` | `audit_only` |
-| `linux_compliance_rule_auditd_data_disk_full_action_stig_enabled` | `auditd_data_disk_full_action_stig` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_action_mail_acct_enabled` | `auditd_data_retention_action_mail_acct` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_admin_space_left_action_enabled` | `auditd_data_retention_admin_space_left_action` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_admin_space_left_percentage_enabled` | `auditd_data_retention_admin_space_left_percentage` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_flush_enabled` | `auditd_data_retention_flush` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_max_log_file_enabled` | `auditd_data_retention_max_log_file` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_max_log_file_action_enabled` | `auditd_data_retention_max_log_file_action` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_max_log_file_action_stig_enabled` | `auditd_data_retention_max_log_file_action_stig` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_space_left_enabled` | `auditd_data_retention_space_left` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_space_left_action_enabled` | `auditd_data_retention_space_left_action` | `audit_only` |
-| `linux_compliance_rule_auditd_data_retention_space_left_percentage_enabled` | `auditd_data_retention_space_left_percentage` | `audit_only` |
-| `linux_compliance_rule_auditd_freq_enabled` | `auditd_freq` | `audit_only` |
-| `linux_compliance_rule_auditd_local_events_enabled` | `auditd_local_events` | `audit_only` |
-| `linux_compliance_rule_auditd_log_format_enabled` | `auditd_log_format` | `audit_only` |
-| `linux_compliance_rule_auditd_name_format_enabled` | `auditd_name_format` | `audit_only` |
-| `linux_compliance_rule_auditd_offload_logs_enabled` | `auditd_offload_logs` | `audit_only` |
-| `linux_compliance_rule_auditd_overflow_action_enabled` | `auditd_overflow_action` | `audit_only` |
-| `linux_compliance_rule_auditd_write_logs_enabled` | `auditd_write_logs` | `audit_only` |
 | `linux_compliance_rule_directory_access_var_log_audit_enabled` | `directory_access_var_log_audit` | `audit_only` |
 | `linux_compliance_rule_directory_group_ownership_var_log_audit_enabled` | `directory_group_ownership_var_log_audit` | `audit_only` |
 | `linux_compliance_rule_directory_ownership_var_log_audit_enabled` | `directory_ownership_var_log_audit` | `audit_only` |

@@ -1052,3 +1052,31 @@ policy:
   found in the trusted directories is reported as `available: false`; an sshd that the helper refuses (wrong owner,
   writable by group or others, a symbolic link out of the trusted directories) or that cannot be started fails the
   module with `fail_json`.
+
+## Amendment 2026-10-30: the audit tools (FREES-110)
+
+The auditd topics ([ADR 0024](0024-native-auditd-settings-and-audit-rules.md)) must load the audit rules that they
+write and ask auditd to read its configuration again, and must not leave a rule set that loads only in part. They follow
+the general rule of the amendment on external configuration validators (FREES-175): the tools run through the audited
+process helper, from a module of this collection, `freesecdev.linux_compliance.audit_control`, its fourth caller. The
+allow-list gains two policies, each with exact complete argument forms (`ExecutablePolicy.argument_forms` of FREES-145)
+and resolved in the trusted directories like `oscap`:
+
+- `auditctl` with exactly `-s` (the kernel's audit status), `-l` (the loaded rules) and `--signal reload` (asks the
+  running auditd to read `/etc/audit/auditd.conf` again, as `SIGHUP` does). Every option that changes the rules or the
+  kernel's audit state, `-D`, `-a`, `-d`, `-w`, `-W`, `-R`, `-e`, `-f`, `-b`, `--loginuid-immutable` and every other
+  signal, is refused before anything runs (`AUDITCTL_FORMS`).
+- `augenrules` with exactly `--load` (`AUGENRULES_FORMS`). `augenrules` is the POSIX shell script of the audit package
+  that `auditd.service` runs at every start: it joins the files of `/etc/audit/rules.d` into `/etc/audit/audit.rules`
+  and loads that file with `auditctl -R`. The helper runs it without a shell of its own, with the fixed environment and
+  a timeout; its command line takes nothing from the caller. Reimplementing how it joins the files would risk loading
+  now a set that differs from the one loaded at the next boot.
+
+The module never passes a rule on a command line. Before it runs `augenrules --load` it reads every file that
+`augenrules` reads (bounded: 512 files of at most 1 MiB, regular files and links to them, names that end in `.rules`
+without a leading dot) and refuses to load when two places hold the same rule or when the rules are locked
+(`enabled 2`); after the load it checks the expected rules against `auditctl -l`. The remediate role rolls back the
+drop-ins of its run when the load fails. Only an `auditctl` that is not found in the trusted directories is reported as
+`available: false`; one that the helper refuses fails the module. Unit tests in
+`tests/unit/plugins/module_utils/compliance/test_process.py` refuse every other form, and
+`tests/unit/plugins/modules/test_audit_control.py` covers the module.

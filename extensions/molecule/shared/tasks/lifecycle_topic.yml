@@ -7,6 +7,21 @@
       {{ lifecycle_catalogue.__linux_compliance_remediate_families | selectattr('name', 'equalto', lifecycle_family)
       | first }}
 
+- name: Lifecycle topic | Name the profile of the cycles of the topic, the platform's own unless the topic names one
+  ansible.builtin.set_fact:
+    lifecycle_topic_profile: >-
+      {{ (lifecycle_topic.profiles | default({}, true))[lifecycle_platform] | default(molecule_image.profile) }}
+
+- name: Lifecycle topic | Use the profile of the topic for the role inputs, the scans and the regressions
+  ansible.builtin.set_fact:
+    molecule_profile: "{{ lifecycle_topic_profile }}"
+  when: lifecycle_topic_profile != molecule_profile
+
+- name: Lifecycle topic | Discover the profile of the topic, whose rules the remediate and audit roles then select
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.discover
+  when: linux_compliance_discovered.profile_id != 'xccdf_org.ssgproject.content_profile_' ~ lifecycle_topic_profile
+
 - name: Lifecycle topic | Select the rules of the topic that the profile of this platform selects
   ansible.builtin.set_fact:
     lifecycle_rules: >-
@@ -39,8 +54,16 @@
       + (lifecycle_declared_applied | selectattr('platforms', 'defined')
       | selectattr('platforms', 'contains', lifecycle_platform) | list)}) }}
   vars:
-    lifecycle_declared_items: "{{ (lifecycle_topic.state | default({}, true))[item] | default([], true) }}"
-    lifecycle_declared_applied: "{{ (lifecycle_topic.applied | default({}, true))[item] | default([], true) }}"
+    lifecycle_driver_items: "{{ (lifecycle_topic.state | default({}, true))[item] | default([], true) }}"
+    lifecycle_driver_applied: "{{ (lifecycle_topic.applied | default({}, true))[item] | default([], true) }}"
+    lifecycle_declared_items: >-
+      {{ (lifecycle_driver_items | rejectattr('drivers', 'defined') | list)
+      + (lifecycle_driver_items | selectattr('drivers', 'defined')
+      | selectattr('drivers', 'contains', molecule_target.driver) | list) }}
+    lifecycle_declared_applied: >-
+      {{ (lifecycle_driver_applied | rejectattr('drivers', 'defined') | list)
+      + (lifecycle_driver_applied | selectattr('drivers', 'defined')
+      | selectattr('drivers', 'contains', molecule_target.driver) | list) }}
   loop: "{{ lifecycle_state_keys.keys() | list }}"
 
 - name: Lifecycle topic | Name the declared files whose content the topic rewrites
@@ -233,3 +256,13 @@
     - >-
       lifecycle_regression.platforms is not defined
       or lifecycle_platform in lifecycle_regression.platforms
+
+- name: Lifecycle topic | Give the platform's own profile back to the role inputs and the next topic
+  ansible.builtin.set_fact:
+    molecule_profile: "{{ molecule_image.profile }}"
+  when: lifecycle_topic_profile != molecule_image.profile
+
+- name: Lifecycle topic | Discover the platform's own profile again
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.discover
+  when: linux_compliance_discovered.profile_id != 'xccdf_org.ssgproject.content_profile_' ~ molecule_image.profile

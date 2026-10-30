@@ -565,7 +565,13 @@
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
     linux_compliance_remediate_enabled: true
     linux_compliance_auditd_enabled: false
+    linux_compliance_remediate_allow_disruptive:
+      - auditd
     auditd_toggle: linux_compliance_auditd_enabled
+    auditd_families:
+      - auditd
+      - auditd_conf
+      - auditd_rules_time
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:
@@ -581,11 +587,16 @@
 
     - name: Describe a discovered profile that selects every catalogued rule, without a fact
       ansible.builtin.set_fact:
-        auditd_rules: "{{ full_catalogue.__linux_compliance_remediate_audit_only.auditd }}"
+        auditd_rules: >-
+          {{ (auditd_families | map('extract', full_catalogue.__linux_compliance_remediate_audit_only)
+              | map('default', []) | ansible.builtin.flatten)
+             + (full_catalogue.__linux_compliance_remediate_rules | selectattr('family', 'in', auditd_families)
+                | map(attribute='rule_id') | list) }}
         full_profile:
           profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
           rule_ids: >-
-            {{ (full_catalogue.__linux_compliance_remediate_rules | selectattr('family', 'equalto', 'file_permissions')
+            {{ (full_catalogue.__linux_compliance_remediate_rules
+                | selectattr('family', 'in', ['file_permissions'] + auditd_families)
                 | map(attribute='rule_id') | list)
                + (full_catalogue.__linux_compliance_remediate_audit_only | ansible.builtin.dict2items
                   | map(attribute='value') | ansible.builtin.flatten) }}
@@ -606,7 +617,7 @@
     - name: Check that every auditd rule is off in both roles and names the topic toggle
       vars:
         planned_auditd: >-
-          {{ linux_compliance_remediated.rules | selectattr('family', 'equalto', 'auditd') | list }}
+          {{ linux_compliance_remediated.rules | selectattr('family', 'in', auditd_families) | list }}
         audit_disabled: "{{ __linux_compliance_audit_toggles.disabled_rules }}"
       ansible.builtin.assert:
         that:
@@ -621,7 +632,7 @@
           - __linux_compliance_audit_toggles.warnings == []
           - linux_compliance_remediated.notices | select('match', 'WARNING:') | list == []
           - >-
-            linux_compliance_remediated.results | selectattr('family', 'equalto', 'auditd') | list == []
+            linux_compliance_remediated.results | selectattr('family', 'in', auditd_families) | list == []
         quiet: true
 
 - name: Full catalogue in check mode | An umbrella toggle switches off every family it groups in both roles

@@ -1,0 +1,105 @@
+---
+- name: Auditd settings of another profile | Refuse to run outside the auditd settings regressions
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'auditd_conf'
+      - regression_label == 'auditd settings regressions'
+      - regression_other_profile is string
+    fail_msg: >-
+      lifecycle_auditd_conf_profiles.yml runs only from the auditd settings regressions; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Auditd settings of another profile | Use the other profile for the role inputs
+  ansible.builtin.set_fact:
+    molecule_profile: "{{ regression_other_profile }}"
+
+- name: Auditd settings of another profile | Discover the other profile
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.discover
+
+- name: Auditd settings of another profile | Name the native rules that only the other profile selects
+  ansible.builtin.set_fact:
+    regression_other_rules: >-
+      {{ lifecycle_native_rules | selectattr('family', 'equalto', 'auditd_conf')
+         | selectattr('rule_id', 'in', linux_compliance_discovered.rule_ids)
+         | rejectattr('rule_id', 'in', lifecycle_rule_ids) | sort(attribute='rule_id') }}
+
+- name: Auditd settings of another profile | Check that the other profile adds rules to prove
+  ansible.builtin.assert:
+    that:
+      - regression_other_rules | length > 0
+    fail_msg: "{{ regression_label }}: {{ regression_other_profile }} selects no rule beyond the lifecycle profile"
+    quiet: true
+
+- name: Auditd settings of another profile | Switch those rules on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_other_rules | map(attribute='toggle') | list }}"
+
+- name: Auditd settings of another profile | Apply those rules with the values of the other profile
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+    lifecycle_rule_ids: "{{ regression_other_rules | map(attribute='rule_id') | list }}"
+
+- name: Auditd settings of another profile | Check that every rule was applied or already compliant
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == regression_other_rules | map(attribute='rule_id') | list
+      - lifecycle_results | map(attribute='status') | difference(['applied', 'compliant']) | list == []
+      - lifecycle_results | selectattr('status', 'equalto', 'applied') | list | length > 0
+    fail_msg: "{{ regression_label }}, {{ regression_other_profile }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings of another profile | Apply those rules again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+    lifecycle_rule_ids: "{{ regression_other_rules | map(attribute='rule_id') | list }}"
+
+- name: Auditd settings of another profile | Check that the second apply found every rule compliant
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['compliant']
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ regression_label }}, {{ regression_other_profile }}, second apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings of another profile | Switch those rules off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_other_rules | map(attribute='toggle') | list }}"
+
+- name: Auditd settings of another profile | Clean up those rules
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: auditd_conf
+    lifecycle_rule_ids: "{{ regression_other_rules | map(attribute='rule_id') | list }}"
+
+- name: Auditd settings of another profile | Read the configuration file after the cleanup
+  ansible.builtin.slurp:
+    src: "{{ regression_conf }}"
+  register: regression_other_cleaned
+
+- name: Auditd settings of another profile | Check that the cleanup restored the file as built
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - regression_other_cleaned.content | b64decode == regression_built_text
+    fail_msg: "{{ regression_label }}, {{ regression_other_profile }}, cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Auditd settings of another profile | Give the profile of the topic back to the role inputs
+  ansible.builtin.set_fact:
+    molecule_profile: "{{ lifecycle_topic_profile }}"
+
+- name: Auditd settings of another profile | Discover the profile of the topic again
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.discover

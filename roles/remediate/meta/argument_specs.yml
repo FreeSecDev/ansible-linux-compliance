@@ -34,6 +34,8 @@ argument_specs:
           - accounts
           - apparmor
           - auditd
+          - auditd_conf
+          - auditd_rules_time
           - autofs
           - bootloader
           - console_access
@@ -180,13 +182,30 @@ argument_specs:
         description:
           - "Topic toggle of the kernel_build_config family (ADR 0011); false switches its rules off."
           - "Rules: 67, native: 0. Generated; see docs/remediation-variables.md."
+      linux_compliance_auditd_rules_time_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the auditd_rules_time family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_auditd_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 5, native: 5. Generated; see docs/remediation-variables.md."
+      linux_compliance_auditd_conf_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the auditd_conf family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_auditd_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 24, native: 20. Generated; see docs/remediation-variables.md."
       linux_compliance_auditd_enabled:
         type: bool
         default: true
         description:
           - "Topic toggle of the auditd family (ADR 0011); false switches its rules off."
+          - "Also the umbrella of auditd_rules_time, auditd_conf, which it switches off too."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 206, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 206, native: 25. Generated; see docs/remediation-variables.md."
       linux_compliance_services_enabled:
         type: bool
         default: true

@@ -580,6 +580,24 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
+The auditd topics ([ADR 0024](adr/0024-native-auditd-settings-and-audit-rules.md), FREES-110) select their rules
+with `profiles`: `auditd_conf` runs with `cis_level2_server` on Ubuntu and `stig` on Rocky Linux, `auditd_rules_time`
+with `cis_level2_server` and `e8`. The images ship the audit packages (`auditd` and `audit`, pinned), so the drop-ins,
+`auditd.conf` and their checksums are proven in the containers, where auditd does not run and nothing is loaded.
+`auditd_rules_time` has three pre-states: as built with real scans, an administrator's `40-site.rules` that already holds
+the time zone watch (that rule is `compliant` and writes nothing; rule toggle only), and a pre-state that requires
+libvirt, where the cycles load the rules with `augenrules` and the `audit_rules` items check each line with
+`auditctl -l` after apply and its absence after cleanup ([libvirt guide](molecule-libvirt.md#driver-requirements-of-a-topic)).
+Each has one regression group, `changes`, a Docker leg per platform. `shared/tasks/lifecycle_auditd_rules_regressions.yml`
+covers a ledger entry of another method (`method_changed`, nothing touched), a change by hand to a drop-in kept as
+`modified_since_apply`, a drop-in removed by hand `restored` without a write, and an administrator's file with the
+time zone watch next to the drop-in (`duplicate_rule`), alone (`compliant`, not recorded) and, on Rocky Linux, in part
+(`duplicate_rule` without a drop-in). `shared/tasks/lifecycle_auditd_conf_regressions.yml` covers the method change, a
+line changed by hand and one put back by hand, a repeated setting (`duplicate_setting`), on Rocky Linux an
+`admin_space_left` that the profile's `space_left` would not exceed (`invalid_config` for every line, nothing written),
+and, through `lifecycle_auditd_conf_profiles.yml`, the rules that only other profiles select (`stig` on Ubuntu, `cis`
+and `ospp` on Rocky Linux) with their own values, applied, applied again, cleaned up and the file compared byte for byte.
+
 ### CI legs
 
 With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
@@ -676,12 +694,13 @@ pre_states:
 | `family` | yes | The topic; must equal the file name |
 | `disruptive` | yes | Must equal the flag of the family in the registry |
 | `containment` | for disruptive topics only | What the topic can break in the container and why the harness still reaches it; see below |
-| `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
-| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
+| `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`), and `audit_rules` (`line`, a rule as a rule file holds it; whether the kernel has loaded it, read with `audit_control`; such an item must name `drivers`, without `docker`, because the containers cannot read the kernel's audit rules). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
+| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`; for audit rules `loaded`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
+| `profiles` | no | The profile per platform (a short identifier of that platform's datastream) with which the cycles, scans and regressions of the topic run, instead of the platform's lifecycle profile; for topics whose rules the CIS level 1 profiles do not select (FREES-110). The harness discovers it at the start of the topic and the platform's own profile again at its end |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration

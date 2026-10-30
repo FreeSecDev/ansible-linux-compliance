@@ -108,6 +108,28 @@ families:
       - kernel_build_config
     rule_prefixes: []
     fallback_groups: []
+  - name: auditd_rules_time
+    umbrella: auditd
+    disruptive: true
+    title: Audit rules for changes of the system time and time zone
+    why: >-
+      Loading the rules reloads the whole rule set of /etc/audit/rules.d, and with the panic failure mode of the audit
+      system more events can stop the host when the backlog overflows
+    topic_groups:
+      - audit_time_rules
+    rule_prefixes: []
+    fallback_groups: []
+  - name: auditd_conf
+    umbrella: auditd
+    disruptive: true
+    title: Audit daemon settings in /etc/audit/auditd.conf (log size, retention and disk space actions)
+    why: >-
+      The disk space and disk error actions can halt the host or drop it to single-user mode when the audit log
+      fills or fails
+    topic_groups:
+      - configure_auditd_data_retention
+    rule_prefixes: []
+    fallback_groups: []
   - name: auditd
     disruptive: true
     title: Audit daemon and audit rules
@@ -1142,11 +1164,238 @@ native_rules:
       type: directory
       attribute: group
       id: 0
+  - rule_id: xccdf_org.ssgproject.content_rule_audit_rules_time_adjtimex
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: rules_file
+      path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-adjtimex.rules
+      lines:
+        xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04:
+          - '-a always,exit -F arch=b32 -S adjtimex -k time-change'
+          - '-a always,exit -F arch=b64 -S adjtimex -k time-change'
+        xccdf_org.ssgproject.content_benchmark_RHEL-9:
+          - '-a always,exit -F arch=b32 -S adjtimex -k time-change'
+          - '-a always,exit -F arch=b64 -S adjtimex -k time-change'
+  - rule_id: xccdf_org.ssgproject.content_rule_audit_rules_time_clock_settime
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: rules_file
+      path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-clock-settime.rules
+      lines:
+        xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04:
+          - '-a always,exit -F arch=b32 -S clock_settime -F a0=0x0 -k time-change'
+          - '-a always,exit -F arch=b64 -S clock_settime -F a0=0x0 -k time-change'
+        xccdf_org.ssgproject.content_benchmark_RHEL-9:
+          - '-a always,exit -F arch=b32 -S clock_settime -F a0=0x0 -k time-change'
+          - '-a always,exit -F arch=b64 -S clock_settime -F a0=0x0 -k time-change'
+  - rule_id: xccdf_org.ssgproject.content_rule_audit_rules_time_settimeofday
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: rules_file
+      path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-settimeofday.rules
+      lines:
+        xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04:
+          - '-a always,exit -F arch=b32 -S settimeofday -k time-change'
+          - '-a always,exit -F arch=b64 -S settimeofday -k time-change'
+        xccdf_org.ssgproject.content_benchmark_RHEL-9:
+          - '-a always,exit -F arch=b32 -S settimeofday -k time-change'
+          - '-a always,exit -F arch=b64 -S settimeofday -k time-change'
+  - rule_id: xccdf_org.ssgproject.content_rule_audit_rules_time_stime
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: rules_file
+      path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-stime.rules
+      lines:
+        xccdf_org.ssgproject.content_benchmark_RHEL-9:
+          - '-a always,exit -F arch=b32 -S stime -k time-change'
+  - rule_id: xccdf_org.ssgproject.content_rule_audit_rules_time_watch_localtime
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: rules_file
+      path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-watch-localtime.rules
+      lines:
+        xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04:
+          - '-w /etc/localtime -p wa -k time-change'
+        xccdf_org.ssgproject.content_benchmark_RHEL-9:
+          - '-a always,exit -F arch=b32 -F path=/etc/localtime -F perm=wa -k time-change'
+          - '-a always,exit -F arch=b64 -F path=/etc/localtime -F perm=wa -k time-change'
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_disk_error_action
+    parameters:
+      method: conf_line
+      setting: disk_error_action
+      compare: choice
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_disk_error_action_stig
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: conf_line
+      setting: disk_error_action
+      compare: choice
+      value: 'syslog|single|halt'
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_disk_full_action
+    parameters:
+      method: conf_line
+      setting: disk_full_action
+      compare: choice
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_disk_full_action_stig
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: conf_line
+      setting: disk_full_action
+      compare: choice
+      value: 'syslog|single|halt'
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_action_mail_acct
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_action_mail_acct
+    parameters:
+      method: conf_line
+      setting: action_mail_acct
+      compare: exact
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_action
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_admin_space_left_action
+    parameters:
+      method: conf_line
+      setting: admin_space_left_action
+      compare: choice
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_admin_space_left_percentage
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_admin_space_left_percentage
+    parameters:
+      method: conf_line
+      setting: admin_space_left
+      compare: percent
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_flush
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_flush
+    parameters:
+      method: conf_line
+      setting: flush
+      compare: choice
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_max_log_file
+    parameters:
+      method: conf_line
+      setting: max_log_file
+      compare: minimum
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_max_log_file_action
+    parameters:
+      method: conf_line
+      setting: max_log_file_action
+      compare: choice
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_max_log_file_action_stig
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: conf_line
+      setting: max_log_file_action
+      compare: choice
+      value: 'rotate|single'
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_space_left
+    parameters:
+      method: conf_line
+      setting: space_left
+      compare: minimum
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_action
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_space_left_action
+    parameters:
+      method: conf_line
+      setting: space_left_action
+      compare: choice
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_data_retention_space_left_percentage
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_space_left_percentage
+    parameters:
+      method: conf_line
+      setting: space_left
+      compare: percent
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_freq
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_freq
+    parameters:
+      method: conf_line
+      setting: freq
+      compare: number
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_local_events
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: conf_line
+      setting: local_events
+      compare: choice
+      value: 'yes'
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_log_format
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: conf_line
+      setting: log_format
+      compare: choice
+      value: 'ENRICHED'
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_name_format
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_auditd_name_format
+    parameters:
+      method: conf_line
+      setting: name_format
+      compare: choice
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_overflow_action
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: conf_line
+      setting: overflow_action
+      compare: choice
+      value: 'syslog|single|halt'
+  - rule_id: xccdf_org.ssgproject.content_rule_auditd_write_logs
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      method: conf_line
+      setting: write_logs
+      compare: choice
+      value: 'yes'
+      absent_compliant: true
 untagged_families:
   - family: auditd
     reason: >-
       Audit rules record changes to a subsystem; they do not configure it. An operator who stops the collection from
       managing a subsystem still needs its changes audited, so only the auditd toggles switch audit rules off
+  - family: auditd_rules_time
+    reason: >-
+      Audit rules record changes to a subsystem; they do not configure it, so only the auditd toggles switch them off
+  - family: auditd_conf
+    reason: >-
+      The settings of the audit daemon configure auditd itself, so only the auditd toggles switch them off
 subsystem_tags:
   - name: aide
     rule_patterns:

@@ -96,6 +96,7 @@ TOP_KEYS: Final[frozenset[str]] = frozenset(
         "unselected_platforms",
         "requires",
         "regressions",
+        "profiles",
     }
 )
 REQUIRED_KEYS: Final[tuple[str, ...]] = ("family", "disruptive", "state", "applied")
@@ -106,6 +107,7 @@ CATEGORY_KEYS: Final[dict[str, str]] = {
     "sysctl": "name",
     "users": "name",
     "groups": "name",
+    "audit_rules": "line",
 }
 ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
     "files": frozenset(
@@ -129,7 +131,14 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
     "sysctl": frozenset({"value"}),
     "users": frozenset({"exists", "entry"}),
     "groups": frozenset({"exists", "entry"}),
+    "audit_rules": frozenset({"loaded"}),
 }
+DRIVERS_KEY: Final[str] = "drivers"
+KERNEL_CATEGORIES: Final[frozenset[str]] = frozenset({"audit_rules"})
+PROFILES_KEY: Final[str] = "profiles"
+PROFILE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_-]{0,127}")
+MANIFEST: Final[Path] = Path("content/manifest.yml")
+PROFILE_PREFIX: Final[str] = "xccdf_org.ssgproject.content_profile_"
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
 PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
@@ -149,6 +158,7 @@ CHANGES_KEY: Final[str] = "changes"
 MODE: Final[re.Pattern[str]] = re.compile(r"[0-7]{4}")
 NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_.@+-]+")
 PATH: Final[re.Pattern[str]] = re.compile(r"/[A-Za-z0-9_.@+/-]*")
+LINE: Final[re.Pattern[str]] = re.compile(r"-[A-Za-z0-9 ,=!<>/._+-]{1,511}")
 
 
 def _load(path: Path) -> object:
@@ -180,33 +190,33 @@ class Context(NamedTuple):
     coverage: dict[str, frozenset[str]] | None = None
     rules: frozenset[str] = frozenset()
     dispatched: frozenset[str] | None = None
+    profiles: dict[str, frozenset[str]] | None = None
 
 
 class Declaration:
     """The validation of one topic declaration; ``errors`` collects every finding."""
 
     def __init__(
-        self,
-        where: str,
-        platforms: frozenset[str],
-        coverage: dict[str, frozenset[str]] | None = None,
-        rules: frozenset[str] = frozenset(),
-        dispatched: frozenset[str] | None = None,
+        self, where: str, platforms: frozenset[str], context: Context | None = None
     ) -> None:
-        """Start the validation of ``where`` for the platforms, driver coverage and native rules.
+        """Start the validation of ``where`` for the platforms and the ``context`` of the topic.
 
-        ``coverage`` maps each driver to the platforms that its lifecycle scenarios run; without it
-        every driver counts as running every platform. ``rules`` holds the short identifiers of the
-        native rules of the topic, which a pre-state may declare ``unchanged``. ``dispatched``
-        holds the regression files that the static dispatch includes (``None``: any file).
+        ``context.coverage`` maps each driver to the platforms that its lifecycle scenarios run;
+        without it every driver counts as running every platform. ``context.rules`` holds the short
+        identifiers of the native rules of the topic, which a pre-state may declare ``unchanged``.
+        ``context.dispatched`` holds the regression files that the static dispatch includes
+        (``None``: any file), ``context.profiles`` the profiles of each platform's datastream
+        (``None``: any profile).
         """
+        found = context if context is not None else Context()
         self.where = where
         self.platforms = platforms
         self.coverage: dict[str, frozenset[str]] = (
-            coverage if coverage is not None else dict.fromkeys(DRIVERS, platforms)
+            found.coverage if found.coverage is not None else dict.fromkeys(DRIVERS, platforms)
         )
-        self.rules = rules
-        self.dispatched = dispatched
+        self.rules = found.rules
+        self.dispatched = found.dispatched
+        self.profiles = found.profiles
         self.regressions: dict[str, frozenset[str]] = {}
         self.regression_files: set[str] = set()
         self.errors: list[str] = []
@@ -257,7 +267,7 @@ class Declaration:
         """Return the identifying value of an item, or record why it is missing or malformed."""
         key = CATEGORY_KEYS[category]
         value = item.get(key)
-        pattern = PATH if key == "path" else NAME
+        pattern = PATH if key == "path" else LINE if key == "line" else NAME
         if not isinstance(value, str) or pattern.fullmatch(value) is None:
             self.error(f"{what} needs a valid {key}")
             return None
@@ -265,6 +275,9 @@ class Declaration:
 
     def state_item_keys(self, category: str, item: dict[str, object], what: str) -> frozenset[str]:
         """Return the keys that a state item of ``category`` may have; check a file's flag."""
+        if category in KERNEL_CATEGORIES:
+            _kernel_drivers(self, item, what)
+            return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY, DRIVERS_KEY})
         if category != "files":
             return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY})
         if not isinstance(item.get(REWRITTEN_KEY, False), bool):
@@ -300,6 +313,8 @@ class Declaration:
         """Check the attributes that an expectation sets or requires to change."""
         attributes = ATTRIBUTES[category]
         allowed = attributes | {CATEGORY_KEYS[category], PLATFORMS_KEY, CHANGES_KEY}
+        if category in KERNEL_CATEGORIES:
+            allowed |= {DRIVERS_KEY}
         self.keys(item, frozenset(allowed), what)
         changes: list[str] = []
         if CHANGES_KEY in item:
@@ -579,6 +594,47 @@ class Declaration:
                 self.error(f"{what}.applied declares no expectation; leave it out instead")
 
 
+def _kernel_drivers(declaration: Declaration, item: dict[str, object], what: str) -> None:
+    """Check the drivers of an item that only a real kernel can show, such as a loaded rule.
+
+    The containers cannot read the kernel's audit rules, so such an item must name the
+    drivers that record it, and Docker is not one of them.
+    """
+    drivers = declaration.driver_list(item.get(DRIVERS_KEY), f"{what}.{DRIVERS_KEY}")
+    if drivers is not None and drivers & UNRESTRICTED_DRIVERS:
+        declaration.error(f"{what} cannot be recorded with docker, whose containers cannot read it")
+
+
+def topic_profiles(declaration: Declaration, value: object) -> None:
+    """Check the profiles that the cycles of the topic use instead of the platform's profile.
+
+    A topic whose rules the lifecycle profile of a platform does not select runs its cycles,
+    scans and regressions with a profile of the same datastream that does, named per platform.
+    """
+    mapping = declaration.mapping(value, PROFILES_KEY)
+    if mapping is None:
+        return
+    if not mapping:
+        declaration.error(f"{PROFILES_KEY} must name at least one platform; leave it out instead")
+    for platform, profile in sorted(mapping.items()):
+        what = f"{PROFILES_KEY}.{platform}"
+        if platform not in declaration.platforms:
+            declaration.error(f"{what} names an unknown platform")
+            continue
+        if not isinstance(profile, str) or PROFILE.fullmatch(profile) is None:
+            declaration.error(f"{what} needs the short identifier of a profile")
+            continue
+        known = (
+            None
+            if declaration.profiles is None
+            else declaration.profiles.get(platform, frozenset())
+        )
+        if known is not None and profile not in known:
+            declaration.error(
+                f"{what} names {profile}, which the datastream of {platform} does not have"
+            )
+
+
 def _regression_groups(declaration: Declaration, value: object) -> None:
     """Check the named groups of regression files of the topic."""
     entries = declaration.sequence(value, REGRESSIONS_KEY)
@@ -668,8 +724,7 @@ def check_declaration(
 def _declaration(
     path: Path, family: str, platforms: frozenset[str], *, disruptive: bool, context: Context | None
 ) -> Declaration:
-    found = context if context is not None else Context()
-    declaration = Declaration(str(path), platforms, found.coverage, found.rules, found.dispatched)
+    declaration = Declaration(str(path), platforms, context)
     data = declaration.mapping(_load(path), "the declaration")
     if data is None:
         return declaration
@@ -682,6 +737,8 @@ def _declaration(
         declaration.applied(data["applied"])
     if "audit" in data:
         declaration.audit(data["audit"])
+    if PROFILES_KEY in data:
+        topic_profiles(declaration, data[PROFILES_KEY])
     if "pre_states" in data:
         declaration.pre_states(data["pre_states"])
     if "unselected_platforms" in data:
@@ -701,6 +758,31 @@ def platforms(root: Path) -> frozenset[str]:
         message = f"{root / VERSIONS} has no {IMAGES_KEY} mapping"
         raise GenerationError(message)
     return frozenset(images)
+
+
+def platform_profiles(root: Path) -> dict[str, frozenset[str]]:
+    """Return, per Molecule platform, the short identifiers of the profiles of its datastream."""
+    data = toggles.as_mapping(_load(root / VERSIONS))
+    images = toggles.as_mapping(data.get(IMAGES_KEY)) if data is not None else None
+    manifest = toggles.as_mapping(_load(root / MANIFEST))
+    streams = toggles.as_sequence(manifest.get("datastreams")) if manifest is not None else None
+    if not images or not streams:
+        message = f"{root / VERSIONS} or {root / MANIFEST} lists no platform or datastream"
+        raise GenerationError(message)
+    by_name: dict[str, frozenset[str]] = {}
+    for entry in streams:
+        stream = toggles.as_mapping(entry) or {}
+        profiles = toggles.as_sequence(stream.get("profiles")) or []
+        by_name[str(stream.get("name"))] = frozenset(
+            str((toggles.as_mapping(profile) or {}).get("id", "")).removeprefix(PROFILE_PREFIX)
+            for profile in profiles
+        )
+    return {
+        str(platform): by_name.get(
+            str((toggles.as_mapping(image) or {}).get("datastream")), frozenset()
+        )
+        for platform, image in images.items()
+    }
 
 
 def scenarios(root: Path, platforms: frozenset[str]) -> dict[str, frozenset[str]]:
@@ -826,6 +908,7 @@ def check(root: Path) -> tuple[list[str], list[str]]:
     known = platforms(root)
     coverage = scenarios(root, known)
     dispatched = dispatched_regressions(root)
+    profiles = platform_profiles(root)
     directory = root / TOPICS
     declared = sorted(path.stem for path in directory.glob("*.yml")) if directory.is_dir() else []
     errors = [
@@ -847,7 +930,7 @@ def check(root: Path) -> tuple[list[str], list[str]]:
                 family,
                 known,
                 disruptive=catalogue.families[family],
-                context=Context(coverage, native_rules(catalogue, family), dispatched),
+                context=Context(coverage, native_rules(catalogue, family), dispatched, profiles),
             )
             errors.extend(declaration.errors)
             named.update(declaration.regression_files)

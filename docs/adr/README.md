@@ -25,5 +25,6 @@
 | [0021](0021-native-banners-pwquality-and-profile-values.md) | Native banners and password quality, with profile values from the pinned content | proposed |
 | [0022](0022-native-sudo-drop-ins.md) | Native sudo remediation through validated drop-ins | proposed |
 | [0023](0023-native-ssh-server-configuration.md) | Native SSH server configuration through validated drop-ins | proposed |
+| [0024](0024-native-auditd-settings-and-audit-rules.md) | Native auditd settings and audit rule drop-ins | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

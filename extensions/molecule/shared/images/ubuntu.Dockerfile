@@ -7,6 +7,7 @@ ARG PYTHON3_APT_VERSION=2.7.7ubuntu5.3
 ARG LIBPAM_PWQUALITY_VERSION=1.4.5-3build1
 ARG OPENSSH_SERVER_VERSION=1:9.6p1-3ubuntu13.20
 ARG SUDO_VERSION=1.9.15p5-3ubuntu5.24.04.4
+ARG AUDITD_VERSION=1:3.1.2-2.1ubuntu0.1
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes \
         "python3=${PYTHON3_VERSION}" \
@@ -16,5 +17,6 @@ RUN apt-get update \
         "libpam-pwquality=${LIBPAM_PWQUALITY_VERSION}" \
         "openssh-server=${OPENSSH_SERVER_VERSION}" \
         "sudo=${SUDO_VERSION}" \
+        "auditd=${AUDITD_VERSION}" \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p -m 0755 /run/sshd

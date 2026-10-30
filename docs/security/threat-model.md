@@ -322,6 +322,58 @@ root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-serve
   original is left alone.
 - **Residual:** a package update that rewrites a vendor file also stops the revert, which then needs a review.
 
+## auditd settings and audit rules on a managed host
+
+The `auditd_conf` and `auditd_rules_time` families of the `remediate` role write `/etc/audit/auditd.conf` and drop-ins
+below `/etc/audit/rules.d`, and the module `audit_control` runs `auditctl` and `augenrules` as root through the audited
+process helper ([ADR 0024](../adr/0024-native-auditd-settings-and-audit-rules.md),
+[ADR 0004](../adr/0004-audited-process-execution.md), FREES-110).
+
+### Assets
+
+| Asset | Why it matters |
+|---|---|
+| The loaded audit rules | A rule set that loads only in part silently stops recording everything after the first error |
+| The audit daemon's configuration | A setting that auditd refuses keeps it from starting at the next boot; a disk action can halt the host |
+| Root execution of `auditctl` and `augenrules` | They change the kernel's audit state |
+
+### T-AUDIT-1: a change leaves the rule set half loaded or auditd unable to start
+
+- **Attacker:** none; a repeated rule, a watch below a missing directory, or an administrator's broken file.
+- **Failure:** `auditctl -R` stops at the first error and every later rule is unloaded; or auditd refuses its
+  configuration at the next start.
+- **Impact:** audit events are lost without notice, or the host runs without auditd.
+- **Mitigation:** every rule line has a strict form without control lines; a rule whose lines another file holds in
+  part is refused before anything is written; the module refuses to load a set with a repeated rule; after the load
+  every applied line is checked with `auditctl -l`, and a refused or failed load rolls back the drop-ins and ledger
+  entries of the run, loads the set again and fails the run. The settings that auditd checks together are computed as
+  they will be after the run and refused as a whole when auditd would refuse them; the line always has the spaces
+  around `=` that auditd requires.
+- **Residual:** two rules that differ only in a spelling the normalisation does not cover are found only by the load,
+  which is then rolled back; a broken rule of an administrator makes every load fail until it is fixed. auditd has no
+  configuration test, so a check that the collection does not know about is not made.
+
+### T-AUDIT-2: the audit tools are turned into something else
+
+- **Attacker:** a caller of the helper or of `audit_control`.
+- **Failure:** `auditctl` deletes rules (`-D`), unlocks or disables auditing (`-e 0`), sets the failure mode
+  (`-f`), or loads an arbitrary rule file (`-R`).
+- **Impact:** auditing switched off as root.
+- **Mitigation:** the helper's policies accept only the exact forms `auditctl -s`, `auditctl -l`,
+  `auditctl --signal reload` and `augenrules --load`; no argument comes from a variable. The executables are resolved
+  in the trusted directories, root-owned and not writable by group or others.
+- **Residual:** `augenrules --load` loads whatever `/etc/audit/rules.d` holds, as auditd does at boot; a root-owned
+  malicious rule file is already a root compromise.
+
+### T-AUDIT-3: a disk action of the profile halts the host
+
+- **Attacker:** none; a profile requires `halt` or `single` when the audit log fills or fails.
+- **Failure:** the host stops or drops to single-user mode when the disk fills.
+- **Impact:** loss of service.
+- **Mitigation:** `auditd_conf` is disruptive and runs only with the allow-list, for apply and cleanup; an alternation
+  of the profile is written as its least disruptive choice (`syslog`, `email`, `single` before `halt`).
+- **Residual:** a profile that allows only `halt` gets `halt`, as its benchmark requires.
+
 ## Libvirt CI caches
 
 The `molecule-libvirt` legs of `ci.yml` restore two Actions caches whose contents are installed or booted:

@@ -38,6 +38,12 @@ def write_scenario(root: Path, scenario: str) -> None:
     (directory / "molecule.yml").write_text("---\n" + yaml.safe_dump(config), encoding="utf-8")
 
 
+def copy_manifest(root: Path) -> None:
+    target = root / check_lifecycle_topics.MANIFEST
+    target.parent.mkdir(parents=True)
+    shutil.copyfile(REPOSITORY_ROOT / check_lifecycle_topics.MANIFEST, target)
+
+
 def make_root(
     tmp_path: Path,
     *,
@@ -63,6 +69,7 @@ def make_root(
     versions = root / check_lifecycle_topics.VERSIONS
     versions.parent.mkdir(parents=True)
     shutil.copyfile(REPOSITORY_ROOT / check_lifecycle_topics.VERSIONS, versions)
+    copy_manifest(root)
     shutil.copytree(
         REPOSITORY_ROOT / check_lifecycle_topics.TOPICS, root / check_lifecycle_topics.TOPICS
     )

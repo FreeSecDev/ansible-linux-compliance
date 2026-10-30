@@ -309,9 +309,10 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 ## Native families
 
-Besides the reference family, three topics are native
+Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md)).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md),
+[ADR 0024](adr/0024-native-auditd-settings-and-audit-rules.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
@@ -482,6 +483,49 @@ is written (FREES-173). Kept `audit_only`, with the reasons in ADR 0022: the rul
 `sudoers_no_command_negation`, `sudoers_no_root_target`), `sudo_add_noexec` and `sudo_add_requiretty` (they break
 `become` and so the run that would revert them), `sudo_dedicated_group` and `file_permissions_sudo` (they limit who may
 run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
+
+### Audit daemon settings and audit rules
+
+The rule groups of the `auditd` umbrella become topics of their own
+([ADR 0024](adr/0024-native-auditd-settings-and-audit-rules.md), FREES-110); `linux_compliance_auditd_enabled: false`
+switches them all off. Two are native so far, the other 177 rules of the umbrella stay `audit_only` with the reasons
+in ADR 0024 (the remaining audit rule groups follow with the same drop-in method).
+
+| Topic | Rules | What is applied | Record and cleanup |
+|---|---|---|---|
+| `auditd_rules_time` (disruptive) | `audit_rules_time_adjtimex`, `_clock_settime`, `_settimeofday`, `_stime`, `_watch_localtime` | `/etc/audit/rules.d/50-freesecdev-<rule>.rules`, mode `0600`, root, with a header that names the rule and the collection's own lines for the benchmark: `b32` and `b64` system call lines (`stime`: `b32` only), and for `/etc/localtime` `-w /etc/localtime -p wa -k time-change` on Ubuntu or the two `-F path= -F perm=wa` lines on RHEL 9 | `recorded_value` of `method` (`rules_file`), `dropin` (`null`) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+| `auditd_conf` (disruptive) | 20 settings of `/etc/audit/auditd.conf`: the disk full and disk error actions (and their STIG variants), `action_mail_acct`, `admin_space_left_action`, `admin_space_left` and `space_left` in percent, `space_left`, `space_left_action`, `max_log_file`, `max_log_file_action` (and its STIG variant), `flush`, `freq`, `local_events`, `log_format`, `name_format`, `overflow_action`, `write_logs` | one line `<setting> = <value>` with the profile's value or the check's, replacing the one line that sets it or appended; an alternation is written as its first choice in the order `syslog`, `email`, `rotate`, `keep_logs`, `hostname`, `fqd`, `numeric`, `single`, `halt`; a minimum keeps a larger value | `recorded_value` of `method` (`conf_line`), `setting`, `prior_line` (`null` when absent) and `written_line`; cleanup writes the prior line back, or removes the line, while the file still holds exactly the line written |
+
+After the drop-ins of a rule topic changed, and only where `service_facts` reports `auditd.service` running, the
+module `freesecdev.linux_compliance.audit_control` loads the rule set with `augenrules --load`, as `auditd.service`
+does at boot: it first refuses a set in which two places hold the same rule, and afterwards checks every applied line
+against `auditctl -l`. A refused or failed load rolls back the drop-ins and ledger entries of the run, loads the set
+again and fails the run. `/etc/audit/audit.rules.prev`, which `augenrules` writes, is put back as it was. With the
+rules locked (`-e 2`) the files change and take effect at the next boot; where auditd does not run (containers) the
+rules load when it starts. After `auditd.conf` changed, a running auditd reads it again (`auditctl --signal reload`).
+
+The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `notapplicable` (apply) | `/etc/audit/rules.d` or `/etc/audit/auditd.conf` does not exist (no audit package), or the host is not x86_64, whose system call tables the lines name |
+| `compliant` (apply) | Every line of an audit rule is already in another file of `/etc/audit/rules.d`; nothing is written or recorded |
+| `duplicate_rule` (apply) | Some lines of the rule are in another file, or they are there and the drop-in exists as well: `auditctl` would stop at the repeated rule |
+| `watch_target_missing` (apply) | The directory of a watched path does not exist; the kernel refuses such a watch |
+| `duplicate_setting` (apply) | `auditd.conf` sets the setting more than once (the check reads the first, auditd keeps the last) |
+| `invalid_config` (apply) | With the lines of the run, `space_left` would not be larger than `admin_space_left` (percentages converted with the size of the log's file system) or incremental flushing would have `freq = 0`; auditd would refuse the file at its next start |
+| `unsupported_value` (apply) | An alternation of the profile offers none of the values that the collection writes |
+| `prior_too_large` (apply) | The line that sets the setting is longer than 1024 characters |
+| `not_regular_file`, `not_directory` | A drop-in, `auditd.conf` or `/etc/audit/rules.d` is a symbolic link or of the wrong type |
+| `not_owned` | A file at the drop-in's path does not carry the collection's header |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The drop-in or the line is no longer what the collection wrote |
+| `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `auditd.conf` is gone |
+
+A drop-in that is already gone at cleanup, or a setting that is already back at its recorded prior line, is
+`restored` by removing the entry, without a write (FREES-173). The golden test
+`tests/unit/tools/test_content_golden_auditd.py` checks every line and setting against the OVAL of both pinned
+datastreams for every profile that selects the rule.
 
 ## Results
 
