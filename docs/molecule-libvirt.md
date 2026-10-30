@@ -402,7 +402,25 @@ reported as passing otherwise.
 
 ### Durations
 
-DURATIONS_TABLE
+Job durations on GitHub's `ubuntu-24.04` runners, in minutes. The first version ran `create` to `destroy` with every
+lifecycle cycle on the machine in one leg per platform.
+
+| Leg | First version | Run 41007894604 | Run 41011440146 |
+|---|---|---|---|
+| `libvirt-ubuntu` | 65 (everything) | failed in `converge`, fixed in a8f8050 | 10.3 |
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `topic` | (included above) | 18.8 | 16.0 |
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `rule` | (included above) | 12.5 | 18.3 |
+| `libvirt-rhel-compatible` | 34 (everything) | failed in `converge`, fixed in a8f8050 | 6.0 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `topic` | (included above) | 6.9 | 12.2 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `rule` | (included above) | 6.9 | 8.7 |
+| `libvirt-selftest` | 4 | 5.5 | 7.9 |
+
+Each leg spends about a minute installing QEMU and libvirt and seconds restoring the cache; `create` and `prepare`
+take about 1.5 minutes. The rest of a lifecycle leg is one cycle: seven no-change snapshots and four whole-instance
+records of the machine, each a `find` with a SHA-256 of every file below `/etc`, `/usr` and the other watched paths,
+plus the warm-up scan. The same steps took up to 1.7 times as long on a slow runner as on a fast one, which explains
+the spread between legs that do the same work. The job's `timeout-minutes` is 28, about one and a half times the
+slowest observed leg, and stays within the merge queue's 30 minutes.
 
 ## Troubleshooting
 
