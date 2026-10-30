@@ -69,6 +69,86 @@
     loop_var: ldo_case
     label: "{{ ldo_case.profile }}"
 
+- name: Login defaults other profiles | Refuse CREATE_HOME next to a drop-in that its check reads
+  when: lifecycle_platform == 'rhel_compatible'
+  block:
+    - name: Login defaults other profiles | Name the CREATE_HOME rule and pretend the STIG profile with it alone
+      ansible.builtin.set_fact:
+        ldo_home: "{{ ldo_prefix }}accounts_have_homedir_login_defs"
+        linux_compliance_remediate_profile: stig
+        linux_compliance_discovered: >-
+          {{ ldo_profile | combine({'profile_id': 'xccdf_org.ssgproject.content_profile_stig',
+                                    'rule_ids': [ldo_prefix ~ 'accounts_have_homedir_login_defs']}) }}
+        linux_compliance_rule_accounts_have_homedir_login_defs_enabled: true
+
+    - name: Login defaults other profiles | Create the drop-in directory that the CREATE_HOME check reads
+      ansible.builtin.file:
+        path: /etc/login.defs.d
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Login defaults other profiles | Put a drop-in that sets CREATE_HOME
+      ansible.builtin.copy:
+        content: "CREATE_HOME no\n"
+        dest: /etc/login.defs.d/50-site.defs
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Login defaults other profiles | Apply CREATE_HOME with the drop-in in place
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: login_defs
+        lifecycle_rule_ids:
+          - "{{ ldo_home }}"
+
+    - name: Login defaults other profiles | Check that CREATE_HOME is overridden by the drop-in and nothing changed
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='status') | list == ['overridden']
+          - lifecycle_results | map(attribute='reason') | first is search('/etc/login.defs.d/50-site.defs')
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ ldo_label }}, CREATE_HOME drop-in: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Login defaults other profiles | Remove the drop-in directory
+      ansible.builtin.file:
+        path: /etc/login.defs.d
+        state: absent
+
+    - name: Login defaults other profiles | Put a symbolic link in place of the drop-in directory
+      ansible.builtin.file:
+        path: /etc/login.defs.d
+        src: /tmp
+        state: link
+
+    - name: Login defaults other profiles | Apply CREATE_HOME with the symbolic link in place
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: login_defs
+        lifecycle_rule_ids:
+          - "{{ ldo_home }}"
+
+    - name: Login defaults other profiles | Check that CREATE_HOME refused the link and nothing changed
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='status') | list == ['not_directory']
+          - lifecycle_results | selectattr('changed') | list == []
+        fail_msg: "{{ ldo_label }}, CREATE_HOME link: {{ lifecycle_results }}"
+        quiet: true
+
+  always:
+    - name: Login defaults other profiles | Remove the drop-in directory or its symbolic link
+      ansible.builtin.file:
+        path: /etc/login.defs.d
+        state: absent
+
 - name: Login defaults other profiles | Give the profile of this platform back
   ansible.builtin.set_fact:
     linux_compliance_discovered: "{{ ldo_profile }}"

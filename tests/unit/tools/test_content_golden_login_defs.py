@@ -182,6 +182,7 @@ def assert_mirrors(rule_id: str, parameters: dict[str, object], check: Check) ->
         {(DROPIN_DIRECTORY, r".*\.defs$")} if setting == "CREATE_HOME" else set()
     )
     assert others == expected_others, (rule_id, others)
+    assert parameters.get("reads_dropins", False) is bool(expected_others), rule_id
     comparison = str(parameters["comparison"])
     if comparison == "equal":
         assert check.operations == frozenset(), (rule_id, check.operations)

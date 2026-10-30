@@ -443,15 +443,16 @@ The statuses that refuse to act, each with a reason, nothing changed and the led
 |---|---|
 | `notapplicable` (apply) | `/etc/login.defs` does not exist (shadow-utils is not installed) |
 | `not_regular_file` | `/etc/login.defs` is a symbolic link or not a regular file; nothing is written through a link |
-| `not_directory` (apply) | `/etc/login.defs.d` exists but is a symbolic link or not a directory |
-| `overridden` (apply) | A drop-in `/etc/login.defs.d/*.defs`, which libeconf builds of shadow-utils read, sets the name |
-| `duplicate_setting` (apply) | The name is set on more than one line, in any case |
+| `overridden`, `not_directory` (apply) | Only `CREATE_HOME`, whose check also reads `/etc/login.defs.d`: a drop-in there sets the name, or the directory is a symbolic link or not a directory. The other rules ignore the directory, as their checks and the pinned shadow-utils do |
+| `duplicate_setting` (apply) | The name is set on more than one line, in any case (`pam_umask` reads the first, shadow-utils the last) |
 | `method_changed` | The ledger entry records another method, or none |
 | `modified_since_apply` (cleanup) | The setting is not exactly the line the collection wrote any more (changed or removed by hand), or the file's mode or ownership changed; an administrator's later change is never overwritten |
 | `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `/etc/login.defs` is gone |
 
 A line counts as compliant only in the form that both shadow-utils and the check read: the name in upper case, one
-value and no trailing comment (shadow-utils does not read `PASS_MAX_DAYS 30 # site` as a number). Commented lines are
+decimal value without a leading zero and no trailing comment (shadow-utils parses with base 0, so it does not read
+`PASS_MAX_DAYS 30 # site` or `090` and reads `010` as 8). Any other line is rewritten, never looser than any
+reading of its first word (`PASS_MAX_DAYS 30 # site` becomes `PASS_MAX_DAYS 30`, `UMASK 077 # site` becomes `UMASK 077`). Commented lines are
 never touched. When the file already holds the recorded prior state at cleanup (an added line removed again by hand),
 the rule is `restored`, its entry is removed and nothing is written (FREES-173). Kept `audit_only`, with the reasons in
 ADR 0024: `set_password_hashing_algorithm_logindefs` (`pam`: its CIS value accepts two algorithms and must agree with

@@ -7,8 +7,10 @@ minor_changes:
     the selected profile's values. Each rule replaces the one line of its setting in place, or appends it, and records
     the prior line; switching the rule or the topic off writes that line back or removes the added one, never
     overwrites a later change (``modified_since_apply``) and only forgets the entry when the line is already as before.
-    A stricter value is kept, the umask keeps the bits it already has, and duplicate lines (``duplicate_setting``), a
-    drop-in in ``/etc/login.defs.d`` (``overridden``) and symbolic links refuse without a change.
+    A stricter value is kept, a rewritten value is never looser than any reading of the line's first word (a
+    trailing comment or a zero-padded number is rewritten), the umask keeps the bits it already has, and duplicate
+    lines (``duplicate_setting``), a ``CREATE_HOME`` drop-in in ``/etc/login.defs.d`` (``overridden``) and symbolic
+    links refuse without a change.
     ``set_password_hashing_algorithm_logindefs`` (``pam``), ``no_shelllogin_for_systemaccounts`` and the
     existing-account rules of ``/etc/shadow`` stay ``audit_only`` (ADR 0024).
 breaking_changes:

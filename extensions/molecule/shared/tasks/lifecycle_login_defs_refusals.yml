@@ -67,7 +67,7 @@
         lines:
           - PASS_MAX_DAYS 365
           - UMASK 077
-      - name: a maximum age with a trailing comment, which shadow-utils does not read as a number
+      - name: a stricter maximum age with a trailing comment, which shadow-utils does not read as a number
         text: >-
           {{ ldf_original.content | b64decode
              | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30 # site') }}
@@ -75,7 +75,37 @@
           max: applied
           umask: applied
         lines:
-          - PASS_MAX_DAYS 365
+          - PASS_MAX_DAYS 30
+      - name: a stricter umask with a trailing comment, which pam_umask and the check read as 077
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 077 # site') }}
+        expected:
+          max: applied
+          umask: applied
+        lines:
+          - UMASK 077
+      - name: zero-padded values that shadow-utils reads with base 0 (090 does not parse, 010 is 8)
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 090')
+             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 010') }}
+        expected:
+          max: applied
+          warn: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 90
+          - PASS_WARN_AGE 10
+      - name: a zero-padded maximum age that shadow-utils reads as octal 245
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 0365') }}
+        expected:
+          max: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 245
 
 - name: Login defaults refusals | Switch every rule of the topic on
   ansible.builtin.set_fact:
@@ -90,7 +120,16 @@
     loop_var: ldf_case
     label: "{{ ldf_case.name }}"
 
-- name: Login defaults refusals | Create the drop-in directory that libeconf builds of shadow-utils read
+- name: Login defaults refusals | Give login.defs its content as built back after the cases
+  ansible.builtin.copy:
+    content: "{{ ldf_text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldf_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults refusals | Create the drop-in directory that the CREATE_HOME check reads
   ansible.builtin.file:
     path: /etc/login.defs.d
     state: directory
@@ -98,7 +137,7 @@
     owner: root
     group: root
 
-- name: Login defaults refusals | Put a drop-in that sets the maximum age into the directory of libeconf builds
+- name: Login defaults refusals | Put a drop-in setting the maximum age, which neither shadow-utils nor the check reads
   ansible.builtin.copy:
     content: "PASS_MAX_DAYS 400\n"
     dest: /etc/login.defs.d/50-site.defs
@@ -113,43 +152,19 @@
     lifecycle_check_mode: false
     lifecycle_family: login_defs
 
-- name: Login defaults refusals | Check that the maximum age is overridden by the drop-in and nothing written for it
+- name: Login defaults refusals | Check that a drop-in does not stop a rule whose check reads only login.defs
   ansible.builtin.assert:
     that:
       - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', ldf_max) | map(attribute='status') | list
-        == ['overridden']
-      - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', ldf_max) | map(attribute='reason') | first
-        is search('/etc/login.defs.d/50-site.defs')
-      - lifecycle_results | selectattr('rule_id', 'equalto', ldf_max) | selectattr('changed') | list == []
+        lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+        == {ldf_max: 'applied', ldf_warn: 'compliant', ldf_umask: 'applied'}
     fail_msg: "{{ ldf_label }}, drop-in: {{ lifecycle_results }}"
     quiet: true
 
-- name: Login defaults refusals | Remove the drop-in directory
+- name: Login defaults refusals | Replace the drop-in directory by a symbolic link
   ansible.builtin.file:
     path: /etc/login.defs.d
     state: absent
-
-- name: Login defaults refusals | Switch every rule of the topic off after the drop-in
-  ansible.builtin.set_fact:
-    "{{ item }}": false
-  loop: "{{ ldf_toggles }}"
-
-- name: Login defaults refusals | Clean up the rules that the run with the drop-in applied
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-    lifecycle_family: login_defs
-
-- name: Login defaults refusals | Check that only the umask was cleaned up
-  ansible.builtin.assert:
-    that:
-      - lifecycle_results | map(attribute='rule_id') | list == [ldf_umask]
-      - lifecycle_results | map(attribute='status') | list == ['restored']
-    fail_msg: "{{ ldf_label }}, cleanup after the drop-in: {{ lifecycle_results }}"
-    quiet: true
 
 - name: Login defaults refusals | Put a symbolic link in place of the drop-in directory
   ansible.builtin.file:
@@ -157,30 +172,44 @@
     src: /tmp
     state: link
 
-- name: Login defaults refusals | Switch every rule of the topic on with the symbolic link in place
+- name: Login defaults refusals | Switch every rule of the topic off with the symbolic link in place
   ansible.builtin.set_fact:
-    "{{ item }}": true
+    "{{ item }}": false
   loop: "{{ ldf_toggles }}"
 
-- name: Login defaults refusals | Apply the topic with a symbolic link in place of the drop-in directory
+- name: Login defaults refusals | Clean up the topic with a symbolic link in place of the drop-in directory
   ansible.builtin.include_tasks:
     file: lifecycle_remediate.yml
   vars:
     lifecycle_check_mode: false
     lifecycle_family: login_defs
 
-- name: Login defaults refusals | Check that every rule refused the link and nothing changed
+- name: Login defaults refusals | Inspect login.defs after the cleanup next to the link
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldf_linked_cleanup
+
+- name: Login defaults refusals | Check that both rules were restored and login.defs is as built
   ansible.builtin.assert:
     that:
-      - lifecycle_results | map(attribute='status') | unique | list == ['not_directory']
-      - lifecycle_results | selectattr('changed') | list == []
-    fail_msg: "{{ ldf_label }}, symbolic link for the drop-in directory: {{ lifecycle_results }}"
+      - lifecycle_results | map(attribute='rule_id') | list == [ldf_max, ldf_umask]
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - ldf_linked_cleanup.stat.checksum == ldf_text | hash('sha256')
+    fail_msg: "{{ ldf_label }}, cleanup with a symbolic link for the drop-in directory: {{ lifecycle_results }}"
     quiet: true
 
 - name: Login defaults refusals | Remove the symbolic link in place of the drop-in directory
   ansible.builtin.file:
     path: /etc/login.defs.d
     state: absent
+
+- name: Login defaults refusals | Switch every rule of the topic on again
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldf_toggles }}"
 
 - name: Login defaults refusals | Move login.defs aside and put a symbolic link to it in its place
   ansible.builtin.copy:

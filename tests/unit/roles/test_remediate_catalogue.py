@@ -33,7 +33,7 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "setting", "main_file_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
     "login_defs": [
-        {"setting", "comparison", "value"},
+        {"setting", "comparison", "value", "reads_dropins"},
         {"setting", "comparison"} | PROFILE_VALUE_PARAMETERS,
     ],
     "sudo": [
@@ -48,8 +48,8 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
 NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality", "login_defs", "sudo"]
 DISRUPTIVE_NATIVE_FAMILIES = ["pwquality", "login_defs", "sudo"]
 LOGIN_DEFS_VALUES = {
-    "at_most": r"[0-9]{1,6}",
-    "at_least": r"[0-9]{1,6}",
+    "at_most": r"(0|[1-9][0-9]{0,5})",
+    "at_least": r"(0|[1-9][0-9]{0,5})",
     "umask": r"[0-7]{3}",
     "equal": r"[a-z]{1,8}",
 }

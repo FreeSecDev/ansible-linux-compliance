@@ -204,9 +204,6 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_not_directory$') == [] or
         '__linux_compliance_remediate_ld_not_directory' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_octal$') == [] or
-        '__linux_compliance_remediate_ld_octal' in (hostvars[inventory_hostname] | list)
-      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_one$') == [] or
         '__linux_compliance_remediate_ld_one' in (hostvars[inventory_hostname] | list)
       - >-
@@ -218,6 +215,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_read$') == [] or
         '__linux_compliance_remediate_ld_read' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_readings$') == [] or
+        '__linux_compliance_remediate_ld_readings' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_reason$') == [] or
         '__linux_compliance_remediate_ld_reason' in (hostvars[inventory_hostname] | list)
@@ -269,6 +269,12 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_strict$') == [] or
         '__linux_compliance_remediate_ld_strict' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_token$') == [] or
+        '__linux_compliance_remediate_ld_token' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_token_pattern$') == [] or
+        '__linux_compliance_remediate_ld_token_pattern' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_value_patterns$') == [] or
         '__linux_compliance_remediate_ld_value_patterns' in (hostvars[inventory_hostname] | list)
@@ -698,7 +704,6 @@
     __linux_compliance_remediate_ld_link_targets: __linux_compliance_unset__
     __linux_compliance_remediate_ld_links: __linux_compliance_unset__
     __linux_compliance_remediate_ld_not_directory: __linux_compliance_unset__
-    __linux_compliance_remediate_ld_octal: __linux_compliance_unset__
     __linux_compliance_remediate_ld_overriding: __linux_compliance_unset__
     __linux_compliance_remediate_ld_prior: __linux_compliance_unset__
     __linux_compliance_remediate_ld_read: __linux_compliance_unset__
@@ -713,6 +718,8 @@
     __linux_compliance_remediate_ld_stat: __linux_compliance_unset__
     __linux_compliance_remediate_ld_status: __linux_compliance_unset__
     __linux_compliance_remediate_ld_strict: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_token: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_token_pattern: __linux_compliance_unset__
     __linux_compliance_remediate_ld_value_patterns: __linux_compliance_unset__
     __linux_compliance_remediate_ld_values: __linux_compliance_unset__
     __linux_compliance_remediate_ld_write: __linux_compliance_unset__
@@ -856,7 +863,6 @@
       - __linux_compliance_remediate_ld_link_targets == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_links == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_not_directory == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ld_octal == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_overriding == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_prior == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_read == '__linux_compliance_unset__'
@@ -871,6 +877,8 @@
       - __linux_compliance_remediate_ld_stat == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_status == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_strict == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_token == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_token_pattern == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_value_patterns == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_write == '__linux_compliance_unset__'
@@ -964,6 +972,7 @@
       - __linux_compliance_remediate_ld_comparison == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_link == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_one == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_readings == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_recorded == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_records == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_required == '__linux_compliance_unset__'
@@ -1132,6 +1141,7 @@
     __linux_compliance_remediate_ld_comparison: __linux_compliance_unset__
     __linux_compliance_remediate_ld_link: __linux_compliance_unset__
     __linux_compliance_remediate_ld_one: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_readings: __linux_compliance_unset__
     __linux_compliance_remediate_ld_recorded: __linux_compliance_unset__
     __linux_compliance_remediate_ld_records: __linux_compliance_unset__
     __linux_compliance_remediate_ld_required: __linux_compliance_unset__
@@ -1226,7 +1236,6 @@
     __linux_compliance_remediate_ld_link_targets: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_links: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_not_directory: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ld_octal: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_overriding: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_prior: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_read: __linux_compliance_unset_again__
@@ -1241,6 +1250,8 @@
     __linux_compliance_remediate_ld_stat: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_status: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_strict: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_token: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_token_pattern: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_value_patterns: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_values: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_write: __linux_compliance_unset_again__
@@ -1384,7 +1395,6 @@
       - __linux_compliance_remediate_ld_link_targets == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_links == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_not_directory == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ld_octal == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_overriding == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_prior == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_read == '__linux_compliance_unset_again__'
@@ -1399,6 +1409,8 @@
       - __linux_compliance_remediate_ld_stat == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_status == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_strict == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_token == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_token_pattern == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_value_patterns == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_write == '__linux_compliance_unset_again__'
@@ -1492,6 +1504,7 @@
       - __linux_compliance_remediate_ld_comparison == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_link == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_one == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_readings == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_recorded == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_records == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_required == '__linux_compliance_unset_again__'
@@ -1544,6 +1557,7 @@
     __linux_compliance_remediate_ld_comparison: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_link: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_one: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_readings: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_recorded: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_records: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_required: __linux_compliance_unset_again__
@@ -1638,7 +1652,6 @@
     __linux_compliance_remediate_ld_link_targets: __linux_compliance_unset__
     __linux_compliance_remediate_ld_links: __linux_compliance_unset__
     __linux_compliance_remediate_ld_not_directory: __linux_compliance_unset__
-    __linux_compliance_remediate_ld_octal: __linux_compliance_unset__
     __linux_compliance_remediate_ld_overriding: __linux_compliance_unset__
     __linux_compliance_remediate_ld_prior: __linux_compliance_unset__
     __linux_compliance_remediate_ld_read: __linux_compliance_unset__
@@ -1653,6 +1666,8 @@
     __linux_compliance_remediate_ld_stat: __linux_compliance_unset__
     __linux_compliance_remediate_ld_status: __linux_compliance_unset__
     __linux_compliance_remediate_ld_strict: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_token: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_token_pattern: __linux_compliance_unset__
     __linux_compliance_remediate_ld_value_patterns: __linux_compliance_unset__
     __linux_compliance_remediate_ld_values: __linux_compliance_unset__
     __linux_compliance_remediate_ld_write: __linux_compliance_unset__

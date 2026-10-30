@@ -39,8 +39,13 @@ Every selected rule whose definition reaches an object that reads `/etc/login.de
 9 datastream but no pinned profile selects it, so it is not catalogued. No pinned profile selects a rule about
 `USERGROUPS_ENAB` or `HOME_MODE`. shadow-utils (`lib/getdef.c`) takes the name of a line case-sensitively, the first
 word after it as the value, ignores lines whose first non-blank character is `#`, trims trailing white space and
-keeps the last line of a name; a value followed by a comment (`PASS_MAX_DAYS 30 # site`) is not a number, so
-shadow-utils falls back to its default. Neither image ships `/etc/login.defs.d`.
+keeps the last line of a name. It parses numbers with base 0 (`strtol`) and requires the whole value to be the
+number, so a value followed by a comment (`PASS_MAX_DAYS 30 # site`) or a zero-padded decimal (`090`, `08`) does not
+parse and shadow-utils falls back to its default, and `010` reads as 8. `pam_umask` (Ubuntu's `common-session`)
+takes the first `UMASK` line, its name in any case, and reads the first word as octal, ignoring a trailing comment.
+Neither image ships `/etc/login.defs.d`, and neither pinned shadow-utils reads it: `useradd` and `chage` do not link
+libeconf on Ubuntu 24.04 (4.13) or Rocky Linux 9 (4.9), and a `PASS_MAX_DAYS 5` there left new accounts at 99999 in
+the review of the pull request. Only the `CREATE_HOME` check reads it.
 
 ## Decision
 
@@ -72,11 +77,16 @@ content's objects match them (`(?i)`), so `pass_max_days 99999` is the line of `
 later restored as written. Commented lines are never counted or touched.
 
 The value comes from the profile (`profile_value`, ADR 0021). A line counts as compliant only when it has the strict
-form that both shadow-utils and the check read (the name in upper case, one number, or three octal digits for the
-umask, and no trailing comment) and satisfies the check's comparison; a stricter value is kept (`PASS_MAX_DAYS 30`
-under a maximum of 365, `UMASK 077` under 027). The umask written is the union of the bits that the profile requires
-and the bits of the current value, so `UMASK 0077`, which the check reads as `007`, becomes `077` and never looser.
-`CREATE_HOME` has no exported value; its rule carries the value `yes`, which the check's pattern requires.
+form that shadow-utils, `pam_umask` and the check all read the same way (the name in upper case, a decimal number
+without a leading zero (`0` or `[1-9][0-9]{0,5}`), or three octal digits for the umask, and no trailing comment) and
+satisfies the check's comparison; then nothing is written and a stricter value is kept (`PASS_MAX_DAYS 30` under a
+maximum of 365, `UMASK 077` under 027). Any other line is rewritten, never looser than the first word of the line in
+any reading: for a maximum the written value is the smallest of the profile's value and the first word read as a
+decimal, octal or hexadecimal number, for a minimum the largest (`PASS_MAX_DAYS 30 # site` becomes `PASS_MAX_DAYS 30`,
+`PASS_MAX_DAYS 0365` becomes `245`, `PASS_WARN_AGE 010` becomes `10`), and the umask written is the union of the bits
+that the profile requires and the octal bits of the first word (`UMASK 077 # site` and `UMASK 0077` become `077`).
+`CREATE_HOME` has no exported value; its rule carries the value `yes`, which the check's pattern requires, and the
+parameter `reads_dropins`, because its check also reads `/etc/login.defs.d`.
 
 Apply reports, with a reason and without a change:
 
@@ -84,9 +94,9 @@ Apply reports, with a reason and without a change:
 |---|---|
 | `notapplicable` | `/etc/login.defs` does not exist (shadow-utils is not installed; the content's `package_shadow-utils` platform) |
 | `not_regular_file` | `/etc/login.defs` is a symbolic link or not a regular file; nothing is written through a link |
-| `not_directory` | `/etc/login.defs.d` exists but is a symbolic link or not a directory, so its drop-ins cannot be read |
-| `overridden` | A drop-in `/etc/login.defs.d/*.defs` (a regular file, or a link to one) sets the name. A libeconf build of shadow-utils reads it after the main file, and the `CREATE_HOME` check fails on it, so the collection does not claim a change that would not take effect and does not edit a file it does not own |
-| `duplicate_setting` | The name is set on more than one line, in any case; shadow-utils takes the last one and the check requires every one to comply |
+| `not_directory` | Only for a rule whose check reads the drop-ins (`reads_dropins`, today `CREATE_HOME`): `/etc/login.defs.d` exists but is a symbolic link or not a directory, so its drop-ins cannot be read |
+| `overridden` | Only for a rule whose check reads the drop-ins (`CREATE_HOME`): a drop-in `/etc/login.defs.d/*.defs` (a regular file, or a link to one) sets the name, and the check fails on it whatever the main file says, so the collection does not claim a change that would not take effect and does not edit a file it does not own. For the other six rules a drop-in is ignored, as by their checks and the pinned shadow-utils |
+| `duplicate_setting` | The name is set on more than one line, in any case: `pam_umask` takes the first line, shadow-utils the last, and the check requires every one to comply, so no single rewrite is right |
 | `method_changed` | The ledger entry was recorded by another method, or none; clean it up first |
 | `compliant` | Exactly one line, in the strict form, satisfies the check; nothing is written or recorded |
 
@@ -109,7 +119,7 @@ a newline gets one when `lineinfile` appends a setting, and keeps it after the c
 
 | Rule | Reason |
 |---|---|
-| `set_password_hashing_algorithm_logindefs` | It stays in `pam`, whose former toggle and allow-list entry the legacy fixture pins (moving it would change what `linux_compliance_pam_enabled` and `allow_disruptive: [pam]` cover), and its value is a choice: the CIS profiles accept `SHA512\|YESCRYPT`, and the algorithm must agree with the `pam_unix` hashing of the PAM stack (`set_password_hashing_algorithm_systemauth`, `..._passwordauth`), which the `pam` topic owns. Both pinned images already comply (`YESCRYPT` on Ubuntu 24.04, `SHA512` on RHEL 9). The `login_defs` tag switches it off with the topic |
+| `set_password_hashing_algorithm_logindefs` | It stays in `pam`, whose former toggle and allow-list entry the legacy fixture pins (moving it would change what `linux_compliance_pam_enabled` and `allow_disruptive: [pam]` cover), and its value is a choice: the CIS profiles accept `SHA512\|YESCRYPT`, and the algorithm must agree with the `pam_unix` hashing of the PAM stack (`set_password_hashing_algorithm_systemauth`, `..._passwordauth`), which the `pam` topic owns. Both pinned images already comply (`SHA512` in the Ubuntu 24.04 and Rocky Linux 9 images). The `login_defs` tag switches it off with the topic |
 | `no_shelllogin_for_systemaccounts` (`root_access`) | It reads login.defs only for the system UID range; it changes the shells of accounts in `/etc/passwd`, which can stop services that run a shell, and it is not a login.defs setting |
 | `accounts_password_set_max_life_existing`, `accounts_password_set_min_life_existing`, `accounts_password_set_warn_age_existing` and the other existing-account rules of `password_aging` | They change fields of every account in `/etc/shadow`. That file holds the password hashes, so its content cannot be recorded in the ledger; an exact revert would need every prior field of every account and breaks as soon as an account is added or changes its password; and setting a maximum age on existing operators and service accounts can expire their passwords at once. Root in the Docker containers cannot even read `/etc/shadow` on Rocky Linux |
 | `set_password_hashing_min_rounds_logindefs` | No pinned profile selects it |
@@ -124,9 +134,10 @@ content update that moves a check fails CI until the family follows.
 
 ## Trade-offs
 
-The family refuses rather than merges: a duplicate line, a drop-in that sets the name, or a symbolic link leave the
-rule unremediated with a reason. A trailing comment on a setting's line is rewritten, because shadow-utils does not
-read the value then; the cleanup puts the commented line back. `lineinfile` replaces the inode of login.defs; its
+The family refuses rather than merges: a duplicate line, a drop-in that sets `CREATE_HOME`, or a symbolic link leave
+the rule unremediated with a reason. A trailing comment or a zero-padded number on a setting's line is rewritten,
+because shadow-utils does not read the value as written then; the value written is never looser than any reading of
+the line, and the cleanup puts the line back as it was. `lineinfile` replaces the inode of login.defs; its
 content, mode, owner and group are restored, the inode and the times are not.
 
 ## Security implications
@@ -148,8 +159,10 @@ cleanup restores those lines and not a default. Three regression groups run in l
 stricter value set by hand (`modified_since_apply`, then `restored` once the written line is put back), a removed line
 that existed before (`modified_since_apply`) and a line that the collection added and an administrator removed again
 (`restored` without a write), and checks the exact SHA-256 after the apply; `lifecycle_login_defs_refusals.yml` covers
-duplicate lines in either case, a commented default, a lower-case name with a four-digit umask, a trailing comment, a
-drop-in that overrides the setting, a symbolic link for the drop-in directory and for login.defs, and a missing
+duplicate lines in either case, a commented default, a lower-case name with a four-digit umask, a stricter maximum
+age and a stricter umask with a trailing comment (both kept), zero-padded numbers (`090`, `010`, `0365`), a drop-in and
+a symbolic link for the drop-in directory (both ignored by these rules), a symbolic link for login.defs and a missing
 login.defs; `lifecycle_login_defs_other_profiles.yml` applies, repeats and cleans up the rules that the CIS level 1
 profiles of the lifecycle do not select, with the STIG profiles of both platforms and the RHEL 9 ANSSI enhanced
-profile.
+profile, and refuses `CREATE_HOME` next to a drop-in that sets it (`overridden`) and next to a linked drop-in
+directory (`not_directory`).

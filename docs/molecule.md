@@ -539,14 +539,18 @@ absent before and that removing it by hand is `restored` without a write (FREES-
 `shared/tasks/lifecycle_login_defs_refusals.yml` runs each of these files through an apply and a cleanup that must
 restore it byte for byte: a second `PASS_MAX_DAYS` line and a second one in lower case (`duplicate_setting`, nothing
 written), a commented default (ignored), a lower-case name with a four-digit umask (`PASS_MAX_DAYS 365` and `UMASK 077`
-written, the lower-case line and `UMASK 0077` restored) and a trailing comment; then a drop-in
-`/etc/login.defs.d/50-site.defs` that sets the maximum age (`overridden`), a symbolic link in place of
-`/etc/login.defs.d` (`not_directory`) and of `/etc/login.defs` (`not_regular_file`, nothing written through it) and a
-missing `/etc/login.defs` (`notapplicable`, nothing created). In `profiles`,
+written, the lower-case line and `UMASK 0077` restored), a stricter maximum age and umask with a trailing comment
+(`PASS_MAX_DAYS 30` and `UMASK 077` written) and zero-padded numbers (`090` becomes `90`, `010` becomes `10`, `0365`
+becomes `245`); then a drop-in
+`/etc/login.defs.d/50-site.defs` that sets the maximum age and a symbolic link in place of `/etc/login.defs.d` (both
+ignored: the rules apply and clean up as usual), a symbolic link in place of `/etc/login.defs` (`not_regular_file`,
+nothing written through it) and a missing `/etc/login.defs` (`notapplicable`, nothing created). In `profiles`,
 `shared/tasks/lifecycle_login_defs_other_profiles.yml` applies in check mode and for real, repeats and cleans up the
 rules that the CIS level 1 profiles of the lifecycle do not select, with the STIG profile of each platform (on Rocky
 Linux from `CREATE_HOME no`, so that `accounts_have_homedir_login_defs` changes something) and the RHEL 9 ANSSI
-enhanced profile, and checks every written line and the byte-for-byte restore.
+enhanced profile, and checks every written line and the byte-for-byte restore; on Rocky Linux it also checks that
+`CREATE_HOME`, whose check reads the drop-ins, is `overridden` by a drop-in that sets it and `not_directory` next to a
+linked drop-in directory.
 
 ### CI legs
 
