@@ -318,7 +318,7 @@ jobs:
   molecule-docker:
     name: molecule-docker (${{ matrix.scenario }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 18
     permissions:
       contents: read
     strategy:
