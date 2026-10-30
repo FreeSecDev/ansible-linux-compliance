@@ -35,27 +35,25 @@
     fail_msg: "{{ stack_label }}, {{ stack_case.name }}, apply: {{ lifecycle_results }}"
     quiet: true
 
-- name: Faillock stack case | Audit the applied topic with a real scan where the content applies
-  ansible.builtin.include_tasks:
-    file: audit.yml
-  vars:
-    audit_check_mode: false
-  when: stack_scan | bool
+- name: Faillock stack case | Read faillock.conf after the apply
+  ansible.builtin.slurp:
+    src: "{{ stack_conf }}"
+  register: stack_applied
 
-- name: Faillock stack case | Check that the scan reports both rules pass, from the file or from the module line
+- name: Faillock stack case | Check that faillock.conf gained only the lines of the applied rules
   vars:
-    stack_findings: >-
-      {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
-         | sort(attribute='rule_id') }}
+    stack_newline: "\n"
+    stack_added: >-
+      {{ (stack_applied.content | b64decode)[(stack_original.results[0].content | b64decode) | length:]
+         | split(stack_newline) | reject('equalto', '') | map('regex_replace', ' = .*$', '') | list }}
   ansible.builtin.assert:
     that:
-      - stack_findings | map(attribute='rule_id') | list == [stack_deny, stack_unlock]
-      - stack_findings | map(attribute='outcome') | unique | list == ['pass']
-    fail_msg: >-
-      {{ stack_label }}, {{ stack_case.name }}: the scan reported
-      {{ stack_findings | items2dict(key_name='rule_id', value_name='outcome') }}
+      - (stack_applied.content | b64decode).startswith(stack_original.results[0].content | b64decode)
+      - >-
+        stack_added == (['deny'] if stack_case.statuses[0] == 'applied' else [])
+        + (['unlock_time'] if stack_case.statuses[1] == 'applied' else [])
+    fail_msg: "{{ stack_label }}, {{ stack_case.name }}: added {{ stack_added }}"
     quiet: true
-  when: stack_scan | bool
 
 - name: Faillock stack case | Switch every rule of the topic off
   ansible.builtin.set_fact:

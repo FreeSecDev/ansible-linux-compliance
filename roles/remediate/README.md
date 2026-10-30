@@ -8,18 +8,23 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 
 ## Status
 
-Dispatcher and safety model implemented (FREES-52). 74 rules have a native remediation: the reference rule
+Dispatcher and safety model implemented (FREES-52). 85 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (`file_permissions`), 15 rules of `banners` (the text,
 mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`), 14 rules of `pwquality` (one line per
 setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks),
 34 sshd keyword rules of `ssh` (one drop-in per rule, `/etc/ssh/sshd_config.d/00-freesecdev-<rule>.conf`, which
 sshd reads first, validated with `sshd -t` through the module `freesecdev.linux_compliance.sshd_validate` before it is
 written; a conflicting later line of `/etc/ssh/sshd_config` or `50-redhat.conf` is set to the rule's value in place and
-written back on cleanup; sshd is reloaded only where it runs) and 10 rules of `sudo` (one `visudo`-checked drop-in
-per setting below `/etc/sudoers.d`, and the mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d`), with the
-values of the selected profile ([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md),
+written back on cleanup; sshd is reloaded only where it runs), 10 rules of `sudo` (one `visudo`-checked drop-in
+per setting below `/etc/sudoers.d`, and the mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d`), 8 rules of
+`faillock` and 3 rules of `pwhistory` (one recorded line per setting in `/etc/security/faillock.conf` or
+`/etc/security/pwhistory.conf`, through the shared helpers `pam_conf_prepare.yml`, `pam_conf_apply.yml` and
+`pam_conf_cleanup.yml`; the PAM stack is only read, and a setting that a module line of the stack sets is
+`overridden`), with the values of the selected profile
+([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md),
 [ADR 0022](../../docs/adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](../../docs/adr/0023-native-ssh-server-configuration.md)). The catalogue `vars/rules.yml` holds
+[ADR 0023](../../docs/adr/0023-native-ssh-server-configuration.md),
+[ADR 0025](../../docs/adr/0025-native-faillock-pwhistory.md)). The catalogue `vars/rules.yml` holds
 every rule of the 25 pinned profiles, 1203 rules in 55 families, generated from the pinned content (FREES-53,
 [control families](../../docs/control-families.md)); every rule without a native remediation has the strategy
 `audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated from the

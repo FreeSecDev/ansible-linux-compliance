@@ -17,7 +17,6 @@
     stack_deny: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
     stack_unlock: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time
     stack_conf: /etc/security/faillock.conf
-    stack_scan: "{{ lifecycle_platform == 'ubuntu' }}"
     stack_files: >-
       {{ {'ubuntu': ['/etc/pam.d/common-auth', '/etc/pam.d/common-account'],
           'rhel_compatible': ['/etc/pam.d/system-auth', '/etc/pam.d/password-auth']}[lifecycle_platform] }}

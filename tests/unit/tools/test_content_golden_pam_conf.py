@@ -290,6 +290,44 @@ def values_of(rule: dict[str, object], sha256: str) -> list[str]:
     return found if "value_id" in parameters else [""]
 
 
+def assert_line_matches(
+    collector: Oval,
+    rule_id: str,
+    parameters: dict[str, object],
+    item: dict[str, list[str]],
+    values: list[str],
+) -> None:
+    for pattern in patterns(collector, item):
+        for value in values:
+            line = written_line(parameters, value)
+            match = re.search(pattern, f"# comment\n{line}\n", re.MULTILINE)
+            assert match is not None, (rule_id, pattern, line)
+            assert re.search(pattern, f"# {line}\n", re.MULTILINE) is None, (rule_id, pattern)
+            if parameters["comparison"] != "present":
+                assert match.group(1) == value, (rule_id, pattern)
+
+
+def assert_states(
+    collector: Oval, rule_id: str, parameters: dict[str, object], test: dict[str, object]
+) -> None:
+    if test["existence"] == "none_exist":
+        return
+    states = [
+        entry for state in cast("list[str]", test["states"]) for entry in collector.states[state]
+    ]
+    if parameters["comparison"] == "present":
+        assert states == [], rule_id
+        return
+    expected = COMPARISONS[str(parameters["comparison"])]
+    assert [(entry["operation"], bool(entry["var_ref"])) for entry in states] == expected, (
+        rule_id,
+        states,
+    )
+    variable = f"oval:ssg-{parameters['value_id']}:var:1"
+    assert all(entry["var_ref"] == variable for entry in states if entry["var_ref"]), rule_id
+    assert all(entry["value"] == "1" for entry in states if not entry["var_ref"]), rule_id
+
+
 def test_every_written_line_satisfies_the_checks_that_read_the_configuration_file() -> None:
     rules = native_rules()
     assert len(rules) == 11
@@ -302,43 +340,14 @@ def test_every_written_line_satisfies_the_checks_that_read_the_configuration_fil
             values = values_of(rule, sha256)
             if definition is None or not values:
                 continue
-            family = str(rule["family"])
             parameters = cast("dict[str, object]", rule["parameters"])
-            setting = str(parameters["setting"])
-            found = conf_objects(collector, definition, family, setting)
+            found = conf_objects(
+                collector, definition, str(rule["family"]), str(parameters["setting"])
+            )
             assert found, (rule_id, benchmark)
             for test, item in found:
-                for pattern in patterns(collector, item):
-                    for value in values:
-                        line = written_line(parameters, value)
-                        match = re.search(pattern, f"# comment\n{line}\n", re.MULTILINE)
-                        assert match is not None, (rule_id, benchmark, pattern, line)
-                        assert re.search(pattern, f"# {line}\n", re.MULTILINE) is None, (
-                            rule_id,
-                            pattern,
-                        )
-                        if parameters["comparison"] != "present":
-                            assert match.group(1) == value, (rule_id, pattern)
-                states = [
-                    entry
-                    for state in cast("list[str]", test["states"])
-                    for entry in collector.states[state]
-                ]
-                if test["existence"] == "none_exist":
-                    continue
-                if parameters["comparison"] == "present":
-                    assert states == [], (rule_id, benchmark)
-                    continue
-                expected = COMPARISONS[str(parameters["comparison"])]
-                assert [
-                    (entry["operation"], bool(entry["var_ref"])) for entry in states
-                ] == expected, (rule_id, benchmark, states)
-                assert all(
-                    entry["var_ref"] == f"oval:ssg-{parameters['value_id']}:var:1"
-                    for entry in states
-                    if entry["var_ref"]
-                ), (rule_id, states)
-                assert all(entry["value"] == "1" for entry in states if not entry["var_ref"])
+                assert_line_matches(collector, rule_id, parameters, item, values)
+                assert_states(collector, rule_id, parameters, test)
             checked.setdefault(benchmark, set()).add(rule_id)
     assert {benchmark: len(found) for benchmark, found in checked.items()} == {
         UBUNTU: 6,
@@ -346,50 +355,49 @@ def test_every_written_line_satisfies_the_checks_that_read_the_configuration_fil
     }
 
 
+def detected_lines(family: str, option: str, argument: str, oval_patterns: list[str]) -> int:
+    kind, module = MODULE[family]
+    lines = [
+        f"{kind} required {module}.so preauth {argument}",
+        f"{kind} requisite {module}.so preauth silent {argument}",
+        f"{kind} [default=die] {module}.so authfail {argument}",
+        f"{kind} requisite /usr/lib64/security/{module}.so use_authtok {argument}",
+    ]
+    detector = option_pattern(family, option + "=" if "=" in argument else argument)
+    found = 0
+    for pattern in oval_patterns:
+        for line in lines:
+            if re.search(pattern, line + "\n", re.MULTILINE):
+                assert re.search(detector, line + "\n"), (pattern, line)
+                found += 1
+    return found
+
+
+def stack_rule(collector: Oval, definition: str, rule: dict[str, object]) -> int:
+    family = str(rule["family"])
+    parameters = cast("dict[str, object]", rule["parameters"])
+    setting = str(parameters["setting"])
+    options = [setting] + ([str(parameters["alternative"])] if "alternative" in parameters else [])
+    found = {option: stack_patterns(collector, definition, family, option) for option in options}
+    assert bool(found[setting]) is parameters["stack_checked"], rule["rule_id"]
+    checked = 0
+    for option, oval_patterns in found.items():
+        value = option == setting and parameters["comparison"] != "present"
+        checked += detected_lines(family, option, f"{option}=5" if value else option, oval_patterns)
+    return checked
+
+
 def test_stack_checked_is_true_exactly_when_the_check_reads_the_module_line_and_detects_it() -> (
     None
 ):
     checked = 0
-    for path, sha256, benchmark in pinned_benchmarks():
+    for path, sha256, _ in pinned_benchmarks():
         profile_values.read_values(path, sha256)
         collector = collect(path)
         for rule_id, rule in native_rules().items():
             definition = rule_definitions(collector, rule_id)
-            if definition is None or not values_of(rule, sha256):
-                continue
-            family = str(rule["family"])
-            parameters = cast("dict[str, object]", rule["parameters"])
-            options = [str(parameters["setting"])] + (
-                [str(parameters["alternative"])] if "alternative" in parameters else []
-            )
-            found = {
-                option: stack_patterns(collector, definition, family, option) for option in options
-            }
-            assert bool(found[options[0]]) is parameters["stack_checked"], (rule_id, benchmark)
-            kind, module = MODULE[family]
-            for option, oval_patterns in found.items():
-                argument = (
-                    option
-                    if parameters["comparison"] == "present" or option != options[0]
-                    else f"{option}=5"
-                )
-                lines = [
-                    f"{kind} required {module}.so preauth {argument}",
-                    f"{kind} requisite {module}.so preauth silent {argument}",
-                    f"{kind} [default=die] {module}.so authfail {argument}",
-                    f"{kind} requisite /usr/lib64/security/{module}.so use_authtok {argument}",
-                ]
-                detector = option_pattern(family, argument if "=" not in argument else option + "=")
-                for pattern in oval_patterns:
-                    for line in lines:
-                        if re.search(pattern, line + "\n", re.MULTILINE):
-                            assert re.search(detector, line + "\n"), (
-                                rule_id,
-                                benchmark,
-                                pattern,
-                                line,
-                            )
-                            checked += 1
+            if definition is not None and values_of(rule, sha256):
+                checked += stack_rule(collector, definition, rule)
     assert checked > 0
 
 

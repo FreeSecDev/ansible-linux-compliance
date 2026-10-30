@@ -1,0 +1,23 @@
+---
+minor_changes:
+  - >-
+    remediate - the ``faillock`` topic is native for eight rules and the ``pwhistory`` topic for three.
+    ``deny``, ``unlock_time``, ``fail_interval``, ``root_unlock_time`` (also for
+    ``even_deny_root_or_root_unlock_time``), ``even_deny_root``, ``audit`` and ``silent`` are written as one line each
+    into ``/etc/security/faillock.conf``, and ``remember`` and ``enforce_for_root`` into
+    ``/etc/security/pwhistory.conf`` (RHEL 9), with the profile's values; a stricter value is kept. The prior line and
+    the file's mode, ownership and SHA-256 are recorded, and switching a rule or the topic off writes the prior line
+    back or removes the line, and never overwrites a later change (``modified_since_apply``). A setting that a
+    ``pam_faillock`` or ``pam_pwhistory`` line of the PAM stack sets is ``overridden`` and the stack is never edited;
+    duplicate lines, symbolic links and a missing file are refused with a reason. The settings take effect where the
+    stack loads the module. The rules that enable the modules in the stack, the Ubuntu pwhistory rules (whose checks
+    read only ``common-password``), ``pam_faildelay``, the tally directory and its SELinux context and the
+    ``pam_unix`` ``remember`` rules stay ``audit_only`` (ADR 0025). Both topics stay disruptive and need ``faillock``,
+    ``pwhistory`` or ``pam`` in ``linux_compliance_remediate_allow_disruptive``.
+trivial:
+  - >-
+    Molecule - a lifecycle pre-state may set ``lines`` of a declared rewritten file, which the harness puts back after
+    the cycle. The lifecycle runs ``faillock`` on Ubuntu 24.04 and Rocky Linux 9 and ``pwhistory`` on Rocky Linux 9,
+    with regression groups for a change of method, changes by hand, refusals, the shared ``remember`` line, the rules
+    of the other profiles and a PAM stack that loads ``pam_faillock``. A golden test pins
+    the method to the OVAL of both datastreams.

@@ -101,7 +101,9 @@
     rule_id: "{{ item.rule_id }}"
     family: pwhistory
     revert_strategy: recorded_value
-    prior_values: "{{ item.prior_values }}"
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | dict2items(key_name='name', value_name='value') }}
     collection_version: "{{ item.collection_version }}"
     replace: true
   loop: "{{ pwr_method_entries if pwr_step.restore_method | default(false) else [] }}"

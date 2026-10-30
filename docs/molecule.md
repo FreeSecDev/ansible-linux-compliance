@@ -580,6 +580,38 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
+`faillock` and `pwhistory` ([ADR 0025](adr/0025-native-faillock-pwhistory.md)) write one recorded line per setting
+into `/etc/security/faillock.conf` and `/etc/security/pwhistory.conf`. Their cycles run from the file as built and from
+a file that an administrator customised with the pre-state key `lines` (`lineinfile` on a declared file whose
+`rewritten` is true; the harness puts the content back after the cycle): `deny=10` in place of the commented default,
+which the cleanup must restore and not a default, and a stricter `unlock_time = 1800`, which stays `compliant`; for
+`pwhistory`, `remember=5`. The cycles do not scan, because neither image loads `pam_faillock` or `pam_pwhistory` in its
+PAM stack and the content limits the rules to `system_with_kernel`; the SHA-256 of the whole file after the apply is
+the evidence.
+`faillock` has three groups on both platforms. `changes` (`shared/tasks/lifecycle_faillock_regressions.yml`) applies the
+topic and compares the whole file with the as-built text plus the two lines; records both entries as if another method
+had written them (`method_changed` at apply and at cleanup, entries kept, file untouched); makes `deny` stricter and
+removes the `unlock_time` line by hand (`modified_since_apply` for `deny`, `restored` without a write for
+`unlock_time`) and puts the written line back (`restored`, the file byte for byte as built); then runs
+`shared/tasks/lifecycle_faillock_case.yml` over a duplicate `deny` (`duplicate_setting`), a zero-padded `deny` with a
+comment and a stricter `unlock_time=1800` (`deny = 3` written in place, `unlock_time` `compliant`) and a commented
+`deny` with a looser commented `unlock_time` (both written), each restored byte for byte; and refuses a symbolic link
+in place of the file (`not_regular_file`, nothing written through it) and a missing file (`notapplicable`, nothing
+created). `stack` (`lifecycle_faillock_stack.yml`) writes the PAM stack that authselect `with-faillock` or a
+pam-auth-update profile writes into `common-auth` and `common-account` (Ubuntu) or `system-auth` and `password-auth`
+(Rocky Linux), applies the topic and checks that the file gained exactly the lines of both rules; with `deny=3`
+on the `pam_faillock` preauth line `deny` is `overridden` with that file named and only `unlock_time` is written; no
+scan runs, because both contents put the faillock rules below a group limited to `system_with_kernel`, so a container
+scan reports them `notapplicable` even with the module in the stack; each cleanup restores the file byte for byte and the stack files are put back at the end.
+`profiles` (`lifecycle_faillock_other_profiles.yml`) applies in check mode and for real, repeats and cleans up the rules
+that the CIS level 1 profiles do not select with the STIG profile and a CIS level 2 profile of each platform, and checks
+that the file as built gained exactly the profile's lines. `pwhistory` has one group, `changes`, on Rocky Linux
+(`lifecycle_pwhistory_regressions.yml`), whose steps check the shared `remember` line: the second rule records the
+line that the first wrote, switching either rule off restores the line and the other rule writes and records it again,
+a rule switched back on finds the other rule's line `compliant`; then a change of method, a line removed by hand, a
+`remember=24` on the `pam_pwhistory` line of `system-auth` (both remember rules `overridden`) and a change by hand that
+both remember rules keep until the written line is back.
+
 ### CI legs
 
 With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
@@ -622,8 +654,10 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
-`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+modes of the topic, so 26 cycle legs and 18 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
+`sudo` `changes` and `profiles`, `faillock` `changes`, `stack` and `profiles` on both platforms, `sudo` `files` on
+Ubuntu, `pwhistory` `changes` on Rocky Linux). A topic skips the platforms that its declaration lists under
+`unselected_platforms` (`pwhistory` on Ubuntu), which get no leg. `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
@@ -679,7 +713,7 @@ pre_states:
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, the `content` of a declared file that the pre-state adds as root and removes after the cycle, or `lines`: a list of `regexp` and `line` that `lineinfile` sets in a declared file whose `rewritten` is true, as an administrator would, and whose content the harness puts back after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
@@ -715,8 +749,8 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality` and `ssh` are the disruptive families with native rules; the others (`pam`, `sssd`, `sudo`, `faillock`
-and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`ssh`, `pwquality`, `pwhistory`, `faillock` and `sudo` are the disruptive families with native rules; the others
+(`pam`, `sssd` and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
