@@ -34,6 +34,11 @@ MOLECULE_LIBVIRT_PLATFORMS ?= ubuntu rhel_compatible
 MOLECULE_LIBVIRT_SELFTEST ?= true
 MOLECULE_LIBVIRT_PINS := extensions/molecule/shared/images/cloud-images.pins
 MOLECULE_LIBVIRT_CACHE := $(CURDIR)/build/molecule-libvirt/cache
+MOLECULE_LIBVIRT_HOST_PINS := tools/molecule/libvirt-host.pins
+MOLECULE_LIBVIRT_HOST_CACHE := $(CURDIR)/build/molecule-libvirt/host-packages
+MOLECULE_LIBVIRT_HOST_PACKAGES := tools/molecule/libvirt-host-packages.sh
+MOLECULE_TIMINGS_LOG ?=
+MOLECULE_TIMINGS_TOP ?= 15
 MOLECULE_LIBVIRT_SELFTEST_DIR := $(CURDIR)/build/molecule-libvirt-selftest
 MOLECULE_LIBVIRT_SELFTEST_CONFIG := $(MOLECULE_LIBVIRT_SELFTEST_DIR)/instance_config.yml
 MOLECULE_LIBVIRT_SELFTEST_PLAYBOOK = MOLECULE_SCENARIO_NAME=libvirt-selftest \
@@ -285,6 +290,10 @@ Tests
   test-molecule-libvirt Molecule libvirt scenarios on KVM virtual machines and their self-test (requires KVM and libvirt)
   test-molecule-libvirt-selftest Guard bypass attempts, decoys, strangers and the destroy fallback against real libvirt objects
   molecule-libvirt-images Fetch the pinned cloud images and packages and check the vendors' signed checksum files
+  molecule-libvirt-host-fetch Fetch the pinned QEMU and libvirt packages of the CI runner and check their SHA-256
+  molecule-libvirt-host-install Install the verified QEMU and libvirt packages (GitHub-hosted runners only)
+  molecule-libvirt-host-pins Print the QEMU and libvirt pins for this host from the signed snapshot index
+  molecule-task-timings Print the slowest Molecule tasks of a GitHub Actions job log (MOLECULE_TIMINGS_LOG=<file>)
   test-molecule-golden  [pending FREES-63] Molecule golden image scenarios
   test-idempotency      [pending FREES-60] Idempotency checks
   test-compliance       [pending FREES-62] Compliance scan scenarios
@@ -329,6 +338,7 @@ export HELP_TEXT
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
+	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
 	require-uv ansible-home
@@ -831,6 +841,21 @@ test-molecule-docker-selftest: require-uv molecule-dependencies
 
 molecule-libvirt-images:
 	tools/molecule/fetch-cloud-images.sh '$(MOLECULE_LIBVIRT_PINS)' '$(MOLECULE_LIBVIRT_CACHE)' $(MOLECULE_LIBVIRT_PLATFORMS)
+
+molecule-libvirt-host-fetch:
+	$(MOLECULE_LIBVIRT_HOST_PACKAGES) fetch '$(MOLECULE_LIBVIRT_HOST_PINS)' '$(MOLECULE_LIBVIRT_HOST_CACHE)'
+
+molecule-libvirt-host-install:
+	$(MOLECULE_LIBVIRT_HOST_PACKAGES) install '$(MOLECULE_LIBVIRT_HOST_PINS)' '$(MOLECULE_LIBVIRT_HOST_CACHE)' || { \
+		printf 'error: the pinned host packages do not install on this runner; the pins for it follow\n' >&2; \
+		$(MOLECULE_LIBVIRT_HOST_PACKAGES) resolve '$(MOLECULE_LIBVIRT_HOST_PINS)' >&2 || true; exit 1; }
+
+molecule-libvirt-host-pins:
+	@$(MOLECULE_LIBVIRT_HOST_PACKAGES) resolve '$(MOLECULE_LIBVIRT_HOST_PINS)'
+
+molecule-task-timings: require-uv
+	@test -n '$(MOLECULE_TIMINGS_LOG)' || { printf 'error: set MOLECULE_TIMINGS_LOG to a GitHub Actions job log\n' >&2; exit 2; }
+	@$(RUN) python -m tools.molecule.task_timings --top '$(MOLECULE_TIMINGS_TOP)' '$(MOLECULE_TIMINGS_LOG)'
 
 molecule-libvirt-preflight: require-uv
 	@test -c /dev/kvm || { printf 'error: /dev/kvm is missing; the libvirt scenarios need KVM (docs/molecule-libvirt.md)\n' >&2; exit 1; }

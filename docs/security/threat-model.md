@@ -253,7 +253,37 @@ by the `scc-smoke` job and never published.
   `tools/scc/release_watch.py:507`); the issue reopens once the record is right again. NIWC's README and the DISA
   host remain the other sources, and the expiry issue and the hard stop do not depend on the record.
 
-## Report inputs on the controller
+## Libvirt CI caches
+
+The `molecule-libvirt` legs of `ci.yml` restore two Actions caches whose contents are installed or booted:
+`build/molecule-libvirt/host-packages`, the QEMU and libvirt packages that are installed as root on the runner
+(FREES-180), and `build/molecule-libvirt/cache`, the cloud images and the scanner packages that are booted and
+installed in the test virtual machines (FREES-61)
+([libvirt guide](../molecule-libvirt.md#host-packages-of-the-ci-runner), [ADR 0009](../adr/0009-molecule-layout-and-drivers.md)).
+
+### T-LIBVIRT-1: a tampered cache entry is installed or booted
+
+- **Asset:** the GitHub-hosted runner, its job token (read-only `contents`), and the integrity of the libvirt scenario
+  results that gate merges.
+- **Attacker:** whoever can write an Actions cache entry of this repository (a workflow run of this repository,
+  including a pull request from a branch of it), or controls the Ubuntu snapshot, the cloud image hosts or the path to
+  them.
+- **Failure:** a modified `.deb` runs its maintainer scripts as root on the runner, or a modified image or scanner
+  package changes what the virtual machine proves.
+- **Mitigation:** a cache entry is only a speed-up and its contents are never trusted. Every file is checked against a
+  SHA-256 and size pinned in a reviewed file of this repository (`tools/molecule/libvirt-host.pins`,
+  `extensions/molecule/shared/images/cloud-images.pins`) after it is restored and before it is used:
+  `tools/molecule/libvirt-host-packages.sh` checks every host package in place, copies the ones it installs into a
+  private directory, checks the copies and installs only those, with `apt-get` given no package source so that it can
+  neither download nor install anything else; `fetch-cloud-images.sh` checks every image and package, and
+  `create_libvirt.yml` and `prepare` check them again before use. A file that fails is downloaded again from the
+  pinned HTTPS source and checked once more; a symbolic link or a planted file of another name is never used. The
+  host package pins come from the signed index of the snapshot, the image pins from the vendors' signed checksum
+  files. A pull request from a fork neither restores nor saves either cache, as for SCC (T-SCC-1). The install
+  refuses to run outside a GitHub-hosted runner.
+- **Residual:** a poisoned entry can only cost a download. A pin change is trusted through review: a reviewer who
+  accepts a wrong digest accepts the file. The runner image itself, and the packages that it already has in the
+  pinned version or later, are trusted as the runner is. No update bot refreshes the pins (FREES-81).
 
 `tools/reporting` turns operator-supplied files into the normalized report and the dashboard
 ([reporting data model](../reporting-data-model.md), [ADR 0016](../adr/0016-report-schema-and-summary-semantics.md)).
