@@ -20,6 +20,7 @@ lifecycle_known_drivers:
   - libvirt
 lifecycle_unrestricted_drivers:
   - docker
+lifecycle_sysctl_runtime: "{{ molecule_target.driver != 'docker' }}"
 lifecycle_regression_mode_pattern: '^regressions-'
 lifecycle_toggle_modes:
   - topic

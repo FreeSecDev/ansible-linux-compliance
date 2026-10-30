@@ -66,7 +66,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | Order | Family | Umbrella | Topic | Disruptive | Why | Catalogued rules | Native | `audit_only` |
 |---|---|---|---|---|---|---|---|---|
 | 1 | `file_permissions` | none | File permissions and ownership | no | Tightens modes and owners of system files; no service is restarted | 155 | 1 | 154 |
-| 2 | `sysctl` | none | Kernel parameters | no | Kernel hardening parameters that do not change routing or forwarding (those belong to the network umbrella) | 31 | 0 | 31 |
+| 2 | `sysctl` | none | Kernel parameters | no | Kernel hardening parameters that do not change routing or forwarding (those belong to the network umbrella) | 31 | 20 | 11 |
 | 3 | `journald` | `logging` | systemd-journald, its storage, forwarding and remote upload | no | Changes where and how the journal is kept and forwarded; no session or workload is stopped | 19 | 0 | 19 |
 | 4 | `rsyslog` | `logging` | rsyslog, its log files and remote logging, and the logging services in general | no | Changes where and how rsyslog writes and sends logs; no session or workload is stopped | 19 | 0 | 19 |
 | 5 | `logrotate` | `logging` | logrotate | no | Installs and schedules log rotation; no session or workload is stopped | 3 | 0 | 3 |
@@ -88,8 +88,8 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 21 | `package_sources` | `packages` | Package repositories and signature checking (gpgcheck, EPEL, apt authentication) | yes | Disabling repositories or enforcing signatures stops installs from sources that the host relies on | 6 | 0 | 6 |
 | 22 | `system_packages` | `packages` | Required and unwanted system packages | yes | Installing or removing system packages such as tuned or gssproxy can change or break running software | 12 | 0 | 12 |
 | 23 | `desktop` | none | Graphical desktop (GNOME and the display manager) | yes | Removing the display manager or forcing screen locks ends graphical sessions | 21 | 0 | 21 |
-| 24 | `ipv4_parameters` | `network` | IPv4 kernel network parameters | yes | Forwarding, redirects and source routing settings can cut routers, container hosts and VPN gateways off | 26 | 0 | 26 |
-| 25 | `ipv6_parameters` | `network` | IPv6 kernel network parameters | yes | Router advertisement, autoconfiguration and forwarding settings can cut IPv6 hosts and routers off | 19 | 0 | 19 |
+| 24 | `ipv4_parameters` | `network` | IPv4 kernel network parameters | yes | Forwarding, redirects and source routing settings can cut routers, container hosts and VPN gateways off | 26 | 26 | 0 |
+| 25 | `ipv6_parameters` | `network` | IPv6 kernel network parameters | yes | Router advertisement, autoconfiguration and forwarding settings can cut IPv6 hosts and routers off | 19 | 19 | 0 |
 | 26 | `ipsec` | `network` | IPsec (Libreswan) | yes | Changing IPsec configuration or approved tunnels can drop VPN connections | 11 | 0 | 11 |
 | 27 | `wireless` | `network` | Wireless interfaces and Bluetooth | yes | Disabling wireless interfaces or Bluetooth cuts hosts that are connected through them off | 3 | 0 | 3 |
 | 28 | `network_settings` | `network` | Network configuration (name resolution, NetworkManager, promiscuous mode, certificates) | yes | Name resolution, NetworkManager and certificate settings can cut the host off from its services | 7 | 0 | 7 |
@@ -120,7 +120,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 53 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
 | 54 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
 | 55 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 74 | 1129 |
+|  | All |  |  |  |  | 1203 | 139 | 1064 |
 
 ## Umbrellas
 
@@ -440,7 +440,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 45 | 47 | 47 | 47 | 21 |
+| Native remediation | 71 | 73 | 73 | 73 | 24 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -502,7 +502,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 14 | 14 | 14 | 6 | 13 | 13 | 12 | 13 | 39 | 37 | 39 | 39 | 11 | 9 | 9 | 15 | 11 | 25 | 33 | 33 |
+| Native remediation | 68 | 68 | 68 | 6 | 13 | 36 | 35 | 36 | 64 | 62 | 64 | 64 | 18 | 14 | 12 | 20 | 18 | 38 | 63 | 63 |
 
 ## Mapping
 

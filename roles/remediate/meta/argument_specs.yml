@@ -101,6 +101,18 @@ argument_specs:
           - "It must not be empty and must not contain a backslash or control characters other than newline and tab."
           - "When the profile requires a text through an XCCDF value, for example the DoD notice of the STIG profiles,"
           - "the text must match that value, or the banners family fails before it changes anything."
+      linux_compliance_remediate_sysctl_runtime:
+        type: bool
+        default: true
+        description:
+          - "Whether the kernel parameter families (sysctl, ipv4_parameters, ipv6_parameters) set the running value."
+          - "The persistent value is always written as a drop-in below /etc/sysctl.d, which the kernel loads at boot."
+          - "With true, a rule whose running value the content's check rejects sets it as well and records the value"
+          - "before, which cleanup sets again; where /proc/sys cannot be written, such a rule is refused as"
+          - "runtime_unavailable and nothing is changed."
+          - "With false, only the persistent value is written and the running kernel is neither read nor changed;"
+          - "it takes the value at the next boot. Cleanup still sets back a running value that the ledger recorded."
+          - "See ADR 0024."
       linux_compliance_file_permissions_enabled:
         type: bool
         default: true
@@ -112,7 +124,7 @@ argument_specs:
         default: true
         description:
           - "Topic toggle of the sysctl family (ADR 0011); false switches its rules off."
-          - "Rules: 31, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 31, native: 20. Generated; see docs/remediation-variables.md."
       linux_compliance_logging_enabled:
         type: bool
         default: true
@@ -305,7 +317,7 @@ argument_specs:
           - "Umbrella toggle (ADR 0011); false switches off ipv4_parameters, ipv6_parameters, ipsec,"
           - "wireless, network_settings."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 66, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 66, native: 45. Generated; see docs/remediation-variables.md."
       linux_compliance_ipv4_parameters_enabled:
         type: bool
         default: true
@@ -313,7 +325,7 @@ argument_specs:
           - "Topic toggle of the ipv4_parameters family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_network_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 26, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 26, native: 26. Generated; see docs/remediation-variables.md."
       linux_compliance_ipv6_parameters_enabled:
         type: bool
         default: true
@@ -321,7 +333,7 @@ argument_specs:
           - "Topic toggle of the ipv6_parameters family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_network_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 19, native: 19. Generated; see docs/remediation-variables.md."
       linux_compliance_ipsec_enabled:
         type: bool
         default: true

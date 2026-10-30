@@ -1,0 +1,31 @@
+---
+- name: Kernel parameters (ipv4_parameters) | Refuse to run outside the dispatcher or without the opt-in
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'ipv4_parameters'
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'ipv4_parameters') | list | first | default({}))
+    fail_msg: >-
+      The ipv4_parameters family file runs only from the remediate dispatcher with
+      linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Kernel parameters (ipv4_parameters) | Apply and clean up the kernel parameters of the family
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/sysctl_parameters.yml"
+    apply:
+      tags:
+        - always
+  tags:
+    - always

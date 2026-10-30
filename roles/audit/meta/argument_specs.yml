@@ -138,7 +138,7 @@ argument_specs:
         default: true
         description:
           - "Topic toggle of the sysctl family (ADR 0011); false switches its rules off."
-          - "Rules: 31, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 31, native: 20. Generated; see docs/remediation-variables.md."
       linux_compliance_logging_enabled:
         type: bool
         default: true
@@ -331,7 +331,7 @@ argument_specs:
           - "Umbrella toggle (ADR 0011); false switches off ipv4_parameters, ipv6_parameters, ipsec,"
           - "wireless, network_settings."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 66, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 66, native: 45. Generated; see docs/remediation-variables.md."
       linux_compliance_ipv4_parameters_enabled:
         type: bool
         default: true
@@ -339,7 +339,7 @@ argument_specs:
           - "Topic toggle of the ipv4_parameters family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_network_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 26, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 26, native: 26. Generated; see docs/remediation-variables.md."
       linux_compliance_ipv6_parameters_enabled:
         type: bool
         default: true
@@ -347,7 +347,7 @@ argument_specs:
           - "Topic toggle of the ipv6_parameters family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_network_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 19, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 19, native: 19. Generated; see docs/remediation-variables.md."
       linux_compliance_ipsec_enabled:
         type: bool
         default: true

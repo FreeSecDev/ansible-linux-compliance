@@ -89,6 +89,7 @@ def test_the_repository_libvirt_matrix_has_a_base_leg_the_libvirt_cycles_and_the
     assert matrix.main(["--root", str(REPOSITORY_ROOT), "--driver", "libvirt"]) == 0
     found = cast("dict[str, list[dict[str, str]]]", json.loads(capsys.readouterr().out))
     cycles = check_lifecycle_topics.cycle_platforms(REPOSITORY_ROOT)
+    regressions = check_lifecycle_topics.regression_platforms(REPOSITORY_ROOT, "libvirt")
     expected: list[dict[str, str]] = []
     for platform in sorted(check_lifecycle_topics.platforms(REPOSITORY_ROOT)):
         expected.append(
@@ -108,7 +109,14 @@ def test_the_repository_libvirt_matrix_has_a_base_leg_the_libvirt_cycles_and_the
             }
             for topic in native_topics(REPOSITORY_ROOT)
             if platform in cycles[topic].get("libvirt", frozenset())
-            for mode in matrix.MODES
+            for mode in (
+                *matrix.MODES,
+                *(
+                    matrix.REGRESSION_MODE_PREFIX + name
+                    for name, chosen in regressions[topic].items()
+                    if platform in chosen
+                ),
+            )
         )
     expected.append({"platform": "ubuntu", "scenario": "libvirt-selftest", "topic": "", "mode": ""})
     assert found["include"] == expected
@@ -191,11 +199,30 @@ def test_the_docker_matrix_holds_every_topic_with_a_docker_cycle(tmp_path: Path)
     assert all(leg["topic"] for leg in matrix.legs(root))
 
 
-def test_regression_groups_get_docker_legs_only(tmp_path: Path) -> None:
+def test_regression_groups_get_legs_of_the_drivers_they_require(tmp_path: Path) -> None:
     root = make_root(tmp_path)
     docker = [leg for leg in matrix.legs(root) if leg["mode"].startswith("regressions-")]
-    assert {(leg["topic"], leg["mode"]) for leg in docker} >= {("sudo", "regressions-files")}
-    assert all(not leg["mode"].startswith("regressions-") for leg in matrix.legs(root, "libvirt"))
+    assert {(leg["topic"], leg["mode"]) for leg in docker} >= {
+        ("sudo", "regressions-files"),
+        ("ipv4_parameters", "regressions-changes"),
+    }
+    assert ("ipv4_parameters", "regressions-runtime") not in {
+        (leg["topic"], leg["mode"]) for leg in docker
+    }
+    libvirt = [
+        (leg["platform"], leg["scenario"], leg["topic"], leg["mode"])
+        for leg in matrix.legs(root, "libvirt")
+        if leg["mode"].startswith("regressions-")
+    ]
+    assert libvirt == [
+        (
+            platform,
+            matrix.scenario_of(platform, "libvirt"),
+            "ipv4_parameters",
+            "regressions-runtime",
+        )
+        for platform in sorted(check_lifecycle_topics.platforms(root))
+    ]
 
 
 def test_a_topic_that_requires_libvirt_has_no_docker_leg(tmp_path: Path) -> None:

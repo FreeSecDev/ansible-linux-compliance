@@ -127,7 +127,7 @@ through subsystem tags.
 | Variable | Family | Umbrella | Disruptive | Default | Catalogued rules | Native | `audit_only` | Tagged rules |
 |---|---|---|---|---|---|---|---|---|
 | `linux_compliance_file_permissions_enabled` | `file_permissions` | none | no | `true` | 155 | 1 | 154 | 0 |
-| `linux_compliance_sysctl_enabled` | `sysctl` | none | no | `true` | 31 | 0 | 31 | 0 |
+| `linux_compliance_sysctl_enabled` | `sysctl` | none | no | `true` | 31 | 20 | 11 | 0 |
 | `linux_compliance_logging_enabled` | `journald`, `rsyslog`, `logrotate` | umbrella | no | `true` | 41 | 0 | 41 | 2 |
 | `linux_compliance_journald_enabled` | `journald` | `logging` | no | `true` | 19 | 0 | 19 | 3 |
 | `linux_compliance_rsyslog_enabled` | `rsyslog` | `logging` | no | `true` | 19 | 0 | 19 | 0 |
@@ -153,9 +153,9 @@ through subsystem tags.
 | `linux_compliance_package_sources_enabled` | `package_sources` | `packages` | yes | `true` | 6 | 0 | 6 | 0 |
 | `linux_compliance_system_packages_enabled` | `system_packages` | `packages` | yes | `true` | 12 | 0 | 12 | 0 |
 | `linux_compliance_desktop_enabled` | `desktop` | none | yes | `true` | 21 | 0 | 21 | 0 |
-| `linux_compliance_network_enabled` | `ipv4_parameters`, `ipv6_parameters`, `ipsec`, `wireless`, `network_settings` | umbrella | yes | `true` | 66 | 0 | 66 | 0 |
-| `linux_compliance_ipv4_parameters_enabled` | `ipv4_parameters` | `network` | yes | `true` | 26 | 0 | 26 | 0 |
-| `linux_compliance_ipv6_parameters_enabled` | `ipv6_parameters` | `network` | yes | `true` | 19 | 0 | 19 | 0 |
+| `linux_compliance_network_enabled` | `ipv4_parameters`, `ipv6_parameters`, `ipsec`, `wireless`, `network_settings` | umbrella | yes | `true` | 66 | 45 | 21 | 0 |
+| `linux_compliance_ipv4_parameters_enabled` | `ipv4_parameters` | `network` | yes | `true` | 26 | 26 | 0 | 0 |
+| `linux_compliance_ipv6_parameters_enabled` | `ipv6_parameters` | `network` | yes | `true` | 19 | 19 | 0 | 0 |
 | `linux_compliance_ipsec_enabled` | `ipsec` | `network` | yes | `true` | 11 | 0 | 11 | 0 |
 | `linux_compliance_wireless_enabled` | `wireless` | `network` | yes | `true` | 3 | 0 | 3 | 0 |
 | `linux_compliance_network_settings_enabled` | `network_settings` | `network` | yes | `true` | 7 | 0 | 7 | 0 |
@@ -366,33 +366,33 @@ a rule with a native remediation, or `audit_only`.
 | `linux_compliance_rule_coredump_disable_storage_enabled` | `coredump_disable_storage` | `audit_only` |
 | `linux_compliance_rule_disable_users_coredumps_enabled` | `disable_users_coredumps` | `audit_only` |
 | `linux_compliance_rule_service_systemd_coredump_disabled_enabled` | `service_systemd-coredump_disabled` | `audit_only` |
-| `linux_compliance_rule_sysctl_fs_protected_fifos_enabled` | `sysctl_fs_protected_fifos` | `audit_only` |
-| `linux_compliance_rule_sysctl_fs_protected_hardlinks_enabled` | `sysctl_fs_protected_hardlinks` | `audit_only` |
-| `linux_compliance_rule_sysctl_fs_protected_regular_enabled` | `sysctl_fs_protected_regular` | `audit_only` |
-| `linux_compliance_rule_sysctl_fs_protected_symlinks_enabled` | `sysctl_fs_protected_symlinks` | `audit_only` |
-| `linux_compliance_rule_sysctl_fs_suid_dumpable_enabled` | `sysctl_fs_suid_dumpable` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_core_pattern_enabled` | `sysctl_kernel_core_pattern` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_core_pattern_empty_string_enabled` | `sysctl_kernel_core_pattern_empty_string` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_core_uses_pid_enabled` | `sysctl_kernel_core_uses_pid` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_dmesg_restrict_enabled` | `sysctl_kernel_dmesg_restrict` | `audit_only` |
+| `linux_compliance_rule_sysctl_fs_protected_fifos_enabled` | `sysctl_fs_protected_fifos` | `recorded_value` |
+| `linux_compliance_rule_sysctl_fs_protected_hardlinks_enabled` | `sysctl_fs_protected_hardlinks` | `recorded_value` |
+| `linux_compliance_rule_sysctl_fs_protected_regular_enabled` | `sysctl_fs_protected_regular` | `recorded_value` |
+| `linux_compliance_rule_sysctl_fs_protected_symlinks_enabled` | `sysctl_fs_protected_symlinks` | `recorded_value` |
+| `linux_compliance_rule_sysctl_fs_suid_dumpable_enabled` | `sysctl_fs_suid_dumpable` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_core_pattern_enabled` | `sysctl_kernel_core_pattern` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_core_pattern_empty_string_enabled` | `sysctl_kernel_core_pattern_empty_string` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_core_uses_pid_enabled` | `sysctl_kernel_core_uses_pid` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_dmesg_restrict_enabled` | `sysctl_kernel_dmesg_restrict` | `recorded_value` |
 | `linux_compliance_rule_sysctl_kernel_exec_shield_enabled` | `sysctl_kernel_exec_shield` | `audit_only` |
 | `linux_compliance_rule_sysctl_kernel_kexec_load_disabled_enabled` | `sysctl_kernel_kexec_load_disabled` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_kptr_restrict_enabled` | `sysctl_kernel_kptr_restrict` | `audit_only` |
+| `linux_compliance_rule_sysctl_kernel_kptr_restrict_enabled` | `sysctl_kernel_kptr_restrict` | `recorded_value` |
 | `linux_compliance_rule_sysctl_kernel_modules_disabled_enabled` | `sysctl_kernel_modules_disabled` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_panic_on_oops_enabled` | `sysctl_kernel_panic_on_oops` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_perf_cpu_time_max_percent_enabled` | `sysctl_kernel_perf_cpu_time_max_percent` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_perf_event_max_sample_rate_enabled` | `sysctl_kernel_perf_event_max_sample_rate` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_perf_event_paranoid_enabled` | `sysctl_kernel_perf_event_paranoid` | `audit_only` |
+| `linux_compliance_rule_sysctl_kernel_panic_on_oops_enabled` | `sysctl_kernel_panic_on_oops` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_perf_cpu_time_max_percent_enabled` | `sysctl_kernel_perf_cpu_time_max_percent` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_perf_event_max_sample_rate_enabled` | `sysctl_kernel_perf_event_max_sample_rate` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_perf_event_paranoid_enabled` | `sysctl_kernel_perf_event_paranoid` | `recorded_value` |
 | `linux_compliance_rule_sysctl_kernel_pid_max_enabled` | `sysctl_kernel_pid_max` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_randomize_va_space_enabled` | `sysctl_kernel_randomize_va_space` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_sysrq_enabled` | `sysctl_kernel_sysrq` | `audit_only` |
+| `linux_compliance_rule_sysctl_kernel_randomize_va_space_enabled` | `sysctl_kernel_randomize_va_space` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_sysrq_enabled` | `sysctl_kernel_sysrq` | `recorded_value` |
 | `linux_compliance_rule_sysctl_kernel_unprivileged_bpf_disabled_enabled` | `sysctl_kernel_unprivileged_bpf_disabled` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_unprivileged_bpf_disabled_accept_default_enabled` | `sysctl_kernel_unprivileged_bpf_disabled_accept_default` | `audit_only` |
-| `linux_compliance_rule_sysctl_kernel_yama_ptrace_scope_enabled` | `sysctl_kernel_yama_ptrace_scope` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_core_bpf_jit_harden_enabled` | `sysctl_net_core_bpf_jit_harden` | `audit_only` |
+| `linux_compliance_rule_sysctl_kernel_unprivileged_bpf_disabled_accept_default_enabled` | `sysctl_kernel_unprivileged_bpf_disabled_accept_default` | `recorded_value` |
+| `linux_compliance_rule_sysctl_kernel_yama_ptrace_scope_enabled` | `sysctl_kernel_yama_ptrace_scope` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_core_bpf_jit_harden_enabled` | `sysctl_net_core_bpf_jit_harden` | `recorded_value` |
 | `linux_compliance_rule_sysctl_user_max_user_namespaces_enabled` | `sysctl_user_max_user_namespaces` | `audit_only` |
 | `linux_compliance_rule_sysctl_user_max_user_namespaces_no_remediation_enabled` | `sysctl_user_max_user_namespaces_no_remediation` | `audit_only` |
-| `linux_compliance_rule_sysctl_vm_mmap_min_addr_enabled` | `sysctl_vm_mmap_min_addr` | `audit_only` |
+| `linux_compliance_rule_sysctl_vm_mmap_min_addr_enabled` | `sysctl_vm_mmap_min_addr` | `recorded_value` |
 
 ### `journald`
 
@@ -1083,56 +1083,56 @@ families through their subsystem tags:
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_local_enabled` | `sysctl_net_ipv4_conf_all_accept_local` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_redirects_enabled` | `sysctl_net_ipv4_conf_all_accept_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_source_route_enabled` | `sysctl_net_ipv4_conf_all_accept_source_route` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_arp_filter_enabled` | `sysctl_net_ipv4_conf_all_arp_filter` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_arp_ignore_enabled` | `sysctl_net_ipv4_conf_all_arp_ignore` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_drop_gratuitous_arp_enabled` | `sysctl_net_ipv4_conf_all_drop_gratuitous_arp` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_forwarding_enabled` | `sysctl_net_ipv4_conf_all_forwarding` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_log_martians_enabled` | `sysctl_net_ipv4_conf_all_log_martians` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_route_localnet_enabled` | `sysctl_net_ipv4_conf_all_route_localnet` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_rp_filter_enabled` | `sysctl_net_ipv4_conf_all_rp_filter` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_secure_redirects_enabled` | `sysctl_net_ipv4_conf_all_secure_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_send_redirects_enabled` | `sysctl_net_ipv4_conf_all_send_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_all_shared_media_enabled` | `sysctl_net_ipv4_conf_all_shared_media` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_default_accept_redirects_enabled` | `sysctl_net_ipv4_conf_default_accept_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_default_accept_source_route_enabled` | `sysctl_net_ipv4_conf_default_accept_source_route` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_default_log_martians_enabled` | `sysctl_net_ipv4_conf_default_log_martians` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_default_rp_filter_enabled` | `sysctl_net_ipv4_conf_default_rp_filter` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_default_secure_redirects_enabled` | `sysctl_net_ipv4_conf_default_secure_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_default_send_redirects_enabled` | `sysctl_net_ipv4_conf_default_send_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_conf_default_shared_media_enabled` | `sysctl_net_ipv4_conf_default_shared_media` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts_enabled` | `sysctl_net_ipv4_icmp_echo_ignore_broadcasts` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses_enabled` | `sysctl_net_ipv4_icmp_ignore_bogus_error_responses` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_ip_forward_enabled` | `sysctl_net_ipv4_ip_forward` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_ip_local_port_range_enabled` | `sysctl_net_ipv4_ip_local_port_range` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_tcp_rfc1337_enabled` | `sysctl_net_ipv4_tcp_rfc1337` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv4_tcp_syncookies_enabled` | `sysctl_net_ipv4_tcp_syncookies` | `audit_only` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_local_enabled` | `sysctl_net_ipv4_conf_all_accept_local` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_redirects_enabled` | `sysctl_net_ipv4_conf_all_accept_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_accept_source_route_enabled` | `sysctl_net_ipv4_conf_all_accept_source_route` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_arp_filter_enabled` | `sysctl_net_ipv4_conf_all_arp_filter` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_arp_ignore_enabled` | `sysctl_net_ipv4_conf_all_arp_ignore` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_drop_gratuitous_arp_enabled` | `sysctl_net_ipv4_conf_all_drop_gratuitous_arp` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_forwarding_enabled` | `sysctl_net_ipv4_conf_all_forwarding` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_log_martians_enabled` | `sysctl_net_ipv4_conf_all_log_martians` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_route_localnet_enabled` | `sysctl_net_ipv4_conf_all_route_localnet` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_rp_filter_enabled` | `sysctl_net_ipv4_conf_all_rp_filter` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_secure_redirects_enabled` | `sysctl_net_ipv4_conf_all_secure_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_send_redirects_enabled` | `sysctl_net_ipv4_conf_all_send_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_all_shared_media_enabled` | `sysctl_net_ipv4_conf_all_shared_media` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_default_accept_redirects_enabled` | `sysctl_net_ipv4_conf_default_accept_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_default_accept_source_route_enabled` | `sysctl_net_ipv4_conf_default_accept_source_route` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_default_log_martians_enabled` | `sysctl_net_ipv4_conf_default_log_martians` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_default_rp_filter_enabled` | `sysctl_net_ipv4_conf_default_rp_filter` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_default_secure_redirects_enabled` | `sysctl_net_ipv4_conf_default_secure_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_default_send_redirects_enabled` | `sysctl_net_ipv4_conf_default_send_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_conf_default_shared_media_enabled` | `sysctl_net_ipv4_conf_default_shared_media` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts_enabled` | `sysctl_net_ipv4_icmp_echo_ignore_broadcasts` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses_enabled` | `sysctl_net_ipv4_icmp_ignore_bogus_error_responses` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_ip_forward_enabled` | `sysctl_net_ipv4_ip_forward` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_ip_local_port_range_enabled` | `sysctl_net_ipv4_ip_local_port_range` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_tcp_rfc1337_enabled` | `sysctl_net_ipv4_tcp_rfc1337` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv4_tcp_syncookies_enabled` | `sysctl_net_ipv4_tcp_syncookies` | `recorded_value` |
 
 ### `ipv6_parameters`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_enabled` | `sysctl_net_ipv6_conf_all_accept_ra` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_defrtr_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_defrtr` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_pinfo_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_pinfo` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_rtr_pref_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_rtr_pref` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_redirects_enabled` | `sysctl_net_ipv6_conf_all_accept_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_source_route_enabled` | `sysctl_net_ipv6_conf_all_accept_source_route` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_autoconf_enabled` | `sysctl_net_ipv6_conf_all_autoconf` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_forwarding_enabled` | `sysctl_net_ipv6_conf_all_forwarding` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_max_addresses_enabled` | `sysctl_net_ipv6_conf_all_max_addresses` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_all_router_solicitations_enabled` | `sysctl_net_ipv6_conf_all_router_solicitations` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_enabled` | `sysctl_net_ipv6_conf_default_accept_ra` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_defrtr_enabled` | `sysctl_net_ipv6_conf_default_accept_ra_defrtr` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_pinfo_enabled` | `sysctl_net_ipv6_conf_default_accept_ra_pinfo` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_rtr_pref_enabled` | `sysctl_net_ipv6_conf_default_accept_ra_rtr_pref` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_redirects_enabled` | `sysctl_net_ipv6_conf_default_accept_redirects` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_source_route_enabled` | `sysctl_net_ipv6_conf_default_accept_source_route` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_autoconf_enabled` | `sysctl_net_ipv6_conf_default_autoconf` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_max_addresses_enabled` | `sysctl_net_ipv6_conf_default_max_addresses` | `audit_only` |
-| `linux_compliance_rule_sysctl_net_ipv6_conf_default_router_solicitations_enabled` | `sysctl_net_ipv6_conf_default_router_solicitations` | `audit_only` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_enabled` | `sysctl_net_ipv6_conf_all_accept_ra` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_defrtr_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_defrtr` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_pinfo_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_pinfo` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_ra_rtr_pref_enabled` | `sysctl_net_ipv6_conf_all_accept_ra_rtr_pref` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_redirects_enabled` | `sysctl_net_ipv6_conf_all_accept_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_accept_source_route_enabled` | `sysctl_net_ipv6_conf_all_accept_source_route` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_autoconf_enabled` | `sysctl_net_ipv6_conf_all_autoconf` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_forwarding_enabled` | `sysctl_net_ipv6_conf_all_forwarding` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_max_addresses_enabled` | `sysctl_net_ipv6_conf_all_max_addresses` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_all_router_solicitations_enabled` | `sysctl_net_ipv6_conf_all_router_solicitations` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_enabled` | `sysctl_net_ipv6_conf_default_accept_ra` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_defrtr_enabled` | `sysctl_net_ipv6_conf_default_accept_ra_defrtr` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_pinfo_enabled` | `sysctl_net_ipv6_conf_default_accept_ra_pinfo` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_ra_rtr_pref_enabled` | `sysctl_net_ipv6_conf_default_accept_ra_rtr_pref` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_redirects_enabled` | `sysctl_net_ipv6_conf_default_accept_redirects` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_accept_source_route_enabled` | `sysctl_net_ipv6_conf_default_accept_source_route` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_autoconf_enabled` | `sysctl_net_ipv6_conf_default_autoconf` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_max_addresses_enabled` | `sysctl_net_ipv6_conf_default_max_addresses` | `recorded_value` |
+| `linux_compliance_rule_sysctl_net_ipv6_conf_default_router_solicitations_enabled` | `sysctl_net_ipv6_conf_default_router_solicitations` | `recorded_value` |
 
 ### `ipsec`
 

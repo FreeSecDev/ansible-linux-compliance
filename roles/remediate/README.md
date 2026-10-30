@@ -8,7 +8,7 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 
 ## Status
 
-Dispatcher and safety model implemented (FREES-52). 74 rules have a native remediation: the reference rule
+Dispatcher and safety model implemented (FREES-52). 139 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (`file_permissions`), 15 rules of `banners` (the text,
 mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`), 14 rules of `pwquality` (one line per
 setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks),
@@ -16,10 +16,16 @@ setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on 
 sshd reads first, validated with `sshd -t` through the module `freesecdev.linux_compliance.sshd_validate` before it is
 written; a conflicting later line of `/etc/ssh/sshd_config` or `50-redhat.conf` is set to the rule's value in place and
 written back on cleanup; sshd is reloaded only where it runs) and 10 rules of `sudo` (one `visudo`-checked drop-in
-per setting below `/etc/sudoers.d`, and the mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d`), with the
+per setting below `/etc/sudoers.d`, and the mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d`) and 65
+kernel parameter rules of `sysctl` (20), `ipv4_parameters` (26) and `ipv6_parameters` (19) (one drop-in per rule,
+`/etc/sysctl.d/999-freesecdev-<rule>.conf`, which sorts after the distributions' files, and, unless
+`linux_compliance_remediate_sysctl_runtime` is `false`, the running value through the module
+`freesecdev.linux_compliance.sysctl_runtime`, recorded and set back on cleanup; a conflicting line of an Ubuntu procps
+file in `/etc/sysctl.d` is set to the rule's value and written back on cleanup), with the
 values of the selected profile ([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md),
 [ADR 0022](../../docs/adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](../../docs/adr/0023-native-ssh-server-configuration.md)). The catalogue `vars/rules.yml` holds
+[ADR 0023](../../docs/adr/0023-native-ssh-server-configuration.md),
+[ADR 0024](../../docs/adr/0024-native-kernel-parameters.md)). The catalogue `vars/rules.yml` holds
 every rule of the 25 pinned profiles, 1203 rules in 55 families, generated from the pinned content (FREES-53,
 [control families](../../docs/control-families.md)); every rule without a native remediation has the strategy
 `audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated from the
@@ -27,7 +33,8 @@ catalogue (FREES-55). Further topics follow the [native remediation guide](../..
 The intended platforms in `meta/main.yml` (Ubuntu 24.04 and RHEL 9 compatible, per
 [ADR 0010](../../docs/adr/0010-initial-os-and-benchmark-scope.md)) are intentions, not tested support: every native
 topic runs in the Docker Molecule scenarios on Ubuntu 24.04 and Rocky Linux 9, whose toggle lifecycle step applies and
-cleans it up from every declared pre-state (FREES-60, `docs/molecule.md`).
+cleans it up from every declared pre-state (FREES-60, `docs/molecule.md`), and the kernel parameter topics also in the
+libvirt scenarios, where the running values are set and set back (FREES-61, `docs/molecule-libvirt.md`).
 
 ## Safety
 
@@ -61,6 +68,7 @@ choices in both files are generated from `vars/rules.yml` with `make toggles`; `
 | `linux_compliance_remediate_allow_disruptive` | `list` | `[]` | Disruptive families that may be applied or cleaned up; only the disruptive families of the registry are accepted. |
 | `linux_compliance_remediate_profile` | `str` | `"cis_level1_server"` | ComplianceAsCode profile short identifier, without the XCCDF prefix. With the opt-in it must equal the profile the `discover` role verified. A profile is never substituted silently. |
 | `linux_compliance_remediate_banner_text` | `str` | `"Authorized users only. All activity may be monitored and reported."` | Text of the login banners and the message of the day. It must not contain a backslash, control characters other than newline and tab, or the operating system name, and must match the profile's XCCDF value where the profile requires one (the STIG profiles require the DoD notice). |
+| `linux_compliance_remediate_sysctl_runtime` | `bool` | `true` | Whether the kernel parameter families also set the running value where the check rejects it, recording the value before for cleanup. With `false` only the persistent drop-in is written, which the kernel loads at the next boot, and the running kernel is neither read nor changed; where `/proc/sys` is read-only, `true` refuses such a rule as `runtime_unavailable`. |
 
 Toggles ([ADR 0011](../../docs/adr/0011-control-toggles-and-cleanup.md)) are flat booleans:
 `linux_compliance_<family>_enabled` for a whole topic, default `true`, and `linux_compliance_rule_<rule_short_id>_enabled`

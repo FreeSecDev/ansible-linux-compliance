@@ -5,10 +5,12 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 (cleanup per family). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup, ledger),
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
+[ADR 0024](adr/0024-native-kernel-parameters.md) (kernel parameters).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
-procedure. `file_permissions`, `banners`, `pwquality`, `ssh` and `sudo`
-([ADR 0022](adr/0022-native-sudo-drop-ins.md)) are the worked examples.
+procedure. `file_permissions`, `banners`, `pwquality`, `ssh`, `sudo`
+([ADR 0022](adr/0022-native-sudo-drop-ins.md)) and the kernel parameter topics `sysctl`, `ipv4_parameters` and
+`ipv6_parameters` are the worked examples.
 
 ## 1. Read what the content expects
 
@@ -122,7 +124,10 @@ Add `extensions/molecule/shared/vars/topics/<family>.yml` ([Molecule guide](mole
 - `audit.applied_outcomes` adds `notapplicable` with the reason when the content's platform excludes containers;
 - regressions that the cycles cannot show (a change of method, a change by hand, a refusal) go into task files of
   `shared/tasks`, included by the static dispatch `shared/tasks/lifecycle_regressions.yml`, and are declared as named
-  groups under `regressions`; each group gets its own CI leg, so the cycle legs stay short;
+  groups under `regressions`; each group gets its own CI leg, so the cycle legs stay short; a group that needs what
+  only a virtual machine has (a running value changed by hand) names `requires: [libvirt]`;
+- what a container cannot prove (a running kernel parameter, an ownership change) goes into a pre-state that
+  `requires: [libvirt]`, next to the container pre-state that proves the files (the kernel parameter topics);
 - a disruptive topic needs `disruptive: true` and a `containment` note that says what it can break and why the harness
   still reaches the container.
 
@@ -159,3 +164,4 @@ role README and add a changelog fragment.
 | `pwquality` | `dcredit`, `dictcheck`, `difok`, `enforce_for_root`, `enforcing`, `lcredit`, `maxclassrepeat`, `maxrepeat`, `maxsequence`, `minclass`, `minlen`, `ocredit`, `retry` (STIG rule), `ucredit` | `recorded_value`: one line per setting in the main file where the content checks only it (Ubuntu), one drop-in per rule where it checks the drop-ins (RHEL) | Values from the profile; the method per platform follows the content's OVAL (`main_file_benchmarks`, checked by a golden test); `duplicate_setting` and `overridden` refuse to claim a change that would not take effect |
 | `ssh` | 34 sshd keyword rules (`PermitRootLogin`, `MaxAuthTries`, `ClientAliveInterval`, `Ciphers`, `Banner` and the others) | `recorded_value`: one drop-in per rule, `00-freesecdev-<rule>.conf`, which sshd reads before every other file, and the one conflicting later line of a vendor file (`sshd_config`, `50-redhat.conf`) set to the rule's value in place | Both contents read the drop-ins and every later line (golden test); fixed values from the check, numeric and algorithm values from the profile; a conflicting later line in an administrator's drop-in or a `Match` block is `overridden`; every change validated with `sshd -t` through the `sshd_validate` module before it is written (`invalid_config`), `overridden` for an earlier setting, `not_included` without the `Include`, `crypto_policy` on RHEL; sshd reloaded only where it runs; 29 rules `audit_only` with the reasons in ADR 0023 |
 | `sudo` | `use_pty`, `logfile`, `timestamp_timeout`, `!targetpw`/`!rootpw`/`!runaspw` (STIG); mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d` (ANSSI) | `recorded_value`: one drop-in per rule below `/etc/sudoers.d` with its SHA-256, or the prior attribute and the one written | Every write is checked by `visudo` through `copy` `validate` (the one reviewed exception of the repository guard); `timestamp_timeout` comes from the content's fix (`profile_value_source: fix`); `conflicting_setting`, `not_included` and `invalid_sudoers` refuse to claim a change that would not take effect; rules that remove other people's `NOPASSWD`, `!authenticate` or user specifications stay `audit_only` |
+| `sysctl`, `ipv4_parameters`, `ipv6_parameters` | 65 kernel parameter rules (`kernel.dmesg_restrict`, `fs.protected_*`, `net.ipv4.conf.*.rp_filter`, `net.ipv4.ip_forward`, `net.ipv6.conf.*.accept_ra` and the others) | `recorded_value`: one drop-in per rule, `/etc/sysctl.d/999-freesecdev-<rule>.conf`, sorting after the distributions' files; the running value through the collection's `sysctl_runtime` module where the check needs it, with the value before (and every interface's forwarding flag) recorded; on Ubuntu the one conflicting line of a procps vendor file set in place | One helper for three topics; both contents read every `sysctl.conf` and `sysctl.d` file and the running value (golden test); values from the profile or the check, never from a fix; `overridden` and `conflicting_setting` for an administrator's file after or before the drop-in; `runtime_unavailable` where `/proc/sys` is read-only, and `linux_compliance_remediate_sysctl_runtime: false` for files only, as in the containers; the running half is proven in the libvirt cycles and a libvirt regression group; 11 rules `audit_only` with the reasons in ADR 0024 |

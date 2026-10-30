@@ -19,6 +19,9 @@ molecule_other_native_topics:
   - pwquality
   - ssh
   - sudo
+  - sysctl
+  - ipv4_parameters
+  - ipv6_parameters
 molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
 molecule_native_results: >-
   {{ linux_compliance_remediated.results | rejectattr('status', 'equalto', 'not_implemented') | list }}

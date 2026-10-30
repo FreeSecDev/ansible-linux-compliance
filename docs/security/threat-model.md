@@ -322,6 +322,68 @@ root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-serve
   original is left alone.
 - **Residual:** a package update that rewrites a vendor file also stops the revert, which then needs a review.
 
+## Kernel parameter remediation on a managed host
+
+The `sysctl`, `ipv4_parameters` and `ipv6_parameters` families of the `remediate` role write drop-ins below
+`/etc/sysctl.d`, change conflicting lines of Ubuntu's procps files there, and the module `sysctl_runtime` writes
+running values below `/proc/sys` as root ([ADR 0024](../adr/0024-native-kernel-parameters.md), FREES-107).
+
+### Assets
+
+| Asset | Why it matters |
+|---|---|
+| The running kernel's parameters | Forwarding, reverse-path filtering, redirects and router advertisements decide whether the host stays reachable; others restrict what processes may do |
+| The prior running values in the ledger | Cleanup sets them back; a wrong record would leave the kernel changed |
+| The vendor files and their recorded lines | The collection changes package-owned files and must restore them exactly |
+
+### Trust boundaries and entry points
+
+| Entry point | Supplied by | Trust |
+|---|---|---|
+| The `read`, `probe` and `set` names of `sysctl_runtime` | The catalogue keys, the interfaces found below `/proc/sys`, and the ledger | Validated by the helper: two to eight components of a fixed alphabet, no `.` or `..` component, at most one `*` and only for reading |
+| The values of `sysctl_runtime` | The catalogue and profile values, and values read before from `/proc/sys` and recorded in the root-only ledger | At most 255 printable characters or tabs, no line break; the family checks catalogue values against the check before anything changes |
+| `/etc/sysctl.conf` and the `*.conf` files of the sysctl directories | Root, packages, administrators | Read as data; a symbolic link or non-regular file at a drop-in path is never written through |
+| `linux_compliance_remediate_allow_disruptive` | The operator | The acknowledgement that the network topics may change and revert running network parameters |
+
+### T-SYSCTL-1: a network parameter cuts the host off
+
+- **Attacker:** none; an operator applies `ip_forward` 0 on a router or container host, strict reverse-path filtering
+  on a multi-homed host, or refuses router advertisements on a host that needs them.
+- **Failure:** forwarded traffic stops, replies on another interface are dropped, or the host loses its IPv6 route.
+- **Impact:** loss of service or of remote access.
+- **Mitigation:** `ipv4_parameters` and `ipv6_parameters` are disruptive and run only with the family or `network` in
+  the allow-list, for apply and cleanup alike; every rule has its own toggle, so a container host keeps forwarding
+  while the rest applies; no rule disables IPv6; check mode reports every change and changes nothing; cleanup sets
+  every recorded running value back, for the forwarding rules flag by flag on every interface.
+- **Residual:** the values are the profile's; on a host that needs them otherwise, the operator must switch the rule
+  off. The libvirt scenarios prove that the harness stays connected, not that every network design does.
+
+### T-SYSCTL-2: `sysctl_runtime` writes outside the kernel's parameters
+
+- **Attacker:** a caller of the module who controls the names, or a local root process that mounts or links a file
+  over a parameter.
+- **Failure:** a file outside `/proc/sys` is written, or a parameter that the collection does not manage is changed.
+- **Impact:** a file written as root, or an unintended kernel setting.
+- **Mitigation:** names are validated before any path is built; the helper requires that the resolved path is the
+  path itself (no symbolic link in any component), a regular file and on the file system of `/proc/sys`, and refuses
+  otherwise. The role passes only the keys of the catalogue, the interfaces that it found and the values that its
+  ledger recorded. Every value written is read back; a value that the kernel does not keep is written back and the
+  module fails. No program runs.
+- **Residual:** root may change any parameter anyway; the module adds no capability that root lacks.
+
+### T-SYSCTL-3: a revert overwrites an administrator's change
+
+- **Attacker:** none; an administrator changes a running value, a drop-in or a vendor line after the collection
+  changed it.
+- **Failure:** cleanup sets the recorded value back over the administrator's.
+- **Impact:** a deliberate site setting is silently lost.
+- **Mitigation:** cleanup sets a running value back only while it is still the value the collection wrote, removes a
+  drop-in only with the recorded SHA-256 and writes a vendor line back only when the file still holds the line
+  written; otherwise the result is `cleanup_incomplete` with `modified_since_apply`, nothing changes and the entry is
+  kept. A value that already equals the recorded one is left alone.
+- **Residual:** an apply that finds the running value changed after an earlier apply sets it again, because the rule
+  is switched on; switching the rule off is how an administrator keeps a value of their own.
+
 ## Libvirt CI caches
 
 The `molecule-libvirt` legs of `ci.yml` restore two Actions caches whose contents are installed or booted:

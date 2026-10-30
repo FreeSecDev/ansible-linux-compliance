@@ -13,6 +13,20 @@
   tags:
     - always
 
+- name: Remediate | Dispatch the sysctl family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/sysctl.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'sysctl'
+  tags:
+    - always
+
 - name: Remediate | Dispatch the banners family when the plan gives it work
   ansible.builtin.include_tasks:
     file: "{{ role_path }}/tasks/banners.yml"
@@ -24,6 +38,34 @@
     loop_var: __linux_compliance_remediate_family
     label: "{{ __linux_compliance_remediate_family.name }}"
   when: __linux_compliance_remediate_family.name == 'banners'
+  tags:
+    - always
+
+- name: Remediate | Dispatch the ipv4_parameters family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/ipv4_parameters.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'ipv4_parameters'
+  tags:
+    - always
+
+- name: Remediate | Dispatch the ipv6_parameters family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/ipv6_parameters.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'ipv6_parameters'
   tags:
     - always
 

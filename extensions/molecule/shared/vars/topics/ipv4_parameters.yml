@@ -1,0 +1,337 @@
+---
+family: ipv4_parameters
+disruptive: true
+containment: >-
+  ipv4_parameters writes one drop-in per rule below /etc/sysctl.d and, on the virtual machines, sets the running
+  value; on Ubuntu it also sets the compliant value on the rp_filter lines of the vendor file
+  10-network-security.conf, recorded and written back on cleanup. Forwarding, redirects, source routing and
+  reverse-path filtering can cut a router or a multi-homed host off. The containers have no network (network_mode
+  none) and a read-only /proc/sys, so only files change there, and the harness connects with docker exec. The
+  virtual machines have one interface on the run's isolated network, with a static address, and are reached over SSH
+  from the host's address on that bridge, which strict reverse-path filtering, disabled forwarding and refused
+  redirects do not affect; the guard's connection test after every remediate run proves that the harness still
+  reaches the same machine. The allow-list names ipv4_parameters only for the runs of this topic.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    The RHEL 9 datastream does not recognise Rocky Linux, so every rule is notapplicable there. On Ubuntu the IPv4
+    rules have no platform restriction, so the container audits evaluate the network namespace of the container,
+    whose running values the collection cannot set (/proc/sys is read-only); the container pre-state therefore runs
+    no scan. On the Ubuntu virtual machine every rule must pass. Both pinned datastreams read the same files as for
+    the sysctl topic and check the running value (tests/unit/tools/test_content_golden_sysctl.py).
+state:
+  files:
+    - path: /etc/sysctl.d
+      rewritten: true
+    - path: /etc/sysctl.d/.freesecdev-created
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-source-route.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-log-martians.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-secure-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-send-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-source-route.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-log-martians.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-rp-filter.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-secure-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-send-redirects.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-echo-ignore-broadcasts.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-ignore-bogus-error-responses.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-ip-forward.conf
+      rewritten: true
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-tcp-syncookies.conf
+      rewritten: true
+    - path: /etc/sysctl.d/10-network-security.conf
+      rewritten: true
+      platforms:
+        - ubuntu
+  sysctl:
+    - name: net.ipv4.conf.all.accept_redirects
+    - name: net.ipv4.conf.all.accept_source_route
+    - name: net.ipv4.conf.all.log_martians
+    - name: net.ipv4.conf.all.rp_filter
+    - name: net.ipv4.conf.all.secure_redirects
+    - name: net.ipv4.conf.all.send_redirects
+    - name: net.ipv4.conf.default.accept_redirects
+    - name: net.ipv4.conf.default.accept_source_route
+    - name: net.ipv4.conf.default.log_martians
+    - name: net.ipv4.conf.default.rp_filter
+    - name: net.ipv4.conf.default.secure_redirects
+    - name: net.ipv4.conf.default.send_redirects
+    - name: net.ipv4.icmp_echo_ignore_broadcasts
+    - name: net.ipv4.icmp_ignore_bogus_error_responses
+    - name: net.ipv4.ip_forward
+    - name: net.ipv4.tcp_syncookies
+applied:
+  files:
+    - path: /etc/sysctl.d
+      exists: true
+      type: directory
+      attributes: []
+      mode: "0755"
+      owner: root
+      group: root
+      platforms:
+        - rhel_compatible
+    - path: /etc/sysctl.d/.freesecdev-created
+      exists: true
+      type: file
+      attributes: []
+      mode: "0600"
+      owner: root
+      group: root
+      platforms:
+        - rhel_compatible
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 3e1dfc350a69892d6dcf9ce013ec1fa82b6ffd7c0ae874cf944a690f2a2be2e1
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-source-route.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: f4652001381e146c4563c3befc189652c9c3f65134aa0f21e2cd5e7a30b5709b
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-log-martians.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 645d32fa420c6b16f3fe4420a1e917f587ab9ffd8398f7d7f3a737d0aa48dac8
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 923a25b88cedc5920a31c6ab27b7a54385d1cb23102cf727af15dfad9b4a49c4
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-secure-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 53c9818e0f523b5af82cdb92e29404615485b6a587d99fef760482214523779b
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-send-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 300981a6b4c898c2b271b5cd49375a5bf33d7b94d2dd25d49653e5f17a39e939
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 6d92c7d1b2dc64d89f33fe7127e278bc588d70d208ea4a4fc6b839a11cbca557
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-source-route.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: af6df62636db88eb9b8314306572f108c5f40544741363296b1a802ff6144c7e
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-log-martians.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 677381faaa565e9ac85759e1b4fc095566085832468b974c9584e8a757b89f78
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-rp-filter.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 4c88003cfb452372961fca9dae54657d8d78f70ac35aca091b3b7b76687a5b01
+      platforms:
+        - ubuntu
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-secure-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 609aa912b8d90dbd5b30c59039651e1e1adcd7c64045e94109a967aa096f5562
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-send-redirects.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: f1989be15488ee5a9afeba3ed790c625ef99b70be4e291accccd56765fff6d43
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-echo-ignore-broadcasts.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 0dfd69ed0385356342ebf3599d2bfea536c279c6f31d94cc4f1e029eb2b4f88e
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-icmp-ignore-bogus-error-responses.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 8fbe7886a7d10930a4e3c20e73f7374810436ea8387c1f662a828c501f61cee0
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-ip-forward.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 3fe1e5534b25b4064850e84f92ce2e480f461121293b7747cae8fb244193ee1f
+    - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-tcp-syncookies.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: a9d59313cb196c9c3924f2480fb3434580ca7dc6642a6e5df3e6a7cec67ffcbc
+    - path: /etc/sysctl.d/10-network-security.conf
+      checksum: 54c16bad87a3e02e374ee3b30664ae57e74e8edae2faa6489fbe1895e2c91560
+      platforms:
+        - ubuntu
+pre_states:
+  - name: as built
+    audit: false
+    unchanged:
+      - rule: sysctl_net_ipv4_conf_default_rp_filter
+        status: compliant
+        platforms:
+          - rhel_compatible
+  - name: as built, with the running kernel
+    audit:
+      - ubuntu
+    requires:
+      - libvirt
+    unchanged:
+      - rule: sysctl_net_ipv4_conf_default_rp_filter
+        status: compliant
+        platforms:
+          - rhel_compatible
+    applied:
+      files:
+        - path: /etc/sysctl.d
+          exists: true
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/.freesecdev-created
+          exists: false
+          platforms:
+            - rhel_compatible
+      sysctl:
+        - name: net.ipv4.conf.all.accept_redirects
+          value: "0"
+        - name: net.ipv4.conf.all.accept_source_route
+          value: "0"
+        - name: net.ipv4.conf.all.log_martians
+          value: "1"
+        - name: net.ipv4.conf.all.rp_filter
+          value: "1"
+        - name: net.ipv4.conf.all.secure_redirects
+          value: "0"
+        - name: net.ipv4.conf.all.send_redirects
+          value: "0"
+        - name: net.ipv4.conf.default.accept_redirects
+          value: "0"
+        - name: net.ipv4.conf.default.accept_source_route
+          value: "0"
+        - name: net.ipv4.conf.default.log_martians
+          value: "1"
+        - name: net.ipv4.conf.default.rp_filter
+          value: "1"
+        - name: net.ipv4.conf.default.secure_redirects
+          value: "0"
+        - name: net.ipv4.conf.default.send_redirects
+          value: "0"
+        - name: net.ipv4.icmp_echo_ignore_broadcasts
+          value: "1"
+        - name: net.ipv4.icmp_ignore_bogus_error_responses
+          value: "1"
+        - name: net.ipv4.ip_forward
+          value: "0"
+        - name: net.ipv4.tcp_syncookies
+          value: "1"
+regressions:
+  - name: changes
+    files:
+      - lifecycle_sysctl_regressions.yml
+  - name: runtime
+    requires:
+      - libvirt
+    files:
+      - lifecycle_sysctl_runtime_regressions.yml

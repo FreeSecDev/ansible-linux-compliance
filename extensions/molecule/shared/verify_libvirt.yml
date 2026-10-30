@@ -13,6 +13,9 @@
     linux_compliance_pwquality_enabled: false
     linux_compliance_ssh_enabled: false
     linux_compliance_sudo_enabled: false
+    linux_compliance_sysctl_enabled: false
+    linux_compliance_ipv4_parameters_enabled: false
+    linux_compliance_ipv6_parameters_enabled: false
   tasks:
     - name: Check that the play switches off every native topic other than the reference topic
       ansible.builtin.assert:

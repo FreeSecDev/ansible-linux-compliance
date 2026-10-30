@@ -504,9 +504,11 @@ A topic declares its regressions as named groups under `regressions` (FREES-175)
 `platforms` only. `make lint-lifecycle` requires every include of the dispatch to run exactly when its own file is
 in the group (no other condition, no tags), every dispatched file to be named by some group and to end by adding its
 name to `lifecycle_regression_files_run`, and the harness fails a regression leg in which a file of its group did not
-run to its end. A group runs at the end of its topic, with the topic's facts, on the Docker driver: in a full run
-after every cycle, and in CI in a leg of its own, `MOLECULE_LIFECYCLE_MODE=regressions-<group>`, which runs no cycle
-(see [CI legs](#ci-legs)). `pwquality` has one group, `changes`, with the regressions above.
+run to its end. A group runs at the end of its topic, with the topic's facts, on the Docker driver unless it names
+the drivers it `requires` (FREES-107): in a full run after every cycle, and in CI in a leg of its own,
+`MOLECULE_LIFECYCLE_MODE=regressions-<group>`, which runs no cycle (see [CI legs](#ci-legs)). A group that requires
+libvirt runs only on platforms where a libvirt cycle of its topic runs, which `make lint-lifecycle` checks.
+`pwquality` has one group, `changes`, with the regressions above.
 
 `sudo` has three groups. In `changes` (both platforms), `shared/tasks/lifecycle_sudo_regressions.yml` does the same
 for `sudo`: it applies the topic, records every ledger entry as if another method had written it and checks that apply
@@ -557,6 +559,32 @@ and on Ubuntu, whose `sshd_config.d` is empty as built, a missing directory is c
 marker, removed again by the cleanup, and a symbolic link in its place makes every rule `not_directory` with nothing
 written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
 only. The regressions end with the whole-instance comparison.
+
+The kernel parameter topics `sysctl`, `ipv4_parameters` and `ipv6_parameters`
+([ADR 0024](adr/0024-native-kernel-parameters.md)) run two pre-states each, by the per-pre-state driver rule of
+FREES-61. `as built` runs in the Docker scenarios, where `/proc/sys` is read-only, so the harness passes
+`linux_compliance_remediate_sysctl_runtime: false` there (`lifecycle_sysctl_runtime` in `shared/vars/lifecycle.yml`,
+`true` on the virtual machines): the cycles prove the drop-ins with their checksums, on Ubuntu the `rp_filter` lines
+of the procps file `10-network-security.conf` set to 1 and written back byte for byte, on Rocky Linux the missing
+`/etc/sysctl.d` created with its marker and removed again, the ledger, check mode, idempotence and the exact cleanup,
+and the whole-instance comparison shows that no running value changed. `as built, with the running kernel` requires
+libvirt (see the [libvirt guide](molecule-libvirt.md#driver-requirements-of-a-topic)). The rules that a pre-state
+already satisfies are declared `unchanged` as `compliant` (`kernel.yama.ptrace_scope` on Ubuntu,
+`net.ipv4.conf.default.rp_filter` on Rocky Linux). The container audits of `sysctl` and `ipv6_parameters` report
+`notapplicable`; the IPv4 rules have no platform restriction on Ubuntu, and a container audit would evaluate the
+container's own network namespace, so the IPv4 container pre-state runs no scan.
+
+`ipv4_parameters` has two regression groups, for the helper that all three topics share. `changes`, a Docker leg on
+both platforms (`shared/tasks/lifecycle_sysctl_regressions.yml`, narrowed to four rules): an administrator's file that
+sorts after the drop-ins (`zz-…`) makes its rule `overridden` and one that sorts before them (`50-…`)
+`conflicting_setting`, each with nothing written and the file named in the reason; a ledger entry of another method is
+`method_changed` on apply and on cleanup; a drop-in and, on Ubuntu, the vendor line changed by hand are kept as
+`modified_since_apply` with their entries until they hold what the collection wrote again, which the next cleanup
+restores, the vendor file byte for byte; a drop-in removed by hand is `restored` without a write; a file without the
+header at a drop-in path is `not_owned`; with the running values on, a rule whose running value the container cannot
+set is `runtime_unavailable` with nothing written or recorded; and on Rocky Linux, where `/etc/sysctl.d` is missing as
+built, a symbolic link in its place makes every rule `not_directory` with nothing written through it. `runtime`
+requires libvirt and is described in the [libvirt guide](molecule-libvirt.md#driver-requirements-of-a-topic).
 
 `shared/tasks/lifecycle_ssh_vendor_regressions.yml`, the `vendor` group, adds
 `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the lifecycle profiles do not
@@ -623,8 +651,11 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
 modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
-`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
-gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
+`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). The kernel parameter topics
+(FREES-107) add 12 cycle legs and the two `ipv4_parameters` `changes` legs to the Docker matrix, and the
+`ipv4_parameters` `runtime` group, which requires libvirt, a leg per platform to the libvirt matrix.
+`tests/unit/tools/test_molecule_matrix.py` checks that every declared group gets its legs with the drivers it
+requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
 
@@ -681,7 +712,7 @@ pre_states:
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
-| `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
+| `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes), optional `platforms` and optional `requires` (the drivers that run it, `docker` when left out; a group that requires libvirt runs only where a libvirt cycle of its topic runs); each group gets one CI leg per platform and driver, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
@@ -751,7 +782,9 @@ Not meaningful in a container, and therefore not covered by these scenarios:
 
 - Boot loader and Secure Boot controls (GRUB, kernel command line).
 - Mount options, partitions and file system layout.
-- Kernel parameters (sysctl) and kernel modules.
+- Running kernel parameters and kernel modules. The persistent half of the kernel parameter topics, the drop-ins
+  below `/etc/sysctl.d`, is proven in the containers with `linux_compliance_remediate_sysctl_runtime: false`; the
+  running values only in the libvirt scenarios.
 - Services that need systemd as PID 1, and anything that restarts services.
 - Firewall rules (nftables, iptables, ufw, firewalld), network configuration and the network stack.
 - PAM, SSH daemon and sudo behaviour that depends on a real login, and auditd.

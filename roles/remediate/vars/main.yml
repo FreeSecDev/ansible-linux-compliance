@@ -24,3 +24,54 @@ __linux_compliance_remediate_sudo_option_pattern: '^[a-z_]{1,32}$'
 __linux_compliance_remediate_sudo_include_pattern: '(?m)^[ \t]*[@#]includedir[ \t]+/etc/sudoers\.d/?[ \t]*$'
 __linux_compliance_remediate_sudo_backslash: '\'
 __linux_compliance_remediate_sudo_read_name: '^[^.]*[^.~]$'
+__linux_compliance_remediate_sysctl_families:
+  - sysctl
+  - ipv4_parameters
+  - ipv6_parameters
+__linux_compliance_remediate_sysctl_directory: /etc/sysctl.d
+__linux_compliance_remediate_sysctl_marker: /etc/sysctl.d/.freesecdev-created
+__linux_compliance_remediate_sysctl_dropin_pattern: '^/etc/sysctl\.d/999-freesecdev-[a-z0-9-]{1,96}\.conf$'
+__linux_compliance_remediate_sysctl_key_pattern: '^[a-z0-9_]+(\.[a-z0-9_]+){1,7}$'
+__linux_compliance_remediate_sysctl_value_pattern: '^([!-~]([ -~]{0,253}[!-~])?)?$'
+__linux_compliance_remediate_sysctl_line_pattern: '^[\s]*{key}[\s]*=[\s]*(.*\S)[\s]*$'
+__linux_compliance_remediate_sysctl_empty_line_pattern: '^[ \t]*{key}[ \t]*=[ \t]*(.*)$'
+__linux_compliance_remediate_sysctl_checked:
+  xccdf_org.ssgproject.content_benchmark_RHEL-9:
+    files:
+      - /etc/sysctl.conf
+    directories:
+      - /etc/sysctl.d
+      - /run/sysctl.d
+      - /usr/local/lib/sysctl.d
+    package_directories:
+      - /usr/lib/sysctl.d
+  xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04:
+    files:
+      - /etc/sysctl.conf
+      - /etc/ufw/sysctl.conf
+    directories:
+      - /etc/sysctl.d
+      - /run/sysctl.d
+      - /usr/local/lib/sysctl.d
+    package_directories:
+      - /usr/lib/sysctl.d
+__linux_compliance_remediate_sysctl_boot_directories:
+  - /etc/sysctl.d
+  - /run/sysctl.d
+  - /usr/local/lib/sysctl.d
+  - /usr/lib/sysctl.d
+  - /lib/sysctl.d
+__linux_compliance_remediate_sysctl_boot_last:
+  - /etc/sysctl.conf
+  - /etc/ufw/sysctl.conf
+__linux_compliance_remediate_sysctl_vendor_files:
+  - /etc/sysctl.d/10-kernel-hardening.conf
+  - /etc/sysctl.d/10-magic-sysrq.conf
+  - /etc/sysctl.d/10-network-security.conf
+  - /etc/sysctl.d/10-ptrace.conf
+  - /etc/sysctl.d/10-zeropage.conf
+  - /etc/ufw/sysctl.conf
+__linux_compliance_remediate_sysctl_propagating:
+  net.ipv4.ip_forward: net.ipv4.conf.*.forwarding
+  net.ipv4.conf.all.forwarding: net.ipv4.conf.*.forwarding
+  net.ipv6.conf.all.forwarding: net.ipv6.conf.*.forwarding

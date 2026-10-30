@@ -7,7 +7,8 @@ reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogu
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendments of
 FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
 banners and password quality), [ADR 0022](adr/0022-native-sudo-drop-ins.md) (sudo, FREES-175),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109). How to make a further topic
+[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109),
+[ADR 0024](adr/0024-native-kernel-parameters.md) (kernel parameters, FREES-107). How to make a further topic
 native is in the
 [native remediation guide](native-remediation-guide.md).
 
@@ -17,11 +18,12 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 
 ## Status
 
-The dispatcher, the safety model and four native families are implemented. The catalogue holds every rule that a
+The dispatcher, the safety model and eight native families are implemented. The catalogue holds every rule that a
 pinned profile selects, 1203 rules in 55 families (FREES-53), generated from the digest-verified content and listed in
-the [control family reference](control-families.md). 74 rules have a native remediation: the reference rule
+the [control family reference](control-families.md). 139 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners`, 14
-of `pwquality`, 34 of `ssh` and 10 of `sudo` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
+of `pwquality`, 34 of `ssh`, 10 of `sudo`, 20 of `sysctl`, 26 of `ipv4_parameters` and 19 of `ipv6_parameters`
+([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
 switched off per rule and per topic, the audit excludes it and reports it as `disabled`, and remediation reports it as
 `not_implemented` and never changes anything for it. The native remediations land topic by topic on top of this
 catalogue, following the [native remediation guide](native-remediation-guide.md). Every native topic is exercised for
@@ -51,6 +53,7 @@ The opt-in must be a JSON boolean on the command line: `-e '{"linux_compliance_r
 | `linux_compliance_remediate_allow_disruptive` | `list` of `str` | `[]` | Disruptive families that may be applied and cleaned up. The argument specification accepts only the disruptive families of the registry and the umbrellas that group one, such as `services`. |
 | `linux_compliance_remediate_profile` | `str` | `cis_level1_server` | Profile short identifier; must equal the profile the `discover` role verified. |
 | `linux_compliance_remediate_banner_text` | `str` | the default of the XCCDF value `cis_banner_text`: `Authorized users only. All activity may be monitored and reported.` | Text of `/etc/issue`, `/etc/issue.net` and `/etc/motd` for the banner text rules; validated against the profile before anything changes ([banners](#banners)). |
+| `linux_compliance_remediate_sysctl_runtime` | `bool` | `true` | Whether the kernel parameter families also set the running value of a rule whose running value the check rejects, and record the value before for cleanup; `false` writes only the persistent drop-in, which the kernel loads at the next boot, and neither reads nor changes the running kernel. Cleanup sets back a recorded running value either way ([kernel parameters](#kernel-parameters)). |
 | `linux_compliance_<family>_enabled` | `bool` | `true` | Topic toggle of a registered family, for example `linux_compliance_auditd_enabled: false` turns off every auditd rule. |
 | `linux_compliance_<umbrella>_enabled` | `bool` | `true` | Umbrella toggle of the families an umbrella groups, for example `linux_compliance_services_enabled: false` turns off `sssd`, `time_sync`, `mail` and every other service family; a family toggle only narrows it. `pam` is both a family and the umbrella of `pwquality`, `pwhistory` and `faillock`, so `allow_disruptive: [pam]` allows all four; there is no entry for the `pam` family alone. |
 | `linux_compliance_rule_<rule_short_id>_enabled` | `bool` | not set: follows `linux_compliance_<family>_enabled` | Toggle of one catalogued rule, for example `linux_compliance_rule_file_permissions_crontab_enabled`. Not declared as a role default (ADR 0011, amendment of FREES-53). |
@@ -309,9 +312,9 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 ## Native families
 
-Besides the reference family, three topics are native
+Besides the reference family, seven topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md)).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0024](adr/0024-native-kernel-parameters.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
@@ -483,6 +486,49 @@ is written (FREES-173). Kept `audit_only`, with the reasons in ADR 0022: the rul
 `become` and so the run that would revert them), `sudo_dedicated_group` and `file_permissions_sudo` (they limit who may
 run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
 
+### Kernel parameters
+
+Three topics hold the kernel parameter rules ([ADR 0024](adr/0024-native-kernel-parameters.md)): `sysctl`, the kernel
+hardening that does not change routing (not disruptive), and `ipv4_parameters` and `ipv6_parameters`, which are
+disruptive and grouped by the umbrella `network`, so they are applied and cleaned up only with the family or `network`
+in `linux_compliance_remediate_allow_disruptive`. One helper, `sysctl_parameters.yml`, implements all three.
+Both pinned contents check every occurrence of the key in `/etc/sysctl.conf` (Ubuntu also `/etc/ufw/sysctl.conf`) and
+in the `*.conf` files of `/etc/sysctl.d`, `/run/sysctl.d` and `/usr/local/lib/sysctl.d`, the package files of
+`/usr/lib/sysctl.d` only when none of those sets it, and the running value;
+`tests/unit/tools/test_content_golden_sysctl.py` checks this against the OVAL of both datastreams.
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| 20 of `sysctl` (`fs.protected_*`, `fs.suid_dumpable`, `kernel.core_pattern`, `kernel.core_uses_pid`, `kernel.dmesg_restrict`, `kernel.kptr_restrict`, `kernel.panic_on_oops`, `kernel.perf_*`, `kernel.randomize_va_space`, `kernel.sysrq`, `kernel.unprivileged_bpf_disabled` (the `accept_default` rule, value 2), `kernel.yama.ptrace_scope`, `net.core.bpf_jit_harden`, `vm.mmap_min_addr`), all 26 of `ipv4_parameters` and all 19 of `ipv6_parameters` | `/etc/sysctl.d/999-freesecdev-<rule>.conf`, mode `0644`, owner and group root, with a header that names the rule and one line `<key> = <value>` with the profile's value or the value of the check; the name sorts after every file of the distributions, so the value applies at boot. With `linux_compliance_remediate_sysctl_runtime` (default `true`) the running value is set as well, where the check rejects it, through the module `sysctl_runtime`, which writes the parameter's file below `/proc/sys` and reads it back. On Ubuntu, a conflicting line in one of the procps files `10-kernel-hardening.conf`, `10-magic-sysrq.conf`, `10-network-security.conf`, `10-ptrace.conf` or `10-zeropage.conf` or in ufw's `/etc/ufw/sysctl.conf` gets the compliant value (`net.ipv4.conf.all.rp_filter=2` becomes `=1`, ufw's `net/ipv4/tcp_syncookies=0` becomes `=1` for the CIS profiles) | `recorded_value` of `method` (`dropin`), `dropin` (`null`), `dropin_sha256`, `written_line`, each changed vendor line (`vendor_line:<path>`, `vendor_written:<path>`) and, when the running value was set, `runtime_prior` and `runtime_written`, for the forwarding rules also the flag of every interface (`companion:<parameter>`); cleanup sets the running value back, then the interface flags, writes back the vendor lines and removes the drop-in |
+
+The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `overridden` (apply) | A file applied after the drop-in sets another value: an administrator's later file, `/etc/sysctl.conf`, or a package file that sorts later; a glob line counts for every key it names |
+| `conflicting_setting` (apply) | A file that the check reads and that is applied earlier sets another value (also a hidden `.*.conf`, which the check reads and the boot skips): the drop-in would win, but the check would still fail |
+| `duplicate_setting`, `prior_too_large` (apply) | A vendor file sets the key more than once, or its line is longer than 1024 characters |
+| `runtime_unavailable` (apply) | The running value must change but `/proc/sys` cannot be written, as in an unprivileged container; set `linux_compliance_remediate_sysctl_runtime` to `false` to write only the persistent value |
+| `notapplicable` (apply) | With the running values on, the kernel has no such parameter, for example IPv6 disabled at boot |
+| `not_directory`, `not_regular_file`, `not_owned` | `/etc/sysctl.d` is not a directory (a symbolic link included), the drop-in path is not a regular file, or a file there lacks the collection's header |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The drop-in, a changed vendor line or the running value is no longer what the collection wrote (and not the recorded value before either); an administrator's change is never overwritten |
+| `invalid_record`, `target_absent` (cleanup) | The record is malformed, a changed vendor file is gone, or the kernel no longer has the parameter |
+
+A rule is `compliant` and writes nothing when its drop-in already holds what the collection writes and the running
+value is accepted, or when the check already passes without a drop-in (`kernel.yama.ptrace_scope`, which Ubuntu's
+`10-ptrace.conf` sets; `net.ipv4.conf.default.rp_filter`, which RHEL's `50-redhat.conf` sets). A running value changed
+again after apply is set again by the next run; the first recorded value is kept. Where `/etc/sysctl.d` is missing (the
+Rocky Linux container) the first drop-in creates it with the marker `.freesecdev-created`, and cleanup removes both once
+nothing else is in it. When the current state already equals the recorded prior state at cleanup, the rule is
+`restored` without a write (FREES-173). Kept `audit_only`, with the reasons in ADR 0024: `sysctl_kernel_kexec_load_disabled`,
+`sysctl_kernel_modules_disabled` and `sysctl_kernel_unprivileged_bpf_disabled` (their running value is one-way until
+the next boot), `sysctl_kernel_pid_max`, `sysctl_user_max_user_namespaces` and its `_no_remediation` variant (they can
+stop workloads), `sysctl_kernel_exec_shield` (a boot loader check) and the four core dump rules of the `sysctl` family
+(`coredump_disable_backtraces`, `coredump_disable_storage`, `service_systemd-coredump_disabled`,
+`disable_users_coredumps`, which configure systemd-coredump and PAM limits, not kernel parameters). What each network
+rule can break, and why each can be switched off on its own, is in ADR 0024, section 5.
+
 ## Results
 
 The role publishes `linux_compliance_remediated`:
@@ -572,6 +618,9 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/playbooks/remediate-native-check.yml`, ssh plays | Against localhost in check mode with the Ubuntu 24.04 CIS rules of `ssh` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/ssh` is unchanged (as a user that cannot read a drop-in, the run must stop at the read); a rule without its profile value fails before any change; `ssh.yml` refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements, exports and the values that fixes substitute, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration, including `profile_value_source`. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), and every attribute rule restricts the path and the mode bits that the OVAL checks | `make test-content-golden`, CI job `test` |
+| `tests/unit/tools/test_content_golden_sysctl.py` | With the pinned content: for every native kernel parameter rule on both platforms, the definition is the static and the runtime half (and the IPv6 alternative), the runtime object names the rule's key, the static objects read exactly the files and directories of `__linux_compliance_remediate_sysctl_checked` with the line pattern of the role, the accepted values are exactly the check's states or its exported value, the written value is accepted and its own drop-in line is captured with it, every drop-in sorts after the vendor names, and the `audit_only` rules of the three families are the documented ones | `make test-content-golden`, CI job `test` |
+| `tests/unit/plugins/modules/test_sysctl_runtime.py`, `tests/unit/plugins/module_utils/compliance/test_sysctl.py` | The `sysctl_runtime` module and its helper against a fake `/proc/sys`: names and wildcards, values, absent parameters, symbolic links, other file systems, oversized and unreadable files, writes that are read back, a value that the kernel does not keep is written back, each value read just before it is set, check mode. 100% line and branch coverage of the helper | `make test-coverage` |
+| `tests/playbooks/remediate-native-check.yml`, kernel parameters | Against localhost in check mode with Ubuntu 24.04 CIS rules of the three families and the running values on: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason, and neither the configuration files nor the running values change; a rule without its profile value fails before any file is read; the three family files and the helper refuse to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/playbooks/remediate-native-check.yml`, sudo | A sudo rule without a profile value fails before any sudoers file is read, and every sudo family file and helper refuses to run without the opt-in. The sudo rules are not run against localhost, because `/etc/sudoers` is readable only by root | `make test-remediate-check`, CI job `test-playbooks` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
@@ -608,8 +657,8 @@ role unit tests fail, at the assertion meant for it:
 - including a family file without `role_path`;
 - disabling the `--skip-tags always` guard.
 
-A play in `remediate-check-mode.yml` also catalogues a rule of the registered `sysctl` family, which has no task file
-yet, and checks that the run stops at the dispatch.
+A play in `remediate-check-mode.yml` also sets a catalogue of its own, with a rule of the `ssh` family, as a fact and
+checks that the guard refuses it before the ledger is read.
 
 The Docker Molecule scenarios ([Molecule guide](molecule.md)) run the role for real in disposable containers. `converge`
 and `verify` show that nothing changes without the opt-in, that the reference rule is applied, idempotent and cleaned up

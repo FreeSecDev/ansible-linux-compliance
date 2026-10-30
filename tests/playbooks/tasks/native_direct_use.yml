@@ -350,3 +350,91 @@
           - "'No change was made to the host' in ansible_failed_result.msg"
         fail_msg: "ssh.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
         quiet: true
+
+- name: Native direct use | sysctl.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run sysctl.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: sysctl.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because sysctl.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: sysctl.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that sysctl.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "sysctl.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | ipv4_parameters.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run ipv4_parameters.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: ipv4_parameters.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because ipv4_parameters.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: ipv4_parameters.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that ipv4_parameters.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "ipv4_parameters.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | ipv6_parameters.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run ipv6_parameters.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: ipv6_parameters.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because ipv6_parameters.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: ipv6_parameters.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that ipv6_parameters.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "ipv6_parameters.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | sysctl_parameters.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run sysctl_parameters.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: sysctl_parameters.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because sysctl_parameters.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: sysctl_parameters.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that sysctl_parameters.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "sysctl_parameters.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true

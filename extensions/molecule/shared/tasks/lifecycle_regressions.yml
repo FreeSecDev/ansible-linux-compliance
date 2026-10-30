@@ -44,6 +44,16 @@
     file: lifecycle_ssh_vendor_regressions.yml
   when: "'lifecycle_ssh_vendor_regressions.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the kernel parameter regressions for other files, changes of method and by hand
+  ansible.builtin.include_tasks:
+    file: lifecycle_sysctl_regressions.yml
+  when: "'lifecycle_sysctl_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the kernel parameter regressions of the running kernel
+  ansible.builtin.include_tasks:
+    file: lifecycle_sysctl_runtime_regressions.yml
+  when: "'lifecycle_sysctl_runtime_regressions.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Remember the regression group that ran
   ansible.builtin.set_fact:
     lifecycle_regressions_run: "{{ lifecycle_regressions_run + [lifecycle_family ~ ':' ~ lifecycle_regression.name] }}"
