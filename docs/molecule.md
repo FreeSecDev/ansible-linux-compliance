@@ -550,23 +550,23 @@ lists no leg fails the gate.
 On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
-duration: 18 for `molecule-lifecycle`, 8 for `molecule-docker` (one [scanner timeout](#scanner-hangs) and its retry
-add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). With `sudo` (FREES-175), the regressions moved
-out of the cycle legs: `make molecule-matrix` adds one leg per regression group that a declaration lists and platform
-it runs on, with the mode `regressions-<group>`, after the two toggle modes of the topic, so 16 cycle legs and 7
-regression legs (`pwquality` `changes`, `sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu).
-`tests/unit/tools/test_molecule_matrix.py` checks that every declared group gets its legs and no libvirt leg, `make
-lint-lifecycle` checks the groups, and the harness fails a regression leg whose group did not run. Before the split
-the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to 19 minutes on slow runners
-(runner speed varies a lot: at 2decd68 the cycles alone of the Rocky Linux rule leg took ten minutes, against six at
-a7a3061). At a7a3061
-the four `sudo` legs took 9.7 (`ubuntu`, `topic`), 11.4 (`rhel_compatible`, `topic`), 12.0 (`ubuntu`, `rule`) and 13.4
-minutes (`rhel_compatible`, `rule`), after the refusals had moved from the rule legs into the topic legs: before, the
-`rhel_compatible` rule leg took 15.6 minutes. A leg that approaches 20 minutes
-should be split further, for example per pre-state, rather than given a longer limit, so that no required job comes
-near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
+duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 17 for `test` (11.2) and 16 for `test-playbooks`
+(10.8). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
+on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
+in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
+Building the instance images once per run and reusing them in every leg is tracked as FREES-182. A leg that
+approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
+no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
 (`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
+
+With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
+group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
+modes of the topic, so 16 cycle legs and 7 regression legs (`pwquality` `changes`, `sudo` `changes` and `profiles` on
+both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
+group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
+19 minutes on slow runners.
 
 ### Declaring a topic
 
