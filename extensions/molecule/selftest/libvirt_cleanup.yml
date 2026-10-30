@@ -18,7 +18,11 @@
         uri: qemu:///system
         name: "{{ item }}"
         command: undefine
-        force: true
+        flags:
+          - managed_save
+          - snapshots_metadata
+          - nvram
+          - checkpoints_metadata
       loop: "{{ selftest_strangers | map(attribute='name') | select('in', selftest_domains.list_vms) | list }}"
 
     - name: Undefine the stranger network

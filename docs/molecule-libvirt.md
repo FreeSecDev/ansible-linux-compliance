@@ -140,12 +140,17 @@ back from inside the virtual machine.
    resolve pool volumes, so QEMU is denied a volume disk on a host with AppArmor, such as the GitHub runners.
 5. If any step fails, removes everything of the run and fails.
 
+A repeated `create` reuses the run id and marker of the instance config, as for Docker. When every domain, the network
+and the pool of that run exist with its labels, it creates nothing and only waits for SSH again; when only some of
+them exist, it refuses to continue and asks for `molecule destroy`.
+
 `destroy_libvirt.yml` lists the domains, networks and pools whose names match this scenario's pattern, reads each
 definition, and removes only those whose labels (for a pool: its directory) belong to a run that the instance config
 records, or, when the config is empty or missing, to any run of this scenario. It powers off and undefines the
 domains, stops and undefines the networks, deletes every volume of each pool, deletes and undefines the pool, removes
 the run's keys and resets the instance config. An object whose name does not match is never read, and one whose
-labels do not match is never touched.
+labels do not match is never touched. Domains are undefined without libvirt's `delete_volumes` flag, so undefining a
+domain never deletes a disk that another domain may name; only the deletion of the run's own pool removes files.
 
 ## Isolation
 

@@ -37,7 +37,11 @@
     uri: qemu:///system
     name: "{{ item.name }}"
     command: undefine
-    force: true
+    flags:
+      - managed_save
+      - snapshots_metadata
+      - nvram
+      - checkpoints_metadata
   loop: "{{ libvirt_remove_domains }}"
   loop_control:
     label: "{{ item.name }}"
