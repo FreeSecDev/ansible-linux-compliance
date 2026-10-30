@@ -87,9 +87,15 @@ def _free_form_names(text: str) -> Iterator[str]:
 
 
 def _parameter_nodes(value: yaml.Node) -> Iterator[tuple[yaml.Node, str, yaml.Node | None]]:
+    """Yield ``(key, name, value)`` per parameter; the value is ``None`` unless the key is direct.
+
+    A parameter that comes from a merge key (``<<``) or a free-form argument has no value here,
+    so no reviewed exception can apply to it.
+    """
     if isinstance(value, yaml.MappingNode):
+        direct = [key for key, _ in value.value]
         for name, key, inner in scalar_items(value):
-            yield key, name, inner
+            yield key, name, inner if any(key is item for item in direct) else None
     elif isinstance(value, yaml.ScalarNode):
         yield from ((value, name, None) for name in _free_form_names(str(value.value)))
 

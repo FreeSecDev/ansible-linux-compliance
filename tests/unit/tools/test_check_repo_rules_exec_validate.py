@@ -78,6 +78,33 @@ def test_every_other_form_of_validate_is_refused(tmp_path: Path, text: str, name
     assert any(message.startswith(REFUSED) for message in found(tmp_path, text, name))
 
 
+YAML_FORMS = (
+    task(value=f"|\n      {VISUDO}"),
+    task(value=f">-\n      {VISUDO}"),
+    (
+        "---\n- name: Probe\n  vars:\n    other: &other /bin/sh -c id %s\n"
+        "  ansible.builtin.copy:\n    content: x\n    dest: /x\n    validate: *other\n"
+    ),
+    (
+        "---\n- name: Probe\n  ansible.builtin.copy:\n"
+        f"    <<: {{validate: {VISUDO}}}\n    content: x\n    dest: /x\n"
+    ),
+    (
+        "---\n- name: Probe\n  vars:\n"
+        f"    base: &base {{validate: {VISUDO}}}\n"
+        "  ansible.builtin.copy:\n    <<: *base\n    content: x\n    dest: /x\n"
+    ),
+    f"---\n- name: Probe\n  action: ansible.builtin.copy content=x dest=/x validate={VISUDO}\n",
+)
+
+
+@pytest.mark.parametrize("text", YAML_FORMS)
+def test_block_scalars_aliases_merge_keys_and_free_form_actions_are_refused(
+    tmp_path: Path, text: str
+) -> None:
+    assert any(message.startswith(REFUSED) for message in found(tmp_path, text))
+
+
 def test_without_a_repository_path_nothing_is_allowed(tmp_path: Path) -> None:
     loader = yaml.SafeLoader(task())
     try:

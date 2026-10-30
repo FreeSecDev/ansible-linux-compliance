@@ -318,6 +318,12 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_cleanup_status$') == [] or
         '__linux_compliance_remediate_sd_cleanup_status' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_conflicting$') == [] or
+        '__linux_compliance_remediate_sd_conflicting' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_conflicts$') == [] or
+        '__linux_compliance_remediate_sd_conflicts' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_content$') == [] or
         '__linux_compliance_remediate_sd_content' in (hostvars[inventory_hostname] | list)
       - >-
@@ -329,6 +335,12 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_current_value$') == [] or
         '__linux_compliance_remediate_sd_current_value' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_defaults$') == [] or
+        '__linux_compliance_remediate_sd_defaults' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_differ$') == [] or
+        '__linux_compliance_remediate_sd_differ' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_directory_stat$') == [] or
         '__linux_compliance_remediate_sd_directory_stat' in (hostvars[inventory_hostname] | list)
@@ -375,6 +387,18 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_lines$') == [] or
         '__linux_compliance_remediate_sd_lines' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_lines_wanted$') == [] or
+        '__linux_compliance_remediate_sd_lines_wanted' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_link$') == [] or
+        '__linux_compliance_remediate_sd_link' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_link_targets$') == [] or
+        '__linux_compliance_remediate_sd_link_targets' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_links$') == [] or
+        '__linux_compliance_remediate_sd_links' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_main_stat$') == [] or
         '__linux_compliance_remediate_sd_main_stat' in (hostvars[inventory_hostname] | list)
       - >-
@@ -417,8 +441,8 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_satisfied_elsewhere$') == [] or
         '__linux_compliance_remediate_sd_satisfied_elsewhere' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_set_elsewhere$') == [] or
-        '__linux_compliance_remediate_sd_set_elsewhere' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_single$') == [] or
+        '__linux_compliance_remediate_sd_single' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_source$') == [] or
         '__linux_compliance_remediate_sd_source' in (hostvars[inventory_hostname] | list)
@@ -431,6 +455,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_status$') == [] or
         '__linux_compliance_remediate_sd_status' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_too_many$') == [] or
+        '__linux_compliance_remediate_sd_too_many' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sd_validator_stat$') == [] or
         '__linux_compliance_remediate_sd_validator_stat' in (hostvars[inventory_hostname] | list)
@@ -574,10 +601,12 @@
     __linux_compliance_remediate_sd_already: __linux_compliance_unset__
     __linux_compliance_remediate_sd_attr: __linux_compliance_unset__
     __linux_compliance_remediate_sd_change: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_conflicting: __linux_compliance_unset__
     __linux_compliance_remediate_sd_content: __linux_compliance_unset__
     __linux_compliance_remediate_sd_content_sha256: __linux_compliance_unset__
     __linux_compliance_remediate_sd_current: __linux_compliance_unset__
     __linux_compliance_remediate_sd_current_value: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_defaults: __linux_compliance_unset__
     __linux_compliance_remediate_sd_directory_stat: __linux_compliance_unset__
     __linux_compliance_remediate_sd_dropins: __linux_compliance_unset__
     __linux_compliance_remediate_sd_elsewhere: __linux_compliance_unset__
@@ -590,6 +619,8 @@
     __linux_compliance_remediate_sd_inspected: __linux_compliance_unset__
     __linux_compliance_remediate_sd_kind: __linux_compliance_unset__
     __linux_compliance_remediate_sd_lines: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_link_targets: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_links: __linux_compliance_unset__
     __linux_compliance_remediate_sd_main_stat: __linux_compliance_unset__
     __linux_compliance_remediate_sd_owned: __linux_compliance_unset__
     __linux_compliance_remediate_sd_prior: __linux_compliance_unset__
@@ -697,10 +728,12 @@
       - __linux_compliance_remediate_sd_already == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_attr == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_change == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_conflicting == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_content == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_content_sha256 == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_current == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_current_value == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_defaults == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_directory_stat == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_dropins == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_elsewhere == '__linux_compliance_unset__'
@@ -713,6 +746,8 @@
       - __linux_compliance_remediate_sd_inspected == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_kind == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_lines == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_link_targets == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_links == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_main_stat == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_owned == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_prior == '__linux_compliance_unset__'
@@ -748,16 +783,21 @@
       - __linux_compliance_remediate_pwq_tidy_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_cleanup_status == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_conflicts == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_differ == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_existing == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_form == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_kind_matches == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_lines_wanted == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_link == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_option_search == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_path == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_recorded == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_satisfied_elsewhere == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_sd_set_elsewhere == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_single == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_source == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sd_too_many == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sd_value == '__linux_compliance_unset__'
       - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset__'
       - >-
@@ -809,6 +849,10 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_rules']
       - >-
+        __linux_compliance_remediate_sudo_continuation is not defined or __linux_compliance_remediate_sudo_continuation
+        == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_continuation']
+      - >-
         __linux_compliance_remediate_sudo_directory is not defined or __linux_compliance_remediate_sudo_directory ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_directory']
@@ -832,6 +876,10 @@
         __linux_compliance_remediate_sudo_option_pattern is not defined or
         __linux_compliance_remediate_sudo_option_pattern == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_option_pattern']
+      - >-
+        __linux_compliance_remediate_sudo_read_name is not defined or __linux_compliance_remediate_sudo_read_name ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_read_name']
       - >-
         __linux_compliance_remediate_sudo_validator is not defined or __linux_compliance_remediate_sudo_validator ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
@@ -868,16 +916,21 @@
     __linux_compliance_remediate_pwq_tidy_path: __linux_compliance_unset__
     __linux_compliance_remediate_rule: __linux_compliance_unset__
     __linux_compliance_remediate_sd_cleanup_status: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_conflicts: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_differ: __linux_compliance_unset__
     __linux_compliance_remediate_sd_existing: __linux_compliance_unset__
     __linux_compliance_remediate_sd_form: __linux_compliance_unset__
     __linux_compliance_remediate_sd_kind_matches: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_lines_wanted: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_link: __linux_compliance_unset__
     __linux_compliance_remediate_sd_option_search: __linux_compliance_unset__
     __linux_compliance_remediate_sd_path: __linux_compliance_unset__
     __linux_compliance_remediate_sd_recorded: __linux_compliance_unset__
     __linux_compliance_remediate_sd_rule: __linux_compliance_unset__
     __linux_compliance_remediate_sd_satisfied_elsewhere: __linux_compliance_unset__
-    __linux_compliance_remediate_sd_set_elsewhere: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_single: __linux_compliance_unset__
     __linux_compliance_remediate_sd_source: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_too_many: __linux_compliance_unset__
     __linux_compliance_remediate_sd_value: __linux_compliance_unset__
     __linux_compliance_remediate_unaccounted: __linux_compliance_unset__
   tags:
@@ -968,10 +1021,12 @@
     __linux_compliance_remediate_sd_already: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_attr: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_change: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_conflicting: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_content: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_content_sha256: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_current: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_current_value: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_defaults: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_directory_stat: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_dropins: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_elsewhere: __linux_compliance_unset_again__
@@ -984,6 +1039,8 @@
     __linux_compliance_remediate_sd_inspected: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_kind: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_lines: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_link_targets: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_links: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_main_stat: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_owned: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_prior: __linux_compliance_unset_again__
@@ -1091,10 +1148,12 @@
       - __linux_compliance_remediate_sd_already == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_attr == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_change == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_conflicting == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_content == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_content_sha256 == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_current == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_current_value == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_defaults == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_directory_stat == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_dropins == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_elsewhere == '__linux_compliance_unset_again__'
@@ -1107,6 +1166,8 @@
       - __linux_compliance_remediate_sd_inspected == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_kind == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_lines == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_link_targets == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_links == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_main_stat == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_owned == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_prior == '__linux_compliance_unset_again__'
@@ -1142,16 +1203,21 @@
       - __linux_compliance_remediate_pwq_tidy_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_cleanup_status == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_conflicts == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_differ == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_existing == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_form == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_kind_matches == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_lines_wanted == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_link == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_option_search == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_path == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_recorded == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_satisfied_elsewhere == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_sd_set_elsewhere == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_single == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_source == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sd_too_many == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sd_value == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_unaccounted == '__linux_compliance_unset_again__'
     fail_msg: >-
@@ -1178,16 +1244,21 @@
     __linux_compliance_remediate_pwq_tidy_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_cleanup_status: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_conflicts: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_differ: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_existing: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_form: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_kind_matches: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_lines_wanted: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_link: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_option_search: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_path: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_recorded: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_satisfied_elsewhere: __linux_compliance_unset_again__
-    __linux_compliance_remediate_sd_set_elsewhere: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_single: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_source: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sd_too_many: __linux_compliance_unset_again__
     __linux_compliance_remediate_sd_value: __linux_compliance_unset_again__
     __linux_compliance_remediate_unaccounted: __linux_compliance_unset_again__
   tags:
@@ -1278,10 +1349,12 @@
     __linux_compliance_remediate_sd_already: __linux_compliance_unset__
     __linux_compliance_remediate_sd_attr: __linux_compliance_unset__
     __linux_compliance_remediate_sd_change: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_conflicting: __linux_compliance_unset__
     __linux_compliance_remediate_sd_content: __linux_compliance_unset__
     __linux_compliance_remediate_sd_content_sha256: __linux_compliance_unset__
     __linux_compliance_remediate_sd_current: __linux_compliance_unset__
     __linux_compliance_remediate_sd_current_value: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_defaults: __linux_compliance_unset__
     __linux_compliance_remediate_sd_directory_stat: __linux_compliance_unset__
     __linux_compliance_remediate_sd_dropins: __linux_compliance_unset__
     __linux_compliance_remediate_sd_elsewhere: __linux_compliance_unset__
@@ -1294,6 +1367,8 @@
     __linux_compliance_remediate_sd_inspected: __linux_compliance_unset__
     __linux_compliance_remediate_sd_kind: __linux_compliance_unset__
     __linux_compliance_remediate_sd_lines: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_link_targets: __linux_compliance_unset__
+    __linux_compliance_remediate_sd_links: __linux_compliance_unset__
     __linux_compliance_remediate_sd_main_stat: __linux_compliance_unset__
     __linux_compliance_remediate_sd_owned: __linux_compliance_unset__
     __linux_compliance_remediate_sd_prior: __linux_compliance_unset__

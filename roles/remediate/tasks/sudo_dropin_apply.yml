@@ -76,34 +76,35 @@
       {{ __linux_compliance_remediate_rule.parameters.lines
          | map('replace', '{value}', __linux_compliance_remediate_sd_value) | list }}
     __linux_compliance_remediate_sd_elsewhere: >-
-      {%- set found = [] -%}
-      {%- for path in __linux_compliance_remediate_sd_sources | list | sort -%}
-      {%- if path != __linux_compliance_remediate_rule.parameters.path -%}
-      {%- for line in __linux_compliance_remediate_sd_sources[path].split(__linux_compliance_remediate_newline) -%}
-      {%- set normal = line | regex_replace('[ \t]+', ' ') | regex_replace(' ?= ?', '=') | trim -%}
-      {%- if normal is match('Defaults([^A-Za-z0-9_]|$)')
-            and normal is search(__linux_compliance_remediate_sd_option_search) -%}
-      {%- set _ = found.append({'path': path, 'line': normal}) -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {{ found }}
+      {{ __linux_compliance_remediate_sd_defaults
+         | rejectattr('path', 'equalto', __linux_compliance_remediate_rule.parameters.path)
+         | selectattr('line', 'search', __linux_compliance_remediate_sd_option_search) | list }}
   tags:
     - always
 
 - name: Sudo | Compose the drop-in content and decide whether it must be written
   vars:
-    __linux_compliance_remediate_sd_set_elsewhere: >-
-      {{ __linux_compliance_remediate_sd_elsewhere | map(attribute='line') | unique | sort }}
-    __linux_compliance_remediate_sd_satisfied_elsewhere: >-
-      {{ __linux_compliance_remediate_sd_elsewhere | length > 0
-         and __linux_compliance_remediate_sd_set_elsewhere == (__linux_compliance_remediate_sd_lines | unique | sort)
-         and (not (__linux_compliance_remediate_rule.parameters.single | default(false))
-              or __linux_compliance_remediate_sd_elsewhere | length == 1) }}
+    __linux_compliance_remediate_sd_lines_wanted: "{{ __linux_compliance_remediate_sd_lines | unique | sort }}"
+    __linux_compliance_remediate_sd_single: "{{ __linux_compliance_remediate_rule.parameters.single | default(false) }}"
     __linux_compliance_remediate_sd_existing: >-
       {{ (__linux_compliance_remediate_sd_current.content | b64decode)
          if __linux_compliance_remediate_sd_current is not skipped else none }}
+    __linux_compliance_remediate_sd_differ: >-
+      {{ __linux_compliance_remediate_sd_elsewhere
+         | rejectattr('line', 'in', __linux_compliance_remediate_sd_lines_wanted) | list }}
+    __linux_compliance_remediate_sd_too_many: >-
+      {{ __linux_compliance_remediate_sd_single
+         and (__linux_compliance_remediate_sd_elsewhere | length > 1
+              or (__linux_compliance_remediate_sd_elsewhere | length == 1
+                  and (__linux_compliance_remediate_sd_existing is not none
+                       or not __linux_compliance_remediate_sd_elsewhere[0].read))) }}
+    __linux_compliance_remediate_sd_conflicts: >-
+      {{ __linux_compliance_remediate_sd_differ if __linux_compliance_remediate_sd_differ | length > 0
+         else __linux_compliance_remediate_sd_elsewhere if __linux_compliance_remediate_sd_too_many else [] }}
+    __linux_compliance_remediate_sd_satisfied_elsewhere: >-
+      {{ __linux_compliance_remediate_sd_existing is none
+         and (__linux_compliance_remediate_sd_elsewhere | selectattr('read') | map(attribute='line') | unique | sort)
+             == __linux_compliance_remediate_sd_lines_wanted }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sd_content: >-
       {{ __linux_compliance_remediate_sd_header ~ __linux_compliance_remediate_newline
@@ -121,11 +122,11 @@
               and not __linux_compliance_remediate_sd_stat.stat.isreg
          else 'not_owned' if __linux_compliance_remediate_sd_existing is not none
               and not __linux_compliance_remediate_sd_existing.startswith(__linux_compliance_remediate_sd_header)
-         else 'compliant' if __linux_compliance_remediate_sd_existing is none
-              and __linux_compliance_remediate_sd_satisfied_elsewhere
-         else 'conflicting_setting' if __linux_compliance_remediate_sd_elsewhere | length > 0
+         else 'conflicting_setting' if __linux_compliance_remediate_sd_conflicts | length > 0
+         else 'compliant' if __linux_compliance_remediate_sd_satisfied_elsewhere
          else 'pending' }}
     __linux_compliance_remediate_sd_existing_text: "{{ __linux_compliance_remediate_sd_existing }}"
+    __linux_compliance_remediate_sd_conflicting: "{{ __linux_compliance_remediate_sd_conflicts }}"
   tags:
     - always
 
@@ -152,8 +153,8 @@
                                ~ ' is missing, so the drop-in cannot be validated',
           'not_owned': __linux_compliance_remediate_rule.parameters.path
                        ~ ' exists without the header of the collection',
-          'conflicting_setting': 'set differently by '
-                                 ~ (__linux_compliance_remediate_sd_elsewhere | map(attribute='path') | unique
+          'conflicting_setting': 'set differently, or more often than the content allows, by '
+                                 ~ (__linux_compliance_remediate_sd_conflicting | map(attribute='path') | unique
                                     | join(', '))
                                  ~ ', which the collection does not edit'}
          [__linux_compliance_remediate_sd_status] | default(none) }}

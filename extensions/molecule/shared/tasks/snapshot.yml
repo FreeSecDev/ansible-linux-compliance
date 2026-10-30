@@ -19,6 +19,18 @@
     get_checksum: true
   register: snapshot_sums
 
+- name: Snapshot | Refuse a checksum pass that stopped early at a file that root cannot read
+  ansible.builtin.assert:
+    that:
+      - >-
+        snapshot_sums.files | length
+        == snapshot_find.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list | length
+    fail_msg: >-
+      The checksum pass found {{ snapshot_sums.files | length }} regular files that their owner may read, the listing
+      {{ snapshot_find.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list | length }}: a file
+      that root cannot read without capabilities cut the pass short ({{ snapshot_sums.skipped_paths | default({}) }}).
+    quiet: true
+
 - name: Snapshot | Record paths, ownership, modes, sizes, times and content of every entry
   ansible.builtin.set_fact:
     snapshot_lines: >-

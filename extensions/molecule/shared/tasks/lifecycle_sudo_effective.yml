@@ -1,0 +1,185 @@
+---
+- name: Sudo effective files | Refuse to run unless the sudo topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'sudo'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['sudo']
+    fail_msg: >-
+      The sudo effective-file cases reuse the facts of the sudo lifecycle, which must have just run; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Sudo effective files | Name the rules, the files of the administrator and the toggles of the cases
+  ansible.builtin.set_fact:
+    effective_label: sudo effective files
+    effective_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    effective_use_pty: xccdf_org.ssgproject.content_rule_sudo_add_use_pty
+    effective_logfile: xccdf_org.ssgproject.content_rule_sudo_custom_logfile
+    effective_timestamp: xccdf_org.ssgproject.content_rule_sudo_require_reauthentication
+    effective_dotted: /etc/sudoers.d/hardening.conf
+    effective_tilde: /etc/sudoers.d/admin~
+    effective_continued: /etc/sudoers.d/99-freesecdev-site
+    effective_link: /etc/sudoers.d/98-freesecdev-linked
+    effective_link_target: /etc/freesecdev-linked-sudoers
+    effective_items: >-
+      {{ lifecycle_items | combine({'files': lifecycle_items.files
+         + [{'path': '/etc/freesecdev-linked-sudoers'}]}) }}
+
+- name: Sudo effective files | Take the state of the whole instance before the cases
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+  vars:
+    lifecycle_items: "{{ effective_items }}"
+
+- name: Sudo effective files | Remember the state of the whole instance before the cases
+  ansible.builtin.set_fact:
+    effective_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Sudo effective files | Run the cases and remove the files of the administrator whatever happens
+  block:
+    - name: Sudo effective files | Set the rules' exact lines only in files whose names sudo skips
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.path }}"
+        mode: "0440"
+        owner: root
+        group: root
+      loop:
+        - path: "{{ effective_dotted }}"
+          content: "Defaults logfile=/var/log/sudo.log\n"
+        - path: "{{ effective_tilde }}"
+          content: "Defaults timestamp_timeout=15\n"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Sudo effective files | Switch every rule of the topic on
+      ansible.builtin.set_fact:
+        "{{ item }}": true
+      loop: "{{ effective_toggles }}"
+
+    - name: Sudo effective files | Apply the topic with the lines only in files that sudo skips
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo effective files | Check that a skipped file never makes a rule compliant
+      vars:
+        effective_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
+      ansible.builtin.assert:
+        that:
+          - effective_statuses[effective_logfile] == 'applied'
+          - effective_statuses[effective_timestamp] == 'conflicting_setting'
+          - >-
+            lifecycle_results | selectattr('rule_id', 'equalto', effective_timestamp) | map(attribute='reason')
+            | first is search(effective_tilde)
+        fail_msg: "{{ effective_label }}, files that sudo skips: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Sudo effective files | Switch every rule of the topic off
+      ansible.builtin.set_fact:
+        "{{ item }}": false
+      loop: "{{ effective_toggles }}"
+
+    - name: Sudo effective files | Clean up what the case applied
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo effective files | Check that the cleanup restored what the case applied
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+        fail_msg: "{{ effective_label }}, cleanup: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Sudo effective files | Remove the files that sudo skips
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ effective_dotted }}"
+        - "{{ effective_tilde }}"
+
+    - name: Sudo effective files | Name options on continued lines and in a file that a symbolic link names
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.path }}"
+        mode: "0440"
+        owner: root
+        group: root
+      loop:
+        - path: "{{ effective_continued }}"
+          content: "Defaults env_reset, \\\n    !use_pty\nDefaults env_reset,\\\n timestamp_timeout=30\n"
+        - path: "{{ effective_link_target }}"
+          content: "Defaults logfile=/var/log/freesecdev-other.log\n"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Sudo effective files | Link a drop-in to the file outside the directory, as sudo follows it
+      ansible.builtin.file:
+        path: "{{ effective_link }}"
+        src: "{{ effective_link_target }}"
+        state: link
+
+    - name: Sudo effective files | Switch every rule of the topic on again
+      ansible.builtin.set_fact:
+        "{{ item }}": true
+      loop: "{{ effective_toggles }}"
+
+    - name: Sudo effective files | Apply the topic with continued lines and a linked drop-in
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo effective files | Check that continued lines and the linked drop-in conflict and nothing changed
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='status') | unique | list == ['conflicting_setting']
+          - lifecycle_results | selectattr('changed') | list == []
+          - >-
+            lifecycle_results | selectattr('rule_id', 'in', [effective_use_pty, effective_timestamp])
+            | map(attribute='reason') | select('search', effective_continued) | list | length == 2
+          - >-
+            lifecycle_results | selectattr('rule_id', 'equalto', effective_logfile) | map(attribute='reason')
+            | first is search(effective_link)
+        fail_msg: "{{ effective_label }}, continued lines and a linked drop-in: {{ lifecycle_results }}"
+        quiet: true
+  always:
+    - name: Sudo effective files | Remove every file and link of the administrator
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ effective_dotted }}"
+        - "{{ effective_tilde }}"
+        - "{{ effective_continued }}"
+        - "{{ effective_link }}"
+        - "{{ effective_link_target }}"
+
+- name: Sudo effective files | Read the ledger after the cases
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: effective_ledger_after
+
+- name: Sudo effective files | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - effective_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ effective_label }}: the ledger still holds {{ effective_ledger_after.entries }}"
+    quiet: true
+
+- name: Sudo effective files | Assert that the whole instance is back to its state before the cases
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: sudo effective files
+    lifecycle_broad_step: the effective-file cases
+    lifecycle_broad_reference: "{{ effective_broad_before }}"
+    lifecycle_items: "{{ effective_items }}"

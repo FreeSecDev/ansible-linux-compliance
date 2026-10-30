@@ -68,8 +68,25 @@ every line against `^Defaults !?[a-z_]{1,32}(={value})?$` before the family chan
 
 ### 2. Apply refuses what it cannot make take effect, and changes nothing then
 
-The family reads `/etc/sudoers` and every regular file of `/etc/sudoers.d` that it does not own, hidden files
-included, as the content's checks do. A rule reports, with a reason and without any change:
+The family reads `/etc/sudoers` and every file of `/etc/sudoers.d` that it does not own, as the content's checks do:
+every regular file, hidden ones and names with a `.` or a trailing `~` included, and every symbolic link whose target
+is a regular file, read through the link. It joins every line that ends in `\` with the next one, as sudo does, and
+keeps every `Defaults` line with the file it came from and whether sudo reads that file: `/etc/sudoers`, and the files
+of `/etc/sudoers.d` whose name has no `.` and does not end in `~`. Revised after the review of PR #62: sudo's
+`includedir` follows a symbolic link to a regular file, skips a dangling link and skips names with a `.` or a trailing
+`~` (checked with `visudo -c`, which lists every file it parses, and `sudo -V`, which prints the effective
+`timestamp_timeout`, for sudo 1.9.15p5 on Ubuntu 24.04 and 1.9.17p2 on Rocky Linux 9). Two sets therefore decide:
+
+- **Conflicts are decided over every file the content's check reads.** A `Defaults` line elsewhere that names one of
+  the rule's options in any form other than exactly one of the rule's lines is a conflict, in a file that sudo reads
+  (it can override the drop-in) and in one that it skips (it fails the content's check). For `timestamp_timeout`,
+  whose check requires exactly one line, any second line is a conflict, and so is a single line in a file that sudo
+  skips.
+- **`compliant` without a drop-in is decided only over the files that sudo reads.** The rule's lines must be set there
+  exactly; a line in `hardening.conf`, `site~` or another file that sudo skips never makes a rule compliant, so the
+  drop-in is written (or, for `timestamp_timeout`, the rule conflicts).
+
+A rule reports, with a reason and without any change:
 
 | Status | When |
 |---|---|
@@ -78,8 +95,8 @@ included, as the content's checks do. A rule reports, with a reason and without 
 | `not_included` | `/etc/sudoers` has no `@includedir` or `#includedir` line for `/etc/sudoers.d`, so sudo would not read the drop-in while the content's check would pass |
 | `validator_missing` | `/usr/sbin/visudo` is not a regular file |
 | `not_owned` | A file at the drop-in's path does not start with the collection's header |
-| `conflicting_setting` | Another file sets one of the rule's options (any `Defaults` line that names it, normalised for whitespace) in a form other than exactly the rule's lines, or, for `timestamp_timeout`, more than once. The collection does not edit files it does not own, and a second line could override the drop-in or fail the content's `only_one_exists` |
-| `compliant` | The drop-in already holds exactly the content, or, without a drop-in, the other files already set exactly the rule's lines (the `Defaults use_pty` of the Ubuntu 24.04 `/etc/sudoers`); nothing is written or recorded |
+| `conflicting_setting` | Another file that the content's check reads sets one of the rule's options (any `Defaults` line, after joining continued lines and normalising whitespace, that names it) in a form other than exactly one of the rule's lines, or, for `timestamp_timeout`, the setting appears anywhere else while the drop-in exists, more than once, or only in a file that sudo skips. The collection does not edit files it does not own, and such a line could override the drop-in or fail the content's check |
+| `compliant` | The drop-in already holds exactly the content, or, without a drop-in, the files that sudo reads already set exactly the rule's lines (the `Defaults use_pty` of the Ubuntu 24.04 `/etc/sudoers`) and nothing conflicts; nothing is written or recorded |
 | `method_changed` | The ledger entry was recorded by another method; clean it up first |
 | `invalid_sudoers` | `visudo` refused the drop-in. Nothing is installed, the ledger entry recorded for it is removed again, and the result names the refusal |
 
@@ -108,18 +125,19 @@ state and the new `dropin_sha256` after the write succeeded.
 | `sudo_remove_no_authenticate`, `sudo_remove_nopasswd`, `sudo_require_authentication` | They need other people's `!authenticate` and `NOPASSWD` lines removed from `/etc/sudoers` and from drop-ins the collection does not own. Automation accounts and break-glass administrators rely on them, so the removal can lock them out, and the removed lines cannot be put back exactly once their files change |
 | `sudo_restrict_privilege_elevation_to_authorized`, `sudoers_explicit_command_args`, `sudoers_no_command_negation`, `sudoers_no_root_target` | They rewrite or remove user specifications that grant administrators root; which ones may go is a site decision, and removing the wrong one locks administrators out |
 | `sudo_add_noexec` | `Defaults noexec` stops every command run through sudo from executing another program, so `sudo -i`, package managers and Ansible's own `become` (`/bin/sh -c` then Python) stop working; the collection could then not even revert it |
-| `sudo_add_requiretty` | `Defaults requiretty` refuses sudo without a terminal, which breaks Ansible `become` with pipelining and every non-interactive automation, again including the run that would revert it |
+| `sudo_add_requiretty` | `Defaults requiretty` refuses sudo without a terminal. Ansible over SSH without pipelining allocates one (`-tt`) and keeps working, but `become` with pipelining, over a connection without a terminal (`docker exec`, `local`) and every other non-interactive automation stops, again including the run that would revert it. The check (`Defaults\b[^!\n]*\brequiretty`) is satisfied by a narrowly scoped `Defaults:<user> requiretty` too, so a remediation that the check rewards but that changes nothing is possible and was rejected; a real one has to be global |
 | `sudo_dedicated_group`, `file_permissions_sudo` | They change the group and mode (`4110`) of `/usr/bin/sudo`, a file of the package, so that only members of a dedicated group can run sudo; with the content's default group `root` the rule cannot pass, and every other user loses sudo |
 | `package_sudo_installed` | Package state belongs to the package topics; removing sudo again on cleanup would lock out every administrator who uses it |
 
 ### 5. The `visudo` check is the only reviewed `validate`
 
-FREES-159 refuses `validate` of the file modules in every form, because the module runs the command it names. ADR
-0004 is amended: `tools/lint/repo_rules/exec_modules.py` allows exactly the plain scalar `/usr/sbin/visudo -cf %s` of
-`ansible.builtin.copy` in `roles/remediate/tasks/sudo_dropin_apply.yml` (`ALLOWED_PARAMETERS`); a templated, quoted,
-free-form, `args` or `module_defaults` value, another value, module or file is still refused. The path is fixed, so no
-variable can choose the executable. Without the check, a drop-in that sudo cannot parse would be installed and sudo
-would refuse every command.
+External validators run through the audited process helper (ADR 0004, amendment of FREES-175). The one exception is
+`copy`'s `validate` with exactly `/usr/sbin/visudo -cf %s` in `roles/remediate/tasks/sudo_dropin_apply.yml`
+(`ALLOWED_PARAMETERS` of `tools/lint/repo_rules/exec_modules.py`), because the check must run on the temporary file
+before the atomic rename, so that a drop-in that sudo cannot parse is never in place, not even briefly. A templated,
+quoted, block, aliased or merged value, a free-form argument, `args`, `module_defaults`, another value, module or file
+is still refused. The path is fixed, so no variable can choose the executable. `copy` runs it through `run_command`,
+without the timeout of ADR 0004; that is an accepted residual, because `visudo -cf` parses one small local file.
 
 ## Benefits
 
@@ -130,7 +148,11 @@ moved in place.
 ## Trade-offs
 
 A host whose `/etc/sudoers` already sets a rule's option in another form (for example `Defaults env_reset,use_pty`)
-gets `conflicting_setting` instead of a drop-in; the comparison is by normalised line, not by sudoers grammar. sudo
+gets `conflicting_setting` instead of a drop-in; the comparison is by normalised line, after joining continued lines,
+not by sudoers grammar. Two refusals are stricter than sudo needs and are accepted: an administrator's later identical
+`timestamp_timeout` line next to the drop-in, and a setting in a file that sudo skips but the content's check reads,
+are `conflicting_setting`. A partial set of the `!targetpw`, `!rootpw` and `!runaspw` lines elsewhere no longer
+conflicts; the drop-in then holds all three. sudo
 writes `/var/log/sudo.log` once `logfile` is set; the log is sudo's, not the collection's, and cleanup does not remove
 it. The fix-sourced timeout is not compared by the audit, so an operator can lower it by hand without the audit
 noticing; cleanup then keeps the change as `modified_since_apply`.
@@ -152,5 +174,9 @@ lifecycle select `sudo_add_use_pty`, `sudo_custom_logfile` and `sudo_require_rea
 rules are applied, made idempotent and cleaned up for real by `shared/tasks/lifecycle_sudo_other_profiles.yml` in the
 topic legs. `shared/tasks/lifecycle_sudo_regressions.yml` (rule legs) covers a change of method and a drop-in changed
 and one removed by hand, and `shared/tasks/lifecycle_sudo_refusals.yml` (topic legs) a setting of the administrator, a
-`visudo` that refuses every file and a symbolic link in place of `/etc/sudoers.d`. The containers drop every capability, so the owner and group rules are
+`visudo` that refuses every file and a symbolic link in place of `/etc/sudoers.d`. On Ubuntu,
+`lifecycle_sudo_states.yml` covers `not_included`, `validator_missing`, `not_owned` at apply and at cleanup,
+`not_regular_file` for a drop-in path, `invalid_record` and `target_absent`, and `lifecycle_sudo_effective.yml` the
+files that sudo skips, continued lines and a linked drop-in. After an apply, a module runs with `become: true`, which
+proves that sudo still parses the whole policy and writes the `logfile` that the drop-in set. The containers drop every capability, so the owner and group rules are
 proven compliant on the root-owned files and are not changed there.

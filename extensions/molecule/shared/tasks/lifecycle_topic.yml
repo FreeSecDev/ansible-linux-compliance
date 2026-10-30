@@ -165,6 +165,24 @@
     - lifecycle_rule_ids | length > 0
     - lifecycle_run_modes | last == 'rule'
 
+- name: Lifecycle topic | Run the sudo refusal states on Ubuntu, where the rule leg has the time for them
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_states.yml
+  when:
+    - lifecycle_family == 'sudo'
+    - lifecycle_rule_ids | length > 0
+    - lifecycle_run_modes | last == 'rule'
+    - lifecycle_platform == 'ubuntu'
+
+- name: Lifecycle topic | Run the sudo cases of files that sudo skips, continued lines and linked drop-ins on Ubuntu
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_effective.yml
+  when:
+    - lifecycle_family == 'sudo'
+    - lifecycle_rule_ids | length > 0
+    - lifecycle_run_modes | first == 'topic'
+    - lifecycle_platform == 'ubuntu'
+
 - name: Lifecycle topic | Run the sudo refusals for a setting elsewhere, a refusing visudo and a symbolic link
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_refusals.yml

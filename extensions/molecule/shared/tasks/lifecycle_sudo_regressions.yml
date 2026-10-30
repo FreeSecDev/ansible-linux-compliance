@@ -20,7 +20,8 @@
     regression_timestamp_dropin: /etc/sudoers.d/50-freesecdev-timestamp_timeout
     regression_logfile_dropin: /etc/sudoers.d/50-freesecdev-logfile
     regression_dropins: "{{ lifecycle_rules | map(attribute='parameters') | map(attribute='path') | list }}"
-    regression_items: "{{ lifecycle_items }}"
+    regression_items: >-
+      {{ lifecycle_items | combine({'files': lifecycle_items.files + [{'path': '/var/log/sudo.log'}]}) }}
     regression_rewritten: "{{ lifecycle_rewritten }}"
 
 - name: Sudo regressions | Take the state of the whole instance before the regressions
@@ -69,6 +70,32 @@
       - regression_logfile in regression_applied_ids
     fail_msg: "{{ regression_label }}, apply: {{ lifecycle_results }}"
     quiet: true
+
+- name: Sudo regressions | Run a module through sudo, which must still parse its whole policy with the drop-ins
+  ansible.builtin.stat:
+    path: /etc/sudoers
+    follow: false
+  become: true
+  become_user: root
+  register: regression_through_sudo
+
+- name: Sudo regressions | Read the log that the logfile drop-in made sudo write
+  ansible.builtin.slurp:
+    src: /var/log/sudo.log
+  register: regression_sudo_log
+
+- name: Sudo regressions | Check that sudo ran the module and logged it where the drop-in says
+  ansible.builtin.assert:
+    that:
+      - regression_through_sudo.stat.exists
+      - regression_sudo_log.content | b64decode is search('COMMAND=')
+    fail_msg: "{{ regression_label }}: sudo did not run or log the module: {{ regression_through_sudo }}"
+    quiet: true
+
+- name: Sudo regressions | Remove the log that sudo wrote
+  ansible.builtin.file:
+    path: /var/log/sudo.log
+    state: absent
 
 - name: Sudo regressions | Read the drop-ins after the apply
   ansible.builtin.stat:

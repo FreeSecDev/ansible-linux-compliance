@@ -91,8 +91,10 @@ controller, then copies it into the instance as `/usr/share/freesecdev-molecule/
 
 - Containers are unprivileged: `privileged: false`, `cap_drop: ALL`, `no-new-privileges`, no network
   (`network_mode: none`), a private cgroup namespace, a process and memory limit, and an init process. The scenarios
-  run as root inside the container without `sudo`, so they pass `ansible_become=false`. Remote temporary files go to
-  `/tmp`.
+  run as root inside the container without `sudo`; the standard scenarios pass `ansible_become=false`. The lifecycle
+  scenarios do not, because the `sudo` regressions run one task with `become: true` to prove that sudo still parses
+  its policy with the collection's drop-ins (FREES-175); no other task of the harness or the roles asks for `become`.
+  Remote temporary files go to `/tmp`.
 - `create.yml` refuses platforms that are privileged, use `network_mode` `host` or `container:*`, declare `volumes`,
   `mounts` or `devices`, or add capabilities without a `capabilities_reason`.
 - The run id is generated once, as the first fact of `create.yml`, and persisted in the instance config. A repeated
@@ -271,7 +273,12 @@ the failure of a task inside the role.
 `/etc`, `/usr`, `/root`, `/home`, `/var/spool`, `/var/log`, `/opt`, `/srv`, `/var/lib/dpkg`, `/var/lib/rpm`,
 `/var/lib/linux_compliance` and
 `/var/lib/freesecdev`. The state ledger and the evidence directory are part of it. On a mismatch the assertion prints
-up to 20 differing entries.
+up to 20 differing entries. The entries are listed by one `find` that reads no content, and the checksums come from a
+second `find` of the regular files whose owner may read them (FREES-175): root in these containers has no capabilities,
+so a file it cannot read (`/etc/shadow` on Rocky Linux, `/usr/bin/sudo` with mode `4111`) made a single `find` with
+checksums stop the walk of its whole path. A task then asserts that the second pass found exactly as many files as the
+first lists with the owner-read bit, so a file that root still cannot read fails the record instead of cutting it
+short.
 
 Two exceptions are recorded explicitly:
 
@@ -423,7 +430,8 @@ and the state after the cleanup and after the last cycle must equal it:
 
 - every entry below `/etc`, `/usr`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib`
   (`find` without following links): path, type, mode, uid, gid, size, inode, mtime, ctime and the SHA-256 of every
-  regular file;
+  regular file whose owner may read it, taken in a second pass that must cover all of them, as for the
+  [no-change snapshot](#the-no-change-snapshot);
 - every kernel parameter that the instance may read (`find` over `/proc/sys` with a SHA-256 of each value);
 - every installed package with its versions (`package_facts`), every user and group with its entry (`getent`), and
   every service where a service manager runs (`service_facts`; the containers have none, which is recorded as such).
@@ -473,7 +481,9 @@ The regressions of a topic run at the end of that topic, with its facts, when th
 run: in a full run and in the topic's rule leg in CI.
 
 `shared/tasks/lifecycle_sudo_regressions.yml` does the same for `sudo` (FREES-175) on both platforms, in the rule
-mode: it applies the topic, records every ledger entry as if another method had written it and checks that apply
+mode: it applies the topic, runs a module with `become: true`, which proves that sudo still parses its whole policy
+with the drop-ins and logs to the `logfile` that a drop-in set, records every ledger entry as if another method had
+written it and checks that apply
 reports `method_changed` and cleanup `cleanup_incomplete` (`method_changed`) with every entry kept and no drop-in
 touched; it changes the `timestamp_timeout` drop-in by hand and removes the `logfile` drop-in, and checks that cleanup
 keeps the change as `modified_since_apply` and reports the removed one `restored` without a write.
@@ -484,8 +494,17 @@ that the rule is `conflicting_setting`, that every other drop-in is `invalid_sud
 recorded; and it replaces `/etc/sudoers.d` by a symbolic link and checks that every rule is `not_directory` and nothing
 is written through the link. `visudo`, `/usr/sbin`, `/etc/sudoers.d` and its `README` are put back with their content,
 mode and ownership, so the whole-instance comparison after the refusals treats them as rewritten (new inodes and times
-only). `shared/tasks/lifecycle_sudo_other_profiles.yml` runs in the topic mode as well and applies, repeats and cleans
-up for real the
+only). On Ubuntu only, where the legs have the time, two more files run. `shared/tasks/lifecycle_sudo_states.yml` (rule
+mode) takes the `@includedir` line out of `/etc/sudoers` (`not_included`), removes `visudo` (`validator_missing`),
+occupies one drop-in path with a file without the header (`not_owned`) and another with a symbolic link
+(`not_regular_file`), and, after an apply, removes the header (`not_owned` at cleanup), records a malformed checksum
+(`invalid_record`) and cleans up an attribute entry while `/etc/sudoers` is gone (`target_absent`), each time with
+nothing changed and every entry kept. `shared/tasks/lifecycle_sudo_effective.yml` (topic mode) covers the files that
+sudo reads: a rule's exact line only in `hardening.conf` or `admin~`, which sudo skips, never makes it `compliant`
+(`applied`, and `conflicting_setting` for `timestamp_timeout`), and a `Defaults` line continued with `\` or a linked
+drop-in that names an option is `conflicting_setting`. Every swap of these files is undone in an `always` section, so
+a failure does not leave `visudo`, `/usr/sbin` or `/etc/sudoers.d` changed. `shared/tasks/lifecycle_sudo_other_profiles.yml`
+runs in the topic mode as well and applies, repeats and cleans up for real the
 seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,
 owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`): the stricter mode an
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and

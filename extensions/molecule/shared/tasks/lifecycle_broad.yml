@@ -22,6 +22,19 @@
     checksum_algorithm: sha256
   register: lifecycle_broad_sums
 
+- name: Lifecycle broad | Refuse a checksum pass that stopped early at a file that root cannot read
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_broad_sums.files | length
+        == lifecycle_broad_files.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list | length
+    fail_msg: >-
+      The checksum pass found {{ lifecycle_broad_sums.files | length }} regular files that their owner may read, the
+      listing {{ lifecycle_broad_files.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list
+      | length }}: a file that root cannot read without capabilities cut the pass short
+      ({{ lifecycle_broad_sums.skipped_paths | default({}) }}), so the record would miss content changes.
+    quiet: true
+
 - name: Lifecycle broad | Read every kernel parameter that the instance may read
   ansible.builtin.find:
     paths: /proc/sys

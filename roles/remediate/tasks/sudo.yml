@@ -130,14 +130,45 @@
   tags:
     - always
 
-- name: Sudo | Read the main sudoers file and every drop-in that the collection does not own
+- name: Sudo | List the symbolic links of the drop-in directory, which sudo follows to a regular file
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_sudo_directory }}"
+    file_type: link
+    follow: false
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_sd_links
+  when: __linux_compliance_remediate_sd_directory_stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Sudo | Inspect the target of every symbolic link of the drop-in directory
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sd_link }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: >-
+    {{ __linux_compliance_remediate_sd_links.files | default([]) | map(attribute='path') | sort
+       | difference(__linux_compliance_remediate_sd_owned) }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sd_link
+  register: __linux_compliance_remediate_sd_link_targets
+  tags:
+    - always
+
+- name: Sudo | Read the main sudoers file and every drop-in that the collection does not own, links to files included
   ansible.builtin.slurp:
     src: "{{ __linux_compliance_remediate_sd_source }}"
   loop: >-
     {{ ([__linux_compliance_remediate_sudo_main]
         if __linux_compliance_remediate_sd_main_stat.isreg | default(false) else [])
        + ((__linux_compliance_remediate_sd_dropins.files | default([]) | map(attribute='path') | sort)
-          | difference(__linux_compliance_remediate_sd_owned)) }}
+          | difference(__linux_compliance_remediate_sd_owned))
+       + (__linux_compliance_remediate_sd_link_targets.results | default([])
+          | selectattr('stat.isreg', 'defined') | selectattr('stat.isreg')
+          | map(attribute='__linux_compliance_remediate_sd_link') | list) }}
   loop_control:
     loop_var: __linux_compliance_remediate_sd_source
   register: __linux_compliance_remediate_sd_read
@@ -159,6 +190,26 @@
     __linux_compliance_remediate_sd_included: >-
       {{ __linux_compliance_remediate_sd_sources[__linux_compliance_remediate_sudo_main] | default('')
          is search(__linux_compliance_remediate_sudo_include_pattern) }}
+  tags:
+    - always
+
+- name: Sudo | Join continued lines and keep every Defaults line, and whether sudo reads the file that holds it
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_defaults: >-
+      {%- set found = [] -%}
+      {%- for path in __linux_compliance_remediate_sd_sources | list | sort -%}
+      {%- set read = path == __linux_compliance_remediate_sudo_main
+            or (path | basename) is match(__linux_compliance_remediate_sudo_read_name) -%}
+      {%- set text = __linux_compliance_remediate_sd_sources[path]
+            | regex_replace(__linux_compliance_remediate_sudo_continuation, ' ') -%}
+      {%- for line in text.split(__linux_compliance_remediate_newline) -%}
+      {%- set normal = line | regex_replace('[ \t]+', ' ') | regex_replace(' ?= ?', '=') | trim -%}
+      {%- if normal is match('Defaults([^A-Za-z0-9_]|$)') -%}
+      {%- set _ = found.append({'path': path, 'read': read, 'line': normal}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ found }}
   tags:
     - always
 

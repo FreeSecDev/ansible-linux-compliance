@@ -406,8 +406,11 @@ The statuses that refuse to act, each with a reason, nothing changed and the led
 | `modified_since_apply` (cleanup) | The drop-in's content or the attribute is no longer what the collection wrote; an administrator's later change is never overwritten |
 | `invalid_record`, `target_absent` (cleanup) | The record is malformed, or the path of an attribute rule is gone |
 
-A rule whose setting the other files already hold exactly (the `Defaults use_pty` of the Ubuntu 24.04 `/etc/sudoers`)
-is `compliant` and writes nothing. When the state already equals the recorded prior state at cleanup (the drop-in was
+The family reads every file that the content's checks read, including names that sudo skips (a `.` or a trailing
+`~`) and symbolic links to regular files, which sudo follows, and joins lines continued with `\`. Conflicts are
+decided over all of them; `compliant` without a drop-in only over the files that sudo reads. A rule whose setting
+those files already hold exactly (the `Defaults use_pty` of the Ubuntu 24.04 `/etc/sudoers`) is `compliant` and
+writes nothing; a setting only in `hardening.conf` or `site~` never is. When the state already equals the recorded prior state at cleanup (the drop-in was
 removed by hand, the attribute already has its prior value), the rule is `restored`, its entry is removed and nothing
 is written (FREES-173). Kept `audit_only`, with the reasons in ADR 0022: the rules that remove other people's
 `!authenticate`, `NOPASSWD` or user specifications (`sudo_remove_no_authenticate`, `sudo_remove_nopasswd`,
