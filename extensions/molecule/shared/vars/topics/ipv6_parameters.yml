@@ -158,6 +158,97 @@ pre_states:
           exists: false
           platforms:
             - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 94f28c75d5c717292eb6b6e6b0b9dc2522b36fda42b34c68769b4891fe31b7c5
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-redirects.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: b7cfcb662f195bd45a49564d5c51c96854ec52d243c853f094dcccf36bfa9908
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-source-route.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: faa054eecbd8a8a69e5c2e0309be22620f09c56fce2df931305b1f6b912b945b
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-forwarding.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 6656056f83c4594fead0a915dbe3a2b75c0d76c356ec08c4e00eb4ddbd8076dd
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-ra.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: f40e0715b2505b71469e08192b939b5052249641b06f4ef2bf1e67eabecabefd
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-redirects.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 96aae2e2b9fb9b19845a40779a5fcf39d3ce1ab3e5e113c1f3f275bde7549d86
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-default-accept-source-route.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 2f81fa64143baed80e9dd6cb049600c9fe55bcb726de81b576bc790cba0bf086
+          platforms:
+            - ubuntu
       sysctl:
         - name: net.ipv6.conf.all.accept_ra
           value: "0"

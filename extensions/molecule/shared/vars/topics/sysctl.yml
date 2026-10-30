@@ -120,6 +120,32 @@ pre_states:
           exists: false
           platforms:
             - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-fs-suid-dumpable.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 1404aaa3870dc47e48078ff008d97cfac8875eb49c0f0db0e8b12545bd4a9dd0
+          platforms:
+            - ubuntu
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-kernel-randomize-va-space.conf
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: b15372eb76ca4b46e9d140e2b92f69f11733702d16739c530ceeeb584d845407
+          platforms:
+            - ubuntu
       sysctl:
         - name: fs.suid_dumpable
           value: "0"
