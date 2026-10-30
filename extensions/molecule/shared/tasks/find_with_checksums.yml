@@ -13,7 +13,7 @@
     follow: false
     get_checksum: true
     checksum_algorithm: "{{ find_checksum_algorithm }}"
-    excludes: "{{ find_known.excludes if find_known else omit }}"
+    excludes: "{{ find_known.excludes if find_known is mapping else omit }}"
   register: find_whole
 
 - name: Find with checksums | Name the paths whose walk stopped at a file that root cannot read
@@ -30,7 +30,7 @@
   ansible.builtin.set_fact:
     find_aborted: "{{ find_paths }}"
   when:
-    - find_known
+    - find_known is mapping
     - find_aborted | length > 0
 
 - name: Find with checksums | List every entry of those paths again, without reading any content
@@ -104,12 +104,12 @@
     loop_var: find_path
   register: find_left_out
   when:
-    - find_known
+    - find_known is mapping
     - find_aborted | length == 0
 
 - name: Find with checksums | Turn the inspected files into entries of the walk
   ansible.builtin.set_fact:
     find_extra: "{{ find_left_out.results | selectattr('stat.exists') | map(attribute='stat') | list }}"
   when:
-    - find_known
+    - find_known is mapping
     - find_aborted | length == 0

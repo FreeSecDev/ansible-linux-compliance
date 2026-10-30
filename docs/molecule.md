@@ -284,8 +284,12 @@ containers has no capabilities, and a file that it cannot read (`/etc/shadow` on
 mode `4111`) stops that `find`'s walk of its whole path, so every later entry of the path would be missing. For a
 path whose walk stopped that way, and only for it, the task lists the entries again without reading content and takes
 the checksums in a second `find` of the regular files whose owner may read them, and fails when that second pass
-stops early as well. Paths whose walk did not stop, and every path on the libvirt drivers, where root keeps its
-capabilities, cost one walk as before.
+stops early as well. It then remembers, per set of paths, the names of the files that root cannot read: later
+records leave those names out of the one walk and inspect every entry of such a name with `stat` instead, which is
+how they stay one walk on Rocky Linux too. A walk that stops again, because a file that root cannot read appeared,
+takes the second pass over every path and refreshes the names. A new entry that happens to have one of those names
+after the first record is not seen; the names are those of the shadow files and the sudo binaries. Paths whose walk
+did not stop, and every path on the libvirt drivers, where root keeps its capabilities, cost one walk as before.
 
 Two exceptions are recorded explicitly, and a virtual machine has a third, for the system logs and service state files
 that a running system rewrites by itself ([libvirt guide](molecule-libvirt.md#differences-that-only-a-virtual-machine-has)):
