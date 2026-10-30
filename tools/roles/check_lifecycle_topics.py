@@ -29,6 +29,14 @@ when no lifecycle scenario of such a driver (one whose ``side_effect`` is the ha
 platform that the topic does not list under ``unselected_platforms``, so every declared cycle is
 exercised by some driver. ``cycle_platforms`` returns the same map for ``make molecule-matrix``,
 which plans one CI leg per topic, toggle mode, driver and platform that runs a cycle.
+
+A topic may declare ``regressions`` (FREES-175): named groups of task files of
+``extensions/molecule/shared/tasks`` that test what the cycles cannot (a change of method, a change
+by hand, a refusal), each optionally limited to ``platforms``. Every file must be one that the
+static dispatch ``lifecycle_regressions.yml`` includes, so no variable chooses a file to include.
+``regression_platforms`` returns, per topic and group, the platforms whose Docker lifecycle scenario
+runs it; ``make molecule-matrix`` plans one leg per group and platform, with the mode
+``regressions-<group>``, so that the regressions do not lengthen the cycle legs.
 """
 
 from __future__ import annotations
@@ -58,6 +66,15 @@ UNRESTRICTED_DRIVERS: Final[frozenset[str]] = frozenset({"docker"})
 REQUIRES_KEY: Final[str] = "requires"
 IMAGES_KEY: Final[str] = "molecule_images"
 LIFECYCLE_PLAYBOOK: Final[str] = "../shared/lifecycle.yml"
+REGRESSIONS_KEY: Final[str] = "regressions"
+REGRESSION_KEYS: Final[frozenset[str]] = frozenset({"name", "files", "platforms"})
+REGRESSION_DRIVER: Final[str] = "docker"
+REGRESSION_DISPATCH: Final[Path] = Path(
+    "extensions/molecule/shared/tasks/lifecycle_regressions.yml"
+)
+INCLUDE_TASKS: Final[str] = "ansible.builtin.include_tasks"
+REGRESSION_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]{0,31}")
+REGRESSION_FILE: Final[re.Pattern[str]] = re.compile(r"lifecycle_[a-z0-9_]{1,64}\.yml")
 TOP_KEYS: Final[frozenset[str]] = frozenset(
     {
         "family",
@@ -69,6 +86,7 @@ TOP_KEYS: Final[frozenset[str]] = frozenset(
         "pre_states",
         "unselected_platforms",
         "requires",
+        "regressions",
     }
 )
 REQUIRED_KEYS: Final[tuple[str, ...]] = ("family", "disruptive", "state", "applied")
@@ -148,6 +166,7 @@ class Context(NamedTuple):
 
     coverage: dict[str, frozenset[str]] | None = None
     rules: frozenset[str] = frozenset()
+    dispatched: frozenset[str] | None = None
 
 
 class Declaration:
@@ -159,12 +178,14 @@ class Declaration:
         platforms: frozenset[str],
         coverage: dict[str, frozenset[str]] | None = None,
         rules: frozenset[str] = frozenset(),
+        dispatched: frozenset[str] | None = None,
     ) -> None:
         """Start the validation of ``where`` for the platforms, driver coverage and native rules.
 
         ``coverage`` maps each driver to the platforms that its lifecycle scenarios run; without it
         every driver counts as running every platform. ``rules`` holds the short identifiers of the
-        native rules of the topic, which a pre-state may declare ``unchanged``.
+        native rules of the topic, which a pre-state may declare ``unchanged``. ``dispatched``
+        holds the regression files that the static dispatch includes (``None``: any file).
         """
         self.where = where
         self.platforms = platforms
@@ -172,6 +193,8 @@ class Declaration:
             coverage if coverage is not None else dict.fromkeys(DRIVERS, platforms)
         )
         self.rules = rules
+        self.dispatched = dispatched
+        self.regressions: dict[str, frozenset[str]] = {}
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
         self.drivers: frozenset[str] = frozenset(DRIVERS)
@@ -482,6 +505,58 @@ class Declaration:
                 self.pre_state_unchanged(item["unchanged"], what)
 
 
+def _regression_groups(declaration: Declaration, value: object) -> None:
+    """Check the named groups of regression files of the topic."""
+    entries = declaration.sequence(value, REGRESSIONS_KEY)
+    if not entries:
+        declaration.error(f"{REGRESSIONS_KEY} must not be empty; leave it out without regressions")
+    for index, entry in enumerate(entries):
+        what = f"{REGRESSIONS_KEY}[{index}]"
+        item = declaration.mapping(entry, what)
+        if item is None:
+            continue
+        declaration.keys(item, REGRESSION_KEYS, what)
+        declaration.platform_list(item, what)
+        name = item.get("name")
+        if not isinstance(name, str) or REGRESSION_NAME.fullmatch(name) is None:
+            declaration.error(f"{what} needs a name of lower-case letters, digits and underscores")
+            continue
+        if name in declaration.regressions:
+            declaration.error(f"{what} repeats the name {name!r}")
+            continue
+        files = _strings(item.get("files"))
+        if files is None:
+            declaration.error(f"{what} needs a non-empty list of files")
+            continue
+        for file in files:
+            if REGRESSION_FILE.fullmatch(file) is None:
+                declaration.error(f"{what} names the file {file!r}, not a lifecycle task file")
+            elif declaration.dispatched is not None and file not in declaration.dispatched:
+                declaration.error(
+                    f"{what} names {file}, which {REGRESSION_DISPATCH} does not include"
+                )
+        chosen = _strings(item.get(PLATFORMS_KEY)) or sorted(declaration.platforms)
+        declaration.regressions[name] = frozenset(chosen) & declaration.platforms
+
+
+def _regression_platforms(declaration: Declaration) -> dict[str, frozenset[str]]:
+    """Return, per regression group, the platforms whose Docker scenario runs it."""
+    running = (declaration.platforms - declaration.skipped_platforms) & declaration.coverage.get(
+        REGRESSION_DRIVER, frozenset()
+    )
+    return {name: chosen & running for name, chosen in sorted(declaration.regressions.items())}
+
+
+def _regressions_run(declaration: Declaration) -> None:
+    """Check that every regression group runs on at least one platform."""
+    for name, chosen in _regression_platforms(declaration).items():
+        if not chosen:
+            declaration.error(
+                f"{REGRESSIONS_KEY} {name} runs on no platform with a {REGRESSION_DRIVER} "
+                "lifecycle scenario that unselected_platforms does not list"
+            )
+
+
 def _identity(
     declaration: Declaration, data: dict[str, object], family: str, *, disruptive: bool
 ) -> None:
@@ -519,7 +594,7 @@ def _declaration(
     path: Path, family: str, platforms: frozenset[str], *, disruptive: bool, context: Context | None
 ) -> Declaration:
     found = context if context is not None else Context()
-    declaration = Declaration(str(path), platforms, found.coverage, found.rules)
+    declaration = Declaration(str(path), platforms, found.coverage, found.rules, found.dispatched)
     data = declaration.mapping(_load(path), "the declaration")
     if data is None:
         return declaration
@@ -536,7 +611,10 @@ def _declaration(
         declaration.pre_states(data["pre_states"])
     if "unselected_platforms" in data:
         declaration.unselected(data["unselected_platforms"])
+    if REGRESSIONS_KEY in data:
+        _regression_groups(declaration, data[REGRESSIONS_KEY])
     declaration.covered()
+    _regressions_run(declaration)
     return declaration
 
 
@@ -585,6 +663,35 @@ def _runs_lifecycle(data: dict[str, object] | None) -> bool:
     return playbooks is not None and playbooks.get("side_effect") == LIFECYCLE_PLAYBOOK
 
 
+def dispatched_regressions(root: Path) -> frozenset[str]:
+    """Return the regression files that the static dispatch includes, by file name.
+
+    Tasks other than includes, such as the one that records the group that ran, are allowed.
+
+    Raises:
+        GenerationError: When the dispatch is missing or is not a list of static includes.
+    """
+    tasks = toggles.as_sequence(_load(root / REGRESSION_DISPATCH))
+    if tasks is None:
+        message = f"{root / REGRESSION_DISPATCH} must be a list of tasks"
+        raise GenerationError(message)
+    found: set[str] = set()
+    for task in tasks:
+        item = toggles.as_mapping(task)
+        if item is None:
+            message = f"{root / REGRESSION_DISPATCH}: every task must be a mapping"
+            raise GenerationError(message)
+        if INCLUDE_TASKS not in item:
+            continue
+        include = toggles.as_mapping(item[INCLUDE_TASKS])
+        target = include.get("file") if include is not None else None
+        if not isinstance(target, str) or REGRESSION_FILE.fullmatch(target) is None:
+            message = f"{root / REGRESSION_DISPATCH}: every include must name one literal file"
+            raise GenerationError(message)
+        found.add(target)
+    return frozenset(found)
+
+
 def native_rules(catalogue: toggles.Catalogue, family: str) -> frozenset[str]:
     """Return the short identifiers of the native rules of ``family``."""
     return frozenset(
@@ -600,6 +707,7 @@ def check(root: Path) -> tuple[list[str], list[str]]:
     native = generate_toggles.native_families(catalogue)
     known = platforms(root)
     coverage = scenarios(root, known)
+    dispatched = dispatched_regressions(root)
     directory = root / TOPICS
     declared = sorted(path.stem for path in directory.glob("*.yml")) if directory.is_dir() else []
     errors = [
@@ -621,7 +729,7 @@ def check(root: Path) -> tuple[list[str], list[str]]:
                     family,
                     known,
                     disruptive=catalogue.families[family],
-                    context=Context(coverage, native_rules(catalogue, family)),
+                    context=Context(coverage, native_rules(catalogue, family), dispatched),
                 )
             )
     return native, errors
@@ -647,6 +755,33 @@ def cycle_platforms(root: Path) -> dict[str, dict[str, frozenset[str]]]:
             disruptive=catalogue.families[family],
             context=Context(None, native_rules(catalogue, family)),
         ).cycle_platforms()
+        for family in native
+    }
+
+
+def regression_platforms(root: Path) -> dict[str, dict[str, frozenset[str]]]:
+    """Return, per native topic and regression group, the platforms of its Docker legs.
+
+    Raises:
+        GenerationError: When ``make lint-lifecycle`` would report a finding.
+    """
+    native, errors = check(root)
+    if errors:
+        message = "; ".join(errors)
+        raise GenerationError(message)
+    catalogue = generate_toggles.load_catalogue(root / generate_toggles.CATALOGUE)
+    known = platforms(root)
+    coverage = scenarios(root, known)
+    return {
+        family: _regression_platforms(
+            _declaration(
+                root / TOPICS / f"{family}.yml",
+                family,
+                known,
+                disruptive=catalogue.families[family],
+                context=Context(coverage, native_rules(catalogue, family)),
+            )
+        )
         for family in native
     }
 

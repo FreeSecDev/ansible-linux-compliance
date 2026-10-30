@@ -16,7 +16,9 @@ therefore gets its legs without any change to the workflow, and no cycle can be 
 matrix of a driver holds every topic with a cycle of that driver, in both modes, on every
 platform that the topic runs. A platform without its lifecycle scenario is an error.
 
-``--driver docker`` (the default) prints the legs of ``docker-<platform>-lifecycle``.
+``--driver docker`` (the default) prints the legs of ``docker-<platform>-lifecycle``: the two
+toggle modes of every topic, and one leg per regression group that a topic declares, with the
+mode ``regressions-<group>`` (FREES-175), so that regressions do not lengthen the cycle legs.
 ``--driver libvirt`` prints, for KVM runners, a fixed base leg per platform (``libvirt-<platform>``:
 the real scan, remediation, idempotence and cleanup of the reference rule), the lifecycle legs of
 the cycles that require libvirt, and the ``libvirt-selftest`` leg. The output is one line of
@@ -41,6 +43,7 @@ MOLECULE: Final[Path] = Path("extensions/molecule")
 SCENARIO_PREFIX: Final[str] = "docker-"
 SCENARIO_SUFFIX: Final[str] = "-lifecycle"
 MODES: Final[tuple[str, ...]] = ("topic", "rule")
+REGRESSION_MODE_PREFIX: Final[str] = "regressions-"
 DRIVERS: Final[tuple[str, ...]] = ("docker", "libvirt")
 LIBVIRT_SELFTEST: Final[str] = "libvirt-selftest"
 LIBVIRT_SELFTEST_PLATFORM: Final[str] = "ubuntu"
@@ -70,6 +73,11 @@ def legs(root: Path, driver: str = "docker") -> list[dict[str, str]]:
         )
         raise GenerationError(message)
     cycles = check_lifecycle_topics.cycle_platforms(root)
+    regressions = (
+        check_lifecycle_topics.regression_platforms(root)
+        if driver == check_lifecycle_topics.REGRESSION_DRIVER
+        else {}
+    )
     known = sorted(check_lifecycle_topics.platforms(root))
     found: list[dict[str, str]] = []
     for platform in known:
@@ -79,12 +87,23 @@ def legs(root: Path, driver: str = "docker") -> list[dict[str, str]]:
             base = scenario_of(platform, driver, "")
             _require(root, base, platform, "libvirt base")
             found.append({"platform": platform, "scenario": base, "topic": "", "mode": ""})
-        found.extend(
-            {"platform": platform, "scenario": scenario, "topic": topic, "mode": mode}
-            for topic in topics
-            if platform in cycles[topic].get(driver, frozenset())
-            for mode in MODES
-        )
+        for topic in topics:
+            if platform not in cycles[topic].get(driver, frozenset()):
+                continue
+            found.extend(
+                {"platform": platform, "scenario": scenario, "topic": topic, "mode": mode}
+                for mode in MODES
+            )
+            found.extend(
+                {
+                    "platform": platform,
+                    "scenario": scenario,
+                    "topic": topic,
+                    "mode": REGRESSION_MODE_PREFIX + name,
+                }
+                for name, chosen in regressions.get(topic, {}).items()
+                if platform in chosen
+            )
     if driver == "libvirt":
         if LIBVIRT_SELFTEST_PLATFORM not in known:
             message = f"the self-test platform {LIBVIRT_SELFTEST_PLATFORM} is not a platform"

@@ -155,3 +155,7 @@ applied:
       checksum: 81bba089cdbc01337b5c2bc711fce02d148dd1644cabeb615e517db5322f1f5d
       platforms:
         - rhel_compatible
+regressions:
+  - name: changes
+    files:
+      - lifecycle_pwquality_regressions.yml

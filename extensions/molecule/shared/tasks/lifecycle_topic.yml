@@ -187,57 +187,21 @@
     lifecycle_broad_reference: "{{ lifecycle_broad_pristine }}"
   when: lifecycle_runs | bool
 
-- name: Lifecycle topic | Run the pwquality regressions for a change of method, a change by hand and a symbolic link
+- name: Lifecycle topic | Run the regression groups of the topic that this run selects, in the Docker scenarios
   ansible.builtin.include_tasks:
-    file: lifecycle_pwquality_regressions.yml
+    file: lifecycle_regressions.yml
+  loop: >-
+    {{ lifecycle_topic.regressions | default([])
+       | selectattr('name', 'in', lifecycle_run_regressions
+                    if lifecycle_run_regressions is not none
+                    else lifecycle_topic.regressions | default([]) | map(attribute='name') | list)
+       | list }}
+  loop_control:
+    loop_var: lifecycle_regression
+    label: "{{ lifecycle_regression.name }}"
   when:
-    - lifecycle_family == 'pwquality'
     - lifecycle_runs | bool
-    - lifecycle_run_modes | last == 'rule'
-
-- name: Lifecycle topic | Run the sudo regressions for a change of method and changes by hand
-  ansible.builtin.include_tasks:
-    file: lifecycle_sudo_regressions.yml
-  when:
-    - lifecycle_family == 'sudo'
-    - lifecycle_runs | bool
-    - lifecycle_run_modes | last == 'rule'
-
-- name: Lifecycle topic | Run the sudo refusal states on Ubuntu, in the topic leg
-  ansible.builtin.include_tasks:
-    file: lifecycle_sudo_states.yml
-  when:
-    - lifecycle_family == 'sudo'
     - molecule_target.driver == 'docker'
-    - lifecycle_runs | bool
-    - lifecycle_run_modes | first == 'topic'
-    - lifecycle_platform == 'ubuntu'
-
-- name: Lifecycle topic | Run the sudo cases of files that sudo skips, continued lines and linked drop-ins on Ubuntu
-  ansible.builtin.include_tasks:
-    file: lifecycle_sudo_effective.yml
-  when:
-    - lifecycle_family == 'sudo'
-    - molecule_target.driver == 'docker'
-    - lifecycle_runs | bool
-    - lifecycle_run_modes | first == 'topic'
-    - lifecycle_platform == 'ubuntu'
-
-- name: Lifecycle topic | Run the sudo refusals for a setting elsewhere, a refusing visudo and a symbolic link on Rocky
-  ansible.builtin.include_tasks:
-    file: lifecycle_sudo_refusals.yml
-  when:
-    - lifecycle_family == 'sudo'
-    - molecule_target.driver == 'docker'
-    - lifecycle_runs | bool
-    - lifecycle_run_modes | first == 'topic'
-    - lifecycle_platform != 'ubuntu'
-
-- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select, on Ubuntu
-  ansible.builtin.include_tasks:
-    file: lifecycle_sudo_other_profiles.yml
-  when:
-    - lifecycle_family == 'sudo'
-    - lifecycle_runs | bool
-    - lifecycle_run_modes | last == 'rule'
-    - lifecycle_platform == 'ubuntu'
+    - >-
+      lifecycle_regression.platforms is not defined
+      or lifecycle_platform in lifecycle_regression.platforms

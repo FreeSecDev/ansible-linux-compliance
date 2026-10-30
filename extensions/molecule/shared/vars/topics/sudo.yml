@@ -84,3 +84,17 @@ pre_states:
         status: compliant
         platforms:
           - ubuntu
+regressions:
+  - name: changes
+    files:
+      - lifecycle_sudo_regressions.yml
+      - lifecycle_sudo_refusals.yml
+  - name: profiles
+    files:
+      - lifecycle_sudo_other_profiles.yml
+  - name: files
+    platforms:
+      - ubuntu
+    files:
+      - lifecycle_sudo_states.yml
+      - lifecycle_sudo_effective.yml

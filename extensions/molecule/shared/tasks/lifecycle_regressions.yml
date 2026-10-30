@@ -1,0 +1,34 @@
+---
+- name: Lifecycle regressions | Run the pwquality regressions for a change of method, a change by hand and a link
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwquality_regressions.yml
+  when: "'lifecycle_pwquality_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the sudo regressions for a change of method and changes by hand
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_regressions.yml
+  when: "'lifecycle_sudo_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the sudo refusals for a setting elsewhere, a refusing visudo and a symbolic link
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_refusals.yml
+  when: "'lifecycle_sudo_refusals.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the sudo refusal states
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_states.yml
+  when: "'lifecycle_sudo_states.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the sudo cases of files that sudo skips, continued lines and linked drop-ins
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_effective.yml
+  when: "'lifecycle_sudo_effective.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Apply and clean up the sudo rules that only other profiles select
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_other_profiles.yml
+  when: "'lifecycle_sudo_other_profiles.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Remember the regression group that ran
+  ansible.builtin.set_fact:
+    lifecycle_regressions_run: "{{ lifecycle_regressions_run + [lifecycle_family ~ ':' ~ lifecycle_regression.name] }}"

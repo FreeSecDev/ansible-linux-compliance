@@ -110,6 +110,9 @@ Add `extensions/molecule/shared/vars/topics/<family>.yml` ([Molecule guide](mole
 - `pre_states` include a customised state that shows that cleanup restores the recorded value and not a default, and
   list under `unchanged` the rules that a pre-state already satisfies;
 - `audit.applied_outcomes` adds `notapplicable` with the reason when the content's platform excludes containers;
+- regressions that the cycles cannot show (a change of method, a change by hand, a refusal) go into task files of
+  `shared/tasks`, included by the static dispatch `shared/tasks/lifecycle_regressions.yml`, and are declared as named
+  groups under `regressions`; each group gets its own CI leg, so the cycle legs stay short;
 - a disruptive topic needs `disruptive: true` and a `containment` note that says what it can break and why the harness
   still reaches the container.
 
