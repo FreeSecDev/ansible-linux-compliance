@@ -218,7 +218,7 @@ class Tree:
         if text is None:
             return None
         try:
-            return cast("object", yaml.safe_load(text))
+            return cast("object", yaml.load(text, Loader=yaml.CSafeLoader))
         except yaml.YAMLError as error:
             message = f"{relative} is not valid YAML"
             raise FullMatrixError(message) from error
@@ -458,6 +458,7 @@ class Context:
         self.head = head
         self.trees = (base, head)
         self._owners: dict[str, frozenset[str]] = {}
+        self._matches: dict[str, frozenset[str]] = {}
 
     @functools.cached_property
     def catalogues(self) -> tuple[Catalogue, Catalogue]:
@@ -471,13 +472,14 @@ class Context:
 
     def referrers(self, pattern: re.Pattern[str], exclude: Iterable[str]) -> set[str]:
         """Return the YAML files of either revision whose text matches ``pattern``."""
-        skipped = set(exclude)
-        return {
-            relative
-            for tree in self.trees
-            for relative, text in tree.sources[0].items()
-            if relative not in skipped and pattern.search(text) is not None
-        }
+        if pattern.pattern not in self._matches:
+            self._matches[pattern.pattern] = frozenset(
+                relative
+                for tree in self.trees
+                for relative, text in tree.sources[0].items()
+                if pattern.search(text) is not None
+            )
+        return set(self._matches[pattern.pattern]) - set(exclude)
 
     def owners(self, relative: str, trail: frozenset[str] = frozenset()) -> frozenset[str]:
         """Return the topics that a change of ``relative`` affects.

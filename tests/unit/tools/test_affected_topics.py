@@ -9,6 +9,7 @@ the mapping falls back to the full matrix or widens the topics.
 
 from __future__ import annotations
 
+import functools
 import json
 import runpy
 import shutil
@@ -36,6 +37,10 @@ PWQUALITY_DECLARATION = "extensions/molecule/shared/vars/topics/pwquality.yml"
 SPECS = "roles/remediate/meta/argument_specs.yml"
 
 
+def load_yaml(text: str) -> object:
+    return cast("object", yaml.load(text, Loader=yaml.CSafeLoader))
+
+
 class Trees:
     """A base and a head copy of the files that the mapping reads; tests change the head."""
 
@@ -56,15 +61,19 @@ class Trees:
         path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8")
 
     def load(self, relative: str) -> object:
-        return cast("object", yaml.safe_load((self.head / relative).read_text(encoding="utf-8")))
+        return load_yaml((self.head / relative).read_text(encoding="utf-8"))
 
     def dump(self, relative: str, data: object) -> None:
-        self.write(relative, "---\n" + yaml.safe_dump(data, sort_keys=False))
+        self.write(relative, "---\n" + yaml.dump(data, Dumper=yaml.CSafeDumper, sort_keys=False))
 
     def edit(self, relative: str, change: Callable[[dict[str, object]], None]) -> None:
         data = cast("dict[str, object]", self.load(relative))
         change(data)
         self.dump(relative, data)
+
+    @functools.cached_property
+    def context(self) -> affected.Context:
+        return affected.Context(affected.Tree(self.base), affected.Tree(self.head))
 
     def decide(self, *changed: str) -> affected.Decision:
         return affected.decide(self.base, self.head, list(changed))
@@ -82,7 +91,7 @@ def topics_of(decision: affected.Decision) -> set[str] | None:
 def catalogue() -> dict[str, object]:
     return cast(
         "dict[str, object]",
-        yaml.safe_load((REPOSITORY_ROOT / affected.CATALOGUE).read_text(encoding="utf-8")),
+        load_yaml((REPOSITORY_ROOT / affected.CATALOGUE).read_text(encoding="utf-8")),
     )
 
 
@@ -201,19 +210,19 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
             family for family in families if stem == family or stem.startswith(family + "_")
         }
         assert len(expected) == 1, relative
-        assert topics_of(trees.decide(relative)) == expected, relative
+        assert set(trees.context.classify(relative)[0]) == expected, relative
 
 
 def test_every_regression_file_belongs_to_the_topics_whose_groups_name_it(trees: Trees) -> None:
     owners: dict[str, set[str]] = {}
     for path in sorted((REPOSITORY_ROOT / affected.TOPICS).glob("*.yml")):
-        data = cast("dict[str, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
+        data = cast("dict[str, object]", load_yaml(path.read_text(encoding="utf-8")))
         for group in cast("list[dict[str, list[str]]]", data.get("regressions", [])):
             for file in group["files"]:
                 owners.setdefault(file, set()).add(path.stem)
     assert owners
     for file, topics in owners.items():
-        assert topics_of(trees.decide(f"{affected.MOLECULE_TASKS}/{file}")) == topics, file
+        assert set(trees.context.classify(f"{affected.MOLECULE_TASKS}/{file}")[0]) == topics, file
 
 
 def test_every_topic_declaration_belongs_to_its_topic(trees: Trees) -> None:
@@ -282,8 +291,7 @@ def test_a_new_role_file_of_a_family_belongs_to_it_even_if_not_yet_native(trees:
     trees.write("roles/remediate/tasks/auditd.yml", "---\n[]\n")
     decision = trees.decide("roles/remediate/tasks/auditd.yml")
     assert topics_of(decision) == {"auditd"}
-    docker = {"include": molecule_matrix.legs(REPOSITORY_ROOT, "docker")}
-    libvirt = {"include": molecule_matrix.legs(REPOSITORY_ROOT, "libvirt")}
+    docker, libvirt = full_matrices()
     found = affected.plan(decision, docker, libvirt)
     assert found["lifecycle_legs"] == 0
     assert found["docker"] == {"include": []}
@@ -748,6 +756,7 @@ def test_a_dispatch_that_is_not_a_list_plans_the_full_matrix(trees: Trees) -> No
     assert trees.decide(affected.REGRESSION_DISPATCH).full
 
 
+@functools.cache
 def full_matrices() -> tuple[dict[str, object], dict[str, object]]:
     return (
         {"include": molecule_matrix.legs(REPOSITORY_ROOT, "docker")},
