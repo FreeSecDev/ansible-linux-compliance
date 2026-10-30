@@ -118,6 +118,183 @@
         fail_msg: "{{ native_results | to_json }}"
         quiet: true
 
+- name: Native families in check mode | The SSH server rules report every rule once and change nothing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - ssh
+    native_prefix: xccdf_org.ssgproject.content_rule_
+    native_ssh_short_ids:
+      - disable_host_auth
+      - sshd_disable_empty_passwords
+      - sshd_disable_rhosts
+      - sshd_disable_root_login
+      - sshd_do_not_permit_user_env
+      - sshd_enable_pam
+      - sshd_enable_warning_banner_net
+      - sshd_set_idle_timeout
+      - sshd_set_keepalive
+      - sshd_set_login_grace_time
+      - sshd_set_loglevel_info
+      - sshd_set_max_auth_tries
+      - sshd_set_max_sessions
+      - sshd_set_maxstartups
+      - sshd_use_strong_ciphers
+      - sshd_use_strong_kex
+      - sshd_use_strong_macs
+    native_ssh_statuses:
+      - applied
+      - compliant
+      - notapplicable
+      - not_regular_file
+      - not_directory
+      - not_included
+      - not_owned
+      - overridden
+      - invalid_config
+      - duplicate_setting
+      - prior_too_large
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Describe the Ubuntu 24.04 cis_level1_server profile with the native ssh rules it selects
+      ansible.builtin.set_fact:
+        native_ssh_rules: "{{ native_ssh_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+        native_ssh_profile:
+          profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+          benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+          content_sha256: >-
+            {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml).datastreams
+               | selectattr('name', 'equalto', 'ubuntu2404') | map(attribute='sha256') | first }}
+          rule_ids: "{{ native_ssh_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+
+    - name: Inspect the SSH server configuration before the role runs
+      ansible.builtin.find:
+        paths: /etc/ssh
+        file_type: any
+        recurse: true
+        hidden: true
+        follow: false
+      register: native_ssh_before
+
+    - name: Find drop-ins that this user cannot read, which only root can remediate
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+        follow: false
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop: "{{ native_ssh_before.files | selectattr('path', 'match', '^/etc/ssh/sshd_config[.]d/.*[.]conf$') | list }}"
+      loop_control:
+        label: "{{ item.path }}"
+      register: native_ssh_readable
+
+    - name: Run the remediate role with the ssh rules in the profile and ssh allow-listed
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+          vars:
+            linux_compliance_discovered: "{{ native_ssh_profile }}"
+
+        - name: Inspect the SSH server configuration after the role ran
+          ansible.builtin.find:
+            paths: /etc/ssh
+            file_type: any
+            recurse: true
+            hidden: true
+            follow: false
+          register: native_ssh_after
+
+        - name: Check that every ssh rule was planned and reported once and that nothing changed
+          vars:
+            native_results: >-
+              {{ linux_compliance_remediated.results | selectattr('rule_id', 'in', native_ssh_rules) | list }}
+            native_ssh_listing_before: >-
+              {{ native_ssh_before.files | sort(attribute='path') | map(attribute='path')
+                 | zip(native_ssh_before.files | sort(attribute='path') | map(attribute='mtime'),
+                       native_ssh_before.files | sort(attribute='path') | map(attribute='size'))
+                 | map('list') | list }}
+            native_ssh_listing_after: >-
+              {{ native_ssh_after.files | sort(attribute='path') | map(attribute='path')
+                 | zip(native_ssh_after.files | sort(attribute='path') | map(attribute='mtime'),
+                       native_ssh_after.files | sort(attribute='path') | map(attribute='size'))
+                 | map('list') | list }}
+          ansible.builtin.assert:
+            that:
+              - __linux_compliance_remediate_plan.families | map(attribute='name') | list == ['ssh']
+              - native_results | map(attribute='rule_id') | sort == native_ssh_rules | sort
+              - native_results | map(attribute='action') | unique | list == ['apply']
+              - native_results | map(attribute='status') | difference(native_ssh_statuses) | list == []
+              - native_results | selectattr('status', 'equalto', 'applied') | rejectattr('changed') | list == []
+              - native_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+              - >-
+                native_results | rejectattr('status', 'in', ['applied', 'compliant'])
+                | selectattr('reason', 'none') | list == []
+              - native_ssh_listing_before == native_ssh_listing_after
+            fail_msg: "{{ native_results | to_json }}"
+            quiet: true
+      rescue:
+        - name: Check that only a drop-in that this user cannot read stopped the check-mode run
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('SSH server [|] Read the main file and every drop-in')
+              - >-
+                native_ssh_readable.results | map(attribute='stat') | rejectattr('readable') | list | length > 0
+            fail_msg: "{{ ansible_failed_task.name }}: {{ ansible_failed_result | default({}) | to_json }}"
+            quiet: true
+
+- name: Native families in check mode | An ssh rule without its profile value fails before any change
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - ssh
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+      content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_sshd_set_max_auth_tries
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role and expect the value check to stop it
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because an ssh rule without its profile value was not refused
+          ansible.builtin.fail:
+            msg: REMEDIATE-SSH-PROFILE-VALUE-NOT-REFUSED
+      rescue:
+        - name: Check that the role stopped at the value check
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name is search('SSH server [|] Refuse a rule without a usable keyword, value')
+              - >-
+                ansible_failed_result.results | map(attribute='msg') | join(' ')
+                is search('generated from the pinned content')
+            quiet: true
+
 - name: Native families in check mode | A banner text that the profile rejects fails before anything changes
   hosts: localhost
   connection: local

@@ -77,8 +77,8 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle) |
-| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle); Python 3.9 comes with the base image |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs) |
+| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle), `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one); Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
 distribution archive drops a pinned version, the image build fails and the pin must be updated by hand; no Renovate
@@ -484,7 +484,10 @@ way a profile that selects only them would, and restores the verified profile ri
 the next topic see it unchanged. A run that applies or cleans up a rule outside the topic fails. Without the narrowing,
 the cycles of one topic would apply every other native topic as well and its cleanup could not be compared exactly.
 
-A pre-state may declare rules `unchanged`: rules that it already satisfies (`compliant`, such as the mode of an
+A pre-state may add files with `content` (the harness writes them as root, mode `0600` unless the pre-state names a
+mode, before the cycle and removes them after it; they must be declared and absent before the topic), and may replace
+expectations of `applied` for the files whose state it changes, such as the absent drop-in of a rule that an earlier
+setting overrides. A pre-state may declare rules `unchanged`: rules that it already satisfies (`compliant`, such as the mode of an
 `/etc/issue` that is already `0644`) or that do not apply (`notapplicable`), optionally per platform. In the steps
 below such a rule must report exactly that status and `changed: false` in check mode, on apply and on the second
 apply, is not recorded in the ledger, is planned `none` when the topic is switched off and reports no cleanup. Every
@@ -492,7 +495,7 @@ other rule must be `applied` and changed, and at least one rule of a pre-state m
 
 For each topic, for the topic toggle and then the rule toggles, and for each declared pre-state:
 
-1. The pre-state is set (only file modes and ownership), the topic is switched on and the **declared state** is
+1. The pre-state is set (file modes and ownership, and the files it adds), the topic is switched on and the **declared state** is
    recorded: per file existence, type, mode, owner, group, uid, gid, inode, mtime, `lsattr` attributes, SHA-256 and
    link target (`stat` without following links); per package whether it is installed and its versions (`package_facts`); per service whether it exists, its
    state and its status (`service_facts`); per kernel parameter its value (`slurp` of `/proc/sys`); per user and group
@@ -617,6 +620,51 @@ owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/s
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
 a directory mode put back by hand is `restored` without a write.
 
+The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states, both with real
+scans (the customised one on Ubuntu only, `audit: [ubuntu]`, because every rule is `notapplicable` on Rocky
+Linux): the as-built configuration, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads
+before the collection's drop-ins and which sets `MaxAuthTries` first, and `60-site.conf`, which sshd reads after them
+and which sets `LoginGraceTime 120` and `ClientAliveInterval 900`. The three rules are `overridden`: their drop-ins are
+expected absent, they are neither recorded nor cleaned up, and the scan must report them `fail` (on Rocky Linux,
+`notapplicable`), which the harness checks for every overridden rule of a pre-state with scans; every other rule is
+applied and passes, and the cleanup leaves both site files alone. The two site files share one pre-state, which runs with the rule
+toggle only (`modes: [rule]`): the `rule` leg runs two cycles and the `topic` leg one. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
+because no rule of the lifecycle profiles conflicts with their lines. `ssh` has two regression groups, each a Docker leg of its own
+on both platforms: `changes` (`lifecycle_ssh_regressions.yml` and `lifecycle_ssh_rollback_regressions.yml`) and
+`vendor` (`lifecycle_ssh_vendor_regressions.yml`). `shared/tasks/lifecycle_ssh_regressions.yml` is narrowed like a
+profile to
+`sshd_set_max_auth_tries` and `sshd_set_login_grace_time` so that each run stays short: a drop-in with a keyword that sshd does not know
+makes every rule `invalid_config` with nothing installed and nothing recorded; a ledger entry of another method makes
+the rule `method_changed` on apply and `cleanup_incomplete` (`method_changed`) on cleanup while the other rule
+applies; in the same cleanup a change by hand to the other rule's drop-in is kept as `modified_since_apply` with its
+entry; once that drop-in is removed by hand, the next cleanup reports it `restored` without a write and drops its entry;
+and on Ubuntu, whose `sshd_config.d` is empty as built, a missing directory is created with mode `0700` and the
+marker, removed again by the cleanup, and a symbolic link in its place makes every rule `not_directory` with nothing
+written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
+only. The regressions end with the whole-instance comparison.
+
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml`, the `vendor` group, adds
+`sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the lifecycle profiles do not
+select, to the verified profile and checks the vendor-line method of ADR 0023 on `/etc/ssh/sshd_config` (Ubuntu) and
+`/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux). For the first apply, the vendor `X11Forwarding yes` line gets a
+comment with `\1`, `\g<0>`, `&`, `\n`, `\\` and a trailing `\`. After the apply every occurrence that the content's
+check reads has the value `no` and the ledger records the original line; a second apply is compliant; the cleanup
+writes the vendor file back byte for byte, that comment included. From the file as built, a change by hand to the
+changed line is kept as `modified_since_apply`, and once the line is restored by hand with other spacing, the cleanup
+leaves it alone and reports the rule `restored`; and a conflicting line inside a `Match` block is `overridden` and not
+edited. It ends with the whole-instance comparison.
+
+`shared/tasks/lifecycle_ssh_rollback_regressions.yml` runs after the regressions in the `changes` group, narrowed
+to the same two rules,
+and reaches the end of the family that the cycles never reach. With an administrator's drop-in in place that sshd
+refuses, a cleanup removes the two drop-ins and forgets their entries, which validates nothing first; the final `sshd
+-t` then refuses the configuration and the run fails at the task that stops it, before the reload, with the cleanup
+kept, because that is the prior state. With the sshd binary removed, as removing openssh-server would, a cleanup
+succeeds and reports both rules `restored`. The binary is copied to `/tmp` and back with its mode; Rocky Linux
+ships `/usr/sbin` with mode `0555` and the instance drops the capability that lets root write it anyway, so the
+regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
+leaves out only the inode and times of the binary and the times of `/usr/sbin`.
+
 ### CI legs
 
 With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
@@ -660,8 +708,8 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 16 cycle legs and 7 regression legs (`pwquality` `changes`, `sudo` `changes` and `profiles` on
-both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
+`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
@@ -715,9 +763,9 @@ pre_states:
 | `disruptive` | yes | Must equal the flag of the family in the registry |
 | `containment` | for disruptive topics only | What the topic can break in the container and why the harness still reaches it; see below |
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
-| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
+| `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant` or that are `notapplicable`, optionally with `platforms`) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
@@ -753,7 +801,7 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality` is the first disruptive family with native rules; the others (`ssh`, `pam`, `sssd`, `sudo`, `faillock`
+`pwquality` and `ssh` are the disruptive families with native rules; the others (`pam`, `sssd`, `sudo`, `faillock`
 and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the

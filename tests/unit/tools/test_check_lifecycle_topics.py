@@ -451,7 +451,7 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         dirs_exist_ok=True,
     )
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "pwquality", "sudo"]
+    assert native == ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
     assert errors == []
 
 
@@ -529,7 +529,7 @@ def test_a_rewritten_file_and_unchanged_rules_are_accepted(tmp_path: Path) -> No
                     }
                 ]
             ),
-            "pre_states[0].unchanged[0] needs the status compliant or notapplicable",
+            "pre_states[0].unchanged[0] needs the status compliant, notapplicable or overridden",
         ),
         (
             changed(
@@ -620,6 +620,87 @@ def test_the_module_runs_as_a_script(
         runpy.run_module("tools.roles.check_lifecycle_topics", run_name="__main__")
     assert exit_info.value.code == 0
     assert "file_permissions" in capsys.readouterr().out
+
+
+def test_pre_states_that_add_files_override_expectations_and_leave_rules_overridden(
+    tmp_path: Path,
+) -> None:
+    declaration = changed(
+        state={"files": [{"path": "/etc/crontab"}, {"path": "/etc/cron.d/site"}]},
+        applied={
+            "files": [
+                {"path": "/etc/crontab", "mode": "0600", "platforms": ["ubuntu"]},
+                {"path": "/etc/crontab", "mode": "0400", "platforms": ["rhel_compatible"]},
+            ]
+        },
+        pre_states=[
+            {
+                "name": "earlier setting",
+                "files": [{"path": "/etc/cron.d/site", "content": "x\n", "mode": "0644"}],
+                "unchanged": [{"rule": "file_permissions_crontab", "status": "overridden"}],
+                "applied": {"files": [{"path": "/etc/crontab", "mode": "0644"}]},
+            }
+        ],
+    )
+    assert errors_for(tmp_path, declaration) == []
+
+
+@pytest.mark.parametrize(
+    ("pre_state", "message"),
+    [
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": ""}]},
+            "pre_states[0].files[0] needs a non-empty content of at most 4096 characters",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": "x" * 4097}]},
+            "pre_states[0].files[0] needs a non-empty content of at most 4096 characters",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": 1}]},
+            "pre_states[0].files[0] needs a non-empty content of at most 4096 characters",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": "x", "owner": "root"}]},
+            "pre_states[0].files[0] writes its content as root and cannot set the owner",
+        ),
+        (
+            {"name": "a", "files": [{"path": "/etc/crontab", "content": "x", "group": "root"}]},
+            "pre_states[0].files[0] writes its content as root and cannot set the group",
+        ),
+        (
+            {"name": "a", "applied": {"files": NO_ITEMS}},
+            "pre_states[0].applied declares no expectation; leave it out instead",
+        ),
+        ({"name": "a", "applied": []}, "pre_states[0].applied must be a mapping"),
+        (
+            {"name": "a", "applied": {"files": [{"path": "/etc/passwd", "mode": "0600"}]}},
+            "pre_states[0].applied.files[0] expects /etc/passwd, which state.files does not",
+        ),
+        (
+            {"name": "a", "applied": {"mounts": NO_ITEMS}},
+            "pre_states[0].applied has the unknown key 'mounts'",
+        ),
+    ],
+)
+def test_an_invalid_pre_state_file_or_override_is_reported(
+    tmp_path: Path, pre_state: dict[str, object], message: str
+) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[pre_state]))
+    assert any(message in error for error in errors), errors
+
+
+def test_an_item_expected_twice_for_one_platform_is_reported(tmp_path: Path) -> None:
+    declaration = changed(
+        applied={
+            "files": [
+                {"path": "/etc/crontab", "mode": "0600", "platforms": ["ubuntu"]},
+                {"path": "/etc/crontab", "mode": "0400"},
+            ]
+        }
+    )
+    errors = errors_for(tmp_path, declaration)
+    assert any("applied.files[1] expects /etc/crontab twice for a platform" in e for e in errors)
 
 
 LIBVIRT_PRE_STATE: dict[str, object] = {
@@ -780,6 +861,65 @@ def test_an_invalid_scenario_stops_the_check(
     assert message in capsys.readouterr().err
 
 
+def test_a_pre_state_may_run_its_scans_on_some_platforms(tmp_path: Path) -> None:
+    pre_states = [{"name": "as built", "audit": ["ubuntu"]}]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize("audit", ["yes", [], ["debian"], [1]])
+def test_an_invalid_audit_value_is_reported(tmp_path: Path, audit: object) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[{"name": "a", "audit": audit}]))
+    message = "pre_states[0].audit must be a boolean or a non-empty list of known platforms"
+    assert any(message in error for error in errors), errors
+
+
+@pytest.mark.parametrize("modes", [["rule"], ["topic"], ["topic", "rule"]])
+def test_a_pre_state_may_run_its_cycles_in_some_modes(tmp_path: Path, modes: list[str]) -> None:
+    pre_states = [{"name": "as built"}, {"name": "customised", "modes": modes}]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+def test_pre_states_may_share_the_modes_between_them(tmp_path: Path) -> None:
+    pre_states = [{"name": "a", "modes": ["topic"]}, {"name": "b", "modes": ["rule"]}]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize(("modes", "missing"), [(["rule"], "topic"), (["topic"], "rule")])
+def test_a_mode_without_a_pre_state_is_reported(
+    tmp_path: Path, modes: list[str], missing: str
+) -> None:
+    pre_states = [{"name": "a", "modes": modes}, {"name": "b", "modes": modes}]
+    errors = errors_for(tmp_path, changed(pre_states=pre_states))
+    message = f"no pre-state runs with docker in the {missing} mode"
+    assert [error for error in errors if message in error] == errors, errors
+    assert len(errors) == 1
+
+
+def test_a_mode_is_checked_for_each_driver_of_the_topic(tmp_path: Path) -> None:
+    libvirt = {**LIBVIRT_PRE_STATE, "modes": ["rule"]}
+    pre_states = [*cast("list[object]", VALID["pre_states"]), libvirt]
+    errors = errors_for(tmp_path, changed(pre_states=pre_states))
+    assert len(errors) == 1
+    assert "no pre-state runs with libvirt in the topic mode" in errors[0]
+
+
+def test_a_mode_of_another_driver_does_not_cover_a_driver(tmp_path: Path) -> None:
+    libvirt = {**LIBVIRT_PRE_STATE, "modes": ["topic"]}
+    pre_states = [{"name": "as built", "modes": ["rule"]}, libvirt]
+    errors = errors_for(tmp_path, changed(pre_states=pre_states))
+    assert sorted(error.split(": ", 1)[1].split(",")[0] for error in errors) == [
+        "no pre-state runs with docker in the topic mode",
+        "no pre-state runs with libvirt in the rule mode",
+    ]
+
+
+@pytest.mark.parametrize("modes", ["rule", [], ["both"], ["rule", "rule"], [1]])
+def test_an_invalid_modes_value_is_reported(tmp_path: Path, modes: object) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[{"name": "a", "modes": modes}]))
+    message = "pre_states[0].modes must be a non-empty list of distinct toggle modes: topic, rule"
+    assert any(message in error for error in errors), errors
+
+
 GROUP = {"name": "changes", "files": ["lifecycle_sudo_regressions.yml"]}
 FILES = ["lifecycle_sudo_regressions.yml", "lifecycle_sudo_states.yml"]
 
@@ -802,7 +942,7 @@ def test_regression_groups_are_planned_on_the_platforms_whose_docker_scenario_ru
     }
 
 
-def test_the_repository_declares_regression_groups_for_pwquality_and_sudo() -> None:
+def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() -> None:
     found = lifecycle.regression_platforms(REPOSITORY_ROOT)
     assert found["pwquality"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
     assert found["sudo"] == {
@@ -810,8 +950,12 @@ def test_the_repository_declares_regression_groups_for_pwquality_and_sudo() -> N
         "files": frozenset({"ubuntu"}),
         "profiles": frozenset({"ubuntu", "rhel_compatible"}),
     }
+    assert found["ssh"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "vendor": frozenset({"ubuntu", "rhel_compatible"}),
+    }
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 6
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 9
 
 
 @pytest.mark.parametrize(

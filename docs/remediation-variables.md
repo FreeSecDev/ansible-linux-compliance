@@ -168,7 +168,7 @@ through subsystem tags.
 | `linux_compliance_nftables_enabled` | `nftables` | `firewall` | yes | `true` | 11 | 0 | 11 | 0 |
 | `linux_compliance_iptables_enabled` | `iptables` | `firewall` | yes | `true` | 12 | 0 | 12 | 0 |
 | `linux_compliance_ufw_enabled` | `ufw` | `firewall` | yes | `true` | 9 | 0 | 9 | 0 |
-| `linux_compliance_ssh_enabled` | `ssh` | none | yes | `true` | 63 | 0 | 63 | 4 |
+| `linux_compliance_ssh_enabled` | `ssh` | none | yes | `true` | 63 | 34 | 29 | 4 |
 | `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 14 | 41 | 1 |
 | `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 14 | 5 | 0 |
 | `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 0 | 7 | 2 |
@@ -1282,7 +1282,7 @@ families through their subsystem tags:
 | `linux_compliance_rule_directory_groupowner_sshd_config_d_enabled` | `directory_groupowner_sshd_config_d` | `audit_only` |
 | `linux_compliance_rule_directory_owner_sshd_config_d_enabled` | `directory_owner_sshd_config_d` | `audit_only` |
 | `linux_compliance_rule_directory_permissions_sshd_config_d_enabled` | `directory_permissions_sshd_config_d` | `audit_only` |
-| `linux_compliance_rule_disable_host_auth_enabled` | `disable_host_auth` | `audit_only` |
+| `linux_compliance_rule_disable_host_auth_enabled` | `disable_host_auth` | `recorded_value` |
 | `linux_compliance_rule_file_groupowner_sshd_config_enabled` | `file_groupowner_sshd_config` | `audit_only` |
 | `linux_compliance_rule_file_groupowner_sshd_drop_in_config_enabled` | `file_groupowner_sshd_drop_in_config` | `audit_only` |
 | `linux_compliance_rule_file_groupownership_sshd_private_key_enabled` | `file_groupownership_sshd_private_key` | `audit_only` |
@@ -1305,43 +1305,43 @@ families through their subsystem tags:
 | `linux_compliance_rule_ssh_keys_passphrase_protected_enabled` | `ssh_keys_passphrase_protected` | `audit_only` |
 | `linux_compliance_rule_ssh_use_approved_macs_ordered_stig_enabled` | `ssh_use_approved_macs_ordered_stig` | `audit_only` |
 | `linux_compliance_rule_sshd_allow_only_protocol2_enabled` | `sshd_allow_only_protocol2` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_compression_enabled` | `sshd_disable_compression` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_empty_passwords_enabled` | `sshd_disable_empty_passwords` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_forwarding_enabled` | `sshd_disable_forwarding` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_gssapi_auth_enabled` | `sshd_disable_gssapi_auth` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_kerb_auth_enabled` | `sshd_disable_kerb_auth` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_rhosts_enabled` | `sshd_disable_rhosts` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_root_login_enabled` | `sshd_disable_root_login` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_root_password_login_enabled` | `sshd_disable_root_password_login` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_tcp_forwarding_enabled` | `sshd_disable_tcp_forwarding` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_user_known_hosts_enabled` | `sshd_disable_user_known_hosts` | `audit_only` |
-| `linux_compliance_rule_sshd_disable_x11_forwarding_enabled` | `sshd_disable_x11_forwarding` | `audit_only` |
-| `linux_compliance_rule_sshd_do_not_permit_user_env_enabled` | `sshd_do_not_permit_user_env` | `audit_only` |
-| `linux_compliance_rule_sshd_enable_pam_enabled` | `sshd_enable_pam` | `audit_only` |
-| `linux_compliance_rule_sshd_enable_pubkey_auth_enabled` | `sshd_enable_pubkey_auth` | `audit_only` |
-| `linux_compliance_rule_sshd_enable_strictmodes_enabled` | `sshd_enable_strictmodes` | `audit_only` |
-| `linux_compliance_rule_sshd_enable_warning_banner_enabled` | `sshd_enable_warning_banner` | `audit_only` |
-| `linux_compliance_rule_sshd_enable_warning_banner_net_enabled` | `sshd_enable_warning_banner_net` | `audit_only` |
+| `linux_compliance_rule_sshd_disable_compression_enabled` | `sshd_disable_compression` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_empty_passwords_enabled` | `sshd_disable_empty_passwords` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_forwarding_enabled` | `sshd_disable_forwarding` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_gssapi_auth_enabled` | `sshd_disable_gssapi_auth` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_kerb_auth_enabled` | `sshd_disable_kerb_auth` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_rhosts_enabled` | `sshd_disable_rhosts` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_root_login_enabled` | `sshd_disable_root_login` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_root_password_login_enabled` | `sshd_disable_root_password_login` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_tcp_forwarding_enabled` | `sshd_disable_tcp_forwarding` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_user_known_hosts_enabled` | `sshd_disable_user_known_hosts` | `recorded_value` |
+| `linux_compliance_rule_sshd_disable_x11_forwarding_enabled` | `sshd_disable_x11_forwarding` | `recorded_value` |
+| `linux_compliance_rule_sshd_do_not_permit_user_env_enabled` | `sshd_do_not_permit_user_env` | `recorded_value` |
+| `linux_compliance_rule_sshd_enable_pam_enabled` | `sshd_enable_pam` | `recorded_value` |
+| `linux_compliance_rule_sshd_enable_pubkey_auth_enabled` | `sshd_enable_pubkey_auth` | `recorded_value` |
+| `linux_compliance_rule_sshd_enable_strictmodes_enabled` | `sshd_enable_strictmodes` | `recorded_value` |
+| `linux_compliance_rule_sshd_enable_warning_banner_enabled` | `sshd_enable_warning_banner` | `recorded_value` |
+| `linux_compliance_rule_sshd_enable_warning_banner_net_enabled` | `sshd_enable_warning_banner_net` | `recorded_value` |
 | `linux_compliance_rule_sshd_include_crypto_policy_enabled` | `sshd_include_crypto_policy` | `audit_only` |
 | `linux_compliance_rule_sshd_limit_user_access_enabled` | `sshd_limit_user_access` | `audit_only` |
-| `linux_compliance_rule_sshd_print_last_log_enabled` | `sshd_print_last_log` | `audit_only` |
+| `linux_compliance_rule_sshd_print_last_log_enabled` | `sshd_print_last_log` | `recorded_value` |
 | `linux_compliance_rule_sshd_rekey_limit_enabled` | `sshd_rekey_limit` | `audit_only` |
-| `linux_compliance_rule_sshd_set_idle_timeout_enabled` | `sshd_set_idle_timeout` | `audit_only` |
-| `linux_compliance_rule_sshd_set_keepalive_enabled` | `sshd_set_keepalive` | `audit_only` |
-| `linux_compliance_rule_sshd_set_login_grace_time_enabled` | `sshd_set_login_grace_time` | `audit_only` |
-| `linux_compliance_rule_sshd_set_loglevel_info_enabled` | `sshd_set_loglevel_info` | `audit_only` |
-| `linux_compliance_rule_sshd_set_loglevel_verbose_enabled` | `sshd_set_loglevel_verbose` | `audit_only` |
-| `linux_compliance_rule_sshd_set_max_auth_tries_enabled` | `sshd_set_max_auth_tries` | `audit_only` |
-| `linux_compliance_rule_sshd_set_max_sessions_enabled` | `sshd_set_max_sessions` | `audit_only` |
-| `linux_compliance_rule_sshd_set_maxstartups_enabled` | `sshd_set_maxstartups` | `audit_only` |
-| `linux_compliance_rule_sshd_use_approved_ciphers_ordered_stig_enabled` | `sshd_use_approved_ciphers_ordered_stig` | `audit_only` |
-| `linux_compliance_rule_sshd_use_approved_kex_ordered_stig_enabled` | `sshd_use_approved_kex_ordered_stig` | `audit_only` |
-| `linux_compliance_rule_sshd_use_approved_macs_ordered_stig_enabled` | `sshd_use_approved_macs_ordered_stig` | `audit_only` |
+| `linux_compliance_rule_sshd_set_idle_timeout_enabled` | `sshd_set_idle_timeout` | `recorded_value` |
+| `linux_compliance_rule_sshd_set_keepalive_enabled` | `sshd_set_keepalive` | `recorded_value` |
+| `linux_compliance_rule_sshd_set_login_grace_time_enabled` | `sshd_set_login_grace_time` | `recorded_value` |
+| `linux_compliance_rule_sshd_set_loglevel_info_enabled` | `sshd_set_loglevel_info` | `recorded_value` |
+| `linux_compliance_rule_sshd_set_loglevel_verbose_enabled` | `sshd_set_loglevel_verbose` | `recorded_value` |
+| `linux_compliance_rule_sshd_set_max_auth_tries_enabled` | `sshd_set_max_auth_tries` | `recorded_value` |
+| `linux_compliance_rule_sshd_set_max_sessions_enabled` | `sshd_set_max_sessions` | `recorded_value` |
+| `linux_compliance_rule_sshd_set_maxstartups_enabled` | `sshd_set_maxstartups` | `recorded_value` |
+| `linux_compliance_rule_sshd_use_approved_ciphers_ordered_stig_enabled` | `sshd_use_approved_ciphers_ordered_stig` | `recorded_value` |
+| `linux_compliance_rule_sshd_use_approved_kex_ordered_stig_enabled` | `sshd_use_approved_kex_ordered_stig` | `recorded_value` |
+| `linux_compliance_rule_sshd_use_approved_macs_ordered_stig_enabled` | `sshd_use_approved_macs_ordered_stig` | `recorded_value` |
 | `linux_compliance_rule_sshd_use_directory_configuration_enabled` | `sshd_use_directory_configuration` | `audit_only` |
-| `linux_compliance_rule_sshd_use_strong_ciphers_enabled` | `sshd_use_strong_ciphers` | `audit_only` |
-| `linux_compliance_rule_sshd_use_strong_kex_enabled` | `sshd_use_strong_kex` | `audit_only` |
-| `linux_compliance_rule_sshd_use_strong_macs_enabled` | `sshd_use_strong_macs` | `audit_only` |
-| `linux_compliance_rule_sshd_x11_use_localhost_enabled` | `sshd_x11_use_localhost` | `audit_only` |
+| `linux_compliance_rule_sshd_use_strong_ciphers_enabled` | `sshd_use_strong_ciphers` | `recorded_value` |
+| `linux_compliance_rule_sshd_use_strong_kex_enabled` | `sshd_use_strong_kex` | `recorded_value` |
+| `linux_compliance_rule_sshd_use_strong_macs_enabled` | `sshd_use_strong_macs` | `recorded_value` |
+| `linux_compliance_rule_sshd_x11_use_localhost_enabled` | `sshd_x11_use_localhost` | `recorded_value` |
 
 `linux_compliance_ssh_enabled: false` also switches off these rules of other
 families through their subsystem tags:

@@ -253,6 +253,75 @@ by the `scc-smoke` job and never published.
   `tools/scc/release_watch.py:507`); the issue reopens once the record is right again. NIWC's README and the DISA
   host remain the other sources, and the expiry issue and the hard stop do not depend on the record.
 
+## SSH server remediation on a managed host
+
+The `ssh` family of the `remediate` role writes sshd drop-ins and changes conflicting lines of the vendor files
+`/etc/ssh/sshd_config` and `/etc/ssh/sshd_config.d/50-redhat.conf`, and the module `sshd_validate` runs `sshd -t` as
+root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-server-configuration.md),
+[ADR 0004](../adr/0004-audited-process-execution.md), FREES-109).
+
+### Assets
+
+| Asset | Why it matters |
+|---|---|
+| Remote access to the host | A wrong or refused sshd configuration locks out every operator who logs in over SSH |
+| Root execution of `sshd -t` | The helper runs `/usr/sbin/sshd` as root; it reads every included file and the host keys |
+| The vendor files and their recorded lines | The collection changes package-owned files and must restore them exactly |
+
+### Trust boundaries and entry points
+
+| Entry point | Supplied by | Trust |
+|---|---|---|
+| `/usr/sbin/sshd` | The distribution package manager | Trusted: resolved only in the trusted directories, root-owned and not writable by group or others; anything else fails the module |
+| The `-o` settings of `sshd_validate` | The catalogue values and the profile values generated from the pinned content | Checked twice: by the family (keyword and one-word value) and by the helper's policy (`option_values`, 28 keywords) |
+| `/etc/ssh/sshd_config` and `/etc/ssh/sshd_config.d/*.conf` | Root, packages, administrators | Read as data; a symbolic link or non-regular file is never written through |
+| `linux_compliance_remediate_allow_disruptive` | The operator | The acknowledgement that the topic may change and revert sshd settings |
+
+### T-SSH-1: the ssh topic locks operators out
+
+- **Attacker:** none; an operator applies a profile whose settings (`PermitRootLogin no`, `MaxAuthTries`, algorithm
+  lists) do not suit how the host is reached, or a configuration that sshd refuses is installed.
+- **Failure:** sshd refuses the configuration at the next start or reload, or rejects the operators' logins.
+- **Impact:** loss of remote access to the host.
+- **Mitigation:** the family is disruptive and runs only with `ssh` in the allow-list, for apply and cleanup alike.
+  Every change is validated with `sshd -t` on the whole effective configuration before anything is written; when sshd
+  refuses, nothing is installed. After the changes `sshd -t` runs again; when it refuses, the run rolls back what it
+  created and fails without reloading. sshd is reloaded, never restarted, and only where `service_facts` reports it
+  running, so open sessions, including the controller's, continue. A run that applies `PermitRootLogin no` or
+  `prohibit-password` while it reaches the host over SSH as root prints a warning. Check mode reports every change and
+  changes nothing.
+- **Residual:** the settings themselves are the profile's; a profile that forbids root logins locks out an operator who
+  has no other account. The rollback restores drop-ins and vendor lines that the run created, not a drop-in that it
+  rewrote for a changed value; what a cleanup removed stays removed, which is the prior state. On a host without sshd
+  the configuration after a cleanup is not validated, because there is nothing to validate it with. Containers cannot show a real login; the libvirt scenarios (FREES-61) are needed for
+  that.
+
+### T-SSH-2: `sshd -t` is turned into something else
+
+- **Attacker:** a caller of the helper or of `sshd_validate` who controls the settings, or a local user who can place a
+  file where sshd is resolved.
+- **Failure:** sshd runs in another mode (`-D`, `-T` with a connection specification, `-E` writing a log file), reads
+  another configuration or host key, or runs a command (`AuthorizedKeysCommand`).
+- **Impact:** a daemon started as root, a file written as root, or a command run as root.
+- **Mitigation:** the helper's policy fixes the prefix `-t -f /etc/ssh/sshd_config` and accepts after it only `-o`
+  followed by one `<Keyword>=<value>` with a keyword of the native rules and a one-word value; every other option and
+  positional argument is refused before anything runs. In test mode sshd does not run `AuthorizedKeysCommand` or start
+  a listener. The executable is vetted like `oscap`; the environment is fixed and the run has a timeout and bounded
+  output.
+- **Residual:** sshd still reads every file that the configuration includes and the host keys, as root; a malicious
+  include is already a root compromise of the configuration.
+
+### T-SSH-3: a revert overwrites an administrator's change
+
+- **Attacker:** none; an administrator changes a drop-in or a vendor line after the collection changed it.
+- **Failure:** cleanup removes or rewrites the administrator's line.
+- **Impact:** a deliberate site setting is silently lost.
+- **Mitigation:** cleanup removes a drop-in only with the recorded SHA-256 and writes a vendor line back only when the
+  file still sets the keyword on exactly the line written; otherwise the result is `cleanup_incomplete` with
+  `modified_since_apply`, nothing changes and the ledger entry is kept. A line that already equals the recorded
+  original is left alone.
+- **Residual:** a package update that rewrites a vendor file also stops the revert, which then needs a review.
+
 ## Libvirt CI caches
 
 The `molecule-libvirt` legs of `ci.yml` restore two Actions caches whose contents are installed or booted:
@@ -284,6 +353,8 @@ installed in the test virtual machines (FREES-61)
 - **Residual:** a poisoned entry can only cost a download. A pin change is trusted through review: a reviewer who
   accepts a wrong digest accepts the file. The runner image itself, and the packages that it already has in the
   pinned version or later, are trusted as the runner is. No update bot refreshes the pins (FREES-81).
+
+## Report inputs on the controller
 
 `tools/reporting` turns operator-supplied files into the normalized report and the dashboard
 ([reporting data model](../reporting-data-model.md), [ADR 0016](../adr/0016-report-schema-and-summary-semantics.md)).
