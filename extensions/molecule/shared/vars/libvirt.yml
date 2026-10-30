@@ -36,6 +36,15 @@ molecule_libvirt_quiet_units:
   - service: packagekit.service
     units:
       - packagekit.service
+  - service: cron.service
+    units:
+      - cron.service
+  - service: crond.service
+    units:
+      - crond.service
+  - service: anacron.service
+    units:
+      - anacron.service
 molecule_libvirt_ssh_options:
   - -F /dev/null
   - -o UserKnownHostsFile=@KNOWN_HOSTS@

@@ -38,6 +38,11 @@ that KVM and `qemu:///system` are usable (`make molecule-libvirt-preflight`), ru
 scenario and stops at the first failure, and then runs the self-test. `molecule test` runs `destroy` after a failed
 step too.
 
+On a WSL2 workstation with nested KVM, with the images cached, `libvirt-ubuntu` took 69 minutes (most of it the six
+lifecycle cycles, because the whole-instance comparison hashes about 80,000 entries below `/usr` each time),
+`libvirt-rhel-compatible` 24 minutes and the self-test 2.5 minutes. Run one scenario at a time on a host: two Molecule
+runs in the same checkout share `ANSIBLE_HOME` and collide when they install the collection.
+
 Record the libvirt objects of your host before and after a local run and compare them:
 
 ```text
@@ -236,9 +241,12 @@ Molecule as scenario `libvirt-selftest`, with its state in `build/molecule-libvi
 `prepare` runs the guard, then, for a libvirt target, waits for cloud-init to finish, installs the pinned packages
 from the controller (one `ansible.builtin.apt` `deb` at a time on Ubuntu, `ansible.builtin.dnf` with every repository
 disabled on Rocky), removes the package files, and stops and masks every systemd timer of the image and the services
-that act on their own schedule (`snapd`, `unattended-upgrades`, `packagekit`, where present). A scheduled job, for
-example an `apt` index update, `logrotate` or `man-db`, would otherwise change files that the toggle lifecycle compares
-in the middle of a test. Then it copies the datastream as for Docker.
+that act on their own schedule (`snapd`, `unattended-upgrades`, `packagekit`, and the cron daemon `cron` or `crond` with
+`anacron`, where present). A scheduled job, for
+example an `apt` index update, `logrotate`, `man-db` or anacron updating `/var/spool/anacron` from `cron.hourly`, would
+otherwise change files that the toggle lifecycle compares in the middle of a test. In CI, anacron once changed the
+times of its timestamp files between two cycles. A future topic that manages one of these services (the cron topic, for
+example) must revisit this list. Then `prepare` copies the datastream as for Docker.
 
 ## Differences that only a virtual machine has
 
