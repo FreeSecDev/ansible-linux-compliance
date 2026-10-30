@@ -1,0 +1,11 @@
+---
+trivial:
+  - >-
+    CI: on a pull request and in the merge queue, molecule-plan keeps only the lifecycle legs of the topics that the
+    diff against the base revision can affect, plus the libvirt base scenarios and self-test; a push to main, the
+    nightly schedule and the new workflow_dispatch trigger run the full matrix. tools/roles/affected_topics.py derives
+    the topics of every changed path from the topic declarations, the catalogue and the file names, and plans the full
+    matrix for a shared or unknown path. The base revision's tools/molecule/plan-lifecycle.sh and make
+    molecule-affected decide, so a pull request cannot shrink its own matrix by editing the planner. ci-gate accepts a
+    skipped molecule-lifecycle only for a planned zero-leg pull request or merge group. make molecule-plan prints the
+    plan of the current branch against MOLECULE_PLAN_BASE (ADR 0011, FREES-189).
