@@ -522,7 +522,10 @@ On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the lon
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
 duration: 18 for `molecule-lifecycle`, 8 for `molecule-docker` (one [scanner timeout](#scanner-hangs) and its retry
-add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). A leg that approaches 20 minutes
+add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). With `sudo` (FREES-175) there are sixteen legs; at a7a3061
+the four `sudo` legs took 9.7 (`ubuntu`, `topic`), 11.4 (`rhel_compatible`, `topic`), 12.0 (`ubuntu`, `rule`) and 13.4
+minutes (`rhel_compatible`, `rule`), after the refusals had moved from the rule legs into the topic legs: before, the
+`rhel_compatible` rule leg took 15.6 minutes. A leg that approaches 20 minutes
 should be split further, for example per pre-state, rather than given a longer limit, so that no required job comes
 near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
