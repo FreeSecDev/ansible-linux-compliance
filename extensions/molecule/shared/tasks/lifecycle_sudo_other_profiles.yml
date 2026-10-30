@@ -1,0 +1,279 @@
+---
+- name: Sudo other profiles | Refuse to run unless the sudo topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'sudo'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['sudo']
+    fail_msg: >-
+      The sudo rules of the other profiles reuse the facts of the sudo lifecycle, which must have just run; the topic
+      was {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Sudo other profiles | Name the native sudo rules that the profile of the lifecycle does not select
+  ansible.builtin.set_fact:
+    other_label: sudo rules of the other profiles
+    other_profile: "{{ linux_compliance_discovered }}"
+    other_rules: >-
+      {{ lifecycle_native_rules | selectattr('family', 'equalto', 'sudo')
+         | rejectattr('rule_id', 'in', lifecycle_rule_ids) | sort(attribute='rule_id') }}
+    other_sudoers_mode: "0640"
+    other_items: >-
+      {{ lifecycle_items | combine({'files': lifecycle_items.files
+         + [{'path': '/etc/sudoers.d/50-freesecdev-validate_passwd'}]}) }}
+
+- name: Sudo other profiles | Name the rule identifiers and toggles of those rules
+  ansible.builtin.set_fact:
+    other_rule_ids: "{{ other_rules | map(attribute='rule_id') | list }}"
+    other_toggles: "{{ other_rules | map(attribute='toggle') | list }}"
+    other_mode_rule: xccdf_org.ssgproject.content_rule_file_permissions_etc_sudoers
+    other_directory_rule: xccdf_org.ssgproject.content_rule_directory_permissions_etc_sudoersd
+    other_dropin_rule: xccdf_org.ssgproject.content_rule_sudoers_validate_passwd
+
+- name: Sudo other profiles | Check that the drop-in and attribute rules of the other profiles are all there
+  ansible.builtin.assert:
+    that:
+      - other_rule_ids | length == 7
+      - other_mode_rule in other_rule_ids
+      - other_directory_rule in other_rule_ids
+      - other_dropin_rule in other_rule_ids
+    fail_msg: "{{ other_label }}: {{ other_rule_ids }}"
+    quiet: true
+
+- name: Sudo other profiles | Read the mode of the main sudoers file and of the drop-in directory as built
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/sudoers
+    - /etc/sudoers.d
+  register: other_built
+
+- name: Sudo other profiles | Take the state of the whole instance before these rules run
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+  vars:
+    lifecycle_items: "{{ other_items }}"
+
+- name: Sudo other profiles | Remember the state of the whole instance before these rules run
+  ansible.builtin.set_fact:
+    other_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Sudo other profiles | Loosen the main sudoers file to a mode that sudo still accepts and the rule restricts
+  ansible.builtin.file:
+    path: /etc/sudoers
+    state: file
+    mode: "{{ other_sudoers_mode }}"
+
+- name: Sudo other profiles | Switch those rules on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ other_toggles }}"
+
+- name: Sudo other profiles | Pretend a profile that selects those rules as well
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ other_profile | combine({'rule_ids': other_profile.rule_ids + other_rule_ids}) }}"
+
+- name: Sudo other profiles | Apply the rules of the other profiles in check mode
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: true
+    lifecycle_family: sudo
+    lifecycle_rule_ids: "{{ other_rule_ids }}"
+
+- name: Sudo other profiles | Read the main sudoers file, the drop-in directory and the drop-in after check mode
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/sudoers
+    - /etc/sudoers.d
+    - /etc/sudoers.d/50-freesecdev-validate_passwd
+  register: other_checked
+
+- name: Sudo other profiles | Check that check mode reported the changes and made none
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == other_rule_ids
+      - lifecycle_results | selectattr('status', 'equalto', 'applied') | rejectattr('changed') | list == []
+      - lifecycle_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+      - lifecycle_results | selectattr('status', 'equalto', 'applied') | list | length >= 2
+      - other_checked.results[0].stat.mode == other_sudoers_mode
+      - other_checked.results[1].stat.mode == other_built.results[1].stat.mode
+      - not other_checked.results[2].stat.exists
+    fail_msg: "{{ other_label }}, check mode: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Sudo other profiles | Apply the rules of the other profiles
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: sudo
+    lifecycle_rule_ids: "{{ other_rule_ids }}"
+
+- name: Sudo other profiles | Read the main sudoers file, the drop-in directory and the drop-in after the apply
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  loop:
+    - /etc/sudoers
+    - /etc/sudoers.d
+    - /etc/sudoers.d/50-freesecdev-validate_passwd
+  register: other_applied
+
+- name: Sudo other profiles | Check the results and the restricted modes of the apply
+  vars:
+    other_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
+    other_directory_expected: >-
+      {{ 'compliant' if other_built.results[1].stat.mode == '0750' else 'applied' }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == other_rule_ids
+      - other_statuses[other_dropin_rule] == 'applied'
+      - other_statuses[other_mode_rule] == 'applied'
+      - other_statuses[other_directory_rule] == other_directory_expected
+      - >-
+        other_statuses | dict2items | rejectattr('key', 'in', [other_dropin_rule, other_mode_rule,
+        other_directory_rule]) | map(attribute='value') | unique | list == ['compliant']
+      - other_applied.results[0].stat.mode == '0440'
+      - other_applied.results[1].stat.mode == '0750'
+      - other_applied.results[2].stat.mode == '0440'
+      - other_applied.results[2].stat.uid == 0
+      - other_applied.results[2].stat.gid == 0
+      - other_applied.results[2].stat.checksum == 'bd2c4e448c195427f9df880657e65d6c444cccd7acaf76a3f79d00d41632dbc1'
+    fail_msg: "{{ other_label }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Sudo other profiles | Apply the rules of the other profiles again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: sudo
+    lifecycle_rule_ids: "{{ other_rule_ids }}"
+
+- name: Sudo other profiles | Check that the second apply found every rule compliant
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['compliant']
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ other_label }}, second apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Sudo other profiles | Make the main sudoers file stricter by hand, as an administrator would
+  ansible.builtin.file:
+    path: /etc/sudoers
+    state: file
+    mode: "0400"
+
+- name: Sudo other profiles | Give the drop-in directory its prior mode back by hand where the rule restricted it
+  ansible.builtin.file:
+    path: /etc/sudoers.d
+    state: directory
+    mode: "{{ other_built.results[1].stat.mode }}"
+
+- name: Sudo other profiles | Switch those rules off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ other_toggles }}"
+
+- name: Sudo other profiles | Clean up the rules of the other profiles after the administrator's changes
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: sudo
+    lifecycle_rule_ids: "{{ other_rule_ids }}"
+
+- name: Sudo other profiles | Read the main sudoers file and the drop-in after the cleanup
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/sudoers
+    - /etc/sudoers.d/50-freesecdev-validate_passwd
+  register: other_cleaned
+
+- name: Sudo other profiles | Check that the stricter mode was kept, the drop-in removed and the directory forgotten
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', other_mode_rule) | map(attribute='reason') | list
+        == ['modified_since_apply']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', other_dropin_rule) | map(attribute='status') | list
+        == ['restored']
+      - >-
+        other_built.results[1].stat.mode == '0750'
+        or (lifecycle_results | selectattr('rule_id', 'equalto', other_directory_rule)
+            | map(attribute='message') | first is search('already as before'))
+      - lifecycle_results | rejectattr('rule_id', 'equalto', other_mode_rule) | map(attribute='status') | unique
+        | list == ['restored']
+      - other_cleaned.results[0].stat.mode == '0400'
+      - not other_cleaned.results[1].stat.exists
+    fail_msg: "{{ other_label }}, cleanup after the administrator's changes: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Sudo other profiles | Put back the mode that the collection wrote
+  ansible.builtin.file:
+    path: /etc/sudoers
+    state: file
+    mode: "0440"
+
+- name: Sudo other profiles | Clean up the mode rule now that the mode is what the collection wrote
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: sudo
+    lifecycle_rule_ids: "{{ other_rule_ids }}"
+
+- name: Sudo other profiles | Read the main sudoers file after the restore
+  ansible.builtin.stat:
+    path: /etc/sudoers
+    follow: false
+  register: other_restored
+
+- name: Sudo other profiles | Check that the recorded prior mode, not a default, was restored
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [other_mode_rule]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
+      - other_restored.stat.mode == other_sudoers_mode
+    fail_msg: "{{ other_label }}, restore of the mode: {{ lifecycle_results }}, mode {{ other_restored.stat.mode }}"
+    quiet: true
+
+- name: Sudo other profiles | Give the profile of this platform back
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ other_profile }}"
+
+- name: Sudo other profiles | Give the main sudoers file its mode as built back
+  ansible.builtin.file:
+    path: /etc/sudoers
+    state: file
+    mode: "{{ other_built.results[0].stat.mode }}"
+
+- name: Sudo other profiles | Read the ledger after these rules
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: other_ledger_after
+
+- name: Sudo other profiles | Check that the ledger records none of these rules any more
+  ansible.builtin.assert:
+    that:
+      - other_ledger_after.entries | selectattr('rule_id', 'in', other_rule_ids) | list == []
+    fail_msg: "{{ other_label }}: the ledger still holds {{ other_ledger_after.entries }}"
+    quiet: true
+
+- name: Sudo other profiles | Assert that the whole instance is back to its state before these rules ran
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: sudo rules of the other profiles
+    lifecycle_broad_step: the rules of the other profiles
+    lifecycle_broad_reference: "{{ other_broad_before }}"
+    lifecycle_items: "{{ other_items }}"

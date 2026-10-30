@@ -6,7 +6,8 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup, ledger),
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
-procedure. `file_permissions`, `banners` and `pwquality` are the worked examples.
+procedure. `file_permissions`, `banners`, `pwquality` and `sudo` ([ADR 0022](adr/0022-native-sudo-drop-ins.md)) are
+the worked examples.
 
 ## 1. Read what the content expects
 
@@ -87,6 +88,14 @@ reviews catch most often:
   module in check mode only when it cannot run without the prediction and another task already reports the change.
 - Report exactly one result per planned rule, with `changed` true exactly when the rule changed or would change
   something.
+- Record what was written (the line, or the drop-in's SHA-256) and the `method`; cleanup refuses `method_changed` and
+  `modified_since_apply` without a change, and a state that already equals the recorded prior state (a drop-in removed
+  by hand, an attribute already back at its prior value) is `restored` by removing the ledger entry, without a write
+  (FREES-173). Every refusal carries a non-null `reason`.
+- When a syntax error in the file breaks the service (sudoers), write it only through the module's `validate` with the
+  service's own checker. The repository guard refuses `validate` except for reviewed entries of `ALLOWED_PARAMETERS`
+  in `tools/lint/repo_rules/exec_modules.py` (ADR 0004, amendment of FREES-175); add one only with an ADR, and catch
+  the refusal so that the rule reports it and nothing is installed (`sudo_dropin_apply.yml`).
 - Jinja under ansible-core 2.21 does not unescape `'\n'` inside a template, so use the constant
   `__linux_compliance_remediate_newline` of `vars/main.yml` for a newline in generated content.
 
@@ -135,3 +144,4 @@ role README and add a changelog fragment.
 | `file_permissions` | `file_permissions_crontab` | `recorded_value` (mode) | Keeps a stricter mode (`current & 0600`) |
 | `banners` | text of `/etc/issue`, `/etc/issue.net`, `/etc/motd` (CIS and STIG/CCN rules), their mode, owner and group | `recorded_value` per attribute | Text from `linux_compliance_remediate_banner_text`, validated against the profile's value; a missing file is created `0644 root:root` and removed again on cleanup |
 | `pwquality` | `dcredit`, `dictcheck`, `difok`, `enforce_for_root`, `enforcing`, `lcredit`, `maxclassrepeat`, `maxrepeat`, `maxsequence`, `minclass`, `minlen`, `ocredit`, `retry` (STIG rule), `ucredit` | `recorded_value`: one line per setting in the main file where the content checks only it (Ubuntu), one drop-in per rule where it checks the drop-ins (RHEL) | Values from the profile; the method per platform follows the content's OVAL (`main_file_benchmarks`, checked by a golden test); `duplicate_setting` and `overridden` refuse to claim a change that would not take effect |
+| `sudo` | `use_pty`, `logfile`, `timestamp_timeout`, `!targetpw`/`!rootpw`/`!runaspw` (STIG); mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d` (ANSSI) | `recorded_value`: one drop-in per rule below `/etc/sudoers.d` with its SHA-256, or the prior attribute and the one written | Every write is checked by `visudo` through `copy` `validate` (the one reviewed exception of the repository guard); `timestamp_timeout` comes from the content's fix (`profile_value_source: fix`); `conflicting_setting`, `not_included` and `invalid_sudoers` refuse to claim a change that would not take effect; rules that remove other people's `NOPASSWD`, `!authenticate` or user specifications stay `audit_only` |

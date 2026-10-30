@@ -106,13 +106,6 @@
       loop_control:
         loop_var: lifecycle_family
 
-    - name: Run the pwquality regressions for a change of method, a change by hand and a symbolic link
-      ansible.builtin.include_tasks:
-        file: tasks/lifecycle_pwquality_regressions.yml
-      when:
-        - lifecycle_run_families | last == 'pwquality'
-        - lifecycle_run_modes | last == 'rule'
-
     - name: Report the topics whose lifecycle was proven
       ansible.builtin.debug:
         msg: >-

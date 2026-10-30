@@ -43,7 +43,10 @@ def document(extra: str = "") -> bytes:
         f'<value selector="dod">^(You[\\s\\n]+are)$</value></Value>'
         f'<Rule id="{RULE}accounts_password_pam_minlen"><check system="oval">'
         f'<check-export export-name="v" value-id="{MINLEN}"/><check-content-ref name="d"/></check>'
-        f'</Rule><Rule id="{RULE}banner_etc_issue"/></Group>{extra}</Benchmark>'
+        f'</Rule><Rule id="{RULE}banner_etc_issue"/>'
+        f'<Rule id="{RULE}sudo_require_reauthentication"><fix system="sh">t=<sub idref="{MINLEN}"/>'
+        f'</fix><check system="oval"><check-content-ref name="d"/></check><sub idref="{BANNER}"/>'
+        f"</Rule></Group>{extra}</Benchmark>"
         f"</data-stream-collection>"
     ).encode()
 
@@ -71,6 +74,12 @@ def test_the_values_refinements_and_exports_of_the_benchmark_are_read(tmp_path: 
     assert found.exports == {
         RULE + "accounts_password_pam_minlen": frozenset({MINLEN}),
         RULE + "banner_etc_issue": frozenset(),
+        RULE + "sudo_require_reauthentication": frozenset(),
+    }
+    assert found.fixes == {
+        RULE + "accounts_password_pam_minlen": frozenset(),
+        RULE + "banner_etc_issue": frozenset(),
+        RULE + "sudo_require_reauthentication": frozenset({MINLEN}),
     }
 
 
@@ -143,7 +152,10 @@ def streams(tmp_path: Path) -> list[pv.StreamProfiles]:
             "test",
             found,
             {
-                PROFILE + "cis": [RULE + "accounts_password_pam_minlen"],
+                PROFILE + "cis": [
+                    RULE + "accounts_password_pam_minlen",
+                    RULE + "sudo_require_reauthentication",
+                ],
                 PROFILE + "stig": [RULE + "accounts_password_pam_minlen", RULE + "x"],
                 PROFILE + "other": [RULE + "x"],
             },
@@ -166,6 +178,44 @@ def test_resolve_groups_the_profiles_that_share_a_value(tmp_path: Path) -> None:
 def test_resolve_refuses_a_rule_whose_checks_do_not_export_the_value(tmp_path: Path) -> None:
     with pytest.raises(pv.ProfileValueError, match="do not export"):
         pv.resolve(streams(tmp_path), RULE + "accounts_password_pam_minlen", "login_banner_text")
+
+
+def test_resolve_takes_a_value_that_the_fixes_substitute(tmp_path: Path) -> None:
+    rule = RULE + "sudo_require_reauthentication"
+    with pytest.raises(pv.ProfileValueError, match="do not export"):
+        pv.resolve(streams(tmp_path), rule, "var_password_pam_minlen")
+    resolved = pv.resolve(streams(tmp_path), rule, "var_password_pam_minlen", pv.FIX_SOURCE)
+    assert resolved == [
+        {
+            "datastream": "test",
+            "content_sha256": written(tmp_path)[1],
+            "profiles": ["cis"],
+            "value": ["14"],
+        }
+    ]
+
+
+def test_resolve_refuses_a_value_that_the_fixes_do_not_substitute(tmp_path: Path) -> None:
+    rule = RULE + "sudo_require_reauthentication"
+    with pytest.raises(pv.ProfileValueError, match="do not substitute"):
+        pv.resolve(streams(tmp_path), rule, "login_banner_text", pv.FIX_SOURCE)
+    with pytest.raises(pv.ProfileValueError, match="do not substitute"):
+        pv.resolve(
+            streams(tmp_path),
+            RULE + "accounts_password_pam_minlen",
+            "var_password_pam_minlen",
+            "fix",
+        )
+
+
+def test_resolve_refuses_an_unknown_value_source(tmp_path: Path) -> None:
+    with pytest.raises(pv.ProfileValueError, match="the value source 'oval' is not one of"):
+        pv.resolve(
+            streams(tmp_path),
+            RULE + "accounts_password_pam_minlen",
+            "var_password_pam_minlen",
+            "oval",
+        )
 
 
 def test_resolve_names_the_datastream_of_a_profile_that_cannot_take_the_value(
@@ -215,6 +265,33 @@ def test_a_native_rule_with_a_profile_value_gets_the_value_of_every_selecting_pr
     assert "profile_values:" in gen.render_catalogue(built)
 
 
+def test_a_profile_value_from_the_fixes_is_resolved_from_the_fixes(tmp_path: Path) -> None:
+    data = valued_document()
+    native = cast("list[dict[str, object]]", data["native_rules"])
+    native[0]["profile_value_source"] = "fix"
+    streams = with_values(tmp_path)
+    with pytest.raises(gen.GenerationError, match="do not substitute"):
+        gen.build(gen.parse_source(data), streams)
+    fixed = [
+        dataclasses.replace(
+            stream,
+            values=dataclasses.replace(
+                cast("pv.StreamValues", stream.values),
+                exports={},
+                fixes={RULE + "file_permissions_crontab": frozenset({MINLEN})},
+            ),
+        )
+        for stream in streams
+    ]
+    built = gen.build(gen.parse_source(data), fixed)
+    crontab = next(
+        rule for rule in built.rules if rule["rule_id"] == RULE + "file_permissions_crontab"
+    )
+    parameters = cast("dict[str, object]", crontab["parameters"])
+    assert parameters["value_id"] == "var_password_pam_minlen"
+    assert "profile_value_source" not in crontab
+
+
 def test_a_profile_value_needs_the_values_of_every_datastream(tmp_path: Path) -> None:
     streams = [dataclasses.replace(stream, values=None) for stream in with_values(tmp_path)]
     with pytest.raises(gen.GenerationError, match="the values of the datastream were not read"):
@@ -256,6 +333,14 @@ def test_a_datastream_whose_values_cannot_be_read_is_an_error(
             "parameters must be a mapping without the generated keys",
         ),
         ({"extra": 1}, "and an optional 'profile_value'"),
+        (
+            {"profile_value_source": "fix"},
+            "profile_value_source must be one of \\['check', 'fix'\\] and needs 'profile_value'",
+        ),
+        (
+            {"profile_value": "var_password_pam_minlen", "profile_value_source": "oval"},
+            "profile_value_source must be one of",
+        ),
     ],
 )
 def test_an_invalid_profile_value_or_parameters_are_refused(

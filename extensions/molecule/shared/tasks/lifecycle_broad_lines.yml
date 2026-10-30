@@ -5,6 +5,7 @@
       {%- set declared = lifecycle_broad_declared | list -%}
       {%- set rewritten = lifecycle_broad_rewritten | default([]) | list -%}
       {%- set parents = declared | map('dirname') | unique | list -%}
+      {%- set sums = lifecycle_broad_raw.checksums | default({}) -%}
       {%- set ignored_trees = '^(' ~ (lifecycle_broad_ignored_trees | map('regex_escape') | join('|')) ~ ')(/|$)' -%}
       {%- set volatile_trees = '^(' ~ (lifecycle_broad_volatile_sysctl_trees | map('regex_escape') | join('|'))
       ~ ')(/|$)' -%}
@@ -15,7 +16,7 @@
       file|{{ entry.path }}|{{ 'link' if entry.islnk else 'file' if entry.isreg else 'directory' if entry.isdir
       else 'other' }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|{{ entry.size }}|
       {{- '-' if entry.path in rewritten else entry.inode }}|
-      {{- times }}|{{ entry.checksum | default('') }}{{ '\n' }}
+      {{- times }}|{{ entry.checksum | default(sums[entry.path] | default('')) }}{{ '\n' }}
       {%- endif -%}
       {%- endfor -%}
       {%- for entry in lifecycle_broad_raw.sysctl | sort(attribute='path') -%}

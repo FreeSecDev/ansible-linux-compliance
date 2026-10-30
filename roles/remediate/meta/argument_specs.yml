@@ -526,7 +526,7 @@ argument_specs:
         description:
           - "Topic toggle of the sudo family (ADR 0011); false switches its rules off."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 22, native: 0, tagged: 3. Generated; see docs/remediation-variables.md."
+          - "Rules: 22, native: 10, tagged: 3. Generated; see docs/remediation-variables.md."
       linux_compliance_mandatory_access_control_enabled:
         type: bool
         default: true

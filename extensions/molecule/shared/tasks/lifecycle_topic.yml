@@ -149,3 +149,26 @@
     lifecycle_label: "{{ lifecycle_family }}"
     lifecycle_broad_step: the topic after every cycle
     lifecycle_broad_reference: "{{ lifecycle_broad_pristine }}"
+
+- name: Lifecycle topic | Run the pwquality regressions for a change of method, a change by hand and a symbolic link
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwquality_regressions.yml
+  when:
+    - lifecycle_family == 'pwquality'
+    - lifecycle_run_modes | last == 'rule'
+
+- name: Lifecycle topic | Run the sudo regressions for a change of method, changes by hand, visudo and a symbolic link
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_regressions.yml
+  when:
+    - lifecycle_family == 'sudo'
+    - lifecycle_rule_ids | length > 0
+    - lifecycle_run_modes | last == 'rule'
+
+- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_other_profiles.yml
+  when:
+    - lifecycle_family == 'sudo'
+    - lifecycle_rule_ids | length > 0
+    - lifecycle_run_modes | first == 'topic'

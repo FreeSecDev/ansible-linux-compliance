@@ -72,8 +72,8 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`) |
-| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`; Python 3.9 comes with the base image |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle) |
+| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle); Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
 distribution archive drops a pinned version, the image build fails and the pin must be updated by hand; no Renovate
@@ -469,8 +469,24 @@ rules are restored; on Ubuntu it puts a symbolic link in place of `pwquality.con
 checks that every rule is `not_directory` and nothing is written through the link; and it compares the whole instance
 with its state before the regressions.
 
-The regressions run when the run ends with `pwquality` in the rule mode: after every topic and mode in a full run,
-and in the `pwquality` rule leg in CI.
+The regressions of a topic run at the end of that topic, with its facts, when the rule mode is the last mode of the
+run: in a full run and in the topic's rule leg in CI.
+
+`shared/tasks/lifecycle_sudo_regressions.yml` does the same for `sudo` (FREES-175) on both platforms: it applies the
+topic, records every ledger entry as if another method had written it and checks that apply reports `method_changed`
+and cleanup `cleanup_incomplete` (`method_changed`) with every entry kept and no drop-in touched; it changes the
+`timestamp_timeout` drop-in by hand and removes the `logfile` drop-in, and checks that cleanup keeps the change as
+`modified_since_apply` and reports the removed one `restored` without a write; it puts a `timestamp_timeout` of its
+own into `/etc/sudoers.d` and replaces `/usr/sbin/visudo` with a copy of `false`, and checks that the rule is
+`conflicting_setting`, that every other drop-in is `invalid_sudoers` and that nothing was installed or recorded; and it
+replaces `/etc/sudoers.d` by a symbolic link and checks that every rule is `not_directory` and nothing is written
+through the link. `visudo`, `/etc/sudoers.d` and its `README` are put back with their content, mode and ownership, so
+the whole-instance comparison after the regressions treats them as rewritten (new inodes and times only).
+`shared/tasks/lifecycle_sudo_other_profiles.yml` runs in the topic mode and applies, repeats and cleans up for real the
+seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,
+owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`): the stricter mode an
+administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
+a directory mode put back by hand is `restored` without a write.
 
 ### CI legs
 

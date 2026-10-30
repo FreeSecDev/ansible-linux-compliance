@@ -112,7 +112,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 45 | `smartcard` | `accounts` | Smart card login (pcscd, OpenSC, PAM smart card authentication) | yes | Requiring smart card authentication locks out every user without a working card and reader | 9 | 0 | 9 |
 | 46 | `console_access` | `accounts` | Physical console access (Ctrl-Alt-Del, single-user and emergency mode, console locking) | yes | Requiring authentication for single-user and emergency mode can leave a broken host unrecoverable | 7 | 0 | 7 |
 | 47 | `user_accounts` | `accounts` | User and group accounts (unique identifiers, expiry, password storage, authselect) | yes | Expiring accounts, locking accounts without passwords and switching to authselect can lock out operators | 24 | 0 | 24 |
-| 48 | `sudo` | none | sudo | yes | Can remove administrative access | 22 | 0 | 22 |
+| 48 | `sudo` | none | sudo | yes | Can remove administrative access | 22 | 10 | 12 |
 | 49 | `selinux` | `mandatory_access_control` | SELinux | yes | Enforcing SELinux or changing its policy can stop services and needs a relabel or reboot | 27 | 0 | 27 |
 | 50 | `apparmor` | `mandatory_access_control` | AppArmor | yes | Enforcing AppArmor profiles can stop services that the profiles do not allow | 6 | 0 | 6 |
 | 51 | `crypto_policy` | none | Cryptographic policy and FIPS mode | yes | Can break TLS and SSH with older peers; FIPS mode needs a reboot | 17 | 0 | 17 |
@@ -120,7 +120,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 53 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
 | 54 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
 | 55 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 30 | 1173 |
+|  | All |  |  |  |  | 1203 | 40 | 1163 |
 
 ## Umbrellas
 
@@ -440,7 +440,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 25 | 25 | 25 | 25 | 9 |
+| Native remediation | 28 | 28 | 28 | 28 | 9 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -502,7 +502,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 6 | 6 | 6 | 6 | 10 | 8 | 8 | 8 | 20 | 20 | 20 | 20 | 5 | 0 | 0 | 1 | 5 | 7 | 13 | 13 |
+| Native remediation | 13 | 13 | 13 | 6 | 10 | 10 | 9 | 10 | 23 | 23 | 23 | 23 | 5 | 0 | 0 | 1 | 5 | 10 | 15 | 15 |
 
 ## Mapping
 

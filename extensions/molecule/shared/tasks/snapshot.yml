@@ -1,22 +1,35 @@
 ---
-- name: Snapshot | Find every entry below the watched paths
+- name: Snapshot | Find every entry below the watched paths, without reading any content
   ansible.builtin.find:
     paths: "{{ contract_snapshot_paths }}"
     file_type: any
     recurse: true
     hidden: true
-    get_checksum: true
+    get_checksum: false
   register: snapshot_find
+
+- name: Snapshot | Take the checksum of every regular file that its owner may read
+  ansible.builtin.find:
+    paths: "{{ contract_snapshot_paths }}"
+    file_type: file
+    recurse: true
+    hidden: true
+    mode: "0400"
+    exact_mode: false
+    get_checksum: true
+  register: snapshot_sums
 
 - name: Snapshot | Record paths, ownership, modes, sizes, times and content of every entry
   ansible.builtin.set_fact:
     snapshot_lines: >-
+      {%- set sums = dict(snapshot_sums.files | map(attribute='path')
+            | zip(snapshot_sums.files | map(attribute='checksum'))) -%}
       {%- for entry in snapshot_find.files | sort(attribute='path') -%}
       {{ entry.path }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|
       {{- 'volatile-directory' if entry.path in snapshot_volatile_directories | default([])
-      else entry.size ~ '|volatile-times|' ~ entry.checksum | default('')
+      else entry.size ~ '|volatile-times|' ~ sums[entry.path] | default('')
       if entry.path is match(contract_snapshot_volatile_times)
-      else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ entry.checksum | default('') }}
+      else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ sums[entry.path] | default('') }}
       {{ '\n' }}
       {%- endfor -%}
     snapshot_count: "{{ snapshot_find.files | length }}"

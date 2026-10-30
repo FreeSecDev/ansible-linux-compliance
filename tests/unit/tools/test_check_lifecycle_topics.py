@@ -414,7 +414,7 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
     }
     root = make_root(tmp_path, declarations, catalogue=REPOSITORY_ROOT / generate_toggles.CATALOGUE)
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "pwquality"]
+    assert native == ["file_permissions", "banners", "pwquality", "sudo"]
     assert errors == []
 
 

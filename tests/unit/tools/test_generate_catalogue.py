@@ -612,6 +612,7 @@ def test_the_repository_mapping_is_valid_and_matches_the_registry() -> None:
     for rule in native:
         details = dict(mapping.native_rules[str(rule["rule_id"])])
         value = details.pop(gen.PROFILE_VALUE_KEY, None)
+        details.pop(gen.PROFILE_VALUE_SOURCE_KEY, None)
         parameters = cast("dict[str, object]", rule["parameters"])
         hand_written = {
             key: parameters[key] for key in parameters if key not in gen.GENERATED_PARAMETERS

@@ -989,3 +989,18 @@ adds an exemption, and no lint limit was raised.
     `exceptions_apply.yml`, `evaluation.yml`, `defer.yml`) and the remediate family files can still be included
     directly with `tasks_from`, which skips the guard, the same residual as the remediate family files above: such a
     caller can do no more than call the modules itself.
+
+## Amendment 2026-10-30: the `visudo` check of the sudo drop-ins (FREES-175)
+
+The native `sudo` topic ([ADR 0022](0022-native-sudo-drop-ins.md)) writes drop-ins below `/etc/sudoers.d`. sudo
+refuses every command when one file of its configuration does not parse, so a drop-in must be checked before it is
+moved into place, and the only native way to do so is the `validate` parameter of `ansible.builtin.copy`, which the
+FREES-159 amendment refuses because the module runs the command it names.
+
+`tools/lint/repo_rules/exec_modules.py` now keeps a reviewed exception list, `ALLOWED_PARAMETERS`, of entries by file,
+module, parameter and exact value. It holds one entry: `validate: /usr/sbin/visudo -cf %s` of `copy` in
+`roles/remediate/tasks/sudo_dropin_apply.yml`. Only a plain scalar in the mapping form of the module counts; a quoted
+or templated value, a free-form argument, `args`, `module_defaults`, any other value, module or file is refused as
+before. The executable is a fixed absolute path, the only argument besides the flags is the temporary file that the
+module created, and no variable can change either. `tests/unit/tools/test_check_repo_rules_exec_validate.py` checks
+that the list holds exactly this entry, that its file uses it once, and that every other form is refused.

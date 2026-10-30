@@ -1,0 +1,223 @@
+---
+- name: Sudo | Refuse to run outside the dispatcher or without the opt-in
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'sudo'
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'sudo') | list | first | default({}))
+    fail_msg: >-
+      The sudo family file runs only from the remediate dispatcher with
+      linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Sudo | Resolve the value that the profile requires for every drop-in rule to apply
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_values: >-
+      {%- set values = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            | selectattr('parameters.method', 'defined')
+            | selectattr('parameters.method', 'equalto', 'dropin') -%}
+      {%- set found = rule.parameters.profile_values | default([])
+            | selectattr('content_sha256', 'equalto', linux_compliance_discovered.content_sha256)
+            | selectattr('profiles', 'contains', linux_compliance_remediate_profile)
+            | map(attribute='value') | map('join', '') | list -%}
+      {%- set _ = values.update({rule.rule_id: (found | first | default(none))
+            if rule.parameters.value_id is defined else ''}) -%}
+      {%- endfor -%}
+      {{ values }}
+  tags:
+    - always
+
+- name: Sudo | Refuse an unwritable rule or a missing profile value before any change
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_sd_rule.parameters.method | default('') in ['dropin', 'attribute']
+      - >-
+        __linux_compliance_remediate_sd_rule.parameters.method != 'attribute'
+        or (__linux_compliance_remediate_sd_rule.parameters.path
+            in [__linux_compliance_remediate_sudo_main, __linux_compliance_remediate_sudo_directory]
+            and __linux_compliance_remediate_sd_rule.parameters.attribute | default('') in ['mode', 'owner', 'group']
+            and __linux_compliance_remediate_sd_rule.parameters.type | default('') in ['file', 'directory'])
+      - >-
+        __linux_compliance_remediate_sd_rule.parameters.method != 'dropin'
+        or (__linux_compliance_remediate_sd_rule.parameters.path | default('')
+            is match(__linux_compliance_remediate_sudo_dropin_pattern)
+            and __linux_compliance_remediate_sd_rule.parameters.options | default([]) | length > 0
+            and __linux_compliance_remediate_sd_rule.parameters.options
+                | reject('match', __linux_compliance_remediate_sudo_option_pattern) | list == []
+            and __linux_compliance_remediate_sd_rule.parameters.lines | default([]) | length > 0
+            and __linux_compliance_remediate_sd_rule.parameters.lines
+                | reject('match', __linux_compliance_remediate_sudo_line_pattern) | list == []
+            and __linux_compliance_remediate_newline
+                not in (__linux_compliance_remediate_sd_rule.parameters.lines | join('')))
+      - >-
+        __linux_compliance_remediate_sd_rule not in __linux_compliance_remediate_family.apply
+        or __linux_compliance_remediate_sd_rule.parameters.method != 'dropin'
+        or (__linux_compliance_remediate_sd_values[__linux_compliance_remediate_sd_rule.rule_id] is string
+            and (__linux_compliance_remediate_sd_rule.parameters.value_id is not defined
+                 or (__linux_compliance_remediate_sd_values[__linux_compliance_remediate_sd_rule.rule_id]
+                     is match(__linux_compliance_remediate_sd_rule.parameters.value_pattern)
+                     and __linux_compliance_remediate_newline
+                         not in __linux_compliance_remediate_sd_values[__linux_compliance_remediate_sd_rule.rule_id])))
+    fail_msg: >-
+      {{ __linux_compliance_remediate_sd_rule.rule_id }} cannot be written: it needs the method dropin with a
+      drop-in below {{ __linux_compliance_remediate_sudo_directory }} whose name sudo reads (no dot, no trailing ~)
+      and Defaults lines, or the method attribute on {{ __linux_compliance_remediate_sudo_main }} or
+      {{ __linux_compliance_remediate_sudo_directory }}, and a rule with a value needs the value
+      {{ __linux_compliance_remediate_sd_rule.parameters.value_id | default('') }} that the profile
+      {{ linux_compliance_remediate_profile }} gives it in the content
+      {{ linux_compliance_discovered.content_sha256 | default('') }}, in the form
+      {{ __linux_compliance_remediate_sd_rule.parameters.value_pattern | default('') }}, but the catalogue holds
+      {{ __linux_compliance_remediate_sd_values[__linux_compliance_remediate_sd_rule.rule_id] | default('') }}.
+      The values are generated from the pinned content (ADR 0021, ADR 0022); no sudo setting was changed.
+    quiet: true
+  loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sd_rule
+    label: "{{ __linux_compliance_remediate_sd_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Sudo | Inspect the main sudoers file, the drop-in directory and visudo without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sd_path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop:
+    - "{{ __linux_compliance_remediate_sudo_main }}"
+    - "{{ __linux_compliance_remediate_sudo_directory }}"
+    - "{{ __linux_compliance_remediate_sudo_validator }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_sd_path
+  register: __linux_compliance_remediate_sd_inspected
+  tags:
+    - always
+
+- name: Sudo | Name what the inspection found and the drop-ins that the collection owns
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_main_stat: "{{ __linux_compliance_remediate_sd_inspected.results[0].stat }}"
+    __linux_compliance_remediate_sd_directory_stat: "{{ __linux_compliance_remediate_sd_inspected.results[1].stat }}"
+    __linux_compliance_remediate_sd_validator_stat: "{{ __linux_compliance_remediate_sd_inspected.results[2].stat }}"
+    __linux_compliance_remediate_sd_owned: >-
+      {{ __linux_compliance_remediate_rules | selectattr('family', 'equalto', 'sudo')
+         | selectattr('parameters.method', 'equalto', 'dropin')
+         | map(attribute='parameters') | map(attribute='path') | list }}
+  tags:
+    - always
+
+- name: Sudo | List the regular files of the drop-in directory, hidden ones included, as the content's checks read them
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_sudo_directory }}"
+    file_type: file
+    follow: false
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_sd_dropins
+  when: __linux_compliance_remediate_sd_directory_stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Sudo | Read the main sudoers file and every drop-in that the collection does not own
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_sd_source }}"
+  loop: >-
+    {{ ([__linux_compliance_remediate_sudo_main]
+        if __linux_compliance_remediate_sd_main_stat.isreg | default(false) else [])
+       + ((__linux_compliance_remediate_sd_dropins.files | default([]) | map(attribute='path') | sort)
+          | difference(__linux_compliance_remediate_sd_owned)) }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_sd_source
+  register: __linux_compliance_remediate_sd_read
+  tags:
+    - always
+
+- name: Sudo | Keep the text of the sudoers files besides the collection's drop-ins and whether the main file reads them
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_sources: >-
+      {{ dict(__linux_compliance_remediate_sd_read.results | default([])
+              | map(attribute='__linux_compliance_remediate_sd_source')
+              | zip(__linux_compliance_remediate_sd_read.results | default([]) | map(attribute='content')
+                    | map('b64decode'))) }}
+  tags:
+    - always
+
+- name: Sudo | Decide whether the main sudoers file includes the drop-in directory
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sd_included: >-
+      {{ __linux_compliance_remediate_sd_sources[__linux_compliance_remediate_sudo_main] | default('')
+         is search(__linux_compliance_remediate_sudo_include_pattern) }}
+  tags:
+    - always
+
+- name: Sudo | Restore the attributes of rules no longer effective
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/sudo_attribute_cleanup.yml"
+    apply:
+      tags:
+        - always
+  loop: >-
+    {{ __linux_compliance_remediate_family.cleanup
+       | selectattr('parameters.method', 'equalto', 'attribute') | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Sudo | Remove the drop-ins of rules no longer effective
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/sudo_dropin_cleanup.yml"
+    apply:
+      tags:
+        - always
+  loop: >-
+    {{ __linux_compliance_remediate_family.cleanup
+       | selectattr('parameters.method', 'equalto', 'dropin') | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Sudo | Restrict the attributes of the effective rules
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/sudo_attribute_apply.yml"
+    apply:
+      tags:
+        - always
+  loop: >-
+    {{ __linux_compliance_remediate_family.apply
+       | selectattr('parameters.method', 'equalto', 'attribute') | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Sudo | Write the drop-ins of the effective rules, each validated by visudo
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/sudo_dropin_apply.yml"
+    apply:
+      tags:
+        - always
+  loop: >-
+    {{ __linux_compliance_remediate_family.apply
+       | selectattr('parameters.method', 'equalto', 'dropin') | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always

@@ -32,8 +32,17 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "setting", "main_file_benchmarks"},
         {"path", "setting", "main_file_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
+    "sudo": [
+        {"method", "path", "options", "lines"},
+        {"method", "path", "options", "lines", "value_pattern"} | PROFILE_VALUE_PARAMETERS,
+        {"method", "path", "options", "lines", "value_pattern", "single"}
+        | PROFILE_VALUE_PARAMETERS,
+        {"method", "path", "type", "attribute", "max_mode"},
+        {"method", "path", "type", "attribute", "id"},
+    ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality"]
+NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality", "sudo"]
+DISRUPTIVE_NATIVE_FAMILIES = ["pwquality", "sudo"]
 
 
 def load(path: Path) -> dict[str, object]:
@@ -208,6 +217,40 @@ def test_native_file_permission_rules_have_an_absolute_path_and_an_octal_maximum
         assert restricted_mode.restricted_mode(maximum, maximum) == maximum.zfill(4)
 
 
+def test_native_sudo_rules_write_only_drop_ins_that_sudo_reads_and_restrict_two_paths() -> None:
+    sudo = [rule for rule in native() if rule["family"] == "sudo"]
+    assert len(sudo) == 10
+    role_vars = load(ROLE / "vars" / "main.yml")
+    dropin = re.compile(str(role_vars["__linux_compliance_remediate_sudo_dropin_pattern"]))
+    line = re.compile(str(role_vars["__linux_compliance_remediate_sudo_line_pattern"]))
+    option = re.compile(str(role_vars["__linux_compliance_remediate_sudo_option_pattern"]))
+    for rule in sudo:
+        parameters = cast("dict[str, object]", rule["parameters"])
+        assert rule["revert_strategy"] == "recorded_value"
+        path = str(parameters["path"])
+        if parameters["method"] == "attribute":
+            assert path in {"/etc/sudoers", "/etc/sudoers.d"}
+            assert parameters["type"] == ("file" if path == "/etc/sudoers" else "directory")
+            continue
+        assert dropin.fullmatch(path), path
+        assert "." not in path.rpartition("/")[2]
+        assert not path.endswith("~")
+        options = cast("list[str]", parameters["options"])
+        lines = cast("list[str]", parameters["lines"])
+        assert all(option.fullmatch(name) for name in options)
+        assert all(line.fullmatch(text) for text in lines)
+        assert sorted({text.split()[1].lstrip("!").split("=")[0] for text in lines}) == options
+        assert ("{value}" in "".join(lines)) is ("value_id" in parameters)
+        entries = cast("list[dict[str, object]]", parameters.get("profile_values", []))
+        for entry in entries:
+            value = "".join(cast("list[str]", entry["value"]))
+            assert re.fullmatch(str(parameters["value_pattern"]), value), (path, value)
+            assert "\n" not in value
+    paths = [str(cast("dict[str, object]", rule["parameters"])["path"]) for rule in sudo]
+    dropins = [path for path in paths if path.startswith("/etc/sudoers.d/")]
+    assert len(dropins) == len(set(dropins)) == 4
+
+
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
     families = {str(family["name"]) for family in registry()}
     role_files = {"main", "dispatch", "internal_variables"}
@@ -285,7 +328,7 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
     result = plan()
     summary = cast("dict[str, int]", result["summary"])
     disruptive = [rule for rule in native() if rule["disruptive"] is True]
-    assert {str(rule["family"]) for rule in disruptive} == {"pwquality"}
+    assert {str(rule["family"]) for rule in disruptive} == set(DISRUPTIVE_NATIVE_FAMILIES)
     assert summary["apply"] == len(native()) - len(disruptive)
     assert summary["skip"] == len(disruptive)
     assert summary["not_implemented"] == len(rules()) - len(native())
@@ -293,7 +336,7 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
         "file_permissions",
         "banners",
     ]
-    allowed = plan(allow_disruptive=["pwquality"])
+    allowed = plan(allow_disruptive=DISRUPTIVE_NATIVE_FAMILIES)
     assert cast("dict[str, int]", allowed["summary"])["apply"] == len(native())
     results = cast("list[dict[str, object]]", result["not_implemented"])
     assert len(results) == summary["not_implemented"]
@@ -350,5 +393,7 @@ def test_only_families_with_native_rules_are_dispatched_and_have_task_files() ->
         family for family in catalogue.families if (ROLE / "tasks" / f"{family}.yml").is_file()
     ]
     assert families_with_files == generate_toggles.native_families(catalogue)
-    planned = cast("list[dict[str, object]]", plan(allow_disruptive=["pwquality"])["families"])
+    planned = cast(
+        "list[dict[str, object]]", plan(allow_disruptive=DISRUPTIVE_NATIVE_FAMILIES)["families"]
+    )
     assert [family["name"] for family in planned] == generate_toggles.native_families(catalogue)

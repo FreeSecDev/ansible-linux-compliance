@@ -1,0 +1,23 @@
+---
+minor_changes:
+  - >-
+    remediate - the ``sudo`` topic is native for ten rules. ``sudo_add_use_pty``, ``sudo_custom_logfile``,
+    ``sudo_require_reauthentication`` and ``sudoers_validate_passwd`` each write one drop-in
+    ``/etc/sudoers.d/50-freesecdev-<setting>`` (mode ``0440``, root) with the profile's value, checked by
+    ``visudo -cf`` before it is moved into place; the mode, owner and group rules of ``/etc/sudoers`` and
+    ``/etc/sudoers.d`` restrict the attribute and record its prior value. Switching a rule or the topic off removes the
+    drop-in or restores the attribute, and never overwrites a later change (``modified_since_apply``). A drop-in that
+    ``visudo`` refuses is not installed (``invalid_sudoers``); a setting that another file already sets differently is
+    left alone (``conflicting_setting``). The rules that would remove other people's ``NOPASSWD``, ``!authenticate``
+    or user specifications, ``noexec``, ``requiretty``, the ``/usr/bin/sudo`` group and mode, and the package stay
+    ``audit_only`` (ADR 0022). ``sudo`` stays disruptive and needs ``sudo`` in
+    ``linux_compliance_remediate_allow_disruptive``.
+  - >-
+    catalogue - a native rule may take its profile value from the content's fixes with
+    ``profile_value_source: fix`` when its check accepts a range, as for ``var_sudo_timestamp_timeout``.
+trivial:
+  - >-
+    Repository guard - ``validate`` stays refused except for the reviewed ``/usr/sbin/visudo -cf %s`` of the sudo
+    drop-in task (ADR 0004 amendment). The Molecule images install ``sudo``; the lifecycle runs the sudo topic on
+    Ubuntu 24.04 and Rocky Linux 9 with regressions for a change of method, changes by hand, a refusing ``visudo``, a
+    setting of the administrator and a symbolic link, and the topic regressions now run at the end of their topic.
