@@ -10,6 +10,44 @@
       if lifecycle_cycle.0 == 'rule'
       else dict(lifecycle_rule_ids | zip([lifecycle_family_toggle] * lifecycle_rules | length)) }}
 
+- name: Lifecycle cycle | Name the rules that the pre-state already satisfies on this platform
+  ansible.builtin.set_fact:
+    lifecycle_unchanged: >-
+      {{ dict(lifecycle_declared_unchanged | map(attribute='rule')
+      | map('regex_replace', '^', 'xccdf_org.ssgproject.content_rule_')
+      | zip(lifecycle_declared_unchanged | map(attribute='status'))) }}
+  vars:
+    lifecycle_declared_unchanged: >-
+      {{ (lifecycle_pre_state.unchanged | default([]) | rejectattr('platforms', 'defined') | list)
+      + (lifecycle_pre_state.unchanged | default([]) | selectattr('platforms', 'defined')
+      | selectattr('platforms', 'contains', lifecycle_platform) | list) }}
+
+- name: Lifecycle cycle | Derive what every run of the cycle must report for each rule
+  ansible.builtin.set_fact:
+    lifecycle_changed_ids: "{{ lifecycle_rule_ids | reject('in', lifecycle_unchanged.keys() | list) | list }}"
+    lifecycle_changed_recorded_ids: >-
+      {{ lifecycle_recorded_rule_ids | reject('in', lifecycle_unchanged.keys() | list) | list }}
+    lifecycle_expected_apply: >-
+      {{ dict(lifecycle_rule_ids | zip_longest([], fillvalue='applied')) | combine(lifecycle_unchanged) }}
+    lifecycle_expected_again: >-
+      {{ dict(lifecycle_rule_ids | zip_longest([], fillvalue='compliant'))
+      | combine(lifecycle_unchanged | dict2items | selectattr('value', 'equalto', 'notapplicable') | items2dict) }}
+    lifecycle_expected_cleanup: >-
+      {{ dict(lifecycle_rule_ids | zip_longest([], fillvalue='cleanup'))
+      | combine(dict(lifecycle_unchanged.keys() | zip_longest([], fillvalue='none'))) }}
+
+- name: Lifecycle cycle | Refuse a pre-state that names a rule the topic does not apply on this platform
+  ansible.builtin.assert:
+    that:
+      - lifecycle_unchanged.keys() | difference(lifecycle_rule_ids) | length == 0
+      - lifecycle_unchanged.values() | difference(['compliant', 'notapplicable']) | length == 0
+      - lifecycle_changed_ids | length > 0
+    fail_msg: >-
+      {{ lifecycle_label }}: the pre-state declares {{ lifecycle_unchanged }} unchanged, but only the rules
+      {{ lifecycle_rule_ids }} run on this platform, an unchanged rule is either compliant or notapplicable, and
+      at least one rule must change something.
+    quiet: true
+
 - name: Lifecycle cycle | Refuse a rule toggle that an earlier cycle left set before a topic-toggle cycle
   ansible.builtin.assert:
     that:
@@ -86,8 +124,8 @@
       - lifecycle_planned | map(attribute='action') | unique | list == ['apply']
       - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
       - lifecycle_results | map(attribute='action') | unique | list == ['apply']
-      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
-      - lifecycle_results | rejectattr('changed') | list | length == 0
+      - lifecycle_results | items2dict(key_name='rule_id', value_name='status') == lifecycle_expected_apply
+      - lifecycle_results | selectattr('changed') | map(attribute='rule_id') | list == lifecycle_changed_ids
     fail_msg: "{{ lifecycle_label }}, check mode on: plan {{ lifecycle_planned }}, results {{ lifecycle_results }}"
     quiet: true
 
@@ -108,8 +146,8 @@
     that:
       - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
       - lifecycle_results | map(attribute='action') | unique | list == ['apply']
-      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
-      - lifecycle_results | rejectattr('changed') | list | length == 0
+      - lifecycle_results | items2dict(key_name='rule_id', value_name='status') == lifecycle_expected_apply
+      - lifecycle_results | selectattr('changed') | map(attribute='rule_id') | list == lifecycle_changed_ids
     fail_msg: "{{ lifecycle_label }}, apply: {{ lifecycle_results }}"
     quiet: true
 
@@ -138,7 +176,10 @@
         == lifecycle_before.ledger | rejectattr('rule_id', 'in', lifecycle_rule_ids) | list
       - >-
         lifecycle_applied_state.ledger | selectattr('rule_id', 'in', lifecycle_recorded_rule_ids)
-        | map(attribute='rule_id') | list == lifecycle_recorded_rule_ids
+        | map(attribute='rule_id') | list == lifecycle_changed_recorded_ids
+      - >-
+        lifecycle_applied_state.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='rule_id') | list == lifecycle_changed_ids
       - >-
         lifecycle_applied_state.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids)
         | map(attribute='family') | unique | list == [lifecycle_family]
@@ -190,7 +231,7 @@
   ansible.builtin.assert:
     that:
       - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
-      - lifecycle_results | map(attribute='status') | unique | list == ['compliant']
+      - lifecycle_results | items2dict(key_name='rule_id', value_name='status') == lifecycle_expected_again
       - lifecycle_results | selectattr('changed') | list | length == 0
     fail_msg: "{{ lifecycle_label }}, second apply: {{ lifecycle_results }}"
     quiet: true
@@ -216,9 +257,9 @@
 - name: Lifecycle cycle | Check that check mode planned and reported the cleanup of every rule of the topic
   ansible.builtin.assert:
     that:
-      - lifecycle_planned | map(attribute='action') | unique | list == ['cleanup']
+      - lifecycle_planned | items2dict(key_name='rule_id', value_name='action') == lifecycle_expected_cleanup
       - lifecycle_planned | items2dict(key_name='rule_id', value_name='disabled_by') == lifecycle_disabled_by
-      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_changed_ids
       - lifecycle_results | map(attribute='action') | unique | list == ['cleanup']
       - lifecycle_results | selectattr('status', 'equalto', 'cleanup_incomplete') | list | length == 0
       - lifecycle_results | rejectattr('changed') | list | length == 0
@@ -240,7 +281,7 @@
 - name: Lifecycle cycle | Check that every rule of the topic was cleaned up
   ansible.builtin.assert:
     that:
-      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_rule_ids
+      - lifecycle_results | map(attribute='rule_id') | list == lifecycle_changed_ids
       - lifecycle_results | map(attribute='action') | unique | list == ['cleanup']
       - lifecycle_results | selectattr('status', 'equalto', 'cleanup_incomplete') | list | length == 0
       - lifecycle_results | rejectattr('changed') | list | length == 0

@@ -70,7 +70,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 3 | `journald` | `logging` | systemd-journald, its storage, forwarding and remote upload | no | Changes where and how the journal is kept and forwarded; no session or workload is stopped | 19 | 0 | 19 |
 | 4 | `rsyslog` | `logging` | rsyslog, its log files and remote logging, and the logging services in general | no | Changes where and how rsyslog writes and sends logs; no session or workload is stopped | 19 | 0 | 19 |
 | 5 | `logrotate` | `logging` | logrotate | no | Installs and schedules log rotation; no session or workload is stopped | 3 | 0 | 3 |
-| 6 | `banners` | none | Login banners | no | Changes the text of login banners and messages of the day | 18 | 0 | 18 |
+| 6 | `banners` | none | Login banners | no | Changes the text of login banners and messages of the day | 18 | 15 | 3 |
 | 7 | `aide` | `integrity` | AIDE file integrity checking and the audit tool checks it covers | no | Installs AIDE, builds its database and schedules checks; no session or workload is stopped | 13 | 0 | 13 |
 | 8 | `software_integrity` | `integrity` | Package verification, prelink and a vendor-supported operating system | no | Verifies installed packages and removes prelink; no session or workload is stopped | 5 | 0 | 5 |
 | 9 | `endpoint_security` | `integrity` | Endpoint security software (antivirus, host intrusion detection) | no | Checks that endpoint security software is installed; no session or workload is stopped | 3 | 0 | 3 |
@@ -102,7 +102,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 35 | `ufw` | `firewall` | Uncomplicated Firewall (ufw) | yes | A default-deny policy can cut every remote session | 9 | 0 | 9 |
 | 36 | `ssh` | none | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 0 | 63 |
 | 37 | `pam` | none | PAM stack, pam_unix, password hashing and the PAM packages | yes | The module stack and the password hashing settings can lock out every user, including root | 15 | 0 | 15 |
-| 38 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 0 | 19 |
+| 38 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 14 | 5 |
 | 39 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 0 | 7 |
 | 40 | `faillock` | `pam` | Account lock-out after failed logins (pam_faillock, pam_faildelay) | yes | Lock-out after failed logins can lock out every user, including root | 14 | 0 | 14 |
 | 41 | `password_aging` | `accounts` | Password ageing (login.defs and existing accounts) | yes | Maximum password ages and inactivity settings can expire the passwords of operators and service accounts | 9 | 0 | 9 |
@@ -120,7 +120,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 53 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
 | 54 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
 | 55 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 1 | 1202 |
+|  | All |  |  |  |  | 1203 | 30 | 1173 |
 
 ## Umbrellas
 
@@ -440,7 +440,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 1 | 1 | 1 | 1 | 0 |
+| Native remediation | 25 | 25 | 25 | 25 | 9 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -502,7 +502,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 |
+| Native remediation | 6 | 6 | 6 | 6 | 10 | 8 | 8 | 8 | 20 | 20 | 20 | 20 | 5 | 0 | 0 | 1 | 5 | 7 | 13 | 13 |
 
 ## Mapping
 

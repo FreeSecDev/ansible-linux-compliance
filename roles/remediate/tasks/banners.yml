@@ -1,0 +1,135 @@
+---
+- name: Banners | Refuse to run outside the dispatcher or without the opt-in
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'banners'
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'banners') | list | first | default({}))
+    fail_msg: >-
+      The banners family file runs only from the remediate dispatcher with
+      linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Banners | Name the banner text, its rules and the profile values they must match
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_bn_text: >-
+      {{ (linux_compliance_remediate_banner_text | regex_replace('\n+$', '')) ~ __linux_compliance_remediate_newline
+         if linux_compliance_remediate_banner_text is string else none }}
+    __linux_compliance_remediate_bn_created: {}
+    __linux_compliance_remediate_bn_checks: >-
+      {%- set checks = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if rule.parameters.attribute | default('') == 'content' -%}
+      {%- set found = rule.parameters.profile_values | default([])
+            | selectattr('content_sha256', 'equalto', linux_compliance_discovered.content_sha256)
+            | selectattr('profiles', 'contains', linux_compliance_remediate_profile)
+            | map(attribute='value') | map('join', '') | list -%}
+      {%- set _ = checks.append({
+            'rule_id': rule.rule_id,
+            'value_id': rule.parameters.value_id | default(none),
+            'pattern': found | first | default(none),
+            'forbidden': rule.parameters.forbidden_pattern | default(none)}) -%}
+      {%- endfor -%}
+      {{ checks }}
+  tags:
+    - always
+
+- name: Banners | Refuse a banner text that the profile does not accept before anything changes
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_bn_text is string
+      - __linux_compliance_remediate_bn_text | trim | length > 0
+      - __linux_compliance_remediate_bn_text | length <= __linux_compliance_remediate_banner_max_length
+      - __linux_compliance_remediate_bn_text is not search(__linux_compliance_remediate_banner_forbidden)
+      - >-
+        __linux_compliance_remediate_bn_check.value_id is none
+        or __linux_compliance_remediate_bn_check.pattern is string
+      - >-
+        __linux_compliance_remediate_bn_check.pattern is none
+        or __linux_compliance_remediate_bn_text is search('(?s)' ~ __linux_compliance_remediate_bn_check.pattern)
+      - >-
+        __linux_compliance_remediate_bn_check.forbidden is none
+        or __linux_compliance_remediate_bn_text is not search(__linux_compliance_remediate_bn_check.forbidden)
+    fail_msg: >-
+      {{ __linux_compliance_remediate_bn_check.rule_id }} cannot apply linux_compliance_remediate_banner_text: it
+      must be a non-empty string of at most {{ __linux_compliance_remediate_banner_max_length }} characters without
+      a backslash or control characters other than newline and tab, it must not name the operating system, and
+      {{ ('it must match the XCCDF value ' ~ __linux_compliance_remediate_bn_check.value_id ~ ' that the profile '
+          ~ linux_compliance_remediate_profile ~ ' requires')
+         if __linux_compliance_remediate_bn_check.pattern is string
+         else ('the catalogue must hold the value ' ~ __linux_compliance_remediate_bn_check.value_id
+               ~ ' of the profile ' ~ linux_compliance_remediate_profile ~ ' for the content '
+               ~ linux_compliance_discovered.content_sha256)
+         if __linux_compliance_remediate_bn_check.value_id is string
+         else 'the profile requires no particular text' }}.
+      No banner was changed.
+    quiet: true
+  loop: "{{ __linux_compliance_remediate_bn_checks }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_bn_check
+    label: "{{ __linux_compliance_remediate_bn_check.rule_id }}"
+  tags:
+    - always
+
+- name: Banners | Restore the recorded content of banners that are no longer effective
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/banners_content_cleanup.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.cleanup | selectattr('parameters.attribute', 'equalto', 'content') }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Banners | Restore the recorded mode, owner or group of banner files that are no longer effective
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/banners_attribute_cleanup.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.cleanup | rejectattr('parameters.attribute', 'equalto', 'content') }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Banners | Write the banner text of the effective content rules
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/banners_content_apply.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.apply | selectattr('parameters.attribute', 'equalto', 'content') }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Banners | Restrict the mode, owner or group of the banner files of the effective rules
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/banners_attribute_apply.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.apply | rejectattr('parameters.attribute', 'equalto', 'content') }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always

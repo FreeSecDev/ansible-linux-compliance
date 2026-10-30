@@ -1,3 +1,10 @@
 ---
 __linux_compliance_remediate_collection_version: "0.1.0"
 __linux_compliance_remediate_toggle_pattern: "^linux_compliance_.+_enabled$"
+__linux_compliance_remediate_banner_forbidden: '[\\\x00-\x08\x0b-\x1f\x7f]'
+__linux_compliance_remediate_banner_max_length: 4096
+__linux_compliance_remediate_prior_content_max_bytes: 3072
+__linux_compliance_remediate_pwquality_main: /etc/security/pwquality.conf
+__linux_compliance_remediate_pwquality_directory: /etc/security/pwquality.conf.d
+__linux_compliance_remediate_pwquality_marker: /etc/security/pwquality.conf.d/.freesecdev-created
+__linux_compliance_remediate_newline: "\n"

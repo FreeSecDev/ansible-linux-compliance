@@ -1,4 +1,14 @@
 ---
+- name: Lifecycle remediate | Keep the profile that the discover role verified
+  ansible.builtin.set_fact:
+    lifecycle_discovered_profile: "{{ linux_compliance_discovered }}"
+
+- name: Lifecycle remediate | Narrow the verified profile to the rules of the topic, so no other topic acts
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: >-
+      {{ lifecycle_discovered_profile | combine({'rule_ids': lifecycle_discovered_profile.rule_ids
+      | select('in', lifecycle_rule_ids) | list}) }}
+
 - name: Lifecycle remediate | Run the real remediate role with the opt-in on
   ansible.builtin.include_role:
     name: freesecdev.linux_compliance.remediate
@@ -8,6 +18,10 @@
     linux_compliance_remediate_enabled: true
     linux_compliance_remediate_allow_disruptive: "{{ lifecycle_allow_disruptive }}"
 
+- name: Lifecycle remediate | Give the verified profile back for the audits and the next topic
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ lifecycle_discovered_profile }}"
+
 - name: Lifecycle remediate | Keep the plan and the results of the rules of the topic
   ansible.builtin.set_fact:
     lifecycle_planned: >-
@@ -16,6 +30,18 @@
     lifecycle_results: >-
       {{ linux_compliance_remediated.results | selectattr('rule_id', 'in', lifecycle_rule_ids)
       | sort(attribute='rule_id') }}
+
+- name: Lifecycle remediate | Check that no rule outside the topic was applied or cleaned up
+  ansible.builtin.assert:
+    that:
+      - >-
+        linux_compliance_remediated.results | rejectattr('rule_id', 'in', lifecycle_rule_ids)
+        | rejectattr('status', 'equalto', 'not_implemented') | list == []
+    fail_msg: >-
+      {{ lifecycle_family }}: the remediate run acted on rules outside the topic:
+      {{ linux_compliance_remediated.results | rejectattr('rule_id', 'in', lifecycle_rule_ids)
+      | rejectattr('status', 'equalto', 'not_implemented') | list }}
+    quiet: true
 
 - name: Lifecycle remediate | Check that the connection still reaches the same unprivileged instance
   ansible.builtin.include_tasks:

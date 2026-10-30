@@ -33,6 +33,12 @@
     lifecycle_declared_applied: "{{ (lifecycle_topic.applied | default({}, true))[item] | default([], true) }}"
   loop: "{{ lifecycle_state_keys.keys() | list }}"
 
+- name: Lifecycle topic | Name the declared files whose content the topic rewrites
+  ansible.builtin.set_fact:
+    lifecycle_rewritten: >-
+      {{ lifecycle_items.files | selectattr('rewritten', 'defined') | selectattr('rewritten')
+      | map(attribute='path') | list }}
+
 - name: Lifecycle topic | Name the rules of the topic and those whose prior state the ledger records
   ansible.builtin.set_fact:
     lifecycle_rule_ids: "{{ lifecycle_rules | map(attribute='rule_id') | list }}"
@@ -109,7 +115,7 @@
 - name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state
   ansible.builtin.include_tasks:
     file: lifecycle_cycle.yml
-  loop: "{{ lifecycle_toggle_modes | product(lifecycle_pre_states) | list }}"
+  loop: "{{ lifecycle_run_modes | product(lifecycle_pre_states) | list }}"
   loop_control:
     loop_var: lifecycle_cycle
     label: "{{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state"

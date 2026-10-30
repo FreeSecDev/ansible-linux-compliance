@@ -16,6 +16,7 @@ from tools.roles import generate_toggles, run_start
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 SENTINEL = "__linux_compliance_unset__"
 SECOND_SENTINEL = "__linux_compliance_unset_again__"
+NATIVE_FAMILIES = ("file_permissions", "banners", "pwquality")
 
 
 def copy_roles(root: Path) -> Path:
@@ -76,7 +77,7 @@ def test_the_dispatch_names_one_literal_file_per_catalogued_family() -> None:
     text = (REPOSITORY_ROOT / gen.DISPATCH).read_text(encoding="utf-8")
     tasks = load(text)
     assert [task["when"] for task in tasks] == [
-        "__linux_compliance_remediate_family.name == 'file_permissions'"
+        f"__linux_compliance_remediate_family.name == '{family}'" for family in NATIVE_FAMILIES
     ]
     include = cast("dict[str, object]", tasks[0]["ansible.builtin.include_tasks"])
     assert include["file"] == "{{ role_path }}/tasks/file_permissions.yml"
@@ -105,11 +106,11 @@ def test_a_family_with_only_audit_only_rules_gets_no_include_and_no_error(tmp_pa
     assert not (root / "roles" / "remediate" / "tasks" / "sysctl.yml").exists()
     tasks = load(gen.outputs(root)[gen.DISPATCH])
     assert [task["when"] for task in tasks] == [
-        "__linux_compliance_remediate_family.name == 'file_permissions'"
+        f"__linux_compliance_remediate_family.name == '{family}'" for family in NATIVE_FAMILIES
     ]
     catalogue = generate_toggles.load_catalogue(catalogue_file)
     assert "sysctl" in {str(rule["family"]) for rule in catalogue.rules}
-    assert generate_toggles.native_families(catalogue) == ["file_permissions"]
+    assert generate_toggles.native_families(catalogue) == list(NATIVE_FAMILIES)
 
 
 def test_a_family_with_a_native_rule_but_no_task_file_is_an_error(tmp_path: Path) -> None:

@@ -44,6 +44,7 @@
     file: lifecycle_broad_lines.yml
   vars:
     lifecycle_broad_declared: "{{ lifecycle_items.files | map(attribute='path') | list }}"
+    lifecycle_broad_rewritten: "{{ lifecycle_rewritten | default([]) }}"
     lifecycle_broad_raw:
       files: "{{ lifecycle_broad_files.files }}"
       sysctl: "{{ lifecycle_broad_sysctl.files }}"

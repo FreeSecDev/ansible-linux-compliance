@@ -4,6 +4,7 @@
     file: lifecycle_broad_lines.yml
   vars:
     lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
+    lifecycle_broad_rewritten: "{{ lifecycle_broad_selfcheck_case.rewritten | default([]) }}"
     lifecycle_broad_raw: "{{ lifecycle_broad_selfcheck_raw }}"
 
 - name: Lifecycle broad self-check | Remember the synthetic state before the case
@@ -15,6 +16,7 @@
     file: lifecycle_broad_lines.yml
   vars:
     lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
+    lifecycle_broad_rewritten: "{{ lifecycle_broad_selfcheck_case.rewritten | default([]) }}"
     lifecycle_broad_raw: "{{ lifecycle_broad_selfcheck_raw | combine(lifecycle_broad_selfcheck_case.after) }}"
 
 - name: Lifecycle broad self-check | Assert that the comparison refuses exactly the differences it must

@@ -33,6 +33,9 @@
         notice: >-
           {{ disruptive_rule }}: skipped, family {{ disruptive_family }} is disruptive and not named in
           linux_compliance_remediate_allow_disruptive
+        other_skipped: >-
+          {{ linux_compliance_remediated.rules | selectattr('action', 'equalto', 'skip')
+          | rejectattr('family', 'equalto', disruptive_family) | list }}
       ansible.builtin.assert:
         that:
           - linux_compliance_remediated.allow_disruptive == []
@@ -41,13 +44,20 @@
           - planned[0].action == 'skip'
           - planned[0].reason == 'disruptive_not_allowed'
           - planned[0].pending_cleanup is false
-          - linux_compliance_remediated.summary.skip == 1
+          - other_skipped | rejectattr('reason', 'equalto', 'disruptive_not_allowed') | list == []
+          - >-
+            other_skipped | map(attribute='rule_id') | list | sort
+            == __linux_compliance_remediate_rules | selectattr('disruptive')
+            | rejectattr('family', 'equalto', disruptive_family) | map(attribute='rule_id') | list | sort
+          - linux_compliance_remediated.summary.skip == 1 + other_skipped | length
           - linux_compliance_remediated.summary.apply == 0
           - linux_compliance_remediated.summary.cleanup == 0
           - linux_compliance_remediated.results == []
           - __linux_compliance_remediate_plan.families == []
           - linux_compliance_remediated.notices | select('equalto', notice | trim) | list | length == 1
-          - linux_compliance_remediated.notices | select('search', 'is disruptive') | list | length == 1
+          - >-
+            linux_compliance_remediated.notices | select('search', 'is disruptive') | list | length
+            == 1 + other_skipped | length
         quiet: true
 
 - name: Disruptive rule in check mode | With the allow-list the rule is planned and the role fails closed
@@ -89,6 +99,9 @@
           vars:
             planned: >-
               {{ linux_compliance_remediated.rules | selectattr('rule_id', 'equalto', disruptive_rule) | list }}
+            other_skipped: >-
+              {{ linux_compliance_remediated.rules | selectattr('action', 'equalto', 'skip')
+              | rejectattr('family', 'equalto', disruptive_family) | list }}
           ansible.builtin.assert:
             that:
               - ansible_failed_task.name == 'Remediate | Check that every planned rule has exactly one result'
@@ -96,9 +109,15 @@
               - planned | length == 1
               - planned[0].action == 'apply'
               - planned[0].reason == 'enabled'
-              - linux_compliance_remediated.summary.skip == 0
+              - other_skipped | rejectattr('reason', 'equalto', 'disruptive_not_allowed') | list == []
+              - linux_compliance_remediated.summary.skip == other_skipped | length
               - linux_compliance_remediated.summary.apply == 1
               - __linux_compliance_remediate_plan.families | map(attribute='name') | list == [disruptive_family]
               - linux_compliance_remediated.results == []
-              - linux_compliance_remediated.notices | select('search', 'is disruptive') | list == []
+              - >-
+                linux_compliance_remediated.notices | select('search', 'family ' ~ disruptive_family ~ ' is disruptive')
+                | list == []
+              - >-
+                linux_compliance_remediated.notices | select('search', 'is disruptive') | list | length
+                == other_skipped | length
             quiet: true

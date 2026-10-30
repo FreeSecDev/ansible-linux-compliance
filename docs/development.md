@@ -86,7 +86,8 @@ overriding them.
 | `test-ansible-units` | implemented | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
 | `molecule-dependencies` | implemented | Installs the pinned `extensions/molecule/requirements.yml` collections into `build/collections` |
 | `molecule-content` | implemented | Fetches and verifies the pinned `ubuntu2404` and `rhel9` datastreams into `build/content` for the Molecule scenarios |
-| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, then `molecule test` for `docker-ubuntu` and `docker-rhel-compatible`, including the toggle lifecycle of every native topic (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`; needs a running Docker daemon, see [Molecule](molecule.md) |
+| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, then `molecule test` for `docker-ubuntu`, `docker-rhel-compatible` and their toggle lifecycle scenarios `docker-ubuntu-lifecycle` and `docker-rhel-compatible-lifecycle` (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`. The lifecycle runs every native topic in both toggle modes unless `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one; needs a running Docker daemon, see [Molecule](molecule.md) |
+| `molecule-matrix` | implemented | `tools/roles/molecule_matrix.py`: prints the CI matrix of the toggle lifecycle legs as one line of JSON, one leg per Molecule platform, native topic and toggle mode ([Molecule](molecule.md#ci-legs)) |
 | `test-molecule-docker-selftest` | implemented | Real guard bypass attempts and the label-based destroy fallback against containers of the `docker-selftest` scenario, see [Molecule](molecule.md#self-test-against-real-containers) |
 | `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
 | `package-check` | implemented | Builds twice from differently ordered trees and fails unless the SHA-256 values match |
@@ -385,12 +386,15 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-evidence`, `make test-remediate-check`, `make test-role-guards`, `make test-verify`, `make test-content-golden`, `make test-browser` |
+| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-content-golden`, `make test-browser` |
+| `test-playbooks` | `make test-evidence`, `make test-remediate-check`, `make test-role-guards`, `make test-verify` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |
 | `collection` | `make test-sanity test-ansible-units package-check` |
 | `iac` | `tools/iac/install-tofu.sh`, then `make lint-iac` |
 | `molecule-docker` | `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` for `docker-ubuntu` and `docker-rhel-compatible`, and `make test-molecule-docker-selftest` for `docker-selftest`, one matrix entry each |
+| `molecule-plan` | `make -s molecule-matrix`: one leg per Molecule platform, native topic and toggle mode, derived from the catalogue, as the job output `matrix` |
+| `molecule-lifecycle` | `make test-molecule-docker MOLECULE_DOCKER_SELFTEST=false` with the `docker-<platform>-lifecycle` scenario, `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` of each leg of `molecule-plan` ([Molecule](molecule.md#ci-legs)) |
 | `scc-changes` | the base revision's `tools/scc/needs-smoke.sh`, read with `git show` and run with `bash`: `scc=false` only for a pull request or merge group whose diff touches no SCC path (renames count as a deletion and an addition); `true` for push, schedule and dispatch, and fails closed to `true`. A change to the filter takes effect only after it merges |
 | `scc-smoke` | runs unless `scc-changes` output `scc=false`; restores the verified SCC download from the Actions cache (key: SHA-256 of `extensions/ci/scc/scc.pins`; skipped for a pull request from a fork), then `make scc-smoke`; `contents: read` only, the image stays on the runner |
 | `ci-gate` | none; fails unless every needed job succeeded |

@@ -13,8 +13,10 @@ a native rule, and when a declaration does not follow the format of ``docs/molec
 unknown keys, a family or disruptive flag that disagrees with the file name or the registry,
 a disruptive topic without a containment note, a declaration without an ``applied``
 expectation, an expectation or a pre-state for an item that is not declared, an unknown
-attribute or platform, a malformed mode, or ``unselected_platforms`` that name every
-platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
+attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
+pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
+status other than ``compliant`` or ``notapplicable``, or ``unselected_platforms`` that name
+every platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
 topic. The harness repeats the coverage check at run time and fails on a platform that skips
 a topic without the declaration saying so.
@@ -88,7 +90,10 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 }
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
-PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files"})
+PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files", "unchanged"})
+UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
+UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable"})
+REWRITTEN_KEY: Final[str] = "rewritten"
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset({"path", "mode", "owner", "group"})
 UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
@@ -120,10 +125,17 @@ def _strings(value: object) -> list[str] | None:
 class Declaration:
     """The validation of one topic declaration; ``errors`` collects every finding."""
 
-    def __init__(self, where: str, platforms: frozenset[str]) -> None:
-        """Start the validation of the declaration in ``where`` for the known ``platforms``."""
+    def __init__(
+        self, where: str, platforms: frozenset[str], rules: frozenset[str] = frozenset()
+    ) -> None:
+        """Start the validation of ``where`` for the known ``platforms`` and native ``rules``.
+
+        ``rules`` holds the short identifiers of the native rules of the topic, which a pre-state
+        may declare ``unchanged``.
+        """
         self.where = where
         self.platforms = platforms
+        self.rules = rules
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
 
@@ -173,13 +185,21 @@ class Declaration:
             return None
         return value
 
+    def state_item_keys(self, category: str, item: dict[str, object], what: str) -> frozenset[str]:
+        """Return the keys that a state item of ``category`` may have; check a file's flag."""
+        if category != "files":
+            return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY})
+        if not isinstance(item.get(REWRITTEN_KEY, False), bool):
+            self.error(f"{what}.{REWRITTEN_KEY} must be a boolean")
+        return frozenset({CATEGORY_KEYS[category], PLATFORMS_KEY, REWRITTEN_KEY})
+
     def state(self, value: object) -> None:
         """Check the items whose state the harness records."""
         state = self.mapping(value, "state")
         if state is None:
             return
         self.keys(state, frozenset(CATEGORY_KEYS), "state")
-        for category, key_field in CATEGORY_KEYS.items():
+        for category in CATEGORY_KEYS:
             if category not in state:
                 continue
             for index, entry in enumerate(self.sequence(state[category], f"state.{category}")):
@@ -187,7 +207,7 @@ class Declaration:
                 item = self.mapping(entry, what)
                 if item is None:
                     continue
-                self.keys(item, frozenset({key_field, PLATFORMS_KEY}), what)
+                self.keys(item, self.state_item_keys(category, item, what), what)
                 self.platform_list(item, what)
                 key = self.key_value(category, item, what)
                 if key is None:
@@ -316,6 +336,26 @@ class Declaration:
                 ):
                     self.error(f"{where} needs a valid {owner}")
 
+    def pre_state_unchanged(self, value: object, what: str) -> None:
+        """Check the rules that a pre-state already satisfies, so that they change nothing."""
+        seen: set[str] = set()
+        for index, entry in enumerate(self.sequence(value, f"{what}.unchanged")):
+            where = f"{what}.unchanged[{index}]"
+            item = self.mapping(entry, where)
+            if item is None:
+                continue
+            self.keys(item, UNCHANGED_KEYS, where)
+            self.platform_list(item, where)
+            rule = item.get("rule")
+            if not isinstance(rule, str) or rule not in self.rules:
+                self.error(f"{where} needs the short identifier of a native rule of the topic")
+            elif rule in seen:
+                self.error(f"{where} lists {rule} twice")
+            else:
+                seen.add(rule)
+            if item.get("status") not in UNCHANGED_STATUSES:
+                self.error(f"{where} needs the status compliant or notapplicable")
+
     def pre_states(self, value: object) -> None:
         """Check the states from which the harness runs the cycles."""
         entries = self.sequence(value, "pre_states")
@@ -339,6 +379,8 @@ class Declaration:
                 self.error(f"{what}.audit must be a boolean")
             if "files" in item:
                 self.pre_state_files(item["files"], what)
+            if "unchanged" in item:
+                self.pre_state_unchanged(item["unchanged"], what)
 
 
 def _identity(
@@ -359,10 +401,18 @@ def _identity(
 
 
 def check_declaration(
-    path: Path, family: str, platforms: frozenset[str], *, disruptive: bool
+    path: Path,
+    family: str,
+    platforms: frozenset[str],
+    *,
+    disruptive: bool,
+    rules: frozenset[str] = frozenset(),
 ) -> list[str]:
-    """Return the findings for the declaration of ``family`` in ``path``."""
-    declaration = Declaration(str(path), platforms)
+    """Return the findings for the declaration of ``family`` in ``path``.
+
+    ``rules`` holds the short identifiers of the native rules of ``family``.
+    """
+    declaration = Declaration(str(path), platforms, rules)
     data = declaration.mapping(_load(path), "the declaration")
     if data is None:
         return declaration.errors
@@ -416,6 +466,11 @@ def check(root: Path) -> tuple[list[str], list[str]]:
                     family,
                     known,
                     disruptive=catalogue.families[family],
+                    rules=frozenset(
+                        toggles.rule_short_id(str(rule["rule_id"]))
+                        for rule in catalogue.rules
+                        if rule["family"] == family and toggles.is_native(rule)
+                    ),
                 )
             )
     return native, errors

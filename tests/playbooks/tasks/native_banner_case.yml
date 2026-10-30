@@ -1,0 +1,32 @@
+---
+- name: Native banner case | Run the remediate role with a banner text that the case rejects
+  block:
+    - name: Native banner case | Run the remediate role
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_remediate_profile: "{{ native_case.profile }}"
+        linux_compliance_remediate_banner_text: "{{ native_case.text }}"
+        linux_compliance_discovered:
+          profile_id: "xccdf_org.ssgproject.content_profile_{{ native_case.profile }}"
+          content_sha256: "{{ native_case.sha256 }}"
+          rule_ids:
+            - "xccdf_org.ssgproject.content_rule_{{ native_case.rule }}"
+
+    - name: Native banner case | Fail because the banner text was accepted
+      ansible.builtin.fail:
+        msg: "REMEDIATE-NATIVE-BANNER-ACCEPTED: {{ native_case.name }}"
+  rescue:
+    - name: Native banner case | Check that the banners family stopped at the text check
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name
+            == 'Banners | Refuse a banner text that the profile does not accept before anything changes'
+          - native_case.message in ansible_failed_result.results | map(attribute='msg') | join(' ')
+          - "'No banner was changed' in ansible_failed_result.results | map(attribute='msg') | join(' ')"
+        fail_msg: >-
+          {{ native_case.name }}: {{ ansible_failed_task.name }}:
+          {{ ansible_failed_result.msg | default(ansible_failed_result.results | default([]) | map(attribute='msg')
+             | list) }}
+        quiet: true

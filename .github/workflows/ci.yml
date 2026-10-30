@@ -58,7 +58,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 17
     permissions:
       contents: read
     steps:
@@ -75,6 +75,27 @@ jobs:
         run: make test-coverage
       - name: Run test-audit-exceptions
         run: make test-audit-exceptions
+      - name: Run test-content-golden
+        run: make test-content-golden
+      - name: Run test-browser
+        run: make test-browser
+
+  test-playbooks:
+    name: test-playbooks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
       - name: Run test-evidence
         run: make test-evidence
       - name: Run test-remediate-check
@@ -83,10 +104,6 @@ jobs:
         run: make test-role-guards
       - name: Run test-verify
         run: make test-verify
-      - name: Run test-content-golden
-        run: make test-content-golden
-      - name: Run test-browser
-        run: make test-browser
 
   oscap-integration:
     name: oscap-integration
@@ -283,7 +300,7 @@ jobs:
   molecule-docker:
     name: molecule-docker (${{ matrix.scenario }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 8
     permissions:
       contents: read
     strategy:
@@ -309,6 +326,59 @@ jobs:
         if: matrix.scenario == 'docker-selftest'
         run: make test-molecule-docker-selftest
 
+  molecule-plan:
+    name: molecule-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Plan one lifecycle leg per platform, native topic and toggle mode
+        id: plan
+        run: |
+          matrix="$(make -s molecule-matrix)"
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+
+  molecule-lifecycle:
+    name: molecule-lifecycle (${{ matrix.platform }}, ${{ matrix.topic }}, ${{ matrix.mode }})
+    needs: molecule-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.molecule-plan.outputs.matrix) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Run the toggle lifecycle of one topic and mode
+        env:
+          MOLECULE_SCENARIO: ${{ matrix.scenario }}
+          LIFECYCLE_TOPIC: ${{ matrix.topic }}
+          LIFECYCLE_MODE: ${{ matrix.mode }}
+        run: >-
+          make test-molecule-docker MOLECULE_DOCKER_SCENARIOS="$MOLECULE_SCENARIO" MOLECULE_DOCKER_SELFTEST=false
+          MOLECULE_LIFECYCLE_TOPIC="$LIFECYCLE_TOPIC" MOLECULE_LIFECYCLE_MODE="$LIFECYCLE_MODE"
+
   ci-gate:
     name: ci-gate
     if: always()
@@ -316,6 +386,7 @@ jobs:
       - lint
       - typecheck
       - test
+      - test-playbooks
       - oscap-integration
       - scc-changes
       - scc-smoke
@@ -324,6 +395,8 @@ jobs:
       - collection
       - iac
       - molecule-docker
+      - molecule-plan
+      - molecule-lifecycle
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}

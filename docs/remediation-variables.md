@@ -132,7 +132,7 @@ through subsystem tags.
 | `linux_compliance_journald_enabled` | `journald` | `logging` | no | `true` | 19 | 0 | 19 | 3 |
 | `linux_compliance_rsyslog_enabled` | `rsyslog` | `logging` | no | `true` | 19 | 0 | 19 | 0 |
 | `linux_compliance_logrotate_enabled` | `logrotate` | `logging` | no | `true` | 3 | 0 | 3 | 0 |
-| `linux_compliance_banners_enabled` | `banners` | none | no | `true` | 18 | 0 | 18 | 0 |
+| `linux_compliance_banners_enabled` | `banners` | none | no | `true` | 18 | 15 | 3 | 0 |
 | `linux_compliance_integrity_enabled` | `aide`, `software_integrity`, `endpoint_security` | umbrella | no | `true` | 21 | 0 | 21 | 0 |
 | `linux_compliance_aide_enabled` | `aide` | `integrity` | no | `true` | 13 | 0 | 13 | 0 |
 | `linux_compliance_software_integrity_enabled` | `software_integrity` | `integrity` | no | `true` | 5 | 0 | 5 | 0 |
@@ -169,8 +169,8 @@ through subsystem tags.
 | `linux_compliance_iptables_enabled` | `iptables` | `firewall` | yes | `true` | 12 | 0 | 12 | 0 |
 | `linux_compliance_ufw_enabled` | `ufw` | `firewall` | yes | `true` | 9 | 0 | 9 | 0 |
 | `linux_compliance_ssh_enabled` | `ssh` | none | yes | `true` | 63 | 0 | 63 | 4 |
-| `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 0 | 55 | 1 |
-| `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 0 | 19 | 0 |
+| `linux_compliance_pam_enabled` | `pam` | none | yes | `true` | 55 | 14 | 41 | 1 |
+| `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 14 | 5 | 0 |
 | `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 0 | 7 | 2 |
 | `linux_compliance_faillock_enabled` | `faillock` | `pam` | yes | `true` | 14 | 0 | 14 | 0 |
 | `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | umbrella | yes | `true` | 88 | 0 | 88 | 2 |
@@ -463,24 +463,24 @@ families through their subsystem tags:
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_banner_etc_issue_enabled` | `banner_etc_issue` | `audit_only` |
-| `linux_compliance_rule_banner_etc_issue_cis_enabled` | `banner_etc_issue_cis` | `audit_only` |
-| `linux_compliance_rule_banner_etc_issue_net_enabled` | `banner_etc_issue_net` | `audit_only` |
-| `linux_compliance_rule_banner_etc_issue_net_cis_enabled` | `banner_etc_issue_net_cis` | `audit_only` |
-| `linux_compliance_rule_banner_etc_motd_enabled` | `banner_etc_motd` | `audit_only` |
-| `linux_compliance_rule_banner_etc_motd_cis_enabled` | `banner_etc_motd_cis` | `audit_only` |
+| `linux_compliance_rule_banner_etc_issue_enabled` | `banner_etc_issue` | `recorded_value` |
+| `linux_compliance_rule_banner_etc_issue_cis_enabled` | `banner_etc_issue_cis` | `recorded_value` |
+| `linux_compliance_rule_banner_etc_issue_net_enabled` | `banner_etc_issue_net` | `recorded_value` |
+| `linux_compliance_rule_banner_etc_issue_net_cis_enabled` | `banner_etc_issue_net_cis` | `recorded_value` |
+| `linux_compliance_rule_banner_etc_motd_enabled` | `banner_etc_motd` | `recorded_value` |
+| `linux_compliance_rule_banner_etc_motd_cis_enabled` | `banner_etc_motd_cis` | `recorded_value` |
 | `linux_compliance_rule_banner_etc_profiled_ssh_confirm_enabled` | `banner_etc_profiled_ssh_confirm` | `audit_only` |
 | `linux_compliance_rule_dconf_gnome_banner_enabled_enabled` | `dconf_gnome_banner_enabled` | `audit_only` |
 | `linux_compliance_rule_dconf_gnome_login_banner_text_enabled` | `dconf_gnome_login_banner_text` | `audit_only` |
-| `linux_compliance_rule_file_groupowner_etc_issue_enabled` | `file_groupowner_etc_issue` | `audit_only` |
-| `linux_compliance_rule_file_groupowner_etc_issue_net_enabled` | `file_groupowner_etc_issue_net` | `audit_only` |
-| `linux_compliance_rule_file_groupowner_etc_motd_enabled` | `file_groupowner_etc_motd` | `audit_only` |
-| `linux_compliance_rule_file_owner_etc_issue_enabled` | `file_owner_etc_issue` | `audit_only` |
-| `linux_compliance_rule_file_owner_etc_issue_net_enabled` | `file_owner_etc_issue_net` | `audit_only` |
-| `linux_compliance_rule_file_owner_etc_motd_enabled` | `file_owner_etc_motd` | `audit_only` |
-| `linux_compliance_rule_file_permissions_etc_issue_enabled` | `file_permissions_etc_issue` | `audit_only` |
-| `linux_compliance_rule_file_permissions_etc_issue_net_enabled` | `file_permissions_etc_issue_net` | `audit_only` |
-| `linux_compliance_rule_file_permissions_etc_motd_enabled` | `file_permissions_etc_motd` | `audit_only` |
+| `linux_compliance_rule_file_groupowner_etc_issue_enabled` | `file_groupowner_etc_issue` | `recorded_value` |
+| `linux_compliance_rule_file_groupowner_etc_issue_net_enabled` | `file_groupowner_etc_issue_net` | `recorded_value` |
+| `linux_compliance_rule_file_groupowner_etc_motd_enabled` | `file_groupowner_etc_motd` | `recorded_value` |
+| `linux_compliance_rule_file_owner_etc_issue_enabled` | `file_owner_etc_issue` | `recorded_value` |
+| `linux_compliance_rule_file_owner_etc_issue_net_enabled` | `file_owner_etc_issue_net` | `recorded_value` |
+| `linux_compliance_rule_file_owner_etc_motd_enabled` | `file_owner_etc_motd` | `recorded_value` |
+| `linux_compliance_rule_file_permissions_etc_issue_enabled` | `file_permissions_etc_issue` | `recorded_value` |
+| `linux_compliance_rule_file_permissions_etc_issue_net_enabled` | `file_permissions_etc_issue_net` | `recorded_value` |
+| `linux_compliance_rule_file_permissions_etc_motd_enabled` | `file_permissions_etc_motd` | `recorded_value` |
 
 ### `aide`
 
@@ -1384,24 +1384,24 @@ families through their subsystem tags:
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_accounts_password_pam_dcredit_enabled` | `accounts_password_pam_dcredit` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_dictcheck_enabled` | `accounts_password_pam_dictcheck` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_difok_enabled` | `accounts_password_pam_difok` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_enforce_root_enabled` | `accounts_password_pam_enforce_root` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_enforcing_enabled` | `accounts_password_pam_enforcing` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_lcredit_enabled` | `accounts_password_pam_lcredit` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_maxclassrepeat_enabled` | `accounts_password_pam_maxclassrepeat` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_maxrepeat_enabled` | `accounts_password_pam_maxrepeat` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_maxsequence_enabled` | `accounts_password_pam_maxsequence` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_minclass_enabled` | `accounts_password_pam_minclass` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_minlen_enabled` | `accounts_password_pam_minlen` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_ocredit_enabled` | `accounts_password_pam_ocredit` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_dcredit_enabled` | `accounts_password_pam_dcredit` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_dictcheck_enabled` | `accounts_password_pam_dictcheck` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_difok_enabled` | `accounts_password_pam_difok` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_enforce_root_enabled` | `accounts_password_pam_enforce_root` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_enforcing_enabled` | `accounts_password_pam_enforcing` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_lcredit_enabled` | `accounts_password_pam_lcredit` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_maxclassrepeat_enabled` | `accounts_password_pam_maxclassrepeat` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_maxrepeat_enabled` | `accounts_password_pam_maxrepeat` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_maxsequence_enabled` | `accounts_password_pam_maxsequence` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_minclass_enabled` | `accounts_password_pam_minclass` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_minlen_enabled` | `accounts_password_pam_minlen` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_pam_ocredit_enabled` | `accounts_password_pam_ocredit` | `recorded_value` |
 | `linux_compliance_rule_accounts_password_pam_pwquality_enabled_enabled` | `accounts_password_pam_pwquality_enabled` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_pwquality_password_auth_enabled` | `accounts_password_pam_pwquality_password_auth` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled` | `accounts_password_pam_pwquality_retry` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled` | `accounts_password_pam_pwquality_retry` | `recorded_value` |
 | `linux_compliance_rule_accounts_password_pam_pwquality_system_auth_enabled` | `accounts_password_pam_pwquality_system_auth` | `audit_only` |
 | `linux_compliance_rule_accounts_password_pam_retry_enabled` | `accounts_password_pam_retry` | `audit_only` |
-| `linux_compliance_rule_accounts_password_pam_ucredit_enabled` | `accounts_password_pam_ucredit` | `audit_only` |
+| `linux_compliance_rule_accounts_password_pam_ucredit_enabled` | `accounts_password_pam_ucredit` | `recorded_value` |
 | `linux_compliance_rule_package_pam_pwquality_installed_enabled` | `package_pam_pwquality_installed` | `audit_only` |
 
 ### `pwhistory`

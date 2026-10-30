@@ -53,6 +53,36 @@
           {{ lifecycle_declared_families }}.
         quiet: true
 
+    - name: Select the topics and toggle modes of this run, all of them unless a CI leg names one
+      ansible.builtin.set_fact:
+        lifecycle_selected_topic: "{{ lookup('ansible.builtin.env', 'MOLECULE_LIFECYCLE_TOPIC') }}"
+        lifecycle_selected_mode: "{{ lookup('ansible.builtin.env', 'MOLECULE_LIFECYCLE_MODE') }}"
+
+    - name: Refuse a selection that names no native topic or no toggle mode
+      ansible.builtin.assert:
+        that:
+          - (lifecycle_selected_topic | length > 0) is sameas (lifecycle_selected_mode | length > 0)
+          - lifecycle_selected_topic | length == 0 or lifecycle_selected_topic in lifecycle_native_families
+          - lifecycle_selected_mode | length == 0 or lifecycle_selected_mode in lifecycle_toggle_modes
+        fail_msg: >-
+          MOLECULE_LIFECYCLE_TOPIC and MOLECULE_LIFECYCLE_MODE must be set together, to a native topic
+          ({{ lifecycle_native_families }}) and a toggle mode ({{ lifecycle_toggle_modes }}), or both left empty to
+          run every topic in every mode. Got '{{ lifecycle_selected_topic }}' and '{{ lifecycle_selected_mode }}'.
+        quiet: true
+
+    - name: Name the topics and modes that this run proves
+      ansible.builtin.set_fact:
+        lifecycle_run_families: >-
+          {{ [lifecycle_selected_topic] if lifecycle_selected_topic | length > 0 else lifecycle_native_families }}
+        lifecycle_run_modes: >-
+          {{ [lifecycle_selected_mode] if lifecycle_selected_mode | length > 0 else lifecycle_toggle_modes }}
+
+    - name: Scan once before any state is recorded, so that the first write of the scanner happens before the reference
+      ansible.builtin.include_tasks:
+        file: tasks/audit.yml
+      vars:
+        audit_check_mode: false
+
     - name: Check that the state comparison finds missing controls, stray changes and leftovers
       ansible.builtin.include_tasks:
         file: tasks/lifecycle_selfcheck.yml
@@ -69,15 +99,23 @@
         loop_var: lifecycle_broad_selfcheck_case
         label: "{{ lifecycle_broad_selfcheck_case.name }}"
 
-    - name: Run the toggle lifecycle of every native topic
+    - name: Run the toggle lifecycle of every selected native topic
       ansible.builtin.include_tasks:
         file: tasks/lifecycle_topic.yml
-      loop: "{{ lifecycle_native_families }}"
+      loop: "{{ lifecycle_run_families }}"
       loop_control:
         loop_var: lifecycle_family
+
+    - name: Run the pwquality regressions for a change of method, a change by hand and a symbolic link
+      ansible.builtin.include_tasks:
+        file: tasks/lifecycle_pwquality_regressions.yml
+      when:
+        - lifecycle_run_families | last == 'pwquality'
+        - lifecycle_run_modes | last == 'rule'
 
     - name: Report the topics whose lifecycle was proven
       ansible.builtin.debug:
         msg: >-
-          Toggle lifecycle proven on {{ molecule_target.instance }} for {{ lifecycle_native_families | join(', ') }}:
-          topic and rule toggles, every declared pre-state, idempotence, check mode and cleanup.
+          Toggle lifecycle proven on {{ molecule_target.instance }} for {{ lifecycle_run_families | join(', ') }}
+          with the {{ lifecycle_run_modes | join(' and ') }} toggles: every declared pre-state, idempotence, check
+          mode and cleanup.

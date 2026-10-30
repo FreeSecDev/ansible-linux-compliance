@@ -155,6 +155,755 @@ __linux_compliance_remediate_families:
   - name: bootloader
     disruptive: true
 __linux_compliance_remediate_rules:
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_dcredit_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-dcredit.conf"
+      setting: "dcredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_dcredit"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "-1"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cui
+            - ospp
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "-1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_dictcheck_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-dictcheck.conf"
+      setting: "dictcheck"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_dictcheck"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_difok"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_difok_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-difok.conf"
+      setting: "difok"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_difok"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "2"
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - stig
+          value:
+            - "8"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "2"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "8"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforce_root"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_enforce_root_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-enforce-root.conf"
+      setting: "enforce_for_root"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforcing"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_enforcing_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-enforcing.conf"
+      setting: "enforcing"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_enforcing"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_lcredit"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_lcredit_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-lcredit.conf"
+      setting: "lcredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_lcredit"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "-1"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cui
+            - ospp
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "-1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxclassrepeat"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_maxclassrepeat_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-maxclassrepeat.conf"
+      setting: "maxclassrepeat"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_maxclassrepeat"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "4"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxrepeat"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_maxrepeat_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-maxrepeat.conf"
+      setting: "maxrepeat"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_maxrepeat"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "3"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "3"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxsequence"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_maxsequence_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-maxsequence.conf"
+      setting: "maxsequence"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_maxsequence"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "3"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "3"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_minclass"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_minclass_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-minclass.conf"
+      setting: "minclass"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_minclass"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "4"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - stig
+            - stig_gui
+          value:
+            - "4"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_minlen_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-minlen.conf"
+      setting: "minlen"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_minlen"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "14"
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - stig
+          value:
+            - "15"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - stig
+            - stig_gui
+          value:
+            - "15"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cui
+            - ospp
+            - "pci-dss"
+          value:
+            - "12"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - ism_o
+          value:
+            - "14"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_ocredit"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_ocredit_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-ocredit.conf"
+      setting: "ocredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_ocredit"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "-1"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cui
+            - ospp
+            - stig
+            - stig_gui
+          value:
+            - "-1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_retry"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_pwquality_retry_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-pwquality-retry.conf"
+      setting: "retry"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_retry"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "3"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_ucredit"
+    family: pwquality
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_pam_ucredit_enabled
+    runbook: null
+    parameters:
+      path: "/etc/security/pwquality.conf.d/50-freesecdev-ucredit.conf"
+      setting: "ucredit"
+      main_file_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"
+      value_id: "var_password_pam_ucredit"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "-1"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cui
+            - ospp
+            - stig
+            - stig_gui
+          value:
+            - "-1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_issue"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_banner_etc_issue_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue"
+      attribute: "content"
+      value_id: "login_banner_text"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "^(Authorized[\\s\\n]+users[\\s\\n]+only\\.[\\s\\n]+All[\\s\\n]+activit"
+            - "y[\\s\\n]+may[\\s\\n]+be[\\s\\n]+monitored[\\s\\n]+and[\\s\\n]+reporte"
+            - "d\\.|^(?!.*(\\\\|fedora|rhel|sle|ubuntu)).*)$"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "^(You[\\s\\n]+are[\\s\\n]+accessing[\\s\\n]+a[\\s\\n]+U\\.S\\.[\\s\\n]"
+            - "+Government[\\s\\n]+\\(USG\\)[\\s\\n]+Information[\\s\\n]+System[\\s\\"
+            - "n]+\\(IS\\)[\\s\\n]+that[\\s\\n]+is[\\s\\n]+provided[\\s\\n]+for[\\s\\"
+            - "n]+USG\\-authorized[\\s\\n]+use[\\s\\n]+only\\.[\\s\\n]+By[\\s\\n]+usi"
+            - "ng[\\s\\n]+this[\\s\\n]+IS[\\s\\n]+\\(which[\\s\\n]+includes[\\s\\n]+a"
+            - "ny[\\s\\n]+device[\\s\\n]+attached[\\s\\n]+to[\\s\\n]+this[\\s\\n]+IS"
+            - "\\),[\\s\\n]+you[\\s\\n]+consent[\\s\\n]+to[\\s\\n]+the[\\s\\n]+follow"
+            - "ing[\\s\\n]+conditions\\:(?:[\\n]+|(?:\\\\n)+)\\-The[\\s\\n]+USG[\\s\\"
+            - "n]+routinely[\\s\\n]+intercepts[\\s\\n]+and[\\s\\n]+monitors[\\s\\n]+c"
+            - "ommunications[\\s\\n]+on[\\s\\n]+this[\\s\\n]+IS[\\s\\n]+for[\\s\\n]+p"
+            - "urposes[\\s\\n]+including,[\\s\\n]+but[\\s\\n]+not[\\s\\n]+limited[\\s"
+            - "\\n]+to,[\\s\\n]+penetration[\\s\\n]+testing,[\\s\\n]+COMSEC[\\s\\n]+m"
+            - "onitoring,[\\s\\n]+network[\\s\\n]+operations[\\s\\n]+and[\\s\\n]+defe"
+            - "nse,[\\s\\n]+personnel[\\s\\n]+misconduct[\\s\\n]+\\(PM\\),[\\s\\n]+la"
+            - "w[\\s\\n]+enforcement[\\s\\n]+\\(LE\\),[\\s\\n]+and[\\s\\n]+counterint"
+            - "elligence[\\s\\n]+\\(CI\\)[\\s\\n]+investigations\\.(?:[\\n]+|(?:\\\\n"
+            - ")+)\\-At[\\s\\n]+any[\\s\\n]+time,[\\s\\n]+the[\\s\\n]+USG[\\s\\n]+may"
+            - "[\\s\\n]+inspect[\\s\\n]+and[\\s\\n]+seize[\\s\\n]+data[\\s\\n]+stored"
+            - "[\\s\\n]+on[\\s\\n]+this[\\s\\n]+IS\\.(?:[\\n]+|(?:\\\\n)+)\\-Communic"
+            - "ations[\\s\\n]+using,[\\s\\n]+or[\\s\\n]+data[\\s\\n]+stored[\\s\\n]+o"
+            - "n,[\\s\\n]+this[\\s\\n]+IS[\\s\\n]+are[\\s\\n]+not[\\s\\n]+private,[\\"
+            - "s\\n]+are[\\s\\n]+subject[\\s\\n]+to[\\s\\n]+routine[\\s\\n]+monitorin"
+            - "g,[\\s\\n]+interception,[\\s\\n]+and[\\s\\n]+search,[\\s\\n]+and[\\s\\"
+            - "n]+may[\\s\\n]+be[\\s\\n]+disclosed[\\s\\n]+or[\\s\\n]+used[\\s\\n]+fo"
+            - "r[\\s\\n]+any[\\s\\n]+USG\\-authorized[\\s\\n]+purpose\\.(?:[\\n]+|(?:"
+            - "\\\\n)+)\\-This[\\s\\n]+IS[\\s\\n]+includes[\\s\\n]+security[\\s\\n]+m"
+            - "easures[\\s\\n]+\\(e\\.g\\.,[\\s\\n]+authentication[\\s\\n]+and[\\s\\n"
+            - "]+access[\\s\\n]+controls\\)[\\s\\n]+to[\\s\\n]+protect[\\s\\n]+USG[\\"
+            - "s\\n]+interests\\-\\-not[\\s\\n]+for[\\s\\n]+your[\\s\\n]+personal[\\s"
+            - "\\n]+benefit[\\s\\n]+or[\\s\\n]+privacy\\.(?:[\\n]+|(?:\\\\n)+)\\-Notw"
+            - "ithstanding[\\s\\n]+the[\\s\\n]+above,[\\s\\n]+using[\\s\\n]+this[\\s"
+            - "\\n]+IS[\\s\\n]+does[\\s\\n]+not[\\s\\n]+constitute[\\s\\n]+consent[\\"
+            - "s\\n]+to[\\s\\n]+PM,[\\s\\n]+LE[\\s\\n]+or[\\s\\n]+CI[\\s\\n]+investig"
+            - "ative[\\s\\n]+searching[\\s\\n]+or[\\s\\n]+monitoring[\\s\\n]+of[\\s\\"
+            - "n]+the[\\s\\n]+content[\\s\\n]+of[\\s\\n]+privileged[\\s\\n]+communica"
+            - "tions,[\\s\\n]+or[\\s\\n]+work[\\s\\n]+product,[\\s\\n]+related[\\s\\n"
+            - "]+to[\\s\\n]+personal[\\s\\n]+representation[\\s\\n]+or[\\s\\n]+servic"
+            - "es[\\s\\n]+by[\\s\\n]+attorneys,[\\s\\n]+psychotherapists,[\\s\\n]+or["
+            - "\\s\\n]+clergy,[\\s\\n]+and[\\s\\n]+their[\\s\\n]+assistants\\.[\\s\\n"
+            - "]+Such[\\s\\n]+communications[\\s\\n]+and[\\s\\n]+work[\\s\\n]+product"
+            - "[\\s\\n]+are[\\s\\n]+private[\\s\\n]+and[\\s\\n]+confidential\\.[\\s\\"
+            - "n]+See[\\s\\n]+User[\\s\\n]+Agreement[\\s\\n]+for[\\s\\n]+details\\.|I"
+            - "'ve[\\s\\n]+read[\\s\\n]+\\&[\\s\\n]+consent[\\s\\n]+to[\\s\\n]+terms["
+            - "\\s\\n]+in[\\s\\n]+IS[\\s\\n]+user[\\s\\n]+agreem't\\.)$"
+  - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_issue_cis"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_banner_etc_issue_cis_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue"
+      attribute: "content"
+      forbidden_pattern: "(\\\\v|\\\\r|\\\\m|\\\\s|ubuntu2404|Ubuntu 24.04|rhel9|Red Hat Enterprise Linux 9)"
+  - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_issue_net"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_banner_etc_issue_net_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue.net"
+      attribute: "content"
+      value_id: "remote_login_banner_text"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - stig
+          value:
+            - "^(You[\\s\\n]+are[\\s\\n]+accessing[\\s\\n]+a[\\s\\n]+U\\.S\\.[\\s\\n]"
+            - "+Government[\\s\\n]+\\(USG\\)[\\s\\n]+Information[\\s\\n]+System[\\s\\"
+            - "n]+\\(IS\\)[\\s\\n]+that[\\s\\n]+is[\\s\\n]+provided[\\s\\n]+for[\\s\\"
+            - "n]+USG\\-authorized[\\s\\n]+use[\\s\\n]+only\\.[\\s\\n]+By[\\s\\n]+usi"
+            - "ng[\\s\\n]+this[\\s\\n]+IS[\\s\\n]+\\(which[\\s\\n]+includes[\\s\\n]+a"
+            - "ny[\\s\\n]+device[\\s\\n]+attached[\\s\\n]+to[\\s\\n]+this[\\s\\n]+IS"
+            - "\\),[\\s\\n]+you[\\s\\n]+consent[\\s\\n]+to[\\s\\n]+the[\\s\\n]+follow"
+            - "ing[\\s\\n]+conditions\\:(?:[\\n]+|(?:\\\\n)+)\\-The[\\s\\n]+USG[\\s\\"
+            - "n]+routinely[\\s\\n]+intercepts[\\s\\n]+and[\\s\\n]+monitors[\\s\\n]+c"
+            - "ommunications[\\s\\n]+on[\\s\\n]+this[\\s\\n]+IS[\\s\\n]+for[\\s\\n]+p"
+            - "urposes[\\s\\n]+including,[\\s\\n]+but[\\s\\n]+not[\\s\\n]+limited[\\s"
+            - "\\n]+to,[\\s\\n]+penetration[\\s\\n]+testing,[\\s\\n]+COMSEC[\\s\\n]+m"
+            - "onitoring,[\\s\\n]+network[\\s\\n]+operations[\\s\\n]+and[\\s\\n]+defe"
+            - "nse,[\\s\\n]+personnel[\\s\\n]+misconduct[\\s\\n]+\\(PM\\),[\\s\\n]+la"
+            - "w[\\s\\n]+enforcement[\\s\\n]+\\(LE\\),[\\s\\n]+and[\\s\\n]+counterint"
+            - "elligence[\\s\\n]+\\(CI\\)[\\s\\n]+investigations\\.(?:[\\n]+|(?:\\\\n"
+            - ")+)\\-At[\\s\\n]+any[\\s\\n]+time,[\\s\\n]+the[\\s\\n]+USG[\\s\\n]+may"
+            - "[\\s\\n]+inspect[\\s\\n]+and[\\s\\n]+seize[\\s\\n]+data[\\s\\n]+stored"
+            - "[\\s\\n]+on[\\s\\n]+this[\\s\\n]+IS\\.(?:[\\n]+|(?:\\\\n)+)\\-Communic"
+            - "ations[\\s\\n]+using,[\\s\\n]+or[\\s\\n]+data[\\s\\n]+stored[\\s\\n]+o"
+            - "n,[\\s\\n]+this[\\s\\n]+IS[\\s\\n]+are[\\s\\n]+not[\\s\\n]+private,[\\"
+            - "s\\n]+are[\\s\\n]+subject[\\s\\n]+to[\\s\\n]+routine[\\s\\n]+monitorin"
+            - "g,[\\s\\n]+interception,[\\s\\n]+and[\\s\\n]+search,[\\s\\n]+and[\\s\\"
+            - "n]+may[\\s\\n]+be[\\s\\n]+disclosed[\\s\\n]+or[\\s\\n]+used[\\s\\n]+fo"
+            - "r[\\s\\n]+any[\\s\\n]+USG\\-authorized[\\s\\n]+purpose\\.(?:[\\n]+|(?:"
+            - "\\\\n)+)\\-This[\\s\\n]+IS[\\s\\n]+includes[\\s\\n]+security[\\s\\n]+m"
+            - "easures[\\s\\n]+\\(e\\.g\\.,[\\s\\n]+authentication[\\s\\n]+and[\\s\\n"
+            - "]+access[\\s\\n]+controls\\)[\\s\\n]+to[\\s\\n]+protect[\\s\\n]+USG[\\"
+            - "s\\n]+interests\\-\\-not[\\s\\n]+for[\\s\\n]+your[\\s\\n]+personal[\\s"
+            - "\\n]+benefit[\\s\\n]+or[\\s\\n]+privacy\\.(?:[\\n]+|(?:\\\\n)+)\\-Notw"
+            - "ithstanding[\\s\\n]+the[\\s\\n]+above,[\\s\\n]+using[\\s\\n]+this[\\s"
+            - "\\n]+IS[\\s\\n]+does[\\s\\n]+not[\\s\\n]+constitute[\\s\\n]+consent[\\"
+            - "s\\n]+to[\\s\\n]+PM,[\\s\\n]+LE[\\s\\n]+or[\\s\\n]+CI[\\s\\n]+investig"
+            - "ative[\\s\\n]+searching[\\s\\n]+or[\\s\\n]+monitoring[\\s\\n]+of[\\s\\"
+            - "n]+the[\\s\\n]+content[\\s\\n]+of[\\s\\n]+privileged[\\s\\n]+communica"
+            - "tions,[\\s\\n]+or[\\s\\n]+work[\\s\\n]+product,[\\s\\n]+related[\\s\\n"
+            - "]+to[\\s\\n]+personal[\\s\\n]+representation[\\s\\n]+or[\\s\\n]+servic"
+            - "es[\\s\\n]+by[\\s\\n]+attorneys,[\\s\\n]+psychotherapists,[\\s\\n]+or["
+            - "\\s\\n]+clergy,[\\s\\n]+and[\\s\\n]+their[\\s\\n]+assistants\\.[\\s\\n"
+            - "]+Such[\\s\\n]+communications[\\s\\n]+and[\\s\\n]+work[\\s\\n]+product"
+            - "[\\s\\n]+are[\\s\\n]+private[\\s\\n]+and[\\s\\n]+confidential\\.[\\s\\"
+            - "n]+See[\\s\\n]+User[\\s\\n]+Agreement[\\s\\n]+for[\\s\\n]+details\\.|I"
+            - "'ve[\\s\\n]+read[\\s\\n]+\\&[\\s\\n]+consent[\\s\\n]+to[\\s\\n]+terms["
+            - "\\s\\n]+in[\\s\\n]+IS[\\s\\n]+user[\\s\\n]+agreem't\\.)$"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "^(Authorized[\\s\\n]+users[\\s\\n]+only\\.[\\s\\n]+All[\\s\\n]+activit"
+            - "y[\\s\\n]+may[\\s\\n]+be[\\s\\n]+monitored[\\s\\n]+and[\\s\\n]+reporte"
+            - "d\\.|^(?!.*(\\\\|fedora|rhel|sle|ubuntu)).*)$"
+  - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_issue_net_cis"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_banner_etc_issue_net_cis_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue.net"
+      attribute: "content"
+      forbidden_pattern: "(\\\\v|\\\\r|\\\\m|\\\\s|ubuntu2404|Ubuntu 24.04|rhel9|Red Hat Enterprise Linux 9)"
+  - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_motd"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_banner_etc_motd_enabled
+    runbook: null
+    parameters:
+      path: "/etc/motd"
+      attribute: "content"
+      value_id: "motd_banner_text"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "^(Authorized[\\s\\n]+users[\\s\\n]+only\\.[\\s\\n]+All[\\s\\n]+activit"
+            - "y[\\s\\n]+may[\\s\\n]+be[\\s\\n]+monitored[\\s\\n]+and[\\s\\n]+reporte"
+            - "d\\.|^(?!.*(\\\\|fedora|rhel|sle|ubuntu)).*)$"
+  - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_motd_cis"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_banner_etc_motd_cis_enabled
+    runbook: null
+    parameters:
+      path: "/etc/motd"
+      attribute: "content"
+      forbidden_pattern: "(\\\\v|\\\\r|\\\\m|\\\\s|ubuntu2404|Ubuntu 24.04|rhel9|Red Hat Enterprise Linux 9)"
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_groupowner_etc_issue_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue"
+      attribute: "group"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue_net"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_groupowner_etc_issue_net_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue.net"
+      attribute: "group"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_groupowner_etc_motd"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_groupowner_etc_motd_enabled
+    runbook: null
+    parameters:
+      path: "/etc/motd"
+      attribute: "group"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_owner_etc_issue"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_owner_etc_issue_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue"
+      attribute: "owner"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_owner_etc_issue_net"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_owner_etc_issue_net_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue.net"
+      attribute: "owner"
+      id: 0
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_owner_etc_motd"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_owner_etc_motd_enabled
+    runbook: null
+    parameters:
+      path: "/etc/motd"
+      attribute: "owner"
+      id: 0
   - rule_id: "xccdf_org.ssgproject.content_rule_file_permissions_crontab"
     family: file_permissions
     disruptive: false
@@ -165,6 +914,39 @@ __linux_compliance_remediate_rules:
     parameters:
       path: "/etc/crontab"
       max_mode: "0600"
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_permissions_etc_issue"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_permissions_etc_issue_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue"
+      attribute: "mode"
+      max_mode: "0644"
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_permissions_etc_issue_net"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_permissions_etc_issue_net_enabled
+    runbook: null
+    parameters:
+      path: "/etc/issue.net"
+      attribute: "mode"
+      max_mode: "0644"
+  - rule_id: "xccdf_org.ssgproject.content_rule_file_permissions_etc_motd"
+    family: banners
+    disruptive: false
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_file_permissions_etc_motd_enabled
+    runbook: null
+    parameters:
+      path: "/etc/motd"
+      attribute: "mode"
+      max_mode: "0644"
 __linux_compliance_remediate_audit_only:
   file_permissions:
     - "xccdf_org.ssgproject.content_rule_dir_group_ownership_library_dirs"
@@ -398,24 +1180,9 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_package_logrotate_installed"
     - "xccdf_org.ssgproject.content_rule_timer_logrotate_enabled"
   banners:
-    - "xccdf_org.ssgproject.content_rule_banner_etc_issue"
-    - "xccdf_org.ssgproject.content_rule_banner_etc_issue_cis"
-    - "xccdf_org.ssgproject.content_rule_banner_etc_issue_net"
-    - "xccdf_org.ssgproject.content_rule_banner_etc_issue_net_cis"
-    - "xccdf_org.ssgproject.content_rule_banner_etc_motd"
-    - "xccdf_org.ssgproject.content_rule_banner_etc_motd_cis"
     - "xccdf_org.ssgproject.content_rule_banner_etc_profiled_ssh_confirm"
     - "xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled"
     - "xccdf_org.ssgproject.content_rule_dconf_gnome_login_banner_text"
-    - "xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue"
-    - "xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue_net"
-    - "xccdf_org.ssgproject.content_rule_file_groupowner_etc_motd"
-    - "xccdf_org.ssgproject.content_rule_file_owner_etc_issue"
-    - "xccdf_org.ssgproject.content_rule_file_owner_etc_issue_net"
-    - "xccdf_org.ssgproject.content_rule_file_owner_etc_motd"
-    - "xccdf_org.ssgproject.content_rule_file_permissions_etc_issue"
-    - "xccdf_org.ssgproject.content_rule_file_permissions_etc_issue_net"
-    - "xccdf_org.ssgproject.content_rule_file_permissions_etc_motd"
   aide:
     - "xccdf_org.ssgproject.content_rule_aide_build_database"
     - "xccdf_org.ssgproject.content_rule_aide_check_audit_tools"
@@ -1113,24 +1880,10 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_passwordauth"
     - "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_systemauth"
   pwquality:
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_difok"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforce_root"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_enforcing"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_lcredit"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxclassrepeat"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxrepeat"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_maxsequence"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_minclass"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_ocredit"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_enabled"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_password_auth"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_retry"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwquality_system_auth"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_retry"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_pam_ucredit"
     - "xccdf_org.ssgproject.content_rule_package_pam_pwquality_installed"
   pwhistory:
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_enabled"

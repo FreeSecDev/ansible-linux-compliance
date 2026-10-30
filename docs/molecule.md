@@ -17,20 +17,23 @@ Prerequisites: the Python environment from `make bootstrap`, and a running Docke
 ```text
 make test-molecule-docker
 make test-molecule-docker MOLECULE_DOCKER_SCENARIOS=docker-ubuntu MOLECULE_DOCKER_SELFTEST=false
+make test-molecule-docker MOLECULE_DOCKER_SCENARIOS=docker-ubuntu-lifecycle MOLECULE_DOCKER_SELFTEST=false \
+  MOLECULE_LIFECYCLE_TOPIC=pwquality MOLECULE_LIFECYCLE_MODE=rule
 make test-molecule-docker-selftest
 ```
 
 `test-molecule-docker` installs the pinned collections from `extensions/molecule/requirements.yml` into
 `build/collections` (`make molecule-dependencies`), fetches and verifies the pinned ComplianceAsCode datastreams into
 `build/content` (`make molecule-content`, the same `tools/content/fetch_content.py` as `test-oscap-integration`), runs
-`molecule test -s <scenario>` for each scenario and stops at the first failure, and then runs the self-test.
+`molecule test -s <scenario>` for each scenario and stops at the first failure, and then runs the self-test. Without
+`MOLECULE_DOCKER_SCENARIOS` it runs all four scenarios, so the lifecycle scenarios run every native topic in both
+toggle modes; `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one topic and one mode, as a
+[CI leg](#ci-legs) does. The first run builds the images. The images stay in the local Docker cache
+(`freesecdev-molecule/*`); remove them with `docker image rm` when no longer needed.
 
-With the toggle lifecycle step, a local run of both scenarios and the self-test took 21 minutes on a WSL2 workstation
-once the instance images were built, including one [scanner timeout](#scanner-hangs) and its retry. The first run builds the images. The images stay in the local Docker cache (`freesecdev-molecule/*`); remove them with `docker image rm`
-when no longer needed.
-
-CI runs the same targets as the `molecule-docker` job, one matrix entry per scenario plus `docker-selftest`, on
-`ubuntu-24.04` GitHub-hosted runners. The job is part of `ci-gate`.
+CI runs the same target in two jobs on `ubuntu-24.04` GitHub-hosted runners: `molecule-docker`, one matrix entry per
+standard scenario plus `docker-selftest`, and `molecule-lifecycle`, one leg per platform, native topic and toggle mode
+(see [CI legs](#ci-legs)). Both are part of `ci-gate`.
 
 ## Scenarios
 
@@ -38,9 +41,13 @@ CI runs the same targets as the `molecule-docker` job, one matrix entry per scen
 |---|---|---|
 | `docker-ubuntu` | Ubuntu 24.04 | `ubuntu2404`, `cis_level1_server` ([ADR 0010](adr/0010-initial-os-and-benchmark-scope.md)) |
 | `docker-rhel-compatible` | Rocky Linux 9 | `rhel9`, `cis_server_l1` |
+| `docker-ubuntu-lifecycle` | Ubuntu 24.04 | as `docker-ubuntu` |
+| `docker-rhel-compatible-lifecycle` | Rocky Linux 9 | as `docker-rhel-compatible` |
 
-Each scenario runs `create`, `prepare`, `converge`, `idempotence`, `verify`, `side_effect` and `destroy`. The
-`side_effect` step is the [toggle lifecycle](#toggle-lifecycle-of-every-native-topic) of every native topic. `destroy`
+The standard scenarios run `create`, `prepare`, `converge`, `idempotence`, `verify` and `destroy`. The lifecycle
+scenarios share every playbook, the image, the guard and the label scheme with them and run `create`, `prepare`,
+`side_effect` and `destroy`: their `side_effect` step is the
+[toggle lifecycle](#toggle-lifecycle-of-every-native-topic), on an instance that no `converge` has touched. `destroy`
 runs even when an earlier step failed. Molecule warns that the scenario has no `cleanup` playbook; there is nothing to clean up outside
 the container, so that is expected.
 
@@ -65,7 +72,7 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle) |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`) |
 | `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`; Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
@@ -321,24 +328,29 @@ applying the roles one by one, and diff mode, are still open under FREES-60.
 
 ## Toggle lifecycle of every native topic
 
-`shared/lifecycle.yml` (FREES-60) is the `side_effect` step of both scenarios. It proves, for every topic that has a
+`shared/lifecycle.yml` (FREES-60) is the `side_effect` step of the lifecycle scenarios. It proves, for every topic that has a
 rule with a native remediation, that switching the topic on applies its controls and that switching it off again
 restores the state before it, with the topic toggle and with the rule toggles. It runs the real remediate role, never
-an internal variable, and only after the [guard](#localhost-guard) accepted the instance; it runs last, after
-`verify`, so nothing that it does can affect another step, and `destroy` removes the container afterwards.
+an internal variable, and only after the [guard](#localhost-guard) accepted the instance; it runs in a container of
+its own, which no other step uses, and `destroy` removes the container afterwards.
 
-Run it on its own during development, against a fresh instance:
+Run it step by step during development, against a fresh instance:
 
 ```text
-uv run --frozen molecule create -s docker-ubuntu
-uv run --frozen molecule prepare -s docker-ubuntu
-uv run --frozen molecule side-effect -s docker-ubuntu
-uv run --frozen molecule destroy -s docker-ubuntu
+uv run --frozen molecule create -s docker-ubuntu-lifecycle
+uv run --frozen molecule prepare -s docker-ubuntu-lifecycle
+MOLECULE_LIFECYCLE_TOPIC=banners MOLECULE_LIFECYCLE_MODE=topic uv run --frozen molecule side-effect -s docker-ubuntu-lifecycle
+uv run --frozen molecule destroy -s docker-ubuntu-lifecycle
 ```
 
-with `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH` set as the `Makefile` exports them. On an instance where
+with `ANSIBLE_HOME` and `ANSIBLE_COLLECTIONS_PATH` set as the `Makefile` exports them. Without the two selection
+variables the step runs every native topic in both modes. Before any topic runs, the harness refuses a selection that
+sets only one of them, names a topic without a native rule or names a mode other than `topic` and `rule`. On an instance where
 `converge` already applied a topic, the harness refuses to run, because the state before the collection is then
-unknown.
+unknown. `converge` and `verify` therefore prove the reference rule alone: their plays set the topic toggles of every
+other native topic to `false` (`molecule_other_native_topics` in `shared/vars/target.yml`), and their first task fails
+when that list differs from the native topics of the catalogue, so a new native topic cannot be applied by them by
+accident.
 
 ### What it runs
 
@@ -354,6 +366,17 @@ control, a change that nothing declares, a file left behind or removed, a declar
 file left behind, modified or only touched, a declared file replaced by another inode, a file next to the ledger, a
 kernel parameter, a package, a user, a group and a service added or changed must be refused; the listed differences
 must be accepted).
+
+Every remediate run of a topic narrows `linux_compliance_discovered.rule_ids` to the native rules of that topic, the
+way a profile that selects only them would, and restores the verified profile right after the run, so the audits and
+the next topic see it unchanged. A run that applies or cleans up a rule outside the topic fails. Without the narrowing,
+the cycles of one topic would apply every other native topic as well and its cleanup could not be compared exactly.
+
+A pre-state may declare rules `unchanged`: rules that it already satisfies (`compliant`, such as the mode of an
+`/etc/issue` that is already `0644`) or that do not apply (`notapplicable`), optionally per platform. In the steps
+below such a rule must report exactly that status and `changed: false` in check mode, on apply and on the second
+apply, is not recorded in the ledger, is planned `none` when the topic is switched off and reports no cleanup. Every
+other rule must be `applied` and changed, and at least one rule of a pre-state must change something.
 
 For each topic, for the topic toggle and then the rule toggles, and for each declared pre-state:
 
@@ -410,6 +433,7 @@ Only these differences are allowed, each listed in `shared/vars/lifecycle.yml`:
 | Difference | Why |
 |---|---|
 | mtime and ctime of the declared files and of their parent directories | changing a mode changes the ctime, and creating or removing a drop-in changes the times of its directory; everything else about these entries still counts, and the declared state compares the declared files exactly |
+| the inode of a declared file with `rewritten: true` | rewriting a file's content (`copy`, `lineinfile`, `template`) replaces it through a new inode; its type, mode, uid, gid, size and SHA-256 still count, so the restored content must be byte for byte the original |
 | `/var/lib/freesecdev`, `/var/lib/freesecdev/linux_compliance` and its `state.json` | the ledger, compared entry by entry instead; any other file in that directory counts |
 | `/var/lib/freesecdev/linux_compliance/evidence` and everything below it | the evidence and output of the real scans of the cycle |
 | the times of `/var/lib/rpm/rpmdb.sqlite-shm` and `-wal` | the scanner's RPM probes, as in the [no-change snapshot](#the-no-change-snapshot) |
@@ -436,6 +460,54 @@ customised mode), 24 remediate runs, four real scans and ten whole-instance reco
 half minutes on a WSL2 workstation. The customised pre-state (`0640`) is what shows that cleanup
 restores the recorded prior value and not a distribution default: with the cleanup changed to always restore `0644`,
 the harness fails with `cleanup: files /etc/crontab: mode changed from 0640 to 0644`.
+
+After the last topic and mode, `shared/tasks/lifecycle_pwquality_regressions.yml` runs regressions of the security review of
+PR #56 on both platforms: it applies pwquality, pretends the content of the other platform and checks that apply
+reports `method_changed` and cleanup `cleanup_incomplete` (`method_changed`) with every ledger entry kept and no file
+touched; it changes `minlen` by hand and checks that cleanup keeps the change as `modified_since_apply` while the other
+rules are restored; on Ubuntu it puts a symbolic link in place of `pwquality.conf.d`, selects the drop-in method and
+checks that every rule is `not_directory` and nothing is written through the link; and it compares the whole instance
+with its state before the regressions.
+
+The regressions run when the run ends with `pwquality` in the rule mode: after every topic and mode in a full run,
+and in the `pwquality` rule leg in CI.
+
+### CI legs
+
+With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
+platform ran ten cycles in a row, and on PR #56 each `molecule-docker` job took 52 minutes on GitHub's `ubuntu-24.04`
+runners, past the 30-minute response limit of the merge queue. The job logs at 6628b92 showed where the time went, per
+platform: `file_permissions` 11 to 12 minutes, `banners` 18 to 19, `pwquality` 12 to 14 and the pwquality regressions
+3 to 4.5, against 5 to 6 minutes for `create` to `verify`. The 18 real scans took under a minute in all and the image
+build under half a minute; most of each cycle is remediate runs, check-mode runs and the 76 whole-instance records
+(seven to ten minutes of `find` and `stat` over the instance). Every scan backs an assertion of an `audit: true`
+pre-state, so none was dropped; the time grows with the number of cycles, and so with every native topic.
+
+The lifecycle therefore runs in CI as one leg per platform, native topic and toggle mode. The `molecule-plan` job runs
+`make -s molecule-matrix` (`tools/roles/molecule_matrix.py`), which derives the legs from the catalogue with
+`generate_toggles.native_families`, the predicate of the remediation dispatch and of `make lint-lifecycle`, and from
+the platforms of `shared/vars/versions.yml`, and prints them as JSON. The `molecule-lifecycle` job runs each leg
+(`fromJSON`, `fail-fast: false`) in a fresh container of the `docker-<platform>-lifecycle` scenario, with
+`MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` set. Each leg runs every declared pre-state of its topic and
+mode, the self-checks of the comparisons, the run-time coverage check and the whole-instance comparison, exactly as a
+full run does for that topic and mode. No `converge` has scanned a lifecycle instance, so the harness runs one real
+scan before it records any state: on Rocky Linux the scanner's first write to the RPM database copies `/var/lib/rpm`
+up into the container's writable layer, which gives the directory a new ctime, and without that first scan the
+whole-instance comparison of the first topic with a real scan refused it (as it did in the first local run of the
+`banners` topic leg). A new native topic gets its two legs per platform without a change to the
+workflow, and the tool fails when a platform has no lifecycle scenario. `ci-gate` needs `molecule-plan` and
+`molecule-lifecycle`, so every leg is required, on `pull_request` and `merge_group` alike, and a plan that fails or
+lists no leg fails the gate.
+
+On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
+`rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
+12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
+duration: 18 for `molecule-lifecycle`, 8 for `molecule-docker` (one [scanner timeout](#scanner-hangs) and its retry
+add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). A leg that approaches 20 minutes
+should be split further, for example per pre-state, rather than given a longer limit, so that no required job comes
+near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
+the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
+(`test-evidence`, `test-remediate-check`, `test-role-guards`, `test-verify`).
 
 ### Declaring a topic
 
@@ -485,10 +557,10 @@ pre_states:
 | `family` | yes | The topic; must equal the file name |
 | `disruptive` | yes | Must equal the flag of the family in the registry |
 | `containment` | for disruptive topics only | What the topic can break in the container and why the harness still reaches it; see below |
-| `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform |
+| `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles) and `files` (mode, owner or group of declared files); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles), `files` (mode, owner or group of declared files) and `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant` or that are `notapplicable`, optionally with `platforms`); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 
 Services can only be recorded where a service manager runs. The containers have no systemd as PID 1, so a declaration
@@ -511,13 +583,16 @@ No topic can gain a native rule without its lifecycle test:
   is required.
 - `shared/lifecycle.yml` repeats the coverage check at run time, before any topic runs, checks each declaration
   against the registry again, and fails when a platform skips a topic that its declaration does not list under
-  `unselected_platforms`, so both Molecule jobs fail too.
+  `unselected_platforms`, so every lifecycle leg fails too.
+- `make molecule-matrix` derives the CI legs with the same predicate, so every topic that `make lint-lifecycle`
+  requires a declaration for runs in both modes on every platform; `tests/unit/tools/test_molecule_matrix.py` checks
+  that the legs of the repository cover every declared topic.
 
 ### Disruptive topics
 
-The disruptive families (`ssh`, `pam`, `sssd`, `sudo`, `faillock` and the others that the registry flags) have no
-native rule yet. When one gains a rule, its topic is opted in by its declaration: `disruptive: true`, which must match
-the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
+`pwquality` is the first disruptive family with native rules; the others (`ssh`, `pam`, `sssd`, `sudo`, `faillock`
+and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
 
@@ -531,7 +606,8 @@ container:
   topic that breaks the connection or the container fails the run at that point instead of producing results from
   somewhere else.
 - Disruptive topics run after every non-disruptive topic, and the first failure ends the play (`any_errors_fatal`), so
-  a broken container cannot hide a regression in another topic or let a later topic run on a broken instance.
+  a broken container cannot hide a regression in another topic or let a later topic run on a broken instance. In CI
+  each topic and mode has a container of its own, so no topic runs after another at all.
 - The lifecycle is the last step before `destroy`, which removes only the containers that carry this scenario's
   labels, and runs even after a failure. The container is never reused.
 

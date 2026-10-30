@@ -22,5 +22,6 @@
 | [0018](0018-evidence-bundle-provenance.md) | Signed evidence bundles and verified report inputs | proposed |
 | [0019](0019-scc-scanner-backend-and-ci-image.md) | SCAP Compliance Checker as a second scanner backend, with a CI-only image | proposed |
 | [0020](0020-stig-viewer-checklist-export.md) | STIG Viewer checklist export (CKL and CKLB) | proposed |
+| [0021](0021-native-banners-pwquality-and-profile-values.md) | Native banners and password quality, with profile values from the pinned content | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

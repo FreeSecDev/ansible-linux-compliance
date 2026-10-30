@@ -9,6 +9,8 @@
       | first | default({}) -%}
       {%- set before = lifecycle_compare_before[category][key] -%}
       {%- for attribute, value in attributes.items() -%}
+      {%- set rewritten = category == 'files' and key in lifecycle_rewritten | default([])
+      and attribute in ['inode', 'mtime'] -%}
       {%- if attribute in wanted -%}
       {%- if value != wanted[attribute] -%}
       {{ category }} {{ key }}: {{ attribute }} is {{ value }}, expected {{ wanted[attribute] }};{{ ' ' }}
@@ -17,7 +19,7 @@
       {%- if value == before[attribute] -%}
       {{ category }} {{ key }}: {{ attribute }} stayed {{ value }}, expected a change;{{ ' ' }}
       {%- endif -%}
-      {%- elif value != before[attribute] -%}
+      {%- elif value != before[attribute] and not rewritten -%}
       {{ category }} {{ key }}: {{ attribute }} changed from {{ before[attribute] }} to {{ value }};{{ ' ' }}
       {%- endif -%}
       {%- endfor -%}
