@@ -667,3 +667,23 @@ guard_libvirt_cases:
     identity:
       serial: ""
     refused: true
+  - name: IPv6 loopback in brackets, recorded and refused only by the loopback rule
+    hostname: "[::1]"
+    record_hostname: true
+    refused: true
+  - name: localhost with a trailing dot as the host name, recorded and refused only by the loopback rule
+    hostname: "localhost."
+    record_hostname: true
+    refused: true
+  - name: localhost in capitals with trailing dots as the host name, recorded and refused only by the loopback rule
+    hostname: "LOCALHOST.."
+    record_hostname: true
+    refused: true
+  - name: IPv4 loopback with a trailing dot as the host name, recorded and refused only by the loopback rule
+    hostname: "127.0.0.1."
+    record_hostname: true
+    refused: true
+  - name: bracketed IPv4-mapped loopback as the host name, recorded and refused only by the loopback rule
+    hostname: "[::ffff:127.0.0.1]"
+    record_hostname: true
+    refused: true

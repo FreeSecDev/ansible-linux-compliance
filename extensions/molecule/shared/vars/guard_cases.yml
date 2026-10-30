@@ -365,3 +365,33 @@ guard_cases:
         Labels:
           org.freesecdev.molecule.run: zzzzzzzz
     refused: true
+  - name: IPv6 loopback in brackets, recorded and refused only by the loopback rule
+    hostname: "[::1]"
+    record_hostname: true
+    connection_vars:
+      ansible_host: "fsd-mol-sim-abcd1234-[::1]"
+    refused: true
+  - name: localhost with a trailing dot as the host name, recorded and refused only by the loopback rule
+    hostname: "localhost."
+    record_hostname: true
+    connection_vars:
+      ansible_host: "fsd-mol-sim-abcd1234-localhost."
+    refused: true
+  - name: localhost in capitals with trailing dots as the host name, recorded and refused only by the loopback rule
+    hostname: "LOCALHOST.."
+    record_hostname: true
+    connection_vars:
+      ansible_host: "fsd-mol-sim-abcd1234-LOCALHOST.."
+    refused: true
+  - name: IPv4 loopback with a trailing dot as the host name, recorded and refused only by the loopback rule
+    hostname: "127.0.0.1."
+    record_hostname: true
+    connection_vars:
+      ansible_host: "fsd-mol-sim-abcd1234-127.0.0.1."
+    refused: true
+  - name: bracketed IPv4-mapped loopback as the host name, recorded and refused only by the loopback rule
+    hostname: "[::ffff:127.0.0.1]"
+    record_hostname: true
+    connection_vars:
+      ansible_host: "fsd-mol-sim-abcd1234-[::ffff:127.0.0.1]"
+    refused: true

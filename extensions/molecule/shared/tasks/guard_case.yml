@@ -7,7 +7,10 @@
       vars:
         guard_scenario: "{{ guard_simulation.scenario }}"
         guard_driver: docker
-        guard_instances: "{{ guard_simulation.instances }}"
+        guard_instances: >-
+          {{ guard_simulation.instances + ([guard_simulation.instances | first
+          | combine({'instance': guard_case.hostname, 'address': 'fsd-mol-sim-abcd1234-' ~ guard_case.hostname})]
+          if guard_case.record_hostname | default(false) else []) }}
         guard_hostname: "{{ guard_case.hostname | default('instance') }}"
         guard_connection_vars: >-
           {{ guard_simulation.good_connection_vars | combine(guard_case.connection_vars | default({})) }}

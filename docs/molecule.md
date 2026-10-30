@@ -182,10 +182,15 @@ carry this instance's marker. The process that the connection runs must have no 
 capabilities, and `NoNewPrivs` must be 1. That catches a connection that reaches another container or daemon, and
 `docker exec --privileged`.
 
-`verify` feeds simulated bypass attempts to the same task files (`shared/vars/guard_cases.yml`, 64 cases). It asserts
+`verify` feeds simulated bypass attempts to the same task files (`shared/vars/guard_cases.yml`, 69 cases). It asserts
 that each is refused with a message that starts with "Refusing to run" and that a disposable container is accepted.
-Every scenario's `verify` also runs the 60 simulated libvirt cases of the [libvirt guard](molecule-libvirt.md#guard),
+Every scenario's `verify` also runs the 116 simulated libvirt cases of the [libvirt guard](molecule-libvirt.md#guard),
 whatever its own driver, so the libvirt guard is exercised even where no KVM is available.
+The loopback check strips brackets, a zone index and trailing dots from the host name and the address before it matches
+them, so `[::1]`, `localhost.`, `LOCALHOST..` and `[::ffff:127.0.0.1]` are loopback. In `{{ }}` templates a regex
+literal is used as written, so its backslashes are single (`\[`, `\.`); only `that:` and `when:` conditionals decode
+escapes. Five simulated cases record such a host name for the run, with a matching address, so that only the loopback
+rule can refuse them.
 The loopback check does not enumerate the controller's own addresses; the exact match against the create step's
 records is what keeps every other target out.
 
