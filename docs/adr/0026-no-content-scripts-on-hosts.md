@@ -47,7 +47,30 @@ are:
 
 `oscap` 1.3.9 uses the last check of a rule whose system it supports, and ComplianceAsCode lists the SCE check first.
 A rule that also has an OVAL check is therefore evaluated through OVAL, and the scripts run for the rules without one.
-`oscap` has no option to disable SCE (threat model T-AUDIT-2).
+With the default `cis_level1_server` profile, that is 16 rules on every Ubuntu 24.04 audit.
+
+`oscap` 1.3.9 cannot be told to skip SCE. This was checked on 2026-10-30 against the pinned `openscap-scanner`
+`1.3.9+dfsg-1.1ubuntu2` in the CI oscap image, and against the OpenSCAP source at tag `1.3.9`:
+
+- `oscap --version` lists `SCE Version: 1.0 (from libopenscap_sce.so.25)` under "Capabilities added by auto-loaded
+  plugins". `libopenscap_sce.so.25` ships in `libopenscap25t64`, the library package itself, so it cannot be
+  removed on its own.
+- `oscap xccdf eval --help` has no option for check engines except `--check-engine-results`, which only exports
+  their results. `--skip-rule` and a tailoring file deselect single rules, which would also drop the result of every
+  rule they name.
+- `src/XCCDF/xccdf_session.c`: `xccdf_session_new_from_source` sets `loading_flags = XCCDF_SESSION_LOAD_ALL`, and
+  `xccdf_session_load` calls `xccdf_session_load_check_engine_plugins` whenever `XCCDF_SESSION_LOAD_CHECK_ENGINE_PLUGINS`
+  is set. That function loads every name in `check_engine_plugin_get_known_plugins()`, which is only
+  `libopenscap_sce.so.<n>` (`src/XCCDF_POLICY/check_engine_plugin.c`).
+- `utils/oscap-xccdf.c` calls `xccdf_session_set_loading_flags` only in `generate fix` and `generate guide`, never in
+  `app_evaluate_xccdf`. So `xccdf eval` always loads SCE, and no command-line option clears the flag.
+- `check_engine_plugin_load2` reads only the environment variable `OSCAP_CHECK_ENGINE_PLUGIN_DIR`, a prefix for the
+  `dlopen` path. Pointing root's `dlopen` at another directory would add a code-loading path, and the process helper
+  does not pass the variable (ADR 0004).
+- `src/XCCDF_POLICY/xccdf_policy.c` `_xccdf_policy_rule_get_applicable_check` keeps the last check whose engine is
+  registered. This is why a check that the scanner never registers (OCIL) leaves a rule `notchecked`.
+
+The only reliable control is therefore the content: an SCE check or script that is not in the datastream cannot run.
 
 ## Decision
 
