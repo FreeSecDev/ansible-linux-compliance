@@ -157,13 +157,21 @@
     - lifecycle_family == 'pwquality'
     - lifecycle_run_modes | last == 'rule'
 
-- name: Lifecycle topic | Run the sudo regressions for a change of method, changes by hand, visudo and a symbolic link
+- name: Lifecycle topic | Run the sudo regressions for a change of method and changes by hand
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_regressions.yml
   when:
     - lifecycle_family == 'sudo'
     - lifecycle_rule_ids | length > 0
     - lifecycle_run_modes | last == 'rule'
+
+- name: Lifecycle topic | Run the sudo refusals for a setting elsewhere, a refusing visudo and a symbolic link
+  ansible.builtin.include_tasks:
+    file: lifecycle_sudo_refusals.yml
+  when:
+    - lifecycle_family == 'sudo'
+    - lifecycle_rule_ids | length > 0
+    - lifecycle_run_modes | first == 'topic'
 
 - name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select
   ansible.builtin.include_tasks:

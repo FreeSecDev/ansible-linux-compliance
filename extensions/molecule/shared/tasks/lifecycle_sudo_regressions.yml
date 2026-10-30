@@ -1,5 +1,5 @@
 ---
-- name: Sudo regressions | Refuse to run unless the sudo topic has just run its rule-toggle cycles
+- name: Sudo regressions | Refuse to run unless the sudo topic has just run its cycles
   ansible.builtin.assert:
     that:
       - lifecycle_topic.family == 'sudo'
@@ -10,7 +10,7 @@
       {{ lifecycle_topic.family | default('none') }}.
     quiet: true
 
-- name: Sudo regressions | Name the drop-ins, the toggles and the files that the regressions replace and put back
+- name: Sudo regressions | Name the drop-ins and the toggles of the regressions
   ansible.builtin.set_fact:
     regression_label: sudo regressions
     regression_profile: "{{ linux_compliance_discovered }}"
@@ -20,14 +20,8 @@
     regression_timestamp_dropin: /etc/sudoers.d/50-freesecdev-timestamp_timeout
     regression_logfile_dropin: /etc/sudoers.d/50-freesecdev-logfile
     regression_dropins: "{{ lifecycle_rules | map(attribute='parameters') | map(attribute='path') | list }}"
-    regression_admin_dropin: /etc/sudoers.d/10-freesecdev-regression
-    regression_link_target: /tmp/freesecdev-sudoers-target
-    regression_visudo: /usr/sbin/visudo
-    regression_visudo_copy: /tmp/freesecdev-visudo
-    regression_items: >-
-      {{ lifecycle_items | combine({'files': lifecycle_items.files
-         + [{'path': '/usr/sbin/visudo'}, {'path': '/etc/sudoers.d/README'}]}) }}
-    regression_rewritten: "{{ lifecycle_rewritten + ['/usr/sbin/visudo', '/etc/sudoers.d/README'] }}"
+    regression_items: "{{ lifecycle_items }}"
+    regression_rewritten: "{{ lifecycle_rewritten }}"
 
 - name: Sudo regressions | Take the state of the whole instance before the regressions
   ansible.builtin.include_tasks:
@@ -252,206 +246,6 @@
       - lifecycle_results | map(attribute='changed') | list == [true]
     fail_msg: "{{ regression_label }}, cleanup after the drop-in was put back: {{ lifecycle_results }}"
     quiet: true
-
-- name: Sudo regressions | Set timestamp_timeout in a drop-in of the administrator
-  ansible.builtin.copy:
-    content: "Defaults timestamp_timeout=30\n"
-    dest: "{{ regression_admin_dropin }}"
-    mode: "0440"
-    owner: root
-    group: root
-
-- name: Sudo regressions | Read the mode of the directory of visudo, which Rocky Linux ships without write bits
-  ansible.builtin.stat:
-    path: /usr/sbin
-    follow: false
-  register: regression_sbin
-
-- name: Sudo regressions | Let root write the directory of visudo, which it owns, as it cannot override modes here
-  ansible.builtin.file:
-    path: /usr/sbin
-    state: directory
-    mode: u+w
-
-- name: Sudo regressions | Make visudo refuse every file, keeping the real one aside
-  ansible.builtin.copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    remote_src: true
-    mode: preserve
-  loop:
-    - src: "{{ regression_visudo }}"
-      dest: "{{ regression_visudo_copy }}"
-    - src: /usr/bin/false
-      dest: "{{ regression_visudo }}"
-  loop_control:
-    label: "{{ item.dest }}"
-
-- name: Sudo regressions | Switch every rule of the topic on again
-  ansible.builtin.set_fact:
-    "{{ item }}": true
-  loop: "{{ regression_toggles }}"
-
-- name: Sudo regressions | Apply the topic with the administrator's setting and a visudo that refuses every file
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-    lifecycle_family: sudo
-
-- name: Sudo regressions | Look for any drop-in of the topic and read the ledger after the refused apply
-  ansible.builtin.stat:
-    path: "{{ item }}"
-    follow: false
-  loop: "{{ regression_dropins }}"
-  register: regression_refused_dropins
-
-- name: Sudo regressions | Read the ledger after the refused apply
-  freesecdev.linux_compliance.control_state:
-    action: list
-  register: regression_ledger_invalid
-
-- name: Sudo regressions | Check that the setting elsewhere and visudo refused every write and nothing was installed
-  ansible.builtin.assert:
-    that:
-      - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', regression_timestamp) | map(attribute='status') | list
-        == ['conflicting_setting']
-      - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', regression_timestamp) | map(attribute='reason') | first
-        is search(regression_admin_dropin)
-      - >-
-        lifecycle_results | rejectattr('rule_id', 'equalto', regression_timestamp) | map(attribute='status')
-        | difference(['invalid_sudoers', 'compliant']) | list == []
-      - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', regression_logfile) | map(attribute='status') | list
-        == ['invalid_sudoers']
-      - lifecycle_results | rejectattr('status', 'equalto', 'compliant') | selectattr('reason', 'none') | list == []
-      - lifecycle_results | selectattr('changed') | list == []
-      - regression_refused_dropins.results | map(attribute='stat') | selectattr('exists') | list == []
-      - regression_ledger_invalid.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
-    fail_msg: "{{ regression_label }}, apply with a refusing visudo: {{ lifecycle_results }}"
-    quiet: true
-
-- name: Sudo regressions | Put the real visudo back and remove the administrator's drop-in
-  ansible.builtin.copy:
-    src: "{{ regression_visudo_copy }}"
-    dest: "{{ regression_visudo }}"
-    remote_src: true
-    mode: preserve
-
-- name: Sudo regressions | Give the directory of visudo its mode back
-  ansible.builtin.file:
-    path: /usr/sbin
-    state: directory
-    mode: "{{ regression_sbin.stat.mode }}"
-
-- name: Sudo regressions | Remove the copy of visudo and the administrator's drop-in
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "{{ regression_visudo_copy }}"
-    - "{{ regression_admin_dropin }}"
-
-- name: Sudo regressions | Read the drop-in directory before it is replaced by a symbolic link
-  ansible.builtin.stat:
-    path: /etc/sudoers.d
-    follow: false
-  register: regression_directory
-
-- name: Sudo regressions | List what the drop-in directory holds before it is replaced
-  ansible.builtin.find:
-    paths: /etc/sudoers.d
-    file_type: any
-    hidden: true
-  register: regression_directory_entries
-
-- name: Sudo regressions | Read the files of the drop-in directory before it is replaced
-  ansible.builtin.slurp:
-    src: "{{ item.path }}"
-  loop: "{{ regression_directory_entries.files }}"
-  loop_control:
-    label: "{{ item.path }}"
-  register: regression_directory_files
-
-- name: Sudo regressions | Check that the directory holds only regular files to put back
-  ansible.builtin.assert:
-    that:
-      - regression_directory.stat.isdir
-      - regression_directory_entries.files | rejectattr('isreg') | list == []
-      - regression_directory_entries.files | map(attribute='path') | difference(['/etc/sudoers.d/README']) | list == []
-    fail_msg: "{{ regression_label }}: unexpected entries {{ regression_directory_entries.files }}"
-    quiet: true
-
-- name: Sudo regressions | Replace the drop-in directory by a symbolic link to an empty directory
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: "{{ item.state }}"
-    src: "{{ item.src | default(omit) }}"
-    mode: "{{ item.mode | default(omit) }}"
-  loop:
-    - path: /etc/sudoers.d
-      state: absent
-    - path: "{{ regression_link_target }}"
-      state: directory
-      mode: "0750"
-    - path: /etc/sudoers.d
-      state: link
-      src: "{{ regression_link_target }}"
-  loop_control:
-    label: "{{ item.path }} {{ item.state }}"
-
-- name: Sudo regressions | Apply the topic through the symbolic link
-  ansible.builtin.include_tasks:
-    file: lifecycle_remediate.yml
-  vars:
-    lifecycle_check_mode: false
-    lifecycle_family: sudo
-
-- name: Sudo regressions | Look for anything written through the symbolic link
-  ansible.builtin.find:
-    paths: "{{ regression_link_target }}"
-    file_type: any
-    hidden: true
-  register: regression_through_link
-
-- name: Sudo regressions | Check that every rule refused the symbolic link and wrote nothing through it
-  ansible.builtin.assert:
-    that:
-      - lifecycle_results | map(attribute='status') | unique | list == ['not_directory']
-      - lifecycle_results | selectattr('reason', 'none') | list == []
-      - lifecycle_results | selectattr('changed') | list == []
-      - regression_through_link.files == []
-    fail_msg: "{{ regression_label }}, symbolic link: {{ lifecycle_results }}"
-    quiet: true
-
-- name: Sudo regressions | Remove the symbolic link and its target
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/sudoers.d
-    - "{{ regression_link_target }}"
-
-- name: Sudo regressions | Put the drop-in directory back with its mode and ownership
-  ansible.builtin.file:
-    path: /etc/sudoers.d
-    state: directory
-    mode: "{{ regression_directory.stat.mode }}"
-    owner: "{{ regression_directory.stat.pw_name }}"
-    group: "{{ regression_directory.stat.gr_name }}"
-
-- name: Sudo regressions | Put the files of the drop-in directory back with their content, mode and ownership
-  ansible.builtin.copy:
-    content: "{{ item.content | b64decode }}"
-    dest: "{{ item.item.path }}"
-    mode: "{{ item.item.mode }}"
-    owner: "{{ item.item.pw_name }}"
-    group: "{{ item.item.gr_name }}"
-  loop: "{{ regression_directory_files.results }}"
-  loop_control:
-    label: "{{ item.item.path }}"
 
 - name: Sudo regressions | Give the profile of this platform back
   ansible.builtin.set_fact:

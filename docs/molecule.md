@@ -472,17 +472,20 @@ with its state before the regressions.
 The regressions of a topic run at the end of that topic, with its facts, when the rule mode is the last mode of the
 run: in a full run and in the topic's rule leg in CI.
 
-`shared/tasks/lifecycle_sudo_regressions.yml` does the same for `sudo` (FREES-175) on both platforms: it applies the
-topic, records every ledger entry as if another method had written it and checks that apply reports `method_changed`
-and cleanup `cleanup_incomplete` (`method_changed`) with every entry kept and no drop-in touched; it changes the
-`timestamp_timeout` drop-in by hand and removes the `logfile` drop-in, and checks that cleanup keeps the change as
-`modified_since_apply` and reports the removed one `restored` without a write; it puts a `timestamp_timeout` of its
-own into `/etc/sudoers.d` and replaces `/usr/sbin/visudo` with a copy of `false`, and checks that the rule is
-`conflicting_setting`, that every other drop-in is `invalid_sudoers` and that nothing was installed or recorded; and it
-replaces `/etc/sudoers.d` by a symbolic link and checks that every rule is `not_directory` and nothing is written
-through the link. `visudo`, `/etc/sudoers.d` and its `README` are put back with their content, mode and ownership, so
-the whole-instance comparison after the regressions treats them as rewritten (new inodes and times only).
-`shared/tasks/lifecycle_sudo_other_profiles.yml` runs in the topic mode and applies, repeats and cleans up for real the
+`shared/tasks/lifecycle_sudo_regressions.yml` does the same for `sudo` (FREES-175) on both platforms, in the rule
+mode: it applies the topic, records every ledger entry as if another method had written it and checks that apply
+reports `method_changed` and cleanup `cleanup_incomplete` (`method_changed`) with every entry kept and no drop-in
+touched; it changes the `timestamp_timeout` drop-in by hand and removes the `logfile` drop-in, and checks that cleanup
+keeps the change as `modified_since_apply` and reports the removed one `restored` without a write.
+`shared/tasks/lifecycle_sudo_refusals.yml` runs in the topic mode, so that the two legs of the topic stay of similar
+length: it puts a `timestamp_timeout` of its own into `/etc/sudoers.d` and replaces `/usr/sbin/visudo` with a copy of
+`false` (on Rocky Linux after giving root, which cannot override modes there, the write bit on `/usr/sbin`), and checks
+that the rule is `conflicting_setting`, that every other drop-in is `invalid_sudoers` and that nothing was installed or
+recorded; and it replaces `/etc/sudoers.d` by a symbolic link and checks that every rule is `not_directory` and nothing
+is written through the link. `visudo`, `/usr/sbin`, `/etc/sudoers.d` and its `README` are put back with their content,
+mode and ownership, so the whole-instance comparison after the refusals treats them as rewritten (new inodes and times
+only). `shared/tasks/lifecycle_sudo_other_profiles.yml` runs in the topic mode as well and applies, repeats and cleans
+up for real the
 seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,
 owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`): the stricter mode an
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and

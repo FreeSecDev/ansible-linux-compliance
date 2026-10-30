@@ -150,7 +150,7 @@ residual of the content's checks as well. `sudo` stays disruptive: it is applied
 The Molecule images install `sudo` (pinned) so that the lifecycle runs on both platforms. The CIS profiles of the
 lifecycle select `sudo_add_use_pty`, `sudo_custom_logfile` and `sudo_require_reauthentication`; the other seven native
 rules are applied, made idempotent and cleaned up for real by `shared/tasks/lifecycle_sudo_other_profiles.yml` in the
-topic legs, and the refusals by `shared/tasks/lifecycle_sudo_regressions.yml` in the rule legs: a change of method, a
-drop-in changed and one removed by hand, a setting of the administrator, a `visudo` that refuses every file, and a
-symbolic link in place of `/etc/sudoers.d`. The containers drop every capability, so the owner and group rules are
+topic legs. `shared/tasks/lifecycle_sudo_regressions.yml` (rule legs) covers a change of method and a drop-in changed
+and one removed by hand, and `shared/tasks/lifecycle_sudo_refusals.yml` (topic legs) a setting of the administrator, a
+`visudo` that refuses every file and a symbolic link in place of `/etc/sudoers.d`. The containers drop every capability, so the owner and group rules are
 proven compliant on the root-owned files and are not changed there.
