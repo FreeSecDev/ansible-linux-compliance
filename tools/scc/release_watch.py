@@ -390,7 +390,7 @@ class GitHubIssues:
         """
         found: list[IssueRef] = []
         for page in range(1, MAX_PAGES + 1):
-            query = f"?state=all&per_page={PAGE_SIZE}&page={page}"
+            query = f"?state=all&creator={quote(BOT_LOGIN)}&per_page={PAGE_SIZE}&page={page}"
             _, listing = self._call("GET", f"/issues{query}", None, frozenset({HTTP_OK}))
             if not isinstance(listing, list):
                 message = "GitHub API returned an issue listing that is not a list"

@@ -1288,7 +1288,8 @@ changes of all three scans stay within the accepted residual.
     and links this amendment. That is the early warning that decision 7 planned for FREES-149.
 - **Exactly one issue per finding, kept current.** Each issue body starts with a marker, for example
   `<!-- scc-release-watch: release 5.16 -->`. The tool creates the label if it is missing, then lists the issues of
-  the repository in every state and with any label, and keeps those whose body starts with a watch marker and that
+  the repository in every state and with any label, asking the API only for those created by
+  `github-actions[bot]` (`creator=`), and keeps those whose body starts with a watch marker and that
   `github-actions[bot]` opened (an issue of another author is never edited). Only the marker finds an issue, so
   removing a label or renaming the issue cannot cause a duplicate.
   - While the finding holds, every run rewrites the title and body, reopens a closed issue and puts a removed label

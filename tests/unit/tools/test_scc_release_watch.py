@@ -99,9 +99,14 @@ class FakeGitHub:
 
     def _listing(self, query: dict[str, list[str]]) -> watch.HttpResponse:
         assert "labels" not in query
+        assert query["creator"] == [BOT["login"]]
         state = query["state"][0]
         page, size = int(query["page"][0]), int(query["per_page"][0])
-        matching = [issue for issue in self.issues if state in ("all", issue["state"])]
+        matching = [
+            issue
+            for issue in self.issues
+            if state in ("all", issue["state"]) and issue.get("user") == BOT
+        ]
         return watch.HttpResponse(
             200, json.dumps(matching[(page - 1) * size : page * size]).encode()
         )
@@ -838,3 +843,16 @@ def test_only_label_names_that_are_strings_are_read(labels: object, names: tuple
         REPOSITORY, TOKEN, ScriptedApi(watch.HttpResponse(200, json.dumps([item]).encode()))
     ).list_marked()
     assert [entry.labels for entry in issues] == [names]
+
+
+def test_the_issue_listing_is_limited_to_the_bot_and_has_no_label_filter() -> None:
+    github = FakeGitHub(record_body=record("5.16"))
+    watch.watch(settings(), github)
+    listings = [
+        request.url
+        for request in github.requests
+        if request.method == "GET" and "/issues?" in request.url
+    ]
+    assert len(listings) == 1
+    assert "state=all&creator=github-actions%5Bbot%5D&" in listings[0]
+    assert "labels=" not in listings[0]
