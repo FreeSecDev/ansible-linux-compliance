@@ -5,6 +5,7 @@ guard_simulation:
     - instance: instance
       address: fsd-mol-sim-abcd1234-instance
       connection: community.docker.docker
+      driver: docker
       scenario: sim
       run_id: abcd1234
       image: ubuntu

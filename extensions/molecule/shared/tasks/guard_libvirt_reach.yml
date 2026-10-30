@@ -1,0 +1,21 @@
+---
+- name: Guard libvirt reach | Read the SMBIOS serial, SMBIOS UUID, boot id and machine id over the real connection
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - /sys/class/dmi/id/product_serial
+    - /sys/class/dmi/id/product_uuid
+    - /proc/sys/kernel/random/boot_id
+    - /etc/machine-id
+  register: guard_libvirt_identity
+
+- name: Guard libvirt reach | Check that the connection reaches the recorded machine and not the controller
+  ansible.builtin.include_tasks:
+    file: guard_libvirt_connection.yml
+  vars:
+    guard_serial: "{{ guard_libvirt_identity.results[0].content | b64decode }}"
+    guard_product_uuid: "{{ guard_libvirt_identity.results[1].content | b64decode }}"
+    guard_boot_id: "{{ guard_libvirt_identity.results[2].content | b64decode }}"
+    guard_machine_id: "{{ guard_libvirt_identity.results[3].content | b64decode }}"
+    guard_controller_boot_id: "{{ lookup('ansible.builtin.file', '/proc/sys/kernel/random/boot_id') }}"
+    guard_controller_machine_id: "{{ lookup('ansible.builtin.file', '/etc/machine-id') }}"

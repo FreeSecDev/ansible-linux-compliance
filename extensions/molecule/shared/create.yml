@@ -13,7 +13,9 @@
       ansible.builtin.assert:
         that:
           - molecule_scenario is match('^[a-z0-9][a-z0-9-]{0,40}$')
-        fail_msg: MOLECULE_SCENARIO_NAME must be lower case letters, digits and hyphens.
+          - molecule_scenario is not match('^libvirt-')
+        fail_msg: >-
+          MOLECULE_SCENARIO_NAME must be lower case letters, digits and hyphens, and must not start with libvirt-.
         quiet: true
 
     - name: Check for an instance config of an earlier create
@@ -92,6 +94,7 @@
             'instance': item.name,
             'address': 'fsd-mol-' ~ molecule_scenario ~ '-' ~ molecule_run_id ~ '-' ~ item.name,
             'connection': 'community.docker.docker',
+            'driver': 'docker',
             'scenario': molecule_scenario,
             'run_id': molecule_run_id,
             'image': item.image,

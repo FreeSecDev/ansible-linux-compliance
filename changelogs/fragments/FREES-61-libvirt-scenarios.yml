@@ -1,0 +1,13 @@
+---
+trivial:
+  - >-
+    Test tooling: the Molecule scenarios libvirt-ubuntu and libvirt-rhel-compatible and their lifecycle scenarios
+    boot pinned Ubuntu 24.04 and Rocky Linux 9.8 cloud images, verified against the vendors' signed checksum files, in
+    KVM virtual machines on an isolated libvirt network of their own, install the pinned scanner packages without a
+    mirror, and run only what a container cannot prove: a real scan before and after remediation of the reference
+    rule, idempotence, cleanup and the lifecycle cycles that require libvirt. The guard checks a libvirt target's
+    inventory settings, an allow-list of its domain, network and pool definitions and its SMBIOS identity, and refuses
+    the controller itself; make test-molecule-libvirt-selftest tests it against real libvirt objects. A lifecycle
+    declaration or pre-state may require a driver (requires: [libvirt]); make lint-lifecycle requires a lifecycle
+    scenario of that driver, and make molecule-matrix plans the CI legs from the same map. community.libvirt 2.4.0
+    and community.crypto 3.5.0 are pinned for the scenarios.

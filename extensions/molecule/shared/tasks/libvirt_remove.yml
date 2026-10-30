@@ -1,0 +1,130 @@
+---
+- name: Libvirt remove | List every domain, network and pool
+  ansible.builtin.include_tasks:
+    file: libvirt_objects.yml
+  vars:
+    libvirt_objects_scenario: "{{ libvirt_remove_scenario }}"
+
+- name: Libvirt remove | Select the objects whose names and labels belong to the runs being removed
+  ansible.builtin.set_fact:
+    libvirt_remove_domains: >-
+      {{ libvirt_objects.domains | selectattr('scenario', 'equalto', libvirt_remove_scenario)
+      | selectattr('labelled') | selectattr('run', 'in', libvirt_remove_selected_runs) | list }}
+    libvirt_remove_networks: >-
+      {{ libvirt_objects.networks | selectattr('scenario', 'equalto', libvirt_remove_scenario)
+      | selectattr('labelled') | selectattr('run', 'in', libvirt_remove_selected_runs) | list }}
+    libvirt_remove_pools: >-
+      {{ libvirt_objects.pools | selectattr('scenario', 'equalto', libvirt_remove_scenario)
+      | selectattr('labelled') | selectattr('run', 'in', libvirt_remove_selected_runs) | list }}
+  vars:
+    libvirt_remove_found_runs: >-
+      {{ (libvirt_objects.domains + libvirt_objects.networks + libvirt_objects.pools)
+      | selectattr('scenario', 'equalto', libvirt_remove_scenario) | map(attribute='run') | unique | list }}
+    libvirt_remove_selected_runs: >-
+      {{ libvirt_remove_runs if libvirt_remove_runs | length > 0 else libvirt_remove_found_runs }}
+
+- name: Libvirt remove | Power off the selected domains
+  community.libvirt.virt:
+    uri: qemu:///system
+    name: "{{ item.name }}"
+    state: destroyed
+  loop: "{{ libvirt_remove_domains }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Libvirt remove | Undefine the selected domains
+  community.libvirt.virt:
+    uri: qemu:///system
+    name: "{{ item.name }}"
+    command: undefine
+    flags:
+      - managed_save
+      - snapshots_metadata
+      - nvram
+      - checkpoints_metadata
+  loop: "{{ libvirt_remove_domains }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Libvirt remove | Stop and undefine the selected networks
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    name: "{{ item.name }}"
+    state: absent
+  loop: "{{ libvirt_remove_networks }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Libvirt remove | Start the selected pools so that their volumes can be listed
+  community.libvirt.virt_pool:
+    uri: qemu:///system
+    name: "{{ item.name }}"
+    state: active
+  loop: "{{ libvirt_remove_pools }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Libvirt remove | Refresh the selected pools
+  community.libvirt.virt_pool:
+    uri: qemu:///system
+    name: "{{ item.name }}"
+    command: refresh
+  loop: "{{ libvirt_remove_pools }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Libvirt remove | List the volumes of the selected pools
+  community.libvirt.virt_volume:
+    uri: qemu:///system
+    pool: "{{ item.name }}"
+    command: list_volumes
+  loop: "{{ libvirt_remove_pools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: libvirt_remove_volumes
+
+- name: Libvirt remove | Delete every volume of the selected pools
+  community.libvirt.virt_volume:
+    uri: qemu:///system
+    pool: "{{ item.0.item.name }}"
+    name: "{{ item.1.name }}"
+    state: absent
+  loop: "{{ libvirt_remove_volumes.results | subelements('list_volumes') }}"
+  loop_control:
+    label: "{{ item.0.item.name }}/{{ item.1.name }}"
+
+- name: Libvirt remove | Delete the directories of the selected pools and undefine them
+  community.libvirt.virt_pool:
+    uri: qemu:///system
+    name: "{{ item.name }}"
+    state: deleted
+  loop: "{{ libvirt_remove_pools }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Libvirt remove | Inspect the ephemeral directory and its key directory without following links
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: false
+  loop:
+    - "{{ libvirt_remove_ephemeral }}"
+    - "{{ libvirt_remove_ephemeral }}/libvirt"
+  register: libvirt_remove_key_dirs
+  when: libvirt_remove_ephemeral_ok | bool
+  vars:
+    libvirt_remove_ephemeral: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    libvirt_remove_ephemeral_ok: >-
+      {{ libvirt_remove_ephemeral is match('^/([^/]+/)*[^/]*' ~ libvirt_remove_scenario | regex_escape ~ '$')
+      and libvirt_remove_ephemeral is not search('(^|/)\.\.?(/|$)') }}
+
+- name: Libvirt remove | Delete the ephemeral keys and known hosts only from the run's own real directory
+  ansible.builtin.file:
+    path: "{{ libvirt_remove_key_dirs.results[1].stat.path }}"
+    state: absent
+  when:
+    - libvirt_remove_key_dirs.results is defined
+    - libvirt_remove_key_dirs.results | map(attribute='stat') | selectattr('exists') | list | length == 2
+    - libvirt_remove_key_dirs.results | map(attribute='stat') | selectattr('isdir') | list | length == 2
+    - libvirt_remove_key_dirs.results | map(attribute='stat') | selectattr('islnk') | list | length == 0
+    - libvirt_remove_key_dirs.results[0].stat.uid == libvirt_remove_key_dirs.results[1].stat.uid

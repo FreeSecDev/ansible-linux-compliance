@@ -1,0 +1,217 @@
+---
+- name: Guard libvirt isolation | Refuse a virtual machine, network or pool that is not this run's isolated one
+  ansible.builtin.assert:
+    that:
+      - guard_instance.driver | default('') == 'libvirt'
+      - guard_domain_xml is search('<name>' ~ guard_instance.domain | regex_escape ~ '</name>')
+      - guard_domain_xml is search(guard_label_prefix ~ '\s*<fsd:instance>' ~ guard_instance.instance | regex_escape
+        ~ '</fsd:instance>')
+      - guard_domain_xml is search("<entry name='serial'>" ~ guard_instance.marker | regex_escape ~ '</entry>')
+      - guard_domain_xml is search("<uuid>[0-9a-f-]{36}</uuid>")
+      - guard_domain_xml | regex_findall('<sysinfo[ />][^>]*>') == ["<sysinfo type='smbios'>"]
+      - guard_domain_xml | regex_findall('<entry[ />][^>]*>') | length == 3
+      - >-
+        guard_domain_xml | regex_findall("<entry name='(manufacturer|product|serial)'>") | unique | sort
+        == ['manufacturer', 'product', 'serial']
+      - guard_domain_xml | regex_findall('<smbios[ />][^>]*>') == ["<smbios mode='sysinfo'/>"]
+      - guard_domain_xml | regex_findall("<(?!source )[A-Za-z][A-Za-z0-9:_.-]*\\s[^>]*\\bfile=") | length == 0
+      - guard_domain_xml | regex_findall('<watchdog[ />][^>]*>') | reject('match', guard_allowed_watchdog) | list
+        | length == 0
+      - guard_domain_xml is not search('xmlns:(?!fsd=)')
+      - guard_domain_elements | difference(guard_domain_allowed_elements) | length == 0
+      - guard_domain_xml | regex_findall('<source[ />]') | length == guard_domain_sources | length
+      - guard_domain_sources | reject('match', guard_allowed_sources) | list | length == 0
+      - guard_domain_xml | regex_findall('<interface ') | length == 1
+      - guard_domain_xml is search("<interface type='network'>")
+      - guard_domain_xml is search("<mac address='" ~ guard_instance.mac | regex_escape ~ "'/>")
+      - guard_domain_xml is search("<source network='" ~ guard_instance.network | regex_escape ~ "'[ />]")
+      - guard_domain_xml | regex_findall('<disk ') | length == 2
+      - guard_domain_xml | regex_findall("<disk type='file' device='(disk|cdrom)'>") | length == 2
+      - guard_domain_xml | regex_findall(guard_disk_source) | length == 2
+      - >-
+        guard_domain_xml | regex_findall('<backingStore[^>]*>') | reject('equalto', '<backingStore/>') | list
+        | length == 0
+      - guard_domain_xml | regex_findall('<driver[ />][^>]*>') | reject('match', guard_allowed_driver) | list
+        | length == 0
+      - guard_domain_xml | regex_findall('<memory[ >][^>]*>') | reject('match', "^<memory unit='[A-Za-z]+'>$") | list
+        | length == 0
+      - guard_domain_xml | regex_findall('<emulator>[^<]*</emulator>') | length == 1
+      - guard_domain_xml | regex_findall('<emulator>[^<]*</emulator>') | reject('match', guard_allowed_emulator) | list
+        | length == 0
+      - guard_domain_xml | regex_findall('<(serial|console) [^>]*>') | length == 2
+      - guard_domain_xml | regex_findall("<(serial|console) type='pty'") | length == 2
+      - guard_domain_xml | regex_findall('<input [^>]*>') | reject('match', guard_allowed_input) | list | length == 0
+      - guard_domain_xml | regex_findall('<audio [^>]*>') | reject('search', "type='none'") | list | length == 0
+      - guard_domain_xml | regex_findall('<rng [^>]*>') == ["<rng model='virtio'>"]
+      - guard_domain_xml | regex_findall('<backend[ >][^<]*') == ["<backend model='random'>/dev/urandom"]
+      - guard_domain_seclabels | length > 0
+      - guard_domain_seclabels | reject('match', guard_allowed_seclabel) | list | length == 0
+      - guard_domain_labels | reject('match', guard_allowed_label) | list | length == 0
+      - guard_domain_xml | regex_findall('<partition>[^<]*') | reject('equalto', '<partition>/machine') | list
+        | length == 0
+      - >-
+        not guard_host_apparmor | bool
+        or guard_domain_seclabels is contains("<seclabel type='dynamic' model='apparmor' relabel='yes'>")
+      - guard_network_xml is search('<name>' ~ guard_instance.network | regex_escape ~ '</name>')
+      - guard_network_xml is search(guard_label_prefix)
+      - guard_network_xml is not search('xmlns:(?!fsd=)')
+      - >-
+        guard_network_xml | regex_findall('<([A-Za-z][A-Za-z0-9:_.-]*)') | unique
+        | difference(guard_network_allowed_elements) | length == 0
+      - guard_network_xml is not search('<forward')
+      - guard_network_xml is not search('ipv6=')
+      - guard_network_xml is not search('<(dhcp|route|portgroup|virtualport|tftp|bootp)[ >/]')
+      - guard_network_xml is search("<bridge name='" ~ guard_instance.bridge | regex_escape ~ "'")
+      - guard_network_xml is search("<dns enable='no'/>")
+      - guard_network_xml | regex_findall('<ip ') | length == 1
+      - >-
+        guard_network_xml is search("<ip address='" ~ guard_instance.gateway | regex_escape
+        ~ "' netmask='255.255.255.0'")
+      - guard_instance.gateway is match('^10\.2[0-4][0-9]\.[0-9]{1,3}\.1$')
+      - guard_instance.address | regex_replace('\.[0-9]+$', '.1') == guard_instance.gateway
+      - guard_instance.address != guard_instance.gateway
+      - guard_pool_xml is search("<pool type='dir'>")
+      - >-
+        guard_pool_xml | regex_findall('<([A-Za-z][A-Za-z0-9:_.-]*)') | unique
+        | difference(guard_pool_allowed_elements) | length == 0
+      - guard_pool_xml is search('<name>' ~ guard_instance.pool | regex_escape ~ '</name>')
+      - guard_instance.pool_path == guard_pool_parent ~ '/' ~ guard_instance.pool
+      - guard_pool_xml is search('<path>' ~ guard_instance.pool_path | regex_escape ~ '</path>')
+      - guard_pool_xml | regex_findall('<mode>[^<]*</mode>') == ['<mode>0711</mode>']
+      - guard_pool_xml | regex_findall('<owner>[^<]*</owner>') == ['<owner>' ~ guard_pool_owner ~ '</owner>']
+      - guard_ssh_settings.host_key_checking | bool
+      - guard_ssh_settings.plugin_host_key_checking | bool
+      - guard_ssh_settings.ssh_args == guard_default_ssh_args
+      - guard_ssh_settings.ssh_extra_args | default('', true) | length == 0
+      - guard_ssh_settings.scp_extra_args | default('', true) | length == 0
+      - guard_ssh_settings.sftp_extra_args | default('', true) | length == 0
+      - guard_ssh_settings.ssh_executable == 'ssh'
+      - guard_ssh_settings.control_path | default('', true) in ['', guard_molecule_control_path]
+      - guard_ssh_settings.control_path_dir == guard_default_control_path_dir
+    fail_msg: >-
+      Refusing to run: virtual machine {{ guard_instance.domain | default('unknown') }} is not isolated. It may hold
+      only the elements and devices that create_libvirt.yml defines and libvirt adds: this run's labels and marker, the
+      recorded disk and seed as files of the run's pool without backing files, one interface on the run's network, a
+      pseudo-terminal console, the random number generator on /dev/urandom, the pinned emulator and dynamic security
+      labels with relabelling{{ ' under AppArmor' if guard_host_apparmor | bool else '' }}. The network must have
+      only the recorded bridge and IPv4 address, without forwarding, DHCP or DNS, and the pool its own directory
+      with mode 0711, owned by the user that owns the run's key. Host key checking must be on, and the SSH
+      arguments, executable, control path and copy arguments of the Ansible configuration must be the defaults.
+      Elements outside the allow-list: {{ guard_domain_elements | difference(guard_domain_allowed_elements) }}.
+    success_msg: Virtual machine {{ guard_instance.domain }} is isolated on the run's own network.
+  vars:
+    guard_label_prefix: >-
+      xmlns:fsd="{{ guard_metadata_namespace | regex_escape }}">\s*<fsd:scenario>{{
+      guard_instance.scenario | regex_escape }}</fsd:scenario>\s*<fsd:run>{{
+      guard_instance.run_id | regex_escape }}</fsd:run>
+    guard_disk_source: >-
+      <source file='{{ guard_instance.pool_path | regex_escape }}/({{ guard_instance.disk | regex_escape }}|{{
+      guard_instance.seed | regex_escape }})'
+    guard_domain_elements: "{{ guard_domain_xml | regex_findall('<([A-Za-z][A-Za-z0-9:_.-]*)') | unique }}"
+    guard_domain_sources: "{{ guard_domain_xml | regex_findall('<source[ />][^>]*>') }}"
+    guard_domain_seclabels: "{{ guard_domain_xml | regex_findall('<seclabel[ >][^>]*>') }}"
+    guard_domain_labels: "{{ guard_domain_xml | regex_findall('<(?:label|imagelabel|baselabel)[ >/][^<]*') }}"
+    guard_allowed_source_alternatives:
+      - >-
+        <source file='{{ guard_instance.pool_path | regex_escape }}/({{ guard_instance.disk | regex_escape }}|{{
+        guard_instance.seed | regex_escape }})'( index='[0-9]+')?/>
+      - >-
+        <source network='{{ guard_instance.network | regex_escape }}'( portid='[0-9a-f-]+')?( bridge='{{
+        guard_instance.bridge | regex_escape }}')?/>
+      - <source path='/dev/pts/[0-9]+'/>
+    guard_allowed_sources: "^({{ guard_allowed_source_alternatives | join('|') }})$"
+    guard_allowed_driver: "^<driver name='qemu' type='(qcow2|raw)'/>$"
+    guard_allowed_emulator: '^<emulator>(/usr/bin/qemu-system-x86_64|/usr/libexec/qemu-kvm)</emulator>$'
+    guard_allowed_watchdog: "^<watchdog model='[a-z0-9-]+' action='(reset|poweroff|none)'/?>$"
+    guard_allowed_input: "^<input type='(mouse|keyboard|tablet)' bus='(ps2|usb|virtio)'/?>$"
+    guard_allowed_seclabel: "^<seclabel type='dynamic' model='(dac|apparmor|selinux)' relabel='yes'>$"
+    guard_allowed_label_alternatives:
+      - \+[1-9][0-9]*:\+[1-9][0-9]*
+      - libvirt-[0-9a-f-]{36}
+      - system_u:(system_r|object_r):svirt_(t|tcg_t|image_t):s0(:c[0-9]{1,4},c[0-9]{1,4})?
+    guard_allowed_label: "^<(label|imagelabel)>({{ guard_allowed_label_alternatives | join('|') }})$"
+    guard_domain_allowed_elements:
+      - acpi
+      - address
+      - alias
+      - apic
+      - audio
+      - backend
+      - backingStore
+      - boot
+      - clock
+      - console
+      - controller
+      - cpu
+      - currentMemory
+      - devices
+      - disk
+      - domain
+      - driver
+      - emulator
+      - entry
+      - features
+      - fsd:instance
+      - fsd:molecule
+      - fsd:run
+      - fsd:scenario
+      - imagelabel
+      - input
+      - interface
+      - label
+      - mac
+      - memballoon
+      - memory
+      - metadata
+      - model
+      - name
+      - on_crash
+      - on_poweroff
+      - on_reboot
+      - os
+      - panic
+      - partition
+      - readonly
+      - resource
+      - rng
+      - seclabel
+      - serial
+      - smbios
+      - source
+      - sysinfo
+      - system
+      - target
+      - type
+      - uuid
+      - vcpu
+      - video
+      - watchdog
+    guard_network_allowed_elements:
+      - bridge
+      - dns
+      - fsd:molecule
+      - fsd:run
+      - fsd:scenario
+      - ip
+      - mac
+      - metadata
+      - name
+      - network
+      - uuid
+    guard_pool_allowed_elements:
+      - allocation
+      - available
+      - capacity
+      - group
+      - mode
+      - name
+      - owner
+      - path
+      - permissions
+      - pool
+      - source
+      - target
+      - uuid
+    guard_default_ssh_args: -C -o ControlMaster=auto -o ControlPersist=60s
+    guard_default_control_path_dir: ~/.ansible/cp
+    guard_molecule_control_path: "%(directory)s/%%h-%%p-%%r"
