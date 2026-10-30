@@ -544,8 +544,9 @@ lists no leg fails the gate.
 On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
-duration: 18 for `molecule-lifecycle`, 8 for `molecule-docker` (one [scanner timeout](#scanner-hangs) and its retry
-add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). A leg that approaches 20 minutes
+duration: 18 for `molecule-lifecycle`, 13 for `molecule-docker` (one [scanner timeout](#scanner-hangs) and its retry
+add three minutes; the standard scenarios took up to 7.9 minutes on `main` at cebeca2, and up to 8.7 once the images
+ship openssh-server for the `ssh` topic, whose image build adds about 45 seconds on Rocky Linux), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). A leg that approaches 20 minutes
 should be split further, for example per pre-state, rather than given a longer limit, so that no required job comes
 near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
