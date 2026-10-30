@@ -24,7 +24,7 @@
   tags:
     - always
 
-- name: Banners | Inspect the banner file without following a symbolic link
+- name: Banners | Inspect the banner file to be written without following a symbolic link
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
     follow: false
