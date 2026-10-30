@@ -6,7 +6,8 @@
 - **Jira:** FREES-144 (this ADR and the CI image), FREES-145 (backend), FREES-146 (STIG to ComplianceAsCode
   mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard),
   FREES-155 (Markdown in the publishing check, no SCC cache for pull requests from forks), FREES-161 (opt-in
-  off-platform scan of Ubuntu 26.04 with the 24.04 benchmark), FREES-170 (toggles and control families for SCC)
+  off-platform scan of Ubuntu 26.04 with the 24.04 benchmark), FREES-170 (toggles and control families for SCC),
+  FREES-176 (release watch and expiry fallback)
 - **Pull requests:** introduced by the pull request for FREES-144 (the CI image, its make targets, the `scc-smoke`
   job and the repository tests). The pull request for FREES-145 adds the backend, the SCC integration and egress
   tests and the amendment at the end of this ADR. The pull request for FREES-147 adds the exporter
@@ -647,6 +648,9 @@ depends on the FREES-146 mapping for `oscap` results.
       `cscc --version` still exited 0. It could not confirm that the faked time reached SCC's expiry check, so
       `scc-smoke` alone would not notice.
     - `expignore` is documented only for pre-release versions and is not used.
+    - Decided by the [FREES-176 amendment](#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176): a
+      scheduled watch reports a new release, and after the hard stop pull requests and merge groups report a named
+      skip of the smoke test instead of deadlocking, while the expiry check still refuses to build or run SCC.
 
 ## Amendment 2026-10-26: the backend (FREES-145)
 
@@ -1232,6 +1236,119 @@ disabled rule is `disabled` with that variable, never `pass`, with SCC's own res
 evidence; that every other rule has the outcome of the untoggled scan in the same container; that partial disables
 stay enabled; and that the run is schema 1.2 with every finding placed and the disabled rules under `ssh`. The state
 changes of all three scans stay within the accepted residual.
+
+## Amendment 2026-10-30: release watch and expiry fallback (FREES-176)
+
+### Context
+
+- **No newer release.** On 2026-10-30 NIWC Atlantic's release record
+  (<https://raw.githubusercontent.com/niwc-atlantic/scap-scc/main/scc_release.xml>) still says `<version>5.15</version>`,
+  and `SCC_5.16_Checksums.txt`, `SCC_5.15.1_Checksums.txt`, `SCC_5.15.2_Checksums.txt` and `SCC_5.16.1_Checksums.txt`
+  return 404 on the DISA host. The pinned 5.15 expires on 2026-11-25, so `make scc-expiry-check` stops the SCC path
+  from 2026-11-18 (open item 12).
+- **Decision 7 deadlocks after the hard stop.** From that day `scc-smoke` fails for every pull request and merge
+  group that touches an SCC path, and `ci-gate` fails with it. The SCC paths include the `Makefile`, every workflow,
+  this ADR and ADR 0020, so:
+  - unrelated pull requests that touch the `Makefile` or a workflow are blocked because DISA has not released;
+  - nothing on an SCC path can merge, including an amendment of this ADR, until NIWC publishes a release. The 5.14.1
+    to 5.15 gap was 120 days.
+- **Nothing watched for a release.** The scheduled check of decision 7 ("Early warning", FREES-149) was not built.
+
+### Decision 1: a scheduled release watch
+
+- **A workflow of its own,** `.github/workflows/scc-release-watch.yml`, not a job of `ci.yml`. It runs daily at 05:43
+  UTC and on manual dispatch, and its one job `scc-release-watch` runs only on `main`. The reasons for a separate
+  workflow:
+  - `issues: write` then exists only in a workflow that never runs for `pull_request` or `merge_group`, so no run
+    of pull request code is handed a token that can write issues;
+  - the watch is never a required check and never part of `ci-gate`. An outage of the release record cannot block a
+    merge or turn the daily `ci.yml` run red for a reason that is not CI's;
+  - it has its own concurrency group without cancellation, so a scheduled and a dispatched run never race to open the
+    same issue.
+- **Permissions.** `permissions: {}` at the top; the job has `contents: read` and `issues: write` and nothing else.
+  The pedantic zizmor audit `undocumented-permissions` is ignored for that one line in `.github/zizmor.yml`, because
+  YAML comments are banned (ADR 0005), with the justification in `pyproject.toml`. The never-publish guard
+  (`tests/unit/tools/test_scc_image.py`) allows SCC identifiers in this job, requires exactly these two permissions
+  for it and refuses `issues` on every other job.
+- **Logic in a tested tool.** The job runs `make scc-release-watch SCC_RELEASE_WATCH_ISSUES=true`, which runs
+  `tools/scc/release_watch.py` with the pinned `SCC_VERSION` and `SCC_EXPIRES`. Without
+  `SCC_RELEASE_WATCH_ISSUES=true` (the default, also locally) the tool only reports.
+  - It fetches only the release record, over HTTPS with a verified certificate, a 30-second timeout, no redirects and
+    a 64 KiB bound. It never downloads an SCC bundle and names no DISA URL.
+  - It parses the record with the hardened reader of `tools/reporting/xmlsafe.py` (defusedxml, no DTD or entities,
+    bounded depth and element count). The root must be `scc` with exactly one `version` matching
+    `[0-9]{1,4}(\.[0-9]{1,4}){1,3}` and at most one well-formed `timeStamp`. Anything else fails the run. The free
+    text of `releaseInfo` is never copied into an issue, so the record cannot mention people or plant links.
+  - A version that differs from the pin is a finding labelled `scc-release`. A newer one is titled
+    "SCC *version* is released: bump the pin from *pin*" and links the upgrade procedure of decision 7, including the
+    seven-day wait; an older one is reported as a suspicious step back that must not be followed without review.
+  - From 21 days before `SCC_EXPIRES` the pinned release is a finding labelled `scc-expiry` that names the hard stop
+    and links this amendment. That is the early warning that decision 7 planned for FREES-149.
+- **Exactly one issue per finding.** Each issue body starts with a marker, for example
+  `<!-- scc-release-watch: release 5.16 -->`. The tool creates the label if it is missing, then searches the open
+  issues with the label for the marker, then the closed ones. An open issue is left alone, a closed one is reopened,
+  and only when neither exists is an issue created. A renamed issue is still found. A listing longer than ten pages of
+  100 issues fails the run instead of risking a duplicate.
+- **Exit status.** 0 when the run worked and the pin is before its hard stop; 1 from the hard stop on, so the daily
+  run fails every day until the pin is bumped; 2 when the record or the API could not be used. A network failure
+  therefore fails the run, opens no release issue, and still opens or reopens the expiry issue.
+
+### Decision 2: after the hard stop, a named skip and never a pass
+
+- **The expiry check is unchanged.** `make scc-expiry-check` is still a prerequisite of `scc-image` and fails from
+  seven days before `SCC_EXPIRES`. No job builds or runs an expired SCC. The backend's own completion rule (FREES-145
+  amendment) still requires an unexpired release on managed hosts.
+- **`scc-changes` gains the output `expiry`,** exactly `current` or `expired`. A step reads the base revision's
+  `tools/scc/expiry-state.sh` and `extensions/ci/scc/scc.pins` with `git show` and runs that script as a separate
+  `bash` process on the base pins and the checked-out (head) pins, like the path filter of FREES-152. It prints
+  `expired` only when all of these hold:
+  - the event is `pull_request` or `merge_group` and the base SHA is 40 hexadecimal digits;
+  - both pin files are regular files that each set `SCC_VERSION` and `SCC_EXPIRES` exactly once, in the expected
+    form, with a real calendar date;
+  - both name the same `SCC_VERSION`, so no newer pin exists in the change;
+  - on the run's UTC date, both are on or after their hard stop (`SCC_EXPIRES` minus seven days, the same margin as
+    `check-expiry.sh`; a test keeps the margins equal).
+
+  Anything else, including a missing base script or pins, a non-zero exit or any other output, is `current`.
+- **Why the base decides.** With the head's pins, a pull request could set `SCC_EXPIRES` to a past date and skip its
+  own smoke test. With the base's pins the expiry must be real on `main`. Requiring the head pin to be expired too
+  means that a pull request that bumps the pin, or moves `SCC_EXPIRES`, is smoke-tested as before, and an expiring
+  replacement still fails the expiry check.
+- **`scc-smoke` is skipped** when `expiry` is `expired`. GitHub shows the job as skipped, not as passed.
+- **`ci-gate`** now also requires `expiry` to be exactly `current` or `expired`. It accepts a skipped `scc-smoke` only
+  for `pull_request` or `merge_group`, and only when `scc` is `false` or `expiry` is `expired`. It then writes the
+  warning annotation "SCC not built or run": the smoke test was skipped, not passed, because the pinned SCC is past
+  its hard stop and no newer pin exists.
+- **It stays loud.**
+  - The push runs on `main` and the daily schedule of `ci.yml` never compute `expired`: `scc-smoke` runs,
+    `scc-expiry-check` fails, and `ci-gate` fails on `main` every day.
+  - The release watch fails every day from the hard stop and keeps its `scc-expiry` issue open, reopening it if it is
+    closed.
+  - Every pull request and merge group that relies on the skip carries the warning annotation.
+- **Recovery is automatic.** Once NIWC publishes a release, the watch opens its `scc-release` issue. The pull request
+  that bumps the pin has a head pin that differs from the base, so `expiry` is `current`, and `scc-smoke` and
+  `scc-integration` run on the merge commit, which holds every SCC change merged during the skip.
+
+### Alternatives rejected
+
+| Alternative | Reason rejected |
+|---|---|
+| Keep blocking every SCC path after the hard stop | Deadlocks the queue for unrelated `Makefile` and workflow changes, and for the fix itself, until DISA releases |
+| Make `scc-smoke` succeed with a message | A green job reads as a passed scan; a skip must look like a skip |
+| Take `scc-smoke` out of `ci-gate` or change the ruleset | Hides every later SCC failure, not only the expiry, and changes the required checks |
+| Move `SCC_EXPIRES`, or use `expignore` | Runs an expired SCC; `expignore` is documented for pre-release versions only |
+| Decide the expiry from the head revision's pins or script | A pull request could fabricate an expiry and skip its own smoke test |
+| Skip only for some SCC paths, block changes to the backend | Still blocks the changes the expiry may require, and every SCC change is scanned at the bump anyway |
+| The watch as a job of `ci.yml` | Gives `issues: write` to a workflow that runs for pull requests, and couples a third-party outage to CI |
+
+### Residual risk
+
+- During the skip, a change to an SCC path merges without a real SCC scan. It is scanned, with everything else merged
+  meanwhile, by the pull request that bumps the pin, before that pull request can merge. The threat model records
+  this under T-SCC-3.
+- The expiry step lives in `ci.yml`, which a pull request controls, like the filter step. Editing it is a change to a
+  workflow, caught by review, and the runs on `main` never use it.
+- The day is the runner's UTC date, as in `check-expiry.sh`.
 
 ## References
 
