@@ -43,7 +43,7 @@
     lifecycle_broad_rewritten: "{{ lifecycle_rewritten | default([]) }}"
     lifecycle_broad_raw:
       files: >-
-        {{ find_whole.files if find_aborted | length == 0
+        {{ find_whole.files + find_extra if find_aborted | length == 0
            else (find_whole.files | rejectattr('path', 'match', find_under) | list) + find_listed.files }}
       checksums: "{{ find_sums }}"
       sysctl: "{{ lifecycle_broad_sysctl.files }}"

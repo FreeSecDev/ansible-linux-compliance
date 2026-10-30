@@ -9,7 +9,7 @@
 - name: Snapshot | Record paths, ownership, modes, sizes, times and content of every entry
   vars:
     snapshot_entries: >-
-      {{ find_whole.files if find_aborted | length == 0
+      {{ find_whole.files + find_extra if find_aborted | length == 0
          else (find_whole.files | rejectattr('path', 'match', find_under) | list) + find_listed.files }}
   ansible.builtin.set_fact:
     snapshot_lines: >-

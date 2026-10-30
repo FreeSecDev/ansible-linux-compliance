@@ -1,4 +1,9 @@
 ---
+- name: Find with checksums | Look up the files that an earlier record of these paths found that root cannot read
+  ansible.builtin.set_fact:
+    find_key: "{{ find_paths | join(',') ~ '|' ~ find_checksum_algorithm }}"
+    find_known: "{{ (find_cache | default({})).get(find_paths | join(',') ~ '|' ~ find_checksum_algorithm) }}"
+
 - name: Find with checksums | Find every entry below the paths, with a checksum of every regular file
   ansible.builtin.find:
     paths: "{{ find_paths }}"
@@ -8,16 +13,25 @@
     follow: false
     get_checksum: true
     checksum_algorithm: "{{ find_checksum_algorithm }}"
+    excludes: "{{ find_known.excludes if find_known else omit }}"
   register: find_whole
 
 - name: Find with checksums | Name the paths whose walk stopped at a file that root cannot read
   ansible.builtin.set_fact:
     find_under: "^$"
     find_sums: {}
+    find_extra: []
     find_aborted: >-
       {{ find_whole.skipped_paths | default({}) | dict2items
          | selectattr('key', 'in', find_paths) | rejectattr('value', 'search', 'Errno 2\]')
          | map(attribute='key') | list }}
+
+- name: Find with checksums | Walk every path again when the files that root cannot read have changed
+  ansible.builtin.set_fact:
+    find_aborted: "{{ find_paths }}"
+  when:
+    - find_known
+    - find_aborted | length > 0
 
 - name: Find with checksums | List every entry of those paths again, without reading any content
   ansible.builtin.find:
@@ -57,9 +71,45 @@
     quiet: true
   when: find_aborted | length > 0
 
-- name: Find with checksums | Keep the checksums of the second pass and the paths it replaces
+- name: Find with checksums | Keep the checksums of the second pass and remember the files that root cannot read
+  vars:
+    find_entries: >-
+      {{ (find_whole.files | rejectattr('path', 'match', find_aborted_under) | list) + find_listed.files }}
+    find_aborted_under: "{{ '^(' ~ (find_aborted | map('regex_escape') | join('|')) ~ ')(/|$)' }}"
+    find_unreadable: >-
+      {{ find_listed.files | selectattr('isreg')
+         | rejectattr('path', 'in', find_summed.files | map(attribute='path') | list)
+         | map(attribute='path') | map('basename') | unique | sort }}
   ansible.builtin.set_fact:
-    find_under: "{{ '^(' ~ (find_aborted | map('regex_escape') | join('|')) ~ ')(/|$)' }}"
+    find_under: "{{ find_aborted_under }}"
     find_sums: >-
       {{ dict(find_summed.files | map(attribute='path') | zip(find_summed.files | map(attribute='checksum'))) }}
+    find_cache: >-
+      {{ find_cache | default({}) | combine({find_key: {
+           'excludes': find_unreadable,
+           'extra': find_entries | selectattr('path', 'search', '/(' ~ (find_unreadable | map('regex_escape')
+                    | join('|')) ~ ')$') | map(attribute='path') | list if find_unreadable | length > 0 else []}}) }}
   when: find_aborted | length > 0
+
+- name: Find with checksums | Inspect the files that the walk left out by name, without following a link
+  ansible.builtin.stat:
+    path: "{{ find_path }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: "{{ find_checksum_algorithm }}"
+    get_mime: false
+    get_attributes: false
+  loop: "{{ find_known.extra }}"
+  loop_control:
+    loop_var: find_path
+  register: find_left_out
+  when:
+    - find_known
+    - find_aborted | length == 0
+
+- name: Find with checksums | Turn the inspected files into entries of the walk
+  ansible.builtin.set_fact:
+    find_extra: "{{ find_left_out.results | selectattr('stat.exists') | map(attribute='stat') | list }}"
+  when:
+    - find_known
+    - find_aborted | length == 0
