@@ -79,7 +79,7 @@
     __linux_compliance_remediate_ld_strict: >-
       {{ '^[ \t]*' ~ __linux_compliance_remediate_ld_setting ~ '[ \t]+('
          ~ ('0|[1-9][0-9]{0,5}' if __linux_compliance_remediate_rule.parameters.comparison in ['at_most', 'at_least']
-            else '[0-7]{3}' if __linux_compliance_remediate_rule.parameters.comparison == 'umask'
+            else '0[0-7]{2}' if __linux_compliance_remediate_rule.parameters.comparison == 'umask'
             else __linux_compliance_remediate_ld_values[__linux_compliance_remediate_rule.rule_id])
          ~ ')[ \t]*$' }}
     __linux_compliance_remediate_ld_token_pattern: >-
@@ -124,7 +124,9 @@
     __linux_compliance_remediate_ld_bits: >-
       {%- set required = __linux_compliance_remediate_ld_required | int(base=8) -%}
       {%- set actual = (__linux_compliance_remediate_ld_token
-            if __linux_compliance_remediate_ld_token is match('^0?[0-7]{1,3}$') else '0') | int(base=8) -%}
+            if __linux_compliance_remediate_ld_token
+               is match(__linux_compliance_remediate_login_defs_umask_read_pattern)
+            else '0') | int(base=8) -%}
       {%- set state = namespace(missing=0, union=0) -%}
       {%- for bit in [256, 128, 64, 32, 16, 8, 4, 2, 1] -%}
       {%- if (required // bit) % 2 == 1 and (actual // bit) % 2 == 0 -%}
@@ -145,6 +147,18 @@
               or (__linux_compliance_remediate_ld_comparison == 'umask'
                   and __linux_compliance_remediate_ld_bits.missing == 0)
               or __linux_compliance_remediate_ld_comparison == 'equal') }}
+    __linux_compliance_remediate_ld_unreadable: >-
+      {{ __linux_compliance_remediate_ld_token | length > 0
+         and ((__linux_compliance_remediate_ld_comparison == 'umask'
+               and __linux_compliance_remediate_ld_token
+                   is not match(__linux_compliance_remediate_login_defs_umask_read_pattern))
+              or (__linux_compliance_remediate_ld_comparison in ['at_most', 'at_least']
+                  and __linux_compliance_remediate_ld_readings | length == 0
+                  and __linux_compliance_remediate_ld_token
+                      is match(__linux_compliance_remediate_login_defs_base0_pattern)
+                  and __linux_compliance_remediate_ld_token is not match('^"?-')
+                  and not (__linux_compliance_remediate_ld_comparison == 'at_most'
+                           and __linux_compliance_remediate_ld_token is match('^[1-9][0-9]{6,}$')))) }}
     __linux_compliance_remediate_ld_line: >-
       {{ __linux_compliance_remediate_rule.parameters.setting ~ ' '
          ~ (__linux_compliance_remediate_ld_bits.union if __linux_compliance_remediate_ld_comparison == 'umask'
@@ -167,6 +181,7 @@
          else 'overridden' if __linux_compliance_remediate_ld_overriding | length > 0
          else 'duplicate_setting' if __linux_compliance_remediate_ld_found | length > 1
          else 'compliant' if __linux_compliance_remediate_ld_satisfied
+         else 'unreadable_value' if __linux_compliance_remediate_ld_unreadable
          else 'applied' }}
   tags:
     - always
@@ -253,7 +268,12 @@
                            ~ ' as well; the collection does not change files it does not own',
              'duplicate_setting': __linux_compliance_remediate_login_defs ~ ' sets '
                                   ~ __linux_compliance_remediate_rule.parameters.setting ~ ' on '
-                                  ~ __linux_compliance_remediate_ld_found | length ~ ' lines'
+                                  ~ __linux_compliance_remediate_ld_found | length ~ ' lines',
+             'unreadable_value': 'the line ' ~ (__linux_compliance_remediate_ld_found | first | default('') | to_json)
+                                 ~ ' of ' ~ __linux_compliance_remediate_login_defs ~ ' has the value '
+                                 ~ (__linux_compliance_remediate_ld_token | to_json)
+                                 ~ ', which shadow-utils or pam_umask may read in a form that the collection cannot'
+                                 ~ ' compare, so a written value could be looser; nothing was written'
            }[__linux_compliance_remediate_ld_status] | default(none),
            'changed': (__linux_compliance_remediate_ld_write is changed)
                       or (__linux_compliance_remediate_ld_rerecord is changed),

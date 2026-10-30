@@ -42,70 +42,32 @@
   ansible.builtin.set_fact:
     ldf_text: "{{ ldf_original.content | b64decode }}"
     ldf_cases:
-      - name: a second maximum age line
-        text: "{{ ldf_original.content | b64decode ~ 'PASS_MAX_DAYS 30\n' }}"
-        expected:
-          max: duplicate_setting
-          umask: applied
       - name: a second maximum age line in lower case
         text: "{{ ldf_original.content | b64decode ~ '  pass_max_days\t30\n' }}"
         expected:
           max: duplicate_setting
           umask: applied
-      - name: a commented maximum age, which shadow-utils and the check ignore
-        text: "{{ ldf_original.content | b64decode ~ '#PASS_MAX_DAYS 1\n' }}"
-        expected:
-          max: applied
-          umask: applied
-      - name: the maximum age in lower case and a umask of four digits that is stricter than the profile's
-        text: >-
-          {{ ldf_original.content | b64decode | regex_replace('(?m)^PASS_MAX_DAYS[ \t]', 'pass_max_days ')
-             | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 0077') }}
-        expected:
-          max: applied
-          umask: applied
-        lines:
-          - PASS_MAX_DAYS 365
-          - UMASK 077
-      - name: a stricter maximum age with a trailing comment, which shadow-utils does not read as a number
-        text: >-
-          {{ ldf_original.content | b64decode
-             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30 # site') }}
+      - name: a hexadecimal maximum age in lower case, a four-digit umask and a commented default
+        text: "{{ (ldf_original.content | b64decode
+          | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'pass_max_days 0x1e')
+          | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 0077')) ~ '#PASS_MAX_DAYS 1\n' }}"
         expected:
           max: applied
           umask: applied
         lines:
           - PASS_MAX_DAYS 30
-      - name: a stricter umask with a trailing comment, which pam_umask and the check read as 077
+          - UMASK 077
+      - name: a stricter maximum age and umask with trailing comments, which pam_umask and the check read
         text: >-
           {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30 # site')
              | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 077 # site') }}
         expected:
           max: applied
           umask: applied
         lines:
+          - PASS_MAX_DAYS 30
           - UMASK 077
-      - name: zero-padded values that shadow-utils reads with base 0 (090 does not parse, 010 is 8)
-        text: >-
-          {{ ldf_original.content | b64decode
-             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 090')
-             | regex_replace('(?m)^PASS_WARN_AGE[ \t].*$', 'PASS_WARN_AGE 010') }}
-        expected:
-          max: applied
-          warn: applied
-          umask: applied
-        lines:
-          - PASS_MAX_DAYS 90
-          - PASS_WARN_AGE 10
-      - name: a zero-padded maximum age that shadow-utils reads as octal 245
-        text: >-
-          {{ ldf_original.content | b64decode
-             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 0365') }}
-        expected:
-          max: applied
-          umask: applied
-        lines:
-          - PASS_MAX_DAYS 245
 
 - name: Login defaults refusals | Switch every rule of the topic on
   ansible.builtin.set_fact:

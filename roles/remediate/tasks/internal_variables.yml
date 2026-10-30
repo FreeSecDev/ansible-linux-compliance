@@ -276,6 +276,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_token_pattern$') == [] or
         '__linux_compliance_remediate_ld_token_pattern' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_unreadable$') == [] or
+        '__linux_compliance_remediate_ld_unreadable' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_value_patterns$') == [] or
         '__linux_compliance_remediate_ld_value_patterns' in (hostvars[inventory_hostname] | list)
       - >-
@@ -903,6 +906,7 @@
     __linux_compliance_remediate_ld_strict: __linux_compliance_unset__
     __linux_compliance_remediate_ld_token: __linux_compliance_unset__
     __linux_compliance_remediate_ld_token_pattern: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_unreadable: __linux_compliance_unset__
     __linux_compliance_remediate_ld_value_patterns: __linux_compliance_unset__
     __linux_compliance_remediate_ld_values: __linux_compliance_unset__
     __linux_compliance_remediate_ld_write: __linux_compliance_unset__
@@ -1107,6 +1111,7 @@
       - __linux_compliance_remediate_ld_strict == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_token == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_token_pattern == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_unreadable == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_value_patterns == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_write == '__linux_compliance_unset__'
@@ -1330,6 +1335,10 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs']
       - >-
+        __linux_compliance_remediate_login_defs_base0_pattern is not defined or
+        __linux_compliance_remediate_login_defs_base0_pattern == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_base0_pattern']
+      - >-
         __linux_compliance_remediate_login_defs_directory is not defined or
         __linux_compliance_remediate_login_defs_directory == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_directory']
@@ -1345,6 +1354,10 @@
         __linux_compliance_remediate_login_defs_umask_pattern is not defined or
         __linux_compliance_remediate_login_defs_umask_pattern == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_umask_pattern']
+      - >-
+        __linux_compliance_remediate_login_defs_umask_read_pattern is not defined or
+        __linux_compliance_remediate_login_defs_umask_read_pattern == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_umask_read_pattern']
       - >-
         __linux_compliance_remediate_login_defs_word_pattern is not defined or
         __linux_compliance_remediate_login_defs_word_pattern == (lookup('ansible.builtin.file', role_path ~
@@ -1577,6 +1590,7 @@
     __linux_compliance_remediate_ld_strict: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_token: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_token_pattern: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_unreadable: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_value_patterns: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_values: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_write: __linux_compliance_unset_again__
@@ -1781,6 +1795,7 @@
       - __linux_compliance_remediate_ld_strict == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_token == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_token_pattern == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_unreadable == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_value_patterns == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_write == '__linux_compliance_unset_again__'
@@ -2115,6 +2130,7 @@
     __linux_compliance_remediate_ld_strict: __linux_compliance_unset__
     __linux_compliance_remediate_ld_token: __linux_compliance_unset__
     __linux_compliance_remediate_ld_token_pattern: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_unreadable: __linux_compliance_unset__
     __linux_compliance_remediate_ld_value_patterns: __linux_compliance_unset__
     __linux_compliance_remediate_ld_values: __linux_compliance_unset__
     __linux_compliance_remediate_ld_write: __linux_compliance_unset__

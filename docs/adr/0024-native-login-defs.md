@@ -78,13 +78,21 @@ later restored as written. Commented lines are never counted or touched.
 
 The value comes from the profile (`profile_value`, ADR 0021). A line counts as compliant only when it has the strict
 form that shadow-utils, `pam_umask` and the check all read the same way (the name in upper case, a decimal number
-without a leading zero (`0` or `[1-9][0-9]{0,5}`), or three octal digits for the umask, and no trailing comment) and
-satisfies the check's comparison; then nothing is written and a stricter value is kept (`PASS_MAX_DAYS 30` under a
-maximum of 365, `UMASK 077` under 027). Any other line is rewritten, never looser than the first word of the line in
-any reading: for a maximum the written value is the smallest of the profile's value and the first word read as a
-decimal, octal or hexadecimal number, for a minimum the largest (`PASS_MAX_DAYS 30 # site` becomes `PASS_MAX_DAYS 30`,
-`PASS_MAX_DAYS 0365` becomes `245`, `PASS_WARN_AGE 010` becomes `10`), and the umask written is the union of the bits
-that the profile requires and the octal bits of the first word (`UMASK 077 # site` and `UMASK 0077` become `077`).
+without a leading zero (`0` or `[1-9][0-9]{0,5}`), or a zero and two octal digits for the umask, and no trailing
+comment) and satisfies the check's comparison; then nothing is written and a stricter value is kept
+(`PASS_MAX_DAYS 30` under a maximum of 365, `UMASK 077` under 027). Any other line is rewritten from the forms of its
+first word that the family reads: for a number an unsigned decimal of up to six digits, a zero and up to six octal
+digits, or `0x` and up to four hexadecimal digits; for the umask `0`, a zero and up to two octal digits, two zeros and
+two octal digits, or a single octal digit (values without the owner's bits, which shadow-utils and `pam_umask` read
+alike). For a maximum the written value is the smallest of the profile's value and every such reading, for a minimum
+the largest (`PASS_MAX_DAYS 30 # site` becomes `PASS_MAX_DAYS 30`, `PASS_MAX_DAYS 0365` becomes `245`,
+`PASS_WARN_AGE 010` becomes `10`), and the umask written is the union of the bits that the profile requires and the
+bits of the reading (`UMASK 077 # site` and `UMASK 0077` become `077`). The profile's value is written as it is when
+the first word is empty, negative (`-1`, no limit), not a number that shadow-utils parses (`9x`), or a decimal of
+seven digits or more under a maximum: in each case it is stricter than what is in effect. A first word in any other
+form that shadow-utils or `pam_umask` may read (quoted, signed, longer, or a umask in another base or length, such as
+`"30"`, `+30`, `1234567` under a minimum, `0x10000`, `00077`, `"077"` or `0x3f`) is refused as `unreadable_value`
+without a write, because the family cannot tell that the profile's value is not looser.
 `CREATE_HOME` has no exported value; its rule carries the value `yes`, which the check's pattern requires, and the
 parameter `reads_dropins`, because its check also reads `/etc/login.defs.d`.
 
@@ -97,6 +105,7 @@ Apply reports, with a reason and without a change:
 | `not_directory` | Only for a rule whose check reads the drop-ins (`reads_dropins`, today `CREATE_HOME`): `/etc/login.defs.d` exists but is a symbolic link or not a directory, so its drop-ins cannot be read |
 | `overridden` | Only for a rule whose check reads the drop-ins (`CREATE_HOME`): a drop-in `/etc/login.defs.d/*.defs` (a regular file, or a link to one) sets the name, and the check fails on it whatever the main file says, so the collection does not claim a change that would not take effect and does not edit a file it does not own. For the other six rules a drop-in is ignored, as by their checks and the pinned shadow-utils |
 | `duplicate_setting` | The name is set on more than one line, in any case: `pam_umask` takes the first line, shadow-utils the last, and the check requires every one to comply, so no single rewrite is right |
+| `unreadable_value` | The one line of the setting has a first word in a form that shadow-utils or `pam_umask` may read but the family does not (see above); the reason names the line |
 | `method_changed` | The ledger entry was recorded by another method, or none; clean it up first |
 | `compliant` | Exactly one line, in the strict form, satisfies the check; nothing is written or recorded |
 
@@ -154,15 +163,17 @@ the root-only ledger are from a world-readable file.
 The Molecule lifecycle (`extensions/molecule/shared/vars/topics/login_defs.yml`) runs both toggle modes on both
 platforms from the as-built file and from a file that an administrator customised (a looser maximum age with extra
 blanks, a warning age in lower case and a stricter umask, set with the new pre-state key `lines`), and checks that the
-cleanup restores those lines and not a default. Three regression groups run in legs of their own
-(`regressions-changes`, `regressions-refusals`, `regressions-profiles`): `lifecycle_login_defs_regressions.yml` covers a change of method, a
+cleanup restores those lines and not a default. Four regression groups run in legs of their own
+(`regressions-changes`, `regressions-refusals`, `regressions-values`, `regressions-profiles`): `lifecycle_login_defs_regressions.yml` covers a change of method, a
 stricter value set by hand (`modified_since_apply`, then `restored` once the written line is put back), a removed line
 that existed before (`modified_since_apply`) and a line that the collection added and an administrator removed again
 (`restored` without a write), and checks the exact SHA-256 after the apply; `lifecycle_login_defs_refusals.yml` covers
 duplicate lines in either case, a commented default, a lower-case name with a four-digit umask, a stricter maximum
-age and a stricter umask with a trailing comment (both kept), zero-padded numbers (`090`, `010`, `0365`), a drop-in and
+age and a stricter umask with a trailing comment (both kept), a drop-in and
 a symbolic link for the drop-in directory (both ignored by these rules), a symbolic link for login.defs and a missing
-login.defs; `lifecycle_login_defs_other_profiles.yml` applies, repeats and cleans up the rules that the CIS level 1
+login.defs; `lifecycle_login_defs_values.yml` covers zero-padded numbers (`090`, `010`, `0365`), the forms refused as
+`unreadable_value` and those that take the profile's value (`-1`, an empty value, `9x`, seven digits under a maximum,
+`0x1e`, `0`); `lifecycle_login_defs_other_profiles.yml` applies, repeats and cleans up the rules that the CIS level 1
 profiles of the lifecycle do not select, with the STIG profiles of both platforms and the RHEL 9 ANSSI enhanced
 profile, and refuses `CREATE_HOME` next to a drop-in that sets it (`overridden`) and next to a linked drop-in
 directory (`not_directory`).

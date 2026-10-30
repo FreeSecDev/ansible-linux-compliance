@@ -580,7 +580,7 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
-`login_defs` (FREES-185) has three groups, all on both platforms. In `changes`,
+`login_defs` (FREES-185) has four groups, all on both platforms. In `changes`,
 `shared/tasks/lifecycle_login_defs_regressions.yml` applies the topic and checks the SHA-256 of the whole
 `/etc/login.defs` against the as-built text with the two lines replaced in place; it records every entry as if another
 method had written it and checks `method_changed` at apply and at cleanup with every entry kept and the file
@@ -593,8 +593,11 @@ absent before and that removing it by hand is `restored` without a write (FREES-
 restore it byte for byte: a second `PASS_MAX_DAYS` line and a second one in lower case (`duplicate_setting`, nothing
 written), a commented default (ignored), a lower-case name with a four-digit umask (`PASS_MAX_DAYS 365` and `UMASK 077`
 written, the lower-case line and `UMASK 0077` restored), a stricter maximum age and umask with a trailing comment
-(`PASS_MAX_DAYS 30` and `UMASK 077` written) and zero-padded numbers (`090` becomes `90`, `010` becomes `10`, `0365`
-becomes `245`); then a drop-in
+(`PASS_MAX_DAYS 30` and `UMASK 077` written). In `values`, `shared/tasks/lifecycle_login_defs_values.yml` does the
+same for zero-padded numbers (`090` becomes `90`, `010` becomes `10`, `0365`
+becomes `245`), the forms refused as `unreadable_value` (`"30"`, `+30`, `1234567` and `0x10000` under a minimum,
+`00077`, `"077"`, `0x3f`, nothing written) and those that take the profile's value (`-1`, an empty value, `9x`,
+`1234567` under a maximum, `0`, `0x1e`); then a drop-in
 `/etc/login.defs.d/50-site.defs` that sets the maximum age and a symbolic link in place of `/etc/login.defs.d` (both
 ignored: the rules apply and clean up as usual), a symbolic link in place of `/etc/login.defs` (`not_regular_file`,
 nothing written through it) and a missing `/etc/login.defs` (`notapplicable`, nothing created). In `profiles`,
@@ -647,8 +650,8 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 24 cycle legs and 17 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
-`sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals` and `profiles` on both platforms, `sudo` `files` on
+modes of the topic, so 24 cycle legs and 19 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
+`sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles` on both platforms, `sudo` `files` on
 Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to

@@ -54,6 +54,11 @@
     file: lifecycle_login_defs_refusals.yml
   when: "'lifecycle_login_defs_refusals.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the login_defs value forms, read, rewritten or refused as unreadable
+  ansible.builtin.include_tasks:
+    file: lifecycle_login_defs_values.yml
+  when: "'lifecycle_login_defs_values.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Apply and clean up the login_defs rules that only other profiles select
   ansible.builtin.include_tasks:
     file: lifecycle_login_defs_other_profiles.yml

@@ -46,6 +46,7 @@
       - not_directory
       - overridden
       - duplicate_setting
+      - unreadable_value
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:

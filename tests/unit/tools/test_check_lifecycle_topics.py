@@ -957,10 +957,11 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["login_defs"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "refusals": frozenset({"ubuntu", "rhel_compatible"}),
+        "values": frozenset({"ubuntu", "rhel_compatible"}),
         "profiles": frozenset({"ubuntu", "rhel_compatible"}),
     }
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 12
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 13
 
 
 @pytest.mark.parametrize(

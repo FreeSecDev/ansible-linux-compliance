@@ -7,10 +7,11 @@ minor_changes:
     the selected profile's values. Each rule replaces the one line of its setting in place, or appends it, and records
     the prior line; switching the rule or the topic off writes that line back or removes the added one, never
     overwrites a later change (``modified_since_apply``) and only forgets the entry when the line is already as before.
-    A stricter value is kept, a rewritten value is never looser than any reading of the line's first word (a
-    trailing comment or a zero-padded number is rewritten), the umask keeps the bits it already has, and duplicate
-    lines (``duplicate_setting``), a ``CREATE_HOME`` drop-in in ``/etc/login.defs.d`` (``overridden``) and symbolic
-    links refuse without a change.
+    A stricter value is kept, a rewritten value is never looser than the readings of the line's first word that the
+    family supports (a trailing comment or a zero-padded number is rewritten), the umask keeps the bits it already has,
+    and a first word in another form that shadow-utils or pam_umask may read (quoted, signed, longer, another base)
+    (``unreadable_value``), duplicate lines (``duplicate_setting``), a ``CREATE_HOME`` drop-in in ``/etc/login.defs.d``
+    (``overridden``) and symbolic links refuse without a change.
     ``set_password_hashing_algorithm_logindefs`` (``pam``), ``no_shelllogin_for_systemaccounts`` and the
     existing-account rules of ``/etc/shadow`` stay ``audit_only`` (ADR 0024).
 breaking_changes:
@@ -25,5 +26,5 @@ trivial:
   - >-
     Molecule - a lifecycle pre-state may set ``lines`` of a declared file that the topic rewrites; the harness puts
     the content back after the cycle. The ``login_defs`` lifecycle runs on Ubuntu 24.04 and Rocky Linux 9 from the
-    as-built and an administrator's ``login.defs``, with the regression groups ``changes``, ``refusals`` and
-    ``profiles``.
+    as-built and an administrator's ``login.defs``, with the regression groups ``changes``, ``refusals``,
+    ``values`` and ``profiles``.
