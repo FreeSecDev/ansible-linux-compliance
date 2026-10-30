@@ -422,11 +422,20 @@ jobs:
           test -r /dev/kvm && test -w /dev/kvm
       - name: Install the pinned QEMU and libvirt from a fixed Ubuntu archive snapshot
         run: |
-          sudo apt-get update --snapshot "${UBUNTU_SNAPSHOT}"
-          sudo apt-get install -y --no-install-recommends --snapshot "${UBUNTU_SNAPSHOT}" \
-            "qemu-system-x86=${QEMU_VERSION}" "qemu-utils=${QEMU_VERSION}" \
-            "libvirt-daemon-system=${LIBVIRT_VERSION}" "libvirt-dev=${LIBVIRT_VERSION}" \
-            "pkg-config=${PKG_CONFIG_VERSION}"
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get -o Acquire::Retries=3 update --error-on=any --snapshot "${UBUNTU_SNAPSHOT}" \
+              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends --snapshot "${UBUNTU_SNAPSHOT}" \
+                "qemu-system-x86=${QEMU_VERSION}" "qemu-utils=${QEMU_VERSION}" \
+                "libvirt-daemon-system=${LIBVIRT_VERSION}" "libvirt-dev=${LIBVIRT_VERSION}" \
+                "pkg-config=${PKG_CONFIG_VERSION}"; then
+              break
+            fi
+            if [ "${attempt}" = 5 ]; then
+              echo '::error::the Ubuntu archive snapshot did not answer after five attempts'
+              exit 1
+            fi
+            sleep $((attempt * 30))
+          done
           test "$(dpkg-query -W -f='${Version}' qemu-system-x86)" = "${QEMU_VERSION}"
           test "$(dpkg-query -W -f='${Version}' libvirt-daemon-system)" = "${LIBVIRT_VERSION}"
           sudo usermod --append --groups libvirt "${USER}"
