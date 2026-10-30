@@ -288,13 +288,13 @@ class Declaration:
 
     def applied(self, value: object) -> None:
         """Check the expectations after the topic is applied."""
-        if self.expectations(value, "applied") == 0:
+        if self._expectations(value, "applied") == 0:
             self.error(
                 "applied declares no expectation; the state after apply is the evidence that the "
                 "remediation works when a container audit cannot show it"
             )
 
-    def expectations(self, value: object, where: str) -> int:
+    def _expectations(self, value: object, where: str) -> int:
         """Check the expectations in ``value`` and return how many there are."""
         applied = self.mapping(value, where)
         if applied is None:
@@ -377,7 +377,7 @@ class Declaration:
             if key is not None and key not in self.items["files"]:
                 self.error(f"{where} sets {key}, which state.files does not declare")
             if "content" in item:
-                self.pre_state_content(item, where)
+                self._pre_state_content(item, where)
             elif len(set(item) & {"mode", "owner", "group"}) == 0:
                 self.error(f"{where} sets no mode, owner or group")
             mode = item.get("mode")
@@ -389,7 +389,7 @@ class Declaration:
                 ):
                     self.error(f"{where} needs a valid {owner}")
 
-    def pre_state_content(self, item: dict[str, object], where: str) -> None:
+    def _pre_state_content(self, item: dict[str, object], where: str) -> None:
         """Check a file that the pre-state writes, as root, before a cycle and removes after it."""
         content = item["content"]
         if not _text(content) or len(str(content)) > MAX_CONTENT:
@@ -501,7 +501,7 @@ class Declaration:
             self._pre_state_requires(item, what)
             if "unchanged" in item:
                 self.pre_state_unchanged(item["unchanged"], what)
-            if "applied" in item and self.expectations(item["applied"], f"{what}.applied") == 0:
+            if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
                 self.error(f"{what}.applied declares no expectation; leave it out instead")
 
 
