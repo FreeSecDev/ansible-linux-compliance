@@ -250,7 +250,7 @@
         fail_msg: >-
           The watched paths changed during a check-mode run, a run without the opt-in, a repeated cleanup or a
           rejected input:
-          {{ (verify_snapshot_before_lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
+          {{ (verify_snapshot_before_lines.splitlines() | symmetric_difference(snapshot_lines.splitlines()))[:20] }}
         quiet: true
 
     - name: Inspect the reference file at the end

@@ -96,7 +96,7 @@
           - snapshot_digest == converge_snapshot_before
         fail_msg: >-
           The watched paths changed during the remediate run without the opt-in:
-          {{ (converge_snapshot_before_lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
+          {{ (converge_snapshot_before_lines.splitlines() | symmetric_difference(snapshot_lines.splitlines()))[:20] }}
         quiet: true
 
     - name: Inspect the reference file before remediation
