@@ -1,0 +1,19 @@
+---
+minor_changes:
+  - >-
+    remediate - the kernel module topics ``filesystem_modules`` (cramfs, freevxfs, hfs, hfsplus, jffs2, overlayfs,
+    squashfs, udf, usb-storage), ``protocol_modules`` (atm, can, dccp, firewire-core, rds, sctp, tipc) and
+    ``wireless_modules`` (bluetooth, cfg80211, iwlmvm, iwlwifi, mac80211) are native for all 21 rules. Each rule writes
+    ``/etc/modprobe.d/freesecdev-<module>.conf`` (mode ``0644``, root) with ``install <module> /bin/false`` and
+    ``blacklist <module>``, the two lines that the checks of both pinned contents require, and records it in the
+    ledger; switching a rule or the topic off removes exactly that drop-in and never overwrites a later change
+    (``modified_since_apply``). A module that another file already disables is ``compliant`` without a drop-in, and an
+    ``install`` command of another file that ``modprobe`` reads first is reported ``overridden`` and left alone. No
+    module is unloaded and no initramfs is rebuilt (ADR 0025). The topics stay disruptive and need their family or
+    ``kernel_modules`` in ``linux_compliance_remediate_allow_disruptive``.
+trivial:
+  - >-
+    Molecule - the images install ``kmod``; a topic declaration may name ``profiles``, the profile of a platform's
+    datastream that the topic's lifecycle runs with, so that the kernel module topics run with the CIS Level 2, STIG
+    and BSI profiles that select them, with regressions for a change of method, changes by hand and site files that
+    disable or re-enable a module.

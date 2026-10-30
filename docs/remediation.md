@@ -17,11 +17,12 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 
 ## Status
 
-The dispatcher, the safety model and four native families are implemented. The catalogue holds every rule that a
+The dispatcher, the safety model and eight native families are implemented. The catalogue holds every rule that a
 pinned profile selects, 1203 rules in 55 families (FREES-53), generated from the digest-verified content and listed in
-the [control family reference](control-families.md). 74 rules have a native remediation: the reference rule
+the [control family reference](control-families.md). 95 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners`, 14
-of `pwquality`, 34 of `ssh` and 10 of `sudo` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
+of `pwquality`, 34 of `ssh`, 10 of `sudo`, and 9 of `filesystem_modules`, 7 of `protocol_modules` and 5 of
+`wireless_modules` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
 switched off per rule and per topic, the audit excludes it and reports it as `disabled`, and remediation reports it as
 `not_implemented` and never changes anything for it. The native remediations land topic by topic on top of this
 catalogue, following the [native remediation guide](native-remediation-guide.md). Every native topic is exercised for
@@ -257,7 +258,8 @@ A family file `roles/remediate/tasks/<family>.yml` receives `__linux_compliance_
 must:
 
 1. **Clean up first, then apply.** Loop over `cleanup`, then over `apply`; per-rule logic may live in helper files
-   named `<family>_<purpose>.yml`.
+   named `<family>_<purpose>.yml`, or `<umbrella>_<purpose>.yml` for helpers that several families of one umbrella
+   share (`kernel_modules_apply.yml`).
 2. **Use native modules only.** No `shell`, `command`, `raw`, `script`, `expect` or anything that executes code
    indirectly; the repository guard enforces the module ban. Missing functionality becomes a typed module or filter of
    this collection.
@@ -309,9 +311,9 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 ## Native families
 
-Besides the reference family, three topics are native
+Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md)).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0025](adr/0025-native-kernel-module-drop-ins.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
@@ -483,6 +485,41 @@ is written (FREES-173). Kept `audit_only`, with the reasons in ADR 0022: the rul
 `become` and so the run that would revert them), `sudo_dedicated_group` and `file_permissions_sudo` (they limit who may
 run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
 
+### Kernel modules
+
+`filesystem_modules`, `protocol_modules` and `wireless_modules` (umbrella `kernel_modules`) are disruptive, so they are
+applied and cleaned up only with the family or `kernel_modules` in `linux_compliance_remediate_allow_disruptive`
+([ADR 0025](adr/0025-native-kernel-module-drop-ins.md)). Every rule of both pinned contents requires a line
+`install <module> /bin/false` (or `/bin/true`) and a line `blacklist <module>` in a `.conf` file of the modprobe
+directories, and reads nothing of the running kernel; `tests/unit/tools/test_content_golden_kernel_modules.py` checks
+this against the OVAL of both datastreams.
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| `kernel_module_cramfs_disabled`, `_freevxfs_`, `_hfs_`, `_hfsplus_`, `_jffs2_`, `_overlayfs_` (module `overlay`), `_squashfs_`, `_udf_`, `_usb-storage_` (`filesystem_modules`); `_atm_`, `_can_`, `_dccp_`, `_firewire-core_`, `_rds_`, `_sctp_`, `_tipc_` (`protocol_modules`); `_bluetooth_`, `_cfg80211_`, `_iwlmvm_`, `_iwlwifi_`, `_mac80211_` (`wireless_modules`) | `/etc/modprobe.d/freesecdev-<module>.conf`, mode `0644`, owner and group root, with a header that names the rule and the two lines `install <module> /bin/false` and `blacklist <module>`; no other file is written | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+
+The family reads every `*.conf` and `*.alias` file that `modprobe` reads, in its order (a name in `/etc/modprobe.d`
+hides the same name in `/run/modprobe.d`, `/usr/local/lib/modprobe.d`, `/usr/lib/modprobe.d` and `/lib/modprobe.d`;
+files are read by name), joins lines continued with `\` and skips comments. `modprobe` runs the first `install`
+command for a module, so:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `compliant` (apply) | The first `install` command for the module is `/bin/false` or `/bin/true` and a `blacklist` line names it, in the form the check matches; nothing is written or recorded. Or the drop-in already holds exactly its content |
+| `overridden` (apply) | The first `install` command for the module is another command in a file read before the drop-in (for example `install hfs /sbin/modprobe --ignore-install hfs` in `00-site.conf`), so the drop-in would not take effect; the collection does not edit that file |
+| `not_directory` | `/etc/modprobe.d` is missing (kmod is not installed), a symbolic link or not a directory |
+| `not_regular_file` | The drop-in path is a symbolic link or another non-regular file |
+| `not_owned` | A file at the drop-in path does not carry the collection's header |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The drop-in's content is no longer what the collection wrote; an administrator's change is never overwritten |
+| `invalid_record` (cleanup) | The recorded SHA-256 is missing or malformed |
+
+A drop-in removed by hand is the recorded prior state at cleanup: the rule is `restored`, its entry removed and nothing
+written (FREES-173). The family never runs `modprobe`, never unloads a loaded module and never rebuilds the initramfs,
+because no pinned check reads either and neither has an exact revert: a module that is loaded stays loaded until the
+next boot, and a module that the initramfs loads early in the boot can still load there until the initramfs is rebuilt
+(ADR 0025). No rule of the three topics stays `audit_only`.
+
 ## Results
 
 The role publishes `linux_compliance_remediated`:
@@ -573,6 +610,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements, exports and the values that fixes substitute, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration, including `profile_value_source`. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), and every attribute rule restricts the path and the mode bits that the OVAL checks | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-native-check.yml`, sudo | A sudo rule without a profile value fails before any sudoers file is read, and every sudo family file and helper refuses to run without the opt-in. The sudo rules are not run against localhost, because `/etc/sudoers` is readable only by root | `make test-remediate-check`, CI job `test-playbooks` |
+| `tests/unit/tools/test_content_golden_kernel_modules.py` | With the pinned content: the check of every native kernel module rule on both platforms is an `AND` of two `check="all"` tests that read `.conf` files of the modprobe directories, the drop-in matches both patterns, the patterns are exactly the drop-in's `install` and `blacklist` lines and equal the family's constants, only the protocol rules apply to containers, and the lifecycle profiles select exactly the drop-ins that the declarations expect | `make test-content-golden`, CI job `test` |
+| `tests/playbooks/remediate-native-check.yml`, kernel modules | Against localhost in check mode with all 21 kernel module rules and `kernel_modules` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/modprobe.d` is unchanged; the three family files and the shared helpers refuse to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
 `/var/lib/freesecdev/linux_compliance` already exists and is root-only it fails instead of reading it.

@@ -159,10 +159,10 @@ through subsystem tags.
 | `linux_compliance_ipsec_enabled` | `ipsec` | `network` | yes | `true` | 11 | 0 | 11 | 0 |
 | `linux_compliance_wireless_enabled` | `wireless` | `network` | yes | `true` | 3 | 0 | 3 | 0 |
 | `linux_compliance_network_settings_enabled` | `network_settings` | `network` | yes | `true` | 7 | 0 | 7 | 0 |
-| `linux_compliance_kernel_modules_enabled` | `filesystem_modules`, `protocol_modules`, `wireless_modules` | umbrella | yes | `true` | 21 | 0 | 21 | 0 |
-| `linux_compliance_filesystem_modules_enabled` | `filesystem_modules` | `kernel_modules` | yes | `true` | 9 | 0 | 9 | 0 |
-| `linux_compliance_protocol_modules_enabled` | `protocol_modules` | `kernel_modules` | yes | `true` | 7 | 0 | 7 | 0 |
-| `linux_compliance_wireless_modules_enabled` | `wireless_modules` | `kernel_modules` | yes | `true` | 5 | 0 | 5 | 0 |
+| `linux_compliance_kernel_modules_enabled` | `filesystem_modules`, `protocol_modules`, `wireless_modules` | umbrella | yes | `true` | 21 | 21 | 0 | 0 |
+| `linux_compliance_filesystem_modules_enabled` | `filesystem_modules` | `kernel_modules` | yes | `true` | 9 | 9 | 0 | 0 |
+| `linux_compliance_protocol_modules_enabled` | `protocol_modules` | `kernel_modules` | yes | `true` | 7 | 7 | 0 | 0 |
+| `linux_compliance_wireless_modules_enabled` | `wireless_modules` | `kernel_modules` | yes | `true` | 5 | 5 | 0 | 0 |
 | `linux_compliance_firewall_enabled` | `firewalld`, `nftables`, `iptables`, `ufw` | umbrella | yes | `true` | 42 | 0 | 42 | 1 |
 | `linux_compliance_firewalld_enabled` | `firewalld` | `firewall` | yes | `true` | 10 | 0 | 10 | 1 |
 | `linux_compliance_nftables_enabled` | `nftables` | `firewall` | yes | `true` | 11 | 0 | 11 | 0 |
@@ -1174,37 +1174,37 @@ families through their subsystem tags:
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_kernel_module_cramfs_disabled_enabled` | `kernel_module_cramfs_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_freevxfs_disabled_enabled` | `kernel_module_freevxfs_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_hfs_disabled_enabled` | `kernel_module_hfs_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_hfsplus_disabled_enabled` | `kernel_module_hfsplus_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_jffs2_disabled_enabled` | `kernel_module_jffs2_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_overlayfs_disabled_enabled` | `kernel_module_overlayfs_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_squashfs_disabled_enabled` | `kernel_module_squashfs_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_udf_disabled_enabled` | `kernel_module_udf_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_usb_storage_disabled_enabled` | `kernel_module_usb-storage_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_cramfs_disabled_enabled` | `kernel_module_cramfs_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_freevxfs_disabled_enabled` | `kernel_module_freevxfs_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_hfs_disabled_enabled` | `kernel_module_hfs_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_hfsplus_disabled_enabled` | `kernel_module_hfsplus_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_jffs2_disabled_enabled` | `kernel_module_jffs2_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_overlayfs_disabled_enabled` | `kernel_module_overlayfs_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_squashfs_disabled_enabled` | `kernel_module_squashfs_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_udf_disabled_enabled` | `kernel_module_udf_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_usb_storage_disabled_enabled` | `kernel_module_usb-storage_disabled` | `recorded_value` |
 
 ### `protocol_modules`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_kernel_module_atm_disabled_enabled` | `kernel_module_atm_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_can_disabled_enabled` | `kernel_module_can_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_dccp_disabled_enabled` | `kernel_module_dccp_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_firewire_core_disabled_enabled` | `kernel_module_firewire-core_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_rds_disabled_enabled` | `kernel_module_rds_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_sctp_disabled_enabled` | `kernel_module_sctp_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_tipc_disabled_enabled` | `kernel_module_tipc_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_atm_disabled_enabled` | `kernel_module_atm_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_can_disabled_enabled` | `kernel_module_can_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_dccp_disabled_enabled` | `kernel_module_dccp_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_firewire_core_disabled_enabled` | `kernel_module_firewire-core_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_rds_disabled_enabled` | `kernel_module_rds_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_sctp_disabled_enabled` | `kernel_module_sctp_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_tipc_disabled_enabled` | `kernel_module_tipc_disabled` | `recorded_value` |
 
 ### `wireless_modules`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_kernel_module_bluetooth_disabled_enabled` | `kernel_module_bluetooth_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_cfg80211_disabled_enabled` | `kernel_module_cfg80211_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_iwlmvm_disabled_enabled` | `kernel_module_iwlmvm_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_iwlwifi_disabled_enabled` | `kernel_module_iwlwifi_disabled` | `audit_only` |
-| `linux_compliance_rule_kernel_module_mac80211_disabled_enabled` | `kernel_module_mac80211_disabled` | `audit_only` |
+| `linux_compliance_rule_kernel_module_bluetooth_disabled_enabled` | `kernel_module_bluetooth_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_cfg80211_disabled_enabled` | `kernel_module_cfg80211_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_iwlmvm_disabled_enabled` | `kernel_module_iwlmvm_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_iwlwifi_disabled_enabled` | `kernel_module_iwlwifi_disabled` | `recorded_value` |
+| `linux_compliance_rule_kernel_module_mac80211_disabled_enabled` | `kernel_module_mac80211_disabled` | `recorded_value` |
 
 ### `firewalld`
 

@@ -1,0 +1,189 @@
+---
+family: filesystem_modules
+disruptive: true
+containment: >-
+  filesystem_modules writes one drop-in per rule below /etc/modprobe.d and nothing else: it never runs modprobe, never
+  unloads a module and never rebuilds an initramfs, so the drop-ins only decide what a later modprobe would do.
+  The containers drop every capability, CAP_SYS_MODULE included, and run no service manager, so nothing in them
+  can load or unload a kernel module and the host kernel is never touched. The harness connects with docker exec
+  through the Docker API, without sshd, PAM, sudo or a login shell, and the guard's connection test after every
+  remediate run proves that it still reaches the same unprivileged container. The allow-list names filesystem_modules
+  only for the runs of this topic.
+profiles:
+  - platform: ubuntu
+    profile: cis_level2_server
+    reason: >-
+      cis_level1_server selects six of the nine rules; the Level 2 server profile also selects overlayfs and udf,
+      so the cycles cover eight. No Ubuntu 24.04 profile selects squashfs; it runs on Rocky Linux.
+  - platform: rhel_compatible
+    profile: cis
+    reason: >-
+      cis_server_l1 selects six of the nine rules; the Level 2 server profile also selects squashfs and udf. The
+      RHEL 9 datastream has no overlayfs rule.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits every file system module rule to the system_with_kernel platform, which excludes
+    containers, and the RHEL 9 datastream does not recognise Rocky Linux, so a container audit reports them
+    notapplicable; the drop-ins with their checksums under applied are the evidence. Both pinned datastreams
+    require an install line and a blacklist line in a .conf file below the modprobe directories
+    (tests/unit/tools/test_content_golden_kernel_modules.py checks this against the OVAL of both datastreams).
+state:
+  files:
+    - path: /etc/modprobe.d
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-cramfs.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-freevxfs.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-hfs.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-hfsplus.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-jffs2.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-overlay.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-squashfs.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-udf.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-usb-storage.conf
+      rewritten: true
+    - path: /etc/modprobe.d/cramfs.conf
+    - path: /etc/modprobe.d/00-site-hfs.conf
+  packages:
+    - name: kmod
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/modprobe.d/freesecdev-cramfs.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: b915783c68ffed8f6824b9b3715bc950dd4945709ed5c02fb70a70eb5fe566c7
+    - path: /etc/modprobe.d/freesecdev-freevxfs.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 94663cc268fdd1296d5c80cf19fa3c4363c06738b8b750390df43b9623ddc7a4
+    - path: /etc/modprobe.d/freesecdev-hfs.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 53f6a9c1295fa26e497bbe8b02ac750d2c72822db63cc3842d3b8a75aafab1a7
+    - path: /etc/modprobe.d/freesecdev-hfsplus.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 2354472bb4ef7a5a035222d21b8129827e0b40067ee4405aa59dc7716a882514
+    - path: /etc/modprobe.d/freesecdev-jffs2.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: c461e1d6a492b05b139bf833591290e61ba9cee0e9355f1e69c0cdd545eab333
+    - path: /etc/modprobe.d/freesecdev-overlay.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 702683d53e3242debda9c549bae6875480f4e286796e776119f1ebde403c293a
+      platforms:
+        - ubuntu
+    - path: /etc/modprobe.d/freesecdev-squashfs.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 7e6d819f449fffbd823e575d324a186dbe082a6cdfb3172d3097acd22a9036c4
+      platforms:
+        - rhel_compatible
+    - path: /etc/modprobe.d/freesecdev-udf.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 2a2043018821096cbac0aac5177e467b04d4915c0c2341a938f413347f90b033
+    - path: /etc/modprobe.d/freesecdev-usb-storage.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 95421312435840c9fb1b3c089111055114eec94cdf87503481701fc9c1653673
+pre_states:
+  - name: as built
+    audit: true
+  - name: a site file that disables cramfs and one read before the collection's that lets hfs load
+    audit: false
+    modes:
+      - rule
+    files:
+      - path: /etc/modprobe.d/cramfs.conf
+        mode: "0644"
+        content: |
+          install cramfs /bin/true
+          blacklist cramfs
+      - path: /etc/modprobe.d/00-site-hfs.conf
+        mode: "0644"
+        content: |
+          install hfs /sbin/modprobe --ignore-install hfs
+    unchanged:
+      - rule: kernel_module_cramfs_disabled
+        status: compliant
+      - rule: kernel_module_hfs_disabled
+        status: overridden
+    applied:
+      files:
+        - path: /etc/modprobe.d/freesecdev-cramfs.conf
+          exists: false
+        - path: /etc/modprobe.d/freesecdev-hfs.conf
+          exists: false
+regressions:
+  - name: changes
+    files:
+      - lifecycle_kernel_modules_regressions.yml

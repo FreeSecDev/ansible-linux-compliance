@@ -681,6 +681,7 @@ pre_states:
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
+| `profiles` | no | Per platform, a profile of that platform's pinned datastream that the cycles and regressions of the topic run with instead of the platform's own (`molecule_images.<platform>.profile`), each with `platform`, `profile` (the short identifier, which `content/manifest.yml` must list for the datastream) and `reason`; for a topic whose rules the platform's own profile does not select (the kernel module topics, FREES-190). The harness switches `molecule_profile`, runs the `discover` role for that profile, and switches back after the topic. A platform under `unselected_platforms` cannot have one |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 
@@ -715,8 +716,9 @@ No topic can gain a native rule without its lifecycle test:
 
 ### Disruptive topics
 
-`pwquality` and `ssh` are the disruptive families with native rules; the others (`pam`, `sssd`, `sudo`, `faillock`
-and the rest that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
+`pwquality`, `ssh`, `sudo` and the kernel module topics (`filesystem_modules`, `protocol_modules`,
+`wireless_modules`) are the disruptive families with native rules; the others (`pam`, `sssd`, `faillock` and the rest
+that the registry flags) have none yet. A disruptive topic is opted in by its declaration:
 `disruptive: true`, which must match the registry, and a `containment` note. The harness then passes `linux_compliance_remediate_allow_disruptive` with
 that one family, for that topic's runs only, both for apply and for cleanup (ADR 0011). The breakage stays in the
 container:
@@ -751,7 +753,8 @@ Not meaningful in a container, and therefore not covered by these scenarios:
 
 - Boot loader and Secure Boot controls (GRUB, kernel command line).
 - Mount options, partitions and file system layout.
-- Kernel parameters (sysctl) and kernel modules.
+- Kernel parameters (sysctl), and loading or unloading kernel modules (the modprobe drop-ins of the kernel module
+  topics are files and are proven in the containers; `modprobe` itself is not).
 - Services that need systemd as PID 1, and anything that restarts services.
 - Firewall rules (nftables, iptables, ufw, firewalld), network configuration and the network stack.
 - PAM, SSH daemon and sudo behaviour that depends on a real login, and auditd.

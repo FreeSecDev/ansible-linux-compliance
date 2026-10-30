@@ -1,0 +1,139 @@
+---
+family: protocol_modules
+disruptive: true
+containment: >-
+  protocol_modules writes one drop-in per rule below /etc/modprobe.d and nothing else: it never runs modprobe, never
+  unloads a module and never rebuilds an initramfs, so the drop-ins only decide what a later modprobe would do.
+  The containers drop every capability, CAP_SYS_MODULE included, and run no service manager, so nothing in them
+  can load or unload a kernel module and the host kernel is never touched. The harness connects with docker exec
+  through the Docker API, without sshd, PAM, sudo or a login shell, and the guard's connection test after every
+  remediate run proves that it still reaches the same unprivileged container. The allow-list names protocol_modules
+  only for the runs of this topic.
+profiles:
+  - platform: ubuntu
+    profile: cis_level2_server
+    reason: >-
+      cis_level1_server selects none of the protocol module rules; the Level 2 server profile selects dccp, rds,
+      sctp and tipc.
+  - platform: rhel_compatible
+    profile: stig
+    reason: >-
+      cis_server_l1 selects none of the protocol module rules; the STIG profile selects atm, can, firewire-core,
+      sctp and tipc, and dccp and rds run on Ubuntu.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    The RHEL 9 datastream does not recognise Rocky Linux, so every rule is notapplicable there; on Ubuntu 24.04
+    the protocol module rules have no platform restriction, and the audit after apply must report them pass or
+    fixed. The drop-ins with their checksums under applied are the evidence on both platforms
+    (tests/unit/tools/test_content_golden_kernel_modules.py checks what the OVAL of both datastreams reads).
+state:
+  files:
+    - path: /etc/modprobe.d
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-atm.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-can.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-dccp.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-firewire-core.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-rds.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-sctp.conf
+      rewritten: true
+    - path: /etc/modprobe.d/freesecdev-tipc.conf
+      rewritten: true
+  packages:
+    - name: kmod
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/modprobe.d/freesecdev-atm.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: ff30f2a060cba04fef1a57eb60ebeb5378c0fb5b365e4b1a62fa07c7d801033a
+      platforms:
+        - rhel_compatible
+    - path: /etc/modprobe.d/freesecdev-can.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 8b101877c73ce5ebe9f0ce82c2b0a9a5dbc87a79caaee22b7049777108c9732f
+      platforms:
+        - rhel_compatible
+    - path: /etc/modprobe.d/freesecdev-dccp.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 00ec49f83f9151b09afb2471852505a52aeb8f5ff6f87e6ff2a1b61500be36de
+      platforms:
+        - ubuntu
+    - path: /etc/modprobe.d/freesecdev-firewire-core.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: c7089436761af34a4ba0e8e34939002cc2f5918b5fdf75953f7b98c749e78a24
+      platforms:
+        - rhel_compatible
+    - path: /etc/modprobe.d/freesecdev-rds.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: 1c7fe8adeee85137f4d56a65296f25a2d8c974dab4cf0ac31bfda1d40058bc22
+      platforms:
+        - ubuntu
+    - path: /etc/modprobe.d/freesecdev-sctp.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: f31edba720c46b6a2189390f16765a412964fc772bdc18bd804a86151c9e9d5b
+    - path: /etc/modprobe.d/freesecdev-tipc.conf
+      exists: true
+      type: file
+      attributes: []
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      checksum: d3eb0f1fc82e1e936ea9a845d7fc73361bd4e8b9cd807ea9046b6b6e733133d9
+pre_states:
+  - name: as built
+    audit: true

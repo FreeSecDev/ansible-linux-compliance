@@ -253,6 +253,110 @@
             fail_msg: "{{ ansible_failed_task.name }}: {{ ansible_failed_result | default({}) | to_json }}"
             quiet: true
 
+- name: Native families in check mode | The kernel module rules report every rule once and change nothing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - kernel_modules
+    linux_compliance_remediate_profile: stig
+    native_prefix: xccdf_org.ssgproject.content_rule_
+    native_module_short_ids:
+      - kernel_module_atm_disabled
+      - kernel_module_bluetooth_disabled
+      - kernel_module_can_disabled
+      - kernel_module_cfg80211_disabled
+      - kernel_module_cramfs_disabled
+      - kernel_module_dccp_disabled
+      - kernel_module_firewire-core_disabled
+      - kernel_module_freevxfs_disabled
+      - kernel_module_hfs_disabled
+      - kernel_module_hfsplus_disabled
+      - kernel_module_iwlmvm_disabled
+      - kernel_module_iwlwifi_disabled
+      - kernel_module_jffs2_disabled
+      - kernel_module_mac80211_disabled
+      - kernel_module_overlayfs_disabled
+      - kernel_module_rds_disabled
+      - kernel_module_sctp_disabled
+      - kernel_module_squashfs_disabled
+      - kernel_module_tipc_disabled
+      - kernel_module_udf_disabled
+      - kernel_module_usb-storage_disabled
+    native_module_statuses:
+      - applied
+      - compliant
+      - overridden
+      - not_directory
+      - not_regular_file
+      - not_owned
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Describe a RHEL 9 profile that selects every native kernel module rule
+      ansible.builtin.set_fact:
+        native_module_rules: "{{ native_module_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+        native_module_profile:
+          profile_id: xccdf_org.ssgproject.content_profile_stig
+          benchmark_id: xccdf_org.ssgproject.content_benchmark_RHEL-9
+          content_sha256: >-
+            {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml).datastreams
+               | selectattr('name', 'equalto', 'rhel9') | map(attribute='sha256') | first }}
+          rule_ids: "{{ native_module_short_ids | map('regex_replace', '^', native_prefix) | list }}"
+
+    - name: Inspect the modprobe configuration before the role runs
+      ansible.builtin.find:
+        paths: /etc/modprobe.d
+        file_type: any
+        hidden: true
+        follow: false
+      register: native_module_before
+
+    - name: Run the remediate role with the kernel module rules in the profile and kernel_modules allow-listed
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+      vars:
+        linux_compliance_discovered: "{{ native_module_profile }}"
+
+    - name: Inspect the modprobe configuration after the role ran
+      ansible.builtin.find:
+        paths: /etc/modprobe.d
+        file_type: any
+        hidden: true
+        follow: false
+      register: native_module_after
+
+    - name: Check that every kernel module rule was planned and reported once and that nothing changed
+      vars:
+        native_results: >-
+          {{ linux_compliance_remediated.results | selectattr('rule_id', 'in', native_module_rules) | list }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            __linux_compliance_remediate_plan.families | map(attribute='name') | list
+            == ['filesystem_modules', 'protocol_modules', 'wireless_modules']
+          - native_results | map(attribute='rule_id') | sort == native_module_rules | sort
+          - native_results | map(attribute='action') | unique | list == ['apply']
+          - native_results | map(attribute='status') | difference(native_module_statuses) | list == []
+          - native_results | selectattr('status', 'equalto', 'applied') | rejectattr('changed') | list == []
+          - native_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+          - >-
+            native_results | rejectattr('status', 'in', ['applied', 'compliant'])
+            | selectattr('reason', 'none') | list == []
+          - >-
+            native_module_before.files | map(attribute='path') | sort
+            == native_module_after.files | map(attribute='path') | sort
+        fail_msg: "{{ native_results | to_json }}"
+        quiet: true
+
 - name: Native families in check mode | An ssh rule without its profile value fails before any change
   hosts: localhost
   connection: local

@@ -353,7 +353,7 @@ argument_specs:
           - "Umbrella toggle (ADR 0011); false switches off filesystem_modules, protocol_modules,"
           - "wireless_modules."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 21, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 21, native: 21. Generated; see docs/remediation-variables.md."
       linux_compliance_filesystem_modules_enabled:
         type: bool
         default: true
@@ -361,7 +361,7 @@ argument_specs:
           - "Topic toggle of the filesystem_modules family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_kernel_modules_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 9, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 9, native: 9. Generated; see docs/remediation-variables.md."
       linux_compliance_protocol_modules_enabled:
         type: bool
         default: true
@@ -369,7 +369,7 @@ argument_specs:
           - "Topic toggle of the protocol_modules family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_kernel_modules_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 7, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 7, native: 7. Generated; see docs/remediation-variables.md."
       linux_compliance_wireless_modules_enabled:
         type: bool
         default: true
@@ -377,7 +377,7 @@ argument_specs:
           - "Topic toggle of the wireless_modules family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_kernel_modules_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 5, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 5, native: 5. Generated; see docs/remediation-variables.md."
       linux_compliance_firewall_enabled:
         type: bool
         default: true
