@@ -492,14 +492,13 @@ mode: it applies the topic, records every ledger entry as if another method had 
 reports `method_changed` and cleanup `cleanup_incomplete` (`method_changed`) with every entry kept and no drop-in
 touched; it changes the `timestamp_timeout` drop-in by hand and removes the `logfile` drop-in, and checks that cleanup
 keeps the change as `modified_since_apply` and reports the removed one `restored` without a write.
-`shared/tasks/lifecycle_sudo_refusals.yml` runs in the topic mode, so that the two legs of the topic stay of similar
-length: it puts a `timestamp_timeout` of its own into `/etc/sudoers.d` and replaces `/usr/sbin/visudo` with a copy of
-`false` (on Rocky Linux after giving root, which cannot override modes there, the write bit on `/usr/sbin`), and checks
+`shared/tasks/lifecycle_sudo_refusals.yml` runs in the Rocky Linux topic leg: it puts a `timestamp_timeout` of its own into `/etc/sudoers.d` and replaces `/usr/sbin/visudo` with a copy of
+`false` (after giving root, which cannot override modes there, the write bit on `/usr/sbin`), and checks
 that the rule is `conflicting_setting`, that every other drop-in is `invalid_sudoers` and that nothing was installed or
 recorded; and it replaces `/etc/sudoers.d` by a symbolic link and checks that every rule is `not_directory` and nothing
 is written through the link. `visudo`, `/usr/sbin`, `/etc/sudoers.d` and its `README` are put back with their content,
 mode and ownership, so the whole-instance comparison after the refusals treats them as rewritten (new inodes and times
-only). On Ubuntu only, where the legs have the time, two more files run. `shared/tasks/lifecycle_sudo_states.yml` (rule
+only). Three more files run on Ubuntu only. `shared/tasks/lifecycle_sudo_states.yml` (topic
 mode) takes the `@includedir` line out of `/etc/sudoers` (`not_included`), removes `visudo` (`validator_missing`),
 occupies one drop-in path with a file without the header (`not_owned`) and another with a symbolic link
 (`not_regular_file`), and, after an apply, removes the header (`not_owned` at cleanup), records a malformed checksum
@@ -509,7 +508,7 @@ sudo reads: a rule's exact line only in `hardening.conf` or `admin~`, which sudo
 (`applied`, and `conflicting_setting` for `timestamp_timeout`), and a `Defaults` line continued with `\` or a linked
 drop-in that names an option is `conflicting_setting`. Every swap of these files is undone in an `always` section, so
 a failure does not leave `visudo`, `/usr/sbin` or `/etc/sudoers.d` changed. `shared/tasks/lifecycle_sudo_other_profiles.yml`
-runs in the topic mode on Ubuntu and in the rule mode on Rocky Linux, the shorter leg of each platform, and applies, repeats and cleans up for real the
+(rule mode) applies, repeats and cleans up for real the
 seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,
 owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`): the stricter mode an
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
@@ -546,7 +545,11 @@ On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the lon
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
 duration: 18 for `molecule-lifecycle`, 8 for `molecule-docker` (one [scanner timeout](#scanner-hangs) and its retry
-add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). With `sudo` (FREES-175) there are sixteen legs; at a7a3061
+add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). With `sudo` (FREES-175) there are sixteen Docker legs. The extra `sudo` files are spread over its four legs, so that
+none carries more than about four minutes of them: the regressions in both rule legs, the refusals in the Rocky Linux
+topic leg, the refusal states and the effective files in the Ubuntu topic leg and the rules of the other profiles in
+the Ubuntu rule leg. Runner speed varies a lot: at 2decd68 the cycles alone of the Rocky Linux rule leg took ten
+minutes against six at a7a3061. At a7a3061
 the four `sudo` legs took 9.7 (`ubuntu`, `topic`), 11.4 (`rhel_compatible`, `topic`), 12.0 (`ubuntu`, `rule`) and 13.4
 minutes (`rhel_compatible`, `rule`), after the refusals had moved from the rule legs into the topic legs: before, the
 `rhel_compatible` rule leg took 15.6 minutes. A leg that approaches 20 minutes

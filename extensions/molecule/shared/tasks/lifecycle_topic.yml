@@ -203,41 +203,41 @@
     - lifecycle_runs | bool
     - lifecycle_run_modes | last == 'rule'
 
-- name: Lifecycle topic | Run the sudo refusal states on Ubuntu, where the rule leg has the time for them
+- name: Lifecycle topic | Run the sudo refusal states on Ubuntu, in the topic leg
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_states.yml
   when:
-    - molecule_target.driver == 'docker'
     - lifecycle_family == 'sudo'
+    - molecule_target.driver == 'docker'
     - lifecycle_runs | bool
-    - lifecycle_run_modes | last == 'rule'
+    - lifecycle_run_modes | first == 'topic'
     - lifecycle_platform == 'ubuntu'
 
 - name: Lifecycle topic | Run the sudo cases of files that sudo skips, continued lines and linked drop-ins on Ubuntu
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_effective.yml
   when:
-    - molecule_target.driver == 'docker'
     - lifecycle_family == 'sudo'
+    - molecule_target.driver == 'docker'
     - lifecycle_runs | bool
     - lifecycle_run_modes | first == 'topic'
     - lifecycle_platform == 'ubuntu'
 
-- name: Lifecycle topic | Run the sudo refusals for a setting elsewhere, a refusing visudo and a symbolic link
+- name: Lifecycle topic | Run the sudo refusals for a setting elsewhere, a refusing visudo and a symbolic link on Rocky
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_refusals.yml
   when:
-    - molecule_target.driver == 'docker'
     - lifecycle_family == 'sudo'
+    - molecule_target.driver == 'docker'
     - lifecycle_runs | bool
     - lifecycle_run_modes | first == 'topic'
+    - lifecycle_platform != 'ubuntu'
 
-- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select, in the shorter leg
+- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select, on Ubuntu
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_other_profiles.yml
   when:
     - lifecycle_family == 'sudo'
     - lifecycle_runs | bool
-    - >-
-      (lifecycle_run_modes | first == 'topic') if lifecycle_platform == 'ubuntu'
-      else (lifecycle_run_modes | last == 'rule')
+    - lifecycle_run_modes | last == 'rule'
+    - lifecycle_platform == 'ubuntu'
