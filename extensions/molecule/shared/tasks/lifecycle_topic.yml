@@ -232,10 +232,12 @@
     - lifecycle_runs | bool
     - lifecycle_run_modes | first == 'topic'
 
-- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select
+- name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select, in the shorter leg
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_other_profiles.yml
   when:
     - lifecycle_family == 'sudo'
     - lifecycle_runs | bool
-    - lifecycle_run_modes | first == 'topic'
+    - >-
+      (lifecycle_run_modes | first == 'topic') if lifecycle_platform == 'ubuntu'
+      else (lifecycle_run_modes | last == 'rule')

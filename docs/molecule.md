@@ -509,7 +509,7 @@ sudo reads: a rule's exact line only in `hardening.conf` or `admin~`, which sudo
 (`applied`, and `conflicting_setting` for `timestamp_timeout`), and a `Defaults` line continued with `\` or a linked
 drop-in that names an option is `conflicting_setting`. Every swap of these files is undone in an `always` section, so
 a failure does not leave `visudo`, `/usr/sbin` or `/etc/sudoers.d` changed. `shared/tasks/lifecycle_sudo_other_profiles.yml`
-runs in the topic mode as well and applies, repeats and cleans up for real the
+runs in the topic mode on Ubuntu and in the rule mode on Rocky Linux, the shorter leg of each platform, and applies, repeats and cleans up for real the
 seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,
 owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`): the stricter mode an
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
