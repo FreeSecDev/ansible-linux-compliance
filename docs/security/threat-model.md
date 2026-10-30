@@ -192,9 +192,10 @@ by the `scc-smoke` job and never published.
   ([ADR 0019 amendment](../adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176)).
   - **Failure:** a pull request fabricates an expiry to skip its own smoke test.
   - **Mitigation:** the output comes from the base revision's `tools/scc/expiry-state.sh` and pins, run as a
-    separate `bash` process. It is `expired` only when both the base and the head pins name the same release and both
-    are past the hard stop, and anything unexpected gives `current`. A pull request that moves `SCC_EXPIRES`, edits
-    the script or bumps the pin is therefore smoke-tested. `ci-gate` matches `current` and `expired` exactly, names
+    separate `bash` process. It is `expired` only when the base and the head `scc.pins` are byte-identical and both
+    are past the hard stop, and anything unexpected gives `current`. A pull request that changes any pin (the version,
+    `SCC_EXPIRES`, the bundle, deb or `cscc` SHA-256, a size, or the content file or its SHA-256) or edits the script is
+    therefore smoke-tested. `ci-gate` matches `current` and `expired` exactly, names
     the skip in a warning annotation, and never accepts it on `push`, `schedule` or dispatch.
   - **Residual:** while the skip applies, an SCC change merges without a real SCC scan. The pull request that bumps
     the pin runs `scc-smoke` and `scc-integration` on a merge commit that holds every such change, before it can

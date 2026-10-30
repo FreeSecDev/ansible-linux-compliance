@@ -15,7 +15,7 @@ concurrency:
 jobs:
   scc-release-watch:
     name: scc-release-watch
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.repository == 'FreeSecDev/ansible-linux-compliance'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
