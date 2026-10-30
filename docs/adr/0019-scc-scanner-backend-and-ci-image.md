@@ -7,7 +7,7 @@
   mapping), FREES-147 (CKL and CKLB export), FREES-152 (hardening of the path filter, the gate and the guard),
   FREES-155 (Markdown in the publishing check, no SCC cache for pull requests from forks), FREES-161 (opt-in
   off-platform scan of Ubuntu 26.04 with the 24.04 benchmark), FREES-170 (toggles and control families for SCC),
-  FREES-176 (release watch and expiry fallback)
+  FREES-176 (release watch and expiry fallback), FREES-179 (CI check of SCC's own expiry)
 - **Pull requests:** introduced by the pull request for FREES-144 (the CI image, its make targets, the `scc-smoke`
   job and the repository tests). The pull request for FREES-145 adds the backend, the SCC integration and egress
   tests and the amendment at the end of this ADR. The pull request for FREES-147 adds the exporter
@@ -350,6 +350,18 @@ a reviewed pull request that changes `extensions/ci/scc/scc.pins`:
      debug log. The expiry is the date of that run plus N days.
    - Check it against the version date that `cscc --version` prints plus 90 days. For 5.15 both give 2026-11-25.
    - If the two disagree, record the earlier date and the reason in the pull request.
+   - CI does the first check on every run of the `scc-smoke` job (FREES-179). The real scan of
+     `make scc-integration` runs with `-o FILE -u DIR -q -d`, and the test driver copies that run's application
+     debug log, `ApplicationLogs/<name>_Debug_Log_001.txt` below the `-u` directory, to `SCC_EXPIRY_LOG`
+     (`build/scc/expiry/application-debug-log.txt`). The copy belongs to the runner user, has mode 0600, stays
+     on the runner and is never uploaded.
+   - The next step, `make scc-own-expiry-check`, runs `tools/scc/own_expiry.py` on that copy. It fails when the
+     copy is missing, when the log mentions the software's expiry more than once or not at all, when that one
+     mention is not a well-formed log record saying "Software expires in N days", or when the run date plus N is
+     earlier than `SCC_EXPIRES`. The run date is the UTC date on which SCC last wrote the log.
+   - A later date passes, because `SCC_EXPIRES` is then the earlier and safer date. A pin bump therefore cannot
+     merge with an `SCC_EXPIRES` after SCC's own expiry. Paste the job's "Software expires" line into the pull
+     request.
 5. Run `make scc-smoke` and paste the verification output into the pull request.
 
 The expiry is enforced on the SCC path, not in every pull request:
@@ -649,6 +661,10 @@ depends on the FREES-146 mapping for `oscap` results.
       `cscc --version` still exited 0. It could not confirm that the faked time reached SCC's expiry check, so
       `scc-smoke` alone would not notice.
     - `expignore` is documented only for pre-release versions and is not used.
+    - Checked in CI since FREES-179: every run of the `scc-smoke` job reads SCC's own "Software expires in N days"
+      from the application debug log of the real scan of `make scc-integration`. `make scc-own-expiry-check`
+      fails when that line is missing or ambiguous, or when the run date plus N is earlier than `SCC_EXPIRES`
+      (decision 7, step 4).
     - Decided by the [FREES-176 amendment](#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176): a
       scheduled watch reports a new release, and after the hard stop pull requests and merge groups report a named
       skip of the smoke test instead of deadlocking, while the expiry check still refuses to build or run SCC.
@@ -797,6 +813,10 @@ one), all capabilities dropped except `CHOWN`,
 are ignored for `tests/system/scc/*.py` only: the tests run Docker and the interpreter with argument
 lists, and the sink binds every address of its isolated network.
 The tests skip without `FREESECDEV_SCC_IMAGE` and fail instead in CI (`FREESECDEV_REQUIRE_SCC=1`).
+Since FREES-179 the real scan's container also mounts the directory of `SCC_EXPIRY_LOG` (given as
+`FREESECDEV_SCC_EXPIRY_LOG`, required in CI), and the driver copies the real run's application debug log there
+after all scans, for `make scc-own-expiry-check` (decision 7, step 4). SCC itself never reads or writes that
+directory.
 
 ### Not yet done
 

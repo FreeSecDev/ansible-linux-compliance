@@ -18,7 +18,10 @@ Commands:
   It then exports the real run's STIG Viewer checklists with the reporting command
   (FREES-147), once with SCC's own XCCDF results and once with the pinned stream as
   content, and reports what ``checklist_check.py`` reads back. The checklists stay
-  in the container.
+  in the container. With ``--export-log`` it copies the real run's application
+  debug log there for ``make scc-own-expiry-check`` (FREES-179), owned by
+  ``--export-owner`` with mode 0600, and reports which of SCC's logs of that run
+  mention the software's expiry.
 - ``install``: install a stream with SCC's own installer. This is test set-up
   only, in a throwaway container: the backend never installs content.
 - ``positive``: the positive control of the egress test. It builds the per-run
@@ -53,6 +56,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -94,6 +98,10 @@ OSCAP_RUN_FILE = "oscap-scan-run.json"
 SCC_RUN_FILE = "scc-scan-run.json"
 TOGGLE_RESOLUTION = "tests/system/scc/toggle_resolution.py"
 TOGGLED_TOPICS = {"linux_compliance_ssh_enabled": False}
+APPLICATION_LOGS = "ApplicationLogs"
+APPLICATION_LOG_PATTERN = "*_Debug_Log_001.txt"
+EXPIRY_MENTION = "Software expires"
+OWNER = re.compile(r"([0-9]{1,10}):([0-9]{1,10})")
 
 
 def _digest(path: Path) -> str:
@@ -259,6 +267,31 @@ def toggled_scan(options: argparse.Namespace, module: Path, python_path: str) ->
     }
 
 
+def export_application_log(options: argparse.Namespace, run_directory: Path) -> dict[str, object]:
+    """Copy the real run's debug log to ``--export-log`` and say where SCC logged its expiry."""
+    user = run_directory / "scan" / scc.WORK_DIRECTORY_NAME / scc.USER_DIRECTORY_NAME
+    logs = sorted((user / APPLICATION_LOGS).glob(APPLICATION_LOG_PATTERN))
+    mentions = sorted(
+        str(path.relative_to(user))
+        for path in user.rglob("*.txt")
+        if path.is_file() and EXPIRY_MENTION in path.read_text(encoding="utf-8", errors="replace")
+    )
+    report: dict[str, object] = {
+        "application_logs": [str(path.relative_to(user)) for path in logs],
+        "mentions": mentions,
+        "exported": False,
+    }
+    owner = OWNER.fullmatch(options.export_owner)
+    if not options.export_log or len(logs) != 1 or owner is None:
+        return report
+    target = Path(options.export_log)
+    shutil.copy2(logs[0], target)
+    os.chown(target, int(owner.group(1)), int(owner.group(2)))
+    target.chmod(0o600)
+    report["exported"] = True
+    return report
+
+
 def scan(options: argparse.Namespace) -> dict[str, object]:
     """Run a real scan, a check-mode scan and a scan with a topic switched off."""
     module = options.repository / "plugins" / "modules" / "compliance_scan.py"
@@ -273,6 +306,7 @@ def scan(options: argparse.Namespace) -> dict[str, object]:
     after = snapshot(WATCHED)
     run_directory = Path(options.output_dir) / "real"
     results = run_directory / "scan" / scc.RESULTS_FILE_NAME
+    expiry = export_application_log(options, run_directory)
     checklists = {
         "results": export_checklists(options, run_directory, results),
         "stream": export_checklists(options, run_directory, Path(options.content)),
@@ -283,6 +317,7 @@ def scan(options: argparse.Namespace) -> dict[str, object]:
         "toggled": toggled,
         "state": difference(before, after),
         "checklists": checklists,
+        "expiry_log": expiry,
     }
 
 
@@ -542,6 +577,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--sha256", default="")
     parser.add_argument("--output-dir", default="/var/lib/freesecdev/linux_compliance/evidence")
     parser.add_argument("--work", default="/work")
+    parser.add_argument("--export-log", default="")
+    parser.add_argument("--export-owner", default="")
     options = parser.parse_args(argv)
     report = COMMANDS[options.command](options)
     sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")

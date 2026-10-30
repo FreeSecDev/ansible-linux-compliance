@@ -9,6 +9,14 @@ build, tag or transfer an image; ``make scc-image`` builds it and
 ``make scc-image-clean`` removes it. Without the variable the tests skip, and with
 ``FREESECDEV_REQUIRE_SCC=1`` (CI) a skip is a failure.
 
+The real scan of :func:`scc_scan_report` also exports the application debug log of
+its real run (FREES-179) to the host path in ``FREESECDEV_SCC_EXPIRY_LOG``, which
+``make scc-integration`` sets to ``SCC_EXPIRY_LOG``; ``make scc-own-expiry-check``
+then checks SCC's own "Software expires in N days" against ``SCC_EXPIRES``. The copy
+belongs to the user who runs the tests, has mode 0600 and stays on the runner: it is
+never committed or uploaded. With ``FREESECDEV_REQUIRE_SCC=1`` the variable is
+required.
+
 The image has no Python. The tests mount the standalone interpreter that runs
 the tests (``sys.base_prefix``, a uv-managed CPython) read-only at ``/opt/py``,
 the project's site packages at ``/site`` and the repository at ``/src``.
@@ -34,6 +42,9 @@ IMAGE_VARIABLE = "FREESECDEV_SCC_IMAGE"
 IMAGE_UBUNTU2604_VARIABLE = "FREESECDEV_SCC_IMAGE_UBUNTU2604"
 OSCAP_IMAGE_VARIABLE = "FREESECDEV_OSCAP_IMAGE"
 REQUIRE_VARIABLE = "FREESECDEV_REQUIRE_SCC"
+EXPIRY_LOG_VARIABLE = "FREESECDEV_SCC_EXPIRY_LOG"
+EXPORT_MOUNT = "/export"
+EXPORT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}")
 LOCAL_TAG = re.compile(r"localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+")
 PYTHON_MOUNT = "/opt/py"
 SITE_MOUNT = "/site"
@@ -119,6 +130,28 @@ def run(arguments: list[str], timeout: int = CONTAINER_TIMEOUT_SECONDS) -> str:
     return completed.stdout
 
 
+def expiry_log_export() -> tuple[list[str], list[str]]:
+    """Return the volume and driver options that export the real run's debug log, or none.
+
+    The host file named by ``FREESECDEV_SCC_EXPIRY_LOG`` (relative to the repository)
+    is removed first, so a stale copy from an earlier run is never checked.
+    """
+    value = os.environ.get(EXPIRY_LOG_VARIABLE, "")
+    if not value:
+        if os.environ.get(REQUIRE_VARIABLE) == "1":
+            pytest.fail(f"{EXPIRY_LOG_VARIABLE} is required in CI")
+        return [], []
+    target = REPOSITORY_ROOT / value
+    if EXPORT_NAME.fullmatch(target.name) is None or ":" in str(target):
+        pytest.fail(f"{EXPIRY_LOG_VARIABLE} must name a plain file name")
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target.unlink(missing_ok=True)
+    volume = ["--volume", f"{target.parent.resolve()}:{EXPORT_MOUNT}"]
+    driver = ["--export-log", f"{EXPORT_MOUNT}/{target.name}"]
+    driver += ["--export-owner", f"{os.getuid()}:{os.getgid()}"]
+    return volume, driver
+
+
 def driver_report(output: str) -> dict[str, object]:
     """Return the JSON report that the driver printed last."""
     lines = [line for line in output.splitlines() if line.startswith("{")]
@@ -131,6 +164,7 @@ def driver_report(output: str) -> dict[str, object]:
 @functools.cache
 def scc_scan_report(image_tag: str) -> dict[str, object]:
     """Return the driver's report of the real SCC scan in ``image_tag``, run once per session."""
+    volume, export = expiry_log_export()
     output = run(
         [
             "run",
@@ -139,6 +173,7 @@ def scc_scan_report(image_tag: str) -> dict[str, object]:
             "none",
             *hardening(),
             *python_mounts(),
+            *volume,
             "--entrypoint",
             interpreter(),
             image_tag,
@@ -153,6 +188,7 @@ def scc_scan_report(image_tag: str) -> dict[str, object]:
             f"{CONTENT_DIRECTORY}/{pin('SCC_CONTENT_FILE')}",
             "--sha256",
             pin("SCC_CONTENT_SHA256"),
+            *export,
         ]
     )
     return driver_report(output)

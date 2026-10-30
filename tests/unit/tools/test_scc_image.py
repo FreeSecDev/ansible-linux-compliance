@@ -119,7 +119,8 @@ BASE64_ALIGNMENTS = 4
 MAX_DECODED_CHARACTERS = 1024 * 1024
 SCC_IDENTIFIER = re.compile(
     r"freesecdev-scc|build/scc|extensions/ci/scc|tools/scc|scc\.pins|\bcscc\b"
-    r"|\bSCC_[A-Z][A-Z0-9_]*\b|\bscc-(?:expiry-check|fetch|image-clean|image|smoke|integration)\b"
+    r"|\bSCC_[A-Z][A-Z0-9_]*\b"
+    r"|\bscc-(?:expiry-check|own-expiry-check|fetch|image-clean|image|smoke|integration)\b"
 )
 WATCH_WORKFLOW = "scc-release-watch.yml"
 WATCH_JOB = "scc-release-watch"
@@ -139,6 +140,7 @@ SCC_TARGETS = frozenset(
         "scc-smoke",
         "scc-image-clean",
         "scc-integration",
+        "scc-own-expiry-check",
         "scc-release-watch",
     }
 )
@@ -1196,6 +1198,7 @@ def test_the_smoke_job_builds_locally_with_read_only_permissions() -> None:
     assert [step.get("run") for step in job["steps"] if "run" in step] == [
         "make scc-smoke",
         "make scc-integration",
+        "make scc-own-expiry-check",
         "make scc-image-clean",
     ]
     cache = [step for step in job["steps"] if is_cache_step(step)]

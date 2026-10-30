@@ -215,6 +215,8 @@ jobs:
           enable-cache: false
       - name: Run a real SCC scan through compliance_scan and the egress test
         run: make scc-integration
+      - name: Check SCC's own expiry from the real scan against SCC_EXPIRES
+        run: make scc-own-expiry-check
       - name: Remove the local SCC image
         if: always()
         run: make scc-image-clean

@@ -1,0 +1,6 @@
+---
+trivial:
+  - >-
+    CI: the scc-smoke job checks SCC's own expiry. The real scan of make scc-integration exports its application
+    debug log, and make scc-own-expiry-check fails when that log does not say "Software expires in N days" exactly
+    once, or when the run date plus N is earlier than SCC_EXPIRES in extensions/ci/scc/scc.pins.
