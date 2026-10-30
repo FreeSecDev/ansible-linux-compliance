@@ -58,7 +58,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 17
     permissions:
       contents: read
     steps:
@@ -83,7 +83,7 @@ jobs:
   test-playbooks:
     name: test-playbooks
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 16
     permissions:
       contents: read
     steps:
@@ -300,7 +300,7 @@ jobs:
   molecule-docker:
     name: molecule-docker (${{ matrix.scenario }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 8
     permissions:
       contents: read
     strategy:
@@ -354,7 +354,7 @@ jobs:
     name: molecule-lifecycle (${{ matrix.platform }}, ${{ matrix.topic }}, ${{ matrix.mode }})
     needs: molecule-plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 18
     permissions:
       contents: read
     strategy:
