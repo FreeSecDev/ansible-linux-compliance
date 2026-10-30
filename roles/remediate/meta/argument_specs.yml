@@ -424,7 +424,7 @@ argument_specs:
         description:
           - "Topic toggle of the ssh family (ADR 0011); false switches its rules off."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 63, native: 0, tagged: 4. Generated; see docs/remediation-variables.md."
+          - "Rules: 63, native: 34, tagged: 4. Generated; see docs/remediation-variables.md."
       linux_compliance_pam_enabled:
         type: bool
         default: true

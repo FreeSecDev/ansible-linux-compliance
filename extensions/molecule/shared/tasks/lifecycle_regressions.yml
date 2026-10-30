@@ -29,6 +29,21 @@
     file: lifecycle_sudo_other_profiles.yml
   when: "'lifecycle_sudo_other_profiles.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the ssh regressions for an invalid configuration, changes by hand and the directory
+  ansible.builtin.include_tasks:
+    file: lifecycle_ssh_regressions.yml
+  when: "'lifecycle_ssh_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the ssh rollback regressions for a refused cleanup and one without sshd
+  ansible.builtin.include_tasks:
+    file: lifecycle_ssh_rollback_regressions.yml
+  when: "'lifecycle_ssh_rollback_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the ssh vendor regressions for the conflicting lines of the vendor files
+  ansible.builtin.include_tasks:
+    file: lifecycle_ssh_vendor_regressions.yml
+  when: "'lifecycle_ssh_vendor_regressions.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Run the login_defs regressions for a change of method and changes by hand
   ansible.builtin.include_tasks:
     file: lifecycle_login_defs_regressions.yml

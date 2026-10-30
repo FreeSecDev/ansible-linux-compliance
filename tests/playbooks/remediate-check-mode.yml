@@ -860,7 +860,7 @@
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
     linux_compliance_remediate_enabled: true
     linux_compliance_remediate_allow_disruptive:
-      - ssh
+      - auditd
     crontab_rule: xccdf_org.ssgproject.content_rule_file_permissions_crontab
   tasks:
     - name: Refuse to run outside check mode
@@ -911,7 +911,7 @@
           - native_results | map(attribute='rule_id') | list == [crontab_rule]
           - __linux_compliance_remediate_plan.families | map(attribute='name') | list == ['file_permissions']
           - >-
-            linux_compliance_remediated.rules | selectattr('family', 'equalto', 'ssh')
+            linux_compliance_remediated.rules | selectattr('family', 'equalto', 'auditd')
             | map(attribute='action') | unique | list == ['not_implemented']
           - >-
             linux_compliance_remediated.notices

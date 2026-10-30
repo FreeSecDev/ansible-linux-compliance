@@ -2,7 +2,11 @@
 - name: Lifecycle cycle | Name the cycle and the toggle that switches the topic off
   ansible.builtin.set_fact:
     lifecycle_mode: "{{ lifecycle_cycle.0 }}"
+    lifecycle_cycles_run: "{{ lifecycle_cycles_run + [lifecycle_cycle.0] }}"
     lifecycle_pre_state: "{{ lifecycle_cycle.1 }}"
+    lifecycle_audit: >-
+      {{ lifecycle_cycle.1.audit | default(false) if lifecycle_cycle.1.audit | default(false) is boolean
+      else lifecycle_platform in lifecycle_cycle.1.audit }}
     lifecycle_label: >-
       {{ lifecycle_family }} with the {{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state
     lifecycle_disabled_by: >-
@@ -30,8 +34,7 @@
     lifecycle_expected_apply: >-
       {{ dict(lifecycle_rule_ids | zip_longest([], fillvalue='applied')) | combine(lifecycle_unchanged) }}
     lifecycle_expected_again: >-
-      {{ dict(lifecycle_rule_ids | zip_longest([], fillvalue='compliant'))
-      | combine(lifecycle_unchanged | dict2items | selectattr('value', 'equalto', 'notapplicable') | items2dict) }}
+      {{ dict(lifecycle_rule_ids | zip_longest([], fillvalue='compliant')) | combine(lifecycle_unchanged) }}
     lifecycle_expected_cleanup: >-
       {{ dict(lifecycle_rule_ids | zip_longest([], fillvalue='cleanup'))
       | combine(dict(lifecycle_unchanged.keys() | zip_longest([], fillvalue='none'))) }}
@@ -40,12 +43,12 @@
   ansible.builtin.assert:
     that:
       - lifecycle_unchanged.keys() | difference(lifecycle_rule_ids) | length == 0
-      - lifecycle_unchanged.values() | difference(['compliant', 'notapplicable']) | length == 0
+      - lifecycle_unchanged.values() | difference(['compliant', 'notapplicable', 'overridden']) | length == 0
       - lifecycle_changed_ids | length > 0
     fail_msg: >-
       {{ lifecycle_label }}: the pre-state declares {{ lifecycle_unchanged }} unchanged, but only the rules
-      {{ lifecycle_rule_ids }} run on this platform, an unchanged rule is either compliant or notapplicable, and
-      at least one rule must change something.
+      {{ lifecycle_rule_ids }} run on this platform, an unchanged rule is compliant, notapplicable or overridden,
+      and at least one rule must change something.
     quiet: true
 
 - name: Lifecycle cycle | Refuse a rule toggle that an earlier cycle left set before a topic-toggle cycle
@@ -59,6 +62,45 @@
       The topic-toggle cycles must run before the rule-toggle cycles.
     quiet: true
   when: lifecycle_mode == 'topic'
+
+- name: Lifecycle cycle | Combine the expectations of the topic with those that the pre-state replaces
+  ansible.builtin.set_fact:
+    lifecycle_cycle_applied: >-
+      {%- set combined = {} -%}
+      {%- for category, entries in lifecycle_applied.items() -%}
+      {%- set key_field = lifecycle_state_keys[category] -%}
+      {%- set declared = (lifecycle_pre_state.applied | default({}, true))[category] | default([], true) -%}
+      {%- set mine = (declared | rejectattr('platforms', 'defined') | list)
+      + (declared | selectattr('platforms', 'defined') | selectattr('platforms', 'contains', lifecycle_platform)
+      | list) -%}
+      {%- set replaced = mine | map(attribute=key_field) | list -%}
+      {%- set _ = combined.update({category: (entries | rejectattr(key_field, 'in', replaced) | list) + mine}) -%}
+      {%- endfor -%}
+      {{ combined }}
+    lifecycle_added_files: "{{ lifecycle_pre_state.files | default([]) | selectattr('content', 'defined') | list }}"
+
+- name: Lifecycle cycle | Refuse a pre-state that adds a file which existed before any cycle
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_added_files | map(attribute='path') | map('extract', lifecycle_pristine.files)
+        | selectattr('exists') | list | length == 0
+    fail_msg: >-
+      {{ lifecycle_label }}: a pre-state may only add files that do not exist before the topic, so that removing them
+      afterwards restores the instance; it adds {{ lifecycle_added_files | map(attribute='path') | list }}.
+    quiet: true
+
+- name: Lifecycle cycle | Write the declared files that the pre-state adds, as root
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.path }}"
+    follow: false
+    mode: "{{ item.mode | default('0600') }}"
+    owner: root
+    group: root
+  loop: "{{ lifecycle_added_files }}"
+  loop_control:
+    label: "{{ item.path }}"
 
 - name: Lifecycle cycle | Read the declared files whose lines the pre-state sets, to put them back after the cycle
   ansible.builtin.slurp:
@@ -87,7 +129,7 @@
     mode: "{{ item.mode | default(omit) }}"
     owner: "{{ item.owner | default(omit) }}"
     group: "{{ item.group | default(omit) }}"
-  loop: "{{ lifecycle_pre_state.files | default([]) }}"
+  loop: "{{ lifecycle_pre_state.files | default([]) | rejectattr('content', 'defined') | list }}"
   loop_control:
     label: "{{ item.path }}"
 
@@ -185,7 +227,7 @@
     lifecycle_compare_step: apply
     lifecycle_compare_before: "{{ lifecycle_before }}"
     lifecycle_compare_after: "{{ lifecycle_applied_state }}"
-    lifecycle_compare_expected: "{{ lifecycle_applied }}"
+    lifecycle_compare_expected: "{{ lifecycle_cycle_applied }}"
 
 - name: Lifecycle cycle | Assert that the ledger records the prior state of the topic and nothing else changed
   ansible.builtin.assert:
@@ -210,25 +252,34 @@
     file: audit.yml
   vars:
     audit_check_mode: false
-  when: lifecycle_pre_state.audit | default(false) | bool
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Check the audit outcome of every applied rule
   ansible.builtin.assert:
     that:
       - lifecycle_findings | map(attribute='rule_id') | list == lifecycle_rule_ids
       - >-
-        lifecycle_findings | map(attribute='outcome') | difference(lifecycle_applied_outcomes
-        + (lifecycle_topic.audit | default({})).applied_outcomes | default([])) | length == 0
+        lifecycle_findings | rejectattr('rule_id', 'in', lifecycle_overridden_ids) | map(attribute='outcome')
+        | difference(lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes
+        | default([])) | length == 0
+      - >-
+        lifecycle_findings | selectattr('rule_id', 'in', lifecycle_overridden_ids) | map(attribute='outcome')
+        | difference(['fail'] + (lifecycle_topic.audit | default({})).applied_outcomes | default([]))
+        | length == 0
     fail_msg: >-
       {{ lifecycle_label }}: the audit after apply reported
       {{ lifecycle_findings | items2dict(key_name='rule_id', value_name='outcome') }}; expected
-      {{ lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes | default([]) }}.
+      {{ lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes | default([]) }}, and
+      fail for the overridden rules {{ lifecycle_overridden_ids }}.
     quiet: true
   vars:
     lifecycle_findings: >-
       {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
       | sort(attribute='rule_id') }}
-  when: lifecycle_pre_state.audit | default(false) | bool
+    lifecycle_overridden_ids: >-
+      {{ lifecycle_unchanged | dict2items | selectattr('value', 'equalto', 'overridden') | map(attribute='key')
+      | list }}
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Take the no-change snapshot of the applied topic
   ansible.builtin.include_tasks:
@@ -340,7 +391,7 @@
     file: audit.yml
   vars:
     audit_check_mode: false
-  when: lifecycle_pre_state.audit | default(false) | bool
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Check that the audit reports every switched-off rule as disabled by its toggle
   ansible.builtin.assert:
@@ -354,7 +405,7 @@
     lifecycle_findings: >-
       {{ linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'in', lifecycle_rule_ids)
       | sort(attribute='rule_id') }}
-  when: lifecycle_pre_state.audit | default(false) | bool
+  when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Take the no-change snapshot of the switched-off topic
   ansible.builtin.include_tasks:
@@ -393,6 +444,14 @@
   vars:
     lifecycle_switch: true
 
+- name: Lifecycle cycle | Remove the files that the pre-state added
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ lifecycle_added_files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
 - name: Lifecycle cycle | Give the declared files back the mode and ownership they had before any cycle
   ansible.builtin.file:
     path: "{{ item.path }}"
@@ -401,7 +460,7 @@
     mode: "{{ lifecycle_pristine.files[item.path].mode }}"
     owner: "{{ lifecycle_pristine.files[item.path].owner }}"
     group: "{{ lifecycle_pristine.files[item.path].group }}"
-  loop: "{{ lifecycle_pre_state.files | default([]) }}"
+  loop: "{{ lifecycle_pre_state.files | default([]) | rejectattr('content', 'defined') | list }}"
   loop_control:
     label: "{{ item.path }}"
 

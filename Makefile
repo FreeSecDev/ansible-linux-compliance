@@ -478,7 +478,7 @@ test-coverage: require-uv collection-link
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 
 test-content-golden: require-uv collection-link content
-	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py tests/unit/tools/test_content_golden_login_defs.py --no-cov
+	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py tests/unit/tools/test_content_golden_ssh.py tests/unit/tools/test_content_golden_login_defs.py --no-cov
 	$(GENERATE_CATALOGUE) --check
 	$(GENERATE_STIG_MAPPING) --check
 
@@ -599,8 +599,8 @@ REMEDIATE_CHECK = $(RUN) ansible-playbook -i localhost, --check
 
 REMEDIATE_DISRUPTIVE_DIR := build/test-remediate-disruptive
 REMEDIATE_DISRUPTIVE_TREE := $(REMEDIATE_DISRUPTIVE_DIR)/collections/$(COLLECTION_PATH)
-REMEDIATE_DISRUPTIVE_RULE := xccdf_org.ssgproject.content_rule_sshd_disable_root_login
-REMEDIATE_DISRUPTIVE_FAMILY := ssh
+REMEDIATE_DISRUPTIVE_RULE := xccdf_org.ssgproject.content_rule_audit_rules_immutable
+REMEDIATE_DISRUPTIVE_FAMILY := auditd
 
 test-remediate-disruptive: ANSIBLE_COLLECTIONS_PATH = $(CURDIR)/$(REMEDIATE_DISRUPTIVE_DIR)/collections
 test-remediate-disruptive: require-uv collection-link

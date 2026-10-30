@@ -32,6 +32,12 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "setting", "main_file_benchmarks"},
         {"path", "setting", "main_file_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
+    "ssh": [
+        {"path", "keyword", "value"},
+        {"path", "keyword", "value", "crypto_policy_benchmarks"},
+        {"path", "keyword"} | PROFILE_VALUE_PARAMETERS,
+        {"path", "keyword", "crypto_policy_benchmarks"} | PROFILE_VALUE_PARAMETERS,
+    ],
     "login_defs": [
         {"setting", "comparison", "value", "reads_dropins"},
         {"setting", "comparison"} | PROFILE_VALUE_PARAMETERS,
@@ -45,8 +51,8 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "id"},
     ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality", "login_defs", "sudo"]
-DISRUPTIVE_NATIVE_FAMILIES = ["pwquality", "login_defs", "sudo"]
+NATIVE_FAMILIES = ["file_permissions", "banners", "ssh", "pwquality", "login_defs", "sudo"]
+DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality", "login_defs", "sudo"]
 LOGIN_DEFS_VALUES = {
     "at_most": r"(0|[1-9][0-9]{0,5})",
     "at_least": r"(0|[1-9][0-9]{0,5})",

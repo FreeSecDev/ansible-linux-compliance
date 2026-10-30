@@ -1122,6 +1122,17 @@ __linux_compliance_remediate_rules:
       type: "directory"
       attribute: "mode"
       max_mode: "0750"
+  - rule_id: "xccdf_org.ssgproject.content_rule_disable_host_auth"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_disable_host_auth_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-disable-host-auth.conf"
+      keyword: "HostbasedAuthentication"
+      value: "no"
   - rule_id: "xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue"
     family: banners
     disruptive: false
@@ -1270,6 +1281,572 @@ __linux_compliance_remediate_rules:
       type: "file"
       attribute: "mode"
       max_mode: "0440"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_compression"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_compression_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-compression.conf"
+      keyword: "Compression"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_empty_passwords_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-empty-passwords.conf"
+      keyword: "PermitEmptyPasswords"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_forwarding"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_forwarding_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-forwarding.conf"
+      keyword: "DisableForwarding"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_gssapi_auth"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_gssapi_auth_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-gssapi-auth.conf"
+      keyword: "GSSAPIAuthentication"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_kerb_auth"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_kerb_auth_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-kerb-auth.conf"
+      keyword: "KerberosAuthentication"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_rhosts"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_rhosts_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-rhosts.conf"
+      keyword: "IgnoreRhosts"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_root_login_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-root-login.conf"
+      keyword: "PermitRootLogin"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_root_password_login"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_root_password_login_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-root-password-login.conf"
+      keyword: "PermitRootLogin"
+      value: "prohibit-password"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_tcp_forwarding"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_tcp_forwarding_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-tcp-forwarding.conf"
+      keyword: "AllowTcpForwarding"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_user_known_hosts"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_user_known_hosts_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-user-known-hosts.conf"
+      keyword: "IgnoreUserKnownHosts"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_disable_x11_forwarding_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-disable-x11-forwarding.conf"
+      keyword: "X11Forwarding"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_do_not_permit_user_env_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-do-not-permit-user-env.conf"
+      keyword: "PermitUserEnvironment"
+      value: "no"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_enable_pam"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_enable_pam_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-pam.conf"
+      keyword: "UsePAM"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_enable_pubkey_auth_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-pubkey-auth.conf"
+      keyword: "PubkeyAuthentication"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_enable_strictmodes"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_enable_strictmodes_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-strictmodes.conf"
+      keyword: "StrictModes"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_enable_warning_banner_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-warning-banner.conf"
+      keyword: "Banner"
+      value: "/etc/issue"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner_net"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_enable_warning_banner_net_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-warning-banner-net.conf"
+      keyword: "Banner"
+      value: "/etc/issue.net"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_print_last_log"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_print_last_log_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-print-last-log.conf"
+      keyword: "PrintLastLog"
+      value: "yes"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_idle_timeout_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-idle-timeout.conf"
+      keyword: "ClientAliveInterval"
+      value_id: "sshd_idle_timeout_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "300"
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - stig
+          value:
+            - "600"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - "pci-dss"
+          value:
+            - "900"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "300"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "600"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_keepalive"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_keepalive_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-keepalive.conf"
+      keyword: "ClientAliveCountMax"
+      value_id: "var_sshd_set_keepalive"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "3"
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - stig
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_login_grace_time"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_login_grace_time_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-login-grace-time.conf"
+      keyword: "LoginGraceTime"
+      value_id: "var_sshd_set_login_grace_time"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "60"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+          value:
+            - "60"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_loglevel_info"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_loglevel_info_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-info.conf"
+      keyword: "LogLevel"
+      value: "INFO"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_loglevel_verbose"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_loglevel_verbose_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-loglevel-verbose.conf"
+      keyword: "LogLevel"
+      value: "VERBOSE"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_max_auth_tries"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_max_auth_tries_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-auth-tries.conf"
+      keyword: "MaxAuthTries"
+      value_id: "sshd_max_auth_tries_value"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "4"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+          value:
+            - "4"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - ism_o
+          value:
+            - "5"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_max_sessions"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_max_sessions_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-max-sessions.conf"
+      keyword: "MaxSessions"
+      value_id: "var_sshd_max_sessions"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "10"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - "pci-dss"
+          value:
+            - "10"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_set_maxstartups"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_set_maxstartups_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-set-maxstartups.conf"
+      keyword: "MaxStartups"
+      value_id: "var_sshd_set_maxstartups"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "10:30:60"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "10:30:60"
+        - datastream: "rhel9"
+          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          profiles:
+            - "pci-dss"
+          value:
+            - "10:30:100"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_use_approved_ciphers_ordered_stig"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_use_approved_ciphers_ordered_stig_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-use-approved-ciphers-ordered-stig.conf"
+      keyword: "Ciphers"
+      value: "aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr"
+      crypto_policy_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_RHEL-9"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_use_approved_kex_ordered_stig"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_use_approved_kex_ordered_stig_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-use-approved-kex-ordered-stig.conf"
+      keyword: "KexAlgorithms"
+      value:
+        - "ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,"
+        - "diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group14-sha256"
+      crypto_policy_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_RHEL-9"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_use_approved_macs_ordered_stig"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_use_approved_macs_ordered_stig_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-use-approved-macs-ordered-stig.conf"
+      keyword: "MACs"
+      value: "hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256"
+      crypto_policy_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_RHEL-9"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_use_strong_ciphers"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_use_strong_ciphers_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-ciphers.conf"
+      keyword: "Ciphers"
+      value:
+        - "aes128-ctr,aes192-ctr,aes256-ctr,chacha20-poly1305@openssh.com,"
+        - "aes256-gcm@openssh.com,aes128-gcm@openssh.com"
+      crypto_policy_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_RHEL-9"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_use_strong_kex"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_use_strong_kex_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-kex.conf"
+      keyword: "KexAlgorithms"
+      crypto_policy_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_RHEL-9"
+      value_id: "sshd_strong_kex"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256"
+            - "@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,d"
+            - "iffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diff"
+            - "ie-hellman-group18-sha512,diffie-hellman-group14-sha256"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_use_strong_macs"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_use_strong_macs_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-use-strong-macs.conf"
+      keyword: "MACs"
+      crypto_policy_benchmarks:
+        - "xccdf_org.ssgproject.content_benchmark_RHEL-9"
+      value_id: "sshd_strong_macs"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-"
+            - "512,hmac-sha2-256"
+  - rule_id: "xccdf_org.ssgproject.content_rule_sshd_x11_use_localhost"
+    family: ssh
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_sshd_x11_use_localhost_enabled
+    runbook: null
+    parameters:
+      path: "/etc/ssh/sshd_config.d/00-freesecdev-sshd-x11-use-localhost.conf"
+      keyword: "X11UseLocalhost"
+      value: "yes"
   - rule_id: "xccdf_org.ssgproject.content_rule_sudo_add_use_pty"
     family: sudo
     disruptive: true
@@ -2246,7 +2823,6 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_directory_groupowner_sshd_config_d"
     - "xccdf_org.ssgproject.content_rule_directory_owner_sshd_config_d"
     - "xccdf_org.ssgproject.content_rule_directory_permissions_sshd_config_d"
-    - "xccdf_org.ssgproject.content_rule_disable_host_auth"
     - "xccdf_org.ssgproject.content_rule_file_groupowner_sshd_config"
     - "xccdf_org.ssgproject.content_rule_file_groupowner_sshd_drop_in_config"
     - "xccdf_org.ssgproject.content_rule_file_groupownership_sshd_private_key"
@@ -2269,43 +2845,10 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_ssh_keys_passphrase_protected"
     - "xccdf_org.ssgproject.content_rule_ssh_use_approved_macs_ordered_stig"
     - "xccdf_org.ssgproject.content_rule_sshd_allow_only_protocol2"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_compression"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_forwarding"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_gssapi_auth"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_kerb_auth"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_rhosts"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_root_password_login"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_tcp_forwarding"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_user_known_hosts"
-    - "xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding"
-    - "xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env"
-    - "xccdf_org.ssgproject.content_rule_sshd_enable_pam"
-    - "xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth"
-    - "xccdf_org.ssgproject.content_rule_sshd_enable_strictmodes"
-    - "xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner"
-    - "xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner_net"
     - "xccdf_org.ssgproject.content_rule_sshd_include_crypto_policy"
     - "xccdf_org.ssgproject.content_rule_sshd_limit_user_access"
-    - "xccdf_org.ssgproject.content_rule_sshd_print_last_log"
     - "xccdf_org.ssgproject.content_rule_sshd_rekey_limit"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_keepalive"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_login_grace_time"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_loglevel_info"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_loglevel_verbose"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_max_auth_tries"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_max_sessions"
-    - "xccdf_org.ssgproject.content_rule_sshd_set_maxstartups"
-    - "xccdf_org.ssgproject.content_rule_sshd_use_approved_ciphers_ordered_stig"
-    - "xccdf_org.ssgproject.content_rule_sshd_use_approved_kex_ordered_stig"
-    - "xccdf_org.ssgproject.content_rule_sshd_use_approved_macs_ordered_stig"
     - "xccdf_org.ssgproject.content_rule_sshd_use_directory_configuration"
-    - "xccdf_org.ssgproject.content_rule_sshd_use_strong_ciphers"
-    - "xccdf_org.ssgproject.content_rule_sshd_use_strong_kex"
-    - "xccdf_org.ssgproject.content_rule_sshd_use_strong_macs"
-    - "xccdf_org.ssgproject.content_rule_sshd_x11_use_localhost"
   pam:
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_modules_in_authselect_profile"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_authtok"

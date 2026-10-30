@@ -1,0 +1,7 @@
+---
+security_fixes:
+  - >-
+    Molecule connection guard: the normalisation of the host name and address that strips brackets, a zone index and
+    trailing dots was a no-op, because its regex literals had doubled backslashes inside a template, where they are used
+    as written. The loopback rule now sees ``[::1]``, ``localhost.``, ``LOCALHOST..`` and ``[::ffff:127.0.0.1]`` as
+    loopback. Five simulated cases per driver, 69 Docker and 133 libvirt in total, are refused only by that rule.

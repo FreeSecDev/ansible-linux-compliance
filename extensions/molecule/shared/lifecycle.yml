@@ -162,4 +162,4 @@
         msg: >-
           Toggle lifecycle proven on {{ molecule_target.instance }} ({{ molecule_target.driver }}) for
           {{ lifecycle_proven_families | join(', ') }} with the {{ lifecycle_run_modes | join(' and ') }} toggles from
-          every pre-state of this driver: idempotence, check mode and cleanup.
+          every pre-state of this driver and mode: idempotence, check mode and cleanup.

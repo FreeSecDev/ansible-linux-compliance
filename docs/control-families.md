@@ -100,7 +100,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 33 | `nftables` | `firewall` | nftables | yes | A default-deny base chain can cut every remote session | 11 | 0 | 11 |
 | 34 | `iptables` | `firewall` | iptables and ip6tables | yes | A default-drop policy can cut every remote session | 12 | 0 | 12 |
 | 35 | `ufw` | `firewall` | Uncomplicated Firewall (ufw) | yes | A default-deny policy can cut every remote session | 9 | 0 | 9 |
-| 36 | `ssh` | none | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 0 | 63 |
+| 36 | `ssh` | none | SSH server and client | yes | sshd settings can lock out every remote operator | 63 | 34 | 29 |
 | 37 | `pam` | none | PAM stack, pam_unix, password hashing and the PAM packages | yes | The module stack and the password hashing settings can lock out every user, including root | 15 | 0 | 15 |
 | 38 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 14 | 5 |
 | 39 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 0 | 7 |
@@ -121,7 +121,7 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 54 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
 | 55 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
 | 56 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 47 | 1156 |
+|  | All |  |  |  |  | 1203 | 81 | 1122 |
 
 ## Umbrellas
 
@@ -478,7 +478,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 31 | 31 | 32 | 32 | 12 |
+| Native remediation | 48 | 50 | 51 | 51 | 24 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -541,7 +541,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 15 | 15 | 14 | 7 | 10 | 15 | 13 | 14 | 27 | 26 | 26 | 27 | 5 | 0 | 0 | 4 | 5 | 12 | 20 | 20 |
+| Native remediation | 16 | 16 | 15 | 7 | 13 | 18 | 16 | 17 | 43 | 40 | 42 | 43 | 11 | 9 | 9 | 18 | 11 | 27 | 38 | 38 |
 
 ## Mapping
 

@@ -18,6 +18,7 @@ molecule_other_native_topics:
   - banners
   - login_defs
   - pwquality
+  - ssh
   - sudo
 molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
 molecule_native_results: >-

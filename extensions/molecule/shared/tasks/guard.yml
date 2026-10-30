@@ -33,11 +33,11 @@
       - '0x[0-9a-f]+'
     guard_loopback_pattern: "^({{ guard_loopback_alternatives | join('|') }})$"
     guard_normalised_hostname: >-
-      {{ guard_hostname | string | trim | lower | regex_replace('^\\[|\\]$', '') | regex_replace('%.*$', '')
-      | regex_replace('\\.+$', '') }}
+      {{ guard_hostname | string | trim | lower | regex_replace('^\[|\]$', '') | regex_replace('%.*$', '')
+      | regex_replace('\.+$', '') }}
     guard_normalised_address: >-
-      {{ guard_address | string | trim | lower | regex_replace('^\\[|\\]$', '') | regex_replace('%.*$', '')
-      | regex_replace('\\.+$', '') }}
+      {{ guard_address | string | trim | lower | regex_replace('^\[|\]$', '') | regex_replace('%.*$', '')
+      | regex_replace('\.+$', '') }}
     guard_address: "{{ guard_connection_vars.ansible_host | default(guard_hostname) }}"
     guard_connection: "{{ guard_connection_vars.ansible_connection | default('ssh') }}"
     guard_driver_settings:
