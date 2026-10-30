@@ -266,7 +266,7 @@ def conf_objects(
 
 def stack_patterns(collector: Oval, definition: str, family: str, setting: str) -> list[str]:
     _, module = MODULE[family]
-    found = []
+    found: list[str] = []
     for test in collector.tests_of(definition):
         item = collector.objects[str(test["object"])]
         if not any(reads_file(collector, item, path) for path in stack_files()):
