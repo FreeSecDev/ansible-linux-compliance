@@ -2,6 +2,7 @@
 - name: Guard | Refuse the controller, unexpected connections and unknown targets
   ansible.builtin.assert:
     that:
+      - guard_driver in guard_driver_settings
       - guard_normalised_hostname is not match(guard_loopback_pattern)
       - guard_normalised_address is not match(guard_loopback_pattern)
       - guard_connection not in ['local', 'ansible.builtin.local', 'ansible.legacy.local']
@@ -10,12 +11,14 @@
       - guard_environment.ANSIBLE_DOCKER_PRIVILEGED | default('') | length == 0
       - guard_matches | length == 1
       - guard_address is match(guard_name_pattern)
+      - guard_unexpected_values | length == 0
     fail_msg: >-
       Refusing to run: host {{ guard_hostname }}, address {{ guard_address }}, connection {{ guard_connection }},
-      forbidden connection variables {{ guard_forbidden_variables }},
+      driver {{ guard_driver }}, forbidden connection variables {{ guard_forbidden_variables }},
+      unexpected connection values {{ guard_unexpected_values }},
       ANSIBLE_DOCKER_PRIVILEGED '{{ guard_environment.ANSIBLE_DOCKER_PRIVILEGED | default('') }}'.
       A target must be a disposable instance recorded by this scenario's create step, reached over
-      {{ guard_allowed_connections | join(', ') }} with no Docker connection overrides.
+      {{ guard_allowed_connections | join(', ') }} with the connection settings that the create step recorded.
     success_msg: Target {{ guard_hostname }} is a disposable instance recorded by this scenario.
   vars:
     guard_loopback_alternatives:
@@ -37,10 +40,44 @@
       | regex_replace('\\.+$', '') }}
     guard_address: "{{ guard_connection_vars.ansible_host | default(guard_hostname) }}"
     guard_connection: "{{ guard_connection_vars.ansible_connection | default('ssh') }}"
+    guard_driver_settings:
+      docker:
+        forbidden: '^(ansible_docker_|docker_)'
+        name: "^fsd-mol-{{ guard_scenario | regex_escape }}-[a-z0-9]{8}-{{ guard_hostname | regex_escape }}$"
+      libvirt:
+        forbidden: >-
+          ^(ansible_(docker_.*|ssh_(?!common_args$).*|scp_.*|sftp_.*|password|host_key_checking|control_path(_dir)?|become_.+)|docker_.*)$
+        name: >-
+          ^10\.2[0-4][0-9]\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(1[0-9]|[2-9][0-9]|1[0-9][0-9]|2[0-4][0-9])$
     guard_forbidden_variables: >-
       {{ guard_connection_vars | dict2items | map(attribute='key')
-      | select('match', '^(ansible_docker_|docker_)') | list }}
+      | select('match', (guard_driver_settings[guard_driver] | default({})).forbidden | default('.*')) | list }}
     guard_matches: >-
       {{ guard_instances | selectattr('instance', 'equalto', guard_hostname)
-      | selectattr('address', 'equalto', guard_address) | selectattr('scenario', 'equalto', guard_scenario) | list }}
-    guard_name_pattern: "^fsd-mol-{{ guard_scenario | regex_escape }}-[a-z0-9]{8}-{{ guard_hostname | regex_escape }}$"
+      | selectattr('address', 'equalto', guard_address) | selectattr('scenario', 'equalto', guard_scenario)
+      | selectattr('driver', 'defined') | selectattr('driver', 'equalto', guard_driver) | list }}
+    guard_name_pattern: "{{ (guard_driver_settings[guard_driver] | default({})).name | default('^$') }}"
+    guard_record: "{{ guard_matches | first | default({}) }}"
+    guard_expected_names:
+      - ansible_user
+      - ansible_port
+      - ansible_private_key_file
+      - ansible_ssh_common_args
+    guard_expected_list:
+      - root
+      - "22"
+      - "{{ guard_record.identity_file | default('') }}"
+      - >-
+        {{ molecule_libvirt_ssh_options | map('replace', '@KNOWN_HOSTS@', guard_record.known_hosts | default(''))
+        | join(' ') }}
+    guard_expected_values: >-
+      {{ {} if guard_driver != 'libvirt' else dict(guard_expected_names | zip(guard_expected_list)) }}
+    guard_actual_values: >-
+      {{ guard_connection_vars | dict2items | selectattr('key', 'in', guard_expected_values.keys() | list)
+      | map(attribute='key') | zip(guard_connection_vars | dict2items
+      | selectattr('key', 'in', guard_expected_values.keys() | list) | map(attribute='value') | map('string'))
+      | map('join', '=') | list }}
+    guard_unexpected_values: >-
+      {{ (guard_expected_values | dict2items | selectattr('value', 'equalto', '') | map(attribute='key') | list)
+      + (guard_expected_values.keys() | zip(guard_expected_values.values() | map('string')) | map('join', '=')
+      | reject('in', guard_actual_values) | map('regex_replace', '=.*$', '') | list) }}

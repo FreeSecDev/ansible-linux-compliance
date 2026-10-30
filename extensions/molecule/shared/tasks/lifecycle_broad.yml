@@ -26,13 +26,14 @@
   ansible.builtin.assert:
     that:
       - >-
-        lifecycle_broad_sums.files | length
-        == lifecycle_broad_files.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list | length
+        lifecycle_broad_sums.skipped_paths | default({}) | list
+        | difference(lifecycle_broad_files.skipped_paths | default({}) | list) | length == 0
     fail_msg: >-
-      The checksum pass found {{ lifecycle_broad_sums.files | length }} regular files that their owner may read, the
-      listing {{ lifecycle_broad_files.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list
-      | length }}: a file that root cannot read without capabilities cut the pass short
-      ({{ lifecycle_broad_sums.skipped_paths | default({}) }}), so the record would miss content changes.
+      The checksum pass stopped early in
+      {{ lifecycle_broad_sums.skipped_paths | default({}) | dict2items
+         | rejectattr('key', 'in', lifecycle_broad_files.skipped_paths | default({}) | list)
+         | items2dict }}: a file that root cannot read without capabilities would leave every later file of that path
+      without a checksum.
     quiet: true
 
 - name: Lifecycle broad | Read every kernel parameter that the instance may read

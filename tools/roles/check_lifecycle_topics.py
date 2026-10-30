@@ -20,6 +20,15 @@ every platform, which would let the topic run nowhere. A topic therefore cannot 
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
 topic. The harness repeats the coverage check at run time and fails on a platform that skips
 a topic without the declaration saying so.
+
+Each cycle runs with one set of Molecule drivers, the prefixes of the scenario directories
+(FREES-61): a pre-state runs with the drivers it ``requires``, else with those its topic
+``requires``, else in the Docker scenarios only, because the libvirt scenarios run only what a
+container cannot prove (an ownership change, a kernel parameter, a service). This check fails
+when no lifecycle scenario of such a driver (one whose ``side_effect`` is the harness) runs a
+platform that the topic does not list under ``unselected_platforms``, so every declared cycle is
+exercised by some driver. ``cycle_platforms`` returns the same map for ``make molecule-matrix``,
+which plans one CI leg per topic, toggle mode, driver and platform that runs a cycle.
 """
 
 from __future__ import annotations
@@ -28,7 +37,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final, NamedTuple, cast
 
 import yaml
 
@@ -43,7 +52,12 @@ if TYPE_CHECKING:
 GenerationError = generate_toggles.GenerationError
 TOPICS: Final[Path] = Path("extensions/molecule/shared/vars/topics")
 VERSIONS: Final[Path] = Path("extensions/molecule/shared/vars/versions.yml")
+MOLECULE: Final[Path] = Path("extensions/molecule")
+DRIVERS: Final[tuple[str, ...]] = ("docker", "libvirt")
+UNRESTRICTED_DRIVERS: Final[frozenset[str]] = frozenset({"docker"})
+REQUIRES_KEY: Final[str] = "requires"
 IMAGES_KEY: Final[str] = "molecule_images"
+LIFECYCLE_PLAYBOOK: Final[str] = "../shared/lifecycle.yml"
 TOP_KEYS: Final[frozenset[str]] = frozenset(
     {
         "family",
@@ -54,6 +68,7 @@ TOP_KEYS: Final[frozenset[str]] = frozenset(
         "applied",
         "pre_states",
         "unselected_platforms",
+        "requires",
     }
 )
 REQUIRED_KEYS: Final[tuple[str, ...]] = ("family", "disruptive", "state", "applied")
@@ -90,7 +105,9 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 }
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
-PRE_STATE_KEYS: Final[frozenset[str]] = frozenset({"name", "audit", "files", "unchanged"})
+PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
+    {"name", "audit", "files", "unchanged", "requires"}
+)
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
 UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable"})
 REWRITTEN_KEY: Final[str] = "rewritten"
@@ -122,22 +139,45 @@ def _strings(value: object) -> list[str] | None:
     return [str(item) for item in items]
 
 
+class Context(NamedTuple):
+    """What a declaration is checked against besides the platforms.
+
+    ``coverage`` maps each driver to the platforms of its lifecycle scenarios (``None``: every
+    driver runs every platform); ``rules`` holds the short identifiers of the topic's native rules.
+    """
+
+    coverage: dict[str, frozenset[str]] | None = None
+    rules: frozenset[str] = frozenset()
+
+
 class Declaration:
     """The validation of one topic declaration; ``errors`` collects every finding."""
 
     def __init__(
-        self, where: str, platforms: frozenset[str], rules: frozenset[str] = frozenset()
+        self,
+        where: str,
+        platforms: frozenset[str],
+        coverage: dict[str, frozenset[str]] | None = None,
+        rules: frozenset[str] = frozenset(),
     ) -> None:
-        """Start the validation of ``where`` for the known ``platforms`` and native ``rules``.
+        """Start the validation of ``where`` for the platforms, driver coverage and native rules.
 
-        ``rules`` holds the short identifiers of the native rules of the topic, which a pre-state
-        may declare ``unchanged``.
+        ``coverage`` maps each driver to the platforms that its lifecycle scenarios run; without it
+        every driver counts as running every platform. ``rules`` holds the short identifiers of the
+        native rules of the topic, which a pre-state may declare ``unchanged``.
         """
         self.where = where
         self.platforms = platforms
+        self.coverage: dict[str, frozenset[str]] = (
+            coverage if coverage is not None else dict.fromkeys(DRIVERS, platforms)
+        )
         self.rules = rules
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
+        self.drivers: frozenset[str] = frozenset(DRIVERS)
+        self.skipped_platforms: set[str] = set()
+        self.topic_drivers: frozenset[str] | None = None
+        self.pre_state_drivers: list[frozenset[str] | None] = [None]
 
     def error(self, message: str) -> None:
         """Record a finding about this declaration."""
@@ -290,6 +330,7 @@ class Declaration:
                 self.error(f"{what} lists {platform} twice")
             else:
                 seen.add(platform)
+                self.skipped_platforms.add(platform)
             if not _text(item.get("reason")):
                 self.error(f"{what} needs a reason")
         if seen and seen >= self.platforms:
@@ -336,6 +377,52 @@ class Declaration:
                 ):
                     self.error(f"{where} needs a valid {owner}")
 
+    def driver_list(self, value: object, what: str) -> frozenset[str] | None:
+        """Return the drivers that ``what`` requires, or record why the list is invalid."""
+        drivers = _strings(value)
+        if drivers is None:
+            self.error(f"{what} needs a non-empty list of drivers")
+            return None
+        if len(set(drivers)) != len(drivers):
+            self.error(f"{what} names a driver twice")
+        unknown = [driver for driver in drivers if driver not in DRIVERS]
+        for driver in unknown:
+            self.error(
+                f"{what} names the unknown driver {driver!r}; known are {', '.join(DRIVERS)}"
+            )
+        return None if unknown else frozenset(drivers)
+
+    def requires(self, value: object) -> None:
+        """Check the drivers that the topic needs."""
+        drivers = self.driver_list(value, REQUIRES_KEY)
+        if drivers is not None:
+            self.drivers = drivers
+            self.topic_drivers = drivers
+
+    def cycle_drivers(self) -> frozenset[str]:
+        """Return the drivers whose scenarios run a cycle of the topic.
+
+        A pre-state runs with the drivers it requires, else with those the topic requires, else
+        in the Docker scenarios only; the libvirt scenarios run only what containers cannot.
+        """
+        default = self.topic_drivers or UNRESTRICTED_DRIVERS
+        return frozenset[str]().union(*(drivers or default for drivers in self.pre_state_drivers))
+
+    def cycle_platforms(self) -> dict[str, frozenset[str]]:
+        """Return, per driver of a cycle, the platforms on which the topic runs."""
+        running = frozenset(self.platforms - self.skipped_platforms)
+        return dict.fromkeys(sorted(self.cycle_drivers()), running)
+
+    def covered(self) -> None:
+        """Check that each driver of a cycle has a lifecycle scenario on every running platform."""
+        running = self.platforms - self.skipped_platforms
+        for driver in sorted(self.cycle_drivers()):
+            for platform in sorted(running - self.coverage.get(driver, frozenset())):
+                self.error(
+                    f"the declaration requires {driver}, but no {driver} scenario in {MOLECULE} "
+                    f"runs the platform {platform}, which unselected_platforms does not list"
+                )
+
     def pre_state_unchanged(self, value: object, what: str) -> None:
         """Check the rules that a pre-state already satisfies, so that they change nothing."""
         seen: set[str] = set()
@@ -356,9 +443,20 @@ class Declaration:
             if item.get("status") not in UNCHANGED_STATUSES:
                 self.error(f"{where} needs the status compliant or notapplicable")
 
+    def _pre_state_requires(self, item: dict[str, object], what: str) -> None:
+        """Record the drivers of a pre-state, which must be drivers of its topic."""
+        if REQUIRES_KEY not in item:
+            self.pre_state_drivers.append(None)
+            return
+        drivers = self.driver_list(item[REQUIRES_KEY], f"{what}.requires") or frozenset()
+        for driver in sorted(drivers - self.drivers):
+            self.error(f"{what} requires {driver}, which the topic does not require")
+        self.pre_state_drivers.append(drivers & self.drivers or None)
+
     def pre_states(self, value: object) -> None:
         """Check the states from which the harness runs the cycles."""
         entries = self.sequence(value, "pre_states")
+        self.pre_state_drivers = []
         if not entries:
             self.error("pre_states must not be empty; leave it out for the as-built state")
         names: set[str] = set()
@@ -379,6 +477,7 @@ class Declaration:
                 self.error(f"{what}.audit must be a boolean")
             if "files" in item:
                 self.pre_state_files(item["files"], what)
+            self._pre_state_requires(item, what)
             if "unchanged" in item:
                 self.pre_state_unchanged(item["unchanged"], what)
 
@@ -406,17 +505,27 @@ def check_declaration(
     platforms: frozenset[str],
     *,
     disruptive: bool,
-    rules: frozenset[str] = frozenset(),
+    context: Context | None = None,
 ) -> list[str]:
     """Return the findings for the declaration of ``family`` in ``path``.
 
-    ``rules`` holds the short identifiers of the native rules of ``family``.
+    ``context`` holds the driver coverage of the scenarios and the short identifiers of the
+    native rules of ``family``.
     """
-    declaration = Declaration(str(path), platforms, rules)
+    return _declaration(path, family, platforms, disruptive=disruptive, context=context).errors
+
+
+def _declaration(
+    path: Path, family: str, platforms: frozenset[str], *, disruptive: bool, context: Context | None
+) -> Declaration:
+    found = context if context is not None else Context()
+    declaration = Declaration(str(path), platforms, found.coverage, found.rules)
     data = declaration.mapping(_load(path), "the declaration")
     if data is None:
-        return declaration.errors
+        return declaration
     _identity(declaration, data, family, disruptive=disruptive)
+    if REQUIRES_KEY in data:
+        declaration.requires(data[REQUIRES_KEY])
     if "state" in data:
         declaration.state(data["state"])
     if "applied" in data:
@@ -427,7 +536,8 @@ def check_declaration(
         declaration.pre_states(data["pre_states"])
     if "unselected_platforms" in data:
         declaration.unselected(data["unselected_platforms"])
-    return declaration.errors
+    declaration.covered()
+    return declaration
 
 
 def platforms(root: Path) -> frozenset[str]:
@@ -440,11 +550,56 @@ def platforms(root: Path) -> frozenset[str]:
     return frozenset(images)
 
 
+def scenarios(root: Path, platforms: frozenset[str]) -> dict[str, frozenset[str]]:
+    """Return, per driver, the platforms that the lifecycle scenarios below ``root`` run.
+
+    A scenario is a directory of ``extensions/molecule`` with a ``molecule.yml``; its name
+    starts with its driver. Every platform must name a key of ``versions.yml``. Only a scenario
+    whose ``side_effect`` playbook is the harness counts as running its platforms.
+    """
+    covered: dict[str, set[str]] = {driver: set() for driver in DRIVERS}
+    for config in sorted((root / MOLECULE).glob("*/molecule.yml")):
+        driver = config.parent.name.split("-", 1)[0]
+        if driver not in covered:
+            message = f"{config}: a scenario name must start with one of {', '.join(DRIVERS)}"
+            raise GenerationError(message)
+        data = toggles.as_mapping(_load(config))
+        entries = toggles.as_sequence(data.get("platforms")) if data is not None else None
+        if not entries:
+            message = f"{config}: the scenario has no platforms"
+            raise GenerationError(message)
+        for entry in entries:
+            item = toggles.as_mapping(entry)
+            image = item.get("image") if item is not None else None
+            if not isinstance(image, str) or image not in platforms:
+                message = f"{config}: every platform needs an image key of {VERSIONS}"
+                raise GenerationError(message)
+            if _runs_lifecycle(data):
+                covered[driver].add(image)
+    return {driver: frozenset(images) for driver, images in covered.items()}
+
+
+def _runs_lifecycle(data: dict[str, object] | None) -> bool:
+    ansible = toggles.as_mapping(data.get("ansible")) if data is not None else None
+    playbooks = toggles.as_mapping(ansible.get("playbooks")) if ansible is not None else None
+    return playbooks is not None and playbooks.get("side_effect") == LIFECYCLE_PLAYBOOK
+
+
+def native_rules(catalogue: toggles.Catalogue, family: str) -> frozenset[str]:
+    """Return the short identifiers of the native rules of ``family``."""
+    return frozenset(
+        toggles.rule_short_id(str(rule["rule_id"]))
+        for rule in catalogue.rules
+        if rule["family"] == family and toggles.is_native(rule)
+    )
+
+
 def check(root: Path) -> tuple[list[str], list[str]]:
     """Return the native topics and every finding about their declarations below ``root``."""
     catalogue = generate_toggles.load_catalogue(root / generate_toggles.CATALOGUE)
     native = generate_toggles.native_families(catalogue)
     known = platforms(root)
+    coverage = scenarios(root, known)
     directory = root / TOPICS
     declared = sorted(path.stem for path in directory.glob("*.yml")) if directory.is_dir() else []
     errors = [
@@ -466,14 +621,34 @@ def check(root: Path) -> tuple[list[str], list[str]]:
                     family,
                     known,
                     disruptive=catalogue.families[family],
-                    rules=frozenset(
-                        toggles.rule_short_id(str(rule["rule_id"]))
-                        for rule in catalogue.rules
-                        if rule["family"] == family and toggles.is_native(rule)
-                    ),
+                    context=Context(coverage, native_rules(catalogue, family)),
                 )
             )
     return native, errors
+
+
+def cycle_platforms(root: Path) -> dict[str, dict[str, frozenset[str]]]:
+    """Return, per native topic and driver of a cycle, the platforms on which the topic runs.
+
+    The map is the one that ``make lint-lifecycle`` checks; a finding stops it, so that no CI
+    leg is planned from an invalid declaration.
+    """
+    native, errors = check(root)
+    if errors:
+        message = "; ".join(errors)
+        raise GenerationError(message)
+    catalogue = generate_toggles.load_catalogue(root / generate_toggles.CATALOGUE)
+    known = platforms(root)
+    return {
+        family: _declaration(
+            root / TOPICS / f"{family}.yml",
+            family,
+            known,
+            disruptive=catalogue.families[family],
+            context=Context(None, native_rules(catalogue, family)),
+        ).cycle_platforms()
+        for family in native
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:

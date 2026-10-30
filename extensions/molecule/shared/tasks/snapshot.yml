@@ -23,12 +23,14 @@
   ansible.builtin.assert:
     that:
       - >-
-        snapshot_sums.files | length
-        == snapshot_find.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list | length
+        snapshot_sums.skipped_paths | default({}) | list
+        | difference(snapshot_find.skipped_paths | default({}) | list) | length == 0
     fail_msg: >-
-      The checksum pass found {{ snapshot_sums.files | length }} regular files that their owner may read, the listing
-      {{ snapshot_find.files | selectattr('isreg') | selectattr('mode', 'match', '^.[4-7]') | list | length }}: a file
-      that root cannot read without capabilities cut the pass short ({{ snapshot_sums.skipped_paths | default({}) }}).
+      The checksum pass stopped early in
+      {{ snapshot_sums.skipped_paths | default({}) | dict2items
+         | rejectattr('key', 'in', snapshot_find.skipped_paths | default({}) | list)
+         | items2dict }}: a file that root cannot read without capabilities would leave every later file of that path
+      without a checksum.
     quiet: true
 
 - name: Snapshot | Record paths, ownership, modes, sizes, times and content of every entry
@@ -39,6 +41,7 @@
       {%- for entry in snapshot_find.files | sort(attribute='path') -%}
       {{ entry.path }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|
       {{- 'volatile-directory' if entry.path in snapshot_volatile_directories | default([])
+      else 'volatile-contents' if entry.path is match(contract_snapshot_volatile_contents)
       else entry.size ~ '|volatile-times|' ~ sums[entry.path] | default('')
       if entry.path is match(contract_snapshot_volatile_times)
       else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ sums[entry.path] | default('') }}

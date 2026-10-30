@@ -1,0 +1,669 @@
+---
+guard_libvirt_sim_pool_path: /var/lib/libvirt/freesecdev-molecule/fsd-mol-libvirt-sim-abcd1234
+guard_libvirt_simulation:
+  scenario: libvirt-sim
+  instances:
+    - instance: probe
+      address: 10.210.5.10
+      user: root
+      port: 22
+      identity_file: /simulated/ephemeral/libvirt/id_ed25519
+      connection: ssh
+      driver: libvirt
+      scenario: libvirt-sim
+      run_id: abcd1234
+      image: ubuntu
+      marker: simulatedmarkersimulatedmarker00
+      domain: fsd-mol-libvirt-sim-abcd1234-probe
+      network: fsd-mol-libvirt-sim-abcd1234
+      bridge: fsdmabcd1234
+      gateway: 10.210.5.1
+      pool: fsd-mol-libvirt-sim-abcd1234
+      pool_path: /var/lib/libvirt/freesecdev-molecule/fsd-mol-libvirt-sim-abcd1234
+      disk: fsd-mol-libvirt-sim-abcd1234-probe.qcow2
+      seed: fsd-mol-libvirt-sim-abcd1234-probe-seed.iso
+      mac: 52:54:00:aa:bb:cc
+      known_hosts: /simulated/ephemeral/libvirt/known_hosts
+      uuid: 0c6b2e5e-1d2f-4c3b-9a8e-7f6d5c4b3a21
+      capabilities_add: []
+  good_connection_vars:
+    ansible_host: 10.210.5.10
+    ansible_connection: ssh
+    ansible_user: root
+    ansible_port: 22
+    ansible_private_key_file: /simulated/ephemeral/libvirt/id_ed25519
+    ansible_ssh_common_args: >-
+      -F /dev/null -o UserKnownHostsFile=/simulated/ephemeral/libvirt/known_hosts -o StrictHostKeyChecking=yes
+      -o IdentitiesOnly=yes -o ControlMaster=auto -o ControlPersist=60s -o ForwardAgent=no -o ForwardX11=no
+      -o LogLevel=ERROR
+  good_ssh_settings:
+    host_key_checking: true
+    plugin_host_key_checking: true
+    ssh_args: -C -o ControlMaster=auto -o ControlPersist=60s
+    ssh_extra_args: ""
+    scp_extra_args: ""
+    sftp_extra_args: ""
+    ssh_executable: ssh
+    control_path: ""
+    control_path_dir: ~/.ansible/cp
+  good_identity:
+    serial: "simulatedmarkersimulatedmarker00\n"
+    product_uuid: "0C6B2E5E-1D2F-4C3B-9A8E-7F6D5C4B3A21\n"
+    boot_id: "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9\n"
+    machine_id: "00112233445566778899aabbccddeeff\n"
+    controller_boot_id: "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a"
+    controller_machine_id: ffeeddccbbaa99887766554433221100
+  good_domain_xml: |
+    <domain type='kvm' id='1'>
+      <name>fsd-mol-libvirt-sim-abcd1234-probe</name>
+      <uuid>0c6b2e5e-1d2f-4c3b-9a8e-7f6d5c4b3a21</uuid>
+      <metadata>
+        <fsd:molecule xmlns:fsd="https://github.com/FreeSecDev/ansible-linux-compliance/molecule">
+          <fsd:scenario>libvirt-sim</fsd:scenario>
+          <fsd:run>abcd1234</fsd:run>
+          <fsd:instance>probe</fsd:instance>
+        </fsd:molecule>
+      </metadata>
+      <memory unit='KiB'>4194304</memory>
+      <currentMemory unit='KiB'>4194304</currentMemory>
+      <vcpu placement='static'>2</vcpu>
+      <resource>
+        <partition>/machine</partition>
+      </resource>
+      <sysinfo type='smbios'>
+        <system>
+          <entry name='manufacturer'>FreeSecDev</entry>
+          <entry name='product'>molecule</entry>
+          <entry name='serial'>simulatedmarkersimulatedmarker00</entry>
+        </system>
+      </sysinfo>
+      <os>
+        <type arch='x86_64' machine='pc-q35-noble'>hvm</type>
+        <boot dev='hd'/>
+        <smbios mode='sysinfo'/>
+      </os>
+      <features>
+        <acpi/>
+        <apic/>
+      </features>
+      <cpu mode='host-passthrough' check='none' migratable='on'/>
+      <clock offset='utc'/>
+      <on_poweroff>destroy</on_poweroff>
+      <on_reboot>restart</on_reboot>
+      <on_crash>destroy</on_crash>
+      <devices>
+        <emulator>/usr/bin/qemu-system-x86_64</emulator>
+        <disk type='file' device='disk'>
+          <driver name='qemu' type='qcow2'/>
+          <source file='{{ guard_libvirt_sim_pool_path }}/fsd-mol-libvirt-sim-abcd1234-probe.qcow2' index='2'/>
+          <backingStore/>
+          <target dev='vda' bus='virtio'/>
+          <alias name='virtio-disk0'/>
+        </disk>
+        <disk type='file' device='cdrom'>
+          <driver name='qemu' type='raw'/>
+          <source file='{{ guard_libvirt_sim_pool_path }}/fsd-mol-libvirt-sim-abcd1234-probe-seed.iso' index='1'/>
+          <backingStore/>
+          <target dev='sda' bus='sata'/>
+          <readonly/>
+        </disk>
+        <controller type='usb' index='0' model='qemu-xhci'>
+          <alias name='usb'/>
+        </controller>
+        <controller type='pci' index='1' model='pcie-root-port'>
+          <model name='pcie-root-port'/>
+          <target chassis='1' port='0x10'/>
+        </controller>
+        <interface type='network'>
+          <mac address='52:54:00:aa:bb:cc'/>
+          <source network='fsd-mol-libvirt-sim-abcd1234' portid='65fb5fdb-7592-4f9f' bridge='fsdmabcd1234'/>
+          <target dev='vnet3'/>
+          <model type='virtio'/>
+        </interface>
+        <serial type='pty'>
+          <source path='/dev/pts/1'/>
+          <target type='isa-serial' port='0'>
+            <model name='isa-serial'/>
+          </target>
+        </serial>
+        <console type='pty' tty='/dev/pts/1'>
+          <source path='/dev/pts/1'/>
+          <target type='serial' port='0'/>
+        </console>
+        <input type='mouse' bus='ps2'>
+          <alias name='input0'/>
+        </input>
+        <input type='keyboard' bus='ps2'>
+          <alias name='input1'/>
+        </input>
+        <audio id='1' type='none'/>
+        <video>
+          <model type='vga' vram='16384' heads='1' primary='yes'/>
+        </video>
+        <watchdog model='itco' action='reset'>
+          <alias name='watchdog0'/>
+        </watchdog>
+        <memballoon model='virtio'>
+          <alias name='balloon0'/>
+        </memballoon>
+        <rng model='virtio'>
+          <backend model='random'>/dev/urandom</backend>
+          <alias name='rng0'/>
+        </rng>
+      </devices>
+      <seclabel type='dynamic' model='dac' relabel='yes'>
+        <label>+64055:+993</label>
+        <imagelabel>+64055:+993</imagelabel>
+      </seclabel>
+    </domain>
+  good_network_xml: |
+    <network connections='1'>
+      <name>fsd-mol-libvirt-sim-abcd1234</name>
+      <metadata>
+        <fsd:molecule xmlns:fsd="https://github.com/FreeSecDev/ansible-linux-compliance/molecule">
+          <fsd:scenario>libvirt-sim</fsd:scenario>
+          <fsd:run>abcd1234</fsd:run>
+        </fsd:molecule>
+      </metadata>
+      <bridge name='fsdmabcd1234' stp='on' delay='0'/>
+      <dns enable='no'/>
+      <ip address='10.210.5.1' netmask='255.255.255.0'>
+      </ip>
+    </network>
+  pool_owner: 1000
+  good_pool_xml: |
+    <pool type='dir'>
+      <name>fsd-mol-libvirt-sim-abcd1234</name>
+      <target>
+        <path>/var/lib/libvirt/freesecdev-molecule/fsd-mol-libvirt-sim-abcd1234</path>
+        <permissions>
+          <mode>0711</mode>
+          <owner>1000</owner>
+          <group>118</group>
+        </permissions>
+      </target>
+    </pool>
+
+guard_libvirt_cases:
+  - name: disposable virtual machine over SSH
+    refused: false
+  - name: virtual machine without a video adapter
+    domain_edits:
+      - ["<model type='vga' vram='16384' heads='1' primary='yes'/>", ""]
+      - ["<video>", ""]
+      - ["</video>", ""]
+    refused: false
+  - name: virtual machine under AppArmor with its dynamic AppArmor label
+    apparmor: true
+    domain_edits:
+      - - "</domain>"
+        - "<seclabel type='dynamic' model='apparmor' relabel='yes'>\
+          <label>libvirt-0c6b2e5e-1d2f-4c3b-9a8e-7f6d5c4b3a21</label>\
+          <imagelabel>libvirt-0c6b2e5e-1d2f-4c3b-9a8e-7f6d5c4b3a21</imagelabel></seclabel></domain>"
+    refused: false
+  - name: virtual machine under SELinux with its dynamic SELinux label
+    domain_edits:
+      - - "</domain>"
+        - "<seclabel type='dynamic' model='selinux' relabel='yes'><label>system_u:system_r:svirt_t:s0:c12,c345</label>\
+          <imagelabel>system_u:object_r:svirt_image_t:s0:c12,c345</imagelabel></seclabel></domain>"
+    refused: false
+  - name: localhost over a local connection
+    hostname: localhost
+    connection_vars:
+      ansible_host: localhost
+      ansible_connection: local
+    refused: true
+  - name: loopback address over SSH
+    connection_vars:
+      ansible_host: 127.0.0.1
+    refused: true
+  - name: unrecorded address on the run's network
+    connection_vars:
+      ansible_host: 10.210.5.11
+    refused: true
+  - name: address of the controller on another network
+    connection_vars:
+      ansible_host: 192.168.1.10
+    refused: true
+  - name: Docker connection to a libvirt target
+    connection_vars:
+      ansible_connection: community.docker.docker
+    refused: true
+  - name: proxy command in the SSH arguments
+    connection_vars:
+      ansible_ssh_common_args: -o ProxyCommand=nc 192.0.2.1 22
+    refused: true
+  - name: host key checking switched off in the SSH arguments
+    connection_vars:
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    refused: true
+  - name: extra SSH arguments
+    connection_vars:
+      ansible_ssh_extra_args: -J jump.example.invalid
+    refused: true
+  - name: another SSH executable
+    connection_vars:
+      ansible_ssh_executable: /opt/attacker/ssh
+    refused: true
+  - name: another SSH port
+    connection_vars:
+      ansible_port: 2222
+    refused: true
+  - name: another remote user
+    connection_vars:
+      ansible_user: ubuntu
+    refused: true
+  - name: another private key
+    connection_vars:
+      ansible_private_key_file: /home/developer/.ssh/id_ed25519
+    refused: true
+  - name: a password instead of the run's key
+    connection_vars:
+      ansible_password: simulated
+    refused: true
+  - name: host key checking switched off by a variable
+    connection_vars:
+      ansible_host_key_checking: false
+    refused: true
+  - name: privilege escalation through another method
+    connection_vars:
+      ansible_become_method: su
+    refused: true
+  - name: host key checking switched off in the configuration
+    ssh_settings:
+      host_key_checking: false
+    refused: true
+  - name: host key checking switched off for the SSH plugin
+    ssh_settings:
+      plugin_host_key_checking: false
+    refused: true
+  - name: SSH arguments of the configuration that disable host key checking
+    ssh_settings:
+      ssh_args: -C -o ControlMaster=auto -o ControlPersist=60s -o StrictHostKeyChecking=no
+    refused: true
+  - name: extra SSH arguments in the configuration
+    ssh_settings:
+      ssh_extra_args: -o ProxyJump=jump.example.invalid
+    refused: true
+  - name: copy arguments in the configuration
+    ssh_settings:
+      scp_extra_args: -o ProxyJump=jump.example.invalid
+    refused: true
+  - name: another SSH executable in the configuration
+    ssh_settings:
+      ssh_executable: /opt/attacker/ssh
+    refused: true
+  - name: control socket chosen by a variable
+    connection_vars:
+      ansible_control_path: /tmp/shared-%h
+    refused: true
+  - name: control socket directory chosen by a variable
+    connection_vars:
+      ansible_control_path_dir: /tmp/shared
+    refused: true
+  - name: control socket chosen in the configuration
+    ssh_settings:
+      control_path: /tmp/shared-%h
+    refused: true
+  - name: control socket that Molecule configures per host, port and user
+    ssh_settings:
+      control_path: "%(directory)s/%%h-%%p-%%r"
+    refused: false
+  - name: control socket directory chosen in the configuration
+    ssh_settings:
+      control_path_dir: /tmp/shared
+    refused: true
+  - name: security labels switched off
+    domain_edits:
+      - - "<seclabel type='dynamic' model='dac' relabel='yes'>"
+        - "<seclabel type='none' model='none'>"
+    refused: true
+  - name: static DAC label of root
+    domain_edits:
+      - - "<seclabel type='dynamic' model='dac' relabel='yes'>"
+        - "<seclabel type='static' model='dac' relabel='no'>"
+      - ["+64055:+993", "+0:+0"]
+    refused: true
+  - name: dynamic DAC label of root
+    domain_edits:
+      - ["+64055:+993", "+0:+0"]
+    refused: true
+  - name: dynamic DAC label of root by name
+    domain_edits:
+      - ["+64055:+993", "root:root"]
+    refused: true
+  - name: dynamic labels without relabelling
+    domain_edits:
+      - ["relabel='yes'", "relabel='no'"]
+    refused: true
+  - name: virtual machine without security labels
+    domain_edits:
+      - ["<seclabel type='dynamic' model='dac' relabel='yes'>", ""]
+      - ["<label>+64055:+993</label>", ""]
+      - ["<imagelabel>+64055:+993</imagelabel>", ""]
+      - ["</seclabel>", ""]
+    refused: true
+  - name: static unconfined AppArmor profile
+    apparmor: true
+    domain_edits:
+      - - "</domain>"
+        - "<seclabel type='static' model='apparmor' relabel='no'><label>unconfined</label></seclabel></domain>"
+    refused: true
+  - name: dynamic AppArmor label set to unconfined
+    apparmor: true
+    domain_edits:
+      - - "</domain>"
+        - "<seclabel type='dynamic' model='apparmor' relabel='yes'><label>unconfined</label></seclabel></domain>"
+    refused: true
+  - name: host with AppArmor but no AppArmor label
+    apparmor: true
+    refused: true
+  - name: security label on one disk that switches relabelling off
+    domain_edits:
+      - - "probe.qcow2' index='2'/>"
+        - "probe.qcow2' index='2'><seclabel model='dac' relabel='no'/></source>"
+    refused: true
+  - name: NVDIMM memory backed by a host file
+    domain_edits:
+      - - "<watchdog "
+        - "<memory model='nvdimm'><source><path>/etc/shadow</path></source><target><size unit='KiB'>524288</size>\
+          </target></memory><watchdog "
+    refused: true
+  - name: memory backed by a shared host file
+    domain_edits:
+      - - "<vcpu "
+        - "<memoryBacking><source type='file'/><access mode='shared'/></memoryBacking><vcpu "
+    refused: true
+  - name: direct kernel boot with a shell as init
+    domain_edits:
+      - - "<boot dev='hd'/>"
+        - "<kernel>/boot/vmlinuz</kernel><initrd>/boot/initrd.img</initrd><cmdline>init=/bin/sh</cmdline>"
+    refused: true
+  - name: firmware loader and variables from host files
+    domain_edits:
+      - - "<boot dev='hd'/>"
+        - "<loader readonly='yes' type='pflash'>/etc/shadow</loader><nvram>/etc/passwd</nvram><boot dev='hd'/>"
+    refused: true
+  - name: disk with a backing file on the host
+    domain_edits:
+      - - "<backingStore/>"
+        - "<backingStore type='file'><format type='raw'/><source file='/etc/shadow'/></backingStore>"
+    refused: true
+  - name: disk read through another driver
+    domain_edits:
+      - ["<driver name='qemu' type='qcow2'/>", "<driver name='qemu' type='qcow2' cache='unsafe' copy_on_read='on'/>"]
+    refused: true
+  - name: input device passed through from the host
+    domain_edits:
+      - - "<audio "
+        - "<input type='evdev'><source dev='/dev/input/event0'/></input><audio "
+    refused: true
+  - name: random number generator on a host TCP service
+    domain_edits:
+      - - "<backend model='random'>/dev/urandom</backend>"
+        - "<backend model='egd' type='tcp'><source mode='connect' host='127.0.0.1' service='2375'/></backend>"
+    refused: true
+  - name: random number generator on the blocking host device
+    domain_edits:
+      - ["<backend model='random'>/dev/urandom</backend>", "<backend model='random'>/dev/random</backend>"]
+    refused: true
+  - name: second random number generator
+    domain_edits:
+      - ["</rng>", "</rng><rng model='virtio'><backend model='random'>/dev/urandom</backend></rng>"]
+    refused: true
+  - name: another emulator binary
+    domain_edits:
+      - ["<emulator>/usr/bin/qemu-system-x86_64</emulator>", "<emulator>/opt/attacker/qemu</emulator>"]
+    refused: true
+  - name: emulator of the RHEL family
+    domain_edits:
+      - ["<emulator>/usr/bin/qemu-system-x86_64</emulator>", "<emulator>/usr/libexec/qemu-kvm</emulator>"]
+    refused: false
+  - name: audio on the host sound server
+    domain_edits:
+      - ["<audio id='1' type='none'/>", "<audio id='1' type='pulseaudio'/>"]
+    refused: true
+  - name: serial log written to a host file
+    domain_edits:
+      - - "<target type='isa-serial' port='0'>"
+        - "<log file='/etc/shadow' append='on'/><target type='isa-serial' port='0'>"
+    refused: true
+  - name: device redirected from the host
+    domain_edits:
+      - ["<audio ", "<redirdev bus='usb' type='spicevmc'/><audio "]
+    refused: true
+  - name: TPM of the host
+    domain_edits:
+      - - "<audio "
+        - "<tpm model='tpm-tis'><backend type='passthrough'><device path='/dev/tpm0'/></backend></tpm><audio "
+    refused: true
+  - name: virtual machine in another resource partition
+    domain_edits:
+      - ["<partition>/machine</partition>", "<partition>/system.slice</partition>"]
+    refused: true
+  - name: fw_cfg entry that exposes a host file to the guest
+    domain_edits:
+      - - "</sysinfo>"
+        - "</sysinfo><sysinfo type='fwcfg'><entry name='opt/com.example/leak' file='/etc/shadow'/></sysinfo>"
+    refused: true
+  - name: fw_cfg sysinfo instead of SMBIOS
+    domain_edits:
+      - ["<sysinfo type='smbios'>", "<sysinfo type='fwcfg'>"]
+      - ["<system>", ""]
+      - ["</system>", ""]
+    refused: true
+  - name: inline fw_cfg entry
+    domain_edits:
+      - - "</sysinfo>"
+        - "</sysinfo><sysinfo type='fwcfg'><entry name='opt/com.example/value'>secret</entry></sysinfo>"
+    refused: true
+  - name: SMBIOS entry read from a host file
+    domain_edits:
+      - ["<entry name='product'>molecule</entry>", "<entry name='product' file='/etc/shadow'/>"]
+    refused: true
+  - name: additional SMBIOS entry
+    domain_edits:
+      - - "<entry name='product'>molecule</entry>"
+        - "<entry name='product'>molecule</entry><entry name='family'>x</entry>"
+    refused: true
+  - name: SMBIOS data of the host
+    domain_edits:
+      - ["<smbios mode='sysinfo'/>", "<smbios mode='host'/>"]
+    refused: true
+  - name: watchdog that dumps guest memory on the host
+    domain_edits:
+      - ["<watchdog model='itco' action='reset'>", "<watchdog model='itco' action='dump'>"]
+    refused: true
+  - name: watchdog that powers the machine off
+    domain_edits:
+      - ["<watchdog model='itco' action='reset'>", "<watchdog model='itco' action='poweroff'>"]
+    refused: false
+  - name: element of another namespace
+    domain_edits:
+      - ["<fsd:molecule ", "<x:extra xmlns:x='urn:x'/><fsd:molecule "]
+    refused: true
+  - name: virtual machine of another scenario
+    domain_edits:
+      - ["<fsd:scenario>libvirt-sim</fsd:scenario>", "<fsd:scenario>libvirt-other</fsd:scenario>"]
+    refused: true
+  - name: virtual machine of another run
+    domain_edits:
+      - ["<fsd:run>abcd1234</fsd:run>", "<fsd:run>zzzz9999</fsd:run>"]
+    refused: true
+  - name: virtual machine without labels
+    domain_edits:
+      - ["<fsd:instance>probe</fsd:instance>", ""]
+    refused: true
+  - name: virtual machine with another marker
+    domain_edits:
+      - ["simulatedmarkersimulatedmarker00", "anothermarkeranothermarker000000"]
+    refused: true
+  - name: virtual machine with another name
+    domain_edits:
+      - ["<name>fsd-mol-libvirt-sim-abcd1234-probe</name>", "<name>adlab-ubuntu</name>"]
+    refused: true
+  - name: second interface bridged to the host network
+    domain_edits:
+      - ["<serial type='pty'>", "<interface type='bridge'><source bridge='br0'/></interface><serial type='pty'>"]
+    refused: true
+  - name: interface directly on a host device
+    domain_edits:
+      - ["<interface type='network'>", "<interface type='direct'>"]
+    refused: true
+  - name: user-mode interface
+    domain_edits:
+      - ["<interface type='network'>", "<interface type='user'>"]
+    refused: true
+  - name: interface on another network
+    domain_edits:
+      - ["<source network='fsd-mol-libvirt-sim-abcd1234'", "<source network='default'"]
+    refused: true
+  - name: interface with another MAC address
+    domain_edits:
+      - ["52:54:00:aa:bb:cc", "52:54:00:aa:bb:cd"]
+    refused: true
+  - name: host directory shared into the virtual machine
+    domain_edits:
+      - - "<serial type='pty'>"
+        - "<filesystem type='mount'><source dir='/home'/><target dir='host'/></filesystem><serial type='pty'>"
+    refused: true
+  - name: host device passed through
+    domain_edits:
+      - ["<serial type='pty'>", "<hostdev mode='subsystem' type='usb'/><serial type='pty'>"]
+    refused: true
+  - name: shared memory with the host
+    domain_edits:
+      - ["<serial type='pty'>", "<shmem name='host'/><serial type='pty'>"]
+    refused: true
+  - name: channel to a host socket
+    domain_edits:
+      - ["<serial type='pty'>", "<channel type='unix'><source mode='bind'/></channel><serial type='pty'>"]
+    refused: true
+  - name: graphical console
+    domain_edits:
+      - ["<serial type='pty'>", "<graphics type='vnc' port='-1'/><serial type='pty'>"]
+    refused: true
+  - name: serial port on a host TCP socket
+    domain_edits:
+      - ["<serial type='pty'>", "<serial type='tcp'>"]
+    refused: true
+  - name: raw QEMU command-line arguments
+    domain_edits:
+      - ["</devices>", "</devices><qemu:commandline xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'/>"]
+    refused: true
+  - name: disk from a host file outside the run's pool
+    domain_edits:
+      - - "fsd-mol-libvirt-sim-abcd1234/fsd-mol-libvirt-sim-abcd1234-probe.qcow2"
+        - "../images/adlab-ubuntu.qcow2"
+    refused: true
+  - name: disk of another run's directory
+    domain_edits:
+      - - "fsd-mol-libvirt-sim-abcd1234/fsd-mol-libvirt-sim-abcd1234-probe.qcow2"
+        - "fsd-mol-libvirt-sim-zzzz9999/fsd-mol-libvirt-sim-abcd1234-probe.qcow2"
+    refused: true
+  - name: disk from a storage pool volume
+    domain_edits:
+      - ["<disk type='file' device='disk'>", "<disk type='volume' device='disk'>"]
+    refused: true
+  - name: third disk with a host block device
+    domain_edits:
+      - - "<interface type='network'>"
+        - "<disk type='block' device='disk'><source dev='/dev/sda'/></disk><interface type='network'>"
+    refused: true
+  - name: network that forwards with NAT
+    network_edits:
+      - ["<bridge ", "<forward mode='nat'/><bridge "]
+    refused: true
+  - name: network bridged to the host
+    network_edits:
+      - ["<bridge ", "<forward mode='bridge'/><bridge "]
+    refused: true
+  - name: network with DHCP
+    network_edits:
+      - - "<ip address='10.210.5.1' netmask='255.255.255.0'>"
+        - "<ip address='10.210.5.1' netmask='255.255.255.0'><dhcp><range start='10.210.5.10' end='10.210.5.20'/></dhcp>"
+    refused: true
+  - name: network with DNS
+    network_edits:
+      - ["<dns enable='no'/>", ""]
+    refused: true
+  - name: network with a route
+    network_edits:
+      - ["</network>", "<route address='192.168.1.0' prefix='24' gateway='10.210.5.2'/></network>"]
+    refused: true
+  - name: network on another bridge
+    network_edits:
+      - ["fsdmabcd1234", "virbr0"]
+    refused: true
+  - name: network with another address
+    network_edits:
+      - ["<ip address='10.210.5.1'", "<ip address='192.168.122.1'"]
+    refused: true
+  - name: network with a second address family
+    network_edits:
+      - ["</network>", "<ip family='ipv6' address='fd00::1' prefix='64'/></network>"]
+    refused: true
+  - name: network with a port group or virtual port
+    network_edits:
+      - ["<dns enable='no'/>", "<dns enable='no'/><portgroup name='host'/>"]
+    refused: true
+  - name: network with an element outside the allow-list
+    network_edits:
+      - ["<dns enable='no'/>", "<dns enable='no'/><port isolated='no'/>"]
+    refused: true
+  - name: network with IPv6 between guest and host
+    network_edits:
+      - ["<network connections='1'>", "<network connections='1' ipv6='yes'>"]
+    refused: true
+  - name: network of another run
+    network_edits:
+      - ["<fsd:run>abcd1234</fsd:run>", "<fsd:run>zzzz9999</fsd:run>"]
+    refused: true
+  - name: pool outside the run's directory
+    pool_edits:
+      - ["/var/lib/libvirt/freesecdev-molecule/fsd-mol-libvirt-sim-abcd1234", "/var/lib/libvirt/images"]
+    refused: true
+  - name: pool on a block device
+    pool_edits:
+      - ["<pool type='dir'>", "<pool type='disk'>"]
+    refused: true
+  - name: pool with a host device as its source
+    pool_edits:
+      - ["<target>", "<source><device path='/dev/sda'/></source><target>"]
+    refused: true
+  - name: pool directory writable by everyone
+    pool_edits:
+      - ["<mode>0711</mode>", "<mode>0777</mode>"]
+    refused: true
+  - name: pool directory owned by another user
+    pool_edits:
+      - ["<owner>1000</owner>", "<owner>0</owner>"]
+    refused: true
+  - name: pool directory without permissions
+    pool_edits:
+      - ["<mode>0711</mode>", ""]
+    refused: true
+  - name: pool of another name
+    pool_edits:
+      - ["<name>fsd-mol-libvirt-sim-abcd1234</name>", "<name>fsd-mol-libvirt-sim-zzzz9999</name>"]
+    refused: true
+  - name: connection reaches the controller, same boot id
+    identity:
+      boot_id: 9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a
+    refused: true
+  - name: connection reaches the controller, same machine id
+    identity:
+      machine_id: ffeeddccbbaa99887766554433221100
+    refused: true
+  - name: connection reaches a machine with another serial
+    identity:
+      serial: anothermarkeranothermarker000000
+    refused: true
+  - name: connection reaches a machine with another UUID
+    identity:
+      product_uuid: 11111111-2222-3333-4444-555555555555
+    refused: true
+  - name: connection reaches a machine without an SMBIOS serial
+    identity:
+      serial: ""
+    refused: true

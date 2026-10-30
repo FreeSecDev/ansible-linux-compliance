@@ -1,0 +1,46 @@
+---
+- name: Destroy the libvirt virtual machines, networks and pools of this scenario
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ molecule_no_log }}"
+  vars_files:
+    - vars/libvirt.yml
+  vars:
+    molecule_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+  tasks:
+    - name: Remove the run's objects and reset the instance config
+      block:
+        - name: Refuse a scenario name that cannot form libvirt names
+          ansible.builtin.assert:
+            that:
+              - molecule_scenario is match('^libvirt-[a-z0-9][a-z0-9-]{0,30}$')
+            fail_msg: >-
+              MOLECULE_SCENARIO_NAME must start with libvirt- followed by lower case letters, digits and hyphens.
+            quiet: true
+
+        - name: Check for an instance config
+          ansible.builtin.stat:
+            path: "{{ molecule_instance_config }}"
+          register: instance_config_stat
+
+        - name: Read the recorded instances
+          ansible.builtin.set_fact:
+            recorded_instances: >-
+              {{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml | default([], true) }}
+          when: instance_config_stat.stat.exists
+
+        - name: Remove the recorded runs, or every labelled run of this scenario when nothing is recorded
+          ansible.builtin.include_tasks:
+            file: tasks/libvirt_remove.yml
+          vars:
+            libvirt_remove_scenario: "{{ molecule_scenario }}"
+            libvirt_remove_runs: >-
+              {{ recorded_instances | default([]) | selectattr('scenario', 'equalto', molecule_scenario)
+              | map(attribute='run_id') | unique | list }}
+      always:
+        - name: Reset the instance config
+          ansible.builtin.copy:
+            content: "[]\n"
+            dest: "{{ molecule_instance_config }}"
+            mode: "0600"

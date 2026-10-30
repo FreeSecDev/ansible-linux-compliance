@@ -67,6 +67,51 @@ def test_the_molecule_allow_list_is_narrow() -> None:
             "ansible_docker_extra_args",
             "--host tcp://192.0.2.1:2375",
         ),
+        (
+            "extensions/molecule/shared/vars/guard_cases_libvirt.yml",
+            "ansible_ssh_common_args",
+            exec_variables.LIBVIRT_SIMULATED_SSH_ARGUMENTS,
+        ),
+        (
+            "extensions/molecule/shared/vars/guard_cases_libvirt.yml",
+            "ansible_connection",
+            "community.docker.docker",
+        ),
+        (
+            "extensions/molecule/shared/vars/guard_cases_libvirt.yml",
+            "ansible_ssh_common_args",
+            "-o ProxyCommand=nc 192.0.2.1 22",
+        ),
+        (
+            "extensions/molecule/shared/vars/guard_cases_libvirt.yml",
+            "ansible_ssh_common_args",
+            "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+        ),
+        (
+            "extensions/molecule/shared/vars/guard_cases_libvirt.yml",
+            "ansible_ssh_extra_args",
+            "-J jump.example.invalid",
+        ),
+        (
+            "extensions/molecule/shared/vars/guard_cases_libvirt.yml",
+            "ansible_ssh_executable",
+            "/opt/attacker/ssh",
+        ),
+        (
+            "extensions/molecule/selftest/libvirt_bypass.yml",
+            "ansible_ssh_common_args",
+            "{{ selftest_ssh_args }}",
+        ),
+        (
+            "extensions/molecule/selftest/libvirt_bypass.yml",
+            "ansible_ssh_common_args",
+            "{{ selftest_proxy_args }}",
+        ),
+        (
+            "extensions/molecule/selftest/libvirt_bypass.yml",
+            "ansible_ssh_extra_args",
+            "{{ selftest_jump_args }}",
+        ),
     }
     others = {
         name for path, name, _ in exec_variables.ALLOWED_SETTINGS if path.parts[0] != "extensions"

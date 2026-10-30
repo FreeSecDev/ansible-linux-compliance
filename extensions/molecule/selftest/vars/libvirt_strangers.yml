@@ -1,0 +1,28 @@
+---
+selftest_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+selftest_stranger_run: >-
+  {{ lookup('ansible.builtin.password',
+  molecule_selftest_dir ~ '/stranger-run chars=ascii_lowercase,digits length=8') }}
+selftest_label_template: >-
+  <metadata><fsd:molecule xmlns:fsd="{{ molecule_libvirt_metadata_namespace }}">
+  <fsd:scenario>@SCENARIO@</fsd:scenario> <fsd:run>@RUN@</fsd:run> <fsd:instance>stranger</fsd:instance>
+  </fsd:molecule></metadata>
+selftest_strangers:
+  - name: "fsd-mol-{{ selftest_scenario }}-{{ selftest_stranger_run }}-unlabelled"
+    labels: ""
+    removed_by_fallback: false
+  - name: "fsd-mol-{{ selftest_scenario }}-{{ selftest_stranger_run }}-other"
+    labels: >-
+      {{ selftest_label_template | replace('@SCENARIO@', 'libvirt-other') | replace('@RUN@', selftest_stranger_run) }}
+    removed_by_fallback: false
+  - name: "fsd-mol-{{ selftest_scenario }}-{{ selftest_stranger_run }}-orphan"
+    labels: >-
+      {{ selftest_label_template | replace('@SCENARIO@', selftest_scenario) | replace('@RUN@', selftest_stranger_run) }}
+    removed_by_fallback: true
+  - name: "fsd-selftest-unrelated-{{ selftest_stranger_run }}"
+    labels: >-
+      {{ selftest_label_template | replace('@SCENARIO@', selftest_scenario) | replace('@RUN@', selftest_stranger_run) }}
+    removed_by_fallback: false
+selftest_stranger_network: "fsd-mol-{{ selftest_scenario }}-{{ selftest_stranger_run }}"
+selftest_stranger_pool: "fsd-mol-{{ selftest_scenario }}-{{ selftest_stranger_run }}"
+selftest_stranger_pool_path: "{{ molecule_selftest_dir }}/stranger-pool"

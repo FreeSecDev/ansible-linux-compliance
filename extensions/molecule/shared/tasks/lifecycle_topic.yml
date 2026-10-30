@@ -14,9 +14,19 @@
       | selectattr('rule_id', 'in', linux_compliance_discovered.rule_ids) | sort(attribute='rule_id') }}
     lifecycle_family_toggle: "linux_compliance_{{ lifecycle_family }}_enabled"
     lifecycle_allow_disruptive: "{{ [lifecycle_family] if lifecycle_registry_entry.disruptive else [] }}"
-    lifecycle_pre_states: "{{ lifecycle_topic.pre_states | default([{'name': 'as built', 'audit': true}], true) }}"
+    lifecycle_drivers: "{{ lifecycle_topic.requires | default(lifecycle_known_drivers, true) }}"
+    lifecycle_declared_pre_states: >-
+      {{ lifecycle_topic.pre_states | default([{'name': 'as built', 'audit': true}], true) }}
+    lifecycle_pre_states: >-
+      {{ ((lifecycle_topic.pre_states | default([{'name': 'as built', 'audit': true}], true)
+      | rejectattr('requires', 'defined') | list)
+      if molecule_target.driver in lifecycle_default_drivers | list else [])
+      + (lifecycle_topic.pre_states | default([], true) | selectattr('requires', 'defined')
+      | selectattr('requires', 'contains', molecule_target.driver) | list) }}
     lifecycle_items: {}
     lifecycle_applied: {}
+  vars:
+    lifecycle_default_drivers: "{{ lifecycle_topic.requires | default(lifecycle_unrestricted_drivers, true) }}"
 
 - name: Lifecycle topic | Keep the declared items and expectations for every platform and for this one
   ansible.builtin.set_fact:
@@ -56,13 +66,15 @@
       - not lifecycle_topic.disruptive or (lifecycle_topic.containment | default('') | length > 0)
       - lifecycle_items.values() | map('length') | sum > 0
       - lifecycle_applied.values() | map('length') | sum > 0
-      - lifecycle_pre_states | map(attribute='name') | unique | list | length == lifecycle_pre_states | length
+      - lifecycle_declared_pre_states | map(attribute='name') | unique | list | length
+        == lifecycle_declared_pre_states | length
+      - lifecycle_drivers | difference(lifecycle_known_drivers) | length == 0
     fail_msg: >-
       The lifecycle declaration of {{ lifecycle_family }} does not match the catalogue: its family must be
       {{ lifecycle_family }}, disruptive must be {{ lifecycle_registry_entry.disruptive }} as in the registry, a
       disruptive topic must describe its containment, at least one item and one applied expectation must be declared
-      for this platform and every pre-state needs a distinct name. tools/roles/check_lifecycle_topics.py checks the
-      full format.
+      for this platform, every pre-state needs a distinct name and requires may name only
+      {{ lifecycle_known_drivers }}. tools/roles/check_lifecycle_topics.py checks the full format.
     quiet: true
 
 - name: Lifecycle topic | Refuse a topic that this platform skips without the declaration saying so, and the reverse
@@ -87,13 +99,31 @@
       declaration states; its lifecycle runs on the other platforms.
   when: lifecycle_rules | length == 0
 
+- name: Lifecycle topic | Decide whether a cycle of the topic runs with this driver and platform
+  ansible.builtin.set_fact:
+    lifecycle_runs: "{{ lifecycle_rules | length > 0 and lifecycle_pre_states | length > 0 }}"
+    lifecycle_proven_families: >-
+      {{ lifecycle_proven_families | default([]) + ([lifecycle_family]
+      if lifecycle_rules | length > 0 and lifecycle_pre_states | length > 0 else []) }}
+
+- name: Lifecycle topic | Report the pre-states whose cycles run with another driver, as declared
+  ansible.builtin.debug:
+    msg: >-
+      {{ lifecycle_family }}: the cycles from {{ lifecycle_declared_pre_states | map(attribute='name')
+      | difference(lifecycle_pre_states | map(attribute='name')) | list }} run in the scenarios of another driver than
+      {{ molecule_target.driver }}; tools/roles/check_lifecycle_topics.py checks that a scenario of that driver runs
+      each of them.
+  when: lifecycle_declared_pre_states | length != lifecycle_pre_states | length
+
 - name: Lifecycle topic | Take the state of the topic before any cycle
   ansible.builtin.include_tasks:
     file: lifecycle_state.yml
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Remember the state before any cycle
   ansible.builtin.set_fact:
     lifecycle_pristine: "{{ lifecycle_state }}"
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Refuse a topic that the ledger already records
   ansible.builtin.assert:
@@ -103,14 +133,17 @@
       The state ledger already records rules of {{ lifecycle_family }}, so the state before the collection is not
       known: {{ lifecycle_pristine.ledger | selectattr('rule_id', 'in', lifecycle_rule_ids) | list }}.
     quiet: true
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Take the state of the whole instance before any cycle
   ansible.builtin.include_tasks:
     file: lifecycle_broad.yml
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Remember the state of the whole instance before any cycle
   ansible.builtin.set_fact:
     lifecycle_broad_pristine: "{{ lifecycle_broad_lines }}"
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state
   ansible.builtin.include_tasks:
@@ -119,11 +152,12 @@
   loop_control:
     loop_var: lifecycle_cycle
     label: "{{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state"
-  when: lifecycle_rules | length > 0
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Take the state of the topic after every cycle
   ansible.builtin.include_tasks:
     file: lifecycle_state.yml
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Assert that the topic left exactly the state before any cycle
   ansible.builtin.include_tasks:
@@ -134,6 +168,7 @@
     lifecycle_compare_before: "{{ lifecycle_pristine }}"
     lifecycle_compare_after: "{{ lifecycle_state }}"
     lifecycle_compare_expected: {}
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Assert that the ledger is back to its entries before any cycle
   ansible.builtin.assert:
@@ -141,6 +176,7 @@
       - lifecycle_state.ledger == lifecycle_pristine.ledger
     fail_msg: "{{ lifecycle_family }} left the ledger at {{ lifecycle_state.ledger }}."
     quiet: true
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Assert that the whole instance is back to its state before any cycle
   ansible.builtin.include_tasks:
@@ -149,12 +185,14 @@
     lifecycle_label: "{{ lifecycle_family }}"
     lifecycle_broad_step: the topic after every cycle
     lifecycle_broad_reference: "{{ lifecycle_broad_pristine }}"
+  when: lifecycle_runs | bool
 
 - name: Lifecycle topic | Run the pwquality regressions for a change of method, a change by hand and a symbolic link
   ansible.builtin.include_tasks:
     file: lifecycle_pwquality_regressions.yml
   when:
     - lifecycle_family == 'pwquality'
+    - lifecycle_runs | bool
     - lifecycle_run_modes | last == 'rule'
 
 - name: Lifecycle topic | Run the sudo regressions for a change of method and changes by hand
@@ -162,15 +200,16 @@
     file: lifecycle_sudo_regressions.yml
   when:
     - lifecycle_family == 'sudo'
-    - lifecycle_rule_ids | length > 0
+    - lifecycle_runs | bool
     - lifecycle_run_modes | last == 'rule'
 
 - name: Lifecycle topic | Run the sudo refusal states on Ubuntu, where the rule leg has the time for them
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_states.yml
   when:
+    - molecule_target.driver == 'docker'
     - lifecycle_family == 'sudo'
-    - lifecycle_rule_ids | length > 0
+    - lifecycle_runs | bool
     - lifecycle_run_modes | last == 'rule'
     - lifecycle_platform == 'ubuntu'
 
@@ -178,8 +217,9 @@
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_effective.yml
   when:
+    - molecule_target.driver == 'docker'
     - lifecycle_family == 'sudo'
-    - lifecycle_rule_ids | length > 0
+    - lifecycle_runs | bool
     - lifecycle_run_modes | first == 'topic'
     - lifecycle_platform == 'ubuntu'
 
@@ -187,8 +227,9 @@
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_refusals.yml
   when:
+    - molecule_target.driver == 'docker'
     - lifecycle_family == 'sudo'
-    - lifecycle_rule_ids | length > 0
+    - lifecycle_runs | bool
     - lifecycle_run_modes | first == 'topic'
 
 - name: Lifecycle topic | Apply and clean up the sudo rules that only other profiles select
@@ -196,5 +237,5 @@
     file: lifecycle_sudo_other_profiles.yml
   when:
     - lifecycle_family == 'sudo'
-    - lifecycle_rule_ids | length > 0
+    - lifecycle_runs | bool
     - lifecycle_run_modes | first == 'topic'

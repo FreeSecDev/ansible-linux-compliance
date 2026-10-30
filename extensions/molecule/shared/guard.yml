@@ -5,12 +5,15 @@
   any_errors_fatal: true
   vars_files:
     - vars/versions.yml
+    - vars/libvirt.yml
   vars:
     guard_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    guard_driver: "{{ 'libvirt' if guard_scenario is match('^libvirt-') else 'docker' }}"
     guard_instances: >-
       {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MOLECULE_INSTANCE_CONFIG'))
       | from_yaml | default([], true) }}
-    guard_connection_variable_pattern: '^(ansible_(host|connection|docker_.*)|docker_.*)$'
+    guard_connection_variable_pattern: >-
+      ^(ansible_(host|connection|port|user|private_key_file|password|host_key_checking|control_path(_dir)?|ssh_.*|scp_.*|sftp_.*|docker_.*|become_.+)|docker_.*)$
     guard_marker_variable: FREESECDEV_MOLECULE_MARKER
   tasks:
     - name: Refuse guard variables that were supplied from outside the guard
@@ -19,7 +22,8 @@
           - ansible_play_hosts_all | map('extract', hostvars, 'inventory_hostname') | list == ansible_play_hosts_all
           - >-
             hostvars[inventory_hostname].keys()
-            | select('match', '^(guard_.*|molecule_target|molecule_docker_default_paths)$') | list | length == 0
+            | select('match', '^(guard_.*|molecule_target.*|molecule_docker_default_paths|molecule_libvirt_.*)$') | list
+            | length == 0
           - ansible_host == 'freesecdev-guard-sentinel'
           - ansible_connection == 'ansible.builtin.local'
           - molecule_allowed_connections == 'freesecdev-guard-sentinel'
@@ -29,7 +33,8 @@
           Refusing to run: a variable that the guard relies on was supplied from outside the guard, for example as an
           extra variable, an inventory variable or a fact of an earlier play. Play hosts {{ ansible_play_hosts_all }},
           guard variables found {{ (hostvars[inventory_hostname] | default({}, true)).keys()
-          | select('match', '^(guard_.*|molecule_target|molecule_docker_default_paths)$') | list }}.
+          | select('match', '^(guard_.*|molecule_target.*|molecule_docker_default_paths|molecule_libvirt_.*)$')
+          | list }}.
           inventory_hostname, ansible_host, ansible_connection and molecule_allowed_connections must not be extra
           variables, and molecule_instance_config must equal the MOLECULE_INSTANCE_CONFIG environment variable.
         success_msg: No variable that the guard relies on was supplied from outside the guard.
@@ -46,7 +51,9 @@
         guard_connection_vars: >-
           {{ hostvars[inventory_hostname] | dict2items
           | selectattr('key', 'match', guard_connection_variable_pattern) | items2dict }}
-        guard_allowed_connections: "{{ molecule_allowed_connections | default(['community.docker.docker']) }}"
+        guard_allowed_connections: >-
+          {{ molecule_allowed_connections | default(['ansible.builtin.ssh', 'ssh'] if guard_driver == 'libvirt'
+          else ['community.docker.docker']) }}
         guard_environment:
           ANSIBLE_DOCKER_PRIVILEGED: "{{ lookup('ansible.builtin.env', 'ANSIBLE_DOCKER_PRIVILEGED', default='') }}"
 
@@ -54,39 +61,122 @@
       ansible.builtin.set_fact:
         molecule_target: "{{ guard_instances | selectattr('instance', 'equalto', inventory_hostname) | first }}"
 
-    - name: Inspect the target container from the controller
-      community.docker.docker_container_info:
-        name: "{{ molecule_target.address }}"
-      delegate_to: localhost
-      register: guard_inspect
+    - name: Check a Docker target
+      when: guard_driver == 'docker'
+      block:
+        - name: Inspect the target container from the controller
+          community.docker.docker_container_info:
+            name: "{{ molecule_target.address }}"
+          delegate_to: localhost
+          register: guard_inspect
 
-    - name: Read the version of the Docker daemon that runs the target
-      community.docker.docker_host_info:
-      delegate_to: localhost
-      register: guard_daemon
+        - name: Read the version of the Docker daemon that runs the target
+          community.docker.docker_host_info:
+          delegate_to: localhost
+          register: guard_daemon
 
-    - name: Check the isolation of every target before anything runs on it
-      ansible.builtin.include_tasks:
-        file: tasks/guard_isolation.yml
-      vars:
-        guard_container: "{{ guard_inspect.container | default({}, true) }}"
-        guard_instance: "{{ molecule_target }}"
-        guard_daemon_version: "{{ guard_daemon.host_info.ServerVersion | default('unknown') }}"
+        - name: Check the isolation of every target before anything runs on it
+          ansible.builtin.include_tasks:
+            file: tasks/guard_isolation.yml
+          vars:
+            guard_container: "{{ guard_inspect.container | default({}, true) }}"
+            guard_instance: "{{ molecule_target }}"
+            guard_daemon_version: "{{ guard_daemon.host_info.ServerVersion | default('unknown') }}"
 
-    - name: Read the environment of the init process over the real connection
-      ansible.builtin.slurp:
-        src: /proc/1/environ
-      register: guard_init_environ
+        - name: Read the environment of the init process over the real connection
+          ansible.builtin.slurp:
+            src: /proc/1/environ
+          register: guard_init_environ
 
-    - name: Read the status of the process that the connection runs
-      ansible.builtin.slurp:
-        src: /proc/self/status
-      register: guard_self_status
+        - name: Read the status of the process that the connection runs
+          ansible.builtin.slurp:
+            src: /proc/self/status
+          register: guard_self_status
 
-    - name: Check that the connection reaches the inspected container without privileges
-      ansible.builtin.include_tasks:
-        file: tasks/guard_connection.yml
-      vars:
-        guard_instance: "{{ molecule_target }}"
-        guard_environ: "{{ guard_init_environ.content | b64decode }}"
-        guard_status: "{{ guard_self_status.content | b64decode }}"
+        - name: Check that the connection reaches the inspected container without privileges
+          ansible.builtin.include_tasks:
+            file: tasks/guard_connection.yml
+          vars:
+            guard_instance: "{{ molecule_target }}"
+            guard_environ: "{{ guard_init_environ.content | b64decode }}"
+            guard_status: "{{ guard_self_status.content | b64decode }}"
+
+    - name: Check a libvirt target
+      when: guard_driver == 'libvirt'
+      block:
+        - name: Read the definition of the target virtual machine from the controller
+          community.libvirt.virt:
+            uri: qemu:///system
+            name: "{{ molecule_target.domain }}"
+            command: get_xml
+          delegate_to: localhost
+          register: guard_domain
+
+        - name: Read the definition of the run's network from the controller
+          community.libvirt.virt_net:
+            uri: qemu:///system
+            name: "{{ molecule_target.network }}"
+            command: get_xml
+          delegate_to: localhost
+          register: guard_network
+
+        - name: Read the definition of the run's storage pool from the controller
+          community.libvirt.virt_pool:
+            uri: qemu:///system
+            name: "{{ molecule_target.pool }}"
+            command: get_xml
+          delegate_to: localhost
+          register: guard_pool
+
+        - name: Read the owner of the run's client key on the controller, the user that created the run's pool
+          ansible.builtin.stat:
+            path: "{{ molecule_target.identity_file }}"
+            follow: false
+            get_checksum: false
+          delegate_to: localhost
+          register: guard_key_owner
+
+        - name: Check the isolation of every target before anything runs on it
+          ansible.builtin.include_tasks:
+            file: tasks/guard_libvirt_isolation.yml
+          vars:
+            guard_instance: "{{ molecule_target }}"
+            guard_pool_owner: "{{ guard_key_owner.stat.uid | default('none') }}"
+            guard_domain_xml: "{{ guard_domain.get_xml | default('') }}"
+            guard_network_xml: "{{ guard_network.get_xml | default('') }}"
+            guard_pool_xml: "{{ guard_pool.get_xml | default('') }}"
+            guard_metadata_namespace: "{{ molecule_libvirt_metadata_namespace }}"
+            guard_pool_parent: "{{ molecule_libvirt_pool_parent }}"
+            guard_host_apparmor: >-
+              {{ lookup('ansible.builtin.fileglob', '/sys/module/apparmor/parameters/enabled', wantlist=True)
+              | length > 0 and lookup('ansible.builtin.file', '/sys/module/apparmor/parameters/enabled') == 'Y' }}
+            guard_ssh_settings:
+              host_key_checking: "{{ lookup('ansible.builtin.config', 'HOST_KEY_CHECKING') }}"
+              plugin_host_key_checking: >-
+                {{ lookup('ansible.builtin.config', 'host_key_checking', plugin_type='connection', plugin_name='ssh') }}
+              ssh_args: >-
+                {{ lookup('ansible.builtin.config', 'ssh_args', plugin_type='connection', plugin_name='ssh') }}
+              ssh_extra_args: >-
+                {{ lookup('ansible.builtin.config', 'ssh_extra_args', plugin_type='connection', plugin_name='ssh') }}
+              scp_extra_args: >-
+                {{ lookup('ansible.builtin.config', 'scp_extra_args', plugin_type='connection', plugin_name='ssh') }}
+              sftp_extra_args: >-
+                {{ lookup('ansible.builtin.config', 'sftp_extra_args', plugin_type='connection', plugin_name='ssh') }}
+              ssh_executable: >-
+                {{ lookup('ansible.builtin.config', 'ssh_executable', plugin_type='connection', plugin_name='ssh') }}
+              control_path: >-
+                {{ lookup('ansible.builtin.config', 'control_path', plugin_type='connection', plugin_name='ssh') }}
+              control_path_dir: >-
+                {{ lookup('ansible.builtin.config', 'control_path_dir', plugin_type='connection', plugin_name='ssh') }}
+
+        - name: Remember the UUID of the inspected virtual machine
+          ansible.builtin.set_fact:
+            molecule_target: >-
+              {{ molecule_target | combine({'uuid': guard_domain.get_xml
+              | regex_search('<uuid>([0-9a-f-]{36})</uuid>', '\1') | first}) }}
+
+        - name: Check that the connection reaches the inspected virtual machine and not the controller
+          ansible.builtin.include_tasks:
+            file: tasks/guard_libvirt_reach.yml
+          vars:
+            guard_instance: "{{ molecule_target }}"

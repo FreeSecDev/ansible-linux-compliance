@@ -76,6 +76,7 @@
           {{ [lifecycle_selected_topic] if lifecycle_selected_topic | length > 0 else lifecycle_native_families }}
         lifecycle_run_modes: >-
           {{ [lifecycle_selected_mode] if lifecycle_selected_mode | length > 0 else lifecycle_toggle_modes }}
+        lifecycle_proven_families: []
 
     - name: Scan once before any state is recorded, so that the first write of the scanner happens before the reference
       ansible.builtin.include_tasks:
@@ -90,6 +91,7 @@
       loop_control:
         loop_var: lifecycle_selfcheck_case
         label: "{{ lifecycle_selfcheck_case.name }}"
+      when: molecule_target.driver in lifecycle_unrestricted_drivers
 
     - name: Check that the whole-instance comparison refuses leftovers and allows only the listed differences
       ansible.builtin.include_tasks:
@@ -98,6 +100,8 @@
       loop_control:
         loop_var: lifecycle_broad_selfcheck_case
         label: "{{ lifecycle_broad_selfcheck_case.name }}"
+      when: >-
+        molecule_target.driver in lifecycle_broad_selfcheck_case.drivers | default(lifecycle_unrestricted_drivers)
 
     - name: Run the toggle lifecycle of every selected native topic
       ansible.builtin.include_tasks:
@@ -106,9 +110,19 @@
       loop_control:
         loop_var: lifecycle_family
 
+    - name: Refuse a CI leg whose topic runs no cycle with this driver on this platform
+      ansible.builtin.assert:
+        that:
+          - lifecycle_selected_topic | length == 0 or lifecycle_selected_topic in lifecycle_proven_families
+        fail_msg: >-
+          The leg selects {{ lifecycle_selected_topic }}, but none of its cycles runs with the {{ molecule_target.driver
+          }} driver on {{ molecule_target.instance }}, so the leg would prove nothing. make molecule-matrix plans a leg
+          only for a driver and platform that run a cycle of the topic.
+        quiet: true
+
     - name: Report the topics whose lifecycle was proven
       ansible.builtin.debug:
         msg: >-
-          Toggle lifecycle proven on {{ molecule_target.instance }} for {{ lifecycle_run_families | join(', ') }}
-          with the {{ lifecycle_run_modes | join(' and ') }} toggles: every declared pre-state, idempotence, check
-          mode and cleanup.
+          Toggle lifecycle proven on {{ molecule_target.instance }} ({{ molecule_target.driver }}) for
+          {{ lifecycle_proven_families | join(', ') }} with the {{ lifecycle_run_modes | join(' and ') }} toggles from
+          every pre-state of this driver: idempotence, check mode and cleanup.

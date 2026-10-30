@@ -1,0 +1,127 @@
+---
+- name: Prepare libvirt | Wait until cloud-init has finished the first boot
+  ansible.builtin.wait_for:
+    path: /var/lib/cloud/instance/boot-finished
+    timeout: "{{ molecule_libvirt_boot_timeout }}"
+
+- name: Prepare libvirt | Name the pinned packages of this platform in installation order
+  ansible.builtin.set_fact:
+    prepare_packages: >-
+      {{ molecule_libvirt_pins | selectattr('0', 'equalto', 'package')
+      | selectattr('1', 'equalto', molecule_target.image) | list }}
+
+- name: Prepare libvirt | Refuse a platform without pinned packages
+  ansible.builtin.assert:
+    that:
+      - prepare_packages | length > 0
+      - prepare_packages | map('length') | unique | list == [5]
+    fail_msg: images/cloud-images.pins pins no well-formed package for {{ molecule_target.image }}.
+    quiet: true
+
+- name: Prepare libvirt | Check the cached packages against their pins on the controller
+  ansible.builtin.stat:
+    path: "{{ molecule_libvirt_cache }}/packages/{{ molecule_target.image }}/{{ item.2 | basename }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  loop: "{{ prepare_packages }}"
+  loop_control:
+    label: "{{ item.2 | basename }}"
+  delegate_to: localhost
+  register: prepare_package_stats
+
+- name: Prepare libvirt | Refuse a missing or unverified package
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.checksum == item.item.3
+    fail_msg: >-
+      {{ item.item.2 | basename }} is missing from {{ molecule_libvirt_cache }}/packages or does not match its pin. Run
+      make test-molecule-libvirt, which fetches it with tools/molecule/fetch-cloud-images.sh.
+    quiet: true
+  loop: "{{ prepare_package_stats.results }}"
+  loop_control:
+    label: "{{ item.item.2 | basename }}"
+
+- name: Prepare libvirt | Create a root-only directory for the packages outside the compared trees
+  ansible.builtin.file:
+    path: /var/cache/freesecdev-molecule/packages
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Prepare libvirt | Copy the verified packages into the instance, which has no route to a mirror
+  ansible.builtin.copy:
+    src: "{{ molecule_libvirt_cache }}/packages/{{ molecule_target.image }}/{{ item.2 | basename }}"
+    dest: "/var/cache/freesecdev-molecule/packages/{{ item.2 | basename }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ prepare_packages }}"
+  loop_control:
+    label: "{{ item.2 | basename }}"
+
+- name: Prepare libvirt | Install the Debian packages one by one in dependency order
+  ansible.builtin.apt:
+    deb: "/var/cache/freesecdev-molecule/packages/{{ item.2 | basename }}"
+  loop: "{{ prepare_packages }}"
+  loop_control:
+    label: "{{ item.2 | basename }}"
+  when: ansible_facts.os_family == 'Debian'
+
+- name: Prepare libvirt | Trust the image's vendor key by its pinned fingerprint to check the RPM signatures
+  ansible.builtin.rpm_key:
+    key: "{{ molecule_libvirt_rpm_keys[molecule_target.image].path }}"
+    fingerprint: "{{ molecule_libvirt_rpm_keys[molecule_target.image].fingerprint }}"
+    state: present
+  when: ansible_facts.os_family == 'RedHat'
+
+- name: Prepare libvirt | Install the RPM packages from their verified and signed files
+  ansible.builtin.dnf:
+    name: >-
+      {{ prepare_packages | map(attribute='2') | map('basename')
+      | map('regex_replace', '^', '/var/cache/freesecdev-molecule/packages/') | list }}
+    state: present
+    disable_plugin:
+      - "*"
+    disablerepo:
+      - "*"
+  when: ansible_facts.os_family == 'RedHat'
+
+- name: Prepare libvirt | Remove the package files
+  ansible.builtin.file:
+    path: /var/cache/freesecdev-molecule
+    state: absent
+
+- name: Prepare libvirt | Find the systemd timers of the image
+  ansible.builtin.find:
+    paths:
+      - /usr/lib/systemd/system
+      - /etc/systemd/system
+    patterns:
+      - "*.timer"
+    file_type: any
+  register: prepare_timers
+
+- name: Prepare libvirt | Stop and mask every timer, so that no scheduled job changes the instance during a test
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    masked: true
+  loop: >-
+    {{ prepare_timers.files | map(attribute='path') | map('basename') | reject('search', '@\.timer$') | unique
+    | sort }}
+
+- name: Prepare libvirt | Read the services of the image
+  ansible.builtin.service_facts:
+
+- name: Prepare libvirt | Stop and mask the services that act on their own schedule
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    masked: true
+  loop: >-
+    {{ molecule_libvirt_quiet_units | selectattr('service', 'in', ansible_facts.services.keys() | list)
+    | map(attribute='units') | flatten | list }}
