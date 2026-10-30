@@ -1,53 +1,24 @@
 ---
-- name: Snapshot | Find every entry below the watched paths, without reading any content
-  ansible.builtin.find:
-    paths: "{{ contract_snapshot_paths }}"
-    file_type: any
-    recurse: true
-    hidden: true
-    get_checksum: false
-  register: snapshot_find
-
-- name: Snapshot | Take the checksum of every regular file that its owner may read
-  ansible.builtin.find:
-    paths: "{{ contract_snapshot_paths }}"
-    file_type: file
-    recurse: true
-    hidden: true
-    mode: "0400"
-    exact_mode: false
-    get_checksum: true
-  register: snapshot_sums
-
-- name: Snapshot | Refuse a checksum pass that stopped early at a file that root cannot read
-  ansible.builtin.assert:
-    that:
-      - >-
-        snapshot_sums.skipped_paths | default({}) | list
-        | difference(snapshot_find.skipped_paths | default({}) | list) | length == 0
-    fail_msg: >-
-      The checksum pass stopped early in
-      {{ snapshot_sums.skipped_paths | default({}) | dict2items
-         | rejectattr('key', 'in', snapshot_find.skipped_paths | default({}) | list)
-         | items2dict }}: a file that root cannot read without capabilities would leave every later file of that path
-      without a checksum.
-    quiet: true
+- name: Snapshot | Find every entry below the watched paths, with a checksum of every file that root can read
+  ansible.builtin.include_tasks:
+    file: find_with_checksums.yml
+  vars:
+    find_paths: "{{ contract_snapshot_paths }}"
+    find_checksum_algorithm: sha1
 
 - name: Snapshot | Record paths, ownership, modes, sizes, times and content of every entry
   ansible.builtin.set_fact:
     snapshot_lines: >-
-      {%- set sums = dict(snapshot_sums.files | map(attribute='path')
-            | zip(snapshot_sums.files | map(attribute='checksum'))) -%}
-      {%- for entry in snapshot_find.files | sort(attribute='path') -%}
+      {%- for entry in find_files | sort(attribute='path') -%}
       {{ entry.path }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|
       {{- 'volatile-directory' if entry.path in snapshot_volatile_directories | default([])
       else 'volatile-contents' if entry.path is match(contract_snapshot_volatile_contents)
-      else entry.size ~ '|volatile-times|' ~ sums[entry.path] | default('')
+      else entry.size ~ '|volatile-times|' ~ entry.checksum | default('')
       if entry.path is match(contract_snapshot_volatile_times)
-      else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ sums[entry.path] | default('') }}
+      else entry.size ~ '|' ~ entry.mtime ~ '|' ~ entry.ctime ~ '|' ~ entry.checksum | default('') }}
       {{ '\n' }}
       {%- endfor -%}
-    snapshot_count: "{{ snapshot_find.files | length }}"
+    snapshot_count: "{{ find_files | length }}"
 
 - name: Snapshot | Reduce the snapshot to a hash
   ansible.builtin.set_fact:

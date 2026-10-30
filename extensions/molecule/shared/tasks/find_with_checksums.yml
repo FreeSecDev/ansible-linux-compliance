@@ -1,0 +1,72 @@
+---
+- name: Find with checksums | Find every entry below the paths, with a checksum of every regular file
+  ansible.builtin.find:
+    paths: "{{ find_paths }}"
+    file_type: any
+    recurse: true
+    hidden: true
+    follow: false
+    get_checksum: true
+    checksum_algorithm: "{{ find_checksum_algorithm }}"
+  register: find_whole
+
+- name: Find with checksums | Name the paths whose walk stopped at a file that root cannot read
+  ansible.builtin.set_fact:
+    find_aborted: >-
+      {{ find_whole.skipped_paths | default({}) | dict2items
+         | selectattr('key', 'in', find_paths) | rejectattr('value', 'search', 'Errno 2\]')
+         | map(attribute='key') | list }}
+
+- name: Find with checksums | List every entry of those paths again, without reading any content
+  ansible.builtin.find:
+    paths: "{{ find_aborted }}"
+    file_type: any
+    recurse: true
+    hidden: true
+    follow: false
+    get_checksum: false
+  register: find_listed
+  when: find_aborted | length > 0
+
+- name: Find with checksums | Take the checksum of every regular file of those paths that its owner may read
+  ansible.builtin.find:
+    paths: "{{ find_aborted }}"
+    file_type: file
+    recurse: true
+    hidden: true
+    follow: false
+    mode: "0400"
+    exact_mode: false
+    get_checksum: true
+    checksum_algorithm: "{{ find_checksum_algorithm }}"
+  register: find_summed
+  when: find_aborted | length > 0
+
+- name: Find with checksums | Refuse a checksum pass that stopped early again
+  ansible.builtin.assert:
+    that:
+      - >-
+        find_summed.skipped_paths | default({}) | list
+        | difference(find_listed.skipped_paths | default({}) | list) | length == 0
+    fail_msg: >-
+      The checksum pass over {{ find_aborted }} stopped early in
+      {{ find_summed.skipped_paths | default({}) }}: a file that root cannot read without capabilities and whose owner
+      may read it would leave every later file of that path without a checksum.
+    quiet: true
+  when: find_aborted | length > 0
+
+- name: Find with checksums | Join the entries, with the checksums of the second pass for the paths walked twice
+  ansible.builtin.set_fact:
+    find_files: >-
+      {%- if find_aborted | length == 0 -%}
+      {{ find_whole.files }}
+      {%- else -%}
+      {%- set under = '^(' ~ (find_aborted | map('regex_escape') | join('|')) ~ ')(/|$)' -%}
+      {%- set sums = dict(find_summed.files | map(attribute='path')
+            | zip(find_summed.files | map(attribute='checksum'))) -%}
+      {%- set joined = find_whole.files | rejectattr('path', 'match', under) | list -%}
+      {%- for entry in find_listed.files -%}
+      {%- set _ = joined.append(entry | combine({'checksum': sums[entry.path]} if entry.path in sums else {})) -%}
+      {%- endfor -%}
+      {{ joined }}
+      {%- endif -%}

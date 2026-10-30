@@ -1,40 +1,10 @@
 ---
-- name: Lifecycle broad | Find every entry below the watched paths, without reading any content
-  ansible.builtin.find:
-    paths: "{{ lifecycle_broad_paths }}"
-    file_type: any
-    recurse: true
-    hidden: true
-    follow: false
-    get_checksum: false
-  register: lifecycle_broad_files
-
-- name: Lifecycle broad | Take the SHA-256 of every regular file that its owner may read
-  ansible.builtin.find:
-    paths: "{{ lifecycle_broad_paths }}"
-    file_type: file
-    recurse: true
-    hidden: true
-    follow: false
-    mode: "0400"
-    exact_mode: false
-    get_checksum: true
-    checksum_algorithm: sha256
-  register: lifecycle_broad_sums
-
-- name: Lifecycle broad | Refuse a checksum pass that stopped early at a file that root cannot read
-  ansible.builtin.assert:
-    that:
-      - >-
-        lifecycle_broad_sums.skipped_paths | default({}) | list
-        | difference(lifecycle_broad_files.skipped_paths | default({}) | list) | length == 0
-    fail_msg: >-
-      The checksum pass stopped early in
-      {{ lifecycle_broad_sums.skipped_paths | default({}) | dict2items
-         | rejectattr('key', 'in', lifecycle_broad_files.skipped_paths | default({}) | list)
-         | items2dict }}: a file that root cannot read without capabilities would leave every later file of that path
-      without a checksum.
-    quiet: true
+- name: Lifecycle broad | Find every entry below the watched paths, with a SHA-256 of every file that root can read
+  ansible.builtin.include_tasks:
+    file: find_with_checksums.yml
+  vars:
+    find_paths: "{{ lifecycle_broad_paths }}"
+    find_checksum_algorithm: sha256
 
 - name: Lifecycle broad | Read every kernel parameter that the instance may read
   ansible.builtin.find:
@@ -72,10 +42,7 @@
     lifecycle_broad_declared: "{{ lifecycle_items.files | map(attribute='path') | list }}"
     lifecycle_broad_rewritten: "{{ lifecycle_rewritten | default([]) }}"
     lifecycle_broad_raw:
-      files: "{{ lifecycle_broad_files.files }}"
-      checksums: >-
-        {{ dict(lifecycle_broad_sums.files | map(attribute='path')
-                | zip(lifecycle_broad_sums.files | map(attribute='checksum'))) }}
+      files: "{{ find_files }}"
       sysctl: "{{ lifecycle_broad_sysctl.files }}"
       packages: "{{ ansible_facts.packages }}"
       services: "{{ none if lifecycle_broad_services is skipped else ansible_facts.services | default(none) }}"

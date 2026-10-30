@@ -278,13 +278,14 @@ the failure of a task inside the role.
 `/etc`, `/usr`, `/root`, `/home`, `/var/spool`, `/var/log`, `/opt`, `/srv`, `/var/lib/dpkg`, `/var/lib/rpm`,
 `/var/lib/linux_compliance` and
 `/var/lib/freesecdev`. The state ledger and the evidence directory are part of it. On a mismatch the assertion prints
-up to 20 differing entries. The entries are listed by one `find` that reads no content, and the checksums come from a
-second `find` of the regular files whose owner may read them (FREES-175): root in these containers has no capabilities,
-so a file it cannot read (`/etc/shadow` on Rocky Linux, `/usr/bin/sudo` with mode `4111`) made a single `find` with
-checksums stop the walk of its whole path. A task then asserts that the second pass skipped no path that the first did not
-skip (a missing path is skipped by both), so a file that root still cannot read fails the record instead of cutting it
-short. The check compares skipped paths rather than counts, because on the libvirt drivers the files that services
-write may appear or go between the two passes.
+up to 20 differing entries. Both this snapshot and the whole-instance record take their entries from
+`shared/tasks/find_with_checksums.yml` (FREES-175): one `find` with checksums, as before. Root in the Docker
+containers has no capabilities, and a file that it cannot read (`/etc/shadow` on Rocky Linux, `/usr/bin/sudo` with
+mode `4111`) stops that `find`'s walk of its whole path, so every later entry of the path would be missing. For a
+path whose walk stopped that way, and only for it, the task lists the entries again without reading content and takes
+the checksums in a second `find` of the regular files whose owner may read them, and fails when that second pass
+stops early as well. Paths whose walk did not stop, and every path on the libvirt drivers, where root keeps its
+capabilities, cost one walk as before.
 
 Two exceptions are recorded explicitly, and a virtual machine has a third, for the system logs and service state files
 that a running system rewrites by itself ([libvirt guide](molecule-libvirt.md#differences-that-only-a-virtual-machine-has)):
@@ -437,8 +438,7 @@ and the state after the cleanup and after the last cycle must equal it:
 
 - every entry below `/etc`, `/usr`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib`
   (`find` without following links): path, type, mode, uid, gid, size, inode, mtime, ctime and the SHA-256 of every
-  regular file whose owner may read it, taken in a second pass that must cover all of them, as for the
-  [no-change snapshot](#the-no-change-snapshot);
+  regular file that root can read, through the same task as the [no-change snapshot](#the-no-change-snapshot);
 - every kernel parameter that the instance may read (`find` over `/proc/sys` with a SHA-256 of each value);
 - every installed package with its versions (`package_facts`), every user and group with its entry (`getent`), and
   every service where a service manager runs (`service_facts`; the containers have none, which is recorded as such).
