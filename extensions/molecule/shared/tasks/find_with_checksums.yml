@@ -91,9 +91,21 @@
                     | unique | sort if find_unreadable | length > 0 else []}}) }}
   when: find_aborted | length > 0
 
+- name: Find with checksums | Name the directories that hold those entries, and the watched ones below the paths
+  ansible.builtin.set_fact:
+    find_named_paths: >-
+      {{ ((find_known.extra | map('dirname') | list)
+          + (find_watched_directories | default([])
+             | select('match', '^(' ~ (find_paths | map('regex_escape') | join('|')) ~ ')(/|$)') | list))
+         | unique | list }}
+  when:
+    - find_known is mapping
+    - find_aborted | length == 0
+    - find_known.extra | length > 0
+
 - name: Find with checksums | List the entries that the walk left out by name, in the directories that hold them
   ansible.builtin.find:
-    paths: "{{ find_known.extra | map('dirname') | unique | list }}"
+    paths: "{{ find_named_paths }}"
     patterns: "{{ find_known.excludes }}"
     file_type: any
     recurse: false
@@ -108,7 +120,7 @@
 
 - name: Find with checksums | Take the checksum of those that their owner may read
   ansible.builtin.find:
-    paths: "{{ find_known.extra | map('dirname') | unique | list }}"
+    paths: "{{ find_named_paths }}"
     patterns: "{{ find_known.excludes }}"
     file_type: file
     recurse: false

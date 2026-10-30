@@ -5,6 +5,7 @@
   vars:
     find_paths: "{{ lifecycle_broad_paths }}"
     find_checksum_algorithm: sha256
+    find_watched_directories: "{{ lifecycle_items.files | map(attribute='path') | map('dirname') | unique | list }}"
 
 - name: Lifecycle broad | Read every kernel parameter that the instance may read
   ansible.builtin.find:
