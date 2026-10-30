@@ -125,6 +125,7 @@
       guard_disk_source: ".*"
       guard_domain_elements: []
       guard_domain_sources: []
+      guard_domain_interface_targets: []
       guard_domain_seclabels:
         - "<seclabel type='dynamic' model='apparmor' relabel='yes'>"
       guard_domain_labels: []
@@ -143,6 +144,11 @@
       guard_allowed_label: ".*"
       guard_host_apparmor: false
       guard_allowed_watchdog: ".*"
+      guard_allowed_lifecycle: ".*"
+      guard_allowed_vnet_target: ".*"
+      guard_allowed_network_tag: ".*"
+      guard_allowed_bridge: ".*"
+      guard_allowed_ip: ".*"
       guard_pool_owner: "0"
       guard_key_owner:
         stat:

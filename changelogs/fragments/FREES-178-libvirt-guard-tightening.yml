@@ -1,0 +1,9 @@
+---
+trivial:
+  - >-
+    Molecule libvirt guard: the domain may crash only to ``destroy`` or ``restart`` (never ``coredump-*``) and has
+    only the power-off, reboot and lock-failure actions of the template; the network bridge, address and network
+    element must match exactly with the listed attributes only (no firewalld ``zone``); the interface target is
+    ``vnet<N>`` without ``managed``.
+    The ``managed=`` rule had a word-boundary escape that Jinja turned into a backspace, so it never matched; it is
+    fixed. Seventeen simulated cases are added, 128 in total.
