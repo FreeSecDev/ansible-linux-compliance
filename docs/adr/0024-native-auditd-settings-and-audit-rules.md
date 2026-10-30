@@ -136,7 +136,7 @@ is `compliant` when that one line already has the form the check reads and a val
 when the setting is set more than once (the check reads the first occurrence, auditd keeps the last), and
 `prior_too_large` for a line above 1024 characters. Before anything is written, the settings that auditd checks
 together are computed as they will be after the run, from the file and auditd's defaults: `space_left` must be larger
-than `admin_space_left` (in percent of the log's file system, read from the mount facts, when one of them is a
+than `admin_space_left` (in percent of the log's file system, whose size `audit_control` reads, when one of them is a
 percentage), and incremental flushing needs `freq` above 0. When auditd would refuse them, every line of the run is
 `invalid_config` and nothing is written. After a change, a running auditd is asked to read the file again
 (`auditctl --signal reload`), and the run fails when the same auditd does not run afterwards.

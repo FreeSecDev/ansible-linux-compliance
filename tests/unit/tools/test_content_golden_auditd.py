@@ -209,7 +209,7 @@ def selecting(oval: Oval, rule_id: str) -> set[str]:
 
 
 def definition_tests(oval: Oval, rule_id: str, filepath: str) -> list[str]:
-    tests = []
+    tests: list[str] = []
     for test in oval.criteria[oval.definitions[rule_id]]:
         if test not in oval.tests:
             continue
@@ -312,7 +312,7 @@ def written_value(parameters: dict[str, object], value: str, order: list[str]) -
 
 def oval_results(oval: Oval, test: str, line: str, value: str) -> list[bool]:
     """Return, per object of an OVAL test, whether ``line`` matches it and satisfies its states."""
-    results = []
+    results: list[bool] = []
     states = [oval.states[state] for state in oval.tests[test]["states"]]
     for reference in oval.tests[test]["objects"]:
         found = re.search(pcre(oval.objects[reference]["pattern"][0]), line)

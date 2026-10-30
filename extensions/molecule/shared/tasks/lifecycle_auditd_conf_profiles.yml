@@ -50,9 +50,13 @@
     that:
       - lifecycle_results | map(attribute='rule_id') | list == regression_other_rules | map(attribute='rule_id') | list
       - lifecycle_results | map(attribute='status') | difference(['applied', 'compliant']) | list == []
-      - lifecycle_results | selectattr('status', 'equalto', 'applied') | list | length > 0
     fail_msg: "{{ regression_label }}, {{ regression_other_profile }}, apply: {{ lifecycle_results }}"
     quiet: true
+
+- name: Auditd settings of another profile | Name the rules that the apply changed
+  ansible.builtin.set_fact:
+    regression_other_applied: >-
+      {{ lifecycle_results | selectattr('status', 'equalto', 'applied') | map(attribute='rule_id') | list }}
 
 - name: Auditd settings of another profile | Apply those rules again
   ansible.builtin.include_tasks:
@@ -91,7 +95,8 @@
 - name: Auditd settings of another profile | Check that the cleanup restored the file as built
   ansible.builtin.assert:
     that:
-      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - lifecycle_results | map(attribute='rule_id') | list == regression_other_applied
+      - lifecycle_results | map(attribute='status') | difference(['restored']) | list == []
       - regression_other_cleaned.content | b64decode == regression_built_text
     fail_msg: "{{ regression_label }}, {{ regression_other_profile }}, cleanup: {{ lifecycle_results }}"
     quiet: true

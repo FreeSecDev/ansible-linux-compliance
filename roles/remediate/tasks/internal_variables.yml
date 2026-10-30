@@ -30,8 +30,8 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_loading$') == [] or
         '__linux_compliance_remediate_ac_loading' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_mounts$') == [] or
-        '__linux_compliance_remediate_ac_mounts' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_log_lines$') == [] or
+        '__linux_compliance_remediate_ac_log_lines' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_plan$') == [] or
         '__linux_compliance_remediate_ac_plan' in (hostvars[inventory_hostname] | list)
@@ -68,6 +68,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_size_mb$') == [] or
         '__linux_compliance_remediate_ac_size_mb' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_space$') == [] or
+        '__linux_compliance_remediate_ac_space' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ac_stat$') == [] or
         '__linux_compliance_remediate_ac_stat' in (hostvars[inventory_hostname] | list)
@@ -901,7 +904,6 @@
     __linux_compliance_remediate_ac_conflict: __linux_compliance_unset__
     __linux_compliance_remediate_ac_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ac_lines: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_mounts: __linux_compliance_unset__
     __linux_compliance_remediate_ac_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ac_read: __linux_compliance_unset__
     __linux_compliance_remediate_ac_record: __linux_compliance_unset__
@@ -912,6 +914,7 @@
     __linux_compliance_remediate_ac_restored: __linux_compliance_unset__
     __linux_compliance_remediate_ac_running: __linux_compliance_unset__
     __linux_compliance_remediate_ac_services: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_space: __linux_compliance_unset__
     __linux_compliance_remediate_ac_stat: __linux_compliance_unset__
     __linux_compliance_remediate_ac_values: __linux_compliance_unset__
     __linux_compliance_remediate_ac_write: __linux_compliance_unset__
@@ -1124,7 +1127,6 @@
       - __linux_compliance_remediate_ac_conflict == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_forget == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_lines == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_ac_mounts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_plan == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_read == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_record == '__linux_compliance_unset__'
@@ -1135,6 +1137,7 @@
       - __linux_compliance_remediate_ac_restored == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_running == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_services == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_space == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_stat == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_values == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_write == '__linux_compliance_unset__'
@@ -1340,6 +1343,7 @@
       - __linux_compliance_remediate_ac_changed_ids == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_effective == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_loading == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ac_log_lines == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_rule == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_size_mb == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ac_text == '__linux_compliance_unset__'
@@ -1559,6 +1563,7 @@
     __linux_compliance_remediate_ac_changed_ids: __linux_compliance_unset__
     __linux_compliance_remediate_ac_effective: __linux_compliance_unset__
     __linux_compliance_remediate_ac_loading: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_log_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ac_rule: __linux_compliance_unset__
     __linux_compliance_remediate_ac_size_mb: __linux_compliance_unset__
     __linux_compliance_remediate_ac_text: __linux_compliance_unset__
@@ -1629,7 +1634,6 @@
     __linux_compliance_remediate_ac_conflict: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_forget: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_lines: __linux_compliance_unset_again__
-    __linux_compliance_remediate_ac_mounts: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_plan: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_read: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_record: __linux_compliance_unset_again__
@@ -1640,6 +1644,7 @@
     __linux_compliance_remediate_ac_restored: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_running: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_services: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_space: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_stat: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_values: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_write: __linux_compliance_unset_again__
@@ -1852,7 +1857,6 @@
       - __linux_compliance_remediate_ac_conflict == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_forget == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_lines == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_ac_mounts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_plan == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_read == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_record == '__linux_compliance_unset_again__'
@@ -1863,6 +1867,7 @@
       - __linux_compliance_remediate_ac_restored == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_running == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_services == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_space == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_stat == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_values == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_write == '__linux_compliance_unset_again__'
@@ -2068,6 +2073,7 @@
       - __linux_compliance_remediate_ac_changed_ids == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_effective == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_loading == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ac_log_lines == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_rule == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_size_mb == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ac_text == '__linux_compliance_unset_again__'
@@ -2139,6 +2145,7 @@
     __linux_compliance_remediate_ac_changed_ids: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_effective: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_loading: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ac_log_lines: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_rule: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_size_mb: __linux_compliance_unset_again__
     __linux_compliance_remediate_ac_text: __linux_compliance_unset_again__
@@ -2209,7 +2216,6 @@
     __linux_compliance_remediate_ac_conflict: __linux_compliance_unset__
     __linux_compliance_remediate_ac_forget: __linux_compliance_unset__
     __linux_compliance_remediate_ac_lines: __linux_compliance_unset__
-    __linux_compliance_remediate_ac_mounts: __linux_compliance_unset__
     __linux_compliance_remediate_ac_plan: __linux_compliance_unset__
     __linux_compliance_remediate_ac_read: __linux_compliance_unset__
     __linux_compliance_remediate_ac_record: __linux_compliance_unset__
@@ -2220,6 +2226,7 @@
     __linux_compliance_remediate_ac_restored: __linux_compliance_unset__
     __linux_compliance_remediate_ac_running: __linux_compliance_unset__
     __linux_compliance_remediate_ac_services: __linux_compliance_unset__
+    __linux_compliance_remediate_ac_space: __linux_compliance_unset__
     __linux_compliance_remediate_ac_stat: __linux_compliance_unset__
     __linux_compliance_remediate_ac_values: __linux_compliance_unset__
     __linux_compliance_remediate_ac_write: __linux_compliance_unset__

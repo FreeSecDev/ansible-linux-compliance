@@ -19,7 +19,11 @@ from __future__ import annotations
 import re
 import stat
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
+
+from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
+    fileio,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -137,7 +141,7 @@ def duplicates(files: Sequence[Mapping[str, object]]) -> list[dict[str, object]]
         lines = item["lines"]
         if not isinstance(lines, list):
             continue
-        for line in lines:
+        for line in cast("list[object]", lines):
             places.setdefault(str(line), []).append(path)
     return [
         {"line": line, "paths": paths} for line, paths in sorted(places.items()) if len(paths) > 1
@@ -184,6 +188,20 @@ def missing_rules(expect: Sequence[str], listed: Sequence[str]) -> list[str]:
         if wanted not in pool:
             missing.append(line)
     return missing
+
+
+def log_megabytes(directory: str) -> int | None:
+    """Return the size of the file system of the audit log directory in MiB, or ``None``.
+
+    A directory that does not exist yet is measured at its nearest existing parent, where auditd
+    would create it. A relative path or one with ``..`` gives ``None``.
+    """
+    if not directory.startswith("/") or ".." in directory.split("/"):
+        return None
+    path = Path(directory)
+    while not path.exists() and path != path.parent:
+        path = path.parent
+    return fileio.filesystem_megabytes(str(path))
 
 
 def listed_rules(text: str) -> list[str]:

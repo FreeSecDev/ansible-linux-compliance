@@ -107,6 +107,7 @@ def test_status_reads_the_kernel_the_rules_and_the_files(
     assert output["rules"] == ["-w /etc/localtime -p wa -k time-change"]
     assert output["files"] == files
     assert output["missing"] == ["-w /y -p wa -k y"]
+    assert isinstance(output["log_megabytes"], int)
     assert fake.calls == [("auditctl", ("-s",)), ("auditctl", ("-l",))]
 
 

@@ -293,13 +293,17 @@
   tags:
     - always
 
-- name: Audit daemon settings | Read the mounts, to compare a space limit in percent with one in megabytes
-  ansible.builtin.setup:
-    gather_subset:
-      - "!all"
-      - "!min"
-      - mounts
-  register: __linux_compliance_remediate_ac_mounts
+- name: Audit daemon settings | Read the size of the file system of the audit log, for limits in percent
+  vars:
+    __linux_compliance_remediate_ac_log_lines: >-
+      {{ __linux_compliance_remediate_ac_lines | select('match', '(?i)^[ \t]*log_file[ \t]*=') | list }}
+  freesecdev.linux_compliance.audit_control:
+    action: status
+    log_directory: >-
+      {{ ((__linux_compliance_remediate_ac_log_lines | last | regex_replace('(?i)^[ \t]*log_file[ \t]*=[ \t]*', '')
+          | trim) if __linux_compliance_remediate_ac_log_lines | length > 0
+         else __linux_compliance_remediate_auditd_defaults.log_file) | dirname }}
+  register: __linux_compliance_remediate_ac_space
   when: >-
     __linux_compliance_remediate_ac_plan | dict2items | selectattr('value.status', 'equalto', 'applied')
     | selectattr('value.setting', 'in', ['space_left', 'admin_space_left']) | list | length > 0
@@ -322,17 +326,7 @@
       {%- endfor -%}
       {{ effective }}
     __linux_compliance_remediate_ac_size_mb: >-
-      {%- set log = __linux_compliance_remediate_ac_effective.log_file | dirname -%}
-      {%- set ns = namespace(size=none, length=-1) -%}
-      {%- for mount in (__linux_compliance_remediate_ac_mounts.ansible_facts | default({})).ansible_mounts
-            | default([]) -%}
-      {%- set prefix = mount.mount | regex_replace('/$', '') ~ '/' -%}
-      {%- if (log ~ '/').startswith(prefix) and prefix | length > ns.length and mount.size_total is defined -%}
-      {%- set ns.length = prefix | length -%}
-      {%- set ns.size = (mount.size_total | int) // 1048576 -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {{ ns.size }}
+      {{ __linux_compliance_remediate_ac_space.log_megabytes | default(none) }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_conflict: >-
       {%- set effective = __linux_compliance_remediate_ac_effective -%}

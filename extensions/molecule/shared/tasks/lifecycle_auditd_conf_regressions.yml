@@ -252,7 +252,9 @@
   ansible.builtin.copy:
     content: "{{ regression_built_text ~ 'space_left_action = syslog' ~ regression_newline }}"
     dest: "{{ regression_conf }}"
-    mode: preserve
+    mode: "0640"
+    owner: root
+    group: root
 
 - name: Auditd settings regressions | Switch every rule of the topic on with the repeated setting
   ansible.builtin.set_fact:
@@ -315,7 +317,9 @@
         content: >-
           {{ regression_built_text | regex_replace('(?m)^admin_space_left = .*$', 'admin_space_left = 90%') }}
         dest: "{{ regression_conf }}"
-        mode: preserve
+        mode: "0640"
+        owner: root
+        group: root
 
     - name: Auditd settings regressions | Leave admin_space_left alone and switch the other rules on
       ansible.builtin.set_fact:
@@ -356,7 +360,9 @@
   ansible.builtin.copy:
     content: "{{ regression_built_text }}"
     dest: "{{ regression_conf }}"
-    mode: preserve
+    mode: "0640"
+    owner: root
+    group: root
 
 - name: Auditd settings regressions | Apply and clean up the rules that only the other profiles of the datastream select
   ansible.builtin.include_tasks:

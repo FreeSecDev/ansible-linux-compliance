@@ -187,3 +187,15 @@ def test_missing_rules_compare_in_one_spelling_and_ignore_derived_system_calls()
     ]
     assert auditrules.missing_rules([], listed) == []
     assert auditrules.missing_rules(["-a always,exit -S"], ["-a always,exit -S"]) == []
+
+
+def test_log_megabytes_measures_the_nearest_existing_directory(tmp_path: Path) -> None:
+    size = auditrules.log_megabytes(str(tmp_path / "missing" / "audit"))
+    assert isinstance(size, int)
+    assert size > 0
+    assert auditrules.log_megabytes(str(tmp_path)) == size
+
+
+@pytest.mark.parametrize("directory", ["relative/audit", "/var/log/../../etc"])
+def test_log_megabytes_refuses_relative_and_parent_paths(directory: str) -> None:
+    assert auditrules.log_megabytes(directory) is None

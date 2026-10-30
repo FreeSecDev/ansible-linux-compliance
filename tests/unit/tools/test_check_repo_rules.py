@@ -976,6 +976,7 @@ def test_file_io_attribute_table_is_pinned() -> None:
             "rename",
             "scandir",
             "stat",
+            "statvfs",
             "supports_dir_fd",
             "unlink",
             "urandom",
@@ -1054,18 +1055,22 @@ def test_only_the_ledger_may_import_the_file_io_helper(tmp_path: Path, source: s
 
 def test_the_importer_table_names_only_the_ledger_and_the_helper() -> None:
     assert sorted(str(path) for path in rules.FILE_IO_IMPORTERS) == [
+        "plugins/module_utils/compliance/auditrules.py",
         "plugins/module_utils/compliance/fileio.py",
         "plugins/module_utils/compliance/ledger.py",
     ]
 
 
-def test_repository_ledger_is_the_only_plugin_file_importing_the_file_io_helper() -> None:
+def test_only_the_ledger_and_the_audit_rules_import_the_file_io_helper() -> None:
     importers = [
         path.relative_to(rules.REPO_ROOT)
         for path in sorted((rules.REPO_ROOT / "plugins").rglob("*.py"))
         if "fileio" in path.read_text(encoding="utf-8")
     ]
-    assert [str(path) for path in importers] == ["plugins/module_utils/compliance/ledger.py"]
+    assert [str(path) for path in importers] == [
+        "plugins/module_utils/compliance/auditrules.py",
+        "plugins/module_utils/compliance/ledger.py",
+    ]
 
 
 def test_pylint_wrong_import_position_is_not_globally_disabled() -> None:

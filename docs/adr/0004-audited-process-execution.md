@@ -1080,3 +1080,9 @@ drop-ins of its run when the load fails. Only an `auditctl` that is not found in
 `available: false`; one that the helper refuses fails the module. Unit tests in
 `tests/unit/plugins/module_utils/compliance/test_process.py` refuse every other form, and
 `tests/unit/plugins/modules/test_audit_control.py` covers the module.
+
+To compare a `space_left` or `admin_space_left` given in percent, the auditd.conf topic needs the size of the file
+system of the audit log, which the mount facts of ansible-core did not report on the hosts tried. The file helper
+`plugins/module_utils/compliance/fileio.py` therefore gains `filesystem_megabytes`, with the one new `os` attribute
+`statvfs` in `FILE_IO_ATTRIBUTES`, which opens and writes nothing; `auditrules.py` joins `FILE_IO_IMPORTERS` to call
+it, and `audit_control` reports the size as `log_megabytes`.

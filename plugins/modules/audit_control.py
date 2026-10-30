@@ -32,6 +32,12 @@ options:
     type: str
     required: true
     choices: [status, load, reload]
+  log_directory:
+    description:
+      - The directory of the audit log, whose file system size RV(log_megabytes) reports for
+        O(action=status).
+    type: path
+    default: /var/log/audit
   expect:
     description:
       - Rule lines, as a rule file holds them, that must be loaded after O(action=load); with
@@ -106,6 +112,13 @@ rules:
   type: list
   elements: str
   sample: ["-w /etc/localtime -p wa -k time-change"]
+log_megabytes:
+  description:
+    - The size of the file system of O(log_directory) in MiB, or null when it cannot be read.
+    - auditd converts a C(space_left) or C(admin_space_left) in percent with this size.
+  returned: when O(action=status)
+  type: int
+  sample: 10240
 files:
   description: Every file of C(/etc/audit/rules.d) that C(augenrules) reads, with its rule lines.
   returned: when O(action=status)
@@ -234,15 +247,20 @@ def unavailable() -> dict[str, object]:
     }
 
 
-def status(expect: list[str]) -> dict[str, object]:
-    """Return the status fields, the rule files and the lines of ``expect`` not loaded."""
+def status(expect: list[str], log_directory: str) -> dict[str, object]:
+    """Return the status fields, the rule files, the log space and the lines not loaded."""
     try:
         files = auditrules.read_rule_files()
     except (auditrules.RulesFileError, OSError) as error:
         raise ControlError(printable(str(error))) from error
     fields = unavailable() if not available() else {"available": True, **kernel_status()}
     missing = auditrules.missing_rules(expect, cast("list[str]", fields["rules"]))
-    return {**fields, "files": files, "missing": missing}
+    return {
+        **fields,
+        "files": files,
+        "missing": missing,
+        "log_megabytes": auditrules.log_megabytes(log_directory),
+    }
 
 
 def load(expect: list[str], *, check_mode: bool) -> dict[str, object]:
@@ -362,6 +380,7 @@ def main() -> None:
         argument_spec={
             "action": {"type": "str", "required": True, "choices": ["status", "load", "reload"]},
             "expect": {"type": "list", "elements": "str", "default": []},
+            "log_directory": {"type": "path", "default": "/var/log/audit"},
         },
         supports_check_mode=True,
     )
@@ -372,7 +391,7 @@ def main() -> None:
         module.fail_json(msg=str(error), changed=False)
     try:
         if action == "status":
-            outcome = status(lines)
+            outcome = status(lines, str(module.params["log_directory"]))
         elif action == "load":
             outcome = load(lines, check_mode=module.check_mode)
         else:
@@ -391,6 +410,7 @@ def main() -> None:
             message=outcome["message"],
             files=outcome["files"],
             missing=outcome["missing"],
+            log_megabytes=outcome["log_megabytes"],
         )
     elif action == "load":
         module.exit_json(
