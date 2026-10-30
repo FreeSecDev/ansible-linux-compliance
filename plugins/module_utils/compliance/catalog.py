@@ -69,6 +69,12 @@ ROOT_UID: Final[int] = 0
 MAX_SYMLINKS: Final[int] = 40
 MAX_ECHO_LENGTH: Final[int] = 64
 ERROR_UNSAFE_CONTENT: Final[str] = "unsafe_content_dir"
+ERROR_SCRIPT_CHECK: Final[str] = "script_check_content"
+OVAL_CHECK_SYSTEM: Final[str] = "http://oval.mitre.org/XMLSchema/oval-definitions-5"
+OCIL_CHECK_SYSTEM: Final[str] = "http://scap.nist.gov/schema/ocil/2"
+SCE_CHECK_SYSTEM: Final[str] = "http://open-scap.org/page/SCE"
+SCE_NAMESPACE: Final[str] = "http://open-scap.org/page/SCE_xccdf_stream"
+ACCEPTED_CHECK_SYSTEMS: Final[frozenset[str]] = frozenset({OVAL_CHECK_SYSTEM, OCIL_CHECK_SYSTEM})
 PROCESS_DIRECTORY: Final[str] = "/proc/self"
 SEVERITIES: Final[frozenset[str]] = frozenset({"unknown", "info", "low", "medium", "high"})
 STIG_ID_REFERENCES: Final[frozenset[str]] = frozenset(
@@ -103,6 +109,9 @@ _VERSION_TAG: Final[str] = _qualified("version")
 _SELECT: Final[str] = _qualified("select")
 _REFERENCE: Final[str] = _qualified("reference")
 _COLLECTION: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}data-stream-collection"
+_CHECK: Final[str] = _qualified("check")
+_EXTENDED_COMPONENT: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}extended-component"
+_SCE_PREFIX: Final[str] = f"{{{SCE_NAMESPACE}}}"
 
 _OUTSIDE: Final[str] = "outside"
 _BENCH: Final[str] = "benchmark"
@@ -160,8 +169,57 @@ class UnsafeContentError(CatalogError):
     """
 
 
+class ScriptCheckError(CatalogError):
+    """Raised when content carries a check that would run a script this collection did not write.
+
+    The OpenSCAP Script Check Engine runs the shell scripts that a datastream embeds as root
+    while it audits (threat model T-AUDIT-2). Only OVAL and OCIL checks are accepted, and no
+    extended component or SCE element may be present (FREES-191, ADR 0026). Modules report it
+    as ``script_check_content``.
+    """
+
+
 def _fail(message: str) -> NoReturn:
     raise CatalogError(message)
+
+
+def refuse_script_check(name: str, attributes: dict[str, str]) -> None:
+    """Refuse an element that would make the scanner run a script of the content.
+
+    That is an XCCDF ``check`` whose ``system`` is not OVAL or OCIL (the Script Check Engine
+    uses ``http://open-scap.org/page/SCE``), any element of the SCE namespace, and any
+    data stream ``extended-component``, which is where a datastream embeds its scripts.
+
+    Raises:
+        ScriptCheckError: When ``name`` and ``attributes`` are such an element.
+    """
+    if name == _CHECK and attributes.get("system", "") not in ACCEPTED_CHECK_SYSTEMS:
+        system = _echo(attributes.get("system", ""))
+        message = (
+            f"the content holds a check with the system {system}, which runs a script that this "
+            "collection did not write; only OVAL and OCIL checks are accepted"
+        )
+        raise ScriptCheckError(message)
+    if name == _EXTENDED_COMPONENT or name.startswith(_SCE_PREFIX):
+        message = (
+            "the content embeds a Script Check Engine script or an extended component, which the "
+            "scanner could run; fetch the content with make content, which removes them"
+        )
+        raise ScriptCheckError(message)
+
+
+class ScriptCheckScanner:
+    """Parse events that only refuse script checks, for a document that is otherwise copied."""
+
+    def start(self, name: str, attributes: dict[str, str], /) -> None:
+        """Refuse a script check (:func:`refuse_script_check`)."""
+        refuse_script_check(name, attributes)
+
+    def end(self, name: str, /) -> None:
+        """Ignore an element end."""
+
+    def text(self, data: str, /) -> None:
+        """Ignore character data."""
 
 
 def _unsafe(message: str) -> NoReturn:
@@ -403,6 +461,7 @@ class _Collector:
         }
 
     def start(self, name: str, attributes: dict[str, str]) -> None:
+        refuse_script_check(name, attributes)
         if not self.frames:
             if name not in {_COLLECTION, _BENCHMARK}:
                 _fail("the root is not a SCAP 1.2 data stream collection or an XCCDF 1.2 Benchmark")
@@ -941,6 +1000,8 @@ def error_type(error: CatalogError) -> str:
         return "unsupported_content"
     if isinstance(error, UnsafeContentError):
         return ERROR_UNSAFE_CONTENT
+    if isinstance(error, ScriptCheckError):
+        return ERROR_SCRIPT_CHECK
     return "invalid_content"
 
 

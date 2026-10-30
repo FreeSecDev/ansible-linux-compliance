@@ -2,7 +2,7 @@
 schema_version: 1
 datastreams:
 - name: ubuntu2404
-  sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+  sha256: 46046895f5b007c1add20393481bab9c0552dc8dfa60452e72962d4ce5a589f9
   profiles:
   - id: xccdf_org.ssgproject.content_profile_cis_level1_server
     rule_count: 408
@@ -20,7 +20,7 @@ datastreams:
     rule_count: 239
     rule_ids_sha256: 4369921196bc36bff59f55e53ae23dd2622090e7eaee1ca69ed5e141b7ec38c2
 - name: rhel9
-  sha256: 92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f
+  sha256: f1edca5926a2c218711c58d1bd54d92aecdcd667f846496b5ce57442432be15c
   profiles:
   - id: xccdf_org.ssgproject.content_profile_anssi_bp28_enhanced
     rule_count: 310

@@ -298,7 +298,7 @@ EXAMPLES = r"""
 - name: Audit the host against the Ubuntu 24.04 CIS Level 1 Server profile
   freesecdev.linux_compliance.compliance_scan:
     content_path: /opt/freesecdev/content/ssg-ubuntu2404-ds.xml
-    expected_sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+    expected_sha256: 46046895f5b007c1add20393481bab9c0552dc8dfa60452e72962d4ce5a589f9
     profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
     host:
       hostname: "{{ ansible_facts['hostname'] }}"
@@ -311,7 +311,7 @@ EXAMPLES = r"""
 - name: Audit with one rule disabled and decide about failures later
   freesecdev.linux_compliance.compliance_scan:
     content_path: /opt/freesecdev/content
-    expected_sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+    expected_sha256: 46046895f5b007c1add20393481bab9c0552dc8dfa60452e72962d4ce5a589f9
     profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
     host:
       hostname: web01
@@ -429,7 +429,7 @@ scan_run:
     content:
       source: ssg-ubuntu2404-ds.xml
       content_version: 0.1.82
-      content_sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+      content_sha256: 46046895f5b007c1add20393481bab9c0552dc8dfa60452e72962d4ce5a589f9
     findings:
       - rule_id: xccdf_org.ssgproject.content_rule_package_aide_installed
         outcome: fail
@@ -489,7 +489,7 @@ content:
   type: dict
   sample:
     source_path: /opt/freesecdev/content/ssg-ubuntu2404-ds.xml
-    sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+    sha256: 46046895f5b007c1add20393481bab9c0552dc8dfa60452e72962d4ce5a589f9
     size: 12645122
     private_copy: /var/lib/freesecdev/evidence/run-1/content/ssg-ubuntu2404-ds.xml
     copy_removed: true
@@ -512,7 +512,7 @@ planned:
     benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
     benchmark_version: 0.1.82
     content_path: /opt/freesecdev/content/ssg-ubuntu2404-ds.xml
-    content_sha256: e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c
+    content_sha256: 46046895f5b007c1add20393481bab9c0552dc8dfa60452e72962d4ce5a589f9
     control_placement_count: 0
     disable_method: tailoring
     profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
@@ -533,8 +533,11 @@ error_type:
       C(nothing_to_scan),
       C(unknown_backend), C(invalid_request), C(evidence_write_failed), C(cleanup_failed),
       C(scan_incomplete),
-      C(digest_mismatch), C(profile_not_found), C(unsupported_content), C(invalid_content) or
-      C(host_mismatch).
+      C(digest_mismatch), C(profile_not_found), C(unsupported_content), C(invalid_content),
+      C(script_check_content) or C(host_mismatch).
+    - C(script_check_content) means that the datastream, or its private copy, holds a check or
+      an embedded script that would make the scanner run a script of the content, such as a
+      Script Check Engine check. Nothing is scanned.
   returned: failure
   type: str
   sample: digest_mismatch

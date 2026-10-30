@@ -30,9 +30,12 @@ Defined in `meta/argument_specs.yml` and `defaults/main.yml`, which must agree.
 
 ## Obtaining the content
 
-The repository does not contain datastreams. Fetch the pinned content on the controller with
-`uv run python tools/content/fetch_content.py` (or `--from-file <zip>` when offline), copy the datastream to the managed
-host and pass its path and its `sha256` from `content/manifest.yml` ([ADR 0015](../../docs/adr/0015-content-acquisition-and-pinning.md)).
+The repository does not contain datastreams. Fetch the pinned content on the controller with `make content` (it runs
+`tools/content/fetch_content.py`; pass `--from-file <zip>` to it when offline), copy the datastream to the managed host
+and pass its path and its `sha256` from `content/manifest.yml`
+([ADR 0015](../../docs/adr/0015-content-acquisition-and-pinning.md)). That datastream has its Script Check Engine
+checks and scripts removed. A datastream that still has them, such as one taken straight from a ComplianceAsCode
+release, fails with `script_check_content` ([ADR 0026](../../docs/adr/0026-no-content-scripts-on-hosts.md)).
 
 ## Result
 

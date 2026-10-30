@@ -239,32 +239,27 @@ No DISA benchmark for Ubuntu 26.04 exists yet. `allow_off_platform_benchmark: tr
 
 Report such runs through `scan-run.json` or evidence bundles, which carry the marker.
 
-### SCE check scripts run as root
+### SCE check scripts are removed before the content reaches a host
 
-The pinned datastreams embed Script Check Engine (SCE) check scripts: the Ubuntu 24.04 datastream has 81 `sce:script`
-components, one per rule that has an SCE check. `oscap` writes them (mode `0700`, opened with `O_NOFOLLOW`) into a new
-`mkdtemp` directory `/tmp/oscap.XXXXXX` and runs them as root during the audit, with `PATH=/bin:/sbin:/usr/bin:/usr/local/bin:/usr/sbin` and the `XCCDF_*` result variables as
-their environment. They are shell scripts that only read the host, but nothing enforces that: they are trusted only
-because the datastream's SHA-256 is pinned and the scanner reads only the verified private copy. They are audit checks,
-not remediation, so [ADR 0003](adr/0003-native-module-remediation.md) still holds; `--remediate` stays refused.
+No script written by ComplianceAsCode runs on a managed host, not even while it is audited
+([ADR 0026](adr/0026-no-content-scripts-on-hosts.md), FREES-191). The published datastreams embed Script Check Engine
+(SCE) shell scripts, which `oscap` would run as root: 81 in Ubuntu 24.04 and 438 in RHEL 9, one per rule with an SCE
+check. `oscap` 1.3.9 has no option to turn SCE off, so `make content` removes them on the controller. It removes
+every SCE check, every embedded script (`ds:extended-component`) and the references to them, and changes no other
+byte. It pins the digest of the processed datastream as `sha256` in `content/manifest.yml`, next to the published
+`source_sha256` and the numbers removed. Pass that processed datastream and its `sha256` to the discover role.
 
-Of those 81 rules, 63 also have an OVAL check, listed after the SCE check. OpenSCAP 1.3.9 takes the last check of a
-rule whose system it supports, so it evaluates those 63 with OVAL and runs SCE only for the 18 rules that have no other
-check; 16 of them are in `cis_level1_server`. The CI job `oscap-integration` asserts that no rule with an OVAL check is
-reported with an SCE check.
+A rule that also has an OVAL check is evaluated through OVAL, as before: 63 rules on Ubuntu 24.04 and 434 on RHEL 9.
+A rule whose only automated check was SCE keeps its OCIL check, which `oscap` does not evaluate, and is reported as
+`notchecked`, never `pass` and never `fail` on a script we did not write. That is 18 rules on Ubuntu 24.04 (16 of the
+408 rules of `cis_level1_server`) and 4 on RHEL 9: the iptables, ip6tables, nftables and ufw firewall rules and the
+file-system-wide checks for world-writable files and for files without a known owner or group.
 
-The pinned `oscap` 1.3.9 has no option to turn SCE off: `oscap xccdf eval --help`, `oscap(8)` and the option table in
-`utils/oscap-xccdf.c` have none. SCE is a plugin, `libopenscap_sce.so.25`, which `oscap` loads automatically
-(`oscap --version` lists it under "Capabilities added by auto-loaded plugins"). On Ubuntu it ships in the same package
-as the library itself (`libopenscap25t64`), so it cannot be uninstalled separately. The undocumented environment
-variable `OSCAP_CHECK_ENGINE_PLUGIN_DIR` changes where it is loaded from, but the process helper passes only `PATH`,
-`LC_ALL`, `LANG` and optionally `TZ` and `TMPDIR` ([ADR 0004](adr/0004-audited-process-execution.md)), and pointing
-root's `dlopen` elsewhere would add a code-loading path, so it is not used. Without SCE, the 63 dual-check rules give the
-same results through OVAL and the SCE-only rules become `notchecked`: in `cis_level1_server` that is 16 of 408 rules,
-the iptables, ip6tables, nftables and ufw firewall rules and the file-system-wide checks for world-writable files and
-for files without a known owner or group. To skip them today, list them in `disabled_rules`: the tailoring file
-deselects them, `oscap` does not run their scripts, and they are reported as `disabled`. The threat model records this
-as [T-AUDIT-2](security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).
+Any datastream that still holds a script check is refused, whoever supplied it: an XCCDF `check` whose system is not
+OVAL or OCIL, an SCE element, or a `ds:extended-component`. The discover role (`benchmark_info`, `profile_info`), the
+audit's profile check and the private copy that `oscap` reads all refuse it with `script_check_content`, and nothing
+is scanned. The threat model records the former risk as
+[T-AUDIT-2](security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).
 
 ### Exit status and failures
 
@@ -656,6 +651,7 @@ and the dashboard filters the rules by family and topic.
 | `nothing_to_scan` | Every rule of the profile is disabled |
 | `unknown_backend` | The backend is not registered |
 | `digest_mismatch`, `profile_not_found`, `unsupported_content`, `invalid_content` | Content errors from the catalog, or from making the private copy |
+| `script_check_content` | The datastream, or its private copy, holds a check or embedded script that would make the scanner run a script of the content; nothing is scanned ([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) |
 | `invalid_request` | The backend refused the request; outside check mode `evidence_dir` names the run directory, in check mode it is null because the temporary directory is gone |
 | `evidence_write_failed` | An evidence file could not be written, or the check-mode scan could not write its files |
 | `cleanup_failed` | The private copy or the temporary check-mode directory could not be removed; `evidence_dir` names what is left |
@@ -715,7 +711,8 @@ only disabled rule, and it removes the content copy and the evidence afterwards.
 ends early, unless `FREESECDEV_REQUIRE_OSCAP=1` turns that into a failure, as in CI.
 
 `make test-oscap-integration` (CI job `oscap-integration`) runs a real `oscap`. It fetches the pinned Ubuntu 24.04
-datastream through `tools/content/fetch_content.py` (archive SHA-512 and datastream SHA-256 verified) and runs
+datastream through `tools/content/fetch_content.py` (archive SHA-512, published and processed datastream SHA-256
+verified, SCE checks removed) and runs
 `tests/system/test_oscap_integration.py` with the production backend and process helper:
 
 - a check-mode scan of `cis_level1_server` without tailoring must complete with exactly the 408 rules recorded in
@@ -725,9 +722,10 @@ datastream through `tools/content/fetch_content.py` (archive SHA-512 and datastr
   tailored profile and `notselected` for exactly those rules and a result for every other selected rule; the normalized
   findings must show them as `disabled` with their toggle variable; the reported `profile_id` must be the original
   one; and `content.source` must carry the SHA-256 of the tailoring file that the evidence lists;
-- the datastream must have 81 SCE scripts and 81 rules with an SCE check, 16 of the profile's rules must have only an
-  SCE check, and no rule-result in `results.xml` may report an SCE check for a rule that also has an OVAL check (the
-  rules evaluated through SCE are printed).
+- the fetched datastream must have no SCE script and no SCE check, the 16 rules of the profile whose only automated
+  check was SCE must keep only their OCIL check, no rule-result in `results.xml` may report an SCE check, and those
+  rules, apart from the three disabled ones, must be `notchecked` or `notapplicable` (their outcomes are printed,
+  FREES-191).
 
 The tests copy the fetched datastream into a fresh temporary directory (`0755`, file `0644`) and vet it with
 `catalog.vetted_content_path`, so the content directory rules hold regardless of how the CI checkout is laid out.

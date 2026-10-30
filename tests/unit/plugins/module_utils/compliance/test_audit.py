@@ -1488,3 +1488,45 @@ def test_check_mode_reports_a_copy_that_cannot_be_removed(harness: Harness) -> N
     finally:
         for directory in locked:
             directory.chmod(0o700)
+
+
+SCE_CHECK = (
+    b'<x:check system="http://open-scap.org/page/SCE"><x:check-content-ref href="s.sh"/></x:check>'
+)
+
+
+def with_script_check(harness: Harness) -> tuple[Path, str]:
+    data = harness.datastream.read_bytes()
+    changed = data.replace(b"</x:Rule>", SCE_CHECK + b"</x:Rule>", 1)
+    assert changed != data
+    path = harness.content_dir / "scripted-ds.xml"
+    path.write_bytes(changed)
+    path.chmod(0o644)
+    return path, hashlib.sha256(changed).hexdigest()
+
+
+def test_a_private_copy_with_a_script_check_is_refused_and_removed(harness: Harness) -> None:
+    path, sha256 = with_script_check(harness)
+    directory = harness.root / "copy-target"
+    with pytest.raises(audit.AuditError, match="which runs a script") as raised:
+        audit.copy_content(str(path), directory, sha256)
+    assert raised.value.error_type == "script_check_content"
+    assert not directory.exists()
+
+
+def test_an_audit_of_content_with_a_script_check_scans_nothing(harness: Harness) -> None:
+    path, sha256 = with_script_check(harness)
+    with pytest.raises(audit.AuditError) as raised:
+        harness.run(content_path=str(path), expected_sha256=sha256)
+    assert raised.value.error_type == "script_check_content"
+    assert harness.runner.evaluations == []
+
+
+def test_a_private_copy_that_is_not_well_formed_is_invalid_content(harness: Harness) -> None:
+    path = harness.content_dir / "broken-ds.xml"
+    path.write_bytes(b"<a>")
+    directory = harness.root / "copy-target"
+    with pytest.raises(audit.AuditError, match="not well-formed") as raised:
+        audit.copy_content(str(path), directory, hashlib.sha256(b"<a>").hexdigest())
+    assert raised.value.error_type == "invalid_content"
+    assert not directory.exists()

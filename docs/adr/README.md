@@ -24,6 +24,7 @@
 | [0020](0020-stig-viewer-checklist-export.md) | STIG Viewer checklist export (CKL and CKLB) | proposed |
 | [0021](0021-native-banners-pwquality-and-profile-values.md) | Native banners and password quality, with profile values from the pinned content | proposed |
 | [0022](0022-native-sudo-drop-ins.md) | Native sudo remediation through validated drop-ins | proposed |
+| [0026](0026-no-content-scripts-on-hosts.md) | No script of the scanner content runs on a managed host, not even to audit | proposed |
 | [0023](0023-native-ssh-server-configuration.md) | Native SSH server configuration through validated drop-ins | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, BinaryIO, Final, NoReturn, Protocol
 from xml.parsers import expat
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
 
 DEFAULT_MAX_ELEMENTS: Final[int] = 2_000_000
 DEFAULT_MAX_DEPTH: Final[int] = 64
@@ -113,11 +113,23 @@ class XmlEvents(Protocol):
 class _Guard:
     """Expat handlers that bound the document and forward events."""
 
-    def __init__(self, events: XmlEvents, bounds: XmlBounds) -> None:
+    def __init__(
+        self,
+        events: XmlEvents,
+        bounds: XmlBounds,
+        on_position: Callable[[int], None] | None = None,
+    ) -> None:
         self.events = events
         self.bounds = bounds
         self.count = 0
         self.depth = 0
+        self.on_position = on_position
+        self.parser: expat.XMLParserType | None = None
+
+    def locate(self) -> None:
+        """Report the byte offset of the current tag to ``on_position``, when one is set."""
+        if self.on_position is not None and self.parser is not None:
+            self.on_position(self.parser.CurrentByteIndex)
 
     @staticmethod
     def reject_declaration(*_arguments: object) -> NoReturn:
@@ -130,10 +142,12 @@ class _Guard:
         if self.depth >= self.bounds.max_depth:
             _fail(f"document is nested deeper than {self.bounds.max_depth} levels")
         self.depth += 1
+        self.locate()
         self.events.start(_clark(name), attributes)
 
     def end(self, name: str) -> None:
         self.depth -= 1
+        self.locate()
         self.events.end(_clark(name))
 
 
@@ -150,7 +164,11 @@ def _scan_for_declarations(previous: bytes, chunk: bytes) -> bytes:
 
 
 def parse_chunks(
-    chunks: Iterable[bytes], events: XmlEvents, bounds: XmlBounds | None = None
+    chunks: Iterable[bytes],
+    events: XmlEvents,
+    bounds: XmlBounds | None = None,
+    *,
+    on_position: Callable[[int], None] | None = None,
 ) -> None:
     """Parse a UTF-8 document delivered in chunks, forwarding events.
 
@@ -158,14 +176,19 @@ def parse_chunks(
         chunks: The document bytes in order. Chunk boundaries may fall anywhere.
         events: Receiver of start, end and text events. It may raise to abort.
         bounds: Element and depth bounds; the defaults apply when omitted.
+        on_position: Called before every start and end event with a byte offset in the
+            document: the ``<`` of a start tag or of an end tag, and for the end of an
+            empty-element tag the offset just after it. A controller tool uses it to cut
+            elements out of a document without serialising it again (FREES-191).
 
     Raises:
         XmlSafetyError: If the document is empty, not well-formed, not UTF-8,
             contains a NUL byte, declares a DOCTYPE or entity, or exceeds the
             bounds. Errors raised by ``events`` propagate unchanged.
     """
-    guard = _Guard(events, XmlBounds() if bounds is None else bounds)
+    guard = _Guard(events, XmlBounds() if bounds is None else bounds, on_position)
     parser = expat.ParserCreate(encoding="utf-8", namespace_separator="}")
+    guard.parser = parser
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
     parser.buffer_text = True
     parser.StartElementHandler = guard.start

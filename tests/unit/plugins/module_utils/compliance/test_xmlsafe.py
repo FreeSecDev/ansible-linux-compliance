@@ -414,3 +414,32 @@ class TestRegularFile:
         with pytest.raises(xmlsafe.CloseError, match=r"^the file cannot be read: Input/") as caught:
             list(xmlsafe.iter_file_chunks(str(path), 10))
         assert caught.value.__cause__ is error
+
+
+POSITIONED = b'<a x=">">\n  <b y="1"/>\n  <c>t<d/></c>\n</a>\n'
+
+
+@pytest.mark.parametrize("size", [1, 3, len(POSITIONED)])
+def test_positions_name_the_tag_of_every_event_across_chunks(size: int) -> None:
+    recorder = Recorder()
+    positions: list[int] = []
+    chunks = [POSITIONED[index : index + size] for index in range(0, len(POSITIONED), size)]
+    xmlsafe.parse_chunks(chunks, recorder, on_position=positions.append)
+    tags = [event for event in recorder.events if event[0] in {"start", "end"}]
+    assert list(zip(tags, positions, strict=True)) == [
+        (("start", "a"), 0),
+        (("start", "b"), 12),
+        (("end", "b"), 22),
+        (("start", "c"), 25),
+        (("start", "d"), 29),
+        (("end", "d"), 33),
+        (("end", "c"), 33),
+        (("end", "a"), 38),
+    ]
+    assert POSITIONED[38:42] == b"</a>"
+
+
+def test_positions_are_not_reported_without_a_receiver() -> None:
+    recorder = Recorder()
+    xmlsafe.parse_chunks([POSITIONED], recorder)
+    assert ("end", "a") in recorder.events

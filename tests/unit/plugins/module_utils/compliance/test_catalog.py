@@ -782,3 +782,66 @@ class TestCloseErrors:
         fail_on_close(monkeypatch, path, OSError(5, "Input/output error"))
         with pytest.raises(catalog.CatalogError, match="not well-formed"):
             catalog.read_benchmarks(path, expected)
+
+
+SCE_SYSTEM = "http://open-scap.org/page/SCE"
+SCE_NAMESPACE = 'xmlns:sce="http://open-scap.org/page/SCE_xccdf_stream"'
+
+
+def check(system: str) -> str:
+    return f'<x:check system="{system}"><x:check-content-ref href="c"/></x:check>'
+
+
+class TestScriptChecks:
+    """Content that would make the scanner run a script of the content is refused (FREES-191)."""
+
+    @pytest.mark.parametrize(
+        ("data", "message"),
+        [
+            (
+                collection(benchmark(rule("a", inner=check(SCE_SYSTEM)))),
+                "the system 'http://open-scap.org/page/SCE', which runs a script",
+            ),
+            (
+                collection(benchmark(rule("a", inner=check("urn:example:script")))),
+                "the system 'urn:example:script'",
+            ),
+            (collection(benchmark(rule("a", inner="<x:check/>"))), "the system ''"),
+            (
+                collection(
+                    benchmark(),
+                    '<ds:extended-component id="e"><ds:x/></ds:extended-component>',
+                ),
+                "embeds a Script Check Engine script or an extended component",
+            ),
+            (
+                collection(benchmark(), f"<sce:script {SCE_NAMESPACE}>echo</sce:script>"),
+                "embeds a Script Check Engine script",
+            ),
+        ],
+        ids=["sce-check", "other-system", "no-system", "extended-component", "sce-script"],
+    )
+    def test_a_script_check_is_refused_wherever_the_content_is_parsed(
+        self, tmp_path: Path, data: bytes, message: str
+    ) -> None:
+        with pytest.raises(catalog.ScriptCheckError, match=message):
+            parse(data)
+        path, sha = write(tmp_path, data)
+        with pytest.raises(catalog.ScriptCheckError) as raised:
+            catalog.benchmark_report(path, sha)
+        assert catalog.error_type(raised.value) == "script_check_content"
+        with pytest.raises(catalog.ScriptCheckError):
+            catalog.profile_report(path, sha, "xccdf_org.example.synthetic_profile_a")
+
+    def test_oval_and_ocil_checks_are_accepted(self) -> None:
+        inner = check(catalog.OVAL_CHECK_SYSTEM) + check(catalog.OCIL_CHECK_SYSTEM)
+        (found,) = parse(collection(benchmark(rule("a", inner=inner))))
+        assert [item.rule_id for item in found.rules] == [RULE + "a"]
+
+    def test_the_scanner_events_refuse_only_script_checks(self) -> None:
+        scanner = catalog.ScriptCheckScanner()
+        xmlsafe.parse_chunks([collection(benchmark(rule("a", inner="text")))], scanner)
+        with pytest.raises(catalog.ScriptCheckError):
+            xmlsafe.parse_chunks(
+                [collection(benchmark(rule("a", inner=check(SCE_SYSTEM))))], scanner
+            )

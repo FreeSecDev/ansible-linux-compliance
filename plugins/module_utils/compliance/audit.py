@@ -65,7 +65,7 @@ import stat
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, NoReturn, cast
+from typing import TYPE_CHECKING, BinaryIO, Final, NoReturn, cast
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     backends,
@@ -78,7 +78,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterator, Mapping
 
 ROOT_UID: Final[int] = 0
 DEFAULT_BACKEND: Final[str] = "openscap"
@@ -143,6 +143,7 @@ ERROR_EVIDENCE: Final[str] = "evidence_write_failed"
 ERROR_CLEANUP: Final[str] = "cleanup_failed"
 ERROR_DIGEST_MISMATCH: Final[str] = "digest_mismatch"
 ERROR_INVALID_CONTENT: Final[str] = "invalid_content"
+ERROR_SCRIPT_CHECK: Final[str] = catalog.ERROR_SCRIPT_CHECK
 ERROR_HOST_MISMATCH: Final[str] = "host_mismatch"
 CONTENT_DIRECTORY_NAME: Final[str] = "content"
 PREVIEW_PREFIX: Final[str] = ".check-"
@@ -1012,23 +1013,42 @@ def _scanner_files(directory: Path) -> tuple[list[EvidenceFile], list[SkippedEnt
     return recorded, skipped
 
 
+class _CopiedChunks:
+    """The chunks of a datastream, hashed and written to its private copy as they are parsed."""
+
+    def __init__(self, handle: BinaryIO, copy: BinaryIO) -> None:
+        self.handle = handle
+        self.copy = copy
+        self.digest = hashlib.sha256()
+        self.size = 0
+
+    def __iter__(self) -> Iterator[bytes]:
+        for chunk in xmlsafe.iter_handle_chunks(self.handle, catalog.DEFAULT_MAX_BYTES):
+            self.digest.update(chunk)
+            self.size += len(chunk)
+            self.copy.write(chunk)
+            yield chunk
+
+
 def copy_content(source: str, directory: Path, pinned: str) -> ContentCopy:
     """Copy the datastream into a new private directory and verify the copy.
 
     The source is opened once as a regular file that is not a symlink and is at
     most :data:`catalog.DEFAULT_MAX_BYTES` long. The SHA-256 is computed over
     exactly the bytes written to the copy (mode 0600, same file name), in one pass,
-    so the copy has the pinned content or the audit stops. A copy that does not
-    match is deleted. ``directory`` is created with mode 0700 and must not exist.
+    so the copy has the pinned content or the audit stops. The same bytes are parsed
+    while they are copied, and a copy that holds a check or script that would make the
+    scanner run a script of the content is refused (:func:`catalog.refuse_script_check`,
+    FREES-191), whatever its digest. A copy that does not match is deleted. ``directory``
+    is created with mode 0700 and must not exist.
 
     Raises:
         AuditError: ``digest_mismatch`` if the bytes are not the pinned content,
-            ``invalid_content`` if the source cannot be read safely, and
-            ``evidence_write_failed`` if the copy cannot be written.
+            ``script_check_content`` if they hold a script check, ``invalid_content`` if
+            the source cannot be read or parsed safely, and ``evidence_write_failed`` if the
+            copy cannot be written.
     """
     target = directory / Path(source).name
-    digest = hashlib.sha256()
-    size = 0
     try:
         directory.mkdir(mode=DIRECTORY_MODE)
     except OSError as error:
@@ -1040,11 +1060,12 @@ def copy_content(source: str, directory: Path, pinned: str) -> ContentCopy:
             target.open("xb") as copy,
         ):
             target.chmod(FILE_MODE)
-            for chunk in xmlsafe.iter_handle_chunks(handle, catalog.DEFAULT_MAX_BYTES):
-                digest.update(chunk)
-                size += len(chunk)
-                copy.write(chunk)
+            copied = _CopiedChunks(handle, copy)
+            xmlsafe.parse_chunks(copied, catalog.ScriptCheckScanner())
             copy.flush()
+    except catalog.ScriptCheckError as error:
+        _discard_copy(directory)
+        raise AuditError(ERROR_SCRIPT_CHECK, str(error)) from error
     except xmlsafe.XmlSafetyError as error:
         _discard_copy(directory)
         raise AuditError(
@@ -1054,12 +1075,12 @@ def copy_content(source: str, directory: Path, pinned: str) -> ContentCopy:
         _discard_copy(directory)
         message = f"the datastream cannot be copied: {error.strerror or type(error).__name__}"
         raise AuditError(ERROR_EVIDENCE, message) from error
-    actual = digest.hexdigest()
+    actual = copied.digest.hexdigest()
     if actual != pinned:
         _discard_copy(directory)
         message = f"the datastream changed after verification: expected {pinned}, copied {actual}"
         raise AuditError(ERROR_DIGEST_MISMATCH, message)
-    return ContentCopy(source, str(target), actual, size)
+    return ContentCopy(source, str(target), actual, copied.size)
 
 
 def _discard_copy(directory: Path) -> None:

@@ -6,6 +6,16 @@ against the manifest, and extracts only the datastreams that the manifest lists.
 Every other member of the archive, including the Ansible playbooks and Bash
 fixes that ComplianceAsCode ships, is never read (ADR 0003).
 
+No script written by ComplianceAsCode may run on a managed host, not even while it
+is audited (FREES-191, ADR 0026). A member is therefore checked against
+``source_sha256`` and ``source_size_bytes``, the published bytes, and then
+:func:`script_checks.strip_script_checks` removes every Script Check Engine check
+and embedded script. The numbers removed must equal ``removed_sce_checks`` and
+``removed_sce_scripts``, and the result must have ``sha256`` and ``size_bytes``,
+the digest and size of the processed datastream that every other consumer pins
+(the discover and audit roles, Molecule, the catalogue). Only the processed
+datastream is written.
+
 Extraction never uses a member name to build a path. A member is found by its
 exact manifest path, must be unique, a regular file (no directory, symlink or
 other special file), unencrypted, and exactly the size the manifest records. The
@@ -34,6 +44,8 @@ from urllib.parse import urljoin, urlsplit
 
 import yaml
 
+from tools.content import script_checks
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
@@ -52,6 +64,7 @@ REDIRECT_STATUSES: Final[frozenset[int]] = frozenset({301, 302, 303, 307, 308})
 HTTP_OK: Final[int] = 200
 MIN_PORT: Final[int] = 1
 MAX_PORT: Final[int] = 65535
+MAX_REMOVED: Final[int] = 100_000
 
 SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
 SHA512: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{128}")
@@ -95,6 +108,10 @@ class Datastream:
     size_bytes: int
     benchmark_id: str
     profiles: tuple[ProfileEntry, ...]
+    source_sha256: str
+    source_size_bytes: int
+    removed_sce_checks: int
+    removed_sce_scripts: int
 
     @property
     def file_name(self) -> str:
@@ -164,6 +181,14 @@ def check_https_url(url: str) -> str:
     return url
 
 
+def _count(table: Mapping[str, object], key: str, where: str) -> int:
+    value = table.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= MAX_REMOVED:
+        message = f"{where}.{key} must be an integer from 0 to {MAX_REMOVED}"
+        raise ContentError(message)
+    return value
+
+
 def _profile(value: object, where: str) -> ProfileEntry:
     table = _mapping(value, where)
     profile_id, title = table.get("id"), table.get("title")
@@ -203,6 +228,10 @@ def _datastream(value: object, index: int) -> Datastream:
         size_bytes=_size(table, "size_bytes", where, MAX_MEMBER_BYTES),
         benchmark_id=_text(table, "benchmark_id", where, re.compile(r"\S+")),
         profiles=profiles,
+        source_sha256=_text(table, "source_sha256", where, SHA256),
+        source_size_bytes=_size(table, "source_size_bytes", where, MAX_MEMBER_BYTES),
+        removed_sce_checks=_count(table, "removed_sce_checks", where),
+        removed_sce_scripts=_count(table, "removed_sce_scripts", where),
     )
 
 
@@ -403,29 +432,61 @@ def _find_member(bundle: zipfile.ZipFile, stream: Datastream) -> zipfile.ZipInfo
     if info.flag_bits & ENCRYPTED_FLAG:
         message = f"{stream.path} is encrypted"
         raise ContentError(message)
-    if info.file_size != stream.size_bytes:
+    if info.file_size != stream.source_size_bytes:
         message = (
-            f"{stream.path} has size {info.file_size}, the manifest records {stream.size_bytes}"
+            f"{stream.path} has size {info.file_size}, "
+            f"the manifest records {stream.source_size_bytes}"
         )
         raise ContentError(message)
     return info
+
+
+def processed(stream: Datastream, data: bytes) -> bytes:
+    """Return the published bytes of ``stream`` without their script checks, as pinned.
+
+    Raises:
+        ContentError: If ``data`` is not the published member, a script construct cannot be
+            removed safely, the numbers removed differ from the manifest, or the result does
+            not have the pinned digest and size.
+    """
+    _matches(
+        stream.path,
+        ok=len(data) == stream.source_size_bytes
+        and hashlib.sha256(data).hexdigest() == stream.source_sha256,
+    )
+    try:
+        stripped = script_checks.strip_script_checks(data)
+    except script_checks.ScriptCheckError as error:
+        message = f"{stream.path}: {error}"
+        raise ContentError(message) from error
+    removed = (stripped.checks, stripped.scripts)
+    if removed != (stream.removed_sce_checks, stream.removed_sce_scripts):
+        message = (
+            f"{stream.path}: removed {stripped.checks} SCE checks and {stripped.scripts} scripts, "
+            f"the manifest records {stream.removed_sce_checks} and {stream.removed_sce_scripts}"
+        )
+        raise ContentError(message)
+    _matches(
+        f"{stream.path} without its script checks",
+        ok=len(stripped.data) == stream.size_bytes
+        and hashlib.sha256(stripped.data).hexdigest() == stream.sha256,
+    )
+    return stripped.data
 
 
 def _extract_member(
     bundle: zipfile.ZipFile, info: zipfile.ZipInfo, stream: Datastream, directory: Path
 ) -> Path:
     descriptor, name = _new_file(directory, ".datastream-")
-    digest = hashlib.sha256()
+    pieces: list[bytes] = []
     received = 0
     try:
         with bundle.open(info) as source, os.fdopen(descriptor, "wb") as handle:
             while chunk := _read(source):
                 received += len(chunk)
-                digest.update(chunk)
-                handle.write(chunk)
-        _matches(
-            stream.path, ok=received == stream.size_bytes and digest.hexdigest() == stream.sha256
-        )
+                _within(received, stream.source_size_bytes, stream.path)
+                pieces.append(chunk)
+            handle.write(processed(stream, b"".join(pieces)))
         Path(name).chmod(FILE_MODE)
         destination = directory / stream.file_name
         Path(name).replace(destination)
@@ -449,9 +510,11 @@ def _extract_member(
 def extract_datastreams(
     archive_path: Path, streams: Sequence[Datastream], directory: Path
 ) -> list[Path]:
-    """Extract only ``streams`` from the archive, verifying each SHA-256.
+    """Extract only ``streams`` from the archive, verified and without their script checks.
 
-    No other member is read. Returns the extracted files in the order given.
+    No other member is read. Each member must have its ``source_sha256``, and the file
+    written is the processed datastream with its pinned ``sha256`` (:func:`processed`).
+    Returns the written files in the order given.
     """
     try:
         with zipfile.ZipFile(archive_path) as bundle:
