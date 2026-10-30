@@ -196,6 +196,8 @@ SCC_CONTAINERFILE := extensions/ci/scc/Containerfile
 SCC_CONTAINERFILE_UBUNTU2604 := extensions/ci/scc/Containerfile.ubuntu2604
 SCC_DOWNLOAD_DIR := build/scc/download
 SCC_CONTEXT_DIR := build/scc/context
+SCC_EXPIRY_LOG := build/scc/expiry/application-debug-log.txt
+SCC_EXPIRY_START := $(SCC_EXPIRY_LOG).start
 OSCAP_IMAGE ?= localhost/freesecdev-oscap:local
 OSCAP_CONTAINERFILE := extensions/ci/oscap/Containerfile
 OPENSCAP_SCANNER_VERSION := 1.3.9+dfsg-1.1ubuntu2
@@ -300,6 +302,7 @@ Images and AWS
   scc-image-ubuntu2604  Build SCC_IMAGE_UBUNTU2604, the same SCC on an Ubuntu 26.04 base, locally; never pushed
   oscap-image           Build OSCAP_IMAGE, the CI-only OpenSCAP image on the SCC image's base, locally; never pushed
   scc-integration       Run real SCC scans through compliance_scan, the egress test, the 26.04 case and the OpenSCAP STIG checklist export
+  scc-own-expiry-check  Fail unless the application debug log of scc-integration's real scan says SCC expires on or after SCC_EXPIRES
   scc-image-clean       Remove the local SCC_IMAGE, SCC_IMAGE_UBUNTU2604 and OSCAP_IMAGE
   scc-release-watch     Compare NIWC's SCC release record with SCC_VERSION and report the expiry; downloads no SCC
                         (SCC_RELEASE_WATCH_ISSUES=true also opens or reopens one GitHub issue per finding)
@@ -322,7 +325,7 @@ endef
 export HELP_TEXT
 
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
-	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
+	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
@@ -967,7 +970,12 @@ scc-integration: scc-image scc-image-ubuntu2604 oscap-image require-uv collectio
 	uv python install
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
 	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_SCC_IMAGE_UBUNTU2604='$(SCC_IMAGE_UBUNTU2604)' FREESECDEV_REQUIRE_SCC=1 \
-		FREESECDEV_OSCAP_IMAGE='$(OSCAP_IMAGE)' $(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
+		FREESECDEV_OSCAP_IMAGE='$(OSCAP_IMAGE)' FREESECDEV_SCC_EXPIRY_LOG='$(SCC_EXPIRY_LOG)' \
+		$(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
+
+scc-own-expiry-check: require-uv
+	start="$$(cat '$(SCC_EXPIRY_START)')" || { printf 'error: %s is missing: the real scan of make scc-integration did not export its start\n' '$(SCC_EXPIRY_START)' >&2; exit 2; }; \
+		$(RUN) --no-dev python -m tools.scc.own_expiry --log '$(SCC_EXPIRY_LOG)' --expires '$(SCC_EXPIRES)' --run-date "$$start"
 
 scc-image-clean:
 	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }
