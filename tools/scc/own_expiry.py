@@ -1,25 +1,36 @@
 """Check SCC's own expiry against the pinned ``SCC_EXPIRES`` (ADR 0019, open item 12, FREES-179).
 
 SCC logs "Software expires in N days" in its application debug log. A real scan
-with ``-d`` writes that log as ``ApplicationLogs/<name>_Debug_Log_001.txt`` below
-the scan's ``-u`` directory, which is where the SCC backend reads it. The SCC
-integration test of ``make scc-integration`` copies the log of its real scan out of
-the container, and ``make scc-own-expiry-check`` runs this tool on the copy in the
-``scc-smoke`` job.
+with ``-d`` writes that log below the scan's ``-u`` directory as
+``ApplicationLogs/<host>_SCC-<version>_<YYYY-MM-DD>_<HHMMSS>_Debug_Log_001.txt``,
+which is where the SCC backend reads it. The time
+in the name is the start of the scan in SCC's process time zone, which the backend
+and the integration test fix to UTC. The SCC integration test of ``make
+scc-integration`` copies the log of its real scan out of the container and writes
+that start time next to it, and ``make scc-own-expiry-check`` runs this tool on the
+copy with the start time as ``--run-date`` in the ``scc-smoke`` job, so a scan that
+crosses midnight cannot shift the run date.
 
 The log is untrusted text. The tool opens it without following a symbolic link,
 requires a regular file of at most :data:`MAX_LOG_BYTES` and decodes it as UTF-8
 with replacement. It then requires exactly one mention of the software's expiry
 ("software expire", in any case) in the whole log, in a well-formed log record
-whose message says "Software expires in N days".
-A missing, repeated or malformed mention fails the check, and so does an expiry
-earlier than the pin: the run date plus N days must be on or after
-``SCC_EXPIRES``. A later expiry passes, because the pin is then the earlier and
-safer date. The run date is the UTC date on which the log was last modified,
-unless ``--run-date`` names it.
+whose message says "Software expires in N days" (or "1 day"). A missing, repeated
+or malformed mention fails the check, and so does an expiry earlier than the pin:
+the run date plus N days must be on or after ``SCC_EXPIRES``.
+
+Two cases pass:
+
+* A later expiry, because the pin is then the earlier and safer date.
+* An expiry exactly one day before ``SCC_EXPIRES``, with a warning, when the scan
+  started at or after 12:00 UTC. SCC may count the days left from the time of day,
+  so on an afternoon a partly used day is no longer counted. The hard stop seven
+  days before ``SCC_EXPIRES`` keeps that day unused. A run date without a time never
+  gets this tolerance.
 
 Exit status: 0 when the check holds, 1 when SCC expires before ``SCC_EXPIRES``,
-2 when the log is missing or unusable or the expiry is missing or ambiguous.
+2 when the log is missing or unusable, the expiry is missing or ambiguous, or an
+argument is malformed.
 """
 
 from __future__ import annotations
@@ -31,7 +42,7 @@ import re
 import stat
 import sys
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
@@ -43,12 +54,17 @@ MAX_SHOWN_CHARACTERS: Final[int] = 200
 EXIT_OK: Final[int] = 0
 EXIT_EARLIER: Final[int] = 1
 EXIT_UNUSABLE: Final[int] = 2
+AFTERNOON_HOUR: Final[int] = 12
+TOLERATED_DAYS: Final[int] = 1
 PINS_FILE: Final[str] = "extensions/ci/scc/scc.pins"
 MENTION: Final[re.Pattern[str]] = re.compile(r"(?i)\bsoftware\s+expire")
 LOG_RECORD: Final[re.Pattern[str]] = re.compile(
     r"[0-9]{2}:[0-9]{2}:[0-9]{2}\t\s*([A-Z]+)\t\s*(\S+)\t\s*([0-9]+)\t(.*)"
 )
-EXPIRY: Final[re.Pattern[str]] = re.compile(r"\bSoftware expires in (-?[0-9]{1,5}) days\b")
+EXPIRY: Final[re.Pattern[str]] = re.compile(r"\bSoftware expires in (-?[0-9]{1,5}) days?\b")
+RUN_DATE: Final[re.Pattern[str]] = re.compile(
+    r"([0-9]{4}-[0-9]{2}-[0-9]{2})(?:T([0-9]{2}:[0-9]{2}:[0-9]{2})Z)?"
+)
 
 
 class ExpiryCheckError(Exception):
@@ -56,34 +72,51 @@ class ExpiryCheckError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
-class DebugLog:
-    """The text of SCC's application debug log and the UTC date it was last modified."""
+class RunStart:
+    """The UTC day the scan started on and, when known, its UTC start time."""
 
-    text: str
-    modified: date
+    day: date
+    started: datetime | None = None
+
+    @property
+    def afternoon(self) -> bool:
+        """Whether the scan is known to have started at or after 12:00 UTC."""
+        return self.started is not None and self.started.hour >= AFTERNOON_HOUR
+
+    def __str__(self) -> str:
+        """Return the start as given: a date, or a date and time in UTC."""
+        if self.started is None:
+            return self.day.isoformat()
+        return f"{self.started.isoformat()}Z"
 
 
 @dataclass(frozen=True, slots=True)
 class Verdict:
-    """SCC's own expiry, derived from the run date and N, compared with the pin."""
+    """SCC's own expiry, derived from the run start and N, compared with the pin."""
 
     days: int
-    run_date: date
+    run: RunStart
     own_expiry: date
     pinned: date
 
     @property
+    def tolerated(self) -> bool:
+        """Whether SCC expires exactly one day early on a scan started in the afternoon."""
+        early = self.own_expiry == self.pinned - timedelta(days=TOLERATED_DAYS)
+        return early and self.run.afternoon
+
+    @property
     def holds(self) -> bool:
-        """Whether SCC expires on or after the pinned ``SCC_EXPIRES``."""
-        return self.own_expiry >= self.pinned
+        """Whether SCC expires on or after the pinned ``SCC_EXPIRES``, or is tolerated."""
+        return self.own_expiry >= self.pinned or self.tolerated
 
 
 def _shown(line: str) -> str:
     return repr(line[:MAX_SHOWN_CHARACTERS])
 
 
-def read_log(path: Path, limit: int = MAX_LOG_BYTES) -> DebugLog:
-    """Read SCC's application debug log at ``path``.
+def read_log(path: Path, limit: int = MAX_LOG_BYTES) -> str:
+    """Return the text of SCC's application debug log at ``path``.
 
     Raises:
         ExpiryCheckError: If the file is missing, a symbolic link, not a regular
@@ -110,8 +143,7 @@ def read_log(path: Path, limit: int = MAX_LOG_BYTES) -> DebugLog:
     if len(data) > limit:
         message = f"SCC's application debug log {path} is larger than {limit} bytes"
         raise ExpiryCheckError(message)
-    modified = datetime.fromtimestamp(status.st_mtime, tz=UTC).date()
-    return DebugLog(data.decode("utf-8", "replace"), modified)
+    return data.decode("utf-8", "replace")
 
 
 def expiry_days(text: str) -> int:
@@ -119,9 +151,8 @@ def expiry_days(text: str) -> int:
 
     Raises:
         ExpiryCheckError: If the log mentions the software's expiry nowhere or more
-            than once,
-            or the one mention is not a well-formed log record that says
-            "Software expires in N days".
+            than once, or the one mention is not a well-formed log record that says
+            "Software expires in N days" or "Software expires in N day".
     """
     mentions = [
         (number, line)
@@ -155,9 +186,28 @@ def expiry_days(text: str) -> int:
     return int(found.group(1))
 
 
-def judge(days: int, run_date: date, pinned: date) -> Verdict:
-    """Return SCC's own expiry, ``run_date`` plus ``days``, compared with ``pinned``."""
-    return Verdict(days, run_date, run_date + timedelta(days=days), pinned)
+def judge(days: int, run: RunStart, pinned: date) -> Verdict:
+    """Return SCC's own expiry, the run's day plus ``days``, compared with ``pinned``."""
+    return Verdict(days, run, run.day + timedelta(days=days), pinned)
+
+
+def parse_run_date(value: str) -> RunStart:
+    """Parse ``YYYY-MM-DD`` or the UTC start time ``YYYY-MM-DDTHH:MM:SSZ``.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is neither, or not a real date or time.
+    """
+    message = f"not a date in the form YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ: {value!r}"
+    match = RUN_DATE.fullmatch(value)
+    if match is None:
+        raise argparse.ArgumentTypeError(message)
+    day_text, clock = match.groups()
+    try:
+        day = date.fromisoformat(day_text)
+        started = None if clock is None else datetime.fromisoformat(f"{day_text}T{clock}")
+    except ValueError:
+        raise argparse.ArgumentTypeError(message) from None
+    return RunStart(day, started)
 
 
 def _date(value: str) -> date:
@@ -169,20 +219,29 @@ def _date(value: str) -> date:
 
 
 def _report(log: Path, verdict: Verdict) -> int:
+    unit = "day" if abs(verdict.days) == 1 else "days"
     print(
-        f"SCC's application debug log {log} says 'Software expires in {verdict.days} days' "
-        f"on {verdict.run_date}: SCC expires on {verdict.own_expiry}; "
+        f"SCC's application debug log {log} says 'Software expires in {verdict.days} {unit}' "
+        f"for the scan started {verdict.run}: SCC expires on {verdict.own_expiry}; "
         f"SCC_EXPIRES is {verdict.pinned}"
     )
     gap = (verdict.own_expiry - verdict.pinned).days
     if not verdict.holds:
+        early = "1 day" if gap == -1 else f"{-gap} days"
         print(
-            f"error: SCC expires {-gap} days before SCC_EXPIRES. Set SCC_EXPIRES in {PINS_FILE} "
+            f"error: SCC expires {early} before SCC_EXPIRES. Set SCC_EXPIRES in {PINS_FILE} "
             f"to {verdict.own_expiry} or earlier (ADR 0019, decision 7, step 4)",
             file=sys.stderr,
         )
         return EXIT_EARLIER
-    if gap:
+    if verdict.tolerated:
+        print(
+            "warning: SCC expires one day before SCC_EXPIRES. The scan started at or after "
+            "12:00 UTC, when SCC may no longer count the partly used day; accepted because the "
+            "hard stop is seven days before SCC_EXPIRES",
+            file=sys.stderr,
+        )
+    elif gap:
         print(
             f"SCC_EXPIRES is {gap} days earlier than SCC's own expiry, so the pin is the safer date"
         )
@@ -198,17 +257,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--log", required=True, type=Path)
     parser.add_argument("--expires", required=True, type=_date)
-    parser.add_argument("--run-date", type=_date, default=None)
+    parser.add_argument("--run-date", required=True, type=parse_run_date)
     arguments = parser.parse_args(argv)
     log = cast("Path", arguments.log)
     try:
-        debug_log = read_log(log)
-        days = expiry_days(debug_log.text)
+        days = expiry_days(read_log(log))
     except ExpiryCheckError as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_UNUSABLE
-    run_date = cast("date | None", arguments.run_date) or debug_log.modified
-    return _report(log, judge(days, run_date, cast("date", arguments.expires)))
+    run = cast("RunStart", arguments.run_date)
+    return _report(log, judge(days, run, cast("date", arguments.expires)))
 
 
 if __name__ == "__main__":

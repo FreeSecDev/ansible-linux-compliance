@@ -159,4 +159,7 @@ def test_the_real_run_exports_its_application_debug_log(scan_report: dict[str, o
     logs = cast("list[str]", expiry["application_logs"])
     assert len(logs) == 1, logs
     assert re.fullmatch(r"ApplicationLogs/[A-Za-z0-9_.-]+_Debug_Log_001\.txt", logs[0])
+    assert re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", str(expiry["start"])
+    )
     assert expiry["exported"] is True

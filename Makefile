@@ -197,6 +197,7 @@ SCC_CONTAINERFILE_UBUNTU2604 := extensions/ci/scc/Containerfile.ubuntu2604
 SCC_DOWNLOAD_DIR := build/scc/download
 SCC_CONTEXT_DIR := build/scc/context
 SCC_EXPIRY_LOG := build/scc/expiry/application-debug-log.txt
+SCC_EXPIRY_START := $(SCC_EXPIRY_LOG).start
 OSCAP_IMAGE ?= localhost/freesecdev-oscap:local
 OSCAP_CONTAINERFILE := extensions/ci/oscap/Containerfile
 OPENSCAP_SCANNER_VERSION := 1.3.9+dfsg-1.1ubuntu2
@@ -973,7 +974,8 @@ scc-integration: scc-image scc-image-ubuntu2604 oscap-image require-uv collectio
 		$(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider
 
 scc-own-expiry-check: require-uv
-	$(RUN) --no-dev python -m tools.scc.own_expiry --log '$(SCC_EXPIRY_LOG)' --expires '$(SCC_EXPIRES)'
+	start="$$(cat '$(SCC_EXPIRY_START)')" || { printf 'error: %s is missing: the real scan of make scc-integration did not export its start\n' '$(SCC_EXPIRY_START)' >&2; exit 2; }; \
+		$(RUN) --no-dev python -m tools.scc.own_expiry --log '$(SCC_EXPIRY_LOG)' --expires '$(SCC_EXPIRES)' --run-date "$$start"
 
 scc-image-clean:
 	@printf '%s' '$(SCC_IMAGE)' | grep -Eq '^localhost/[a-z0-9._/-]+:[A-Za-z0-9._-]+$$' || { printf 'error: SCC_IMAGE must be a localhost/ tag\n' >&2; exit 2; }

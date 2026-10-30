@@ -352,16 +352,22 @@ a reviewed pull request that changes `extensions/ci/scc/scc.pins`:
    - If the two disagree, record the earlier date and the reason in the pull request.
    - CI does the first check on every run of the `scc-smoke` job (FREES-179). The real scan of
      `make scc-integration` runs with `-o FILE -u DIR -q -d`, and the test driver copies that run's application
-     debug log, `ApplicationLogs/<name>_Debug_Log_001.txt` below the `-u` directory, to `SCC_EXPIRY_LOG`
-     (`build/scc/expiry/application-debug-log.txt`). The copy belongs to the runner user, has mode 0600, stays
-     on the runner and is never uploaded.
-   - The next step, `make scc-own-expiry-check`, runs `tools/scc/own_expiry.py` on that copy. It fails when the
-     copy is missing, when the log mentions the software's expiry more than once or not at all, when that one
-     mention is not a well-formed log record saying "Software expires in N days", or when the run date plus N is
-     earlier than `SCC_EXPIRES`. The run date is the UTC date on which SCC last wrote the log.
-   - A later date passes, because `SCC_EXPIRES` is then the earlier and safer date. A pin bump therefore cannot
-     merge with an `SCC_EXPIRES` after SCC's own expiry. Paste the job's "Software expires" line into the pull
-     request.
+     debug log, `ApplicationLogs/<host>_SCC-<version>_<YYYY-MM-DD>_<HHMMSS>_Debug_Log_001.txt` below the `-u`
+     directory, to `SCC_EXPIRY_LOG` (`build/scc/expiry/application-debug-log.txt`).
+   - SCC names the log after the start of the scan in its process time zone, which `TZ=UTC0` fixes to UTC. The
+     driver writes that start, as `YYYY-MM-DDTHH:MM:SSZ`, to `SCC_EXPIRY_START` (the same path with `.start`
+     appended). A scan that crosses midnight therefore cannot shift the run date.
+   - Both files belong to the runner user, have mode 0600, stay on the runner and are never uploaded.
+   - The next step, `make scc-own-expiry-check`, runs `tools/scc/own_expiry.py` on the copy, with the start as
+     `--run-date`. It fails when either file is missing, when the log mentions the software's expiry more than
+     once or not at all, or when that one mention is not a well-formed log record saying "Software expires in N
+     days" (or "1 day" on the last day). It also fails when the start day plus N is earlier than `SCC_EXPIRES`.
+   - A later date passes, because `SCC_EXPIRES` is then the earlier and safer date.
+   - A date exactly one day before `SCC_EXPIRES` passes with a warning, but only for a scan that started at or after
+     12:00 UTC. SCC may count the days left from the time of day, and so drop a day that is partly used. The hard
+     stop seven days before `SCC_EXPIRES` keeps that day out of use.
+   - A pin bump therefore cannot merge with an `SCC_EXPIRES` after SCC's own expiry, apart from that one
+     afternoon day. Paste the job's "Software expires" line into the pull request.
 5. Run `make scc-smoke` and paste the verification output into the pull request.
 
 The expiry is enforced on the SCC path, not in every pull request:
@@ -663,11 +669,13 @@ depends on the FREES-146 mapping for `oscap` results.
     - `expignore` is documented only for pre-release versions and is not used.
     - Checked in CI since FREES-179: every run of the `scc-smoke` job reads SCC's own "Software expires in N days"
       from the application debug log of the real scan of `make scc-integration`. `make scc-own-expiry-check`
-      fails when that line is missing or ambiguous, or when the run date plus N is earlier than `SCC_EXPIRES`
+      fails when that line is missing or ambiguous, or when the scan's UTC start day plus N is earlier than
+      `SCC_EXPIRES`. One day early is accepted, with a warning, only for a scan started at or after 12:00 UTC
       (decision 7, step 4).
-    - Observed in CI by the pull request for FREES-179: the real scan of 2026-10-30 (started 11:03 UTC) logged
-      "Software expires in 26 days" in its application debug log, and in no other log of its `-u` directory. That
-      gives 2026-11-25, the pinned `SCC_EXPIRES`, as the scans of 2026-10-26 did.
+    - Observed in CI by the pull request for FREES-179 (Actions run 41046486870, job `scc-smoke`): the real scan
+      that started at 2026-10-30 11:20:17 UTC logged "Software expires in 26 days" in its application debug log,
+      and in no other log of its `-u` directory. That gives 2026-11-25, the pinned `SCC_EXPIRES`, as the scans of
+      2026-10-26 did.
     - Decided by the [FREES-176 amendment](#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176): a
       scheduled watch reports a new release, and after the hard stop pull requests and merge groups report a named
       skip of the smoke test instead of deadlocking, while the expiry check still refuses to build or run SCC.
@@ -818,8 +826,8 @@ lists, and the sink binds every address of its isolated network.
 The tests skip without `FREESECDEV_SCC_IMAGE` and fail instead in CI (`FREESECDEV_REQUIRE_SCC=1`).
 Since FREES-179 the real scan's container also mounts the directory of `SCC_EXPIRY_LOG` (given as
 `FREESECDEV_SCC_EXPIRY_LOG`, required in CI), and the driver copies the real run's application debug log there
-after all scans, for `make scc-own-expiry-check` (decision 7, step 4). SCC itself never reads or writes that
-directory.
+after all scans, with the scan's UTC start next to it, for `make scc-own-expiry-check` (decision 7, step 4). SCC
+itself never reads or writes that directory.
 
 ### Not yet done
 

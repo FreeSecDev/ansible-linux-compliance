@@ -19,7 +19,8 @@ Commands:
   (FREES-147), once with SCC's own XCCDF results and once with the pinned stream as
   content, and reports what ``checklist_check.py`` reads back. The checklists stay
   in the container. With ``--export-log`` it copies the real run's application
-  debug log there for ``make scc-own-expiry-check`` (FREES-179), owned by
+  debug log there for ``make scc-own-expiry-check`` (FREES-179), and the scan's UTC
+  start from the log's name to the same path with ``.start`` appended, both owned by
   ``--export-owner`` with mode 0600, and reports which of SCC's logs of that run
   mention the software's expiry.
 - ``install``: install a stream with SCC's own installer. This is test set-up
@@ -102,6 +103,29 @@ APPLICATION_LOGS = "ApplicationLogs"
 APPLICATION_LOG_PATTERN = "*_Debug_Log_001.txt"
 EXPIRY_MENTION = "Software expires"
 OWNER = re.compile(r"([0-9]{1,10}):([0-9]{1,10})")
+LOG_START = re.compile(
+    r"[A-Za-z0-9_.-]{1,160}_([0-9]{4}-[0-9]{2}-[0-9]{2})_([0-9]{2})([0-9]{2})([0-9]{2})"
+    r"_Debug_Log_001\.txt"
+)
+START_SUFFIX = ".start"
+
+
+def log_start(name: str) -> str | None:
+    """Return the UTC start ``YYYY-MM-DDTHH:MM:SSZ`` that SCC put in its debug log's name.
+
+    SCC names the log after the start of the scan in its process time zone, which
+    the backend and this driver fix to UTC (``TZ=UTC0``).
+    """
+    match = LOG_START.fullmatch(name)
+    if match is None:
+        return None
+    day, hours, minutes, seconds = match.groups()
+    return f"{day}T{hours}:{minutes}:{seconds}Z"
+
+
+def _write_owned(path: Path, owner: re.Match[str]) -> None:
+    os.chown(path, int(owner.group(1)), int(owner.group(2)))
+    path.chmod(0o600)
 
 
 def _digest(path: Path) -> str:
@@ -268,7 +292,10 @@ def toggled_scan(options: argparse.Namespace, module: Path, python_path: str) ->
 
 
 def export_application_log(options: argparse.Namespace, run_directory: Path) -> dict[str, object]:
-    """Copy the real run's debug log to ``--export-log`` and say where SCC logged its expiry."""
+    """Copy the real run's debug log and its UTC start to ``--export-log`` and ``.start``.
+
+    It also says which of SCC's logs of the run mention the software's expiry.
+    """
     user = run_directory / "scan" / scc.WORK_DIRECTORY_NAME / scc.USER_DIRECTORY_NAME
     logs = sorted((user / APPLICATION_LOGS).glob(APPLICATION_LOG_PATTERN))
     mentions = sorted(
@@ -276,18 +303,22 @@ def export_application_log(options: argparse.Namespace, run_directory: Path) -> 
         for path in user.rglob("*.txt")
         if path.is_file() and EXPIRY_MENTION in path.read_text(encoding="utf-8", errors="replace")
     )
+    start = log_start(logs[0].name) if len(logs) == 1 else None
     report: dict[str, object] = {
         "application_logs": [str(path.relative_to(user)) for path in logs],
         "mentions": mentions,
+        "start": start,
         "exported": False,
     }
     owner = OWNER.fullmatch(options.export_owner)
-    if not options.export_log or len(logs) != 1 or owner is None:
+    if not options.export_log or start is None or owner is None:
         return report
     target = Path(options.export_log)
     shutil.copy2(logs[0], target)
-    os.chown(target, int(owner.group(1)), int(owner.group(2)))
-    target.chmod(0o600)
+    _write_owned(target, owner)
+    start_file = target.with_name(target.name + START_SUFFIX)
+    start_file.write_text(start + "\n", encoding="utf-8")
+    _write_owned(start_file, owner)
     report["exported"] = True
     return report
 

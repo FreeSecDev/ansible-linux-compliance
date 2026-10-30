@@ -14,8 +14,9 @@ its real run (FREES-179) to the host path in ``FREESECDEV_SCC_EXPIRY_LOG``, whic
 ``make scc-integration`` sets to ``SCC_EXPIRY_LOG``; ``make scc-own-expiry-check``
 then checks SCC's own "Software expires in N days" against ``SCC_EXPIRES``. The copy
 belongs to the user who runs the tests, has mode 0600 and stays on the runner: it is
-never committed or uploaded. With ``FREESECDEV_REQUIRE_SCC=1`` the variable is
-required.
+never committed or uploaded. The scan's UTC start, read from the log's name, goes to
+the same path with ``.start`` appended and is the check's ``--run-date``. With
+``FREESECDEV_REQUIRE_SCC=1`` the variable is required.
 
 The image has no Python. The tests mount the standalone interpreter that runs
 the tests (``sys.base_prefix``, a uv-managed CPython) read-only at ``/opt/py``,
@@ -146,6 +147,7 @@ def expiry_log_export() -> tuple[list[str], list[str]]:
         pytest.fail(f"{EXPIRY_LOG_VARIABLE} must name a plain file name")
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     target.unlink(missing_ok=True)
+    target.with_name(target.name + ".start").unlink(missing_ok=True)
     volume = ["--volume", f"{target.parent.resolve()}:{EXPORT_MOUNT}"]
     driver = ["--export-log", f"{EXPORT_MOUNT}/{target.name}"]
     driver += ["--export-owner", f"{os.getuid()}:{os.getgid()}"]
