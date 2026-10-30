@@ -668,7 +668,7 @@ a skipped `molecule-lifecycle` only when such a plan has exactly zero lifecycle 
 touches no topic. Measured examples are in the pull request of FREES-189: one topic's task file plans that topic's
 legs on both platforms (four for `banners`, nine for `sudo`), and a documentation change plans none.
 
-Cross-topic interactions are caught only on `main` and nightly: a change that the mapping confines to one topic can
+Cross-topic interactions are caught only on `main` and in the nightly run: a change that the mapping confines to one topic can
 still break another topic's legs, through state on the instance that both inspect or the order in which topics run,
 and only the full matrix shows it, after the merge. The other residual risks are in the ADR amendment. To see what a
 branch would plan, run `make molecule-plan` (`MOLECULE_PLAN_BASE` defaults to `origin/main`); it changes nothing and
