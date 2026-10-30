@@ -76,6 +76,7 @@ def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harness:
         encoding="utf-8",
     )
     monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(release))
+    monkeypatch.setattr(audit, "OS_RELEASE_FALLBACK_PATH", str(tmp_path / "absent-fallback"))
     return Harness(tmp_path)
 
 
@@ -171,6 +172,68 @@ def test_the_scc_backend_refuses_an_unreadable_release_file(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(harness.root / "absent"))
+    with pytest.raises(audit.AuditError, match="cannot be read") as raised:
+        audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
+    assert raised.value.error_type == "host_mismatch"
+
+
+def test_a_missing_etc_release_falls_back_to_the_usr_lib_file(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fallback = harness.root / "usr-lib-os-release"
+    fallback.write_text('ID=ubuntu\nVERSION_ID="26.04"\n', encoding="utf-8")
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(harness.root / "absent"))
+    monkeypatch.setattr(audit, "OS_RELEASE_FALLBACK_PATH", str(fallback))
+    audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
+    other = model.HostIdentity("host.example", "ubuntu", "24.04", "x86_64", None)
+    with pytest.raises(audit.AuditError, match=r"VERSION_ID '26\.04'") as raised:
+        audit.plan(harness.job(backend="scc", host=other), owner_uid=UID)
+    assert raised.value.error_type == "host_mismatch"
+
+
+def test_an_existing_etc_release_wins_over_the_usr_lib_file(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fallback = harness.root / "usr-lib-os-release"
+    fallback.write_text('ID=debian\nVERSION_ID="12"\n', encoding="utf-8")
+    monkeypatch.setattr(audit, "OS_RELEASE_FALLBACK_PATH", str(fallback))
+    audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
+
+
+def test_a_dangling_etc_release_symlink_counts_as_missing(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fallback = harness.root / "usr-lib-os-release"
+    fallback.write_text('ID=ubuntu\nVERSION_ID="26.04"\n', encoding="utf-8")
+    dangling = harness.root / "etc-os-release"
+    dangling.symlink_to(harness.root / "nowhere")
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(dangling))
+    monkeypatch.setattr(audit, "OS_RELEASE_FALLBACK_PATH", str(fallback))
+    assert audit.resolve_os_release(str(dangling), str(fallback)) == str(fallback)
+    audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
+
+
+def test_an_unreadable_etc_release_does_not_fall_back(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fallback = harness.root / "usr-lib-os-release"
+    fallback.write_text('ID=ubuntu\nVERSION_ID="26.04"\n', encoding="utf-8")
+    directory = harness.root / "etc-os-release"
+    directory.mkdir()
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(directory))
+    monkeypatch.setattr(audit, "OS_RELEASE_FALLBACK_PATH", str(fallback))
+    with pytest.raises(audit.AuditError, match="cannot be read") as raised:
+        audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
+    assert raised.value.error_type == "host_mismatch"
+
+
+def test_neither_release_file_existing_fails_closed(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(audit, "OS_RELEASE_PATH", str(harness.root / "absent"))
+    assert audit.resolve_os_release(audit.OS_RELEASE_PATH, audit.OS_RELEASE_FALLBACK_PATH) == str(
+        harness.root / "absent"
+    )
     with pytest.raises(audit.AuditError, match="cannot be read") as raised:
         audit.plan(harness.job(backend="scc", host=TARGET), owner_uid=UID)
     assert raised.value.error_type == "host_mismatch"

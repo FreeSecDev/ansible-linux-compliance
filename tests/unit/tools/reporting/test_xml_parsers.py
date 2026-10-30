@@ -422,3 +422,146 @@ def test_xccdf_rule_results_are_bounded_by_the_model_limit(
     )
     over = xccdf.parse_arf(write("a.xml", arf.replace("</TestResult>", f"{extra}</TestResult>")))
     assert over.status is SectionStatus.ERROR
+
+
+UBUNTU_2404_CPE = "cpe:/o:canonical:ubuntu_linux:24.04::~~lts~~~"
+RSYSLOG_PLATFORM = "xccdf_mil.disa.stig_platform_LinuxRsyslog"
+
+
+def scc_xccdf(
+    kit: Any, *, benchmark: tuple[str, ...], result: tuple[str, ...], system: str = "scc"
+) -> str:
+    systems = {"scc": "cpe:/a:niwc:scc:5.15", "oscap": "cpe:/a:open-scap:oscap:1.3"}
+    test_system = systems.get(system, system)
+    declared = "".join(f'<platform idref="{idref}"/>' for idref in benchmark)
+    listed = "".join(f'<platform idref="{idref}"/>' for idref in result)
+    text: str = kit.xccdf_text("host.example")
+    text = text.replace("<TestResult ", f'<TestResult test-system="{test_system}" ')
+    text = text.replace("<version>", f"{declared}<version>", 1)
+    return text.replace("</TestResult>", f"{listed}</TestResult>")
+
+
+def test_scc_results_that_list_the_benchmark_platform_are_accepted(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(
+        kit, benchmark=(UBUNTU_2404_CPE,), result=(UBUNTU_2404_CPE, RSYSLOG_PLATFORM)
+    )
+    assert xccdf.parse_xccdf(write("on.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def test_scc_results_without_the_benchmark_platform_are_refused_by_content(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(RSYSLOG_PLATFORM,))
+    result = xccdf.parse_xccdf(write("copied-out-of-the-bundle.xml", document))
+    assert result.status is SectionStatus.ERROR
+    assert result.data is None
+    assert result.reason == xccdf.PLATFORM_REFUSAL
+
+
+def test_scc_results_that_list_another_operating_system_are_refused(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    other = "cpe:/o:canonical:ubuntu_linux:26.04"
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(other,))
+    assert xccdf.parse_xccdf(write("other.xml", document)).status is SectionStatus.ERROR
+
+
+def test_scc_results_of_a_benchmark_without_operating_system_platforms_are_accepted(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(RSYSLOG_PLATFORM,), result=())
+    assert xccdf.parse_xccdf(write("none.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def test_results_of_another_scanner_are_not_checked_for_platforms(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(), system="oscap")
+    assert xccdf.parse_xccdf(write("oscap.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def test_a_platform_listed_by_the_test_result_alone_does_not_declare_one(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(), result=(UBUNTU_2404_CPE,))
+    assert xccdf.parse_xccdf(write("alone.xml", document)).status is SectionStatus.AVAILABLE
+
+
+def scc_arf(
+    kit: Any, *, result: tuple[str, ...], declared: str = UBUNTU_2404_CPE, own: bool = True
+) -> str:
+    arf: str = (kit.REPORTING / "arf.xml").read_text(encoding="utf-8")
+    identifier = kit.BENCHMARK if own else "xccdf_org.example.other"
+    benchmark = (
+        f'<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="{identifier}">'
+        f'<platform idref="{declared}"/></Benchmark>'
+    )
+    listed = "".join(f'<platform idref="{idref}"/>' for idref in result)
+    arf = arf.replace("<arf:content>", f"<arf:content>{benchmark}", 1)
+    arf = arf.replace("<TestResult xmlns=", '<TestResult test-system="cpe:/a:niwc:scc:5.15" xmlns=')
+    return arf.replace("</TestResult>", f"{listed}</TestResult>")
+
+
+def test_an_scc_arf_is_checked_against_the_platform_of_its_benchmark(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    accepted = xccdf.parse_arf(write("on.xml", scc_arf(kit, result=(UBUNTU_2404_CPE,))))
+    assert accepted.status is SectionStatus.AVAILABLE
+    refused = xccdf.parse_arf(write("off.xml", scc_arf(kit, result=(RSYSLOG_PLATFORM,))))
+    assert refused.status is SectionStatus.ERROR
+    assert refused.reason == xccdf.PLATFORM_REFUSAL
+
+
+CPE_23_SCC = "cpe:2.3:a:niwc:scc:5.15:*:*:*:*:*:*:*"
+CPE_23_UBUNTU = "cpe:2.3:o:canonical:ubuntu_linux:24.04:*:lts:*:*:*:*:*"
+
+
+def test_cpe_2_3_formatted_strings_are_recognised(kit: Any, write: Callable[..., Path]) -> None:
+    accepted = scc_xccdf(
+        kit, benchmark=(CPE_23_UBUNTU,), result=(CPE_23_UBUNTU,), system=CPE_23_SCC
+    )
+    assert xccdf.parse_xccdf(write("on.xml", accepted)).status is SectionStatus.AVAILABLE
+    refused = scc_xccdf(kit, benchmark=(CPE_23_UBUNTU,), result=(), system=CPE_23_SCC)
+    assert xccdf.parse_xccdf(write("off.xml", refused)).reason == xccdf.PLATFORM_REFUSAL
+
+
+def test_a_2_2_uri_and_a_2_3_string_do_not_match_each_other(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(CPE_23_UBUNTU,))
+    assert xccdf.parse_xccdf(write("mixed.xml", document)).status is SectionStatus.ERROR
+
+
+@pytest.mark.parametrize("system", ["SCC 5.15", "urn:niwc:tool", "cpe:/a:acme:niwc:1"])
+def test_a_test_system_that_names_scc_in_an_unknown_form_is_refused(
+    kit: Any, write: Callable[..., Path], system: str
+) -> None:
+    document = scc_xccdf(kit, benchmark=(UBUNTU_2404_CPE,), result=(), system=system)
+    result = xccdf.parse_xccdf(write("unknown.xml", document))
+    assert result.status is SectionStatus.ERROR
+    assert result.reason is not None
+    assert "names SCC in a form this report does not recognise" in result.reason
+
+
+def test_the_platform_of_another_benchmark_in_an_arf_does_not_count(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    arf = scc_arf(kit, result=(UBUNTU_2404_CPE,), declared="cpe:/o:canonical:ubuntu_linux:26.04")
+    other = (
+        '<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_org.example.other">'
+        f'<platform idref="{UBUNTU_2404_CPE}"/></Benchmark>'
+    )
+    mixed = arf.replace("<arf:content>", f"<arf:content>{other}", 1)
+    assert xccdf.parse_arf(write("multi.xml", mixed)).reason == xccdf.PLATFORM_REFUSAL
+
+
+def test_an_unresolved_benchmark_falls_back_to_the_whole_document(
+    kit: Any, write: Callable[..., Path]
+) -> None:
+    arf = scc_arf(kit, result=(RSYSLOG_PLATFORM,), own=False)
+    assert xccdf.parse_arf(write("unresolved.xml", arf)).reason == xccdf.PLATFORM_REFUSAL
+    nameless = arf.replace(f'<benchmark id="{kit.BENCHMARK}"/>', "")
+    assert nameless != arf
+    assert xccdf.parse_arf(write("nameless.xml", nameless)).reason == xccdf.PLATFORM_REFUSAL
