@@ -94,3 +94,22 @@ the original list remain for the scenarios of FREES-62 and FREES-63, which build
   `/dev/kvm` it fails instead of emulating. Each leg must finish well within the 30-minute check timeout of the merge
   queue; the first version, which ran every cycle on the machines, took 65 minutes, so the machines now run only what
   containers cannot prove.
+
+## Amendment 2026-10-30: cached host packages and task timings (FREES-180)
+
+On slow runs the snapshot answered at 128 to 239 kB/s, and installing QEMU and libvirt took 6.4 minutes instead of
+0.9, close to the leg's timeout. These refinements apply ([libvirt guide](../molecule-libvirt.md#host-packages-of-the-ci-runner)).
+
+- **Pinned files, not a resolver run.** `tools/molecule/libvirt-host.pins` names the snapshot, the required versions
+  and every `.deb` that the runner lacks for them, each with its pool path, SHA-256 and size from the snapshot's
+  signed index. The snapshot pin stays: the files are downloaded from its pool.
+- **Verify, then cache, then install.** CI restores the files with `actions/cache/restore` under a key of the pins
+  file, `tools/molecule/libvirt-host-packages.sh fetch` checks each one and downloads only what is missing or wrong,
+  `actions/cache/save` stores them on a miss, and `install` checks them again and installs them with `apt-get`
+  configured with no package source, so that `apt` can neither download nor install a file that was not verified. A
+  cache entry is therefore only a speed-up: its content is never trusted. As for the cloud images, a pull request from
+  a fork neither restores nor saves it.
+- **Timings from the job log.** A timing callback such as `ansible.posix.profile_tasks` is code that Ansible loads,
+  and the repository rules refuse `callbacks_enabled` and `ANSIBLE_CALLBACKS_ENABLED` (ADR 0004). The per-task times
+  come instead from the timestamps that GitHub Actions puts on every log line: `make molecule-task-timings` reads a
+  job log and prints the slowest tasks, so the runs need no change.

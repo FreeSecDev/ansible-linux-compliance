@@ -264,3 +264,7 @@
     lifecycle_label: pwquality regressions
     lifecycle_broad_step: the regressions
     lifecycle_broad_reference: "{{ regression_broad_before }}"
+
+- name: Pwquality regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_pwquality_regressions.yml'] }}"

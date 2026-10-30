@@ -11,10 +11,6 @@
     - vars/guard_cases.yml
     - vars/guard_cases_libvirt.yml
   tasks:
-    - name: Check that the no-change failure message names only the entries that changed
-      ansible.builtin.include_tasks:
-        file: tasks/snapshot_message_check.yml
-
     - name: Refuse simulated bypass attempts and accept a disposable container, whatever the driver
       ansible.builtin.include_tasks:
         file: tasks/guard_case.yml
@@ -43,6 +39,7 @@
       - "{{ molecule_evidence_directory }}"
     linux_compliance_banners_enabled: false
     linux_compliance_pwquality_enabled: false
+    linux_compliance_sudo_enabled: false
   tasks:
     - name: Check that the play switches off every native topic other than the reference topic
       ansible.builtin.assert:

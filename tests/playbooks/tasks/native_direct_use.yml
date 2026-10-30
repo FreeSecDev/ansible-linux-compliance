@@ -218,3 +218,113 @@
           - "'No change was made to the host' in ansible_failed_result.msg"
         fail_msg: "pwquality_main_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
         quiet: true
+
+- name: Native direct use | sudo.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run sudo.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: sudo.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because sudo.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: sudo.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that sudo.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "sudo.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | sudo_dropin_apply.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run sudo_dropin_apply.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: sudo_dropin_apply.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because sudo_dropin_apply.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: sudo_dropin_apply.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that sudo_dropin_apply.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "sudo_dropin_apply.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | sudo_dropin_cleanup.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run sudo_dropin_cleanup.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: sudo_dropin_cleanup.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because sudo_dropin_cleanup.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: sudo_dropin_cleanup.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that sudo_dropin_cleanup.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "sudo_dropin_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | sudo_attribute_apply.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run sudo_attribute_apply.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: sudo_attribute_apply.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because sudo_attribute_apply.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: sudo_attribute_apply.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that sudo_attribute_apply.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "sudo_attribute_apply.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | sudo_attribute_cleanup.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run sudo_attribute_cleanup.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: sudo_attribute_cleanup.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because sudo_attribute_cleanup.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: sudo_attribute_cleanup.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that sudo_attribute_cleanup.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "sudo_attribute_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true

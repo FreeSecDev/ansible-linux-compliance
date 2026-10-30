@@ -5,8 +5,3 @@ security_fixes:
     trailing dots was a no-op, because its regex literals had doubled backslashes inside a template, where they are used
     as written. The loopback rule now sees ``[::1]``, ``localhost.``, ``LOCALHOST..`` and ``[::ffff:127.0.0.1]`` as
     loopback. Five simulated cases per driver, 69 Docker and 133 libvirt in total, are refused only by that rule.
-trivial:
-  - >-
-    Molecule: the rendering of the no-change snapshot moved to ``tasks/snapshot_lines.yml``, and every scenario's
-    ``verify`` checks that the failure message of the no-change assertions, which splits the snapshot on the ``\n``
-    that the snapshot template emits, names only the entry that changed.

@@ -1,0 +1,32 @@
+snapshot 20261027T000000Z
+require qemu-system-x86 1:8.2.2+ds-0ubuntu1.18
+require qemu-utils 1:8.2.2+ds-0ubuntu1.18
+require libvirt-daemon-system 10.0.0-2ubuntu8.19
+require libvirt-dev 10.0.0-2ubuntu8.19
+require pkg-config 1.8.1-2build1
+deb ipxe-qemu 1.21.1+git-20220113.fbbdc3926-0ubuntu2 pool/main/i/ipxe/ipxe-qemu_1.21.1+git-20220113.fbbdc3926-0ubuntu2_all.deb 1f1612934b6ddaf4dd633760dfe5ef2a79ea2507341fd5efe394ff589a044707 1564600
+deb libbrlapi0.8 6.6-4ubuntu5 pool/main/b/brltty/libbrlapi0.8_6.6-4ubuntu5_amd64.deb 82272b3090c912e45d92ff7ed200de289c47e504513559377a6f6c5a372cbcf5 31388
+deb libpcsclite1 2.0.3-1build1 pool/main/p/pcsc-lite/libpcsclite1_2.0.3-1build1_amd64.deb 703bacc9204a7ecc24486ac8c96d15d0b9e2c91c385388e132ad4fd8f56f035a 21432
+deb libcacard0 1:2.8.0-3build4 pool/main/libc/libcacard/libcacard0_2.8.0-3build4_amd64.deb 7a75de14b0fdff2828a3d218a49e7fe4da2df533185ba9ccbabd0647db05e33c 36546
+deb libdaxctl1 77-2ubuntu2 pool/main/n/ndctl/libdaxctl1_77-2ubuntu2_amd64.deb c6629b49c79343fb11ae404aeaa3156f051168da6c6d3d9d8d516acd94705061 21404
+deb libndctl6 77-2ubuntu2 pool/main/n/ndctl/libndctl6_77-2ubuntu2_amd64.deb 4eab53588a8fa9e3192635e118c2d91bc069cde46a4a3785c77a0bb1ae001d02 62750
+deb libpmem1 1.13.1-1.1ubuntu2 pool/main/p/pmdk/libpmem1_1.13.1-1.1ubuntu2_amd64.deb 8f1be1cc834a98f0cf5c0950153f7f939a0c2c92095e98cd7bb40c752c545c1b 84760
+deb librdmacm1t64 50.0-2ubuntu0.2 pool/main/r/rdma-core/librdmacm1t64_50.0-2ubuntu0.2_amd64.deb 7b7cc2fa16564bf301751b43d05d16f0846288b080d9a25a92a691d0df33fc68 70698
+deb liburing2 2.5-1build1 pool/main/libu/liburing/liburing2_2.5-1build1_amd64.deb c2aef62accee92a06263c3ad4ef46132c13e409b54296c44792a20491830a7b0 21092
+deb libusbredirparser1t64 0.13.0-2.1build1 pool/main/u/usbredir/libusbredirparser1t64_0.13.0-2.1build1_amd64.deb 78be9176f05512bcac369fcada499686b1dd34320965d27e3405c7aacbc4e461 16508
+deb libvirt0 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt0_10.0.0-2ubuntu8.19_amd64.deb 1fa4578c3c7d4b7cf0b66a307ebb7b2d91369add40a396f287cb9ffc504220d7 1831872
+deb libvirt-clients 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt-clients_10.0.0-2ubuntu8.19_amd64.deb 4799aedf3930bec367c33130d8e8f1ae143c0a72f08e2447448665c6bc771d96 438328
+deb libvirt-daemon-driver-qemu 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt-daemon-driver-qemu_10.0.0-2ubuntu8.19_amd64.deb 050ef5aac8d9f1b6b22a6b73d68ba8eab68de524140d330a6d7c34a447166ce7 740554
+deb libvirt-daemon 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt-daemon_10.0.0-2ubuntu8.19_amd64.deb 7f24b0a293c2d5ec222ce4bbafc2b6e025965c124bfa133849d9b57f1bd459fc 431496
+deb libvirt-daemon-config-network 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt-daemon-config-network_10.0.0-2ubuntu8.19_all.deb c0558529f5ab4182f3c68e082c4ecf7609926dca9bf97d09d5e4d3deb0373af4 3114
+deb libvirt-daemon-config-nwfilter 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt-daemon-config-nwfilter_10.0.0-2ubuntu8.19_all.deb d330bf6b3002884c343df5f8bf162e4c5122878f4ca33917a6197e28a04e839e 6038
+deb systemd-container 255.4-1ubuntu8.18 pool/main/s/systemd/systemd-container_255.4-1ubuntu8.18_amd64.deb 4692e521e9330c8d87427ffbeeed3b21d487857804dbdf630df650ba0f2b6573 417242
+deb libvirt-daemon-system-systemd 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt-daemon-system-systemd_10.0.0-2ubuntu8.19_all.deb 45460814ad33181ebd6c7d46633ba3d6eca5f50c89a6c7533551b27d834ee364 1378
+deb libvirt-daemon-system 10.0.0-2ubuntu8.19 pool/main/libv/libvirt/libvirt-daemon-system_10.0.0-2ubuntu8.19_amd64.deb 67b6c0800fe6c70b3d214fceada5e2e585919f55fd7770461c5398a74e07d961 49984
+deb libvirt-dev 10.0.0-2ubuntu8.19 pool/universe/libv/libvirt/libvirt-dev_10.0.0-2ubuntu8.19_amd64.deb ac1fec1fd884e22ab97d2300a0cd0bfcc682346f166035c654c5556c6f645561 178130
+deb qemu-system-common 1:8.2.2+ds-0ubuntu1.18 pool/main/q/qemu/qemu-system-common_8.2.2+ds-0ubuntu1.18_amd64.deb 0a0b744f31e87d72dd0465436b8dfbb1ef9f574ecd0d5a2e9dd8c5cb7d0fef1f 1255316
+deb qemu-system-data 1:8.2.2+ds-0ubuntu1.18 pool/main/q/qemu/qemu-system-data_8.2.2+ds-0ubuntu1.18_all.deb a14b88d864859bd61c8a3274971da4ecb7da6cec15be6c265d0d411f783d5f2e 1796342
+deb libfdt1 1.7.0-2build1 pool/main/d/device-tree-compiler/libfdt1_1.7.0-2build1_amd64.deb 274d20dfab9d6b216b5de85446a93f6ce5b2cd82c847b8dfdc508577f76eb96a 20128
+deb seabios 1.16.3-2 pool/main/s/seabios/seabios_1.16.3-2_all.deb cac4e59a66c834d19cae751c22ab3a0391c22f78010fd11aa2e3fe630e6bc0e0 174648
+deb qemu-system-x86 1:8.2.2+ds-0ubuntu1.18 pool/main/q/qemu/qemu-system-x86_8.2.2+ds-0ubuntu1.18_amd64.deb 14602e262627adac030329d2cecfee5f6c0938b34566ff2ea2d4c9a9eb02430d 11222476
+deb qemu-utils 1:8.2.2+ds-0ubuntu1.18 pool/main/q/qemu/qemu-utils_8.2.2+ds-0ubuntu1.18_amd64.deb 10695e57937d8a1d0ec6d017a6770d02353ec0c9500e4a36928230b2d39026c5 2220842
