@@ -91,7 +91,9 @@ whole effective configuration, the main file and every drop-in it includes, exac
 read first. The helper's allow-list gains `sshd` with only that form (an amendment of ADR 0004): the prefix
 `-t -f /etc/ssh/sshd_config` and the option `-o`; `-T`, `-D`, `-d`, `-h`, `-E`, `-C`, another configuration file and
 every other option are refused, and the module accepts only the keywords of the native rules and one-word values.
-sshd in test mode reads the configuration and the host keys and exits; it starts no daemon.
+sshd in test mode reads the configuration and the host keys and exits; it starts no daemon. Like the other modules
+of the collection, `sshd_validate` carries no GPLv3 header, so `tests/sanity/ignore-2.20.txt` and `ignore-2.21.txt`
+gain exactly `plugins/modules/sshd_validate.py validate-modules:missing-gplv3-license` (ADR 0011).
 
 All drop-ins of a run are validated in one call before the first is written. When sshd refuses (a later drop-in with an
 unknown keyword, a value that this sshd does not support, a missing host key), every rule to write is

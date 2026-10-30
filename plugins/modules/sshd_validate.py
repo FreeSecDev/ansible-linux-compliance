@@ -209,7 +209,7 @@ def main() -> None:
                 "elements": "dict",
                 "default": [],
                 "options": {
-                    "keyword": {"type": "str", "required": True},
+                    "keyword": {"type": "str", "required": True, "no_log": False},
                     "value": {"type": "str", "required": True},
                 },
             },
