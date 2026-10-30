@@ -320,6 +320,7 @@
       {%- if rule.parameters.key in __linux_compliance_remediate_sysctl_propagating -%}
       {%- set _ = names.append(__linux_compliance_remediate_sysctl_propagating[rule.parameters.key]) -%}
       {%- endif -%}
+      {%- set _ = names.extend(__linux_compliance_remediate_sysctl_side_effects[rule.parameters.key] | default([])) -%}
       {%- endfor -%}
       {%- endif -%}
       {{ names | unique | list }}
@@ -418,9 +419,14 @@
       {%- set ns.detail = 'the kernel no longer has the parameter ' ~ key -%}
       {%- elif (current.split() | join(' ')) == (prior.runtime_written.split() | join(' ')) -%}
       {%- set ns.runtime = [{'name': key, 'value': prior.runtime_prior}] -%}
-      {%- for companion in companions if __linux_compliance_remediate_sc_running_values[companion] | default(none)
-            is not none -%}
-      {%- set ns.runtime = ns.runtime + [{'name': companion, 'value': prior['companion:' ~ companion]}] -%}
+      {%- set side_effects = __linux_compliance_remediate_sysctl_side_effects[key] | default([]) -%}
+      {%- set kept = __linux_compliance_remediate_family.apply | map(attribute='parameters.key') | list -%}
+      {%- for companion in (companions | reject('in', side_effects) | list)
+            + (companions | select('in', side_effects) | list)
+            if __linux_compliance_remediate_sc_running_values[companion] | default(none) is not none -%}
+      {%- set ns.runtime = ns.runtime + [{'name': companion,
+            'value': __linux_compliance_remediate_sc_running_values[companion] if companion in kept
+                     else prior['companion:' ~ companion]}] -%}
       {%- endfor -%}
       {%- elif (current.split() | join(' ')) != (prior.runtime_prior.split() | join(' ')) -%}
       {%- set ns.reason = 'modified_since_apply' -%}
@@ -437,11 +443,15 @@
   tags:
     - always
 
-- name: Kernel parameters | Name the rules whose prior state can be restored
+- name: Kernel parameters | Name the rules whose prior state can be restored, those that change forwarding first
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_reverted_ids: >-
-      {{ __linux_compliance_remediate_sc_cleanup_plan | dict2items | rejectattr('value.reason')
-         | map(attribute='key') | list }}
+      {%- set reverted = __linux_compliance_remediate_sc_cleanup_plan | dict2items | rejectattr('value.reason')
+            | map(attribute='key') | list -%}
+      {%- set forwarding = __linux_compliance_remediate_sysctl_propagating.keys() | list -%}
+      {%- set rules = __linux_compliance_remediate_family.cleanup | selectattr('rule_id', 'in', reverted) | list -%}
+      {{ (rules | selectattr('parameters.key', 'in', forwarding) | map(attribute='rule_id') | list)
+         + (rules | rejectattr('parameters.key', 'in', forwarding) | map(attribute='rule_id') | list) }}
   tags:
     - always
 
@@ -727,11 +737,18 @@
                   ~ ' read-only or the parameter is protected; set linux_compliance_remediate_sysctl_runtime to'
                   ~ ' false to write only the persistent value') if status == 'runtime_unavailable'
             else none -%}
+      {%- set pins = [] -%}
+      {%- for companion in __linux_compliance_remediate_sysctl_side_effects[key] | default([])
+            if companion != key and __linux_compliance_remediate_sc_running_values[companion] | default(none)
+               is not none -%}
+      {%- set _ = pins.append({'name': companion,
+                               'value': __linux_compliance_remediate_sc_running_values[companion]}) -%}
+      {%- endfor -%}
       {%- set _ = plan.update({rule.rule_id: {
             'status': status, 'reason': reason,
             'write': status == 'applied' and not exact,
             'edits': ns.edits if status == 'applied' else [],
-            'runtime': [{'name': key, 'value': value}]
+            'runtime': ([{'name': key, 'value': value}] + pins)
                        if status == 'applied' and not runtime_ok else [],
             'current': current}}) -%}
       {%- endfor -%}
@@ -754,8 +771,11 @@
       {%- endfor -%}
       {{ edits }}
     __linux_compliance_remediate_sc_runtime_set: >-
-      {{ __linux_compliance_remediate_family.apply | map(attribute='rule_id')
-         | map('extract', __linux_compliance_remediate_sc_plan) | map(attribute='runtime') | flatten }}
+      {%- set forwarding = __linux_compliance_remediate_sysctl_propagating.keys() | list -%}
+      {{ ((__linux_compliance_remediate_family.apply | selectattr('parameters.key', 'in', forwarding) | list)
+          + (__linux_compliance_remediate_family.apply | rejectattr('parameters.key', 'in', forwarding) | list))
+         | map(attribute='rule_id') | map('extract', __linux_compliance_remediate_sc_plan)
+         | map(attribute='runtime') | flatten }}
     __linux_compliance_remediate_sc_record_values: >-
       {%- set records = {} -%}
       {%- for rule in __linux_compliance_remediate_family.apply
@@ -780,6 +800,12 @@
                                 __linux_compliance_remediate_sc_running_values[companion]}) -%}
       {%- endfor -%}
       {%- endif -%}
+      {%- for companion in __linux_compliance_remediate_sysctl_side_effects[rule.parameters.key] | default([])
+            if companion != rule.parameters.key
+               and __linux_compliance_remediate_sc_running_values[companion] | default(none) is not none -%}
+      {%- set _ = extra.update({'companion:' ~ companion:
+                                __linux_compliance_remediate_sc_running_values[companion]}) -%}
+      {%- endfor -%}
       {%- endif -%}
       {%- set values = base | combine(extra)
             | combine({'dropin_sha256': __linux_compliance_remediate_sc_contents[rule.rule_id] | hash('sha256'),

@@ -139,13 +139,20 @@ refuses a path reached through a symbolic link, a file that is not regular and a
 one `write` to the open file is how the kernel takes a parameter. Its test root is the keyword-only seam `proc_root`,
 which only this helper may define (the repository guard's `SEAM_OWNERS`). `ansible.posix.sysctl` was not used: the
 collection has no dependencies, and that module always edits a configuration file of its own choice and runs the
-`sysctl` program to set and reload values.
+`sysctl` program to set and reload values. Like every module of the collection, `sysctl_runtime` carries no GPLv3
+header, so `tests/sanity/ignore-2.20.txt` and `ignore-2.21.txt` gain exactly
+`plugins/modules/sysctl_runtime.py validate-modules:missing-gplv3-license` (ADR 0011).
 
 Writing `net.ipv4.ip_forward`, `net.ipv4.conf.all.forwarding` or `net.ipv6.conf.all.forwarding` also sets the
 forwarding flag of `default` and of every interface. Before such a rule sets it, its ledger entry records the flag of
 every interface as well (`companion:<parameter>`), and cleanup sets the global value back first and then every
 interface's flag that still exists, each read just before it is set, so a router whose interfaces forwarded
-differently gets exactly its prior flags back. The running kernel regressions prove this on the virtual machines.
+differently gets exactly its prior flags back. A change of IPv4 forwarding also sets
+`net.ipv4.conf.all.accept_redirects` to its opposite (the kernel's `inet_forward_change`), so that parameter is
+recorded as a companion too (`__linux_compliance_remediate_sysctl_side_effects`): apply sets it back to its value
+before right after forwarding, cleanup sets the recorded value again after the forwarding flags, unless a rule that
+stays applied manages it, and the forwarding rules are set and restored before every other rule of the family. The
+running kernel regressions prove this on the virtual machines.
 
 ### 4. The ledger and cleanup
 

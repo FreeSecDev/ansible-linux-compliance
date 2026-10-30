@@ -228,7 +228,7 @@ def run(params: Mapping[str, object], *, check_mode: bool) -> dict[str, object]:
             values[pattern] = None
         for name in expanded:
             values[name] = sysctl.read(name)
-    for name in [*probe, *(name for name, _ in pairs)]:
+    for name in [*probe, *(pair[0] for pair in pairs)]:
         if name not in values:
             values[name] = sysctl.read(name)
     writable = {name: sysctl.writable(name) for name in probe}

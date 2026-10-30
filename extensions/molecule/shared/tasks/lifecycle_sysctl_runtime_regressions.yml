@@ -140,6 +140,8 @@
       - regression_recorded.runtime_prior == '1'
       - regression_recorded.runtime_written == '0'
       - regression_recorded['companion:net.ipv4.conf.lo.forwarding'] == '0'
+      - regression_recorded['companion:net.ipv4.conf.all.accept_redirects'] == '1'
+      - regression_applied.running['net.ipv4.conf.all.accept_redirects'] == '0'
       - >-
         regression_interfaces | reject('equalto', 'net.ipv4.conf.lo.forwarding')
         | map('regex_replace', '^', 'companion:') | map('extract', regression_recorded) | unique | list == ['1']

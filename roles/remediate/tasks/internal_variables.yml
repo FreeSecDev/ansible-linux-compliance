@@ -1543,6 +1543,10 @@
         __linux_compliance_remediate_sysctl_propagating == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml')
         | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_propagating']
       - >-
+        __linux_compliance_remediate_sysctl_side_effects is not defined or
+        __linux_compliance_remediate_sysctl_side_effects == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_side_effects']
+      - >-
         __linux_compliance_remediate_sysctl_value_pattern is not defined or
         __linux_compliance_remediate_sysctl_value_pattern == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_value_pattern']

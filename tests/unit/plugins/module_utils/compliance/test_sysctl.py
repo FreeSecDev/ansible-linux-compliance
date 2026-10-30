@@ -128,8 +128,8 @@ def test_a_file_on_another_file_system_is_refused(
 ) -> None:
     real = Path.stat
 
-    def other_device(self: Path, *, follow_symlinks: bool = True) -> os.stat_result:
-        found = real(self, follow_symlinks=follow_symlinks)
+    def other_device(self: Path, **options: bool) -> os.stat_result:
+        found = real(self, **options)
         if self == proc:
             values = list(found)
             values[2] = found.st_dev + 1

@@ -289,6 +289,10 @@ pre_states:
     requires:
       - libvirt
     unchanged:
+      - rule: sysctl_net_ipv4_conf_default_accept_source_route
+        status: compliant
+        platforms:
+          - rhel_compatible
       - rule: sysctl_net_ipv4_conf_default_rp_filter
         status: compliant
         platforms:
@@ -308,6 +312,10 @@ pre_states:
           platforms:
             - rhel_compatible
         - path: /etc/sysctl.d/.freesecdev-created
+          exists: false
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-source-route.conf
           exists: false
           platforms:
             - rhel_compatible

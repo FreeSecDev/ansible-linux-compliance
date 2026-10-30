@@ -426,3 +426,22 @@ def test_the_propagating_parameters_are_keys_of_native_rules() -> None:
         prefix, _, field = pattern.partition(".*.")
         assert key.startswith(prefix.rsplit(".", 1)[0])
         assert key.endswith(field) or key == "net.ipv4.ip_forward"
+
+
+def test_only_ipv4_forwarding_resets_the_accept_redirects_of_all_interfaces() -> None:
+    """The kernel sets ``conf.all.accept_redirects`` to the opposite of IPv4 forwarding.
+
+    ``inet_forward_change`` runs when ``net.ipv4.ip_forward`` or ``net.ipv4.conf.all.forwarding``
+    changes; the role records and restores that parameter around such a change.
+    """
+    side_effects = cast(
+        "dict[str, list[str]]", role_vars()["__linux_compliance_remediate_sysctl_side_effects"]
+    )
+    propagating = cast(
+        "dict[str, str]", role_vars()["__linux_compliance_remediate_sysctl_propagating"]
+    )
+    assert side_effects == {
+        "net.ipv4.ip_forward": ["net.ipv4.conf.all.accept_redirects"],
+        "net.ipv4.conf.all.forwarding": ["net.ipv4.conf.all.accept_redirects"],
+    }
+    assert set(side_effects) <= set(propagating)
