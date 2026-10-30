@@ -99,7 +99,7 @@
     checksum_algorithm: "{{ find_checksum_algorithm }}"
     get_mime: false
     get_attributes: false
-  loop: "{{ find_known.extra }}"
+  loop: "{{ find_known.extra if find_known is mapping else [] }}"
   loop_control:
     loop_var: find_path
   register: find_left_out
