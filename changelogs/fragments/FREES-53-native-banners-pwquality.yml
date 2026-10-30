@@ -18,3 +18,9 @@ minor_changes:
     catalogue - native rules take the values of the XCCDF ``Value`` their check exports from the pinned
     content, per content and profile (``profile_value`` in ``content/catalogue.yml``, ``value_id`` and
     ``profile_values`` in the rule parameters).
+trivial:
+  - >-
+    CI - the Molecule toggle lifecycle runs in the new ``docker-ubuntu-lifecycle`` and
+    ``docker-rhel-compatible-lifecycle`` scenarios, as one required CI leg per platform, native topic and toggle
+    mode that ``make molecule-matrix`` derives from the catalogue, and the ``test`` job is split into ``test`` and
+    ``test-playbooks``, so that every required job stays well below the merge queue's 30-minute limit.

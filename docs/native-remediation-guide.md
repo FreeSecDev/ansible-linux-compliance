@@ -117,7 +117,9 @@ variables of `converge.yml` and `verify.yml`; their first task fails until both 
   rule and changes nothing (`tests/playbooks/remediate-native-check.yml`).
 - `make test-molecule-docker`: the toggle lifecycle applies and cleans up the topic from every pre-state on Ubuntu
   24.04 and Rocky Linux 9 and compares the whole instance. Never run remediation on a workstation; only in these
-  containers.
+  containers. Add `MOLECULE_DOCKER_SCENARIOS=docker-ubuntu-lifecycle MOLECULE_LIFECYCLE_TOPIC=<topic>
+  MOLECULE_LIFECYCLE_MODE=rule` (and `topic`) to run only the new topic; CI gives the topic its own legs without a
+  workflow change ([Molecule](molecule.md#ci-legs)).
 - Regenerate with the make targets and run `make lint`, `make lint-role-guards`, `make lint-lifecycle` and `make ci`.
 
 ## 7. Document

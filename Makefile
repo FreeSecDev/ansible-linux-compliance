@@ -15,7 +15,10 @@ ANSIBLE_HOME ?= $(CURDIR)/build/ansible-home
 ANSIBLE_COLLECTIONS_PATH ?= $(CURDIR)/build/collections
 ANSIBLE_TEST_HOME ?= $(CURDIR)/build/ansible-test-home
 export ANSIBLE_HOME ANSIBLE_COLLECTIONS_PATH
-MOLECULE_DOCKER_SCENARIOS := docker-ubuntu docker-rhel-compatible
+MOLECULE_DOCKER_SCENARIOS := docker-ubuntu docker-rhel-compatible docker-ubuntu-lifecycle docker-rhel-compatible-lifecycle
+MOLECULE_LIFECYCLE_TOPIC ?=
+MOLECULE_LIFECYCLE_MODE ?=
+export MOLECULE_LIFECYCLE_TOPIC MOLECULE_LIFECYCLE_MODE
 MOLECULE_DOCKER_SELFTEST ?= true
 MOLECULE_SELFTEST_DIR := $(CURDIR)/build/molecule-selftest
 MOLECULE_SELFTEST_CONFIG := $(MOLECULE_SELFTEST_DIR)/instance_config.yml
@@ -257,6 +260,7 @@ Tests
   test-integration      [pending FREES-60] Integration tests
   test-molecule-docker  Molecule Docker scenarios and their self-test (requires a running Docker daemon)
   test-molecule-docker-selftest Guard bypass attempts and the destroy fallback against real containers
+  molecule-matrix       Print the CI matrix of the toggle lifecycle legs, one per platform, native topic and toggle mode
   test-molecule-libvirt [pending FREES-61] Molecule libvirt scenarios
   test-molecule-golden  [pending FREES-63] Molecule golden image scenarios
   test-idempotency      [pending FREES-60] Idempotency checks
@@ -297,7 +301,7 @@ export HELP_TEXT
 .PHONY: help bootstrap install format lint lint-ansible lint-toggles toggles lint-role-guards role-guards lint-lifecycle content catalogue stig-mapping lint-python lint-yaml lint-actions \
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-image-clean lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
-	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
+	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-golden test-idempotency test-compliance packer-validate packer-build \
 	aws-bootstrap image-build report report-serve docs package release-check clean ci \
 	require-uv ansible-home
@@ -359,6 +363,9 @@ lint-role-guards: require-uv collection-link
 
 lint-lifecycle: require-uv collection-link
 	PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.check_lifecycle_topics
+
+molecule-matrix: require-uv collection-link
+	@PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.roles.molecule_matrix
 
 lock-check: require-uv
 	uv lock --check

@@ -115,7 +115,7 @@
 - name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state
   ansible.builtin.include_tasks:
     file: lifecycle_cycle.yml
-  loop: "{{ lifecycle_toggle_modes | product(lifecycle_pre_states) | list }}"
+  loop: "{{ lifecycle_run_modes | product(lifecycle_pre_states) | list }}"
   loop_control:
     loop_var: lifecycle_cycle
     label: "{{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state"
