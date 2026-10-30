@@ -272,6 +272,4 @@ with mode `0600`, which the CIS and STIG drop-in permission rules require.
 
 The Ubuntu and Rocky Linux Molecule images grow by openssh-server. The `ssh` `rule` leg runs two cycles and the
 rollback regressions, and the `topic` leg one cycle and the other two sets of regressions, all narrowed to two rules
-(four with the vendor rules), so that each leg stays within the time budget of the merge queue. The larger images add about 45 seconds to every image build on
-Rocky Linux, which took the standard `molecule-docker` scenarios past their 8-minute limit, so that limit is now 13
-minutes, one and a half times their longest run as `docs/molecule.md` sets out.
+(four with the vendor rules), so that each leg stays within the time budget of the merge queue.
