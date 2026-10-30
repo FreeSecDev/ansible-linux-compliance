@@ -835,8 +835,8 @@ class TestScriptChecks:
 
     def test_oval_and_ocil_checks_are_accepted(self) -> None:
         inner = check(catalog.OVAL_CHECK_SYSTEM) + check(catalog.OCIL_CHECK_SYSTEM)
-        (found,) = parse(collection(benchmark(rule("a", inner=inner))))
-        assert [item.rule_id for item in found.rules] == [RULE + "a"]
+        found = parse(collection(benchmark(rule("a", inner=inner))))
+        assert [item.rule_id for parsed in found for item in parsed.rules] == [RULE + "a"]
 
     def test_the_scanner_events_refuse_only_script_checks(self) -> None:
         scanner = catalog.ScriptCheckScanner()

@@ -101,7 +101,7 @@ The former SCE-only rules are `notchecked`. The text below records the situation
   but a content update still changes what the scanner reads as root, so its review covers the OVAL that changed. The
   removal is static: a future scanner that runs another kind of embedded code would need the refusal extended, which
   the allow-list of check systems (OVAL and OCIL only) makes fail closed. The transform and the refusal are covered
-  by `tests/unit/tools/test_script_checks.py`, `test_catalog.py`, `test_audit.py` and the golden test
+  by `tests/unit/tools/test_script_checks.py`, `test_catalog.py`, `test_audit_content.py` and the golden test
   `test_content_golden_scripts.py`.
 
 ## CI-only SCC image
