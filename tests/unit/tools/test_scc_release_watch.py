@@ -822,3 +822,19 @@ def test_the_pins_name_a_version_the_watch_accepts() -> None:
     )
     assert watch.version_key(values["SCC_VERSION"])
     assert date.fromisoformat(values["SCC_EXPIRES"])
+
+
+@pytest.mark.parametrize(
+    ("labels", "names"),
+    [
+        (None, ()),
+        ("scc-release", ()),
+        ([{"name": "a"}, "b", {"name": 3}, {}, 7, None], ("a", "b")),
+    ],
+)
+def test_only_label_names_that_are_strings_are_read(labels: object, names: tuple[str, ...]) -> None:
+    item = {"number": 4, "user": BOT, "body": f"{watch.MARKER_PREFIX} x -->", "labels": labels}
+    issues = watch.GitHubIssues(
+        REPOSITORY, TOKEN, ScriptedApi(watch.HttpResponse(200, json.dumps([item]).encode()))
+    ).list_marked()
+    assert [entry.labels for entry in issues] == [names]
