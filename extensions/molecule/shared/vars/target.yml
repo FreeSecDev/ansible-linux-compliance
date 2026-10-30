@@ -16,6 +16,7 @@ molecule_reference_toggle: linux_compliance_rule_file_permissions_crontab_enable
 molecule_reference_family: file_permissions
 molecule_other_native_topics:
   - banners
+  - login_defs
   - pwquality
 molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
 molecule_native_results: >-

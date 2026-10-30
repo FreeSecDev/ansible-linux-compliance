@@ -13,6 +13,7 @@
     snapshot_volatile_directories:
       - "{{ molecule_evidence_directory }}"
     linux_compliance_banners_enabled: false
+    linux_compliance_login_defs_enabled: false
     linux_compliance_pwquality_enabled: false
   tasks:
     - name: Check that the play switches off every native topic other than the reference topic

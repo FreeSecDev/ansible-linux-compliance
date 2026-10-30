@@ -413,12 +413,30 @@ families:
   - name: password_aging
     umbrella: accounts
     disruptive: true
-    title: Password ageing (login.defs and existing accounts)
+    title: Password ageing of existing accounts and account inactivity
     why: Maximum password ages and inactivity settings can expire the passwords of operators and service accounts
     topic_groups: []
     rule_prefixes: []
     fallback_groups:
       - password_expiration
+  - name: login_defs
+    umbrella: accounts
+    disruptive: true
+    title: Account defaults in /etc/login.defs (password ageing and length, umask, home directories, login delay)
+    why: >-
+      The defaults apply to every password that shadow-utils sets and every account it creates, and on Ubuntu pam_umask
+      takes the umask of every login session from them; a maximum password age expires passwords and a stricter umask
+      changes the modes of the files that users and applications create
+    topic_groups: []
+    rule_prefixes:
+      - accounts_have_homedir_login_
+      - accounts_logon_fail_
+      - accounts_maximum_age_login_
+      - accounts_minimum_age_login_
+      - accounts_password_minlen_login_
+      - accounts_password_warn_age_login_
+      - accounts_umask_etc_login_
+    fallback_groups: []
   - name: root_access
     umbrella: accounts
     disruptive: true
@@ -659,6 +677,55 @@ native_rules:
       path: /etc/motd
       attribute: mode
       max_mode: "0644"
+  - rule_id: xccdf_org.ssgproject.content_rule_accounts_have_homedir_login_defs
+    revert_strategy: recorded_value
+    runbook: null
+    parameters:
+      setting: CREATE_HOME
+      comparison: equal
+      value: "yes"
+  - rule_id: xccdf_org.ssgproject.content_rule_accounts_logon_fail_delay
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_accounts_fail_delay
+    parameters:
+      setting: FAIL_DELAY
+      comparison: at_least
+  - rule_id: xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_accounts_maximum_age_login_defs
+    parameters:
+      setting: PASS_MAX_DAYS
+      comparison: at_most
+  - rule_id: xccdf_org.ssgproject.content_rule_accounts_minimum_age_login_defs
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_accounts_minimum_age_login_defs
+    parameters:
+      setting: PASS_MIN_DAYS
+      comparison: at_least
+  - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_minlen_login_defs
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_accounts_password_minlen_login_defs
+    parameters:
+      setting: PASS_MIN_LEN
+      comparison: at_least
+  - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_accounts_password_warn_age_login_defs
+    parameters:
+      setting: PASS_WARN_AGE
+      comparison: at_least
+  - rule_id: xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs
+    revert_strategy: recorded_value
+    runbook: null
+    profile_value: var_accounts_user_umask
+    parameters:
+      setting: UMASK
+      comparison: umask
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit
     revert_strategy: recorded_value
     runbook: null
@@ -849,6 +916,20 @@ subsystem_tags:
       - reason: An audit rule that watches the journal directory; it stays with auditd alone
         rules:
           - audit_rules_var_log_journal
+  - name: login_defs
+    rule_patterns:
+      - login_defs
+      - logindefs
+    groups: []
+    exclusions: []
+  - name: password_aging
+    rule_patterns:
+      - accounts_maximum_age_login_defs
+      - accounts_minimum_age_login_defs
+      - accounts_password_minlen_login_defs
+      - accounts_password_warn_age_login_defs
+    groups: []
+    exclusions: []
   - name: pwhistory
     rule_patterns:
       - pwhistory
@@ -920,5 +1001,16 @@ subsystem_tags:
       - timesyncd
     groups:
       - ntp
+    exclusions: []
+  - name: umask
+    rule_patterns:
+      - accounts_umask_etc_login_defs
+    groups: []
+    exclusions: []
+  - name: user_sessions
+    rule_patterns:
+      - accounts_have_homedir_login_defs
+      - accounts_logon_fail_delay
+    groups: []
     exclusions: []
 ledger_family_aliases: {}

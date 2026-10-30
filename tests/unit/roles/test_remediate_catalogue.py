@@ -32,8 +32,19 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "setting", "main_file_benchmarks"},
         {"path", "setting", "main_file_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
+    "login_defs": [
+        {"setting", "comparison", "value"},
+        {"setting", "comparison"} | PROFILE_VALUE_PARAMETERS,
+    ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality"]
+NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality", "login_defs"]
+DISRUPTIVE_NATIVE = ["pwquality", "login_defs"]
+LOGIN_DEFS_VALUES = {
+    "at_most": r"[0-9]{1,6}",
+    "at_least": r"[0-9]{1,6}",
+    "umask": r"[0-7]{3}",
+    "equal": r"[a-z]{1,8}",
+}
 
 
 def load(path: Path) -> dict[str, object]:
@@ -208,6 +219,28 @@ def test_native_file_permission_rules_have_an_absolute_path_and_an_octal_maximum
         assert restricted_mode.restricted_mode(maximum, maximum) == maximum.zfill(4)
 
 
+def test_native_login_defs_rules_name_an_upper_case_setting_once_and_a_value_of_their_form() -> None:
+    settings: list[str] = []
+    for rule in native():
+        if rule["family"] != "login_defs":
+            continue
+        parameters = cast("dict[str, object]", rule["parameters"])
+        setting = str(parameters["setting"])
+        settings.append(setting)
+        assert re.fullmatch(r"[A-Z][A-Z0-9_]{1,31}", setting)
+        pattern = LOGIN_DEFS_VALUES[str(parameters["comparison"])]
+        if "value" in parameters:
+            assert re.fullmatch(pattern, str(parameters["value"]))
+            continue
+        entries = cast("list[dict[str, object]]", parameters["profile_values"])
+        assert entries
+        for entry in entries:
+            value = "".join(cast("list[str]", entry["value"]))
+            assert re.fullmatch(pattern, value), (rule["rule_id"], value)
+    assert sorted(settings) == sorted(set(settings))
+    assert len(settings) == 7
+
+
 def test_the_task_files_are_only_family_files_and_their_helpers() -> None:
     families = {str(family["name"]) for family in registry()}
     role_files = {"main", "dispatch", "internal_variables"}
@@ -285,7 +318,7 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
     result = plan()
     summary = cast("dict[str, int]", result["summary"])
     disruptive = [rule for rule in native() if rule["disruptive"] is True]
-    assert {str(rule["family"]) for rule in disruptive} == {"pwquality"}
+    assert {str(rule["family"]) for rule in disruptive} == set(DISRUPTIVE_NATIVE)
     assert summary["apply"] == len(native()) - len(disruptive)
     assert summary["skip"] == len(disruptive)
     assert summary["not_implemented"] == len(rules()) - len(native())
@@ -293,7 +326,7 @@ def test_with_the_opt_in_only_the_native_rules_are_applied_and_the_rest_not_impl
         "file_permissions",
         "banners",
     ]
-    allowed = plan(allow_disruptive=["pwquality"])
+    allowed = plan(allow_disruptive=DISRUPTIVE_NATIVE)
     assert cast("dict[str, int]", allowed["summary"])["apply"] == len(native())
     results = cast("list[dict[str, object]]", result["not_implemented"])
     assert len(results) == summary["not_implemented"]
@@ -350,5 +383,5 @@ def test_only_families_with_native_rules_are_dispatched_and_have_task_files() ->
         family for family in catalogue.families if (ROLE / "tasks" / f"{family}.yml").is_file()
     ]
     assert families_with_files == generate_toggles.native_families(catalogue)
-    planned = cast("list[dict[str, object]]", plan(allow_disruptive=["pwquality"])["families"])
+    planned = cast("list[dict[str, object]]", plan(allow_disruptive=DISRUPTIVE_NATIVE)["families"])
     assert [family["name"] for family in planned] == generate_toggles.native_families(catalogue)

@@ -1,0 +1,101 @@
+---
+- name: Login defaults case | Write the login.defs of the case
+  ansible.builtin.copy:
+    content: "{{ ldf_case.text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldf_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults case | Inspect the login.defs of the case before the apply
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldf_case_before
+
+- name: Login defaults case | Switch every rule of the topic on for the case
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldf_toggles }}"
+
+- name: Login defaults case | Apply the topic to the login.defs of the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults case | Read the ledger and login.defs after the apply of the case
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldf_case_ledger
+
+- name: Login defaults case | Read login.defs after the apply of the case
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldf_case_applied
+
+- name: Login defaults case | Check the status of every rule, the lines written and what the ledger records
+  vars:
+    ldf_newline: "\n"
+    ldf_case_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
+    ldf_case_text: "{{ ldf_case_applied.content | b64decode }}"
+    ldf_case_recorded: >-
+      {{ ldf_case_ledger.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | map(attribute='rule_id')
+         | sort }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        ldf_case_statuses == {ldf_max: ldf_case.expected.max, ldf_warn: 'compliant',
+                              ldf_umask: ldf_case.expected.umask}
+      - >-
+        ldf_case_recorded == lifecycle_results | selectattr('status', 'equalto', 'applied')
+        | map(attribute='rule_id') | sort
+      - lifecycle_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
+      - >-
+        lifecycle_results | rejectattr('status', 'in', ['applied', 'compliant']) | selectattr('reason', 'none')
+        | list == []
+      - >-
+        ldf_case.lines | default([]) | reject('in', ldf_case_text.split(ldf_newline)) | list == []
+      - >-
+        ldf_case.expected.max != 'duplicate_setting'
+        or ldf_case_text | regex_findall('(?mi)^[ \t]*PASS_MAX_DAYS([ \t].*)?$')
+           == ldf_case.text | regex_findall('(?mi)^[ \t]*PASS_MAX_DAYS([ \t].*)?$')
+    fail_msg: "{{ ldf_label }}, {{ ldf_case.name }}, apply: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults case | Switch every rule of the topic off for the case
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ ldf_toggles }}"
+
+- name: Login defaults case | Clean up the topic of the case
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults case | Inspect the login.defs of the case after the cleanup
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldf_case_after
+
+- name: Login defaults case | Check that the cleanup restored the login.defs of the case byte for byte
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list in [['restored'], []]
+      - ldf_case_after.stat.checksum == ldf_case_before.stat.checksum
+    fail_msg: "{{ ldf_label }}, {{ ldf_case.name }}, cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults case | Switch every rule of the topic on again after the case
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldf_toggles }}"

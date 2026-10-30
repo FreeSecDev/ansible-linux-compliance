@@ -1,0 +1,212 @@
+---
+- name: Login defaults in check mode | Every rule of each platform's profile is reported once and nothing changes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - login_defs
+    login_defs_prefix: xccdf_org.ssgproject.content_rule_
+    login_defs_manifest: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../content/manifest.yml') | from_yaml }}"
+    login_defs_cases:
+      - name: the Ubuntu 24.04 CIS level 2 server profile
+        profile: cis_level2_server
+        datastream: ubuntu2404
+        benchmark: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+        rules:
+          - accounts_maximum_age_login_defs
+          - accounts_minimum_age_login_defs
+          - accounts_password_warn_age_login_defs
+          - accounts_umask_etc_login_defs
+      - name: the RHEL 9 STIG profile
+        profile: stig
+        datastream: rhel9
+        benchmark: xccdf_org.ssgproject.content_benchmark_RHEL-9
+        rules:
+          - accounts_have_homedir_login_defs
+          - accounts_logon_fail_delay
+          - accounts_maximum_age_login_defs
+          - accounts_minimum_age_login_defs
+          - accounts_umask_etc_login_defs
+      - name: the RHEL 9 ANSSI enhanced profile
+        profile: anssi_bp28_enhanced
+        datastream: rhel9
+        benchmark: xccdf_org.ssgproject.content_benchmark_RHEL-9
+        rules:
+          - accounts_password_minlen_login_defs
+          - accounts_umask_etc_login_defs
+    login_defs_statuses:
+      - applied
+      - compliant
+      - notapplicable
+      - not_regular_file
+      - not_directory
+      - overridden
+      - duplicate_setting
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run every profile in check mode and check its results
+      ansible.builtin.include_tasks:
+        file: tasks/login_defs_profile_case.yml
+      loop: "{{ login_defs_cases }}"
+      loop_control:
+        loop_var: login_defs_case
+        label: "{{ login_defs_case.name }}"
+
+- name: Login defaults in check mode | A rule without a profile value fails before anything is read or changed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    linux_compliance_remediate_allow_disruptive:
+      - accounts
+    linux_compliance_discovered:
+      profile_id: xccdf_org.ssgproject.content_profile_cis_level1_server
+      benchmark_id: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+      content_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      rule_ids:
+        - xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Run the remediate role and expect the value check to stop it
+      block:
+        - name: Run the remediate role
+          ansible.builtin.include_role:
+            name: freesecdev.linux_compliance.remediate
+
+        - name: Fail because a login_defs rule without its profile value was not refused
+          ansible.builtin.fail:
+            msg: REMEDIATE-LOGIN-DEFS-PROFILE-VALUE-NOT-REFUSED
+      rescue:
+        - name: Check that the role stopped at the value check, before it read login.defs
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Login defaults | Refuse a malformed rule or a missing profile value before anything changes'
+              - >-
+                ansible_failed_result.results | map(attribute='msg') | join(' ')
+                is search('generated from the pinned content')
+            quiet: true
+
+- name: Login defaults in check mode | The family file and its helpers refuse direct use
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Include each file without the opt-in and check that its first task refuses it
+      ansible.builtin.include_tasks:
+        file: tasks/login_defs_direct_use.yml
+      loop:
+        - login_defs.yml
+        - login_defs_apply.yml
+        - login_defs_cleanup.yml
+      loop_control:
+        loop_var: login_defs_file
+
+- name: Login defaults in check mode | A ledger entry of another method or a malformed one is refused, never forgotten
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    login_defs_line_entry:
+      - name: group
+        value: "0"
+      - name: method
+        value: line
+      - name: mode
+        value: "0644"
+      - name: owner
+        value: "0"
+      - name: setting_line
+        value: PASS_MAX_DAYS 99999
+      - name: sha256
+        value: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: written_line
+        value: PASS_MAX_DAYS 365
+    login_defs_entry_cases:
+      - name: an entry of another method at cleanup
+        helper: login_defs_cleanup.yml
+        prior_values: "{{ login_defs_line_entry | rejectattr('name', 'equalto', 'method') | list
+          + [{'name': 'method', 'value': 'dropin'}] }}"
+        status: cleanup_incomplete
+        reason: method_changed
+      - name: an entry of another method at apply
+        helper: login_defs_apply.yml
+        prior_values: "{{ login_defs_line_entry | rejectattr('name', 'equalto', 'method') | list
+          + [{'name': 'method', 'value': 'dropin'}] }}"
+        status: method_changed
+        reason: recorded by the dropin method
+      - name: an entry without a recorded method at cleanup
+        helper: login_defs_cleanup.yml
+        prior_values: "{{ login_defs_line_entry | rejectattr('name', 'equalto', 'method') | list }}"
+        status: cleanup_incomplete
+        reason: method_changed
+      - name: an entry whose written line is not a line of the setting
+        helper: login_defs_cleanup.yml
+        prior_values: "{{ login_defs_line_entry | rejectattr('name', 'equalto', 'written_line') | list
+          + [{'name': 'written_line', 'value': 'UMASK 027'}] }}"
+        status: cleanup_incomplete
+        reason: invalid_record
+      - name: an entry whose prior line spans two lines
+        helper: login_defs_cleanup.yml
+        prior_values: "{{ login_defs_line_entry | rejectattr('name', 'equalto', 'setting_line') | list
+          + [{'name': 'setting_line', 'value': 'PASS_MAX_DAYS 1\nUMASK 000'}] }}"
+        status: cleanup_incomplete
+        reason: invalid_record
+      - name: an entry with a malformed mode
+        helper: login_defs_cleanup.yml
+        prior_values: "{{ login_defs_line_entry | rejectattr('name', 'equalto', 'mode') | list
+          + [{'name': 'mode', 'value': '644'}] }}"
+        status: cleanup_incomplete
+        reason: invalid_record
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Load the maximum age rule of the catalogue
+      ansible.builtin.set_fact:
+        login_defs_rule: >-
+          {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/remediate/vars/rules.yml')
+             | from_yaml).__linux_compliance_remediate_rules
+             | selectattr('rule_id', 'equalto', 'xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs')
+             | first }}
+
+    - name: Run every refused ledger entry through its helper
+      ansible.builtin.include_tasks:
+        file: tasks/login_defs_entry_case.yml
+      loop: "{{ login_defs_entry_cases }}"
+      loop_control:
+        loop_var: login_defs_entry_case
+        label: "{{ login_defs_entry_case.name }}"
