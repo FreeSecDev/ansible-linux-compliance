@@ -128,7 +128,7 @@ def test_a_file_without_its_pinned_exception_passes(tmp_path: Path) -> None:
 def test_every_pinned_exception_matches_the_repository_file_exactly() -> None:
     for (relative, kind), pinned in own.PINNED_EXCEPTIONS.items():
         data = (rules.REPO_ROOT / relative).read_bytes()
-        found = own._python_findings(relative, data)[kind]
+        found = own.python_findings(relative, data)[kind]
         assert sorted(text for _, text in found) == sorted(pinned), (relative, kind)
 
 

@@ -260,7 +260,8 @@ def _fix_names(line: int, text: str) -> Iterator[tuple[int, str]]:
         yield from ((line, match.group(0)) for match in FIX_MARKUP.finditer(text))
 
 
-def _python_findings(relative: Path, data: bytes) -> dict[str, set[tuple[int, str]]]:
+def python_findings(relative: Path, data: bytes) -> dict[str, set[tuple[int, str]]]:
+    """Return the fix-reader and invocation findings of one Python file, by kind."""
     found: dict[str, set[tuple[int, str]]] = {FIX_READER: set(), INVOCATION: set()}
     try:
         tree = ast.parse(data)
@@ -345,7 +346,7 @@ def own_remediation_findings(path: Path, relative: Path | None, data: bytes) -> 
         return []
     violations = _upstream_content(path, relative, data)
     if path.suffix.lower() in PYTHON_SUFFIXES:
-        found = _python_findings(relative, data)
+        found = python_findings(relative, data)
     else:
         found = _text_findings(relative, data)
     messages = {FIX_READER: FIX_MESSAGE, INVOCATION: INVOCATION_MESSAGE}
