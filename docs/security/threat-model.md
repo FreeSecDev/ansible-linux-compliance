@@ -84,13 +84,16 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
   `make lint-repo` refuses Python that reads `fix` elements and any committed upstream remediation content
   ([ADR 0025](../adr/0025-own-ansible-remediation-only.md)). ADR 0003 is about
   what changes a host; SCE checks are meant to read it, but nothing technical confines them to reading.
-- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE. SCE is the auto-loaded
+- **Option to disable:** the pinned `oscap` 1.3.9 has no command-line option to disable SCE (the source lines are
+  cited in [ADR 0025](../adr/0025-own-ansible-remediation-only.md), Security implications). SCE is the auto-loaded
   plugin `libopenscap_sce.so.25`, shipped in `libopenscap25t64` with the library itself. The undocumented variable
   `OSCAP_CHECK_ENGINE_PLUGIN_DIR` would redirect its `dlopen`, but the process helper does not pass it and redirecting
   root's library loading would add a code-loading path. Without SCE, the 16 SCE-only rules of `cis_level1_server` are
   `notchecked` (13 firewall rules and 3 file-system-wide ownership and permission rules); the other 392 rules are
   unaffected. An operator who does not want to run any SCE script can list those rules in `disabled_rules`: the
-  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`.
+  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`. That is not the
+  default, so the owner's requirement that ComplianceAsCode code never runs is not yet met for SCE;
+  [FREES-191](https://vidlunnia.atlassian.net/browse/FREES-191) tracks it.
 - **Residual:** the pinned content and its 81 scripts are trusted as a whole, like the OVAL definitions, which
   `oscap` also evaluates as root. A content update is therefore a change to code that runs as root: its review covers
   the SCE scripts that changed, not only the digest.

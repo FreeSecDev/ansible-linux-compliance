@@ -51,6 +51,25 @@ PYTHON_FIX_READERS = [
     f'NAMES = ("check", "{FIX}")\n',
     f'def read(root):\n    return root.iter(NS + "{FIX}")\n',
     f'def read(root):\n    return [item for item in root if item.tag == "{FIX}"]\n',
+    f'NAME = ".//xccdf:{FIX}"\n',
+    f'NAME = "xccdf:Rule/xccdf:{FIX}"\n',
+    f'NAME = ".//{{http://checklists.nist.gov/xccdf/1.2}}{FIX}"\n',
+    f'NAME = f".//{{NS}}{FIX}"\n',
+    f'NAME = ".//{{*}}{FIX}"\n',
+    f'NAME = "{{ns}}Rule/{{ns}}{FIX}"\n',
+    f'NAME = f"{{NS}}Rule/{{NS}}{FIX}text"\n',
+    f'def read(el):\n    return el.tag.endswith("}}{FIX}")\n',
+    f'def read(root, ns):\n    return root.findall(".//xccdf:{FIX}", ns)\n',
+    f'def read(root):\n    return root.iter(f".//{{XCCDF}}{FIX}")\n',
+    f'NAME = ".//xccdf:{FIX}[@system]"\n',
+    f'NAME = ".//xccdf:{FIX}/text()"\n',
+    f'NAME = "//xccdf:{FIX}/xccdf:sub"\n',
+    f'NAME = b"{{http://checklists.nist.gov/xccdf/1.2}}{FIX}"\n',
+    f'NAME = b".//xccdf:{FIX}"\n',
+    f"NAME = b\"<xccdf:{FIX} system='x'>\"\n",
+    f'PATTERN = r"<(\\w+:)?{FIX}\\b"\n',
+    f'PATTERN = r"<(?:\\w+:)?{FIX}\\b"\n',
+    f'PATTERN = rb"</?(?:[\\w.-]+:)?{FIX}text[^>]*>"\n',
 ]
 
 
@@ -94,6 +113,13 @@ def test_the_fix_reader_of_the_removed_value_source_is_refused(tmp_path: Path) -
         f'NAME = "a {FIX}"\n',
         'NAME = "<fixtext_x>"\n',
         f"{FIX} = 1\n",
+        f'NAME = "{FIX}-type"\n',
+        f'NAME = ".//{FIX}es"\n',
+        f'NAME = "xccdf:{FIX}ed"\n',
+        'NAME = "<prefix>"\n',
+        'PATTERN = r"<(\\w+:)?prefix\\b"\n',
+        f'NAME = b"a {FIX}"\n',
+        f'NAME = "note: {FIX} it"\n',
     ],
 )
 def test_python_that_does_not_name_the_fix_element_is_accepted(tmp_path: Path, source: str) -> None:
@@ -102,12 +128,26 @@ def test_python_that_does_not_name_the_fix_element_is_accepted(tmp_path: Path, s
 
 @pytest.mark.parametrize(
     "relative",
-    ["tests/unit/tools/test_x.py", "tests/system/x.py", "docs/x.py", "extensions/x.py"],
+    [
+        "tests/system/x.py",
+        "tests/system/backends/x.py",
+        "extensions/x.py",
+        "extensions/molecule/shared/library/x.py",
+        "infra/x.py",
+        "x.py",
+    ],
 )
-def test_the_fix_element_is_only_refused_in_tools_and_plugins(
+def test_the_fix_element_is_refused_in_all_python_outside_unit_tests(
     tmp_path: Path, relative: str
 ) -> None:
-    assert findings(tmp_path, relative, f'NAME = "{FIX}"\n') == []
+    assert_refused(findings(tmp_path, relative, f'NAME = ".//xccdf:{FIX}"\n'), FIX_READS)
+
+
+@pytest.mark.parametrize("relative", ["tests/unit/tools/test_x.py", "docs/x.py", "changelogs/x.py"])
+def test_the_fix_element_is_not_refused_in_unit_tests_and_documentation(
+    tmp_path: Path, relative: str
+) -> None:
+    assert findings(tmp_path, relative, f'NAME = ".//xccdf:{FIX}"\n') == []
 
 
 def test_the_checklist_fix_text_is_the_pinned_exception(tmp_path: Path) -> None:
@@ -152,6 +192,41 @@ def test_the_grype_fix_object_is_pinned_exactly(tmp_path: Path) -> None:
     source = f'FIX = get(item, "{FIX}")\nVERSIONS = get(FIX, "versions", "{FIX}")\n'
     assert findings(tmp_path, relative, source) == []
     assert_refused(findings(tmp_path, relative, source + f'MORE = "{FIX}"\n'), FIX_READS)
+
+
+@pytest.mark.parametrize(
+    ("relative", "kind"),
+    [(relative, kind) for relative, kind in own.PINNED_EXCEPTIONS if kind == own.FIX_READER],
+)
+def test_a_path_form_added_to_a_pinned_file_is_refused(
+    tmp_path: Path, relative: Path, kind: str
+) -> None:
+    pinned = "".join(
+        f'PIN_{index} = "{text}"\n'
+        for index, text in enumerate(own.PINNED_EXCEPTIONS[relative, kind])
+    )
+    assert findings(tmp_path, str(relative), pinned) == []
+    messages = findings(tmp_path, str(relative), pinned + f'MORE = ".//xccdf:{FIX}"\n')
+    assert_refused(messages, FIX_READS)
+    assert_refused(messages, PIN)
+
+
+def test_only_the_pinned_constants_name_the_fix_element_in_the_repository() -> None:
+    found: dict[Path, list[str]] = {}
+    for top in ("tools", "plugins", "extensions", "tests/system"):
+        for path in sorted((rules.REPO_ROOT / top).rglob("*.py")):
+            relative = path.relative_to(rules.REPO_ROOT)
+            texts = sorted(
+                text for _, text in own.python_findings(relative, path.read_bytes())[own.FIX_READER]
+            )
+            if texts:
+                found[relative] = texts
+    expected = {
+        relative: sorted(pinned)
+        for (relative, kind), pinned in own.PINNED_EXCEPTIONS.items()
+        if kind == own.FIX_READER
+    }
+    assert found == expected
 
 
 def test_every_pinned_exception_names_a_tracked_file() -> None:
@@ -285,6 +360,25 @@ INVOCATION_CASES = [
     ),
     ("tools/x.sh", "/opt/scc/Resources/Scripts/remediate.sh\n"),
     ("tools/x.py", 'SCRIPT = "build/content/bash/ubuntu2404-script-cis.sh"\n'),
+    ("tools/x.sh", f"#!/bin/sh\noscap xccdf generate \\\n  {FIX} ds.xml\n"),
+    ("Makefile", f"x:\n\toscap xccdf generate \\\r\n\t\t{FIX} --profile x ds.xml\n"),
+    ("tools/x.sh", "#!/bin/sh\noscap xccdf \\\n  remediate results.xml\n"),
+    ("tools/x.sh", "#!/bin/sh\noscap \\\n  xccdf \\\n  remediate results.xml\n"),
+    ("tools/x.sh", f"#!/bin/sh\nusg {FIX} cis_level1_server\n"),
+    ("tools/x.sh", f"#!/bin/sh\nusg --verbose {FIX} --tailoring-file t.xml\n"),
+    ("tools/x.sh", f"#!/bin/sh\nusg \\\n  {FIX} cis_level1_server\n"),
+    ("tools/x.sh", f"#!/bin/sh\nusg generate-{FIX} cis_level1_server\n"),
+    (".github/workflows/x.yml", f"---\njobs:\n  x:\n    steps:\n      - run: sudo usg {FIX} cis\n"),
+    (
+        "roles/x/tasks/x.yml",
+        f"---\n- name: x\n  vars:\n    argv: [usg, {FIX}, cis_level1_server]\n",
+    ),
+    ("tools/x.py", f'ARGS = ["usg", "{FIX}", "cis_level1_server"]\n'),
+    ("tools/x.py", f'ARGS = (b"oscap", b"xccdf", b"generate", b"{FIX}")\n'),
+    ("tools/x.py", f'ARGS = b"oscap xccdf eval {REMEDIATE_OPTION} ds.xml"\n'),
+    ("roles/x/templates/run.sh.j2", f"oscap xccdf eval {REMEDIATE_OPTION} {{{{ ds }}}}\n"),
+    ("roles/x/templates/cron.j2", f"0 * * * * root usg {FIX} {{{{ profile }}}}\n"),
+    ("templates/x.jinja2", f"oscap xccdf {GENERATE_FIX} ds.xml\n"),
 ]
 
 
@@ -316,6 +410,13 @@ def test_running_the_scanner_remediation_or_its_scripts_is_refused(
         ("tools/x.py", '"""Never pass --remediate or generate fix."""\n'),
         ("tools/x.py", 'PATHS = ("roles/remediate", "tests/playbooks/remediate-check-mode.yml")\n'),
         ("docs/notes.txt", f"oscap xccdf eval {REMEDIATE_OPTION}\n"),
+        ("docs/templates/x.j2", f"oscap xccdf eval {REMEDIATE_OPTION}\n"),
+        ("tools/x.sh", "#!/bin/sh\nusg audit cis_level1_server\n"),
+        ("tools/x.sh", f"#!/bin/sh\nusg audit cis_level1_server\necho {FIX}\n"),
+        ("tools/x.sh", f"#!/bin/sh\nusg audit --{FIX}-hint x\n"),
+        ("tools/x.sh", f"#!/bin/sh\nbusg {FIX}\n"),
+        ("tools/x.sh", f"#!/bin/sh\noscap xccdf generate report x \\\n  {FIX}.html\n"),
+        ("roles/x/vars/x.yml", "---\nbanner: The USG may inspect and seize data\n"),
     ],
 )
 def test_what_only_mentions_or_refuses_the_scanner_remediation_is_accepted(

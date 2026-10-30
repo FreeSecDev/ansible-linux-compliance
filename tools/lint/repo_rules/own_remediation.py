@@ -5,10 +5,12 @@ scanner content (the OVAL) is used only to audit and as a reference in golden te
 rule without a native implementation is reported as ``not_implemented`` and never remediated by
 another tool. This rule group makes that decision a check:
 
-* Python under ``tools/`` or ``plugins/`` may not name the XCCDF ``fix`` element: a string
-  constant that is ``fix`` or ``fixtext`` with an optional namespace, prefix or path (an
-  f-string counts with its placeholders), a ``fix`` tag in markup, a ``local-name()`` test for it
-  or an XCCDF fix system URN. ``PINNED_EXCEPTIONS`` lists the only constants that may remain,
+* Python outside ``tests/unit/``, ``docs/`` and ``changelogs/`` may not name the XCCDF ``fix``
+  element: a string or bytes constant whose last step, or a step followed by ``/``, is ``fix`` or
+  ``fixtext`` with an optional predicate, at the start or after ``/``, ``}`` or ``:`` (so any
+  namespace, prefix, wildcard or path; an f-string counts with its placeholders), a ``fix`` tag in
+  markup or in a regular expression, a ``local-name()`` test for it or an XCCDF fix system URN.
+  ``PINNED_EXCEPTIONS`` lists the only constants that may remain,
   exactly and with their number per file (a file that no longer has any of them passes): the
   STIG checklist export shows ``fixtext`` to the reader (``tools/reporting/stig_content.py``),
   the process helper refuses the ``generate fix`` sequence and the remediation words
@@ -22,17 +24,21 @@ another tool. This rule group makes that decision a check:
   generated playbooks. The repository ships only what it tracks, so nothing of that kind can
   reach the collection tarball either.
 * Files that run (YAML outside ``docs/`` and ``changelogs/``, makefiles, files below
-  ``.github/``, shell scripts and templates, container files, files with a shebang, and Python
-  outside ``tests/unit/``) may not invoke the scanner's remediation (its ``remediate`` options and
-  sub-commands, ``generate fix`` and the fix type option, also as consecutive items of a list) or
-  run a script that the scanner or its content provides (a script or playbook path below the
-  fetched content, the release archive, the SCC installation or the distribution's SSG
-  directories, or named like a release archive member).
+  ``.github/``, shell scripts and templates, Jinja templates, container files, files with a
+  shebang, and Python outside ``tests/unit/``) may not invoke the scanner's remediation (its
+  ``remediate`` options and sub-commands, ``generate fix`` and the fix type option, also across a
+  backslash line continuation and as consecutive items of a list, and the Ubuntu Security Guide's
+  ``usg fix``, which applies the ComplianceAsCode remediation) or run a script that the scanner or
+  its content provides (a script or playbook path below the fetched content, the release
+  archive, the SCC installation or the distribution's SSG directories, or named like a release
+  archive member).
 
 The module spells the element name as ``FIX`` and writes its patterns so that they do not match
 its own source. The SCE check scripts that the pinned datastreams embed are checks that
 ``oscap`` runs while it audits; T-AUDIT-2 of the threat model covers them, and nothing here runs
-them. This is static analysis of the tracked files, not a sandbox (ADR 0004).
+them. This is static analysis of the tracked files, not a sandbox (ADR 0004): a name or an
+option built at run time (string operations, Jinja expressions, Makefile, shell or environment
+variables) is not seen, as ADR 0025 records.
 """
 
 from __future__ import annotations
@@ -52,13 +58,13 @@ if TYPE_CHECKING:
 
 FIX_READER: Final[str] = "fix_reader"
 INVOCATION: Final[str] = "invocation"
-FIX_SCOPES: Final[frozenset[str]] = frozenset({"tools", "plugins"})
 DOCUMENTATION_SCOPES: Final[frozenset[str]] = frozenset({"docs", "changelogs"})
 UNIT_TESTS: Final[tuple[str, str]] = ("tests", "unit")
 EXECUTED_DIRECTORY: Final[str] = ".github"
 MAKEFILE_NAMES: Final[frozenset[str]] = frozenset({"makefile", "gnumakefile"})
 SCRIPT_SUFFIXES: Final[frozenset[str]] = frozenset({".sh", ".bash", ".zsh", ".ksh", ".mk"})
 SCRIPT_TEMPLATE_SUFFIX: Final[str] = ".sh.tmpl"
+JINJA_SUFFIXES: Final[frozenset[str]] = frozenset({".j2", ".jinja", ".jinja2"})
 CONTAINER_FILE_PREFIXES: Final[tuple[str, ...]] = ("containerfile", "dockerfile")
 SHEBANG: Final[bytes] = b"#!"
 PLACEHOLDER: Final[str] = "{}"
@@ -75,10 +81,11 @@ PINNED_EXCEPTIONS: Final[dict[tuple[Path, str], tuple[str, ...]]] = {
 }
 
 FIX_ELEMENT: Final[re.Pattern[str]] = re.compile(
-    r"(?:\{[^{}]*\}|[A-Za-z_][\w.-]*:|\.{0,2}/{1,2})?fi[x](?:text)?(?:\[[^\]]*\])?"
+    r"(?:.*[/}:])?fi[x](?:text)?(?:\[[^\]]*\])?(?:/.*)?", re.DOTALL
 )
 FIX_MARKUP: Final[re.Pattern[str]] = re.compile(
     r"</?(?:[A-Za-z_][\w.-]*:)?fi[x](?:text)?[\s>/]"
+    r"|<[^\s<>'\"]{0,40}?(?<![\w])fi[x](?:text)?(?![\w-])"
     r"|local-name\(\)\s*=\s*['\"]fi[x]"
     r"|urn:xccdf:fi[x]\b"
 )
@@ -112,12 +119,17 @@ PLAYBOOK_TAGS: Final[tuple[re.Pattern[str], ...]] = tuple(
         r"[a-z]+_strategy",
     )
 )
+SPACE: Final[str] = r"(?:\s|\\\r?\n)+"
+SAME_COMMAND: Final[str] = r"(?:\\\r?\n|[^\n])*?"
 INVOCATIONS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"-\-remediate\b"),
     re.compile(r"-\-fix-type\b"),
-    re.compile(r"\bgenerate\s+fi[x]\b"),
-    re.compile(r"\bxccdf\s+remediate\b"),
-    re.compile(r"(?<![\w./-])osca[p](?![\w-])[^\n]*?(?<![\w./-])remediate(?![\w-])"),
+    re.compile(rf"\bgenerate{SPACE}fi[x]\b"),
+    re.compile(rf"\bxccdf{SPACE}remediate\b"),
+    re.compile(rf"(?<![\w./-])osca[p](?![\w-]){SAME_COMMAND}(?<![\w./-])remediate(?![\w-])"),
+    re.compile(
+        rf"(?<![\w./-])us[g](?![\w-]){SAME_COMMAND}(?<![\w./-])(?:generate-)?fi[x](?![\w-])"
+    ),
 )
 SCANNER_SCRIPTS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(
@@ -166,13 +178,14 @@ def is_executed(relative: Path, data: bytes) -> bool:
     """Return whether ``relative`` runs or is read by something that runs it.
 
     That is YAML outside ``docs/`` and ``changelogs/``, every file below ``.github/``,
-    makefiles, shell scripts and their templates, container files and files with a shebang.
+    makefiles, shell scripts and their templates, Jinja templates (which Ansible renders into
+    files that may run), container files and files with a shebang.
     """
     if _is_documentation(relative):
         return False
     name = relative.name.casefold()
     return (
-        relative.suffix.lower() in YAML_SUFFIXES | SCRIPT_SUFFIXES
+        relative.suffix.lower() in YAML_SUFFIXES | SCRIPT_SUFFIXES | JINJA_SUFFIXES
         or relative.parts[:1] == (EXECUTED_DIRECTORY,)
         or name in MAKEFILE_NAMES
         or name.endswith(SCRIPT_TEMPLATE_SUFFIX)
@@ -181,10 +194,21 @@ def is_executed(relative: Path, data: bytes) -> bool:
     )
 
 
-def _strings(tree: ast.AST) -> Iterator[tuple[int, str]]:
-    """Yield the line and text of every string the code can use, f-strings with placeholders.
+def _text(node: ast.AST) -> str | None:
+    """Return the text of a string or bytes constant; bytes are read as Latin-1, byte for byte."""
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, str):
+            return node.value
+        if isinstance(node.value, bytes):
+            return node.value.decode("latin-1")
+    return None
 
-    Expression statements (docstrings) are skipped: they cannot be read by the code.
+
+def _strings(tree: ast.AST) -> Iterator[tuple[int, str]]:
+    """Yield the line and text of every string and bytes constant the code can use.
+
+    F-strings are joined with placeholders. Expression statements (docstrings) are skipped: they
+    cannot be read by the code.
     """
     skipped: set[int] = set()
     for node in ast.walk(tree):
@@ -195,8 +219,10 @@ def _strings(tree: ast.AST) -> Iterator[tuple[int, str]]:
     for node in ast.walk(tree):
         if id(node) in skipped:
             continue
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            yield node.lineno, node.value
+        if isinstance(node, ast.Constant):
+            text = _text(node)
+            if text is not None:
+                yield node.lineno, text
         elif isinstance(node, ast.JoinedStr):
             yield (
                 node.lineno,
@@ -210,14 +236,10 @@ def _strings(tree: ast.AST) -> Iterator[tuple[int, str]]:
 
 
 def _sequences(tree: ast.AST) -> Iterator[tuple[int, str]]:
-    """Yield every list, tuple and set of string constants, joined as an argument vector."""
+    """Yield every list, tuple and set of string or bytes constants, joined as an argv."""
     for node in ast.walk(tree):
         if isinstance(node, ast.List | ast.Tuple | ast.Set):
-            words = [
-                element.value
-                for element in node.elts
-                if isinstance(element, ast.Constant) and isinstance(element.value, str)
-            ]
+            words = [text for text in map(_text, node.elts) if text is not None]
             if len(words) > 1:
                 yield node.lineno, " ".join(words)
 
@@ -261,19 +283,24 @@ def _fix_names(line: int, text: str) -> Iterator[tuple[int, str]]:
 
 
 def python_findings(relative: Path, data: bytes) -> dict[str, set[tuple[int, str]]]:
-    """Return the fix-reader and invocation findings of one Python file, by kind."""
+    """Return the fix-reader and invocation findings of one Python file, by kind.
+
+    Unit tests are not checked: they hold the refused forms as cases. Python below ``docs/`` and
+    ``changelogs/`` is checked only for invocations.
+    """
     found: dict[str, set[tuple[int, str]]] = {FIX_READER: set(), INVOCATION: set()}
     try:
         tree = ast.parse(data)
     except (SyntaxError, ValueError):
         return found
+    if relative.parts[:2] == UNIT_TESTS:
+        return found
     strings = list(_strings(tree))
-    if relative.parts[:1] != () and relative.parts[0] in FIX_SCOPES:
+    if not _is_documentation(relative):
         for line, text in strings:
             found[FIX_READER].update(_fix_names(line, text))
-    if relative.parts[:2] != UNIT_TESTS:
-        for line, text in [*strings, *_sequences(tree)]:
-            found[INVOCATION].update(_invocations(line, text))
+    for line, text in [*strings, *_sequences(tree)]:
+        found[INVOCATION].update(_invocations(line, text))
     return found
 
 

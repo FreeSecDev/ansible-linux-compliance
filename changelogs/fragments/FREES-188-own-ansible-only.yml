@@ -8,12 +8,13 @@ security_fixes:
     ``timestamp_timeout`` of 15 for CIS, 0 for the STIG and 5 for CCN and PCI DSS, which a golden test pins (ADR 0025).
 minor_changes:
   - >-
-    Repository guard - ``make lint-repo`` refuses Python in ``tools/`` and ``plugins/`` that reads XCCDF ``fix``
-    elements, any committed ComplianceAsCode or OpenSCAP remediation content (generated playbooks and Bash fixes,
-    ``ssg-*`` files, ``fix`` elements, the kickstart add-on), and any invocation of the scanner's remediation
-    (``--remediate``, ``xccdf remediate``, ``generate fix``, ``--fix-type``) or of a script that the scanner provides in
-    tasks, makefiles, workflows, scripts, container files and Python. Only the checklist ``fixtext``, the process
-    helper's forbidden words and the Grype ``fix`` object are pinned exceptions (FREES-188).
+    Repository guard - ``make lint-repo`` refuses Python outside ``tests/unit/`` that names XCCDF ``fix`` elements
+    (as a constant, path, namespace, wildcard, suffix test, markup or regular expression, in strings and bytes), any
+    committed ComplianceAsCode or OpenSCAP remediation content (generated playbooks and Bash fixes, ``ssg-*`` files,
+    ``fix`` elements, the kickstart add-on), and any invocation of the scanner's remediation (``--remediate``,
+    ``xccdf remediate``, ``generate fix``, ``--fix-type``, ``usg fix``) or of a script that the scanner provides in
+    tasks, makefiles, workflows, scripts, Jinja templates, container files and Python. Only the checklist
+    ``fixtext``, the process helper's forbidden words and the Grype ``fix`` object are pinned exceptions (FREES-188).
 trivial:
   - >-
     Documentation - README, the remediation guide, the native remediation guide, ADR 0003, ADR 0021, ADR 0022, the

@@ -99,11 +99,12 @@ Rules:
   ``__init__`` takes the seam, and may assign ``self._name`` only directly in ``__init__``,
   never from a function nested in it (FREES-137, FREES-153).
 
-* Remediation is the collection's own Ansible (FREES-188, ADR 0025): Python under ``tools/`` or
-  ``plugins/`` may not name the XCCDF ``fix`` element, no file may be ComplianceAsCode or OpenSCAP
-  remediation content, and no task, makefile, workflow, script, container file or Python outside
-  ``tests/unit/`` may invoke the scanner's remediation or run a script that it provides, except the
-  exact ``PINNED_EXCEPTIONS`` of ``tools/lint/repo_rules/own_remediation.py``.
+* Remediation is the collection's own Ansible (FREES-188, ADR 0025): Python outside ``tests/unit/``,
+  ``docs/`` and ``changelogs/`` may not name the XCCDF ``fix`` element, no file may be
+  ComplianceAsCode or OpenSCAP remediation content, and no task, makefile, workflow, script, Jinja
+  template, container file or Python outside ``tests/unit/`` may invoke the scanner's remediation
+  (including ``usg fix``) or run a script that it provides, except the exact ``PINNED_EXCEPTIONS``
+  of ``tools/lint/repo_rules/own_remediation.py``.
 
 Violations are printed as ``path:line: message`` and the exit status is 1. An
 ``--index-modes`` listing that cannot be read is reported with exit status 2.
