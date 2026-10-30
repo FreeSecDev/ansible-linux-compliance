@@ -24,6 +24,7 @@
 | [0020](0020-stig-viewer-checklist-export.md) | STIG Viewer checklist export (CKL and CKLB) | proposed |
 | [0021](0021-native-banners-pwquality-and-profile-values.md) | Native banners and password quality, with profile values from the pinned content | proposed |
 | [0022](0022-native-sudo-drop-ins.md) | Native sudo remediation through validated drop-ins | proposed |
+| [0023](0023-native-ssh-server-configuration.md) | Native SSH server configuration through validated drop-ins | proposed |
 | [0025](0025-own-ansible-remediation-only.md) | Remediation is our own Ansible only; scanner remediation content is never used | proposed |
 
 Proposed ADRs are accepted through the pull request that introduces their first implementation.

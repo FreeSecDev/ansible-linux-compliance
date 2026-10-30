@@ -1022,3 +1022,33 @@ parses one small local file (at most a few lines of fixed `Defaults` names and p
 executable and its arguments cannot be chosen by a variable; a hanging `visudo` would stop the run, not change the
 host. A validator that has to check a whole configuration (as `sshd -t` does) goes through a module on the audited
 helper instead.
+
+## Amendment 2026-10-30: the sshd configuration test (FREES-109)
+
+The `ssh` topic ([ADR 0023](0023-native-ssh-server-configuration.md)) must not install a configuration that sshd
+refuses. It follows the general rule of the amendment on external configuration validators (FREES-175): its
+validator runs through the audited process helper, from a module of this collection, with an explicit argument list.
+The one `validate` exception of that amendment, `validate: /usr/sbin/visudo -cf %s` of `copy` in
+`roles/remediate/tasks/sudo_dropin_apply.yml`, does not extend to sshd: `sshd -t` has to check the whole effective
+configuration with the new settings, not one temporary file, so it cannot run as the `validate` of a file module. The
+module `freesecdev.linux_compliance.sshd_validate` is the third caller of the helper, and the allow-list gains one
+policy:
+
+- `sshd`, resolved in the trusted directories like `oscap`, with the one command prefix
+  `-t -f /etc/ssh/sshd_config` (`SSHD_CONFIG_PATH`). sshd's test mode reads the configuration, every file it includes
+  and the host keys, and exits; it never starts a daemon or binds a port.
+- The policy model gains `ExecutablePolicy.option_values`, `(option, pattern)` pairs. When a policy has them, every
+  argument after the command prefix must be one of these options as its own argument followed by exactly one argument
+  that matches the option's pattern in full; other options, `allowed_options` and positional arguments are refused.
+  Every existing policy leaves it empty and behaves as before. The `sshd` policy has one pair: `-o` with
+  `SSHD_SETTING`, `<Keyword>=<value>` where the keyword is one of the 28 keywords of the native ssh rules
+  (`SSHD_KEYWORDS`) and the value one word of letters, digits and `@.,:/_+-` that does not start with `-`
+  (`SSHD_VALUE`). The helper itself therefore refuses `-T`, `-D`, `-d`, `-h`, `-E`, `-C`, `-oX=Y` and `-o=X=Y`, a bare
+  `-o`, another configuration file, positional arguments, and `-o` with `Include`, `HostKey`, `AuthorizedKeysCommand`,
+  `PidFile`, a value with a space or a value that starts with `-`
+  (`tests/unit/plugins/module_utils/compliance/test_process.py`).
+- The module checks the same keywords and value pattern before it builds the command (it imports them from the
+  helper), passes at most 30 pairs, and runs with a 30-second timeout and 64 KiB of output. Only an sshd that is not
+  found in the trusted directories is reported as `available: false`; an sshd that the helper refuses (wrong owner,
+  writable by group or others, a symbolic link out of the trusted directories) or that cannot be started fails the
+  module with `fail_json`.

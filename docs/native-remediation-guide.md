@@ -5,10 +5,11 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 (cleanup per family). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup, ledger),
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality),
+[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
 [ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
-procedure. `file_permissions`, `banners`, `pwquality` and `sudo` ([ADR 0022](adr/0022-native-sudo-drop-ins.md)) are
-the worked examples.
+procedure. `file_permissions`, `banners`, `pwquality`, `ssh` and `sudo`
+([ADR 0022](adr/0022-native-sudo-drop-ins.md)) are the worked examples.
 
 ## The rule: our own Ansible, never theirs
 
@@ -119,6 +120,12 @@ reviews catch most often:
   the refusal so that the rule reports it and nothing is installed (`sudo_dropin_apply.yml`).
 - Jinja under ansible-core 2.21 does not unescape `'\n'` inside a template, so use the constant
   `__linux_compliance_remediate_newline` of `vars/main.yml` for a newline in generated content.
+- The `validate` parameter of the file modules is refused by the repository guard (ADR 0004). When a service must
+  accept a configuration before it is written, validate it with a module of this collection that runs the service's
+  own test through the audited process helper, as `sshd_validate` does for `ssh` (ADR 0023), and validate the
+  effective configuration rather than the new file alone.
+- Restart or reload a service only where it runs (`service_facts`), once per run, after a final validation, and prefer
+  a reload that keeps open sessions; check mode never reloads.
 
 ## 5. Declare the lifecycle
 
@@ -129,7 +136,10 @@ Add `extensions/molecule/shared/vars/topics/<family>.yml` ([Molecule guide](mole
 - `applied` gives real expectations, ideally the SHA-256 of the exact content, the mode, owner, group, uid and gid,
   because a container audit often reports `notapplicable`;
 - `pre_states` include a customised state that shows that cleanup restores the recorded value and not a default, and
-  list under `unchanged` the rules that a pre-state already satisfies;
+  list under `unchanged` the rules that a pre-state already satisfies (`compliant`), that do not apply
+  (`notapplicable`) or that an earlier setting overrides (`overridden`); a pre-state may add files with `content`
+  (written before the cycle and removed after it) and replace `applied` expectations, for example the absent drop-in
+  of an overridden rule;
 - `audit.applied_outcomes` adds `notapplicable` with the reason when the content's platform excludes containers;
 - regressions that the cycles cannot show (a change of method, a change by hand, a refusal) go into task files of
   `shared/tasks`, included by the static dispatch `shared/tasks/lifecycle_regressions.yml`, and are declared as named
@@ -168,4 +178,5 @@ role README and add a changelog fragment.
 | `file_permissions` | `file_permissions_crontab` | `recorded_value` (mode) | Keeps a stricter mode (`current & 0600`) |
 | `banners` | text of `/etc/issue`, `/etc/issue.net`, `/etc/motd` (CIS and STIG/CCN rules), their mode, owner and group | `recorded_value` per attribute | Text from `linux_compliance_remediate_banner_text`, validated against the profile's value; a missing file is created `0644 root:root` and removed again on cleanup |
 | `pwquality` | `dcredit`, `dictcheck`, `difok`, `enforce_for_root`, `enforcing`, `lcredit`, `maxclassrepeat`, `maxrepeat`, `maxsequence`, `minclass`, `minlen`, `ocredit`, `retry` (STIG rule), `ucredit` | `recorded_value`: one line per setting in the main file where the content checks only it (Ubuntu), one drop-in per rule where it checks the drop-ins (RHEL) | Values from the profile; the method per platform follows the content's OVAL (`main_file_benchmarks`, checked by a golden test); `duplicate_setting` and `overridden` refuse to claim a change that would not take effect |
+| `ssh` | 34 sshd keyword rules (`PermitRootLogin`, `MaxAuthTries`, `ClientAliveInterval`, `Ciphers`, `Banner` and the others) | `recorded_value`: one drop-in per rule, `00-freesecdev-<rule>.conf`, which sshd reads before every other file, and the one conflicting later line of a vendor file (`sshd_config`, `50-redhat.conf`) set to the rule's value in place | Both contents read the drop-ins and every later line (golden test); fixed values from the check, numeric and algorithm values from the profile; a conflicting later line in an administrator's drop-in or a `Match` block is `overridden`; every change validated with `sshd -t` through the `sshd_validate` module before it is written (`invalid_config`), `overridden` for an earlier setting, `not_included` without the `Include`, `crypto_policy` on RHEL; sshd reloaded only where it runs; 29 rules `audit_only` with the reasons in ADR 0023 |
 | `sudo` | `use_pty`, `logfile`, `timestamp_timeout`, `!targetpw`/`!rootpw`/`!runaspw` (STIG); mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d` (ANSSI) | `recorded_value`: one drop-in per rule below `/etc/sudoers.d` with its SHA-256, or the prior attribute and the one written | Every write is checked by `visudo` through `copy` `validate` (the one reviewed exception of the repository guard); `timestamp_timeout` comes from the profile through the pinned `profile_value_id`; `conflicting_setting`, `not_included` and `invalid_sudoers` refuse to claim a change that would not take effect; rules that remove other people's `NOPASSWD`, `!authenticate` or user specifications stay `audit_only` |
