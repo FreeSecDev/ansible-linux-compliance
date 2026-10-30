@@ -203,11 +203,13 @@ by the `scc-smoke` job and never published.
   - The setting is written only for the allowed pair.
   - The confirmation requires SCC's options dump to show it as `1` exactly then and as `0` for every other run, and
     `saveResultsForNotApplicableContent` as `0` for every run.
-  - The module compares the asserted release with the host's `/etc/os-release` (`host_mismatch`). Below that, SCC's
+  - The module compares the asserted release with the host's `/etc/os-release`, or `/usr/lib/os-release` when that is missing (`host_mismatch`, also when neither exists). Below that, SCC's
     own CPE platform test still stops an unmarked scan of a 26.04 host claimed as 24.04, which the integration case
     proves.
   - Raw copies are named `*.off-platform.xml`. The report refuses them and any XCCDF or ARF next to a marked
     `scan-run.json`, and a host with only an off-platform scan is not covered in a fleet report.
+  - The report parsers also read the content (FREES-164): SCC results whose `TestResult` lists none of the benchmark's
+    operating system platforms are refused, so a copy taken out of its bundle is refused too.
   - Retrieval stays confirmed off, and the egress test covers it.
   - Every result carries the off-platform marker. Reports keep marked results out of every figure, and FREES-147
     maps them to Not Reviewed.

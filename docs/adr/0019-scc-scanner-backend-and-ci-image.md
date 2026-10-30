@@ -491,10 +491,18 @@ atomically with mode 0600 and escaped as untrusted data.
     scripts, Makefile fragments and test modules under `tests/`, where FREES-145 will put its integration tests.
   - **Multi-line commands count (FREES-155).** Before matching, the guard joins backslash-newline continuations
     and collapses every run of whitespace, quotes, commas, brackets, parentheses, backticks and `*` into one
-    space. The container tool and the publishing verb then only have to be within 60 characters of that text.
-    A ruff-formatted argument list with one element per line, a continued shell command in a script, a code
-    fence or a workflow `run` block, and Markdown emphasis around each word are therefore caught. A hit names
-    the original file and line. The window keeps prose in which the two words are far apart from matching.
+    space. The text is then split into commands on `;`, `&&`, `||`, `|`, a
+    newline outside any bracket and not escaped by a backslash (also with CR LF), and the end of a sentence, which is
+    a full stop, `!` or `?` followed by whitespace and a capital letter (FREES-158). A closing bracket is not a
+    boundary. Within one command the container tool followed by a publishing verb is flagged with no character
+    limit, so long global options before the verb (TLS, logging, remote connection and identity options of Docker
+    and Podman) no longer hide it. So do a make variable, a shell variable, a call such as `*global_flags()`, an
+    f-string or a lone `.` between the tool and the verb, also inside a ruff-formatted argument list with one
+    element per line. The regression tests in the guard module carry these shapes. In Markdown a newline does not
+    end a command, because prose wraps. A continued shell command in a script, a code fence or a workflow `run`
+    block, and Markdown emphasis around each word are caught. A hit names the original file and line.
+    **Out of scope:** a verb that is itself computed at run time, through a variable, an f-string or
+    concatenation, cannot be seen by a regex guard and is left to review, like a split image name.
   - **Markdown is checked too (FREES-155).** A Markdown file that names an SCC identifier, or lies under
     `tools/scc/` or `extensions/ci/scc/`, must not contain a publishing command either. A document that genuinely
     has to show one needs a reviewed entry in `ACCEPTED_PUBLISHING_MARKDOWN` in the guard module: the path and the
@@ -969,6 +977,11 @@ it stays `0`.
      no on-platform evidence. `host_coverage` counts it in `off_platform`, it gets a missing input of its own, and the
      coverage is `incomplete`, so `--require-host-coverage` fails and the compliance section has no summary or pooled
      figure. No option lets such a fleet pass; one would need its own decision and must never be the default.
+   - **Mixed hosts (FREES-164).** A bundle is evidence only when the collection summary lists its run and manifest
+     digest, and the summary lists one run per host. A host whose listed bundle is on-platform is covered, and an
+     extra off-platform bundle of that host is refused as an unlisted bundle. A host whose listed bundle is
+     off-platform stays `incomplete`, also when an extra on-platform bundle is supplied: that bundle is unlisted and
+     refused too. This conservative behaviour is unchanged and now tested.
    - The report keeps it out of every figure and lists it separately
      ([ADR 0016 amendment](0016-report-schema-and-summary-semantics.md#amendment-2026-10-26-schema-22-off-platform-results-frees-161)).
    - The dashboard labels it ([ADR 0017 amendment](0017-offline-html-dashboard.md#amendment-2026-10-26-off-platform-results-frees-161)).
@@ -987,9 +1000,11 @@ it stays `0`.
      checklist would otherwise record a 26.04 host against a 24.04 STIG as if it had been reviewed.
 8. **Host identity.**
    - The gate, like the 24.04 gate, compares the `host` that the caller supplies, usually from gathered facts.
-   - **The module checks it.** For `backend: scc` the module reads `/etc/os-release` on the managed host before
+   - **The module checks it.** For `backend: scc` the module reads `/etc/os-release` on the managed host, or
+     `/usr/lib/os-release` when that file does not exist as os-release(5) says (FREES-164), before
      anything is created (`audit.check_host_release`). It stops with `host_mismatch` unless `ID` and `VERSION_ID` equal
-     `host.distribution_id` and `host.distribution_version`, and also when the file cannot be read. The OpenSCAP
+     `host.distribution_id` and `host.distribution_version`, and also when the file cannot be read, or when neither file exists. An existing but unreadable
+     `/etc/os-release` never yields to the fallback. The OpenSCAP
      backend is unchanged: Ansible's distribution facts differ from `os-release` on several of its platforms (for
      example `redhat` and `rhel`).
    - **SCC is the backstop below that check.** A 26.04 host declared as 24.04 reaches SCC only if the release check
@@ -1002,6 +1017,19 @@ it stays `0`.
      refuse any file whose directory, or the directory above it, holds a `scan-run.json` that carries the marker or
      cannot be read as a scan run.
    - Off-platform runs are reported through `scan-run.json` or evidence bundles, which carry the marker.
+   - **Content check (FREES-164).** A copy taken out of its bundle passes both checks above, so the XCCDF and ARF
+     parsers also read the content. A `TestResult` written by SCC (`test-system` `cpe:/a:niwc:scc`) lists, as
+     `platform` children, the platforms that SCC matched to the target. When the benchmark declares operating system
+     platforms (`cpe:/o:`) and the `TestResult` lists none of them, the file is refused as an input `error`. Observed
+     with SCC 5.15 on 2026-10-29: the Ubuntu 24.04 run lists `cpe:/o:canonical:ubuntu_linux:24.04::~~lts~~~`; the
+     Ubuntu 26.04 run with the platform test ignored lists only the non-OS platforms. The `os_name` and `os_version`
+     target facts cannot be used: SCC wrote `Debian Variant` and `Unknown` on both hosts. Results of other scanners
+     are not checked, because OpenSCAP does not always list platforms. Both CPE 2.2 URIs and CPE 2.3 formatted
+     strings are recognised, for the `test-system` and for the platforms. A `test-system` that names niwc or scc in
+     neither form is refused, so the check cannot fail open. The platforms are those of the `Benchmark` whose ID the
+     `TestResult` names in its own `benchmark` element, so another benchmark of a multi-benchmark ARF cannot supply
+     a match. If no `Benchmark` of the document has that ID, or the `TestResult` names none, the platforms of the
+     whole document are used, which is the limit: a hand-built document can then still borrow a platform.
 10. **Integration case.**
     - `extensions/ci/scc/Containerfile.ubuntu2604` is the Containerfile of decision 10. Only the base, pinned by index
       digest, and two labels differ, and a repository test enforces that.

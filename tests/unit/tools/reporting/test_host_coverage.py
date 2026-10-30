@@ -571,3 +571,44 @@ def test_the_schema_never_lets_an_off_platform_host_count_as_covered(
 def test_the_dashboard_names_the_off_platform_only_host(kit: Any, tmp_path: Path) -> None:
     page = dashboard.render_dashboard(off_platform_fleet(kit, tmp_path, applied=False))
     assert page.startswith("<!DOCTYPE html>")
+
+
+def mixed_host_report(kit: Any, tmp_path: Path, *, listed_on_platform: bool) -> dict[str, Any]:
+    on_platform = write_bundle(kit, tmp_path / "on", "web01", applied=False)
+    off_platform = write_bundle(marked_kit(kit), tmp_path / "off", "web01", applied=False)
+    listed = on_platform if listed_on_platform else off_platform
+    summary = write_collection(tmp_path, {"web01": ("collected", manifest_sha(listed))})
+    return build(
+        scope=Scope.FLEET,
+        evidence_bundle=(on_platform, off_platform),
+        evidence_collection=summary,
+    )
+
+
+def test_a_host_with_a_listed_on_platform_and_an_extra_off_platform_bundle_is_covered(
+    kit: Any, tmp_path: Path
+) -> None:
+    document = mixed_host_report(kit, tmp_path, listed_on_platform=True)
+    coverage = document["sections"]["compliance"]["host_coverage"]
+    assert coverage["status"] == "complete"
+    assert coverage["summary"]["off_platform"] == 0
+    assert coverage["summary"]["missing"] == 0
+    assert coverage["hosts"][0]["off_platform"] is False
+    errors = [
+        item["reason"]
+        for item in document["sections"]["compliance"]["items"]
+        if item["status"] == "error"
+    ]
+    assert len(errors) == 1
+    assert "does not list run run-web01 of web01" in errors[0]
+
+
+def test_a_listed_off_platform_bundle_with_an_extra_on_platform_bundle_stays_incomplete(
+    kit: Any, tmp_path: Path
+) -> None:
+    document = mixed_host_report(kit, tmp_path, listed_on_platform=False)
+    coverage = document["sections"]["compliance"]["host_coverage"]
+    assert coverage["status"] == "incomplete"
+    assert coverage["summary"]["off_platform"] == 1
+    assert coverage["hosts"][0]["off_platform"] is True
+    assert "only an off-platform scan (web01)" in coverage["reason"]
