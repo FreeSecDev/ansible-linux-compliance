@@ -1,0 +1,12 @@
+---
+trivial:
+  - >-
+    CI: a daily SCC release watch (make scc-release-watch, workflow scc-release-watch) compares NIWC Atlantic's
+    release record with the pinned SCC version without downloading SCC, and keeps exactly one GitHub issue per
+    finding: one labelled scc-release for a new release and one labelled scc-expiry from 21 days before the pin
+    expires. It fails every day from the hard stop on.
+  - >-
+    CI: once the pinned SCC is past its hard stop and no newer pin exists, pull requests and merge groups that touch
+    an SCC path no longer deadlock. The SCC smoke test is skipped with a named warning, never reported as passed,
+    the expiry check still refuses to build or run SCC, and the push and scheduled runs on main stay red. The
+    decision is read from the base revision, so a pull request cannot fabricate an expiry.

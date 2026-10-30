@@ -127,7 +127,8 @@ by the `scc-smoke` job and never published.
 - **Mitigation:** the image carries only a `localhost/` tag. `tests/unit/tools/test_scc_image.py` fails if:
   - an SCC identifier (the image name, the SCC paths, `cscc`, an `SCC_*` variable or an `scc-*` target) appears
     outside the allow-list. The allow-list is:
-    - the `scc-smoke` job;
+    - the `scc-changes`, `scc-smoke` and `ci-gate` jobs, and the `scc-release-watch` job of its own workflow
+      (FREES-176);
     - the SCC variables and targets of the Makefile;
     - `tools/scc/` and `extensions/ci/scc/`;
     - documentation and tests.
@@ -148,7 +149,8 @@ by the `scc-smoke` job and never published.
       or `--eval`;
     - a Makefile line, workflow string or SCC file runs a `.md` file with a shell, `.`, `source`, `make -f` or a
       script interpreter, directly, by redirect or through a pipe;
-  - the SCC job uses a publishing action or widens its permissions;
+  - an SCC job uses a publishing action or widens its permissions beyond `contents: read`, or, for
+    `scc-release-watch` only, beyond exactly `contents: read` and `issues: write`;
   - a tracked file looks like an SCC bundle, package, binary or checklist (plain, compressed, base64 at any alignment,
     or hexadecimal) or has a pinned SCC digest.
 
@@ -185,6 +187,18 @@ by the `scc-smoke` job and never published.
 - **Residual:** the step script that fetches the base filter, and `ci-gate` itself, are in `ci.yml`, which the
   pull request controls. Editing them is a change to a workflow, which is an SCC path, and is caught by review.
   The first push run on `main` after the merge runs the smoke test regardless.
+- **Expiry skip (FREES-176).** After the hard stop, while no newer pin exists, `ci-gate` also accepts a skipped
+  `scc-smoke` for a pull request or merge group whose `scc-changes` output is exactly `expiry=expired`
+  ([ADR 0019 amendment](../adr/0019-scc-scanner-backend-and-ci-image.md#amendment-2026-10-30-release-watch-and-expiry-fallback-frees-176)).
+  - **Failure:** a pull request fabricates an expiry to skip its own smoke test.
+  - **Mitigation:** the output comes from the base revision's `tools/scc/expiry-state.sh` and pins, run as a
+    separate `bash` process. It is `expired` only when both the base and the head pins name the same release and both
+    are past the hard stop, and anything unexpected gives `current`. A pull request that moves `SCC_EXPIRES`, edits
+    the script or bumps the pin is therefore smoke-tested. `ci-gate` matches `current` and `expired` exactly, names
+    the skip in a warning annotation, and never accepts it on `push`, `schedule` or dispatch.
+  - **Residual:** while the skip applies, an SCC change merges without a real SCC scan. The pull request that bumps
+    the pin runs `scc-smoke` and `scc-integration` on a merge commit that holds every such change, before it can
+    merge. Meanwhile `main` and the release watch fail every day.
 
 ### T-SCC-4: off-platform checks run on another release
 
@@ -219,6 +233,22 @@ by the `scc-smoke` job and never published.
     report a wrong outcome, which the marker and the exclusion from figures contain but do not prevent.
   - `/etc/os-release` is written by the host itself, so the release check binds the caller's claim to the host's own
     claim, not to an independent fact.
+
+### T-SCC-5: the release watch is abused
+
+- **Asset:** the repository's issues, and the `issues: write` token of the `scc-release-watch` job.
+- **Attacker:** whoever controls NIWC's release record or the network path to it.
+- **Failure:** a hostile record makes the watch open many issues, plant links or mentions in them, or fetch
+  something else; or a pull request obtains a token that can write issues.
+- **Mitigation (FREES-176):** the watch fetches one fixed HTTPS URL with a verified certificate, no redirects, a
+  timeout and a 64 KiB bound, parses it with the hardened XML reader, and accepts only a strictly formed version and
+  time stamp. No free text of the record reaches an issue. Each finding has one body marker, and the watch reopens
+  an existing issue instead of creating another, so a changing record yields at most one issue per distinct
+  version. The job runs only on `schedule` and dispatch on `main`, with `contents: read` and `issues: write` only,
+  and the never-publish guard refuses `issues` on every other job. The token is sent only to `api.github.com`.
+- **Residual:** a hostile record can still open one issue for each version it names, which stays open while the
+  record names that version, and it can hide a real release by naming the pinned version. NIWC's README and the DISA
+  host remain the other sources, and the expiry issue and the hard stop do not depend on the record.
 
 ## Report inputs on the controller
 
