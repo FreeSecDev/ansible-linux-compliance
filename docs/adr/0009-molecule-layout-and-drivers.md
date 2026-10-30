@@ -113,3 +113,42 @@ On slow runs the snapshot answered at 128 to 239 kB/s, and installing QEMU and l
   and the repository rules refuse `callbacks_enabled` and `ANSIBLE_CALLBACKS_ENABLED` (ADR 0004). The per-task times
   come instead from the timestamps that GitHub Actions puts on every log line: `make molecule-task-timings` reads a
   job log and prints the slowest tasks, so the runs need no change.
+
+## Amendment 2026-10-30: instance images and collections prepared once per run (FREES-182, FREES-184)
+
+Every Docker leg built both instance images in `create`, and every Molecule leg and `lint` installed the collections
+from Galaxy, about 35 times per run. Two flakes took pull requests out of the merge queue, whose check timeout is 30
+minutes: building the Rocky Linux image took 532 to 540 seconds on a slow package mirror instead of about 24, and
+Galaxy answered HTTP 500, cut downloads short, failed TLS or left its cache incomplete. These refinements apply
+([Molecule guide](../molecule.md#images-and-collections-built-once-per-run)).
+
+- **One job per input.** `molecule-images` builds the instance images and `molecule-collections` fetches the
+  collections, each once per run, with `contents: read` only. The Docker legs need both, the libvirt legs and `lint`
+  need `molecule-collections`, and `ci-gate` needs both. The jobs run before the legs start, so they add no
+  concurrent jobs at the peak of a run.
+- **Images: verify, never rebuild in a leg.** `make molecule-images-build` restores each image's archive from an
+  `actions/cache` entry keyed by its tag, which already hashes every build input, and reuses it only when the image
+  carries the label `org.freesecdev.molecule.inputs=<tag>` on exactly the layers of the pinned base, which it pulls by
+  digest. Otherwise it builds, with each pull and build attempt bounded by `timeout` and retried up to three times.
+  The job passes the image IDs as an output and the archives as a run artifact. A leg loads the archive and refuses an
+  image whose ID is not the recorded one; it never pulls or builds, because `MOLECULE_OFFLINE` is `true` in GitHub
+  Actions. `create.yml` builds nothing: it requires the record of verified images with its own tag and the recorded
+  ID. The tag scheme is unchanged. Images are never pushed, and they keep the digest-pinned bases.
+- **Collections: pinned by SHA-256, installed offline.** Galaxy publishes no signatures for the pinned collections.
+  `extensions/molecule/collections.pins` records the SHA-256 and size of each artifact, including the dependency
+  `community.library_inventory_filtering_v1`, which `requirements.yml` now pins as well. `make
+  molecule-collections-fetch` downloads only what a cached file does not match, with bounded `curl` retries, and every
+  install checks every file again and runs `ansible-galaxy collection install --offline` on verified copies, with an
+  unresolvable Galaxy server. No step after the fetch contacts Galaxy.
+- **Trust in caches.** As for the libvirt host packages, a pull request from a fork neither restores nor saves these
+  caches. A collection cache entry is only a speed-up: every file is checked against its pin. An image cannot be
+  checked against a pin, because builds are not reproducible; an image cache entry is written only by this
+  repository's own runs from an image the job built and verified, and its label and base layers are checked again on
+  every restore. Within a run the artifact's digest is checked by `actions/download-artifact` and the image ID by the
+  leg.
+- **Shell scripts, not Ansible.** The image and collection steps are `tools/molecule/instance-images.sh` and
+  `tools/molecule/galaxy-collections.sh`, called by `make`, for the same reason as the cloud image fetch: tools and
+  plugins stay free of `subprocess` outside the audited process helper, and playbooks use no `shell` or `command`.
+  The tag computation, which needs YAML, is the pure Python `tools/molecule/instance_images.py`.
+
+FREES182_ADR_DURATIONS

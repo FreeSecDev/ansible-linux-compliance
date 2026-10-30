@@ -24,14 +24,17 @@ make test-molecule-docker MOLECULE_DOCKER_SCENARIOS=docker-ubuntu-lifecycle MOLE
 make test-molecule-docker-selftest
 ```
 
-`test-molecule-docker` installs the pinned collections from `extensions/molecule/requirements.yml` into
-`build/collections` (`make molecule-dependencies`), fetches and verifies the pinned ComplianceAsCode datastreams into
-`build/content` (`make molecule-content`, the same `tools/content/fetch_content.py` as `test-oscap-integration`), runs
-`molecule test -s <scenario>` for each scenario and stops at the first failure, and then runs the self-test. Without
+`test-molecule-docker` installs the collections pinned in `extensions/molecule/collections.pins` into
+`build/collections` from verified local files (`make molecule-dependencies`), fetches and verifies the pinned
+ComplianceAsCode datastreams into `build/content` (`make molecule-content`, the same `tools/content/fetch_content.py`
+as `test-oscap-integration`), prepares the instance images of the selected scenarios, runs `molecule test -s
+<scenario>` for each scenario and stops at the first failure, and then runs the self-test. Without
 `MOLECULE_DOCKER_SCENARIOS` it runs all four scenarios, so the lifecycle scenarios run every native topic in both
 toggle modes; `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one topic and one mode, as a
-[CI leg](#ci-legs) does. The first run builds the images. The images stay in the local Docker cache
-(`freesecdev-molecule/*`); remove them with `docker image rm` when no longer needed.
+[CI leg](#ci-legs) does. Outside GitHub Actions the first run builds the images and later runs reuse them; in CI the
+legs load the images and collections of the run instead ([built once per run](#images-and-collections-built-once-per-run)).
+The images stay in the local Docker cache (`freesecdev-molecule/*`); remove them with `docker image rm` when no longer
+needed.
 
 CI runs the same target in two jobs on `ubuntu-24.04` GitHub-hosted runners: `molecule-docker`, one matrix entry per
 standard scenario plus `docker-selftest`, and `molecule-lifecycle`, one leg per platform, native topic and toggle mode
@@ -83,7 +86,89 @@ manager reads `versions.yml` or the Dockerfiles yet (FREES-81).
 
 The image tag is `<first 12 hex digits of the base digest>-<first 12 hex digits of a SHA-256 over the base reference
 and the Dockerfile>`. Every build input is in that hash (the Dockerfiles copy nothing from the build context), so a
-changed Dockerfile or base image builds a new image even though `community.docker.docker_image` uses `state: present`.
+changed Dockerfile or base image gives a new tag and a new image. The hash input is
+`<reference>:<tag>@<digest>`, a literal backslash and `n` (Jinja leaves `'\n'` in the folded scalar of `create.yml`
+as two characters), and the Dockerfile without trailing whitespace. `tools/molecule/instance_images.py` computes the
+same tag outside Ansible, and `create.yml` compares the tag that the preparation recorded with its own.
+
+`create.yml` builds nothing. It reads the record of verified images that `make` writes
+(`build/molecule-images.verified.yml`, named by the `FREESECDEV_MOLECULE_IMAGES` environment variable), requires an
+entry with its own tag for every platform, inspects `freesecdev-molecule/<image>:<tag>` and refuses to start a
+container when the image is missing or its ID is not the recorded one. Run the scenarios through `make`, which prepares
+the images; `molecule test` alone fails in `create` with a message that says so.
+
+## Images and collections built once per run
+
+Before FREES-182 and FREES-184 every Docker leg built both instance images in `create` and every Molecule leg and
+`lint` installed the collections from Galaxy. About 35 legs per run did the same work, and two flakes took PRs out of
+the merge queue: the Rocky Linux image took 532 to 540 seconds on a slow package mirror (jobs 124055287121 and
+124276806503) instead of about 24, and Galaxy answered HTTP 500 (job 124276806541), cut downloads short
+(`IncompleteRead`), failed TLS or left its cache without `results`. Each input is now prepared once per run, in its
+own job, and every leg verifies what it receives ([ADR 0009](adr/0009-molecule-layout-and-drivers.md)).
+
+### Instance images
+
+| Step | Where | What it does |
+|---|---|---|
+| Plan | `molecule-images`, `make -s molecule-images-plan` | Prints `<image>=<tag>` for every image of `shared/vars/versions.yml` |
+| Cache | `molecule-images`, one `actions/cache` per image | Restores `build/molecule-images/<image>/image.tar.zst` under the key `molecule-image-<image>-<tag>`, except in a pull request from a fork |
+| Build | `molecule-images`, `make molecule-images-build` | Both images in parallel, see below |
+| Share | `molecule-images` | The job output `ids` (`<image>=<image ID>` pairs) and the artifact `molecule-images` (retention one day) |
+| Load | each `molecule-docker` and `molecule-lifecycle` leg | Downloads the artifact; `make test-molecule-docker` loads only the images its scenarios use and verifies each |
+
+`tools/molecule/instance-images.sh build` pulls each pinned base by digest (`docker pull`, up to three attempts of at
+most 120 seconds) and reads its layers. It reuses a restored archive or an image that the local daemon already holds
+only when the image carries the label `org.freesecdev.molecule.inputs=<tag>` and its layers start with exactly the
+base's layers and add at least one; otherwise it discards the image and builds. A build is `docker build` with the
+pinned `BASE_IMAGE`, that label and the tag, up to three attempts of at most 200 seconds each (`timeout` ends a stuck
+attempt; a build takes about 25 seconds on a normal mirror), so three slow attempts end within ten minutes, inside the
+15-minute limit of the job. Both images are prepared in parallel and their output is prefixed with the image key. The
+package managers themselves move on from a slow mirror: the Rocky Linux Dockerfile gives `dnf` a minimum rate, a
+per-mirror timeout and retries, so that a mirror slower than 256 KiB/s for 20 seconds is left for the next one of the
+mirror list, and the Ubuntu Dockerfile gives `apt-get` retries and a timeout. With `save`, the job writes the archive with `docker save` and `zstd`, and records the tag and image ID of
+each image in `build/molecule-images.verified.yml`, from which `make -s molecule-images-ids` prints the job output.
+On an unchanged image the cache hit means no package mirror is contacted at all, so a slow mirror matters only in the
+first run after a Dockerfile or base digest changes.
+
+`load` in a leg never pulls or builds. It requires an archive and an expected ID for every planned image, loads the
+archive, requires `docker load` to report exactly `freesecdev-molecule/<image>:<tag>`, compares the image ID with the
+one of the job output and the inputs label with the tag, removes a mismatched image and fails. Then it writes the
+record that `create.yml` checks. `make` decides between the two with `MOLECULE_OFFLINE`, which is `true` in GitHub
+Actions (`GITHUB_ACTIONS=true`) and `false` elsewhere, so a CI leg cannot fall back to building.
+
+A cache entry is written only by this repository's own runs, from an image that the same job built and verified. The
+label and the base layers are checked again on every restore; a forged archive would need write access to the
+repository's cache. Images are never pushed: `freesecdev-molecule/*` exists only in the runner's local daemon and in
+the run's artifact, and no workflow, Makefile line or script runs `docker push`, `docker login` or `docker tag`
+(`tests/unit/tools/test_instance_images_script.py`).
+
+### Galaxy collections
+
+`extensions/molecule/requirements.yml` pins each collection and its dependency
+`community.library_inventory_filtering_v1` exactly; `extensions/molecule/collections.pins` adds the SHA-256 and size
+of each artifact, from Galaxy's metadata (`make molecule-collections-lock`, which refuses a dependency that
+`requirements.yml` does not pin). Galaxy publishes no signatures for these collections, so the pins are SHA-256.
+
+| Step | Where | What it does |
+|---|---|---|
+| Cache | `molecule-collections`, `actions/cache` | Restores `build/molecule-collections` under the key `galaxy-collections-<hash of the pins>`, except in a pull request from a fork |
+| Fetch | `molecule-collections`, `make molecule-collections-fetch` | Checks every cached file and downloads only what is missing or wrong |
+| Share | `molecule-collections` | The artifact `molecule-collections` (retention one day) |
+| Install | `lint`, `molecule-docker`, `molecule-lifecycle`, `molecule-libvirt` | Downloads the artifact; `make molecule-dependencies` installs offline |
+
+`tools/molecule/galaxy-collections.sh fetch` downloads `<namespace>-<name>-<version>.tar.gz` from Galaxy's artifact
+URL over HTTPS only, with `curl --retry 4 --retry-delay 10 --retry-all-errors`, at most 90 seconds per attempt and no
+more bytes than the pinned size. It keeps a file only when its size and SHA-256 match the pin, checks a cached file the
+same way before it reuses it and removes files that are not pinned. `install` checks every file again, copies it into
+a private directory, checks the copy and runs `ansible-galaxy collection install --offline --force` on those copies
+only, with `ANSIBLE_GALAXY_SERVER=https://galaxy.invalid`, so that a missing dependency fails instead of reaching
+Galaxy. In GitHub Actions `molecule-dependencies` does not fetch; outside it, it fetches first, which reuses verified
+files and needs no network once they are there. When Renovate raises a version in `requirements.yml`, run
+`make molecule-collections-lock`; `tests/unit/tools/test_galaxy_collections.py` fails until the pins match.
+
+### Durations
+
+FREES182_DURATIONS
 
 The datastreams are the ones pinned in `content/manifest.yml`. `prepare` checks the SHA-256 of the fetched file on the
 controller, then copies it into the instance as `/usr/share/freesecdev-molecule/content/<file>` (root-owned, directory
@@ -566,7 +651,8 @@ duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 17 for `test` (
 (10.8). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
 on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
 in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
-Building the instance images once per run and reusing them in every leg is tracked as FREES-182. A leg that
+Since FREES-182 the images are built once per run and every leg loads them
+([built once per run](#images-and-collections-built-once-per-run)). A leg that
 approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
 no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks

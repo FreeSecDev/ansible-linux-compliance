@@ -1,0 +1,14 @@
+---
+trivial:
+  - >-
+    CI: the molecule-images job builds each Docker instance image once per workflow run (make molecule-images-build),
+    with each pull and build attempt bounded in time and retried, reuses an image cached under a key of its tag only
+    after it carries the inputs label of that tag on exactly the layers of the pinned base, and shares it as a run
+    artifact with its image ID. Every Docker Molecule leg loads that archive and refuses an image whose ID differs;
+    create.yml no longer builds an image and fails when the verified image is missing. Images are never pushed.
+  - >-
+    CI: the molecule-collections job fetches the Galaxy collections of extensions/molecule/collections.pins once per
+    run (make molecule-collections-fetch), with bounded retries, and keeps a file only after its SHA-256 and size match
+    the pin; lint and every Molecule leg install those files offline with ansible-galaxy --offline and contact Galaxy
+    no more. make molecule-collections-lock writes the pins from requirements.yml, which now also pins the dependency
+    community.library_inventory_filtering_v1 1.1.5.

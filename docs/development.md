@@ -85,9 +85,14 @@ overriding them.
 | `name-sets` | implemented | Probes Python 3.9 to 3.15 (`uv python find`) and regenerates `tools/lint/name_sets.json` and the name-set constants of the guard |
 | `test-sanity` | implemented | `ansible-test sanity --local` on the temporary collection tree, no Docker; installs Python 3.9 to 3.14 with `uv python install` |
 | `test-ansible-units` | implemented | `ansible-test units --venv` on Python 3.9, 3.12 and 3.14, no Docker |
-| `molecule-dependencies` | implemented | Installs the pinned `extensions/molecule/requirements.yml` collections into `build/collections` |
+| `molecule-dependencies` | implemented | Installs the collections of `extensions/molecule/collections.pins` into `build/collections` with `ansible-galaxy --offline`, from files whose SHA-256 and size match the pins; outside GitHub Actions it runs `molecule-collections-fetch` first ([Molecule](molecule.md#galaxy-collections)) |
+| `molecule-collections-fetch` | implemented | Downloads the pinned collection artifacts from Galaxy with bounded retries into `build/molecule-collections`, checks each one and reuses verified files; the only target that contacts Galaxy |
+| `molecule-collections-lock` | implemented | Writes `extensions/molecule/collections.pins` from Galaxy's metadata for the exact versions of `extensions/molecule/requirements.yml`; run it after Renovate raises a version |
+| `molecule-images-build` | implemented | Builds or reuses each Docker instance image with bounded, timed attempts, verifies it against its inputs label and the pinned base layers, saves it to `build/molecule-images` and records its image ID (the CI job `molecule-images`) |
+| `molecule-images-plan` | implemented | Prints `<image>=<tag>` for each Docker instance image, for `$GITHUB_OUTPUT` |
+| `molecule-images-ids` | implemented | Prints the verified `<image>=<image ID>` pairs that the Docker legs check |
 | `molecule-content` | implemented | Fetches and verifies the pinned `ubuntu2404` and `rhel9` datastreams into `build/content` for the Molecule scenarios |
-| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, then `molecule test` for `docker-ubuntu`, `docker-rhel-compatible` and their toggle lifecycle scenarios `docker-ubuntu-lifecycle` and `docker-rhel-compatible-lifecycle` (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`. The lifecycle runs every native topic in both toggle modes unless `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one; needs a running Docker daemon, see [Molecule](molecule.md) |
+| `test-molecule-docker` | implemented | `molecule-dependencies`, `molecule-content`, the instance images of the selected scenarios (built or reused locally; in GitHub Actions only loaded from `build/molecule-images` and checked against `MOLECULE_IMAGE_IDS`), then `molecule test` for `docker-ubuntu`, `docker-rhel-compatible` and their toggle lifecycle scenarios `docker-ubuntu-lifecycle` and `docker-rhel-compatible-lifecycle` (stops at the first failure), then `test-molecule-docker-selftest` unless `MOLECULE_DOCKER_SELFTEST=false`. The lifecycle runs every native topic in both toggle modes unless `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one; needs a running Docker daemon, see [Molecule](molecule.md) |
 | `molecule-matrix` | implemented | `tools/roles/molecule_matrix.py`: prints the CI matrix of the toggle lifecycle legs as one line of JSON, one leg per Molecule platform, native topic and toggle mode ([Molecule](molecule.md#ci-legs)) |
 | `test-molecule-docker-selftest` | implemented | Real guard bypass attempts and the label-based destroy fallback against containers of the `docker-selftest` scenario, see [Molecule](molecule.md#self-test-against-real-containers) |
 | `package` | implemented | `ansible-galaxy collection build` repacked with a canonical `FILES.json`, into `dist/`, plus `dist/SHA256SUMS` |
@@ -437,7 +442,8 @@ signature and attestations as described in the runner repository's `docs/image-b
   ([dependency management](dependency-management.md)).
 - Molecule and `requests` are pinned to exact versions in `pyproject.toml` and `uv.lock` like the other Python tools.
   The `community.docker` collection is pinned in `extensions/molecule/requirements.yml` (Renovate owns Galaxy
-  collections) and the container image digests live in `extensions/molecule/shared/vars/versions.yml`. The
+  collections), with the SHA-256 of every artifact in `extensions/molecule/collections.pins`; after a Renovate update
+  run `make molecule-collections-lock` and commit both files. The container image digests live in `extensions/molecule/shared/vars/versions.yml`. The
   distribution packages of the instance images are pinned to exact versions in the Dockerfiles under
   `extensions/molecule/shared/images/` and updated by hand.
 - GitHub Actions are pinned to full commit SHAs with a `# vX.Y.Z` annotation.
