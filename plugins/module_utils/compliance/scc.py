@@ -417,7 +417,7 @@ _USING_PROFILE: Final[str] = r"\s*Using configuration profile: (.*)"
 _DUMP_HEADER: Final[str] = r"\*\s+Contents of (.*):"
 _DUMP_ELEMENT: Final[str] = r"\*\s+<([A-Za-z0-9_]+)>([^<]*)</\1>\s*"
 _DUMP_EMPTY: Final[str] = r"\*\s+<([A-Za-z0-9_]+)/>\s*"
-_EXPIRY: Final[str] = r"Software expires in (-?[0-9]+) days"
+_EXPIRY: Final[str] = r"Software expires in (-?[0-9]+) days?\b"
 _ERROR_OUTCOMES: Final[frozenset[model.Outcome]] = frozenset(
     {model.Outcome.FAIL, model.Outcome.ERROR}
 )
