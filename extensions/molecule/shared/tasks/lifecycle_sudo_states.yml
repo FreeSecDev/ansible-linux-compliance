@@ -387,3 +387,7 @@
     lifecycle_broad_reference: "{{ states_broad_before }}"
     lifecycle_items: "{{ states_items }}"
     lifecycle_rewritten: "{{ states_rewritten }}"
+
+- name: Sudo states | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_sudo_states.yml'] }}"

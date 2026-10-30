@@ -151,6 +151,60 @@
             | first is search(effective_link)
         fail_msg: "{{ effective_label }}, continued lines and a linked drop-in: {{ lifecycle_results }}"
         quiet: true
+
+    - name: Sudo effective files | Remove the linked drop-in and keep only full-line comments that end in a backslash
+      ansible.builtin.file:
+        path: "{{ effective_link }}"
+        state: absent
+
+    - name: Sudo effective files | Name both options after comments ending in a backslash, which sudo does not join
+      ansible.builtin.copy:
+        content: "# site timeout \\\nDefaults timestamp_timeout=30\n# keep the tty \\\nDefaults !use_pty\n"
+        dest: "{{ effective_continued }}"
+        mode: "0440"
+        owner: root
+        group: root
+
+    - name: Sudo effective files | Apply the topic with options after comments that end in a backslash
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo effective files | Check that the options after the comments conflict, as sudo applies them
+      vars:
+        effective_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
+      ansible.builtin.assert:
+        that:
+          - effective_statuses[effective_use_pty] == 'conflicting_setting'
+          - effective_statuses[effective_timestamp] == 'conflicting_setting'
+          - effective_statuses[effective_logfile] == 'applied'
+          - >-
+            lifecycle_results | selectattr('rule_id', 'in', [effective_use_pty, effective_timestamp])
+            | map(attribute='reason') | select('search', effective_continued) | list | length == 2
+        fail_msg: "{{ effective_label }}, comments ending in a backslash: {{ lifecycle_results }}"
+        quiet: true
+
+    - name: Sudo effective files | Switch every rule of the topic off after the comment case
+      ansible.builtin.set_fact:
+        "{{ item }}": false
+      loop: "{{ effective_toggles }}"
+
+    - name: Sudo effective files | Clean up what the comment case applied
+      ansible.builtin.include_tasks:
+        file: lifecycle_remediate.yml
+      vars:
+        lifecycle_check_mode: false
+        lifecycle_family: sudo
+
+    - name: Sudo effective files | Check that the cleanup of the comment case restored the logfile drop-in
+      ansible.builtin.assert:
+        that:
+          - lifecycle_results | map(attribute='rule_id') | list == [effective_logfile]
+          - lifecycle_results | map(attribute='status') | list == ['restored']
+        fail_msg: "{{ effective_label }}, cleanup after the comment case: {{ lifecycle_results }}"
+        quiet: true
   always:
     - name: Sudo effective files | Remove every file and link of the administrator
       ansible.builtin.file:
@@ -183,3 +237,7 @@
     lifecycle_broad_step: the effective-file cases
     lifecycle_broad_reference: "{{ effective_broad_before }}"
     lifecycle_items: "{{ effective_items }}"
+
+- name: Sudo effective files | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_sudo_effective.yml'] }}"

@@ -286,3 +286,7 @@
     lifecycle_broad_reference: "{{ regression_broad_before }}"
     lifecycle_items: "{{ regression_items }}"
     lifecycle_rewritten: "{{ regression_rewritten }}"
+
+- name: Sudo refusals | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_sudo_refusals.yml'] }}"

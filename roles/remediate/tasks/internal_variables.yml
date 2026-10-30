@@ -849,9 +849,9 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_rules']
       - >-
-        __linux_compliance_remediate_sudo_continuation is not defined or __linux_compliance_remediate_sudo_continuation
-        == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
-        ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_continuation']
+        __linux_compliance_remediate_sudo_backslash is not defined or __linux_compliance_remediate_sudo_backslash ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_backslash']
       - >-
         __linux_compliance_remediate_sudo_directory is not defined or __linux_compliance_remediate_sudo_directory ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |

@@ -34,6 +34,9 @@ A topic may declare ``regressions`` (FREES-175): named groups of task files of
 ``extensions/molecule/shared/tasks`` that test what the cycles cannot (a change of method, a change
 by hand, a refusal), each optionally limited to ``platforms``. Every file must be one that the
 static dispatch ``lifecycle_regressions.yml`` includes, so no variable chooses a file to include.
+Each include must run exactly when its own file is in the selected group (no other condition, no
+tags), every dispatched file must be named by some group, and every dispatched file must end by
+recording that it ran, which the harness checks for every file of the group of a leg (FREES-175).
 ``regression_platforms`` returns, per topic and group, the platforms whose Docker lifecycle scenario
 runs it; ``make molecule-matrix`` plans one leg per group and platform, with the mode
 ``regressions-<group>``, so that the regressions do not lengthen the cycle legs.
@@ -73,6 +76,10 @@ REGRESSION_DISPATCH: Final[Path] = Path(
     "extensions/molecule/shared/tasks/lifecycle_regressions.yml"
 )
 INCLUDE_TASKS: Final[str] = "ansible.builtin.include_tasks"
+SET_FACT: Final[str] = "ansible.builtin.set_fact"
+INCLUDE_KEYS: Final[frozenset[str]] = frozenset({"name", INCLUDE_TASKS, "when"})
+RECORD_KEYS: Final[frozenset[str]] = frozenset({"name", SET_FACT})
+RECORD_FACT: Final[str] = "lifecycle_regression_files_run"
 REGRESSION_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]{0,31}")
 REGRESSION_FILE: Final[re.Pattern[str]] = re.compile(r"lifecycle_[a-z0-9_]{1,64}\.yml")
 TOP_KEYS: Final[frozenset[str]] = frozenset(
@@ -195,6 +202,7 @@ class Declaration:
         self.rules = rules
         self.dispatched = dispatched
         self.regressions: dict[str, frozenset[str]] = {}
+        self.regression_files: set[str] = set()
         self.errors: list[str] = []
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
         self.drivers: frozenset[str] = frozenset(DRIVERS)
@@ -528,6 +536,7 @@ def _regression_groups(declaration: Declaration, value: object) -> None:
         if files is None:
             declaration.error(f"{what} needs a non-empty list of files")
             continue
+        declaration.regression_files.update(files)
         for file in files:
             if REGRESSION_FILE.fullmatch(file) is None:
                 declaration.error(f"{what} names the file {file!r}, not a lifecycle task file")
@@ -663,31 +672,74 @@ def _runs_lifecycle(data: dict[str, object] | None) -> bool:
     return playbooks is not None and playbooks.get("side_effect") == LIFECYCLE_PLAYBOOK
 
 
+def _dispatch_error(root: Path, problem: str) -> GenerationError:
+    return GenerationError(f"{root / REGRESSION_DISPATCH}: {problem}")
+
+
+def _record_value(file: str) -> str:
+    return "{{ " + RECORD_FACT + " + ['" + file + "'] }}"
+
+
+def _dispatched_file(root: Path, item: dict[str, object]) -> str:
+    """Return the file of one dispatch include, which must run exactly for its own file."""
+    if frozenset(item) != INCLUDE_KEYS:
+        message = f"an include must have exactly the keys {sorted(INCLUDE_KEYS)}, no tags"
+        raise _dispatch_error(root, message)
+    include = toggles.as_mapping(item[INCLUDE_TASKS])
+    target = include.get("file") if include is not None else None
+    if (
+        include is None
+        or frozenset(include) != frozenset({"file"})
+        or not isinstance(target, str)
+        or REGRESSION_FILE.fullmatch(target) is None
+    ):
+        message = "every include must name one literal file and nothing else"
+        raise _dispatch_error(root, message)
+    if item["when"] != f"'{target}' in lifecycle_regression.files":
+        message = f"the include of {target} must run when '{target}' in lifecycle_regression.files"
+        raise _dispatch_error(root, message)
+    return target
+
+
+def _records_its_run(root: Path, file: str) -> bool:
+    """Return whether the regression file ends by recording that it ran."""
+    tasks = toggles.as_sequence(_load(root / REGRESSION_DISPATCH.parent / file))
+    last = toggles.as_mapping(tasks[-1]) if tasks else None
+    if last is None or frozenset(last) != RECORD_KEYS:
+        return False
+    facts = toggles.as_mapping(last[SET_FACT])
+    return facts is not None and facts == {RECORD_FACT: _record_value(file)}
+
+
 def dispatched_regressions(root: Path) -> frozenset[str]:
     """Return the regression files that the static dispatch includes, by file name.
 
-    Tasks other than includes, such as the one that records the group that ran, are allowed.
+    Every include must run exactly when its own file is in the selected group, without tags or
+    another condition, and every included file must end by recording that it ran. Tasks other
+    than includes, such as the one that records the group that ran, are allowed.
 
     Raises:
-        GenerationError: When the dispatch is missing or is not a list of static includes.
+        GenerationError: When the dispatch or an included file breaks these rules.
     """
     tasks = toggles.as_sequence(_load(root / REGRESSION_DISPATCH))
     if tasks is None:
-        message = f"{root / REGRESSION_DISPATCH} must be a list of tasks"
-        raise GenerationError(message)
+        message = "must be a list of tasks"
+        raise _dispatch_error(root, message)
     found: set[str] = set()
     for task in tasks:
         item = toggles.as_mapping(task)
         if item is None:
-            message = f"{root / REGRESSION_DISPATCH}: every task must be a mapping"
-            raise GenerationError(message)
+            message = "every task must be a mapping"
+            raise _dispatch_error(root, message)
         if INCLUDE_TASKS not in item:
             continue
-        include = toggles.as_mapping(item[INCLUDE_TASKS])
-        target = include.get("file") if include is not None else None
-        if not isinstance(target, str) or REGRESSION_FILE.fullmatch(target) is None:
-            message = f"{root / REGRESSION_DISPATCH}: every include must name one literal file"
-            raise GenerationError(message)
+        target = _dispatched_file(root, item)
+        if not _records_its_run(root, target):
+            message = (
+                f"{target} must end with a set_fact that adds '{target}' to {RECORD_FACT}, "
+                "so the harness can tell that it ran"
+            )
+            raise _dispatch_error(root, message)
         found.add(target)
     return frozenset(found)
 
@@ -721,17 +773,22 @@ def check(root: Path) -> tuple[list[str], list[str]]:
         for family in declared
         if family not in native
     )
+    named: set[str] = set()
     for family in native:
         if family in declared:
-            errors.extend(
-                check_declaration(
-                    directory / f"{family}.yml",
-                    family,
-                    known,
-                    disruptive=catalogue.families[family],
-                    context=Context(coverage, native_rules(catalogue, family), dispatched),
-                )
+            declaration = _declaration(
+                directory / f"{family}.yml",
+                family,
+                known,
+                disruptive=catalogue.families[family],
+                context=Context(coverage, native_rules(catalogue, family), dispatched),
             )
+            errors.extend(declaration.errors)
+            named.update(declaration.regression_files)
+    errors.extend(
+        f"{REGRESSION_DISPATCH}: {file} is included, but no regression group of a topic names it"
+        for file in sorted(dispatched - named)
+    )
     return native, errors
 
 

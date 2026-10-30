@@ -85,6 +85,7 @@
              if lifecycle_selected_mode is match(lifecycle_regression_mode_pattern)
              else none if lifecycle_selected_mode | length == 0 else [] }}
         lifecycle_regressions_run: []
+        lifecycle_regression_files_run: []
         lifecycle_proven_families: []
 
     - name: Scan once before any state is recorded, so that the first write of the scanner happens before the reference
@@ -129,6 +130,21 @@
           The leg selects the regression group {{ lifecycle_run_regressions }} of {{ lifecycle_selected_topic }},
           but it did not run on {{ molecule_target.instance }}: the declaration does not name the group, or limits it
           to other platforms. make molecule-matrix plans a regression leg only for a declared group and platform.
+        quiet: true
+
+    - name: Refuse a regression leg in which a file of its group did not run to its end
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_run_regressions is none or lifecycle_run_regressions | length == 0
+            or (lifecycle_topic.regressions | default([])
+                | selectattr('name', 'equalto', lifecycle_run_regressions[0])
+                | map(attribute='files') | first | default([])
+                | difference(lifecycle_regression_files_run) | length == 0)
+        fail_msg: >-
+          The regression group {{ lifecycle_run_regressions }} of {{ lifecycle_selected_topic }} declares files that
+          did not run to their end on {{ molecule_target.instance }}; ran {{ lifecycle_regression_files_run }}. Every
+          file of a group must be included by shared/tasks/lifecycle_regressions.yml and end by recording that it ran.
         quiet: true
 
     - name: Refuse a CI leg whose topic runs no cycle with this driver on this platform

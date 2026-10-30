@@ -288,3 +288,7 @@
     lifecycle_broad_step: the rules of the other profiles
     lifecycle_broad_reference: "{{ other_broad_before }}"
     lifecycle_items: "{{ other_items }}"
+
+- name: Sudo other profiles | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_sudo_other_profiles.yml'] }}"

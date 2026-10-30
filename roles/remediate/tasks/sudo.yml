@@ -193,16 +193,26 @@
   tags:
     - always
 
-- name: Sudo | Join continued lines and keep every Defaults line, and whether sudo reads the file that holds it
+- name: Sudo | Join continued lines, except comments, and keep every Defaults line and whether sudo reads its file
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sd_defaults: >-
       {%- set found = [] -%}
       {%- for path in __linux_compliance_remediate_sd_sources | list | sort -%}
       {%- set read = path == __linux_compliance_remediate_sudo_main
             or (path | basename) is match(__linux_compliance_remediate_sudo_read_name) -%}
-      {%- set text = __linux_compliance_remediate_sd_sources[path]
-            | regex_replace(__linux_compliance_remediate_sudo_continuation, ' ') -%}
-      {%- for line in text.split(__linux_compliance_remediate_newline) -%}
+      {%- set state = namespace(pending='', lines=[]) -%}
+      {%- for raw in __linux_compliance_remediate_sd_sources[path].split(__linux_compliance_remediate_newline) -%}
+      {%- set line = state.pending ~ raw -%}
+      {%- if state.pending == '' and (raw | trim).startswith('#') -%}
+      {%- set state.pending = '' -%}
+      {%- elif line.endswith(__linux_compliance_remediate_sudo_backslash) -%}
+      {%- set state.pending = line[:-1] ~ ' ' -%}
+      {%- else -%}
+      {%- set state.pending = '' -%}
+      {%- set state.lines = state.lines + [line] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for line in state.lines + ([state.pending] if state.pending else []) -%}
       {%- set normal = line | regex_replace('[ \t]+', ' ') | regex_replace(' ?= ?', '=') | trim -%}
       {%- if normal is match('Defaults([^A-Za-z0-9_]|$)') -%}
       {%- set _ = found.append({'path': path, 'read': read, 'line': normal}) -%}

@@ -15,5 +15,5 @@ __linux_compliance_remediate_sudo_dropin_pattern: '^/etc/sudoers\.d/50-freesecde
 __linux_compliance_remediate_sudo_line_pattern: '^Defaults !?[a-z_]{1,32}(=\{value\})?$'
 __linux_compliance_remediate_sudo_option_pattern: '^[a-z_]{1,32}$'
 __linux_compliance_remediate_sudo_include_pattern: '(?m)^[ \t]*[@#]includedir[ \t]+/etc/sudoers\.d/?[ \t]*$'
-__linux_compliance_remediate_sudo_continuation: '\\\n'
+__linux_compliance_remediate_sudo_backslash: '\'
 __linux_compliance_remediate_sudo_read_name: '^[^.]*[^.~]$'

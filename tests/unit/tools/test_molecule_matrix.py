@@ -66,10 +66,9 @@ def make_root(
     shutil.copytree(
         REPOSITORY_ROOT / check_lifecycle_topics.TOPICS, root / check_lifecycle_topics.TOPICS
     )
-    (root / check_lifecycle_topics.REGRESSION_DISPATCH).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(
-        REPOSITORY_ROOT / check_lifecycle_topics.REGRESSION_DISPATCH,
-        root / check_lifecycle_topics.REGRESSION_DISPATCH,
+    shutil.copytree(
+        REPOSITORY_ROOT / check_lifecycle_topics.REGRESSION_DISPATCH.parent,
+        root / check_lifecycle_topics.REGRESSION_DISPATCH.parent,
     )
     for family, declaration in (declarations or {}).items():
         path = root / check_lifecycle_topics.TOPICS / f"{family}.yml"
