@@ -74,8 +74,8 @@ package versions:
 
 | Image | Packages |
 |---|---|
-| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs) |
-| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle), `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one); Python 3.9 comes with the base image |
+| `ubuntu` | `python3=3.12.3-0ubuntu2.1`, `openscap-scanner=1.3.9+dfsg-1.1ubuntu2` (the version that `oscap-integration` pins), `cron=3.0pl1-184ubuntu2`, `python3-apt=2.7.7ubuntu5.3` (for `package_facts` in the toggle lifecycle), `libpam-pwquality=1.4.5-3build1` (libpwquality and its `pwquality.conf`, so that the `pwquality` lifecycle runs on Ubuntu as on Rocky Linux, where the library is part of `pam`), `sudo=1.9.15p5-3ubuntu5.24.04.4` (`/etc/sudoers`, `/etc/sudoers.d` and `visudo` for the `sudo` lifecycle), `openssh-server=1:9.6p1-3ubuntu13.20` and the directory `/run/sshd` (so that the `ssh` lifecycle can test the configuration with `sshd -t`, which refuses to run without its privilege separation directory; no sshd runs), `kmod=31+20240202-2ubuntu7.2` (`/etc/modprobe.d` and its vendor files for the kernel module lifecycles; no module is ever loaded) |
+| `rhel_compatible` | `openscap-scanner-1:1.3.14-1.el9_8.rocky.0.1`, `cronie-1.5.7-16.el9`, `sudo-1.9.17p2-3.el9_8.3` (for the `sudo` lifecycle), `openssh-server-9.9p1-13.el9_8.rocky.0.1` with host keys from `ssh-keygen -A` (the package creates them only when the service first starts, and `sshd -t` refuses to run without one), `kmod-28-11.el9` (`/etc/modprobe.d` for the kernel module lifecycles); Python 3.9 comes with the base image |
 
 `cron` and `cronie` provide `/etc/crontab` with mode `0644`, the starting point of the reference rule. When a
 distribution archive drops a pinned version, the image build fails and the pin must be updated by hand; no Renovate
@@ -535,6 +535,20 @@ owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/s
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
 a directory mode put back by hand is `restored` without a write.
 
+The kernel module topics ([ADR 0025](adr/0025-native-kernel-module-drop-ins.md)) run with the profiles that select
+their rules (`profiles` in the declaration): `filesystem_modules` with `cis_level2_server` on Ubuntu and `cis` on Rocky
+Linux, `protocol_modules` with `cis_level2_server` and `stig`, and `wireless_modules` with `bsi` on Rocky Linux only.
+`filesystem_modules` has a second pre-state, in the rule mode: a site file `/etc/modprobe.d/cramfs.conf` that already
+disables cramfs (`compliant`, no drop-in) and `00-site-hfs.conf`, read before the collection's drop-ins, that lets hfs
+load again (`overridden`, no drop-in). Its group `changes` (both platforms),
+`shared/tasks/lifecycle_kernel_modules_regressions.yml`, puts a site file that disables hfsplus and a file of the
+administrator at the udf drop-in's path before the apply (`compliant` and `not_owned`, neither recorded nor touched),
+records every entry as if another method had written it (`method_changed` at apply and cleanup, every drop-in kept),
+adds a file read first that lets jffs2 load after the apply (`overridden`, nothing changed), changes the cramfs drop-in
+by hand and removes the freevxfs one (`modified_since_apply` kept, `restored` without a write), and finally puts the
+cramfs drop-in back and cleans it up. Every kernel module rule is limited to systems with a kernel, so the scans in
+the containers report them `notapplicable`; the drop-ins and their checksums are the evidence.
+
 The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states, both with real
 scans (the customised one on Ubuntu only, `audit: [ubuntu]`, because every rule is `notapplicable` on Rocky
 Linux): the as-built configuration, and a customised one with two site drop-ins: `00-admin.conf`, which sshd reads
@@ -622,8 +636,9 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
-`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+modes of the topic, so 30 cycle legs and 13 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
+`sudo` `changes` and `profiles`, `filesystem_modules` `changes` on both platforms, `sudo` `files` on Ubuntu;
+`wireless_modules` runs on Rocky Linux only). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
@@ -681,7 +696,7 @@ pre_states:
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
 | `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
-| `profiles` | no | Per platform, a profile of that platform's pinned datastream that the cycles and regressions of the topic run with instead of the platform's own (`molecule_images.<platform>.profile`), each with `platform`, `profile` (the short identifier, which `content/manifest.yml` must list for the datastream) and `reason`; for a topic whose rules the platform's own profile does not select (the kernel module topics, FREES-190). The harness switches `molecule_profile`, runs the `discover` role for that profile, and switches back after the topic. A platform under `unselected_platforms` cannot have one |
+| `profiles` | no | Per platform, a profile of that platform's pinned datastream that the cycles and regressions of the topic run with instead of the platform's own (`molecule_images.<platform>.profile`), each with `platform`, `profile` (the short identifier, which `content/manifest.yml` must list for the datastream) and `reason`; for a topic whose rules the platform's own profile does not select (the kernel module topics, FREES-190). The harness switches `molecule_profile`, runs the `discover` role for that profile, and switches back after the topic; every scan then expects the reference rule only when that profile selects it. A platform under `unselected_platforms` cannot have one |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 

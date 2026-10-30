@@ -31,8 +31,8 @@ same check on both platforms, with only the module name changing:
   does not fail it, and unloading one does not make it pass.
 - The rule of `overlayfs` names the module `overlay`. The Ubuntu 24.04 datastream has no rule for atm, can,
   firewire-core or the five wireless modules; the RHEL 9 datastream has no overlayfs rule.
-- The file system and wireless rules carry the `system_with_kernel` platform, which excludes containers; the protocol
-  rules carry no platform.
+- Every rule is limited to the `system_with_kernel` platform, which excludes containers: the file system and wireless
+  rules carry it themselves, the protocol rules through their group `network-uncommon`.
 
 | Topic | Ubuntu 24.04 profiles | RHEL 9 profiles |
 |---|---|---|
@@ -158,5 +158,5 @@ with a site file that disables cramfs and one, read first, that lets hfs load pr
 the cycles, and `shared/tasks/lifecycle_kernel_modules_regressions.yml` (group `changes`) a change of method, a drop-in
 changed and one removed by hand, a site file that already disables a module, a site file added after the apply that
 overrides the drop-in, and a file of the administrator at the drop-in's path. The containers cannot load kernel
-modules, so `modprobe` itself is left to the libvirt scenarios (FREES-61); the audit after apply must pass for the
-protocol rules on Ubuntu, which have no platform restriction.
+modules, so `modprobe` itself is left to the libvirt scenarios (FREES-61), and every rule is `notapplicable` in a
+container scan; the drop-ins with their checksums and the golden tests are the evidence there.

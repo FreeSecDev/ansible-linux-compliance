@@ -10,7 +10,7 @@
       - linux_compliance_audited.summary.error | int == 0
       - >-
         linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'equalto', molecule_reference_rule)
-        | list | length == 1
+        | list | length == (1 if molecule_reference_rule in linux_compliance_discovered.rule_ids else 0)
     fail_msg: >-
       The {{ 'check-mode ' if assert_audit_check_mode else '' }}audit did not complete as expected:
       run_status={{ linux_compliance_audited.run_status | default('missing') }}
@@ -23,4 +23,5 @@
     msg: >-
       {{ molecule_reference_rule }}:
       {{ (linux_compliance_audited.scan_run.findings | selectattr('rule_id', 'equalto', molecule_reference_rule)
-      | first).outcome }}; summary {{ linux_compliance_audited.summary }}
+      | map(attribute='outcome') | first | default('not selected by ' ~ linux_compliance_discovered.profile_id)) }};
+      summary {{ linux_compliance_audited.summary }}

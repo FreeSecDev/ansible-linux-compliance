@@ -24,9 +24,9 @@ audit:
   applied_outcomes:
     - notapplicable
   reason: >-
-    The RHEL 9 datastream does not recognise Rocky Linux, so every rule is notapplicable there; on Ubuntu 24.04
-    the protocol module rules have no platform restriction, and the audit after apply must report them pass or
-    fixed. The drop-ins with their checksums under applied are the evidence on both platforms
+    ComplianceAsCode limits the protocol module rules to the system_with_kernel platform through their group
+    network-uncommon, which excludes containers, and the RHEL 9 datastream does not recognise Rocky Linux, so a
+    container audit reports them notapplicable; the drop-ins with their checksums under applied are the evidence
     (tests/unit/tools/test_content_golden_kernel_modules.py checks what the OVAL of both datastreams reads).
 state:
   files:

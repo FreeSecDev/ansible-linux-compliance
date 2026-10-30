@@ -66,6 +66,7 @@ class Collector:
         self.content = Content()
         self.current: dict[str, str] = {}
         self.criteria: list[list[object]] = []
+        self.groups: list[list[str]] = []
         self.stack: list[dict[str, str]] = []
         self.parts: list[str] = []
 
@@ -90,17 +91,27 @@ class Collector:
         elif local == "select" and self.current.get("profile"):
             if attributes.get("selected") == "true":
                 content.profiles[self.current["profile"]].add(attributes.get("idref", ""))
-        elif local == "Rule":
-            self.current["rule"] = identifier
-            content.platforms[identifier] = []
-        elif local == "platform" and rule:
-            content.platforms[rule].append(attributes.get("idref", ""))
+        elif local in {"Group", "Rule", "platform"}:
+            self.platform_start(local, identifier, attributes.get("idref", ""))
         elif local == "check" and rule:
             self.current["check"] = attributes.get("system", "")
         elif local == "check-export" and rule and oval:
             content.exports.setdefault(rule, set()).add(attributes.get("value-id", ""))
         elif local == "check-content-ref" and rule and oval:
             content.definitions[rule] = attributes.get("name", "")
+
+    def platform_start(self, local: str, identifier: str, reference: str) -> None:
+        """Keep the platforms of every rule, those of the groups that contain it included."""
+        rule = self.current.get("rule", "")
+        if local == "Group":
+            self.groups.append([])
+        elif local == "Rule":
+            self.current["rule"] = identifier
+            self.content.platforms[identifier] = [item for group in self.groups for item in group]
+        elif rule:
+            self.content.platforms[rule].append(reference)
+        elif self.groups:
+            self.groups[-1].append(reference)
 
     def definition_start(self, local: str, attributes: dict[str, str]) -> None:
         identifier = attributes.get("id", "")
@@ -155,6 +166,8 @@ class Collector:
         item = self.current.get("object", "")
         if name in CLOSES:
             self.current.pop(CLOSES[name], None)
+        elif name == f"{XCCDF}Group":
+            self.groups.pop()
         elif name == f"{DEF}criteria":
             self.criteria.pop()
         elif name == f"{DEF}value" and self.current.get("variable"):
@@ -304,15 +317,12 @@ def test_each_kernel_module_rule_writes_exactly_what_the_content_of_each_platfor
     assert set(covered) == set(rules)
 
 
-def test_only_the_protocol_modules_are_checked_in_containers() -> None:
-    families = catalogue_families()
+def test_every_kernel_module_rule_is_limited_to_systems_with_a_kernel() -> None:
     for path, sha256, _ in pinned_benchmarks():
         content = read(path, sha256)
         for rule_id in module_rules():
-            if rule_id not in content.platforms:
-                continue
-            expected = [] if families[rule_id] == "protocol_modules" else [WITH_KERNEL]
-            assert content.platforms[rule_id] == expected, rule_id
+            if rule_id in content.platforms:
+                assert content.platforms[rule_id] == [WITH_KERNEL], rule_id
 
 
 def test_the_lifecycle_profiles_select_the_drop_ins_that_the_declarations_expect() -> None:
