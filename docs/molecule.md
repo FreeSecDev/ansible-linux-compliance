@@ -285,9 +285,12 @@ mode `4111`) stops that `find`'s walk of its whole path, so every later entry of
 path whose walk stopped that way, and only for it, the task lists the entries again without reading content and takes
 the checksums in a second `find` of the regular files whose owner may read them, and fails when that second pass
 stops early as well. It then remembers, per set of paths, the names of the files that root cannot read: later
-records leave those names out of the one walk and inspect every entry of such a name with `stat` instead, which is
-how they stay one walk on Rocky Linux too. A walk that stops again, because a file that root cannot read appeared,
-takes the second pass over every path and refreshes the names. A new entry that happens to have one of those names
+records leave those names out of the one walk and list the entries of such a name with two `find`s that do not
+recurse, one without content and one with the checksums that their owner may read, which is how they stay one walk on
+Rocky Linux too. Those two `find`s look in the directories that held such an entry in the first record and, for the
+whole-instance record, in the parent directory of every path that the topic declares, so a new entry of one of those
+names next to a declared path is seen. A walk that stops again, because a file that root cannot read appeared, takes
+the second pass over every path and refreshes the names. A new entry with one of those names in any other directory
 after the first record is not seen; the names are those of the shadow files and the sudo binaries. Paths whose walk
 did not stop, and every path on the libvirt drivers, where root keeps its capabilities, cost one walk as before.
 
@@ -490,7 +493,10 @@ with its state before the regressions.
 
 A topic declares its regressions as named groups under `regressions` (FREES-175); each group lists task files of
 `shared/tasks` that the static dispatch `shared/tasks/lifecycle_regressions.yml` includes, optionally for some
-`platforms` only. A group runs at the end of its topic, with the topic's facts, on the Docker driver: in a full run
+`platforms` only. `make lint-lifecycle` requires every include of the dispatch to run exactly when its own file is
+in the group (no other condition, no tags), every dispatched file to be named by some group and to end by adding its
+name to `lifecycle_regression_files_run`, and the harness fails a regression leg in which a file of its group did not
+run to its end. A group runs at the end of its topic, with the topic's facts, on the Docker driver: in a full run
 after every cycle, and in CI in a leg of its own, `MOLECULE_LIFECYCLE_MODE=regressions-<group>`, which runs no cycle
 (see [CI legs](#ci-legs)). `pwquality` has one group, `changes`, with the regressions above.
 
@@ -512,7 +518,8 @@ occupies one drop-in path with a file without the header (`not_owned`) and anoth
 nothing changed and every entry kept. `shared/tasks/lifecycle_sudo_effective.yml` covers the files that
 sudo reads: a rule's exact line only in `hardening.conf` or `admin~`, which sudo skips, never makes it `compliant`
 (`applied`, and `conflicting_setting` for `timestamp_timeout`), and a `Defaults` line continued with `\` or a linked
-drop-in that names an option is `conflicting_setting`. Every swap of these files is undone in an `always` section, so
+drop-in that names an option is `conflicting_setting`, and so is an option right after a full-line comment that
+ends in `\`, which sudo does not continue. Every swap of these files is undone in an `always` section, so
 a failure does not leave `visudo`, `/usr/sbin` or `/etc/sudoers.d` changed. `shared/tasks/lifecycle_sudo_other_profiles.yml`
 (group `profiles`, both platforms) applies, repeats and cleans up for real the
 seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,

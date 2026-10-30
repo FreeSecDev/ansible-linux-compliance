@@ -70,8 +70,9 @@ every line against `^Defaults !?[a-z_]{1,32}(={value})?$` before the family chan
 
 The family reads `/etc/sudoers` and every file of `/etc/sudoers.d` that it does not own, as the content's checks do:
 every regular file, hidden ones and names with a `.` or a trailing `~` included, and every symbolic link whose target
-is a regular file, read through the link. It joins every line that ends in `\` with the next one, as sudo does, and
-keeps every `Defaults` line with the file it came from and whether sudo reads that file: `/etc/sudoers`, and the files
+is a regular file, read through the link. It joins every line that ends in `\` with the next one, as sudo does, except a full-line comment (its first
+non-blank character is `#`), which sudo ends at its line even when it ends in `\`; a `#` later in a line
+(`Defaults:#1000`) is not a comment. It then keeps every `Defaults` line with the file it came from and whether sudo reads that file: `/etc/sudoers`, and the files
 of `/etc/sudoers.d` whose name has no `.` and does not end in `~`. Revised after the review of PR #62: sudo's
 `includedir` follows a symbolic link to a regular file, skips a dangling link and skips names with a `.` or a trailing
 `~` (checked with `visudo -c`, which lists every file it parses, and `sudo -V`, which prints the effective
@@ -135,7 +136,7 @@ External validators run through the audited process helper (ADR 0004, amendment 
 `copy`'s `validate` with exactly `/usr/sbin/visudo -cf %s` in `roles/remediate/tasks/sudo_dropin_apply.yml`
 (`ALLOWED_PARAMETERS` of `tools/lint/repo_rules/exec_modules.py`), because the check must run on the temporary file
 before the atomic rename, so that a drop-in that sudo cannot parse is never in place, not even briefly. A templated,
-quoted, block, aliased or merged value, a free-form argument, `args`, `module_defaults`, another value, module or file
+quoted, block or merged value, an alias to another value, a free-form argument, `args`, `module_defaults`, another value, module or file
 is still refused. The path is fixed, so no variable can choose the executable. `copy` runs it through `run_command`,
 without the timeout of ADR 0004; that is an accepted residual, because `visudo -cf` parses one small local file.
 
