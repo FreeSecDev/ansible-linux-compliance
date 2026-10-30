@@ -16,10 +16,15 @@ Findings:
   before ``SCC_EXPIRES``, when ``make scc-expiry-check`` stops the SCC path, the
   tool also exits 1, so the scheduled run fails.
 
-An issue is found again by a marker in its body: first among the open issues with
-the label, then among the closed ones. An open issue is left alone, a closed one is
-reopened, and only when neither exists is a new one created, so a finding never has
-two issues. Without ``--manage-issues true`` the tool only reports.
+An issue is found again by the marker that starts its body, among all issues of the
+repository that the workflow's bot opened, whatever their state and labels, so removing
+a label cannot cause a duplicate. While the finding holds, the issue is brought up to
+date on every run: its title and body are rewritten, a closed issue is reopened and a
+removed label is put back. Only when no such issue exists is a new one created, so a
+finding never has two issues. Once the finding no longer holds (the pin was bumped, or
+the expiry is not near any more) the open issue is closed. A release finding is only
+judged when the release record could be read. Without ``--manage-issues true`` the tool
+only reports.
 """
 
 from __future__ import annotations
@@ -59,6 +64,8 @@ LABEL_DESCRIPTIONS: Final[dict[str, str]] = {
     EXPIRY_LABEL: "The pinned SCC release is about to expire (ADR 0019)",
 }
 MARKER_PREFIX: Final[str] = "<!-- scc-release-watch:"
+MARKER_KINDS: Final[dict[str, str]] = {RELEASE_LABEL: "release", EXPIRY_LABEL: "expiry"}
+BOT_LOGIN: Final[str] = "github-actions[bot]"
 WARNING_DAYS: Final[int] = 21
 HARD_STOP_DAYS: Final[int] = 7
 PUBLICATION_WAIT_DAYS: Final[int] = 7
@@ -172,11 +179,17 @@ def https_transport(request: HttpRequest, limit: int) -> HttpResponse:
 
 
 def version_key(version: str) -> tuple[int, ...]:
-    """Return the numeric parts of a validated version for comparison."""
+    """Return the numeric parts of a validated version for comparison.
+
+    Trailing zero components are dropped, so ``5.15.0`` and ``5.15`` compare equal.
+    """
     if VERSION.fullmatch(version) is None:
         message = f"not an SCC version: {version!r}"
         raise WatchError(message)
-    return tuple(int(part) for part in version.split("."))
+    parts = [int(part) for part in version.split(".")]
+    while parts and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
 
 
 def _single_text(root_children: list[tuple[str, str]], name: str) -> str | None:
@@ -254,7 +267,8 @@ def _footer(repository: str) -> str:
         "Opened by the scheduled SCC release watch (`make scc-release-watch`, "
         "`.github/workflows/scc-release-watch.yml`). The watch reads only NIWC Atlantic's "
         "release record and never downloads SCC. It finds this issue again by the marker "
-        "above, reopens it while the finding holds, and never opens a second one. "
+        "above, rewrites it while the finding holds, closes it when the finding no longer holds, "
+        "and never opens a second one. "
         f"Fallback while no newer release exists: {_adr_link(repository, FALLBACK_ANCHOR)}"
     )
 
@@ -365,26 +379,30 @@ class GitHubIssues:
             label = {"name": name, "color": LABEL_COLOR, "description": LABEL_DESCRIPTIONS[name]}
             self._call("POST", "/labels", label, frozenset({HTTP_CREATED, HTTP_UNPROCESSABLE}))
 
-    def find(self, label: str, marker: str, state: str) -> int | None:
-        """Return the number of an issue with ``label`` and ``state`` whose body has ``marker``.
+    def list_marked(self) -> list[IssueRef]:
+        """Return every issue the watch's bot opened whose body starts with a watch marker.
+
+        The listing covers all states and labels, so a removed label cannot hide an issue.
+        Pull requests, issues of other authors and issues without the marker are skipped.
 
         Raises:
             WatchError: For an unexpected response, or more than ``MAX_PAGES`` pages.
         """
+        found: list[IssueRef] = []
         for page in range(1, MAX_PAGES + 1):
-            query = f"?labels={quote(label)}&state={state}&per_page={PAGE_SIZE}&page={page}"
+            query = f"?state=all&per_page={PAGE_SIZE}&page={page}"
             _, listing = self._call("GET", f"/issues{query}", None, frozenset({HTTP_OK}))
             if not isinstance(listing, list):
                 message = "GitHub API returned an issue listing that is not a list"
                 raise WatchError(message)
             items = cast("list[object]", listing)
             for item in items:
-                number = _matching_issue(item, marker)
-                if number is not None:
-                    return number
+                reference = _marked_issue(item)
+                if reference is not None:
+                    found.append(reference)
             if len(items) < PAGE_SIZE:
-                return None
-        message = f"more than {MAX_PAGES * PAGE_SIZE} issues carry the label {label}"
+                return found
+        message = f"more than {MAX_PAGES * PAGE_SIZE} issues need to be searched for a marker"
         raise WatchError(message)
 
     def create(self, finding: Finding) -> int:
@@ -393,9 +411,25 @@ class GitHubIssues:
         _, created = self._call("POST", "/issues", payload, frozenset({HTTP_CREATED}))
         return _issue_number(created)
 
-    def reopen(self, number: int) -> None:
-        """Reopen the closed issue ``number``."""
-        self._call("PATCH", f"/issues/{number}", {"state": "open"}, frozenset({HTTP_OK}))
+    def update(self, number: int, changes: Mapping[str, object]) -> None:
+        """Apply ``changes`` (title, body, state, labels) to the issue ``number``."""
+        self._call("PATCH", f"/issues/{number}", dict(changes), frozenset({HTTP_OK}))
+
+
+@dataclass(frozen=True, slots=True)
+class IssueRef:
+    """An issue of the watch as listed: number, state, title, body and label names."""
+
+    number: int
+    state: str
+    title: str
+    body: str
+    labels: tuple[str, ...]
+
+    @property
+    def marker(self) -> str:
+        """The first line of the body, which is the marker."""
+        return self.body.partition("\n")[0].strip()
 
 
 def _issue_number(item: object) -> int:
@@ -406,28 +440,88 @@ def _issue_number(item: object) -> int:
     return number
 
 
-def _matching_issue(item: object, marker: str) -> int | None:
+def _label_names(value: object) -> tuple[str, ...]:
+    names: list[str] = []
+    if isinstance(value, list):
+        for entry in cast("list[object]", value):
+            name = (
+                cast("dict[str, object]", entry).get("name") if isinstance(entry, dict) else entry
+            )
+            if isinstance(name, str):
+                names.append(name)
+    return tuple(names)
+
+
+def _marked_issue(item: object) -> IssueRef | None:
     if not isinstance(item, dict):
         message = "GitHub API returned an issue that is not an object"
         raise WatchError(message)
     issue = cast("dict[str, object]", item)
     body = issue.get("body")
-    if "pull_request" in issue or not isinstance(body, str) or marker not in body:
+    user = issue.get("user")
+    login = cast("dict[str, object]", user).get("login") if isinstance(user, dict) else None
+    if (
+        "pull_request" in issue
+        or login != BOT_LOGIN
+        or not isinstance(body, str)
+        or not body.startswith(MARKER_PREFIX)
+    ):
         return None
-    return _issue_number(issue)
+    title, state = issue.get("title"), issue.get("state")
+    return IssueRef(
+        _issue_number(issue),
+        state if isinstance(state, str) else "",
+        title if isinstance(title, str) else "",
+        body,
+        _label_names(issue.get("labels")),
+    )
 
 
-def ensure_issue(issues: GitHubIssues, finding: Finding) -> str:
-    """Make sure exactly one open issue carries ``finding``; return what was done."""
+def ensure_issue(issues: GitHubIssues, marked: Sequence[IssueRef], finding: Finding) -> str:
+    """Make sure exactly one open, current issue carries ``finding``; return what was done.
+
+    The issue is found by its marker alone, an open one before a closed one. It is
+    rewritten when its title, body or labels differ, and reopened when it is closed.
+    """
     issues.ensure_label(finding.label)
-    number = issues.find(finding.label, finding.marker, "open")
-    if number is not None:
-        return f"issue #{number} is already open: {finding.title}"
-    number = issues.find(finding.label, finding.marker, "closed")
-    if number is not None:
-        issues.reopen(number)
-        return f"reopened issue #{number}: {finding.title}"
-    return f"opened issue #{issues.create(finding)}: {finding.title}"
+    matching = [issue for issue in marked if issue.marker == finding.marker]
+    if not matching:
+        return f"opened issue #{issues.create(finding)}: {finding.title}"
+    issue = next((entry for entry in matching if entry.state == "open"), matching[0])
+    changes: dict[str, object] = {}
+    if issue.state != "open":
+        changes["state"] = "open"
+    if issue.title != finding.title:
+        changes["title"] = finding.title
+    if issue.body != finding.body:
+        changes["body"] = finding.body
+    if finding.label not in issue.labels:
+        changes["labels"] = [*issue.labels, finding.label]
+    if not changes:
+        return f"issue #{issue.number} is already open and current: {finding.title}"
+    issues.update(issue.number, changes)
+    verb = "reopened and updated" if "state" in changes else "updated"
+    return f"{verb} issue #{issue.number}: {finding.title}"
+
+
+def close_stale(
+    issues: GitHubIssues,
+    marked: Sequence[IssueRef],
+    findings: Sequence[Finding],
+    judged: Sequence[str],
+) -> list[str]:
+    """Close the open issues of the ``judged`` labels whose marker no finding names any more."""
+    current = {finding.marker for finding in findings}
+    done: list[str] = []
+    for label in judged:
+        prefix = f"{MARKER_PREFIX} {MARKER_KINDS[label]} "
+        for issue in marked:
+            if issue.state != "open" or not issue.marker.startswith(prefix):
+                continue
+            if issue.marker not in current:
+                issues.update(issue.number, {"state": "closed", "state_reason": "completed"})
+                done.append(f"closed issue #{issue.number}: the finding no longer holds")
+    return done
 
 
 @dataclass(frozen=True, slots=True)
@@ -454,12 +548,14 @@ def watch(settings: WatchSettings, transport: Transport) -> int:
     """
     version_key(settings.pinned)
     findings: list[Finding] = []
+    judged = [EXPIRY_LABEL]
     errors: list[str] = []
     try:
         release = fetch_release(transport)
     except WatchError as error:
         errors.append(str(error))
     else:
+        judged.append(RELEASE_LABEL)
         print(f"SCC release record: {release.version}; pinned: {settings.pinned}")
         finding = release_finding(settings.pinned, release, settings.repository)
         if finding is not None:
@@ -470,7 +566,7 @@ def watch(settings: WatchSettings, transport: Transport) -> int:
     if expiry is not None:
         findings.append(expiry)
     try:
-        _report(settings, findings, transport)
+        _report(settings, findings, judged, transport)
     except WatchError as error:
         errors.append(str(error))
     for message in errors:
@@ -487,17 +583,26 @@ def watch(settings: WatchSettings, transport: Transport) -> int:
     return EXIT_OK
 
 
-def _report(settings: WatchSettings, findings: list[Finding], transport: Transport) -> None:
-    if not findings:
-        print("nothing to report")
-        return
+def _report(
+    settings: WatchSettings,
+    findings: list[Finding],
+    judged: list[str],
+    transport: Transport,
+) -> None:
     if not settings.manage_issues:
         for finding in findings:
             print(f"finding (issues not managed): {finding.title}")
+        if not findings:
+            print("nothing to report")
         return
     issues = GitHubIssues(settings.repository, settings.token, transport)
+    marked = issues.list_marked()
     for finding in findings:
-        print(ensure_issue(issues, finding))
+        print(ensure_issue(issues, marked, finding))
+    for line in close_stale(issues, marked, findings, judged):
+        print(line)
+    if not findings:
+        print("nothing to report")
 
 
 def _date(value: str) -> date:

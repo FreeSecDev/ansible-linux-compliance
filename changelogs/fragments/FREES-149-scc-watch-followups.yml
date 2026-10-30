@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - >-
+    The SCC expiry skip of ``ci-gate`` now requires the base and head ``scc.pins`` to be
+    byte-identical, so a pull request that changes any pin (bundle, deb or ``cscc`` SHA-256,
+    size, content file) is smoke-tested after the hard stop. The SCC release watch treats
+    ``5.15.0`` as the same release as ``5.15``, rewrites its issue while a finding persists,
+    closes ``scc-release`` and ``scc-expiry`` issues when the finding no longer holds, finds
+    them by their body marker only, never edits issues of other authors, and runs only in
+    ``FreeSecDev/ansible-linux-compliance``.
