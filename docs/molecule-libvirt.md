@@ -469,6 +469,32 @@ plus the warm-up scan. The same steps took up to 1.7 times as long on a slow run
 the spread between legs that do the same work. The job's `timeout-minutes` is 28, about one and a half times the
 slowest observed leg, and stays within the merge queue's 30 minutes.
 
+Before and after the [host package cache](#host-packages-of-the-ci-runner) (FREES-180), in minutes. The two runs of
+`main` installed QEMU and libvirt with `apt-get --snapshot`; the pull request run 41071337240 found the cache empty
+and filled it, run 41074930703 restored it.
+
+| Leg | `main` 41048149375 | `main` 41045982865 | Cache miss, 41071337240 | Cache hit, 41074930703 |
+|---|---|---|---|---|
+| `libvirt-ubuntu` | 12.7 | 11.1 | 4.4 | 8.0 |
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `topic` | 26.0 | 24.7 | 19.4 | 14.2 |
+| `libvirt-ubuntu-lifecycle`, `file_permissions`, `rule` | 15.9 | 23.8 | 19.2 | 19.4 |
+| `libvirt-rhel-compatible` | 3.9 | 8.9 | 4.5 | 3.3 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `topic` | 13.0 | 13.4 | 7.7 | 9.3 |
+| `libvirt-rhel-compatible-lifecycle`, `file_permissions`, `rule` | 14.3 | 18.5 | 8.1 | 9.6 |
+| `libvirt-selftest` | 11.1 | 12.8 | 5.0 | 4.1 |
+
+The package steps took 0.9 to 7.5 minutes per leg with `apt-get --snapshot` (6.4 minutes on the slow runs, where the
+snapshot answered at 128 to 239 kB/s), 44 to 85 seconds on the cache miss (download, check and install) and 12 to 25
+seconds on a cache hit (restore up to 5 seconds, check of the 26 files up to 1 second, install 11 to 18 seconds). The
+rest of a leg did not change: the scenario of an Ubuntu lifecycle leg still took 14 to 18 minutes, so those legs
+remain at about 19 minutes on a slow runner until the snapshots are made cheaper.
+
+`make molecule-task-timings` attributes that time. In the `topic` leg of run 41071337240, 15.8 of 17.6 minutes of
+task time were the lifecycle (`side_effect`): the seven no-change snapshots (`find` 231 seconds, recording the lines
+147 seconds), the four whole-instance records (`find` with SHA-256 175 seconds, normalising 105 seconds, sorting 21
+seconds) and the warm-up scan (69 seconds), about three quarters of the leg. The slow runs of `main` show the same
+order.
+
 ## Troubleshooting
 
 - `molecule-libvirt-preflight` fails: check `ls -l /dev/kvm` and `virsh -c qemu:///system list`.
