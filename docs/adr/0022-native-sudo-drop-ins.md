@@ -172,7 +172,7 @@ residual of the content's checks as well. `sudo` stays disruptive: it is applied
 The Molecule images install `sudo` (pinned) so that the lifecycle runs on both platforms. The CIS profiles of the
 lifecycle select `sudo_add_use_pty`, `sudo_custom_logfile` and `sudo_require_reauthentication`; the other seven native
 rules are applied, made idempotent and cleaned up for real by `shared/tasks/lifecycle_sudo_other_profiles.yml` in the
-Ubuntu rule leg. `shared/tasks/lifecycle_sudo_regressions.yml` (rule legs) covers a change of method and a drop-in changed
+Rocky Linux rule leg. `shared/tasks/lifecycle_sudo_regressions.yml` (rule legs) covers a change of method and a drop-in changed
 and one removed by hand, and `shared/tasks/lifecycle_sudo_refusals.yml` (Rocky Linux topic leg) a setting of the administrator, a
 `visudo` that refuses every file and a symbolic link in place of `/etc/sudoers.d`. On Ubuntu,
 `lifecycle_sudo_states.yml` covers `not_included`, `validator_missing`, `not_owned` at apply and at cleanup,

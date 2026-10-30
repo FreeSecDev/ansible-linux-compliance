@@ -498,7 +498,7 @@ that the rule is `conflicting_setting`, that every other drop-in is `invalid_sud
 recorded; and it replaces `/etc/sudoers.d` by a symbolic link and checks that every rule is `not_directory` and nothing
 is written through the link. `visudo`, `/usr/sbin`, `/etc/sudoers.d` and its `README` are put back with their content,
 mode and ownership, so the whole-instance comparison after the refusals treats them as rewritten (new inodes and times
-only). Three more files run on Ubuntu only. `shared/tasks/lifecycle_sudo_states.yml` (topic
+only). Two more files run on Ubuntu only. `shared/tasks/lifecycle_sudo_states.yml` (topic
 mode) takes the `@includedir` line out of `/etc/sudoers` (`not_included`), removes `visudo` (`validator_missing`),
 occupies one drop-in path with a file without the header (`not_owned`) and another with a symbolic link
 (`not_regular_file`), and, after an apply, removes the header (`not_owned` at cleanup), records a malformed checksum
@@ -508,9 +508,9 @@ sudo reads: a rule's exact line only in `hardening.conf` or `admin~`, which sudo
 (`applied`, and `conflicting_setting` for `timestamp_timeout`), and a `Defaults` line continued with `\` or a linked
 drop-in that names an option is `conflicting_setting`. Every swap of these files is undone in an `always` section, so
 a failure does not leave `visudo`, `/usr/sbin` or `/etc/sudoers.d` changed. `shared/tasks/lifecycle_sudo_other_profiles.yml`
-(rule mode) applies, repeats and cleans up for real the
+(Rocky Linux rule leg) applies, repeats and cleans up for real the
 seven native sudo rules that the CIS profiles of the lifecycle do not select (`sudoers_validate_passwd` and the mode,
-owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`): the stricter mode an
+owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/sudoers` (`0640`) and `/etc/sudoers.d` (`0755`, as Ubuntu ships it): the stricter mode an
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
 a directory mode put back by hand is `restored` without a write.
 
@@ -548,7 +548,9 @@ duration: 18 for `molecule-lifecycle`, 8 for `molecule-docker` (one [scanner tim
 add three minutes), 17 for `test` (11.2) and 16 for `test-playbooks` (10.8). With `sudo` (FREES-175) there are sixteen Docker legs. The extra `sudo` files are spread over its four legs, so that
 none carries more than about four minutes of them: the regressions in both rule legs, the refusals in the Rocky Linux
 topic leg, the refusal states and the effective files in the Ubuntu topic leg and the rules of the other profiles in
-the Ubuntu rule leg. Runner speed varies a lot: at 2decd68 the cycles alone of the Rocky Linux rule leg took ten
+the Rocky Linux rule leg. At 4e936f8, with the rules of the other profiles still in the Ubuntu rule leg, the four
+`sudo` legs took 11.2 (`rhel_compatible`, `topic`), 12.3 (`rhel_compatible`, `rule`), 15.1 (`ubuntu`, `topic`) and
+16.7 minutes (`ubuntu`, `rule`); moving those rules (about 2.5 minutes) to the Rocky Linux rule leg evens them out. Runner speed varies a lot: at 2decd68 the cycles alone of the Rocky Linux rule leg took ten
 minutes against six at a7a3061. At a7a3061
 the four `sudo` legs took 9.7 (`ubuntu`, `topic`), 11.4 (`rhel_compatible`, `topic`), 12.0 (`ubuntu`, `rule`) and 13.4
 minutes (`rhel_compatible`, `rule`), after the refusals had moved from the rule legs into the topic legs: before, the

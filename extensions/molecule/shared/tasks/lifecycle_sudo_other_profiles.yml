@@ -18,6 +18,7 @@
       {{ lifecycle_native_rules | selectattr('family', 'equalto', 'sudo')
          | rejectattr('rule_id', 'in', lifecycle_rule_ids) | sort(attribute='rule_id') }}
     other_sudoers_mode: "0640"
+    other_directory_mode: "0755"
     other_items: >-
       {{ lifecycle_items | combine({'files': lifecycle_items.files
          + [{'path': '/etc/sudoers.d/50-freesecdev-validate_passwd'}]}) }}
@@ -65,6 +66,12 @@
     state: file
     mode: "{{ other_sudoers_mode }}"
 
+- name: Sudo other profiles | Loosen the drop-in directory to the mode that Ubuntu ships, which the rule restricts
+  ansible.builtin.file:
+    path: /etc/sudoers.d
+    state: directory
+    mode: "{{ other_directory_mode }}"
+
 - name: Sudo other profiles | Switch those rules on
   ansible.builtin.set_fact:
     "{{ item }}": true
@@ -100,7 +107,7 @@
       - lifecycle_results | rejectattr('status', 'equalto', 'applied') | selectattr('changed') | list == []
       - lifecycle_results | selectattr('status', 'equalto', 'applied') | list | length >= 2
       - other_checked.results[0].stat.mode == other_sudoers_mode
-      - other_checked.results[1].stat.mode == other_built.results[1].stat.mode
+      - other_checked.results[1].stat.mode == other_directory_mode
       - not other_checked.results[2].stat.exists
     fail_msg: "{{ other_label }}, check mode: {{ lifecycle_results }}"
     quiet: true
@@ -128,8 +135,7 @@
 - name: Sudo other profiles | Check the results and the restricted modes of the apply
   vars:
     other_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
-    other_directory_expected: >-
-      {{ 'compliant' if other_built.results[1].stat.mode == '0750' else 'applied' }}
+    other_directory_expected: applied
   ansible.builtin.assert:
     that:
       - lifecycle_results | map(attribute='rule_id') | list == other_rule_ids
@@ -170,11 +176,11 @@
     state: file
     mode: "0400"
 
-- name: Sudo other profiles | Give the drop-in directory its prior mode back by hand where the rule restricted it
+- name: Sudo other profiles | Give the drop-in directory its prior mode back by hand
   ansible.builtin.file:
     path: /etc/sudoers.d
     state: directory
-    mode: "{{ other_built.results[1].stat.mode }}"
+    mode: "{{ other_directory_mode }}"
 
 - name: Sudo other profiles | Switch those rules off
   ansible.builtin.set_fact:
@@ -208,8 +214,7 @@
         lifecycle_results | selectattr('rule_id', 'equalto', other_dropin_rule) | map(attribute='status') | list
         == ['restored']
       - >-
-        other_built.results[1].stat.mode == '0750'
-        or (lifecycle_results | selectattr('rule_id', 'equalto', other_directory_rule)
+        (lifecycle_results | selectattr('rule_id', 'equalto', other_directory_rule)
             | map(attribute='message') | first is search('already as before'))
       - lifecycle_results | rejectattr('rule_id', 'equalto', other_mode_rule) | map(attribute='status') | unique
         | list == ['restored']
@@ -256,6 +261,12 @@
     path: /etc/sudoers
     state: file
     mode: "{{ other_built.results[0].stat.mode }}"
+
+- name: Sudo other profiles | Give the drop-in directory its mode as built back
+  ansible.builtin.file:
+    path: /etc/sudoers.d
+    state: directory
+    mode: "{{ other_built.results[1].stat.mode }}"
 
 - name: Sudo other profiles | Read the ledger after these rules
   freesecdev.linux_compliance.control_state:
