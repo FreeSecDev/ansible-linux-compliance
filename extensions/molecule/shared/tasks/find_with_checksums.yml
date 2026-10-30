@@ -23,7 +23,7 @@
     find_extra: []
     find_aborted: >-
       {{ find_whole.skipped_paths | default({}) | dict2items
-         | selectattr('key', 'in', find_paths) | rejectattr('value', 'search', 'Errno 2\]')
+         | selectattr('key', 'in', find_paths) | selectattr('value', 'search', 'Errno 13\]')
          | map(attribute='key') | list }}
 
 - name: Find with checksums | Walk every path again when the files that root cannot read have changed
