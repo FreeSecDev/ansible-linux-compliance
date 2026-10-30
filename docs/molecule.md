@@ -181,7 +181,22 @@ In the second run the Rocky Linux mirror was slow for six legs: one build took 4
 two legs took 819 and 927 seconds of their 18-minute limit. Every one of the 76 Docker legs built an image and every
 one of the 78 jobs that installed collections downloaded them from Galaxy.
 
-After this change, on the runs of its pull request: pending the first runs.
+After, on two runs of the pull request of this change (#71 at c5d9634, after the merge of #61, so with the `ssh`
+topic's legs): the first attempt of run 41128905509 built both images because their tags were new, the second
+attempt of the same run restored them from the cache.
+
+| Run | Legs | Lifecycle median / max | Docker median / max | libvirt median / max | `molecule-images` | `molecule-collections` | Image load per Docker leg, median / max | Offline install per job, median / max |
+|---|---|---|---|---|---|---|---|---|
+| 41128905509, attempt 1 | 41 | 427 / 826 | 444 / 518 | 618 / 1128 | 56 (built both) | 7 | 8.9 / 12.9 (34 legs, 287 in all) | 4.4 / 5.5 (42 jobs, 180 in all) |
+| 41128905509, attempt 2 | 41 | 396 / 806 | 498 / 543 | 468 / 1154 | 32 (cache hits) | 11 | 7.2 / 11.8 (34 legs, 245 in all) | 4.3 / 4.9 (42 jobs, 171 in all) |
+
+The artifact downloads took a median of 2 seconds per step. In both attempts no leg logged a Galaxy URL, an image
+build or a `docker build`, and every leg logged `installed 4 verified collections offline; Galaxy was not contacted`
+and, for the Docker legs, `loaded freesecdev-molecule/<image>:<tag> and verified its image ID ...; nothing was built`.
+Per leg the two inputs now cost about 15 seconds (download, load, install) instead of about 45 in the median, and nothing in a leg depends on a
+package mirror or on Galaxy any more; a slow mirror can delay only the `molecule-images` job, and only when an image
+changed. The leg durations themselves are dominated by the lifecycle cycles and vary by a minute or two between
+runs, so the medians above move by more than the saving.
 
 The datastreams are the ones pinned in `content/manifest.yml`. `prepare` checks the SHA-256 of the fetched file on the
 controller, then copies it into the instance as `/usr/share/freesecdev-molecule/content/<file>` (root-owned, directory

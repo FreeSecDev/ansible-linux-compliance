@@ -153,5 +153,7 @@ Galaxy answered HTTP 500, cut downloads short, failed TLS or left its cache inco
 
 - **Measured.** Before, on runs 41112773853 and 41113885988, the Docker legs spent a median of 27 to 29 seconds
   building images and up to 472 when the mirror was slow, and every Molecule job and `lint` spent a median of 17 to 18
-  seconds installing collections from Galaxy. The durations after the change are in the
-  [Molecule guide](../molecule.md#durations).
+  seconds installing collections from Galaxy. After, on both attempts of run 41128905509, no leg built an image or
+  contacted Galaxy: loading and verifying an image took a median of 7 to 9 seconds, the offline install 4 seconds,
+  `molecule-images` 56 seconds when it built both images and 32 on cache hits, and `molecule-collections` 7 to 11
+  seconds. The tables are in the [Molecule guide](../molecule.md#durations).
