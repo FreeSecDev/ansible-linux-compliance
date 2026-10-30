@@ -464,7 +464,9 @@ With `banners` (four cycles) and `pwquality` (two cycles) each scenario runs ten
 runners the whole `docker-ubuntu` job took 31 minutes, and `docker-rhel-compatible` ran past the former 45-minute
 job limit, so the `molecule-docker` jobs of `.github/workflows/ci.yml` now allow 90 minutes. Every further native topic
 adds its cycles to both jobs; when they approach the limit, split the lifecycle step per topic into separate jobs
-rather than raising the limit again.
+rather than raising the limit again. The `test` job, which also runs the check-mode plays of
+`tests/playbooks/remediate-native-check.yml`, allows 30 minutes: it took 17 to 18 minutes on `main` and was cancelled
+at the former 20-minute limit once the pwquality method cases were added.
 
 ### Declaring a topic
 
