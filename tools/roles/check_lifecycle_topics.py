@@ -17,7 +17,9 @@ attribute or platform, a malformed mode, a ``rewritten`` flag that is not a bool
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
 status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
 ``content`` is not a non-empty text or that also sets an owner or group, a pre-state ``applied``
-override that the top-level ``applied`` would refuse, or ``unselected_platforms`` that name
+override that the top-level ``applied`` would refuse, pre-state ``lines`` (``regexp`` and ``line``
+on one line each) of a file that ``state.files`` does not declare ``rewritten`` (FREES-185), or
+``unselected_platforms`` that name
 every platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
 topic. The harness repeats the coverage check at run time and fails on a platform that skips
@@ -140,8 +142,9 @@ UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"
 UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
 REWRITTEN_KEY: Final[str] = "rewritten"
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset(
-    {"path", "mode", "owner", "group", "content"}
+    {"path", "mode", "owner", "group", "content", "lines"}
 )
+PRE_STATE_LINE_KEYS: Final[frozenset[str]] = frozenset({"regexp", "line"})
 MAX_CONTENT: Final[int] = 4096
 UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
@@ -213,6 +216,7 @@ class Declaration:
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
         self.drivers: frozenset[str] = frozenset(DRIVERS)
         self.skipped_platforms: set[str] = set()
+        self.rewritten: set[str] = set()
         self.topic_drivers: frozenset[str] | None = None
         self.pre_state_drivers: list[frozenset[str] | None] = [None]
         self.pre_state_modes: list[frozenset[str]] = [TOGGLE_MODES]
@@ -293,6 +297,8 @@ class Declaration:
                 if key in self.items[category]:
                     self.error(f"{what} declares {key} twice")
                 self.items[category].add(key)
+                if category == "files" and item.get(REWRITTEN_KEY) is True:
+                    self.rewritten.add(key)
         if not any(self.items.values()):
             self.error("state declares no item")
 
@@ -411,8 +417,10 @@ class Declaration:
                 self.error(f"{where} sets {key}, which state.files does not declare")
             if "content" in item:
                 self._pre_state_content(item, where)
-            elif len(set(item) & {"mode", "owner", "group"}) == 0:
+            elif len(set(item) & {"mode", "owner", "group", "lines"}) == 0:
                 self.error(f"{where} sets no mode, owner or group")
+            if "lines" in item:
+                self._pre_state_file_lines(item, key, where)
             mode = item.get("mode")
             if "mode" in item and (not isinstance(mode, str) or MODE.fullmatch(mode) is None):
                 self.error(f"{where} needs a four-digit octal mode string")
@@ -443,6 +451,17 @@ class Declaration:
             self.pre_state_modes.append(TOGGLE_MODES)
             return
         self.pre_state_modes.append(frozenset(modes))
+
+    def _pre_state_file_lines(self, item: dict[str, object], key: str | None, where: str) -> None:
+        """Check the lines that a pre-state sets in a declared file that the topic rewrites."""
+        _pre_state_lines(self, item["lines"], where)
+        if "content" in item:
+            self.error(f"{where} cannot both add a file with content and set lines of it")
+        if key is not None and key not in self.rewritten:
+            self.error(
+                f"{where} sets lines of {key}, which state.files must declare rewritten: "
+                "the harness puts its content back with a new inode after the cycle"
+            )
 
     def _pre_state_content(self, item: dict[str, object], where: str) -> None:
         """Check a file that the pre-state writes, as root, before a cycle and removes after it."""
@@ -577,6 +596,23 @@ class Declaration:
                 self.pre_state_unchanged(item["unchanged"], what)
             if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
                 self.error(f"{what}.applied declares no expectation; leave it out instead")
+
+
+def _pre_state_lines(declaration: Declaration, value: object, what: str) -> None:
+    """Check the lines that a pre-state sets in a declared file, as an administrator would."""
+    entries = declaration.sequence(value, f"{what}.lines")
+    if not entries:
+        declaration.error(f"{what}.lines must not be empty")
+    for index, entry in enumerate(entries):
+        where = f"{what}.lines[{index}]"
+        item = declaration.mapping(entry, where)
+        if item is None:
+            continue
+        declaration.keys(item, PRE_STATE_LINE_KEYS, where)
+        for key in sorted(PRE_STATE_LINE_KEYS):
+            text = item.get(key)
+            if not _text(text) or "\n" in str(text):
+                declaration.error(f"{where} needs a {key} on one line")
 
 
 def _regression_groups(declaration: Declaration, value: object) -> None:

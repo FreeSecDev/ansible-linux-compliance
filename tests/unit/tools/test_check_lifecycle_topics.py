@@ -1097,3 +1097,66 @@ def test_regression_platforms_fail_on_an_invalid_declaration(tmp_path: Path) -> 
     root = make_root(tmp_path, {"file_permissions": changed(regressions=NO_ITEMS)})
     with pytest.raises(lifecycle.GenerationError, match="regressions must not be empty"):
         lifecycle.regression_platforms(root)
+
+
+REWRITTEN_STATE = {
+    **cast("dict[str, object]", VALID["state"]),
+    "files": [{"path": "/etc/crontab", "rewritten": True}, {"path": "/etc/cron.d/x"}],
+}
+LINE = {"regexp": "^MAILTO=", "line": "MAILTO=root"}
+
+
+def lines_state(lines: object, path: str = "/etc/crontab") -> dict[str, object]:
+    return changed(
+        state=REWRITTEN_STATE,
+        pre_states=[{"name": "a", "files": [{"path": path, "lines": lines}]}],
+    )
+
+
+def test_a_pre_state_may_set_lines_of_a_rewritten_file(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": lines_state([LINE])})
+    assert lifecycle.check(root)[1] == []
+
+
+@pytest.mark.parametrize(
+    ("declaration", "message"),
+    [
+        (lines_state(NO_ITEMS), "pre_states[0].files[0].lines must not be empty"),
+        (lines_state({"x": 1}), "pre_states[0].files[0].lines must be a list"),
+        (lines_state(["x"]), "pre_states[0].files[0].lines[0] must be a mapping"),
+        (
+            lines_state([{**LINE, "x": 1}]),
+            "pre_states[0].files[0].lines[0] has the unknown key 'x'",
+        ),
+        (
+            lines_state([{"regexp": "^a"}]),
+            "pre_states[0].files[0].lines[0] needs a line on one line",
+        ),
+        (
+            lines_state([{**LINE, "regexp": "^a\nb"}]),
+            "pre_states[0].files[0].lines[0] needs a regexp on one line",
+        ),
+        (
+            changed(
+                state=REWRITTEN_STATE,
+                pre_states=[
+                    {
+                        "name": "a",
+                        "files": [{"path": "/etc/crontab", "lines": [LINE], "content": "x"}],
+                    }
+                ],
+            ),
+            "pre_states[0].files[0] cannot both add a file with content and set lines of it",
+        ),
+        (
+            lines_state([LINE], "/etc/cron.d/x"),
+            "pre_states[0].files[0] sets lines of /etc/cron.d/x, which state.files must declare",
+        ),
+    ],
+)
+def test_invalid_pre_state_lines_are_reported(
+    tmp_path: Path, declaration: object, message: str
+) -> None:
+    root = make_root(tmp_path, {"file_permissions": declaration})
+    found = lifecycle.check(root)[1]
+    assert any(message in error for error in found), found

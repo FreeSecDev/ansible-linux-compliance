@@ -101,6 +101,24 @@
   loop: "{{ lifecycle_added_files }}"
   loop_control:
     label: "{{ item.path }}"
+- name: Lifecycle cycle | Read the declared files whose lines the pre-state sets, to put them back after the cycle
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop: "{{ lifecycle_pre_state.files | default([]) | selectattr('lines', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: lifecycle_pre_state_contents
+
+- name: Lifecycle cycle | Set the lines that the pre-state declares, as an administrator would
+  ansible.builtin.lineinfile:
+    path: "{{ item.0.path }}"
+    regexp: "{{ item.1.regexp }}"
+    line: "{{ item.1.line }}"
+    state: present
+    create: false
+  loop: "{{ lifecycle_pre_state.files | default([]) | selectattr('lines', 'defined') | subelements('lines') }}"
+  loop_control:
+    label: "{{ item.0.path }}: {{ item.1.line }}"
 
 - name: Lifecycle cycle | Give the declared files the mode and ownership of the pre-state
   ansible.builtin.file:
@@ -444,3 +462,15 @@
   loop: "{{ lifecycle_pre_state.files | default([]) | rejectattr('content', 'defined') | list }}"
   loop_control:
     label: "{{ item.path }}"
+
+- name: Lifecycle cycle | Give the files whose lines the pre-state set back the content they had before the cycle
+  ansible.builtin.copy:
+    content: "{{ item.content | b64decode }}"
+    dest: "{{ item.item.path }}"
+    follow: false
+    mode: "{{ lifecycle_pristine.files[item.item.path].mode }}"
+    owner: "{{ lifecycle_pristine.files[item.item.path].owner }}"
+    group: "{{ lifecycle_pristine.files[item.item.path].group }}"
+  loop: "{{ lifecycle_pre_state_contents.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
