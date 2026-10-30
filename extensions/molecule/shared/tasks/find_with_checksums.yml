@@ -71,24 +71,24 @@
     quiet: true
   when: find_aborted | length > 0
 
-- name: Find with checksums | Keep the checksums of the second pass and remember the files that root cannot read
-  vars:
-    find_entries: >-
-      {{ (find_whole.files | rejectattr('path', 'match', find_aborted_under) | list) + find_listed.files }}
-    find_aborted_under: "{{ '^(' ~ (find_aborted | map('regex_escape') | join('|')) ~ ')(/|$)' }}"
-    find_unreadable: >-
-      {{ find_listed.files | selectattr('isreg')
-         | rejectattr('path', 'in', find_summed.files | map(attribute='path') | list)
-         | map(attribute='path') | map('basename') | unique | sort }}
+- name: Find with checksums | Keep the checksums of the second pass and name the files that root cannot read
   ansible.builtin.set_fact:
-    find_under: "{{ find_aborted_under }}"
+    find_under: "{{ '^(' ~ (find_aborted | map('regex_escape') | join('|')) ~ ')(/|$)' }}"
     find_sums: >-
       {{ dict(find_summed.files | map(attribute='path') | zip(find_summed.files | map(attribute='checksum'))) }}
+    find_unreadable: >-
+      {{ find_listed.files | selectattr('isreg') | map(attribute='path') | list
+         | difference(find_summed.files | map(attribute='path') | list) | map('basename') | unique | sort }}
+  when: find_aborted | length > 0
+
+- name: Find with checksums | Remember the names, and every entry that has one of them, for the next records
+  ansible.builtin.set_fact:
     find_cache: >-
       {{ find_cache | default({}) | combine({find_key: {
            'excludes': find_unreadable,
-           'extra': find_entries | selectattr('path', 'search', '/(' ~ (find_unreadable | map('regex_escape')
-                    | join('|')) ~ ')$') | map(attribute='path') | list if find_unreadable | length > 0 else []}}) }}
+           'extra': (find_whole.files + find_listed.files) | map(attribute='path')
+                    | select('search', '/(' ~ (find_unreadable | map('regex_escape') | join('|')) ~ ')$')
+                    | unique | sort if find_unreadable | length > 0 else []}}) }}
   when: find_aborted | length > 0
 
 - name: Find with checksums | Inspect the files that the walk left out by name, without following a link
