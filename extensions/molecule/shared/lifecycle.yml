@@ -141,7 +141,7 @@
         file: tasks/lifecycle_ssh_vendor_regressions.yml
       when:
         - "'ssh' in lifecycle_run_families"
-        - "'rule' in lifecycle_run_modes"
+        - (lifecycle_vendor_regression_mode[lifecycle_platform] | default('rule')) in lifecycle_run_modes
         - "'ssh' in lifecycle_proven_families"
 
     - name: Report the topics whose lifecycle was proven

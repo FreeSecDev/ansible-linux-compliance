@@ -503,8 +503,9 @@ marker, removed again by the cleanup, and a symbolic link in its place makes eve
 written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
 only. The regressions end with the whole-instance comparison.
 
-`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs in the `ssh` `rule` leg, so that the two legs stay of
-similar length. It adds `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs in the `ssh` `topic` leg on Ubuntu and the `rule` leg on Rocky
+Linux (`lifecycle_vendor_regression_mode` in `shared/vars/lifecycle.yml`), so that no leg carries both the directory
+regressions and the vendor regressions and every leg stays well under the 18 minutes of the job. It adds `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the
 lifecycle profiles do not select, to the verified profile and checks the vendor-line method of ADR 0023 on
 `/etc/ssh/sshd_config` (Ubuntu) and `/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux): after the apply every
 occurrence that the content's check reads has the value `no` and the ledger records the original line; a second apply

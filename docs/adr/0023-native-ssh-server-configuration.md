@@ -225,8 +225,8 @@ rule `invalid_config` with nothing installed; an entry of another method is refu
 by hand is kept as `modified_since_apply`; a drop-in removed by hand is restored without a write; and, on Ubuntu, where
 the directory is empty as built, a missing directory is created with the marker and removed again, and a symbolic link
 in its place makes every rule `not_directory` with nothing written through it.
-`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs in the `rule` leg, so that the two legs stay of similar
-length: it adds `sshd_disable_x11_forwarding` (and on RHEL `sshd_disable_gssapi_auth`) to the profile, applies them and
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs in the `topic` leg on Ubuntu and the `rule` leg on RHEL
+compatible hosts, so that the legs stay of similar length: it adds `sshd_disable_x11_forwarding` (and on RHEL `sshd_disable_gssapi_auth`) to the profile, applies them and
 checks that every occurrence that the check reads now has the compliant value, that a second apply is compliant, and
 that cleanup writes the vendor file back byte for byte; that a change by hand to the changed line is kept as
 `modified_since_apply` and, once restored by hand with other spacing, left alone while the rule is reported

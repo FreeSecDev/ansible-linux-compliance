@@ -374,3 +374,6 @@ lifecycle_selfcheck_cases:
             - "1.0"
     expected: {}
     mismatch: "packages selfcheck: installed changed from False to True;"
+lifecycle_vendor_regression_mode:
+  ubuntu: topic
+  rhel_compatible: rule
