@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import runpy
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -88,3 +90,16 @@ def test_main_refuses_bad_input(
     options = [argument for argument in arguments if argument != "--missing"]
     assert task_timings.main([path, *options]) == 2
     assert message in capsys.readouterr().err
+
+
+def test_the_module_runs_as_a_script(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "job.log"
+    log.write_text(LOG, encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["task_timings", str(log)])
+    sys.modules.pop("tools.molecule.task_timings", None)
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_module("tools.molecule.task_timings", run_name="__main__")
+    assert exit_info.value.code == 0
+    assert "Top 15 single task runs:" in capsys.readouterr().out
