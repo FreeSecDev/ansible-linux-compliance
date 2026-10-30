@@ -225,6 +225,7 @@
         mode: preserve
         owner: root
         group: root
+      when: rollback_sbin_before.stat is defined
 
     - name: SSH rollback regressions | Give the directory of sshd back its mode
       ansible.builtin.file:

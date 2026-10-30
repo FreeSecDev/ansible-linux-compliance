@@ -826,6 +826,10 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/rules.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_audit_only']
       - >-
+        __linux_compliance_remediate_backslash is not defined or __linux_compliance_remediate_backslash ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_backslash']
+      - >-
         __linux_compliance_remediate_banner_forbidden is not defined or __linux_compliance_remediate_banner_forbidden ==
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_banner_forbidden']

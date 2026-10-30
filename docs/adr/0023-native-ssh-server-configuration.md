@@ -94,7 +94,13 @@ for each such file the exact original line (`vendor_line:<path>`), the line writ
 `<Keyword> <value>` as the drop-in); a file is recorded once, by the first run that changes it.
 `ansible.builtin.lineinfile` then replaces that one line, keeping the file's mode and owner. It runs with `backrefs:
 true` for the edit, the cleanup and the rollback, so a line that no longer matches is left alone and nothing is ever
-appended at the end of the file, where it could land inside a `Match` block.
+appended at the end of the file, where it could land inside a `Match` block. With `backrefs`, `lineinfile` expands
+`\1`, `\g<0>`, `\n` and other escapes in the line it writes, and a trailing `\` makes it fail. The recorded original is
+the raw vendor line, comments included, so every backslash in the line to write is doubled first. Ansible 2.21 does
+not process escapes in Jinja string literals, so the doubling uses a one-character constant,
+`__linux_compliance_remediate_backslash`, as the role does for the newline. A vendor line with backslashes, `&` or
+replacement syntax in its comment is therefore written back exactly, which the vendor regressions check byte for
+byte.
 Otherwise the rule is refused with nothing changed: `overridden` for a later line in an administrator's drop-in (for
 example `LoginGraceTime 120` in a `60-site.conf`, which the collection never edits) or inside a `Match` block of a vendor
 file, `duplicate_setting` when a vendor file sets the keyword more than once, and `prior_too_large` for a line over

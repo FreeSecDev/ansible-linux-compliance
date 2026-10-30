@@ -8,6 +8,7 @@ __linux_compliance_remediate_pwquality_main: /etc/security/pwquality.conf
 __linux_compliance_remediate_pwquality_directory: /etc/security/pwquality.conf.d
 __linux_compliance_remediate_pwquality_marker: /etc/security/pwquality.conf.d/.freesecdev-created
 __linux_compliance_remediate_newline: "\n"
+__linux_compliance_remediate_backslash: "\\"
 __linux_compliance_remediate_sshd_main: /etc/ssh/sshd_config
 __linux_compliance_remediate_sshd_directory: /etc/ssh/sshd_config.d
 __linux_compliance_remediate_sshd_marker: /etc/ssh/sshd_config.d/.freesecdev-created

@@ -301,7 +301,9 @@
     path: "{{ __linux_compliance_remediate_ssh_restore.path }}"
     regexp: "{{ __linux_compliance_remediate_ssh_restore.regexp }}"
     line: >-
-      {{ __linux_compliance_remediate_ssh_restore.line | replace('\\', '\\\\') }}
+      {{ __linux_compliance_remediate_ssh_restore.line
+         | replace(__linux_compliance_remediate_backslash,
+                   __linux_compliance_remediate_backslash ~ __linux_compliance_remediate_backslash) }}
     backrefs: true
     state: present
     create: false
@@ -719,7 +721,9 @@
     path: "{{ __linux_compliance_remediate_ssh_edit.path }}"
     regexp: "{{ __linux_compliance_remediate_ssh_edit.regexp }}"
     line: >-
-      {{ __linux_compliance_remediate_ssh_edit.written | replace('\\', '\\\\') }}
+      {{ __linux_compliance_remediate_ssh_edit.written
+         | replace(__linux_compliance_remediate_backslash,
+                   __linux_compliance_remediate_backslash ~ __linux_compliance_remediate_backslash) }}
     backrefs: true
     state: present
     create: false
@@ -865,7 +869,9 @@
         path: "{{ __linux_compliance_remediate_ssh_undo.path }}"
         regexp: "{{ __linux_compliance_remediate_ssh_undo.regexp }}"
         line: >-
-          {{ __linux_compliance_remediate_ssh_undo.original | replace('\\', '\\\\') }}
+          {{ __linux_compliance_remediate_ssh_undo.original
+             | replace(__linux_compliance_remediate_backslash,
+                       __linux_compliance_remediate_backslash ~ __linux_compliance_remediate_backslash) }}
         backrefs: true
         state: present
         create: false

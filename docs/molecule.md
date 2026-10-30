@@ -505,7 +505,16 @@ written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the 
 only. The regressions end with the whole-instance comparison.
 
 `shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs after them in the same `ssh` `topic` leg, which runs one cycle
-against the two of the `rule` leg, so that both legs stay well under the 18 minutes of the job.
+against the two of the `rule` leg, so that both legs stay well under the 18 minutes of the job. It adds
+`sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the lifecycle profiles do not
+select, to the verified profile and checks the vendor-line method of ADR 0023 on `/etc/ssh/sshd_config` (Ubuntu) and
+`/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux). For the first apply, the vendor `X11Forwarding yes` line gets a
+comment with `\1`, `\g<0>`, `&`, `\n`, `\\` and a trailing `\`. After the apply every occurrence that the content's
+check reads has the value `no` and the ledger records the original line; a second apply is compliant; the cleanup
+writes the vendor file back byte for byte, that comment included. From the file as built, a change by hand to the
+changed line is kept as `modified_since_apply`, and once the line is restored by hand with other spacing, the cleanup
+leaves it alone and reports the rule `restored`; and a conflicting line inside a `Match` block is `overridden` and not
+edited. It ends with the whole-instance comparison.
 
 `shared/tasks/lifecycle_ssh_rollback_regressions.yml` runs in the `ssh` `rule` leg, narrowed to the same two rules,
 and reaches the end of the family that the cycles never reach. With an administrator's drop-in in place that sshd
@@ -515,14 +524,7 @@ kept, because that is the prior state. With the sshd binary removed, as removing
 succeeds and reports both rules `restored`. The binary is copied to `/tmp` and back with its mode; Rocky Linux
 ships `/usr/sbin` with mode `0555` and the instance drops the capability that lets root write it anyway, so the
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
-leaves out only the inode and times of the binary and the times of `/usr/sbin`. It adds `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the
-lifecycle profiles do not select, to the verified profile and checks the vendor-line method of ADR 0023 on
-`/etc/ssh/sshd_config` (Ubuntu) and `/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux): after the apply every
-occurrence that the content's check reads has the value `no` and the ledger records the original line; a second apply
-is compliant; the cleanup writes the vendor file back byte for byte; a change by hand to the changed line is kept as
-`modified_since_apply`, and once the line is restored by hand with other spacing, the cleanup leaves it alone and
-reports the rule `restored`; and a conflicting line inside a `Match` block is `overridden` and not edited. It ends with the whole-instance
-comparison.
+leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
 ### CI legs
 

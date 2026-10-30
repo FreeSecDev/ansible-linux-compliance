@@ -7,6 +7,7 @@
       - ssh
     lifecycle_items: {}
     vendor_label: ssh vendor regressions
+    vendor_escaped_line: 'X11Forwarding yes # keep \1, \g<0>, & and \n and \\ literally, and a trailing \'
     vendor_profile: "{{ linux_compliance_discovered }}"
     vendor_file: >-
       {{ '/etc/ssh/sshd_config' if lifecycle_platform == 'ubuntu' else '/etc/ssh/sshd_config.d/50-redhat.conf' }}
@@ -59,6 +60,17 @@
   ansible.builtin.slurp:
     src: "{{ vendor_file }}"
   register: vendor_built
+
+- name: SSH vendor regressions | Give the X11Forwarding line a comment with backslashes and replacement syntax
+  ansible.builtin.lineinfile:
+    path: "{{ vendor_file }}"
+    regexp: "^X11Forwarding "
+    line: "{{ vendor_escaped_line }}"
+
+- name: SSH vendor regressions | Read the vendor file with the backslashes, which the cleanup must restore byte for byte
+  ansible.builtin.slurp:
+    src: "{{ vendor_file }}"
+  register: vendor_escaped
 
 - name: SSH vendor regressions | Pretend a profile that also selects the rules whose vendor line conflicts
   ansible.builtin.set_fact:
@@ -136,9 +148,18 @@
     that:
       - lifecycle_results | map(attribute='status') | unique | list == ['restored']
       - lifecycle_results | map(attribute='message') | select('search', 'written back') | list | length > 0
-      - vendor_cleaned.content == vendor_built.content
+      - vendor_cleaned.content == vendor_escaped.content
+      - (vendor_cleaned.content | b64decode).splitlines() | select('equalto', vendor_escaped_line) | list | length == 1
     fail_msg: "{{ vendor_label }}, cleanup: {{ lifecycle_results }}"
     quiet: true
+
+- name: SSH vendor regressions | Give the vendor file its content as built, before the change by hand
+  ansible.builtin.copy:
+    content: "{{ vendor_built.content | b64decode }}"
+    dest: "{{ vendor_file }}"
+    mode: "{{ '0644' if lifecycle_platform == 'ubuntu' else '0600' }}"
+    owner: root
+    group: root
 
 - name: SSH vendor regressions | Switch the rules on to test a change by hand
   ansible.builtin.set_fact:
