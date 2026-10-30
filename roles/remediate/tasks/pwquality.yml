@@ -199,13 +199,33 @@
   tags:
     - always
 
+- name: Password quality | Inspect the directory and the marker again without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwq_tidy_check }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop:
+    - "{{ __linux_compliance_remediate_pwquality_directory }}"
+    - "{{ __linux_compliance_remediate_pwquality_marker }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_pwq_tidy_check
+  register: __linux_compliance_remediate_pwq_tidy_stats
+  when: __linux_compliance_remediate_pwq_directory_stat.isdir | default(false)
+  tags:
+    - always
+
 - name: Password quality | Decide whether the directory holds nothing but the marker of the collection
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_tidy: >-
-      {{ (__linux_compliance_remediate_pwq_left.files | default([]) | map(attribute='path') | list
-          | difference(__linux_compliance_remediate_pwq_removed)
-          | union(__linux_compliance_remediate_pwq_written) | sort)
-         == [__linux_compliance_remediate_pwquality_marker] }}
+      {{ __linux_compliance_remediate_pwq_tidy_stats is not skipped
+         and (__linux_compliance_remediate_pwq_tidy_stats.results[0].stat.isdir | default(false))
+         and (__linux_compliance_remediate_pwq_tidy_stats.results[1].stat.isreg | default(false))
+         and (__linux_compliance_remediate_pwq_left.files | default([]) | map(attribute='path') | list
+              | difference(__linux_compliance_remediate_pwq_removed)
+              | union(__linux_compliance_remediate_pwq_written) | sort)
+             == [__linux_compliance_remediate_pwquality_marker] }}
   tags:
     - always
 

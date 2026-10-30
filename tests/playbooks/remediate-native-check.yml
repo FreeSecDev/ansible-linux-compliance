@@ -256,3 +256,91 @@
     - name: Include each file without the opt-in and check that its first task refuses it
       ansible.builtin.include_tasks:
         file: tasks/native_direct_use.yml
+
+- name: Native families in check mode | A ledger entry of the other pwquality method is refused, never forgotten
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    linux_compliance_remediate_enabled: true
+    native_ubuntu: xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04
+    native_rhel: xccdf_org.ssgproject.content_benchmark_RHEL-9
+    native_main_entry:
+      - name: group
+        value: "0"
+      - name: method
+        value: main_file
+      - name: mode
+        value: "0644"
+      - name: owner
+        value: "0"
+      - name: setting_line
+        value: minlen = 9
+      - name: sha256
+        value: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: written_line
+        value: minlen = 14
+    native_dropin_entry:
+      - name: dropin
+        value: null
+      - name: dropin_sha256
+        value: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: method
+        value: dropin
+    native_method_cases:
+      - name: a main file entry cleaned up where the content checks the drop-ins
+        helper: dropin_cleanup
+        benchmark: "{{ native_rhel }}"
+        prior_values: "{{ native_main_entry }}"
+        status: cleanup_incomplete
+        reason: method_changed
+      - name: a drop-in entry cleaned up where the content checks only the main file
+        helper: main_cleanup
+        benchmark: "{{ native_ubuntu }}"
+        prior_values: "{{ native_dropin_entry }}"
+        status: cleanup_incomplete
+        reason: method_changed
+      - name: a main file entry applied over where the content checks the drop-ins
+        helper: dropin_apply
+        benchmark: "{{ native_rhel }}"
+        prior_values: "{{ native_main_entry }}"
+        status: method_changed
+        reason: recorded by the main_file method
+      - name: a drop-in entry applied over where the content checks only the main file
+        helper: main_apply
+        benchmark: "{{ native_ubuntu }}"
+        prior_values: "{{ native_dropin_entry }}"
+        status: method_changed
+        reason: recorded by the dropin method
+      - name: an entry without a recorded method
+        helper: dropin_cleanup
+        benchmark: "{{ native_rhel }}"
+        prior_values:
+          - name: dropin
+            value: null
+        status: cleanup_incomplete
+        reason: method_changed
+  tasks:
+    - name: Refuse to run outside check mode
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: This test playbook only runs with --check; it must never change the host.
+        quiet: true
+
+    - name: Load the minlen rule of the catalogue
+      ansible.builtin.set_fact:
+        native_minlen: >-
+          {{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/remediate/vars/rules.yml')
+             | from_yaml).__linux_compliance_remediate_rules
+             | selectattr('rule_id', 'equalto', 'xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen')
+             | first }}
+
+    - name: Run every direction of a change of method
+      ansible.builtin.include_tasks:
+        file: tasks/native_method_changed.yml
+      loop: "{{ native_method_cases }}"
+      loop_control:
+        loop_var: native_method_case
+        label: "{{ native_method_case.name }}"

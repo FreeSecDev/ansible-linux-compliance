@@ -345,8 +345,22 @@ benchmark that the `discover` role verified.
 
 | Rules | Method | What is applied | Record and cleanup |
 |---|---|---|---|
-| `accounts_password_pam_dcredit`, `_dictcheck`, `_difok`, `_enforcing`, `_lcredit`, `_maxclassrepeat`, `_maxrepeat`, `_maxsequence`, `_minclass`, `_minlen`, `_ocredit`, `_ucredit`, `_pwquality_retry`, `_enforce_root` | main file (Ubuntu 24.04) | One line per setting in `/etc/security/pwquality.conf` with the profile's value (`enforce_for_root` without value), written with `lineinfile`: the one active line of the setting is replaced, or the line is appended | `recorded_value` of `setting_line` (the prior active line, or `null` when absent) and the file's `mode`, `owner`, `group` and `sha256`; cleanup writes the line back or removes the setting, and restores the mode, owner and group, so the file is byte for byte the original once every rule is cleaned up |
-| the same rules | drop-ins (RHEL 9) | `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf` with a header that names the rule; the main file is not touched | `recorded_value` of `dropin` (`null`: it did not exist); cleanup removes the drop-in when it carries the header |
+| `accounts_password_pam_dcredit`, `_dictcheck`, `_difok`, `_enforcing`, `_lcredit`, `_maxclassrepeat`, `_maxrepeat`, `_maxsequence`, `_minclass`, `_minlen`, `_ocredit`, `_ucredit`, `_pwquality_retry`, `_enforce_root` | main file (Ubuntu 24.04) | One line per setting in `/etc/security/pwquality.conf` with the profile's value (`enforce_for_root` without value), written with `lineinfile`: the one active line of the setting is replaced, or the line is appended | `recorded_value` of `method` (`main_file`), `setting_line` (the prior active line, or `null` when absent), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup checks that the setting is still the line written and that the mode and ownership are unchanged, then writes the line back or removes the setting, so the file is byte for byte the original once every rule is cleaned up |
+| the same rules | drop-ins (RHEL 9) | `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf` with a header that names the rule; the main file is not touched | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+
+Every ledger entry records its `method` and what was written (`written_line`, or `dropin_sha256` for a drop-in). The
+statuses that refuse to act, with nothing changed and the entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `method_changed` | The entry was recorded by the other method, for example after a content update moved the check; apply writes nothing, cleanup is `cleanup_incomplete` |
+| `modified_since_apply` (cleanup) | The setting is no longer exactly the line the collection wrote, the main file's mode or ownership changed, or the drop-in's content no longer has the recorded SHA-256; an administrator's later change is never overwritten |
+| `not_directory` | `pwquality.conf.d` exists but is not a directory, for example a symbolic link; nothing is written through it |
+| `not_regular_file` | The main file or a drop-in is a symbolic link or another non-regular file |
+| `not_owned` | A file at the drop-in's path does not carry the collection's header, with or without a ledger entry |
+
+When the profile value changes while a rule stays on, apply writes the new value and replaces the entry with the same
+prior state and the new `written_line` or `dropin_sha256`.
 
 With the main file, a setting that is active on more than one line is `duplicate_setting` and not touched. With
 drop-ins, libpwquality reads them in lexical order and the main file last, so a rule is `overridden`, with nothing

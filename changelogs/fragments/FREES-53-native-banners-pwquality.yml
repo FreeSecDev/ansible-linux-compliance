@@ -9,8 +9,10 @@ minor_changes:
     remediate - the ``pwquality`` topic is native, with the value of the selected profile, written where
     the pinned content of the platform checks it: one line per setting in ``/etc/security/pwquality.conf``
     on Ubuntu 24.04 and one drop-in per setting below ``/etc/security/pwquality.conf.d`` on RHEL 9. Switching
-    the rule or topic off restores the recorded line or removes the drop-in. It is disruptive and needs
-    ``pwquality`` or ``pam`` in
+    the rule or topic off restores the recorded line or removes the drop-in, but only while it is still what the
+    collection wrote: a later change by hand is ``modified_since_apply``, a ledger entry of the other method is
+    ``method_changed``, and a symbolic link in place of ``pwquality.conf.d`` is ``not_directory``; each keeps the
+    entry and changes nothing. It is disruptive and needs ``pwquality`` or ``pam`` in
     ``linux_compliance_remediate_allow_disruptive``.
   - >-
     catalogue - native rules take the values of the XCCDF ``Value`` their check exports from the pinned

@@ -735,3 +735,10 @@ step-2 and FREES-165 amendments; the statements about the crontab rule itself ar
   also checks on the pinned catalogue, and the toggle lifecycle applies and cleans it up with its allow-list entry.
 - **Lifecycle harness.** The FREES-60 harness gains `rewritten` files, `unchanged` rules per pre-state and a
   per-topic narrowing of the verified profile, as ADR 0021 describes.
+- **Cleanup from the entry, and only over the collection's own change.** A ledger entry records how its rule was
+  applied (for pwquality, `method`), and cleanup follows the entry: an entry that the current method cannot restore is
+  `cleanup_incomplete` (`method_changed`) and kept, never forgotten. Before restoring, cleanup checks that the target
+  still holds what the collection wrote (`written_line`, `dropin_sha256`, the recorded mode and ownership); if an
+  administrator changed it since, the result is `cleanup_incomplete` (`modified_since_apply`), nothing is changed and
+  the entry is kept. "Restore the recorded prior value" therefore never overwrites a later change. The banner and
+  crontab families restore a single attribute that only they change and keep their behaviour.

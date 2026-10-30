@@ -28,6 +28,20 @@
   tags:
     - always
 
+- name: Password quality | Read the method and the values that the ledger entry of the rule records
+  vars:
+    __linux_compliance_remediate_pwq_recorded: >-
+      {{ (__linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+          | items2dict(key_name='name', value_name='value'))
+         if __linux_compliance_remediate_rule.ledger_entry is mapping else {} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_entry: "{{ __linux_compliance_remediate_pwq_recorded }}"
+    __linux_compliance_remediate_pwq_entry_method: >-
+      {{ none if __linux_compliance_remediate_rule.ledger_entry is not mapping
+         else __linux_compliance_remediate_pwq_recorded.method | default('unknown') }}
+  tags:
+    - always
+
 - name: Password quality | Inspect the drop-in without following a symbolic link
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
@@ -80,19 +94,22 @@
 - name: Password quality | Decide whether the drop-in must be written
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_directory_missing: >-
-      {{ not (__linux_compliance_remediate_pwq_directory_stat.isdir | default(false)) }}
+      {{ not (__linux_compliance_remediate_pwq_directory_stat.exists | default(false)) }}
+    __linux_compliance_remediate_pwq_content_sha256: "{{ __linux_compliance_remediate_pwq_content | hash('sha256') }}"
     __linux_compliance_remediate_pwq_status: >-
-      {{ 'notapplicable' if not (__linux_compliance_remediate_pwq_main_stat.isreg | default(false))
+      {{ 'method_changed' if __linux_compliance_remediate_pwq_entry_method not in [none, 'dropin']
+         else 'notapplicable' if not (__linux_compliance_remediate_pwq_main_stat.isreg | default(false))
+         else 'not_directory' if (__linux_compliance_remediate_pwq_directory_stat.exists | default(false))
+              and not (__linux_compliance_remediate_pwq_directory_stat.isdir | default(false))
          else 'not_regular_file' if __linux_compliance_remediate_pwq_stat.stat.exists
               and not __linux_compliance_remediate_pwq_stat.stat.isreg
+         else 'not_owned' if __linux_compliance_remediate_pwq_current is not skipped
+              and not (__linux_compliance_remediate_pwq_current.content | b64decode)
+                      .startswith(__linux_compliance_remediate_pwq_header)
          else 'overridden' if __linux_compliance_remediate_pwq_overriding | length > 0
          else 'compliant' if __linux_compliance_remediate_pwq_current is not skipped
               and (__linux_compliance_remediate_pwq_current.content | b64decode)
                   == __linux_compliance_remediate_pwq_content
-         else 'not_owned' if __linux_compliance_remediate_pwq_current is not skipped
-              and __linux_compliance_remediate_rule.ledger_entry is none
-              and not (__linux_compliance_remediate_pwq_current.content | b64decode)
-                      .startswith(__linux_compliance_remediate_pwq_header)
          else 'applied' }}
   tags:
     - always
@@ -133,13 +150,39 @@
     family: "{{ __linux_compliance_remediate_rule.family }}"
     revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
     prior_values:
+      - name: method
+        value: dropin
       - name: dropin
         value: null
+      - name: dropin_sha256
+        value: "{{ __linux_compliance_remediate_pwq_content_sha256 }}"
     collection_version: "{{ __linux_compliance_remediate_collection_version }}"
   register: __linux_compliance_remediate_pwq_record
   when:
     - __linux_compliance_remediate_pwq_status == 'applied'
     - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: Password quality | Keep the recorded prior state and record the new content when the profile value changed
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_pwq_entry
+         | combine({'dropin_sha256': __linux_compliance_remediate_pwq_content_sha256})
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+    replace: true
+  register: __linux_compliance_remediate_pwq_rerecord
+  when:
+    - __linux_compliance_remediate_pwq_status in ['applied', 'compliant']
+    - __linux_compliance_remediate_pwq_entry_method == 'dropin'
+    - >-
+      __linux_compliance_remediate_pwq_entry.dropin_sha256 | default(none)
+      != __linux_compliance_remediate_pwq_content_sha256
   tags:
     - always
 
@@ -176,9 +219,13 @@
            'action': 'apply',
            'status': __linux_compliance_remediate_pwq_status,
            'reason': (__linux_compliance_remediate_pwq_overriding | join(', '))
-                     if __linux_compliance_remediate_pwq_status == 'overridden' else none,
+                     if __linux_compliance_remediate_pwq_status == 'overridden'
+                     else ('the ledger entry was recorded by the ' ~ __linux_compliance_remediate_pwq_entry_method
+                           ~ ' method; clean it up first')
+                     if __linux_compliance_remediate_pwq_status == 'method_changed' else none,
            'changed': (__linux_compliance_remediate_pwq_write is changed)
-                      or (__linux_compliance_remediate_pwq_directory is changed),
+                      or (__linux_compliance_remediate_pwq_directory is changed)
+                      or (__linux_compliance_remediate_pwq_rerecord is changed),
            'message': __linux_compliance_remediate_rule.parameters.path ~ ': ' ~ __linux_compliance_remediate_pwq_status
                       ~ ((' (set later by ' ~ (__linux_compliance_remediate_pwq_overriding | join(', '))
                           ~ ', which libpwquality reads after the drop-in; nothing was changed)')

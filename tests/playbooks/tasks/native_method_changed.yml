@@ -1,0 +1,72 @@
+---
+- name: Native method | Give the minlen rule the ledger entry of the case
+  ansible.builtin.set_fact:
+    native_method_rule: >-
+      {{ native_minlen | combine({'action': 'apply', 'reason': 'enabled', 'disabled_by': none,
+         'ledger_entry': {'rule_id': native_minlen.rule_id, 'family': 'pwquality',
+                          'revert_strategy': 'recorded_value', 'prior_values': native_method_case.prior_values}}) }}
+
+- name: Native method | Plan the rule for apply and for cleanup in the pwquality family
+  ansible.builtin.set_fact:
+    native_method_family:
+      name: pwquality
+      disruptive: true
+      apply:
+        - "{{ native_method_rule }}"
+      cleanup:
+        - "{{ native_method_rule }}"
+
+- name: Native method | Plan the minlen rule with a ledger entry of the other method
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: []
+    __linux_compliance_remediate_rule: "{{ native_method_rule }}"
+    __linux_compliance_remediate_family: "{{ native_method_family }}"
+    __linux_compliance_remediate_plan:
+      enabled: true
+      families:
+        - "{{ native_method_family }}"
+    __linux_compliance_remediate_pwq_benchmark: "{{ native_method_case.benchmark }}"
+    __linux_compliance_remediate_pwq_values: "{{ {native_method_rule.rule_id: '14'} }}"
+    __linux_compliance_remediate_pwq_owned: "{{ [native_method_rule.parameters.path] }}"
+    __linux_compliance_remediate_pwq_sources: {}
+    __linux_compliance_remediate_pwq_main_stat:
+      isreg: true
+    __linux_compliance_remediate_pwq_directory_stat:
+      exists: true
+      isdir: true
+    __linux_compliance_remediate_pwq_removed: []
+    __linux_compliance_remediate_pwq_written: []
+
+- name: Native method | Run the main file apply helper
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: pwquality_main_apply.yml
+  when: native_method_case.helper == 'main_apply'
+
+- name: Native method | Run the main file cleanup helper
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: pwquality_main_cleanup.yml
+  when: native_method_case.helper == 'main_cleanup'
+
+- name: Native method | Run the drop-in apply helper
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: pwquality_dropin_apply.yml
+  when: native_method_case.helper == 'dropin_apply'
+
+- name: Native method | Run the drop-in cleanup helper
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: pwquality_dropin_cleanup.yml
+  when: native_method_case.helper == 'dropin_cleanup'
+
+- name: Native method | Check that the helper refused the entry of the other method and changed nothing
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_results | length == 1
+      - __linux_compliance_remediate_results[0].status == native_method_case.status
+      - (__linux_compliance_remediate_results[0].reason | default('', true)) is search(native_method_case.reason)
+      - __linux_compliance_remediate_results[0].changed is false
+    fail_msg: "{{ native_method_case.name }}: {{ __linux_compliance_remediate_results }}"
+    quiet: true

@@ -129,8 +129,10 @@ pwquality rule is `recorded_value`.
   `/etc/security/pwquality.conf` (`minlen = 14`, or `enforce_for_root`): it replaces the one active line of the
   setting, or appends the line when there is none. Before the change the ledger records the exact prior state of the
   setting and of the file: `setting_line` (the active line as it was, or `null` when the setting was absent), `mode`,
-  `owner`, `group` and `sha256` of the file. Cleanup writes the recorded line back in place, or removes the setting
-  when it was absent, and gives the file back its recorded mode, owner and group; with every rule cleaned up the file
+  `owner`, `group` and `sha256` of the file, with the `method` and the `written_line`. The collection never changes the
+  file's mode or ownership (`lineinfile` keeps them), so cleanup requires them to be unchanged rather than setting
+  them. Cleanup writes the recorded line back in place, or removes the setting when it was absent; with every rule
+  cleaned up the file
   is byte for byte the original, which the toggle lifecycle checks by SHA-256. No drop-in directory is created. A
   setting that is active on more than one line is not touched (`duplicate_setting`), because libpwquality would take
   the last one and the content's check requires every one to comply. Nothing overrides the main file, which
@@ -147,6 +149,28 @@ pwquality rule is `recorded_value`.
 
 On both platforms a rule is `notapplicable` when `/etc/security/pwquality.conf` does not exist, because libpwquality
 is not installed, as in the content.
+
+Refinements after the security review of PR #56 (findings B1, N1 and N2):
+
+- **The method belongs to the ledger entry.** Every entry records `method` (`main_file` or `dropin`) next to what it
+  wrote: `written_line` for the main file, `dropin_sha256` (the SHA-256 of the drop-in written) for a drop-in. The
+  benchmark only selects the method for new work. When an entry was recorded by the other method, which happens when a
+  content update moves a check to the other file, apply reports `method_changed` and writes nothing, and cleanup
+  reports `cleanup_incomplete` with the reason `method_changed`, keeps the entry and changes nothing. An entry without
+  a recorded method counts as the other method. Without this, a main-file entry cleaned up through the drop-in path
+  was forgotten and reported `restored` while the line stayed in place.
+- **Cleanup never overwrites a later change.** Before it restores anything, cleanup checks that the state is still
+  what the collection wrote: with the main file, the setting is active on exactly one line equal to `written_line`, and
+  the mode, owner and group of the file are the recorded ones; with a drop-in, its content has the recorded SHA-256.
+  Otherwise the result is `cleanup_incomplete` with the reason `modified_since_apply`, the file is left alone and the
+  entry is kept, so an administrator's later change survives and the rule is reported as not reverted. When the
+  profile value changes while a rule stays applied, apply writes the new value and replaces the entry with the same
+  prior state and the new `written_line` or `dropin_sha256`, so the check keeps matching.
+- **No symbolic links are followed.** A `pwquality.conf.d` that exists but is not a directory, a symbolic link
+  included, makes every drop-in rule `not_directory` (apply) or `cleanup_incomplete` (`not_directory`) without any
+  change; a drop-in that is a symbolic link is `not_regular_file`; and the directory and the marker are removed only
+  when the directory is a real directory and the marker a regular file. A file at a drop-in's path without the
+  collection's header is `not_owned` whether or not a ledger entry exists.
 
 Kept `audit_only`, each with its reason:
 

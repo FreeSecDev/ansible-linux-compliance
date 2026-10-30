@@ -452,6 +452,14 @@ half minutes on a WSL2 workstation. The customised pre-state (`0640`) is what sh
 restores the recorded prior value and not a distribution default: with the cleanup changed to always restore `0644`,
 the harness fails with `cleanup: files /etc/crontab: mode changed from 0640 to 0644`.
 
+After the last topic, `shared/tasks/lifecycle_pwquality_regressions.yml` runs regressions of the security review of
+PR #56 on both platforms: it applies pwquality, pretends the content of the other platform and checks that apply
+reports `method_changed` and cleanup `cleanup_incomplete` (`method_changed`) with every ledger entry kept and no file
+touched; it changes `minlen` by hand and checks that cleanup keeps the change as `modified_since_apply` while the other
+rules are restored; on Ubuntu it puts a symbolic link in place of `pwquality.conf.d`, selects the drop-in method and
+checks that every rule is `not_directory` and nothing is written through the link; and it compares the whole instance
+with its state before the regressions.
+
 With `banners` (four cycles) and `pwquality` (two cycles) each scenario runs ten cycles. On GitHub's `ubuntu-24.04`
 runners the whole `docker-ubuntu` job took 31 minutes, and `docker-rhel-compatible` ran past the former 45-minute
 job limit, so the `molecule-docker` jobs of `.github/workflows/ci.yml` now allow 90 minutes. Every further native topic

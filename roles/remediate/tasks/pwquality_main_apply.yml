@@ -27,6 +27,20 @@
   tags:
     - always
 
+- name: Password quality | Read the method and the values that the ledger entry of the rule records
+  vars:
+    __linux_compliance_remediate_pwq_recorded: >-
+      {{ (__linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+          | items2dict(key_name='name', value_name='value'))
+         if __linux_compliance_remediate_rule.ledger_entry is mapping else {} }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_entry: "{{ __linux_compliance_remediate_pwq_recorded }}"
+    __linux_compliance_remediate_pwq_entry_method: >-
+      {{ none if __linux_compliance_remediate_rule.ledger_entry is not mapping
+         else __linux_compliance_remediate_pwq_recorded.method | default('unknown') }}
+  tags:
+    - always
+
 - name: Password quality | Inspect the main file with its SHA-256 before changing it
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_pwquality_main }}"
@@ -71,7 +85,8 @@
 - name: Password quality | Decide whether the setting must be written
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_status: >-
-      {{ 'notapplicable' if not __linux_compliance_remediate_pwq_stat.stat.exists
+      {{ 'method_changed' if __linux_compliance_remediate_pwq_entry_method not in [none, 'main_file']
+         else 'notapplicable' if not __linux_compliance_remediate_pwq_stat.stat.exists
          else 'not_regular_file' if not __linux_compliance_remediate_pwq_stat.stat.isreg
          else 'duplicate_setting' if __linux_compliance_remediate_pwq_found | length > 1
          else 'compliant' if __linux_compliance_remediate_pwq_found == [__linux_compliance_remediate_pwq_line]
@@ -79,15 +94,19 @@
   tags:
     - always
 
-- name: Password quality | Record the prior line of the setting and the state of the main file before changing it
+- name: Password quality | Record the prior line of the setting, the line written and the state of the main file
   freesecdev.linux_compliance.control_state:
     action: record
     rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
     family: "{{ __linux_compliance_remediate_rule.family }}"
     revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
     prior_values:
+      - name: method
+        value: main_file
       - name: setting_line
         value: "{{ __linux_compliance_remediate_pwq_found | first | default(none) }}"
+      - name: written_line
+        value: "{{ __linux_compliance_remediate_pwq_line }}"
       - name: mode
         value: "{{ __linux_compliance_remediate_pwq_stat.stat.mode }}"
       - name: owner
@@ -101,6 +120,25 @@
   when:
     - __linux_compliance_remediate_pwq_status == 'applied'
     - __linux_compliance_remediate_rule.ledger_entry is none
+  tags:
+    - always
+
+- name: Password quality | Keep the recorded prior state and record the new line when the profile value changed
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+    family: "{{ __linux_compliance_remediate_rule.family }}"
+    revert_strategy: "{{ __linux_compliance_remediate_rule.revert_strategy }}"
+    prior_values: >-
+      {{ __linux_compliance_remediate_pwq_entry | combine({'written_line': __linux_compliance_remediate_pwq_line})
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ __linux_compliance_remediate_collection_version }}"
+    replace: true
+  register: __linux_compliance_remediate_pwq_rerecord
+  when:
+    - __linux_compliance_remediate_pwq_status in ['applied', 'compliant']
+    - __linux_compliance_remediate_pwq_entry_method == 'main_file'
+    - __linux_compliance_remediate_pwq_entry.written_line | default(none) != __linux_compliance_remediate_pwq_line
   tags:
     - always
 
@@ -126,8 +164,12 @@
            'status': __linux_compliance_remediate_pwq_status,
            'reason': ('the main file sets ' ~ __linux_compliance_remediate_rule.parameters.setting ~ ' '
                       ~ __linux_compliance_remediate_pwq_found | length ~ ' times')
-                     if __linux_compliance_remediate_pwq_status == 'duplicate_setting' else none,
-           'changed': __linux_compliance_remediate_pwq_write is changed,
+                     if __linux_compliance_remediate_pwq_status == 'duplicate_setting'
+                     else ('the ledger entry was recorded by the ' ~ __linux_compliance_remediate_pwq_entry_method
+                           ~ ' method; clean it up first')
+                     if __linux_compliance_remediate_pwq_status == 'method_changed' else none,
+           'changed': (__linux_compliance_remediate_pwq_write is changed)
+                      or (__linux_compliance_remediate_pwq_rerecord is changed),
            'message': __linux_compliance_remediate_pwquality_main ~ ' '
                       ~ __linux_compliance_remediate_rule.parameters.setting ~ ': '
                       ~ __linux_compliance_remediate_pwq_status
