@@ -27,6 +27,9 @@
     regression_foreign_dropin: /etc/modprobe.d/freesecdev-udf.conf
     regression_foreign_content: |
       blacklist udf
+    regression_early: xccdf_org.ssgproject.content_rule_kernel_module_hfs_disabled
+    regression_early_dropin: /etc/modprobe.d/freesecdev-hfs.conf
+    regression_early_file: /etc/modprobe.d/00-site-hfs.conf
     regression_dropins: "{{ lifecycle_rules | map(attribute='parameters') | map(attribute='path') | list }}"
     regression_items: "{{ lifecycle_items }}"
     regression_rewritten: "{{ lifecycle_rewritten }}"
@@ -35,8 +38,8 @@
   ansible.builtin.assert:
     that:
       - >-
-        [regression_edited, regression_removed, regression_elsewhere, regression_overridden, regression_foreign]
-        is subset(lifecycle_rule_ids)
+        [regression_edited, regression_removed, regression_elsewhere, regression_overridden, regression_foreign,
+         regression_early] is subset(lifecycle_rule_ids)
     fail_msg: "{{ regression_label }}: the profile selects only {{ lifecycle_rule_ids }}"
     quiet: true
 
@@ -65,6 +68,15 @@
   ansible.builtin.copy:
     content: "{{ regression_foreign_content }}"
     dest: "{{ regression_foreign_dropin }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Kernel module regressions | Let hfs load again in a file that modprobe reads before the drop-in
+  ansible.builtin.copy:
+    content: |
+      install hfs /sbin/modprobe --ignore-install hfs
+    dest: "{{ regression_early_file }}"
     mode: "0644"
     owner: root
     group: root
@@ -109,20 +121,29 @@
       {{ lifecycle_results | selectattr('status', 'equalto', 'applied') | map(attribute='rule_id') | list }}
     regression_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
 
-- name: Kernel module regressions | Check that the site file made hfsplus compliant and the udf file was not owned
+- name: Kernel module regressions | Check the site files' effects, hfsplus compliant, hfs overridden, udf not owned
   ansible.builtin.assert:
     that:
       - regression_statuses[regression_elsewhere] == 'compliant'
       - regression_statuses[regression_foreign] == 'not_owned'
+      - regression_statuses[regression_early] == 'overridden'
       - >-
         lifecycle_results | selectattr('rule_id', 'equalto', regression_foreign) | map(attribute='reason')
         | first is search('without the header')
       - >-
-        lifecycle_results | selectattr('rule_id', 'in', [regression_elsewhere, regression_foreign])
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_early) | map(attribute='reason')
+        | first is search(regression_early_file)
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', [regression_elsewhere, regression_foreign, regression_early])
         | selectattr('changed') | list == []
       - >-
-        regression_statuses | dict2items | rejectattr('key', 'in', [regression_elsewhere, regression_foreign])
+        regression_statuses | dict2items
+        | rejectattr('key', 'in', [regression_elsewhere, regression_foreign, regression_early])
         | map(attribute='value') | unique | list == ['applied']
+      - regression_early not in regression_applied_ids
+      - >-
+        regression_applied_files.results | selectattr('item', 'equalto', regression_early_dropin)
+        | map(attribute='stat') | map(attribute='exists') | list == [false]
       - regression_recorded | map(attribute='rule_id') | list == regression_applied_ids
       - regression_elsewhere not in regression_applied_ids
       - regression_foreign not in regression_applied_ids
@@ -355,6 +376,7 @@
     - "{{ regression_elsewhere_file }}"
     - "{{ regression_overridden_file }}"
     - "{{ regression_foreign_dropin }}"
+    - "{{ regression_early_file }}"
 
 - name: Kernel module regressions | Read the ledger after the regressions
   freesecdev.linux_compliance.control_state:

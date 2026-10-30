@@ -153,10 +153,11 @@ no protocol or wireless module rule, so a topic declaration may now name `profil
 platform's datastream that its cycles run with (`docs/molecule.md`): `filesystem_modules` runs with
 `cis_level2_server` on Ubuntu and `cis` on Rocky Linux, `protocol_modules` with `cis_level2_server` and `stig`, and
 `wireless_modules` with `bsi` on Rocky Linux only, because the Ubuntu datastream has no such rule. A golden test checks
-that these profiles select exactly the drop-ins that the declarations expect. The pre-state of `filesystem_modules`
-with a site file that disables cramfs and one, read first, that lets hfs load proves `compliant` and `overridden` in
-the cycles, and `shared/tasks/lifecycle_kernel_modules_regressions.yml` (group `changes`) a change of method, a drop-in
-changed and one removed by hand, a site file that already disables a module, a site file added after the apply that
-overrides the drop-in, and a file of the administrator at the drop-in's path. The containers cannot load kernel
+that these profiles select exactly the drop-ins that the declarations expect.
+`shared/tasks/lifecycle_kernel_modules_regressions.yml` (group `changes`, both platforms) proves a change of method, a
+drop-in changed and one removed by hand, a site file that already disables a module (`compliant`), a site file read
+first that lets a module load, before the apply and after it (`overridden`), and a file of the administrator at the
+drop-in's path. These cases run there rather than as a pre-state of the cycles, which kept the Rocky Linux rule leg
+above 15 minutes. The containers cannot load kernel
 modules, so `modprobe` itself is left to the libvirt scenarios (FREES-61), and every rule is `notapplicable` in a
 container scan; the drop-ins with their checksums and the golden tests are the evidence there.

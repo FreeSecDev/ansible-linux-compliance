@@ -538,11 +538,10 @@ a directory mode put back by hand is `restored` without a write.
 The kernel module topics ([ADR 0025](adr/0025-native-kernel-module-drop-ins.md)) run with the profiles that select
 their rules (`profiles` in the declaration): `filesystem_modules` with `cis_level2_server` on Ubuntu and `cis` on Rocky
 Linux, `protocol_modules` with `cis_level2_server` and `stig`, and `wireless_modules` with `bsi` on Rocky Linux only.
-`filesystem_modules` has a second pre-state, in the rule mode: a site file `/etc/modprobe.d/cramfs.conf` that already
-disables cramfs (`compliant`, no drop-in) and `00-site-hfs.conf`, read before the collection's drop-ins, that lets hfs
-load again (`overridden`, no drop-in). Its group `changes` (both platforms),
-`shared/tasks/lifecycle_kernel_modules_regressions.yml`, puts a site file that disables hfsplus and a file of the
-administrator at the udf drop-in's path before the apply (`compliant` and `not_owned`, neither recorded nor touched),
+The group `changes` of `filesystem_modules` (both platforms), `shared/tasks/lifecycle_kernel_modules_regressions.yml`,
+puts a site file that disables hfsplus, `00-site-hfs.conf`, read before the collection's drop-ins, that lets hfs load
+again, and a file of the administrator at the udf drop-in's path before the apply (`compliant`, `overridden` and
+`not_owned`, none recorded or touched),
 records every entry as if another method had written it (`method_changed` at apply and cleanup, every drop-in kept),
 adds a file read first that lets jffs2 load after the apply (`overridden`, nothing changed), changes the cramfs drop-in
 by hand and removes the freevxfs one (`modified_since_apply` kept, `restored` without a write), and finally puts the

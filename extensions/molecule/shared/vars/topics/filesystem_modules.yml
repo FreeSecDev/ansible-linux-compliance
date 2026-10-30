@@ -51,8 +51,6 @@ state:
       rewritten: true
     - path: /etc/modprobe.d/freesecdev-usb-storage.conf
       rewritten: true
-    - path: /etc/modprobe.d/cramfs.conf
-    - path: /etc/modprobe.d/00-site-hfs.conf
   packages:
     - name: kmod
   users:
@@ -158,31 +156,6 @@ applied:
 pre_states:
   - name: as built
     audit: true
-  - name: a site file that disables cramfs and one read before the collection's that lets hfs load
-    audit: false
-    modes:
-      - rule
-    files:
-      - path: /etc/modprobe.d/cramfs.conf
-        mode: "0644"
-        content: |
-          install cramfs /bin/true
-          blacklist cramfs
-      - path: /etc/modprobe.d/00-site-hfs.conf
-        mode: "0644"
-        content: |
-          install hfs /sbin/modprobe --ignore-install hfs
-    unchanged:
-      - rule: kernel_module_cramfs_disabled
-        status: compliant
-      - rule: kernel_module_hfs_disabled
-        status: overridden
-    applied:
-      files:
-        - path: /etc/modprobe.d/freesecdev-cramfs.conf
-          exists: false
-        - path: /etc/modprobe.d/freesecdev-hfs.conf
-          exists: false
 regressions:
   - name: changes
     files:
