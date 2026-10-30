@@ -91,25 +91,46 @@
                     | unique | sort if find_unreadable | length > 0 else []}}) }}
   when: find_aborted | length > 0
 
-- name: Find with checksums | Inspect the files that the walk left out by name, without following a link
-  ansible.builtin.stat:
-    path: "{{ find_path }}"
+- name: Find with checksums | List the entries that the walk left out by name, in the directories that hold them
+  ansible.builtin.find:
+    paths: "{{ find_known.extra | map('dirname') | unique | list }}"
+    patterns: "{{ find_known.excludes }}"
+    file_type: any
+    recurse: false
+    hidden: true
     follow: false
+    get_checksum: false
+  register: find_named
+  when:
+    - find_known is mapping
+    - find_aborted | length == 0
+    - find_known.extra | length > 0
+
+- name: Find with checksums | Take the checksum of those that their owner may read
+  ansible.builtin.find:
+    paths: "{{ find_known.extra | map('dirname') | unique | list }}"
+    patterns: "{{ find_known.excludes }}"
+    file_type: file
+    recurse: false
+    hidden: true
+    follow: false
+    mode: "0400"
+    exact_mode: false
     get_checksum: true
     checksum_algorithm: "{{ find_checksum_algorithm }}"
-    get_mime: false
-    get_attributes: false
-  loop: "{{ find_known.extra if find_known is mapping else [] }}"
-  loop_control:
-    loop_var: find_path
-  register: find_left_out
+  register: find_named_summed
   when:
     - find_known is mapping
     - find_aborted | length == 0
+    - find_known.extra | length > 0
 
-- name: Find with checksums | Turn the inspected files into entries of the walk
+- name: Find with checksums | Add the entries left out by name and their checksums to the walk
   ansible.builtin.set_fact:
-    find_extra: "{{ find_left_out.results | selectattr('stat.exists') | map(attribute='stat') | list }}"
+    find_extra: "{{ find_named.files }}"
+    find_sums: >-
+      {{ dict(find_named_summed.files | map(attribute='path')
+              | zip(find_named_summed.files | map(attribute='checksum'))) }}
   when:
     - find_known is mapping
     - find_aborted | length == 0
+    - find_known.extra | length > 0
