@@ -128,11 +128,20 @@
           delegate_to: localhost
           register: guard_pool
 
+        - name: Read the owner of the run's client key on the controller, the user that created the run's pool
+          ansible.builtin.stat:
+            path: "{{ molecule_target.identity_file }}"
+            follow: false
+            get_checksum: false
+          delegate_to: localhost
+          register: guard_key_owner
+
         - name: Check the isolation of every target before anything runs on it
           ansible.builtin.include_tasks:
             file: tasks/guard_libvirt_isolation.yml
           vars:
             guard_instance: "{{ molecule_target }}"
+            guard_pool_owner: "{{ guard_key_owner.stat.uid | default('none') }}"
             guard_domain_xml: "{{ guard_domain.get_xml | default('') }}"
             guard_network_xml: "{{ guard_network.get_xml | default('') }}"
             guard_pool_xml: "{{ guard_pool.get_xml | default('') }}"

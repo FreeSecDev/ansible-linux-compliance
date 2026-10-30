@@ -150,6 +150,10 @@
       guard_metadata_namespace: ""
       guard_pool_parent: /
       guard_host_apparmor: false
+      guard_pool_owner: "0"
+      guard_key_owner:
+        stat:
+          uid: 0
       guard_ssh_settings:
         host_key_checking: true
       molecule_target: "{{ selftest_probe }}"

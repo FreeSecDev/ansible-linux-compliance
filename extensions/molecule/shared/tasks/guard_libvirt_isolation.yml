@@ -8,6 +8,15 @@
         ~ '</fsd:instance>')
       - guard_domain_xml is search("<entry name='serial'>" ~ guard_instance.marker | regex_escape ~ '</entry>')
       - guard_domain_xml is search("<uuid>[0-9a-f-]{36}</uuid>")
+      - guard_domain_xml | regex_findall('<sysinfo[ />][^>]*>') == ["<sysinfo type='smbios'>"]
+      - guard_domain_xml | regex_findall('<entry[ />][^>]*>') | length == 3
+      - >-
+        guard_domain_xml | regex_findall("<entry name='(manufacturer|product|serial)'>") | unique | sort
+        == ['manufacturer', 'product', 'serial']
+      - guard_domain_xml | regex_findall('<smbios[ />][^>]*>') == ["<smbios mode='sysinfo'/>"]
+      - guard_domain_xml | regex_findall("<(?!source )[A-Za-z][A-Za-z0-9:_.-]*\\s[^>]*\\bfile=") | length == 0
+      - guard_domain_xml | regex_findall('<watchdog[ />][^>]*>') | reject('match', guard_allowed_watchdog) | list
+        | length == 0
       - guard_domain_xml is not search('xmlns:(?!fsd=)')
       - guard_domain_elements | difference(guard_domain_allowed_elements) | length == 0
       - guard_domain_xml | regex_findall('<source[ />]') | length == guard_domain_sources | length
@@ -50,6 +59,7 @@
         guard_network_xml | regex_findall('<([A-Za-z][A-Za-z0-9:_.-]*)') | unique
         | difference(guard_network_allowed_elements) | length == 0
       - guard_network_xml is not search('<forward')
+      - guard_network_xml is not search('ipv6=')
       - guard_network_xml is not search('<(dhcp|route|portgroup|virtualport|tftp|bootp)[ >/]')
       - guard_network_xml is search("<bridge name='" ~ guard_instance.bridge | regex_escape ~ "'")
       - guard_network_xml is search("<dns enable='no'/>")
@@ -67,6 +77,8 @@
       - guard_pool_xml is search('<name>' ~ guard_instance.pool | regex_escape ~ '</name>')
       - guard_instance.pool_path == guard_pool_parent ~ '/' ~ guard_instance.pool
       - guard_pool_xml is search('<path>' ~ guard_instance.pool_path | regex_escape ~ '</path>')
+      - guard_pool_xml | regex_findall('<mode>[^<]*</mode>') == ['<mode>0711</mode>']
+      - guard_pool_xml | regex_findall('<owner>[^<]*</owner>') == ['<owner>' ~ guard_pool_owner ~ '</owner>']
       - guard_ssh_settings.host_key_checking | bool
       - guard_ssh_settings.plugin_host_key_checking | bool
       - guard_ssh_settings.ssh_args == guard_default_ssh_args
@@ -82,7 +94,8 @@
       recorded disk and seed as files of the run's pool without backing files, one interface on the run's network, a
       pseudo-terminal console, the random number generator on /dev/urandom, the pinned emulator and dynamic security
       labels with relabelling{{ ' under AppArmor' if guard_host_apparmor | bool else '' }}. The network must have
-      only the recorded bridge and address, without forwarding, DHCP or DNS. Host key checking must be on, and the SSH
+      only the recorded bridge and IPv4 address, without forwarding, DHCP or DNS, and the pool its own directory
+      with mode 0711, owned by the user that owns the run's key. Host key checking must be on, and the SSH
       arguments, executable, control path and copy arguments of the Ansible configuration must be the defaults.
       Elements outside the allow-list: {{ guard_domain_elements | difference(guard_domain_allowed_elements) }}.
     success_msg: Virtual machine {{ guard_instance.domain }} is isolated on the run's own network.
@@ -109,6 +122,7 @@
     guard_allowed_sources: "^({{ guard_allowed_source_alternatives | join('|') }})$"
     guard_allowed_driver: "^<driver name='qemu' type='(qcow2|raw)'/>$"
     guard_allowed_emulator: '^<emulator>(/usr/bin/qemu-system-x86_64|/usr/libexec/qemu-kvm)</emulator>$'
+    guard_allowed_watchdog: "^<watchdog model='[a-z0-9-]+' action='(reset|poweroff|none)'/?>$"
     guard_allowed_input: "^<input type='(mouse|keyboard|tablet)' bus='(ps2|usb|virtio)'/?>$"
     guard_allowed_seclabel: "^<seclabel type='dynamic' model='(dac|apparmor|selinux)' relabel='yes'>$"
     guard_allowed_label_alternatives:

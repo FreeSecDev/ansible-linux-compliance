@@ -142,6 +142,11 @@
         - ".*"
       guard_allowed_label: ".*"
       guard_host_apparmor: false
+      guard_allowed_watchdog: ".*"
+      guard_pool_owner: "0"
+      guard_key_owner:
+        stat:
+          uid: 0
       guard_default_control_path_dir: /tmp
       guard_molecule_control_path: /tmp/selftest
       guard_default_ssh_args: ""

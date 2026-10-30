@@ -170,11 +170,17 @@ guard_libvirt_simulation:
       <ip address='10.210.5.1' netmask='255.255.255.0'>
       </ip>
     </network>
+  pool_owner: 1000
   good_pool_xml: |
     <pool type='dir'>
       <name>fsd-mol-libvirt-sim-abcd1234</name>
       <target>
         <path>/var/lib/libvirt/freesecdev-molecule/fsd-mol-libvirt-sim-abcd1234</path>
+        <permissions>
+          <mode>0711</mode>
+          <owner>1000</owner>
+          <group>118</group>
+        </permissions>
       </target>
     </pool>
 
@@ -435,6 +441,43 @@ guard_libvirt_cases:
     domain_edits:
       - ["<partition>/machine</partition>", "<partition>/system.slice</partition>"]
     refused: true
+  - name: fw_cfg entry that exposes a host file to the guest
+    domain_edits:
+      - - "</sysinfo>"
+        - "</sysinfo><sysinfo type='fwcfg'><entry name='opt/com.example/leak' file='/etc/shadow'/></sysinfo>"
+    refused: true
+  - name: fw_cfg sysinfo instead of SMBIOS
+    domain_edits:
+      - ["<sysinfo type='smbios'>", "<sysinfo type='fwcfg'>"]
+      - ["<system>", ""]
+      - ["</system>", ""]
+    refused: true
+  - name: inline fw_cfg entry
+    domain_edits:
+      - - "</sysinfo>"
+        - "</sysinfo><sysinfo type='fwcfg'><entry name='opt/com.example/value'>secret</entry></sysinfo>"
+    refused: true
+  - name: SMBIOS entry read from a host file
+    domain_edits:
+      - ["<entry name='product'>molecule</entry>", "<entry name='product' file='/etc/shadow'/>"]
+    refused: true
+  - name: additional SMBIOS entry
+    domain_edits:
+      - - "<entry name='product'>molecule</entry>"
+        - "<entry name='product'>molecule</entry><entry name='family'>x</entry>"
+    refused: true
+  - name: SMBIOS data of the host
+    domain_edits:
+      - ["<smbios mode='sysinfo'/>", "<smbios mode='host'/>"]
+    refused: true
+  - name: watchdog that dumps guest memory on the host
+    domain_edits:
+      - ["<watchdog model='itco' action='reset'>", "<watchdog model='itco' action='dump'>"]
+    refused: true
+  - name: watchdog that powers the machine off
+    domain_edits:
+      - ["<watchdog model='itco' action='reset'>", "<watchdog model='itco' action='poweroff'>"]
+    refused: false
   - name: element of another namespace
     domain_edits:
       - ["<fsd:molecule ", "<x:extra xmlns:x='urn:x'/><fsd:molecule "]
@@ -568,6 +611,10 @@ guard_libvirt_cases:
     network_edits:
       - ["<dns enable='no'/>", "<dns enable='no'/><port isolated='no'/>"]
     refused: true
+  - name: network with IPv6 between guest and host
+    network_edits:
+      - ["<network connections='1'>", "<network connections='1' ipv6='yes'>"]
+    refused: true
   - name: network of another run
     network_edits:
       - ["<fsd:run>abcd1234</fsd:run>", "<fsd:run>zzzz9999</fsd:run>"]
@@ -583,6 +630,18 @@ guard_libvirt_cases:
   - name: pool with a host device as its source
     pool_edits:
       - ["<target>", "<source><device path='/dev/sda'/></source><target>"]
+    refused: true
+  - name: pool directory writable by everyone
+    pool_edits:
+      - ["<mode>0711</mode>", "<mode>0777</mode>"]
+    refused: true
+  - name: pool directory owned by another user
+    pool_edits:
+      - ["<owner>1000</owner>", "<owner>0</owner>"]
+    refused: true
+  - name: pool directory without permissions
+    pool_edits:
+      - ["<mode>0711</mode>", ""]
     refused: true
   - name: pool of another name
     pool_edits:
