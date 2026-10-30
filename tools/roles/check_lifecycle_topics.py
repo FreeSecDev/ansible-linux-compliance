@@ -108,8 +108,9 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
 PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
-    {"name", "audit", "files", "unchanged", "applied", "requires"}
+    {"name", "audit", "modes", "files", "unchanged", "applied", "requires"}
 )
+TOGGLE_MODES: Final[frozenset[str]] = frozenset({"topic", "rule"})
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
 UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
 REWRITTEN_KEY: Final[str] = "rewritten"
@@ -395,6 +396,18 @@ class Declaration:
         if platforms is None or any(platform not in self.platforms for platform in platforms):
             self.error(f"{what}.audit must be a boolean or a non-empty list of known platforms")
 
+    def _pre_state_runs(self, item: dict[str, object], what: str) -> None:
+        """Check where a pre-state scans and in which toggle modes it runs, when it names them."""
+        if "audit" in item and not isinstance(item["audit"], bool):
+            self._audit_platforms(item["audit"], what)
+        if "modes" not in item:
+            return
+        modes = _strings(item["modes"])
+        if modes is None or len(set(modes)) != len(modes) or not set(modes) <= TOGGLE_MODES:
+            self.error(
+                f"{what}.modes must be a non-empty list of distinct toggle modes: topic, rule"
+            )
+
     def _pre_state_content(self, item: dict[str, object], where: str) -> None:
         """Check a file that the pre-state writes, as root, before a cycle and removes after it."""
         content = item["content"]
@@ -500,8 +513,7 @@ class Declaration:
                 self.error(f"{what} repeats the name {name!r}")
             else:
                 names.add(str(name))
-            if "audit" in item and not isinstance(item["audit"], bool):
-                self._audit_platforms(item["audit"], what)
+            self._pre_state_runs(item, what)
             if "files" in item:
                 self.pre_state_files(item["files"], what)
             self._pre_state_requires(item, what)

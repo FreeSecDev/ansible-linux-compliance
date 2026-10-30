@@ -488,8 +488,9 @@ before the collection's drop-ins and which sets `MaxAuthTries` first, and `60-si
 and which sets `LoginGraceTime 120` and `ClientAliveInterval 900`. The three rules are `overridden`: their drop-ins are
 expected absent, they are neither recorded nor cleaned up, and the scan must report them `fail` (on Rocky Linux,
 `notapplicable`), which the harness checks for every overridden rule of a pre-state with scans; every other rule is
-applied and passes, and the cleanup leaves both site files alone. The two site files share one pre-state so that each
-leg runs two cycles. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
+applied and passes, and the cleanup leaves both site files alone. The two site files share one pre-state, which runs with the rule
+toggle only (`modes: [rule]`): the `rule` leg runs two cycles and the `topic` leg one cycle and both sets of
+regressions. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
 because no rule of the lifecycle profiles conflicts with their lines. `shared/tasks/lifecycle_ssh_regressions.yml`
 runs after the topic when the run
 includes `ssh` in the topic mode, so in CI in the `ssh` `topic` leg, narrowed like a profile to
@@ -503,9 +504,8 @@ marker, removed again by the cleanup, and a symbolic link in its place makes eve
 written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the directory regressions run on Ubuntu
 only. The regressions end with the whole-instance comparison.
 
-`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs in the `ssh` `topic` leg on Ubuntu and the `rule` leg on Rocky
-Linux (`lifecycle_vendor_regression_mode` in `shared/vars/lifecycle.yml`), so that no leg carries both the directory
-regressions and the vendor regressions and every leg stays well under the 18 minutes of the job. It adds `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs after them in the same `ssh` `topic` leg, which runs one cycle
+against the two of the `rule` leg, so that both legs stay well under the 18 minutes of the job. It adds `sshd_disable_x11_forwarding` (and on Rocky Linux `sshd_disable_gssapi_auth`), which the
 lifecycle profiles do not select, to the verified profile and checks the vendor-line method of ADR 0023 on
 `/etc/ssh/sshd_config` (Ubuntu) and `/etc/ssh/sshd_config.d/50-redhat.conf` (Rocky Linux): after the apply every
 occurrence that the content's check reads has the value `no` and the ledger records the original line; a second apply
@@ -602,7 +602,7 @@ pre_states:
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |
 

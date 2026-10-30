@@ -211,22 +211,25 @@ lifecycle profiles changes them, which the declaration proves) and two pre-state
 state, and a customised one with a site drop-in read after the collection's, which sets `LoginGraceTime` and
 `ClientAliveInterval`, and an earlier one that sets `MaxAuthTries` first. In the customised state those three rules are
 `overridden`, nothing is written for them, and the scan must report them `fail`, which the harness now checks for
-every overridden rule of a pre-state with scans. Three harness extensions, each checked by
-`tools/roles/check_lifecycle_topics.py`:
+every overridden rule of a pre-state with scans. The customised pre-state runs with the rule toggle only
+(`modes: [rule]`), because the overridden statuses do not depend on the toggle and a second cycle of it would push the
+`topic` leg past its time budget. Four harness extensions, each checked by `tools/roles/check_lifecycle_topics.py`:
 
 - a pre-state file may give `content`: the harness writes it as root before the cycle and removes it afterwards, which
   is how the customised pre-state adds the two site drop-ins;
 - a pre-state may list rules `unchanged` with the status `overridden`, and may replace expectations of `applied`
   (`applied` inside the pre-state), so that the overridden rule's drop-in is expected absent;
-- an `applied` expectation may name the same path once per platform, for a drop-in whose value differs per profile.
+- an `applied` expectation may name the same path once per platform, for a drop-in whose value differs per profile;
+- a pre-state may list the toggle `modes` in which its cycles run, and `audit` may list the platforms on which its
+  cycles scan.
 
 `shared/tasks/lifecycle_ssh_regressions.yml` runs in the `topic` leg of `ssh`: a drop-in that sshd refuses makes every
 rule `invalid_config` with nothing installed; an entry of another method is refused on apply and on cleanup; a change
 by hand is kept as `modified_since_apply`; a drop-in removed by hand is restored without a write; and, on Ubuntu, where
 the directory is empty as built, a missing directory is created with the marker and removed again, and a symbolic link
 in its place makes every rule `not_directory` with nothing written through it.
-`shared/tasks/lifecycle_ssh_vendor_regressions.yml` runs in the `topic` leg on Ubuntu and the `rule` leg on RHEL
-compatible hosts, so that the legs stay of similar length: it adds `sshd_disable_x11_forwarding` (and on RHEL `sshd_disable_gssapi_auth`) to the profile, applies them and
+`shared/tasks/lifecycle_ssh_vendor_regressions.yml` also runs in the `topic` leg, which runs one cycle against the
+two of the `rule` leg, so that the legs stay of similar length: it adds `sshd_disable_x11_forwarding` (and on RHEL `sshd_disable_gssapi_auth`) to the profile, applies them and
 checks that every occurrence that the check reads now has the compliant value, that a second apply is compliant, and
 that cleanup writes the vendor file back byte for byte; that a change by hand to the changed line is kept as
 `modified_since_apply` and, once restored by hand with other spacing, left alone while the rule is reported
@@ -256,6 +259,6 @@ with mode `0600`, which the CIS and STIG drop-in permission rules require.
 
 ## Operational consequences
 
-The Ubuntu and Rocky Linux Molecule images grow by openssh-server. Each `ssh` lifecycle leg runs two cycles, and the
-`topic` leg the regressions as well, narrowed to two rules so that the leg stays within the time budget of the merge
-queue.
+The Ubuntu and Rocky Linux Molecule images grow by openssh-server. The `ssh` `rule` leg runs two cycles, and the
+`topic` leg one cycle and both sets of regressions, narrowed to two rules (four with the vendor rules), so that each leg
+stays within the time budget of the merge queue.

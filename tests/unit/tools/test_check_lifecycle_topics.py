@@ -838,3 +838,16 @@ def test_an_invalid_audit_value_is_reported(tmp_path: Path, audit: object) -> No
     errors = errors_for(tmp_path, changed(pre_states=[{"name": "a", "audit": audit}]))
     message = "pre_states[0].audit must be a boolean or a non-empty list of known platforms"
     assert any(message in error for error in errors), errors
+
+
+@pytest.mark.parametrize("modes", [["rule"], ["topic"], ["topic", "rule"]])
+def test_a_pre_state_may_run_its_cycles_in_some_modes(tmp_path: Path, modes: list[str]) -> None:
+    pre_states = [{"name": "as built", "modes": modes}]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize("modes", ["rule", [], ["both"], ["rule", "rule"], [1]])
+def test_an_invalid_modes_value_is_reported(tmp_path: Path, modes: object) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[{"name": "a", "modes": modes}]))
+    message = "pre_states[0].modes must be a non-empty list of distinct toggle modes: topic, rule"
+    assert any(message in error for error in errors), errors

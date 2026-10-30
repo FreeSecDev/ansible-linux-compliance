@@ -145,14 +145,16 @@
     lifecycle_broad_pristine: "{{ lifecycle_broad_lines }}"
   when: lifecycle_runs | bool
 
-- name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state
+- name: Lifecycle topic | Run every cycle, topic toggle before rule toggle, for every declared pre-state of the mode
   ansible.builtin.include_tasks:
     file: lifecycle_cycle.yml
   loop: "{{ lifecycle_run_modes | product(lifecycle_pre_states) | list }}"
   loop_control:
     loop_var: lifecycle_cycle
     label: "{{ lifecycle_cycle.0 }} toggle from the {{ lifecycle_cycle.1.name }} state"
-  when: lifecycle_runs | bool
+  when:
+    - lifecycle_runs | bool
+    - lifecycle_cycle.0 in lifecycle_cycle.1.modes | default(lifecycle_toggle_modes)
 
 - name: Lifecycle topic | Take the state of the topic after every cycle
   ansible.builtin.include_tasks:
