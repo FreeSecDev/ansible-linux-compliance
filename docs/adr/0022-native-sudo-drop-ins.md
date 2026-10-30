@@ -60,10 +60,13 @@ group become uid and gid 0. The ledger records `method: attribute`, the prior at
 and `written`, the value the collection set, with `ansible.builtin.file` and `follow: false`.
 
 The values follow ADR 0021: `var_sudo_logfile` is exported by the check. `var_sudo_timestamp_timeout` is not, because
-the check accepts any non-negative timeout; the catalogue entry therefore sets `profile_value_source: fix`, and
-`make catalogue` takes the value that the content's own fixes substitute, refusing generation when they do not
-(`tools/roles/profile_values.py`). The profile's `refine-value` stays the only source; nothing is chosen by the
-collection. Every value is checked against the rule's `value_pattern` (an absolute path, or one to four digits) and
+the check accepts any non-negative timeout. Amended by FREES-188
+([ADR 0025](0025-own-ansible-remediation-only.md)): the catalogue entry pins the value's full identifier,
+`profile_value_id: xccdf_org.ssgproject.content_value_var_sudo_timestamp_timeout`, and `make catalogue` resolves it from
+each profile's `refine-value` and the `Value`'s options, failing when a pinned datastream does not define it
+(`tools/roles/profile_values.py`). The content's `fix` elements are no longer read. Every profile keeps its value
+(15 for CIS, 0 for the STIG, 5 for CCN and PCI DSS), which a golden test pins. The profile's `refine-value` stays the
+only source; nothing is chosen by the collection. Every value is checked against the rule's `value_pattern` (an absolute path, or one to four digits) and
 every line against `^Defaults !?[a-z_]{1,32}(={value})?$` before the family changes anything.
 
 ### 2. Apply refuses what it cannot make take effect, and changes nothing then
@@ -155,7 +158,7 @@ not by sudoers grammar. Two refusals are stricter than sudo needs and are accept
 are `conflicting_setting`. A partial set of the `!targetpw`, `!rootpw` and `!runaspw` lines elsewhere no longer
 conflicts; the drop-in then holds all three. sudo
 writes `/var/log/sudo.log` once `logfile` is set; the log is sudo's, not the collection's, and cleanup does not remove
-it. The fix-sourced timeout is not compared by the audit, so an operator can lower it by hand without the audit
+it. The pinned timeout is not compared by the audit, so an operator can lower it by hand without the audit
 noticing; cleanup then keeps the change as `modified_since_apply`.
 
 ## Security implications

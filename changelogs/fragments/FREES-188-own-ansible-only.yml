@@ -1,0 +1,22 @@
+---
+security_fixes:
+  - >-
+    catalogue - remediation never reads the scanner's remediation code. The catalogue generator no longer parses the
+    ``fix`` elements of the datastreams, and ``profile_value_source`` is removed. A rule whose check accepts a range
+    pins the XCCDF ``Value`` it uses with ``profile_value_id`` in ``content/catalogue.yml``, and the value still comes
+    only from the profile's ``refine-value`` and the ``Value``'s options. ``sudo_require_reauthentication`` keeps its
+    ``timestamp_timeout`` of 15 for CIS, 0 for the STIG and 5 for CCN and PCI DSS, which a golden test pins (ADR 0025).
+minor_changes:
+  - >-
+    Repository guard - ``make lint-repo`` refuses Python in ``tools/`` and ``plugins/`` that reads XCCDF ``fix``
+    elements, any committed ComplianceAsCode or OpenSCAP remediation content (generated playbooks and Bash fixes,
+    ``ssg-*`` files, ``fix`` elements, the kickstart add-on), and any invocation of the scanner's remediation
+    (``--remediate``, ``xccdf remediate``, ``generate fix``, ``--fix-type``) or of a script that the scanner provides in
+    tasks, makefiles, workflows, scripts, container files and Python. Only the checklist ``fixtext``, the process
+    helper's forbidden words and the Grype ``fix`` object are pinned exceptions (FREES-188).
+trivial:
+  - >-
+    Documentation - README, the remediation guide, the native remediation guide, ADR 0003, ADR 0021, ADR 0022, the
+    threat model and the upstream research now say plainly that remediation is our own Ansible only, that the OVAL is
+    used only to audit and as a reference in golden tests, and that a rule without a native remediation is
+    ``not_implemented`` (ADR 0025).
