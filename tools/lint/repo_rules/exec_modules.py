@@ -134,14 +134,19 @@ def _task_findings(
                 modules.append(found)
     arguments = [value for name, _, value in items if name == ARGS_KEY]
     for module, sources in modules:
-        refused = MODULE_PARAMETERS[module_name(module)]
-        for source in (*sources, *arguments):
-            for node, parameter, given in _parameter_nodes(source):
-                if parameter in refused and not (
-                    any(source is item for item in sources)
-                    and _allowed(relative, module, parameter, given)
-                ):
-                    yield node, _problem(module, parameter)
+        yield from _module_findings(module, sources, arguments, relative)
+
+
+def _module_findings(
+    module: str, sources: list[yaml.Node], arguments: list[yaml.Node], relative: Path | None
+) -> Iterator[tuple[yaml.Node, str]]:
+    """Yield the refused parameters of one module, allowing only reviewed values of its own."""
+    refused = MODULE_PARAMETERS[module_name(module)]
+    for source in (*sources, *arguments):
+        own = any(source is item for item in sources)
+        for node, parameter, given in _parameter_nodes(source):
+            if parameter in refused and not (own and _allowed(relative, module, parameter, given)):
+                yield node, _problem(module, parameter)
 
 
 def _defaults_findings(value: yaml.Node) -> Iterator[tuple[yaml.Node, str]]:
