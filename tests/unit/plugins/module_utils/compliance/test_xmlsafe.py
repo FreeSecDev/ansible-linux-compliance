@@ -426,16 +426,17 @@ def test_positions_name_the_tag_of_every_event_across_chunks(size: int) -> None:
     chunks = [POSITIONED[index : index + size] for index in range(0, len(POSITIONED), size)]
     xmlsafe.parse_chunks(chunks, recorder, on_position=positions.append)
     tags = [event for event in recorder.events if event[0] in {"start", "end"}]
-    assert list(zip(tags, positions, strict=True)) == [
-        (("start", "a"), 0),
-        (("start", "b"), 12),
-        (("end", "b"), 22),
-        (("start", "c"), 25),
-        (("start", "d"), 29),
-        (("end", "d"), 33),
-        (("end", "c"), 33),
-        (("end", "a"), 38),
+    assert tags == [
+        ("start", "a"),
+        ("start", "b"),
+        ("end", "b"),
+        ("start", "c"),
+        ("start", "d"),
+        ("end", "d"),
+        ("end", "c"),
+        ("end", "a"),
     ]
+    assert positions == [0, 12, 22, 25, 29, 33, 33, 38]
     assert POSITIONED[38:42] == b"</a>"
 
 
