@@ -366,7 +366,11 @@ jobs:
         with:
           version: 0.13.1
           enable-cache: false
-      - name: Restore the verified cloud images and packages
+      - name: Restore the verified cloud images and packages, except in a pull request from a fork
+        if: >-
+          github.event_name != 'pull_request'
+          || (!github.event.pull_request.head.repo.fork
+          && github.event.pull_request.head.repo.full_name == github.repository)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: build/molecule-libvirt/cache

@@ -236,8 +236,9 @@ in the middle of a test. Then it copies the datastream as for Docker.
 ## Differences that only a virtual machine has
 
 A running system writes to some files continuously. For a libvirt target the no-change snapshot and the whole-instance
-comparison of the lifecycle ignore the size, times and content of these files, but not their existence, type, mode,
-owner or inode (`contract_snapshot_volatile_contents_by_driver` in `shared/vars/contract.yml`):
+comparison of the lifecycle ignore the size, times, content and inode of these files (a service may replace one by
+renaming a new copy over it), but not their existence, type, mode or owner
+(`contract_snapshot_volatile_contents_by_driver` in `shared/vars/contract.yml`):
 
 | Path | Why |
 |---|---|
@@ -295,7 +296,8 @@ entry per scenario plus `libvirt-selftest`, and is part of `ci-gate`. It:
 3. installs exact versions of `qemu-system-x86`, `qemu-utils`, `libvirt-daemon-system`, `libvirt-dev` and
    `pkg-config` from a fixed Ubuntu archive snapshot (`apt-get --snapshot`), checks the installed versions and adds the
    runner user to the `libvirt` group;
-4. restores `build/molecule-libvirt/cache` keyed by the platform and the SHA-256 of the pins file; the fetch script
+4. restores `build/molecule-libvirt/cache` keyed by the platform and the SHA-256 of the pins file, except in a pull
+   request from a fork, as for the SCC download; the fetch script
    checks every restored file again;
 5. runs the make target under `sg libvirt`, because the group membership is new, with a timeout of 240 minutes, and
    prints the libvirt objects afterwards.

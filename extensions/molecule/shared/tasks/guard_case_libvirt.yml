@@ -8,7 +8,7 @@
         guard_scenario: "{{ guard_libvirt_simulation.scenario }}"
         guard_driver: libvirt
         guard_instances: "{{ guard_libvirt_simulation.instances }}"
-        guard_hostname: "{{ guard_case.hostname | default('instance') }}"
+        guard_hostname: "{{ guard_case.hostname | default('probe') }}"
         guard_connection_vars: >-
           {{ guard_libvirt_simulation.good_connection_vars | combine(guard_case.connection_vars | default({})) }}
         guard_allowed_connections:

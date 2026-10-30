@@ -2,7 +2,7 @@
 guard_libvirt_simulation:
   scenario: libvirt-sim
   instances:
-    - instance: instance
+    - instance: probe
       address: 10.210.5.10
       user: root
       port: 22
@@ -13,14 +13,14 @@ guard_libvirt_simulation:
       run_id: abcd1234
       image: ubuntu
       marker: simulatedmarkersimulatedmarker00
-      domain: fsd-mol-libvirt-sim-abcd1234-instance
+      domain: fsd-mol-libvirt-sim-abcd1234-probe
       network: fsd-mol-libvirt-sim-abcd1234
       bridge: fsdmabcd1234
       gateway: 10.210.5.1
       pool: fsd-mol-libvirt-sim-abcd1234
       pool_path: /var/lib/libvirt/freesecdev-molecule/fsd-mol-libvirt-sim-abcd1234
-      disk: fsd-mol-libvirt-sim-abcd1234-instance.qcow2
-      seed: fsd-mol-libvirt-sim-abcd1234-instance-seed.iso
+      disk: fsd-mol-libvirt-sim-abcd1234-probe.qcow2
+      seed: fsd-mol-libvirt-sim-abcd1234-probe-seed.iso
       mac: 52:54:00:aa:bb:cc
       known_hosts: /simulated/ephemeral/libvirt/known_hosts
       uuid: 0c6b2e5e-1d2f-4c3b-9a8e-7f6d5c4b3a21
@@ -52,13 +52,13 @@ guard_libvirt_simulation:
     controller_machine_id: ffeeddccbbaa99887766554433221100
   good_domain_xml: |
     <domain type='kvm' id='1'>
-      <name>fsd-mol-libvirt-sim-abcd1234-instance</name>
+      <name>fsd-mol-libvirt-sim-abcd1234-probe</name>
       <uuid>0c6b2e5e-1d2f-4c3b-9a8e-7f6d5c4b3a21</uuid>
       <metadata>
         <fsd:molecule xmlns:fsd="https://github.com/FreeSecDev/ansible-linux-compliance/molecule">
           <fsd:scenario>libvirt-sim</fsd:scenario>
           <fsd:run>abcd1234</fsd:run>
-          <fsd:instance>instance</fsd:instance>
+          <fsd:instance>probe</fsd:instance>
         </fsd:molecule>
       </metadata>
       <sysinfo type='smbios'>
@@ -68,11 +68,10 @@ guard_libvirt_simulation:
       </sysinfo>
       <devices>
         <disk type='volume' device='disk'>
-          <source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-instance.qcow2' index='2'/>
+          <source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2' index='2'/>
         </disk>
         <disk type='volume' device='cdrom'>
-          <source pool='fsd-mol-libvirt-sim-abcd1234'
-            volume='fsd-mol-libvirt-sim-abcd1234-instance-seed.iso' index='1'/>
+          <source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-probe-seed.iso' index='1'/>
           <readonly/>
         </disk>
         <interface type='network'>
@@ -213,7 +212,7 @@ guard_libvirt_cases:
     refused: true
   - name: virtual machine without labels
     domain_edits:
-      - ["<fsd:instance>instance</fsd:instance>", ""]
+      - ["<fsd:instance>probe</fsd:instance>", ""]
     refused: true
   - name: virtual machine with another marker
     domain_edits:
@@ -221,7 +220,7 @@ guard_libvirt_cases:
     refused: true
   - name: virtual machine with another name
     domain_edits:
-      - ["<name>fsd-mol-libvirt-sim-abcd1234-instance</name>", "<name>adlab-ubuntu</name>"]
+      - ["<name>fsd-mol-libvirt-sim-abcd1234-probe</name>", "<name>adlab-ubuntu</name>"]
     refused: true
   - name: second interface bridged to the host network
     domain_edits:
@@ -277,13 +276,13 @@ guard_libvirt_cases:
       - ["<disk type='volume' device='disk'>", "<disk type='file' device='disk'>"]
       - - >-
           <source pool='fsd-mol-libvirt-sim-abcd1234'
-          volume='fsd-mol-libvirt-sim-abcd1234-instance.qcow2' index='2'/>
+          volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2' index='2'/>
         - "<source file='/var/lib/libvirt/images/adlab-ubuntu.qcow2'/>"
     refused: true
   - name: disk from another pool
     domain_edits:
-      - - "<source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-instance.qcow2'"
-        - "<source pool='default' volume='fsd-mol-libvirt-sim-abcd1234-instance.qcow2'"
+      - - "<source pool='fsd-mol-libvirt-sim-abcd1234' volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2'"
+        - "<source pool='default' volume='fsd-mol-libvirt-sim-abcd1234-probe.qcow2'"
     refused: true
   - name: third disk with a host block device
     domain_edits:

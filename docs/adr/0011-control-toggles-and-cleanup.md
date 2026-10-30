@@ -726,7 +726,7 @@ init system. The libvirt scenarios of ADR 0009 answer it ([libvirt guide](../mol
   platform that the topic does not list under `unselected_platforms`, so a native topic that requires libvirt must run
   in a libvirt scenario on each of its platforms, and CI runs every scenario of each driver.
 - **A virtual machine has more state than a container.** For a libvirt instance the whole-instance comparison ignores
-  the contents, but not the existence, mode, owner or inode, of the system logs, the login accounting, the journal and
+  the contents and inode, but not the existence, mode or owner, of the system logs, the login accounting, the journal and
   three service state files that a running system rewrites by itself; the list and its reasons are in the libvirt guide.
 - **A VM-only case.** The `file_permissions` declaration gains a pre-state that changes the owner and group of
   `/etc/crontab` and requires libvirt, because a container without `CAP_CHOWN` cannot set it. It proves that cleanup
