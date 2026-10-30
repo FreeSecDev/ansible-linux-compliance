@@ -3,3 +3,4 @@ rules:
   undocumented-permissions:
     ignore:
       - oidc-check.yml:20
+      - scc-release-watch.yml:23
