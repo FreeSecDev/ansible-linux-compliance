@@ -11,6 +11,10 @@
     - vars/guard_cases.yml
     - vars/guard_cases_libvirt.yml
   tasks:
+    - name: Check that the no-change failure message names only the entries that changed
+      ansible.builtin.include_tasks:
+        file: tasks/snapshot_message_check.yml
+
     - name: Refuse simulated bypass attempts and accept a disposable container, whatever the driver
       ansible.builtin.include_tasks:
         file: tasks/guard_case.yml
@@ -250,7 +254,7 @@
         fail_msg: >-
           The watched paths changed during a check-mode run, a run without the opt-in, a repeated cleanup or a
           rejected input:
-          {{ (verify_snapshot_before_lines.splitlines() | symmetric_difference(snapshot_lines.splitlines()))[:20] }}
+          {{ (verify_snapshot_before_lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
         quiet: true
 
     - name: Inspect the reference file at the end

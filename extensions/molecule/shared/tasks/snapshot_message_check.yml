@@ -1,0 +1,41 @@
+---
+- name: Snapshot message check | Render the snapshot of a state
+  ansible.builtin.include_tasks:
+    file: snapshot_lines.yml
+    apply:
+      vars:
+        contract_snapshot_volatile_contents: '^$'
+        contract_snapshot_volatile_times: '^$'
+        snapshot_find:
+          files:
+            - {path: /etc/a, mode: '0644', uid: 0, gid: 0, size: 1, mtime: 1.0, ctime: 1.0, checksum: a}
+            - {path: /etc/b, mode: '0644', uid: 0, gid: 0, size: 1, mtime: 1.0, ctime: 1.0, checksum: a}
+            - {path: /etc/c, mode: '0644', uid: 0, gid: 0, size: 1, mtime: 1.0, ctime: 1.0, checksum: a}
+
+- name: Snapshot message check | Keep the first snapshot
+  ansible.builtin.set_fact:
+    snapshot_check_before: "{{ snapshot_lines }}"
+
+- name: Snapshot message check | Render the snapshot of a state in which one mode differs
+  ansible.builtin.include_tasks:
+    file: snapshot_lines.yml
+    apply:
+      vars:
+        contract_snapshot_volatile_contents: '^$'
+        contract_snapshot_volatile_times: '^$'
+        snapshot_find:
+          files:
+            - {path: /etc/a, mode: '0644', uid: 0, gid: 0, size: 1, mtime: 1.0, ctime: 1.0, checksum: a}
+            - {path: /etc/b, mode: '0600', uid: 0, gid: 0, size: 1, mtime: 1.0, ctime: 1.0, checksum: a}
+            - {path: /etc/c, mode: '0644', uid: 0, gid: 0, size: 1, mtime: 1.0, ctime: 1.0, checksum: a}
+
+- name: Snapshot message check | The failure message names only the entry that changed
+  ansible.builtin.assert:
+    that:
+      - snapshot_check_before != snapshot_lines
+      - snapshot_check_changed | length == 2
+      - snapshot_check_changed | select('match', '^/etc/b\|') | list | length == 2
+    quiet: true
+  vars:
+    snapshot_check_changed: >-
+      {{ (snapshot_check_before.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
