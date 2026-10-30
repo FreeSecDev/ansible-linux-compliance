@@ -174,24 +174,24 @@ def test_a_new_rule_gets_its_toggle_and_its_reference_row(tmp_path: Path) -> Non
     rules = cast("list[dict[str, object]]", data[gen.RULES_KEY])
     rules.append(
         {
-            "rule_id": "xccdf_org.ssgproject.content_rule_sshd_disable_root_login",
-            "family": "ssh",
+            "rule_id": "xccdf_org.ssgproject.content_rule_audit_rules_immutable",
+            "family": "auditd",
             "disruptive": True,
             "reversible": True,
             "revert_strategy": "owned_dropin",
-            "toggle": "linux_compliance_rule_sshd_disable_root_login_enabled",
+            "toggle": "linux_compliance_rule_audit_rules_immutable_enabled",
             "runbook": None,
             "parameters": {},
         }
     )
     audit_only = cast("dict[str, list[str]]", data[gen.AUDIT_ONLY_KEY])
-    audit_only["ssh"].remove("xccdf_org.ssgproject.content_rule_sshd_disable_root_login")
+    audit_only["auditd"].remove("xccdf_org.ssgproject.content_rule_audit_rules_immutable")
     write_catalogue(root, data[gen.FAMILIES_KEY], rules, audit_only)
     generated = gen.outputs(root)
     defaults = cast("dict[str, object]", yaml.safe_load(generated[gen.DEFAULTS]))
-    assert "linux_compliance_rule_sshd_disable_root_login_enabled" not in defaults
+    assert "linux_compliance_rule_audit_rules_immutable_enabled" not in defaults
     assert (
-        "| `linux_compliance_rule_sshd_disable_root_login_enabled` | `sshd_disable_root_login` | "
+        "| `linux_compliance_rule_audit_rules_immutable_enabled` | `audit_rules_immutable` | "
         "`owned_dropin` |"
     ) in generated[gen.REFERENCE]
 

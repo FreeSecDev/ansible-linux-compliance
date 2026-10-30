@@ -15,7 +15,7 @@ from tools.roles import promote_native_rule as promote
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CATALOGUE = REPOSITORY_ROOT / generate_toggles.CATALOGUE
-SSH_RULE = "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+AUDITD_RULE = "xccdf_org.ssgproject.content_rule_audit_rules_immutable"
 SYSCTL_RULE = "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
 CRONTAB_RULE = "xccdf_org.ssgproject.content_rule_file_permissions_crontab"
 
@@ -32,30 +32,33 @@ def load(path: Path) -> dict[str, object]:
 
 def test_the_promoted_rule_is_a_native_disruptive_rule_of_its_family(tmp_path: Path) -> None:
     target = copy_catalogue(tmp_path)
-    assert promote.main(["--catalogue", str(target), "--rule", SSH_RULE]) == 0
+    assert promote.main(["--catalogue", str(target), "--rule", AUDITD_RULE]) == 0
     data = load(target)
     assert target.read_text(encoding="utf-8").startswith("---\n")
     rules = cast("list[dict[str, object]]", data[generate_toggles.RULES_KEY])
     assert rules[-1] == {
-        "rule_id": SSH_RULE,
-        "family": "ssh",
+        "rule_id": AUDITD_RULE,
+        "family": "auditd",
         "disruptive": True,
         "reversible": True,
         "revert_strategy": "recorded_state",
-        "toggle": "linux_compliance_rule_sshd_disable_root_login_enabled",
+        "toggle": "linux_compliance_rule_audit_rules_immutable_enabled",
         "runbook": None,
         "parameters": {},
     }
     audit_only = cast("dict[str, list[str]]", data[generate_toggles.AUDIT_ONLY_KEY])
-    assert SSH_RULE not in audit_only["ssh"]
+    assert AUDITD_RULE not in audit_only["auditd"]
     original = load(CATALOGUE)
     original_audit_only = cast("dict[str, list[str]]", original[generate_toggles.AUDIT_ONLY_KEY])
-    assert audit_only["ssh"] == [rule for rule in original_audit_only["ssh"] if rule != SSH_RULE]
+    assert audit_only["auditd"] == [
+        rule for rule in original_audit_only["auditd"] if rule != AUDITD_RULE
+    ]
     assert data[generate_toggles.FAMILIES_KEY] == original[generate_toggles.FAMILIES_KEY]
     catalogue = generate_toggles.load_catalogue(target)
     assert generate_toggles.native_families(catalogue) == [
         "file_permissions",
         "banners",
+        "auditd",
         "ssh",
         "pwquality",
         "sudo",
@@ -66,7 +69,7 @@ def test_the_repository_catalogue_is_never_rewritten(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     before = CATALOGUE.read_bytes()
-    assert promote.main(["--catalogue", str(CATALOGUE), "--rule", SSH_RULE]) == 2
+    assert promote.main(["--catalogue", str(CATALOGUE), "--rule", AUDITD_RULE]) == 2
     assert "promote only in a copy" in capsys.readouterr().err
     assert CATALOGUE.read_bytes() == before
 
@@ -84,12 +87,12 @@ def test_a_hard_link_to_the_repository_catalogue_is_never_rewritten(
     link.parent.mkdir()
     os.link(repository, link)
     before = repository.read_bytes()
-    assert promote.main(["--catalogue", str(link), "--rule", SSH_RULE]) == 2
+    assert promote.main(["--catalogue", str(link), "--rule", AUDITD_RULE]) == 2
     assert "promote only in a copy" in capsys.readouterr().err
     assert repository.read_bytes() == before
     copy = tmp_path / "copy" / "separate.yml"
     shutil.copyfile(repository, copy)
-    assert promote.main(["--catalogue", str(copy), "--rule", SSH_RULE]) == 0
+    assert promote.main(["--catalogue", str(copy), "--rule", AUDITD_RULE]) == 0
     assert repository.read_bytes() == before
 
 
@@ -116,10 +119,10 @@ def test_main_runs_as_a_module(
 ) -> None:
     target = copy_catalogue(tmp_path)
     monkeypatch.setattr(
-        sys, "argv", ["promote_native_rule", "--catalogue", str(target), "--rule", SSH_RULE]
+        sys, "argv", ["promote_native_rule", "--catalogue", str(target), "--rule", AUDITD_RULE]
     )
     monkeypatch.delitem(sys.modules, "tools.roles.promote_native_rule", raising=False)
     with pytest.raises(SystemExit) as raised:
         runpy.run_module("tools.roles.promote_native_rule", run_name="__main__")
     assert raised.value.code == 0
-    assert f"promoted {SSH_RULE}" in capsys.readouterr().out
+    assert f"promoted {AUDITD_RULE}" in capsys.readouterr().out

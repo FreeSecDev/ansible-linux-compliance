@@ -32,6 +32,12 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "setting", "main_file_benchmarks"},
         {"path", "setting", "main_file_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
+    "ssh": [
+        {"path", "keyword", "value"},
+        {"path", "keyword", "value", "crypto_policy_benchmarks"},
+        {"path", "keyword"} | PROFILE_VALUE_PARAMETERS,
+        {"path", "keyword", "crypto_policy_benchmarks"} | PROFILE_VALUE_PARAMETERS,
+    ],
     "sudo": [
         {"method", "path", "options", "lines"},
         {"method", "path", "options", "lines", "value_pattern"} | PROFILE_VALUE_PARAMETERS,
@@ -41,8 +47,8 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"method", "path", "type", "attribute", "id"},
     ],
 }
-NATIVE_FAMILIES = ["file_permissions", "banners", "pwquality", "sudo"]
-DISRUPTIVE_NATIVE_FAMILIES = ["pwquality", "sudo"]
+NATIVE_FAMILIES = ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
+DISRUPTIVE_NATIVE_FAMILIES = ["ssh", "pwquality", "sudo"]
 
 
 def load(path: Path) -> dict[str, object]:

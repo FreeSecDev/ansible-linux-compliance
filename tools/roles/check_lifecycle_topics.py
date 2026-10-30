@@ -15,7 +15,9 @@ a disruptive topic without a containment note, a declaration without an ``applie
 expectation, an expectation or a pre-state for an item that is not declared, an unknown
 attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
-status other than ``compliant`` or ``notapplicable``, or ``unselected_platforms`` that name
+status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
+``content`` is not a non-empty text or that also sets an owner or group, a pre-state ``applied``
+override that the top-level ``applied`` would refuse, or ``unselected_platforms`` that name
 every platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
 topic. The harness repeats the coverage check at run time and fails on a platform that skips
@@ -131,12 +133,16 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
 PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
-    {"name", "audit", "files", "unchanged", "requires"}
+    {"name", "audit", "modes", "files", "unchanged", "applied", "requires"}
 )
+TOGGLE_MODES: Final[frozenset[str]] = frozenset({"topic", "rule"})
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
-UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable"})
+UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
 REWRITTEN_KEY: Final[str] = "rewritten"
-PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset({"path", "mode", "owner", "group"})
+PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset(
+    {"path", "mode", "owner", "group", "content"}
+)
+MAX_CONTENT: Final[int] = 4096
 UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
 CHANGES_KEY: Final[str] = "changes"
@@ -209,6 +215,7 @@ class Declaration:
         self.skipped_platforms: set[str] = set()
         self.topic_drivers: frozenset[str] | None = None
         self.pre_state_drivers: list[frozenset[str] | None] = [None]
+        self.pre_state_modes: list[frozenset[str]] = [TOGGLE_MODES]
 
     def error(self, message: str) -> None:
         """Record a finding about this declaration."""
@@ -314,17 +321,25 @@ class Declaration:
 
     def applied(self, value: object) -> None:
         """Check the expectations after the topic is applied."""
-        applied = self.mapping(value, "applied")
+        if self._expectations(value, "applied") == 0:
+            self.error(
+                "applied declares no expectation; the state after apply is the evidence that the "
+                "remediation works when a container audit cannot show it"
+            )
+
+    def _expectations(self, value: object, where: str) -> int:
+        """Check the expectations in ``value`` and return how many there are."""
+        applied = self.mapping(value, where)
         if applied is None:
-            return
-        self.keys(applied, frozenset(CATEGORY_KEYS), "applied")
+            return -1
+        self.keys(applied, frozenset(CATEGORY_KEYS), where)
         expectations = 0
         for category in CATEGORY_KEYS:
             if category not in applied:
                 continue
-            seen: set[str] = set()
-            for index, entry in enumerate(self.sequence(applied[category], f"applied.{category}")):
-                what = f"applied.{category}[{index}]"
+            seen: dict[str, set[str]] = {}
+            for index, entry in enumerate(self.sequence(applied[category], f"{where}.{category}")):
+                what = f"{where}.{category}[{index}]"
                 item = self.mapping(entry, what)
                 if item is None:
                     continue
@@ -335,15 +350,12 @@ class Declaration:
                     continue
                 if key not in self.items[category]:
                     self.error(f"{what} expects {key}, which state.{category} does not declare")
-                if key in seen:
-                    self.error(f"{what} expects {key} twice")
-                seen.add(key)
+                covered = set(_strings(item.get(PLATFORMS_KEY)) or self.platforms)
+                if seen.get(key, set()) & covered:
+                    self.error(f"{what} expects {key} twice for a platform")
+                seen.setdefault(key, set()).update(covered)
                 expectations += 1
-        if expectations == 0:
-            self.error(
-                "applied declares no expectation; the state after apply is the evidence that the "
-                "remediation works when a container audit cannot show it"
-            )
+        return expectations
 
     def unselected(self, value: object) -> None:
         """Check the platforms whose profile selects no native rule of the topic."""
@@ -397,7 +409,9 @@ class Declaration:
             key = self.key_value("files", item, where)
             if key is not None and key not in self.items["files"]:
                 self.error(f"{where} sets {key}, which state.files does not declare")
-            if len(set(item) & {"mode", "owner", "group"}) == 0:
+            if "content" in item:
+                self._pre_state_content(item, where)
+            elif len(set(item) & {"mode", "owner", "group"}) == 0:
                 self.error(f"{where} sets no mode, owner or group")
             mode = item.get("mode")
             if "mode" in item and (not isinstance(mode, str) or MODE.fullmatch(mode) is None):
@@ -407,6 +421,37 @@ class Declaration:
                     isinstance(item[owner], str) and NAME.fullmatch(str(item[owner]))
                 ):
                     self.error(f"{where} needs a valid {owner}")
+
+    def _audit_platforms(self, value: object, what: str) -> None:
+        """Check the platforms on which a pre-state runs its scans, when it names them."""
+        platforms = _strings(value)
+        if platforms is None or any(platform not in self.platforms for platform in platforms):
+            self.error(f"{what}.audit must be a boolean or a non-empty list of known platforms")
+
+    def _pre_state_runs(self, item: dict[str, object], what: str) -> None:
+        """Check where a pre-state scans and in which toggle modes it runs, when it names them."""
+        if "audit" in item and not isinstance(item["audit"], bool):
+            self._audit_platforms(item["audit"], what)
+        if "modes" not in item:
+            self.pre_state_modes.append(TOGGLE_MODES)
+            return
+        modes = _strings(item["modes"])
+        if modes is None or len(set(modes)) != len(modes) or not set(modes) <= TOGGLE_MODES:
+            self.error(
+                f"{what}.modes must be a non-empty list of distinct toggle modes: topic, rule"
+            )
+            self.pre_state_modes.append(TOGGLE_MODES)
+            return
+        self.pre_state_modes.append(frozenset(modes))
+
+    def _pre_state_content(self, item: dict[str, object], where: str) -> None:
+        """Check a file that the pre-state writes, as root, before a cycle and removes after it."""
+        content = item["content"]
+        if not _text(content) or len(str(content)) > MAX_CONTENT:
+            self.error(f"{where} needs a non-empty content of at most {MAX_CONTENT} characters")
+        for owner in ("owner", "group"):
+            if owner in item:
+                self.error(f"{where} writes its content as root and cannot set the {owner}")
 
     def driver_list(self, value: object, what: str) -> frozenset[str] | None:
         """Return the drivers that ``what`` requires, or record why the list is invalid."""
@@ -445,9 +490,28 @@ class Declaration:
         return dict.fromkeys(sorted(self.cycle_drivers()), running)
 
     def covered(self) -> None:
-        """Check that each driver of a cycle has a lifecycle scenario on every running platform."""
+        """Check that each driver of a cycle has a lifecycle scenario on every running platform.
+
+        Each driver must also run a pre-state in both toggle modes: the matrix plans a leg per
+        mode, and a leg whose mode no pre-state runs would prove nothing about that toggle.
+        """
         running = self.platforms - self.skipped_platforms
+        default = self.topic_drivers or UNRESTRICTED_DRIVERS
         for driver in sorted(self.cycle_drivers()):
+            modes = frozenset[str]().union(
+                *(
+                    modes
+                    for drivers, modes in zip(
+                        self.pre_state_drivers, self.pre_state_modes, strict=True
+                    )
+                    if driver in (drivers or default)
+                )
+            )
+            for mode in sorted(TOGGLE_MODES - modes):
+                self.error(
+                    f"no pre-state runs with {driver} in the {mode} mode, so the {mode} leg of "
+                    f"{driver} would run no cycle; give a pre-state of {driver} the {mode} mode"
+                )
             for platform in sorted(running - self.coverage.get(driver, frozenset())):
                 self.error(
                     f"the declaration requires {driver}, but no {driver} scenario in {MOLECULE} "
@@ -472,7 +536,7 @@ class Declaration:
             else:
                 seen.add(rule)
             if item.get("status") not in UNCHANGED_STATUSES:
-                self.error(f"{where} needs the status compliant or notapplicable")
+                self.error(f"{where} needs the status compliant, notapplicable or overridden")
 
     def _pre_state_requires(self, item: dict[str, object], what: str) -> None:
         """Record the drivers of a pre-state, which must be drivers of its topic."""
@@ -488,6 +552,7 @@ class Declaration:
         """Check the states from which the harness runs the cycles."""
         entries = self.sequence(value, "pre_states")
         self.pre_state_drivers = []
+        self.pre_state_modes = []
         if not entries:
             self.error("pre_states must not be empty; leave it out for the as-built state")
         names: set[str] = set()
@@ -504,13 +569,14 @@ class Declaration:
                 self.error(f"{what} repeats the name {name!r}")
             else:
                 names.add(str(name))
-            if "audit" in item and not isinstance(item["audit"], bool):
-                self.error(f"{what}.audit must be a boolean")
+            self._pre_state_runs(item, what)
             if "files" in item:
                 self.pre_state_files(item["files"], what)
             self._pre_state_requires(item, what)
             if "unchanged" in item:
                 self.pre_state_unchanged(item["unchanged"], what)
+            if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
+                self.error(f"{what}.applied declares no expectation; leave it out instead")
 
 
 def _regression_groups(declaration: Declaration, value: object) -> None:

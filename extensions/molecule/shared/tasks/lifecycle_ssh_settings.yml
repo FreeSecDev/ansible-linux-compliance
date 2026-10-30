@@ -1,0 +1,29 @@
+---
+- name: SSH settings | List the drop-ins that sshd and the content check read
+  ansible.builtin.find:
+    paths: /etc/ssh/sshd_config.d
+    patterns: "*.conf"
+    file_type: file
+    follow: false
+  register: vendor_settings_dropins
+
+- name: SSH settings | Read the main file and every drop-in
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ ['/etc/ssh/sshd_config'] + (vendor_settings_dropins.files | map(attribute='path') | sort) }}"
+  register: vendor_settings_read
+
+- name: SSH settings | Name the value of every occurrence of each keyword, as the content check reads them
+  ansible.builtin.set_fact:
+    vendor_settings: >-
+      {%- set settings = {} -%}
+      {%- for result in vendor_settings_read.results -%}
+      {%- for line in (result.content | b64decode).splitlines()
+            if line is match('^[ \t]*[A-Za-z0-9]+([ \t]*=[ \t]*|[ \t]+)\S') -%}
+      {%- set keyword = (line | trim).split()[0].split('=')[0] | lower -%}
+      {%- set value = line | regex_replace('^[ \t]*[A-Za-z0-9]+(?:[ \t]*=[ \t]*|[ \t]+)', '')
+            | regex_replace('[ \t]*(#.*)?$', '') -%}
+      {%- set _ = settings.update({keyword: settings[keyword] | default([]) + [value]}) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ settings }}
