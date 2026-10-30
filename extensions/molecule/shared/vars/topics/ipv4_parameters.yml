@@ -88,6 +88,8 @@ applied:
       mode: "0755"
       owner: root
       group: root
+      uid: 0
+      gid: 0
       platforms:
         - rhel_compatible
     - path: /etc/sysctl.d/.freesecdev-created
@@ -97,6 +99,9 @@ applied:
       mode: "0600"
       owner: root
       group: root
+      uid: 0
+      gid: 0
+      checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
       platforms:
         - rhel_compatible
     - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf

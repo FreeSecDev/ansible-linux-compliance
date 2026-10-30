@@ -16,7 +16,7 @@ from tools.roles import promote_native_rule as promote
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CATALOGUE = REPOSITORY_ROOT / generate_toggles.CATALOGUE
 AUDITD_RULE = "xccdf_org.ssgproject.content_rule_audit_rules_immutable"
-SYSCTL_RULE = "xccdf_org.ssgproject.content_rule_sysctl_kernel_dmesg_restrict"
+JOURNALD_RULE = "xccdf_org.ssgproject.content_rule_dir_owner_system_journal"
 CRONTAB_RULE = "xccdf_org.ssgproject.content_rule_file_permissions_crontab"
 
 
@@ -57,8 +57,11 @@ def test_the_promoted_rule_is_a_native_disruptive_rule_of_its_family(tmp_path: P
     catalogue = generate_toggles.load_catalogue(target)
     assert generate_toggles.native_families(catalogue) == [
         "file_permissions",
+        "sysctl",
         "banners",
         "auditd",
+        "ipv4_parameters",
+        "ipv6_parameters",
         "ssh",
         "pwquality",
         "sudo",
@@ -101,7 +104,7 @@ def test_a_hard_link_to_the_repository_catalogue_is_never_rewritten(
     [
         (CRONTAB_RULE, "is not an audit_only rule of the catalogue"),
         ("xccdf_org.ssgproject.content_rule_unknown", "is not an audit_only rule of the catalogue"),
-        (SYSCTL_RULE, "belongs to sysctl, which is not a disruptive family"),
+        (JOURNALD_RULE, "belongs to journald, which is not a disruptive family"),
     ],
 )
 def test_only_an_audit_only_rule_of_a_disruptive_family_is_promoted(

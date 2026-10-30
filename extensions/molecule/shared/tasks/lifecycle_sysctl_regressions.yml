@@ -76,6 +76,21 @@
   register: regression_vendor_built
   when: regression_has_vendor_file | bool
 
+- name: Kernel parameter regressions | Inspect the drop-in directory as built
+  ansible.builtin.stat:
+    path: "{{ regression_directory }}"
+    follow: false
+  register: regression_directory_built
+
+- name: Kernel parameter regressions | Create the drop-in directory where the platform has none, as an administrator
+  ansible.builtin.file:
+    path: "{{ regression_directory }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  when: not regression_directory_built.stat.exists
+
 - name: Kernel parameter regressions | Add an administrator's file before the drop-ins and one after them
   ansible.builtin.copy:
     content: "{{ item.content }}"
@@ -292,21 +307,6 @@
     fail_msg: "{{ regression_label }}, cleanup after the content is back: {{ lifecycle_results }}"
     quiet: true
 
-- name: Kernel parameter regressions | Inspect the drop-in directory before the refusals
-  ansible.builtin.stat:
-    path: "{{ regression_directory }}"
-    follow: false
-  register: regression_directory_before_refusals
-
-- name: Kernel parameter regressions | Create the drop-in directory where the platform has none
-  ansible.builtin.file:
-    path: "{{ regression_directory }}"
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  when: not regression_directory_before_refusals.stat.exists
-
 - name: Kernel parameter regressions | Occupy the drop-in path of ip_forward with a file without the header
   ansible.builtin.copy:
     content: "net.ipv4.ip_forward = 0\n"
@@ -399,17 +399,11 @@
     fail_msg: "{{ regression_label }}, cleanup after the refusals: {{ lifecycle_results }}"
     quiet: true
 
-- name: Kernel parameter regressions | Remove the drop-in directory that the regression created
+- name: Kernel parameter regressions | Remove the drop-in directory that the regressions created
   ansible.builtin.file:
     path: "{{ regression_directory }}"
     state: absent
-  when: not regression_directory_before_refusals.stat.exists
-
-- name: Kernel parameter regressions | Inspect the drop-in directory before the directory regressions
-  ansible.builtin.stat:
-    path: "{{ regression_directory }}"
-    follow: false
-  register: regression_directory_built
+  when: not regression_directory_built.stat.exists
 
 - name: Kernel parameter regressions | Run the directory regression where the platform has no drop-in directory as built
   when: not regression_directory_built.stat.exists
