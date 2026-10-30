@@ -192,6 +192,34 @@
         label: "{{ item.name }}"
         index_var: idx
 
+    - name: Find the objects that an earlier create of this run made
+      ansible.builtin.include_tasks:
+        file: tasks/libvirt_objects.yml
+      vars:
+        libvirt_objects_scenario: "{{ molecule_scenario }}"
+
+    - name: Decide whether an earlier create of this run made every object
+      ansible.builtin.set_fact:
+        create_existing: >-
+          {{ (libvirt_objects.domains + libvirt_objects.networks + libvirt_objects.pools)
+          | selectattr('run', 'equalto', molecule_run_id) | list }}
+        create_reuse: >-
+          {{ libvirt_objects.domains | selectattr('run', 'equalto', molecule_run_id) | selectattr('labelled')
+          | map(attribute='name') | sort == instance_conf | map(attribute='domain') | sort
+          and libvirt_objects.networks | selectattr('run', 'equalto', molecule_run_id) | selectattr('labelled')
+          | list | length == 1
+          and libvirt_objects.pools | selectattr('run', 'equalto', molecule_run_id) | selectattr('labelled')
+          | list | length == 1 }}
+
+    - name: Refuse an earlier create of this run that left only some of its objects
+      ansible.builtin.assert:
+        that:
+          - create_reuse | bool or create_existing | length == 0
+        fail_msg: >-
+          An earlier create of run {{ molecule_run_id }} left only {{ create_existing | map(attribute='name') | list }}.
+          Run molecule destroy first.
+        quiet: true
+
     - name: Build, boot and check the virtual machines
       block:
         - name: Write the instance config before any libvirt object exists
@@ -239,140 +267,143 @@
               {{ create_host_keys.results | map(attribute='item.address')
               | zip(create_host_keys.results | map(attribute='public_key')) | map('join', ' ') | list }}
 
-        - name: Define the run's isolated network without forwarding, DHCP or DNS
-          community.libvirt.virt_net:
-            uri: qemu:///system
-            command: define
-            name: "{{ create_run.network }}"
-            xml: |
-              <network>
-                <name>{{ create_run.network }}</name>
-                <metadata>
-                  <fsd:molecule xmlns:fsd="{{ molecule_libvirt_metadata_namespace }}">
-                    <fsd:scenario>{{ molecule_scenario }}</fsd:scenario>
-                    <fsd:run>{{ molecule_run_id }}</fsd:run>
-                  </fsd:molecule>
-                </metadata>
-                <bridge name='{{ create_run.bridge }}' stp='on' delay='0'/>
-                <dns enable='no'/>
-                <ip address='{{ create_run.subnet }}.1' netmask='255.255.255.0'/>
-              </network>
+        - name: Create the run's network, pool, disks, seeds and domains unless an earlier create made them
+          when: not create_reuse
+          block:
+            - name: Define the run's isolated network without forwarding, DHCP or DNS
+              community.libvirt.virt_net:
+                uri: qemu:///system
+                command: define
+                name: "{{ create_run.network }}"
+                xml: |
+                  <network>
+                    <name>{{ create_run.network }}</name>
+                    <metadata>
+                      <fsd:molecule xmlns:fsd="{{ molecule_libvirt_metadata_namespace }}">
+                        <fsd:scenario>{{ molecule_scenario }}</fsd:scenario>
+                        <fsd:run>{{ molecule_run_id }}</fsd:run>
+                      </fsd:molecule>
+                    </metadata>
+                    <bridge name='{{ create_run.bridge }}' stp='on' delay='0'/>
+                    <dns enable='no'/>
+                    <ip address='{{ create_run.subnet }}.1' netmask='255.255.255.0'/>
+                  </network>
 
-        - name: Start the run's isolated network
-          community.libvirt.virt_net:
-            uri: qemu:///system
-            name: "{{ create_run.network }}"
-            state: active
+            - name: Start the run's isolated network
+              community.libvirt.virt_net:
+                uri: qemu:///system
+                name: "{{ create_run.network }}"
+                state: active
 
-        - name: Define the run's storage pool, owned by the controller user
-          community.libvirt.virt_pool:
-            uri: qemu:///system
-            command: define
-            name: "{{ create_run.pool }}"
-            xml: |
-              <pool type='dir'>
-                <name>{{ create_run.pool }}</name>
-                <target>
-                  <path>{{ create_run.pool_path }}</path>
-                  <permissions>
-                    <mode>0711</mode>
-                    <owner>{{ ansible_facts.user_uid }}</owner>
-                    <group>{{ ansible_facts.user_gid }}</group>
-                  </permissions>
-                </target>
-              </pool>
+            - name: Define the run's storage pool, owned by the controller user
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                command: define
+                name: "{{ create_run.pool }}"
+                xml: |
+                  <pool type='dir'>
+                    <name>{{ create_run.pool }}</name>
+                    <target>
+                      <path>{{ create_run.pool_path }}</path>
+                      <permissions>
+                        <mode>0711</mode>
+                        <owner>{{ ansible_facts.user_uid }}</owner>
+                        <group>{{ ansible_facts.user_gid }}</group>
+                      </permissions>
+                    </target>
+                  </pool>
 
-        - name: Build the run's storage pool directory
-          community.libvirt.virt_pool:
-            uri: qemu:///system
-            command: build
-            name: "{{ create_run.pool }}"
+            - name: Build the run's storage pool directory
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                command: build
+                name: "{{ create_run.pool }}"
 
-        - name: Start the run's storage pool
-          community.libvirt.virt_pool:
-            uri: qemu:///system
-            name: "{{ create_run.pool }}"
-            state: active
+            - name: Start the run's storage pool
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                name: "{{ create_run.pool }}"
+                state: active
 
-        - name: Copy the verified cloud image of every instance into the pool
-          ansible.builtin.copy:
-            src: "{{ molecule_libvirt_cache }}/images/{{ item.image_sha256 }}.qcow2"
-            dest: "{{ item.pool_path }}/{{ item.disk }}"
-            remote_src: true
-            mode: "0600"
-          loop: "{{ instance_conf }}"
-          loop_control:
-            label: "{{ item.instance }}"
+            - name: Copy the verified cloud image of every instance into the pool
+              ansible.builtin.copy:
+                src: "{{ molecule_libvirt_cache }}/images/{{ item.image_sha256 }}.qcow2"
+                dest: "{{ item.pool_path }}/{{ item.disk }}"
+                remote_src: true
+                mode: "0600"
+              loop: "{{ instance_conf }}"
+              loop_control:
+                label: "{{ item.instance }}"
 
-        - name: Let the pool see the copied disks
-          community.libvirt.virt_pool:
-            uri: qemu:///system
-            command: refresh
-            name: "{{ create_run.pool }}"
+            - name: Let the pool see the copied disks
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                command: refresh
+                name: "{{ create_run.pool }}"
 
-        - name: Bound the disk of every instance to its size
-          community.libvirt.virt_volume:
-            uri: qemu:///system
-            pool: "{{ item.pool }}"
-            state: present
-            xml: |
-              <volume>
-                <name>{{ item.disk }}</name>
-                <capacity unit='GiB'>{{ item.disk_gib }}</capacity>
-              </volume>
-          loop: "{{ instance_conf }}"
-          loop_control:
-            label: "{{ item.instance }}"
+            - name: Bound the disk of every instance to its size
+              community.libvirt.virt_volume:
+                uri: qemu:///system
+                pool: "{{ item.pool }}"
+                state: present
+                xml: |
+                  <volume>
+                    <name>{{ item.disk }}</name>
+                    <capacity unit='GiB'>{{ item.disk_gib }}</capacity>
+                  </volume>
+              loop: "{{ instance_conf }}"
+              loop_control:
+                label: "{{ item.instance }}"
 
-        - name: Create the cloud-init seed of every instance with its host key and the run's client key
-          community.libvirt.virt_volume:
-            uri: qemu:///system
-            pool: "{{ item.0.pool }}"
-            command: create_cidata_cdrom
-            name: "{{ item.0.seed }}"
-            cloudinit_config:
-              METADATA:
-                instance-id: "{{ item.0.domain }}"
-                local-hostname: "{{ item.0.instance }}"
-              USERDATA:
-                disable_root: false
-                ssh_pwauth: false
-                users:
-                  - name: root
-                    lock_passwd: true
-                    ssh_authorized_keys:
-                      - "{{ create_client_key.public_key }}"
-                ssh_deletekeys: true
-                ssh_genkeytypes: []
-                ssh_keys:
-                  ed25519_private: "{{ lookup('ansible.builtin.file', item.1.filename) }}\n"
-                  ed25519_public: "{{ item.1.public_key }}"
-                package_update: false
-                package_upgrade: false
-              NETWORK_CONFIG:
-                version: 2
-                ethernets:
-                  primary:
-                    match:
-                      macaddress: "{{ item.0.mac }}"
-                    dhcp4: false
-                    addresses:
-                      - "{{ item.0.address }}/24"
-          loop: "{{ instance_conf | zip(create_host_keys.results) | list }}"
-          loop_control:
-            label: "{{ item.0.instance }}"
-          no_log: true
+            - name: Create the cloud-init seed of every instance with its host key and the run's client key
+              community.libvirt.virt_volume:
+                uri: qemu:///system
+                pool: "{{ item.0.pool }}"
+                command: create_cidata_cdrom
+                name: "{{ item.0.seed }}"
+                cloudinit_config:
+                  METADATA:
+                    instance-id: "{{ item.0.domain }}"
+                    local-hostname: "{{ item.0.instance }}"
+                  USERDATA:
+                    disable_root: false
+                    ssh_pwauth: false
+                    users:
+                      - name: root
+                        lock_passwd: true
+                        ssh_authorized_keys:
+                          - "{{ create_client_key.public_key }}"
+                    ssh_deletekeys: true
+                    ssh_genkeytypes: []
+                    ssh_keys:
+                      ed25519_private: "{{ lookup('ansible.builtin.file', item.1.filename) }}\n"
+                      ed25519_public: "{{ item.1.public_key }}"
+                    package_update: false
+                    package_upgrade: false
+                  NETWORK_CONFIG:
+                    version: 2
+                    ethernets:
+                      primary:
+                        match:
+                          macaddress: "{{ item.0.mac }}"
+                        dhcp4: false
+                        addresses:
+                          - "{{ item.0.address }}/24"
+              loop: "{{ instance_conf | zip(create_host_keys.results) | list }}"
+              loop_control:
+                label: "{{ item.0.instance }}"
+              no_log: true
 
-        - name: Define every instance with the run's labels, marker, disk, seed and only the isolated network
-          community.libvirt.virt:
-            uri: qemu:///system
-            command: define
-            xml: "{{ molecule_libvirt_domain_xml }}"
-          vars:
-            libvirt_domain: "{{ item }}"
-          loop: "{{ instance_conf }}"
-          loop_control:
-            label: "{{ item.instance }}"
+            - name: Define every instance with the run's labels, marker, disk, seed and only the isolated network
+              community.libvirt.virt:
+                uri: qemu:///system
+                command: define
+                xml: "{{ molecule_libvirt_domain_xml }}"
+              vars:
+                libvirt_domain: "{{ item }}"
+              loop: "{{ instance_conf }}"
+              loop_control:
+                label: "{{ item.instance }}"
 
         - name: Boot every instance
           community.libvirt.virt:
