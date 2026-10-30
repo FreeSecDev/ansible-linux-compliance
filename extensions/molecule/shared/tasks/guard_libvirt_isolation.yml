@@ -28,7 +28,7 @@
       - guard_domain_xml is search("<interface type='network'>")
       - guard_domain_xml is search("<mac address='" ~ guard_instance.mac | regex_escape ~ "'/>")
       - guard_domain_xml is search("<source network='" ~ guard_instance.network | regex_escape ~ "'[ />]")
-      - guard_domain_xml | regex_findall('<target[ />][^>]*\bmanaged=') | length == 0
+      - guard_domain_xml | regex_findall('<target[ />][^>]*\\bmanaged=') | length == 0
       - guard_domain_interface_targets | reject('match', guard_allowed_vnet_target) | list | length == 0
       - guard_domain_xml | regex_findall('<disk ') | length == 2
       - guard_domain_xml | regex_findall("<disk type='file' device='(disk|cdrom)'>") | length == 2
@@ -66,15 +66,15 @@
       - guard_network_xml is not search('<forward')
       - guard_network_xml is not search('ipv6=')
       - guard_network_xml is not search('<(dhcp|route|portgroup|virtualport|tftp|bootp)[ >/]')
-      - guard_network_xml | regex_findall('<network[ >/][^>]*>') | reject('match', guard_allowed_network_tag) | list
+      - guard_network_xml | regex_findall('<network(?=[ >/])[^>]*>') | reject('match', guard_allowed_network_tag) | list
         | length == 0
-      - guard_network_xml | regex_findall('<bridge[ >/][^>]*>') | length == 1
+      - guard_network_xml | regex_findall('<bridge(?=[ >/])[^>]*>') | length == 1
       - >-
-        guard_network_xml | regex_findall('<bridge[ >/][^>]*>') | select('match', guard_allowed_bridge) | list
+        guard_network_xml | regex_findall('<bridge(?=[ >/])[^>]*>') | select('match', guard_allowed_bridge) | list
         | length == 1
       - guard_network_xml is search("<dns enable='no'/>")
       - guard_network_xml | regex_findall('<ip ') | length == 1
-      - guard_network_xml | regex_findall('<ip[ >/][^>]*>') | select('match', guard_allowed_ip) | list | length == 1
+      - guard_network_xml | regex_findall('<ip(?=[ >/])[^>]*>') | select('match', guard_allowed_ip) | list | length == 1
       - guard_instance.gateway is match('^10\.2[0-4][0-9]\.[0-9]{1,3}\.1$')
       - guard_instance.address | regex_replace('\.[0-9]+$', '.1') == guard_instance.gateway
       - guard_instance.address != guard_instance.gateway

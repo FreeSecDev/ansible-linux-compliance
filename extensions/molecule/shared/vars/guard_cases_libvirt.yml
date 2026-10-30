@@ -622,6 +622,22 @@ guard_libvirt_cases:
     network_edits:
       - ["<network connections='1'>", "<network connections='1' trustGuestRxFilters='yes'>"]
     refused: true
+  - name: file attribute on an element outside a disk source
+    domain_edits:
+      - ["<boot dev='hd'/>", "<boot dev='hd' file='/etc/shadow'/>"]
+    refused: true
+  - name: managed attribute on a target outside the interface
+    domain_edits:
+      - ["<target type='serial' port='0'/>", "<target type='serial' port='0' managed='no'/>"]
+    refused: true
+  - name: managed attribute on the interface target
+    domain_edits:
+      - ["<target dev='vnet3'/>", "<target dev='vnet3' managed='yes'/>"]
+    refused: true
+  - name: network element without attributes
+    network_edits:
+      - ["<network connections='1'>", "<network>"]
+    refused: false
   - name: network that forwards with NAT
     network_edits:
       - ["<bridge ", "<forward mode='nat'/><bridge "]
