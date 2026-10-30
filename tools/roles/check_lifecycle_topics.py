@@ -406,7 +406,7 @@ class Declaration:
         in the Docker scenarios only; the libvirt scenarios run only what containers cannot.
         """
         default = self.topic_drivers or UNRESTRICTED_DRIVERS
-        return frozenset().union(*(drivers or default for drivers in self.pre_state_drivers))
+        return frozenset[str]().union(*(drivers or default for drivers in self.pre_state_drivers))
 
     def cycle_platforms(self) -> dict[str, frozenset[str]]:
         """Return, per driver of a cycle, the platforms on which the topic runs."""
@@ -443,7 +443,7 @@ class Declaration:
             if item.get("status") not in UNCHANGED_STATUSES:
                 self.error(f"{where} needs the status compliant or notapplicable")
 
-    def pre_state_requires(self, item: dict[str, object], what: str) -> None:
+    def _pre_state_requires(self, item: dict[str, object], what: str) -> None:
         """Record the drivers of a pre-state, which must be drivers of its topic."""
         if REQUIRES_KEY not in item:
             self.pre_state_drivers.append(None)
@@ -477,7 +477,7 @@ class Declaration:
                 self.error(f"{what}.audit must be a boolean")
             if "files" in item:
                 self.pre_state_files(item["files"], what)
-            self.pre_state_requires(item, what)
+            self._pre_state_requires(item, what)
             if "unchanged" in item:
                 self.pre_state_unchanged(item["unchanged"], what)
 
