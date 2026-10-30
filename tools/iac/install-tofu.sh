@@ -28,7 +28,8 @@ tar -xzf "${work_dir}/${archive}" -C "${work_dir}" tofu
 mkdir -p "${install_dir}"
 install -m 0755 "${work_dir}/tofu" "${install_dir}/tofu"
 
-installed_version="$("${install_dir}/tofu" version | head -n 1)"
+version_output="$("${install_dir}/tofu" version)"
+installed_version="${version_output%%$'\n'*}"
 printf 'installed %s to %s\n' "${installed_version}" "${install_dir}"
 if [[ "${installed_version}" != "OpenTofu v${TOFU_VERSION}" ]]; then
   printf 'error: expected OpenTofu v%s\n' "${TOFU_VERSION}" >&2
