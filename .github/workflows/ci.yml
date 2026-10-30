@@ -352,6 +352,7 @@ jobs:
       contents: read
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      libvirt: ${{ steps.plan.outputs.libvirt }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -362,11 +363,13 @@ jobs:
         with:
           version: 0.13.1
           enable-cache: false
-      - name: Plan one lifecycle leg per platform, native topic and toggle mode
+      - name: Plan one lifecycle leg per platform, native topic and toggle mode, and the libvirt legs
         id: plan
         run: |
           matrix="$(make -s molecule-matrix)"
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+          libvirt="$(make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt)"
+          printf 'libvirt=%s\n' "$libvirt" >> "$GITHUB_OUTPUT"
 
   molecule-lifecycle:
     name: molecule-lifecycle (${{ matrix.platform }}, ${{ matrix.topic }}, ${{ matrix.mode }})
@@ -397,6 +400,103 @@ jobs:
           make test-molecule-docker MOLECULE_DOCKER_SCENARIOS="$MOLECULE_SCENARIO" MOLECULE_DOCKER_SELFTEST=false
           MOLECULE_LIFECYCLE_TOPIC="$LIFECYCLE_TOPIC" MOLECULE_LIFECYCLE_MODE="$LIFECYCLE_MODE"
 
+  molecule-libvirt:
+    name: >-
+      molecule-libvirt (${{ matrix.scenario }}${{ matrix.topic && format(', {0}, {1}', matrix.topic, matrix.mode)
+      || '' }})
+    needs: molecule-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.molecule-plan.outputs.libvirt) }}
+    env:
+      UBUNTU_SNAPSHOT: 20261027T000000Z
+      QEMU_VERSION: 1:8.2.2+ds-0ubuntu1.18
+      LIBVIRT_VERSION: 10.0.0-2ubuntu8.19
+      PKG_CONFIG_VERSION: 1.8.1-2build1
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require KVM on the hosted runner
+        run: |
+          if [ ! -c /dev/kvm ]; then
+            echo '::error::/dev/kvm is missing; the libvirt scenarios need KVM (docs/molecule-libvirt.md)'
+            exit 1
+          fi
+          ls -l /dev/kvm
+          grep -Ec '(vmx|svm)' /proc/cpuinfo
+      - name: Give the runner access to /dev/kvm with the udev rule that GitHub documents
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle --timeout=30
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Install the pinned QEMU and libvirt from a fixed Ubuntu archive snapshot
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get -o Acquire::Retries=3 update --error-on=any --snapshot "${UBUNTU_SNAPSHOT}" \
+              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends --snapshot "${UBUNTU_SNAPSHOT}" \
+                "qemu-system-x86=${QEMU_VERSION}" "qemu-utils=${QEMU_VERSION}" \
+                "libvirt-daemon-system=${LIBVIRT_VERSION}" "libvirt-dev=${LIBVIRT_VERSION}" \
+                "pkg-config=${PKG_CONFIG_VERSION}"; then
+              break
+            fi
+            if [ "${attempt}" = 5 ]; then
+              echo '::error::the Ubuntu archive snapshot did not answer after five attempts'
+              exit 1
+            fi
+            sleep $((attempt * 30))
+          done
+          test "$(dpkg-query -W -f='${Version}' qemu-system-x86)" = "${QEMU_VERSION}"
+          test "$(dpkg-query -W -f='${Version}' libvirt-daemon-system)" = "${LIBVIRT_VERSION}"
+          sudo usermod --append --groups libvirt "${USER}"
+          sudo systemctl is-active libvirtd
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Restore the verified cloud images and packages, except in a pull request from a fork
+        if: >-
+          github.event_name != 'pull_request'
+          || (!github.event.pull_request.head.repo.fork
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-libvirt/cache
+          key: libvirt-images-${{ matrix.platform }}-${{ hashFiles('extensions/molecule/shared/images/*.pins') }}
+      - name: Run the libvirt scenario
+        if: matrix.scenario != 'libvirt-selftest'
+        env:
+          MOLECULE_SCENARIO: ${{ matrix.scenario }}
+          MOLECULE_PLATFORM: ${{ matrix.platform }}
+          MOLECULE_LIFECYCLE_TOPIC: ${{ matrix.topic }}
+          MOLECULE_LIFECYCLE_MODE: ${{ matrix.mode }}
+        run: >-
+          sg libvirt -c "make test-molecule-libvirt MOLECULE_LIBVIRT_SCENARIOS=$MOLECULE_SCENARIO
+          MOLECULE_LIBVIRT_PLATFORMS=$MOLECULE_PLATFORM MOLECULE_LIBVIRT_SELFTEST=false
+          MOLECULE_LIFECYCLE_TOPIC=$MOLECULE_LIFECYCLE_TOPIC MOLECULE_LIFECYCLE_MODE=$MOLECULE_LIFECYCLE_MODE"
+      - name: Run the libvirt guard and destroy self-test
+        if: matrix.scenario == 'libvirt-selftest'
+        run: sg libvirt -c "make test-molecule-libvirt-selftest MOLECULE_LIBVIRT_PLATFORMS=ubuntu"
+      - name: Show what libvirt holds after the run
+        if: always()
+        run: |
+          if ! command -v virsh >/dev/null; then
+            echo 'libvirt was not installed'
+            exit 0
+          fi
+          sudo virsh -c qemu:///system list --all
+          sudo virsh -c qemu:///system net-list --all
+          sudo virsh -c qemu:///system pool-list --all
+
   ci-gate:
     name: ci-gate
     if: always()
@@ -415,6 +515,7 @@ jobs:
       - molecule-docker
       - molecule-plan
       - molecule-lifecycle
+      - molecule-libvirt
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}

@@ -1,0 +1,437 @@
+---
+- name: Create disposable libvirt virtual machines on an isolated network
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ molecule_no_log }}"
+  vars_files:
+    - vars/versions.yml
+    - vars/libvirt.yml
+  vars:
+    molecule_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    molecule_ephemeral_directory: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    molecule_platform_keys:
+      - name
+      - image
+      - memory_mib
+      - vcpus
+      - disk_gib
+  tasks:
+    - name: Refuse a scenario name that cannot form libvirt names
+      ansible.builtin.assert:
+        that:
+          - molecule_scenario is match('^libvirt-[a-z0-9][a-z0-9-]{0,30}$')
+          - molecule_ephemeral_directory is match('^/')
+        fail_msg: >-
+          MOLECULE_SCENARIO_NAME must start with libvirt- followed by lower case letters, digits and hyphens, and
+          MOLECULE_EPHEMERAL_DIRECTORY must be an absolute path.
+        quiet: true
+
+    - name: Check for an instance config of an earlier create
+      ansible.builtin.stat:
+        path: "{{ molecule_instance_config }}"
+      register: create_config_stat
+
+    - name: Read the instance config of an earlier create
+      ansible.builtin.set_fact:
+        create_recorded_instances: >-
+          {{ (lookup('ansible.builtin.file', molecule_instance_config) | from_yaml | default([], true))
+          if create_config_stat.stat.exists else [] }}
+
+    - name: Reuse the recorded run id, or generate it once
+      ansible.builtin.set_fact:
+        molecule_run_id: >-
+          {{ create_recorded_instances | map(attribute='run_id') | first
+          if create_recorded_instances | length > 0
+          else lookup('ansible.builtin.password', '/dev/null chars=ascii_lowercase,digits length=8') }}
+
+    - name: Refuse a recorded config of another scenario, driver or run
+      ansible.builtin.assert:
+        that:
+          - molecule_run_id is match('^[a-z0-9]{8}$')
+          - create_recorded_instances | map(attribute='run_id') | unique | list | length <= 1
+          - create_recorded_instances | rejectattr('scenario', 'equalto', molecule_scenario) | list | length == 0
+          - create_recorded_instances | rejectattr('driver', 'defined') | list | length == 0
+          - create_recorded_instances | rejectattr('driver', 'equalto', 'libvirt') | list | length == 0
+        fail_msg: >-
+          The instance config {{ molecule_instance_config }} belongs to another scenario, driver or run.
+          Run molecule destroy first.
+        quiet: true
+
+    - name: Read the user that runs the controller
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - user
+
+    - name: Name the cloud image of every pinned platform
+      ansible.builtin.set_fact:
+        create_image_lines: "{{ molecule_libvirt_pins | selectattr('0', 'equalto', 'image') | list }}"
+
+    - name: Validate the platform definitions
+      ansible.builtin.assert:
+        that:
+          - molecule_yml.platforms | length > 0
+          - molecule_yml.platforms | length <= 4
+          - item.name is match('^[a-z0-9][a-z0-9-]{0,20}$')
+          - item.keys() | difference(molecule_platform_keys) | length == 0
+          - item.image in molecule_images
+          - create_image_lines | selectattr('1', 'equalto', item.image) | list | length == 1
+          - (item.memory_mib | default(molecule_libvirt_bounds.memory_mib.default)) is integer
+          - >-
+            (item.memory_mib | default(molecule_libvirt_bounds.memory_mib.default))
+            >= molecule_libvirt_bounds.memory_mib.minimum
+          - >-
+            (item.memory_mib | default(molecule_libvirt_bounds.memory_mib.default))
+            <= molecule_libvirt_bounds.memory_mib.maximum
+          - (item.vcpus | default(molecule_libvirt_bounds.vcpus.default)) is integer
+          - >-
+            (item.vcpus | default(molecule_libvirt_bounds.vcpus.default))
+            >= molecule_libvirt_bounds.vcpus.minimum
+          - >-
+            (item.vcpus | default(molecule_libvirt_bounds.vcpus.default))
+            <= molecule_libvirt_bounds.vcpus.maximum
+          - (item.disk_gib | default(molecule_libvirt_bounds.disk_gib.default)) is integer
+          - >-
+            (item.disk_gib | default(molecule_libvirt_bounds.disk_gib.default))
+            >= molecule_libvirt_bounds.disk_gib.minimum
+          - >-
+            (item.disk_gib | default(molecule_libvirt_bounds.disk_gib.default))
+            <= molecule_libvirt_bounds.disk_gib.maximum
+        fail_msg: >-
+          Every platform needs a lower-case name, a platform key of vars/versions.yml with a cloud image in
+          images/cloud-images.pins, and memory_mib, vcpus and disk_gib within the bounds of vars/libvirt.yml; no
+          other key is allowed.
+        quiet: true
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Check the cached cloud images against their pins
+      ansible.builtin.stat:
+        path: "{{ molecule_libvirt_cache }}/images/{{ item }}.qcow2"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+      loop: >-
+        {{ molecule_yml.platforms | map(attribute='image') | unique
+        | map('extract', dict(create_image_lines | map(attribute='1') | zip(create_image_lines | map(attribute='4'))))
+        | list }}
+      register: create_image_stats
+
+    - name: Refuse a missing or unverified cloud image
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+          - item.stat.checksum == item.item
+        fail_msg: >-
+          {{ item.item }}.qcow2 is missing from {{ molecule_libvirt_cache }}/images or does not match its pin. Run
+          make test-molecule-libvirt, which fetches it and checks the vendor's signed checksum file with
+          tools/molecule/fetch-cloud-images.sh.
+        quiet: true
+      loop: "{{ create_image_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Compute the run's network, pool and directory
+      ansible.builtin.set_fact:
+        create_run:
+          network: "{{ molecule_libvirt_name_prefix }}-{{ molecule_scenario }}-{{ molecule_run_id }}"
+          bridge: "fsdm{{ molecule_run_id }}"
+          pool: "{{ molecule_libvirt_name_prefix }}-{{ molecule_scenario }}-{{ molecule_run_id }}"
+          pool_path: >-
+            {{ molecule_libvirt_pool_parent }}/{{ molecule_libvirt_name_prefix }}-{{ molecule_scenario }}-{{
+            molecule_run_id }}
+          directory: "{{ molecule_ephemeral_directory }}/libvirt"
+          subnet: >-
+            10.{{ 200 + (molecule_run_id | hash('sha256'))[0:2] | int(base=16) % 50 }}.{{
+            (molecule_run_id | hash('sha256'))[2:4] | int(base=16) }}
+
+    - name: Compute unique instance names, addresses, markers and labels
+      ansible.builtin.set_fact:
+        instance_conf: >-
+          {{ instance_conf | default([]) + [{
+            'instance': item.name,
+            'address': create_run.subnet ~ '.' ~ (10 + idx),
+            'user': 'root',
+            'port': 22,
+            'identity_file': create_run.directory ~ '/id_ed25519',
+            'connection': 'ssh',
+            'driver': 'libvirt',
+            'scenario': molecule_scenario,
+            'run_id': molecule_run_id,
+            'image': item.image,
+            'marker': (create_recorded_instances | selectattr('instance', 'equalto', item.name)
+                       | map(attribute='marker') | first
+                       | default(lookup('ansible.builtin.password',
+                                      '/dev/null chars=ascii_lowercase,digits length=32'))),
+            'domain': molecule_libvirt_name_prefix ~ '-' ~ molecule_scenario ~ '-' ~ molecule_run_id ~ '-' ~ item.name,
+            'network': create_run.network,
+            'bridge': create_run.bridge,
+            'gateway': create_run.subnet ~ '.1',
+            'pool': create_run.pool,
+            'pool_path': create_run.pool_path,
+            'disk': molecule_libvirt_name_prefix ~ '-' ~ molecule_scenario ~ '-' ~ molecule_run_id ~ '-' ~ item.name
+                    ~ '.qcow2',
+            'seed': molecule_libvirt_name_prefix ~ '-' ~ molecule_scenario ~ '-' ~ molecule_run_id ~ '-' ~ item.name
+                    ~ '-seed.iso',
+            'mac': '52:54:00:' ~ [((molecule_run_id ~ item.name) | hash('sha256'))[0:2],
+                                  ((molecule_run_id ~ item.name) | hash('sha256'))[2:4],
+                                  ((molecule_run_id ~ item.name) | hash('sha256'))[4:6]] | join(':'),
+            'known_hosts': create_run.directory ~ '/known_hosts',
+            'image_sha256': create_image_lines | selectattr('1', 'equalto', item.image) | map(attribute='4') | first,
+            'memory_mib': item.memory_mib | default(molecule_libvirt_bounds.memory_mib.default),
+            'vcpus': item.vcpus | default(molecule_libvirt_bounds.vcpus.default),
+            'disk_gib': item.disk_gib | default(molecule_libvirt_bounds.disk_gib.default),
+            'capabilities_add': []
+          }] }}
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        label: "{{ item.name }}"
+        index_var: idx
+
+    - name: Find the objects that an earlier create of this run made
+      ansible.builtin.include_tasks:
+        file: tasks/libvirt_objects.yml
+      vars:
+        libvirt_objects_scenario: "{{ molecule_scenario }}"
+
+    - name: Decide whether an earlier create of this run made every object
+      ansible.builtin.set_fact:
+        create_existing: >-
+          {{ (libvirt_objects.domains + libvirt_objects.networks + libvirt_objects.pools)
+          | selectattr('run', 'equalto', molecule_run_id) | list }}
+        create_reuse: >-
+          {{ libvirt_objects.domains | selectattr('run', 'equalto', molecule_run_id) | selectattr('labelled')
+          | map(attribute='name') | sort == instance_conf | map(attribute='domain') | sort
+          and libvirt_objects.networks | selectattr('run', 'equalto', molecule_run_id) | selectattr('labelled')
+          | list | length == 1
+          and libvirt_objects.pools | selectattr('run', 'equalto', molecule_run_id) | selectattr('labelled')
+          | list | length == 1 }}
+
+    - name: Refuse an earlier create of this run that left only some of its objects
+      ansible.builtin.assert:
+        that:
+          - create_reuse | bool or create_existing | length == 0
+        fail_msg: >-
+          An earlier create of run {{ molecule_run_id }} left only {{ create_existing | map(attribute='name') | list }}.
+          Run molecule destroy first.
+        quiet: true
+
+    - name: Build, boot and check the virtual machines
+      block:
+        - name: Write the instance config before any libvirt object exists
+          ansible.builtin.copy:
+            content: "{{ instance_conf | to_nice_yaml }}"
+            dest: "{{ molecule_instance_config }}"
+            mode: "0600"
+
+        - name: Create the run's private directory for its ephemeral keys
+          ansible.builtin.file:
+            path: "{{ create_run.directory }}"
+            state: directory
+            mode: "0700"
+
+        - name: Generate the ephemeral client key of this run
+          community.crypto.openssh_keypair:
+            path: "{{ create_run.directory }}/id_ed25519"
+            type: ed25519
+            backend: cryptography
+            private_key_format: ssh
+            comment: "fsd-mol-{{ molecule_run_id }}"
+            mode: "0600"
+          register: create_client_key
+
+        - name: Generate the ephemeral host key of every instance
+          community.crypto.openssh_keypair:
+            path: "{{ create_run.directory }}/{{ item.instance }}_host_ed25519"
+            type: ed25519
+            backend: cryptography
+            private_key_format: ssh
+            comment: "{{ item.domain }}"
+            mode: "0600"
+          loop: "{{ instance_conf }}"
+          loop_control:
+            label: "{{ item.instance }}"
+          register: create_host_keys
+
+        - name: Pin the host key of every instance in the run's known_hosts file
+          ansible.builtin.copy:
+            content: "{{ create_known_hosts | join('\n') }}\n"
+            dest: "{{ create_run.directory }}/known_hosts"
+            mode: "0600"
+          vars:
+            create_known_hosts: >-
+              {{ create_host_keys.results | map(attribute='item.address')
+              | zip(create_host_keys.results | map(attribute='public_key')) | map('join', ' ') | list }}
+
+        - name: Create the run's network, pool, disks, seeds and domains unless an earlier create made them
+          when: not create_reuse
+          block:
+            - name: Define the run's isolated network without forwarding, DHCP or DNS
+              community.libvirt.virt_net:
+                uri: qemu:///system
+                command: define
+                name: "{{ create_run.network }}"
+                xml: |
+                  <network>
+                    <name>{{ create_run.network }}</name>
+                    <metadata>
+                      <fsd:molecule xmlns:fsd="{{ molecule_libvirt_metadata_namespace }}">
+                        <fsd:scenario>{{ molecule_scenario }}</fsd:scenario>
+                        <fsd:run>{{ molecule_run_id }}</fsd:run>
+                      </fsd:molecule>
+                    </metadata>
+                    <bridge name='{{ create_run.bridge }}' stp='on' delay='0'/>
+                    <dns enable='no'/>
+                    <ip address='{{ create_run.subnet }}.1' netmask='255.255.255.0'/>
+                  </network>
+
+            - name: Start the run's isolated network
+              community.libvirt.virt_net:
+                uri: qemu:///system
+                name: "{{ create_run.network }}"
+                state: active
+
+            - name: Define the run's storage pool, owned by the controller user
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                command: define
+                name: "{{ create_run.pool }}"
+                xml: |
+                  <pool type='dir'>
+                    <name>{{ create_run.pool }}</name>
+                    <target>
+                      <path>{{ create_run.pool_path }}</path>
+                      <permissions>
+                        <mode>0711</mode>
+                        <owner>{{ ansible_facts.user_uid }}</owner>
+                        <group>{{ ansible_facts.user_gid }}</group>
+                      </permissions>
+                    </target>
+                  </pool>
+
+            - name: Build the run's storage pool directory
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                command: build
+                name: "{{ create_run.pool }}"
+
+            - name: Start the run's storage pool
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                name: "{{ create_run.pool }}"
+                state: active
+
+            - name: Copy the verified cloud image of every instance into the pool
+              ansible.builtin.copy:
+                src: "{{ molecule_libvirt_cache }}/images/{{ item.image_sha256 }}.qcow2"
+                dest: "{{ item.pool_path }}/{{ item.disk }}"
+                remote_src: true
+                mode: "0600"
+              loop: "{{ instance_conf }}"
+              loop_control:
+                label: "{{ item.instance }}"
+
+            - name: Let the pool see the copied disks
+              community.libvirt.virt_pool:
+                uri: qemu:///system
+                command: refresh
+                name: "{{ create_run.pool }}"
+
+            - name: Bound the disk of every instance to its size
+              community.libvirt.virt_volume:
+                uri: qemu:///system
+                pool: "{{ item.pool }}"
+                state: present
+                xml: |
+                  <volume>
+                    <name>{{ item.disk }}</name>
+                    <capacity unit='GiB'>{{ item.disk_gib }}</capacity>
+                  </volume>
+              loop: "{{ instance_conf }}"
+              loop_control:
+                label: "{{ item.instance }}"
+
+            - name: Create the cloud-init seed of every instance with its host key and the run's client key
+              community.libvirt.virt_volume:
+                uri: qemu:///system
+                pool: "{{ item.0.pool }}"
+                command: create_cidata_cdrom
+                name: "{{ item.0.seed }}"
+                cloudinit_config:
+                  METADATA:
+                    instance-id: "{{ item.0.domain }}"
+                    local-hostname: "{{ item.0.instance }}"
+                  USERDATA:
+                    disable_root: false
+                    ssh_pwauth: false
+                    users:
+                      - name: root
+                        lock_passwd: true
+                        ssh_authorized_keys:
+                          - "{{ create_client_key.public_key }}"
+                    ssh_deletekeys: true
+                    ssh_genkeytypes: []
+                    ssh_keys:
+                      ed25519_private: "{{ lookup('ansible.builtin.file', item.1.filename) }}\n"
+                      ed25519_public: "{{ item.1.public_key }}"
+                    package_update: false
+                    package_upgrade: false
+                  NETWORK_CONFIG:
+                    version: 2
+                    ethernets:
+                      primary:
+                        match:
+                          macaddress: "{{ item.0.mac }}"
+                        dhcp4: false
+                        addresses:
+                          - "{{ item.0.address }}/24"
+              loop: "{{ instance_conf | zip(create_host_keys.results) | list }}"
+              loop_control:
+                label: "{{ item.0.instance }}"
+              no_log: true
+
+            - name: Define every instance with the run's labels, marker, disk, seed and only the isolated network
+              community.libvirt.virt:
+                uri: qemu:///system
+                command: define
+                xml: "{{ molecule_libvirt_domain_xml }}"
+              vars:
+                libvirt_domain: "{{ item }}"
+              loop: "{{ instance_conf }}"
+              loop_control:
+                label: "{{ item.instance }}"
+
+        - name: Boot every instance
+          community.libvirt.virt:
+            uri: qemu:///system
+            name: "{{ item.domain }}"
+            state: running
+          loop: "{{ instance_conf }}"
+          loop_control:
+            label: "{{ item.instance }}"
+
+        - name: Wait until every instance answers on SSH
+          ansible.builtin.wait_for:
+            host: "{{ item.address }}"
+            port: 22
+            search_regex: OpenSSH
+            timeout: "{{ molecule_libvirt_boot_timeout }}"
+          loop: "{{ instance_conf }}"
+          loop_control:
+            label: "{{ item.instance }}"
+      rescue:
+        - name: Remove everything this run created
+          ansible.builtin.include_tasks:
+            file: tasks/libvirt_remove.yml
+          vars:
+            libvirt_remove_scenario: "{{ molecule_scenario }}"
+            libvirt_remove_runs:
+              - "{{ molecule_run_id }}"
+
+        - name: Fail because instance creation failed
+          ansible.builtin.fail:
+            msg: Instance creation failed and everything this run created was removed.

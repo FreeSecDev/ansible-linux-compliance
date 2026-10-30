@@ -1,0 +1,92 @@
+---
+- name: Libvirt objects | Name the patterns of this scenario's domains, networks, pools and labels
+  ansible.builtin.set_fact:
+    libvirt_objects_domain_pattern: >-
+      ^fsd-mol-{{ libvirt_objects_scenario | regex_escape }}-([a-z0-9]{8})-[a-z0-9][a-z0-9-]*$
+    libvirt_objects_run_pattern: "^fsd-mol-{{ libvirt_objects_scenario | regex_escape }}-([a-z0-9]{8})$"
+    libvirt_objects_label_prefix: >-
+      xmlns:fsd="{{ molecule_libvirt_metadata_namespace | regex_escape }}">\s*<fsd:scenario>{{
+      libvirt_objects_scenario | regex_escape }}</fsd:scenario>\s*<fsd:run>
+    libvirt_objects:
+      domains: []
+      networks: []
+      pools: []
+
+- name: Libvirt objects | List every domain
+  community.libvirt.virt:
+    uri: qemu:///system
+    command: list_vms
+  register: libvirt_objects_domain_names
+
+- name: Libvirt objects | List every network
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    command: list_nets
+  register: libvirt_objects_network_names
+
+- name: Libvirt objects | List every pool
+  community.libvirt.virt_pool:
+    uri: qemu:///system
+    command: list_pools
+  register: libvirt_objects_pool_names
+
+- name: Libvirt objects | Read the definition of every domain named like one of this scenario
+  community.libvirt.virt:
+    uri: qemu:///system
+    name: "{{ item }}"
+    command: get_xml
+  loop: "{{ libvirt_objects_domain_names.list_vms | select('match', libvirt_objects_domain_pattern) | list }}"
+  register: libvirt_objects_domain_xml
+
+- name: Libvirt objects | Read the definition of every network named like one of this scenario
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    name: "{{ item }}"
+    command: get_xml
+  loop: "{{ libvirt_objects_network_names.list_nets | select('match', libvirt_objects_run_pattern) | list }}"
+  register: libvirt_objects_network_xml
+
+- name: Libvirt objects | Read the definition of every pool named like one of this scenario
+  community.libvirt.virt_pool:
+    uri: qemu:///system
+    name: "{{ item }}"
+    command: get_xml
+  loop: "{{ libvirt_objects_pool_names.list_pools | select('match', libvirt_objects_run_pattern) | list }}"
+  register: libvirt_objects_pool_xml
+
+- name: Libvirt objects | Record each domain and whether its definition carries the labels of its run
+  ansible.builtin.set_fact:
+    libvirt_objects: >-
+      {{ libvirt_objects | combine({'domains': libvirt_objects.domains + [{
+      'name': item.item, 'scenario': libvirt_objects_scenario, 'run': libvirt_objects_run, 'xml': item.get_xml,
+      'labelled': item.get_xml is search(libvirt_objects_label_prefix ~ libvirt_objects_run ~ '</fsd:run>')}]}) }}
+  vars:
+    libvirt_objects_run: "{{ item.item | regex_replace(libvirt_objects_domain_pattern, '\\1') }}"
+  loop: "{{ libvirt_objects_domain_xml.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Libvirt objects | Record each network and whether its definition carries the labels of its run
+  ansible.builtin.set_fact:
+    libvirt_objects: >-
+      {{ libvirt_objects | combine({'networks': libvirt_objects.networks + [{
+      'name': item.item, 'scenario': libvirt_objects_scenario, 'run': libvirt_objects_run, 'xml': item.get_xml,
+      'labelled': item.get_xml is search(libvirt_objects_label_prefix ~ libvirt_objects_run ~ '</fsd:run>')}]}) }}
+  vars:
+    libvirt_objects_run: "{{ item.item | regex_replace(libvirt_objects_run_pattern, '\\1') }}"
+  loop: "{{ libvirt_objects_network_xml.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Libvirt objects | Record each pool and whether its directory is the one of its run
+  ansible.builtin.set_fact:
+    libvirt_objects: >-
+      {{ libvirt_objects | combine({'pools': libvirt_objects.pools + [{
+      'name': item.item, 'scenario': libvirt_objects_scenario, 'run': libvirt_objects_run, 'xml': item.get_xml,
+      'labelled': item.get_xml is search('<path>' ~ (molecule_libvirt_pool_parent ~ '/' ~ item.item) | regex_escape
+      ~ '</path>')}]}) }}
+  vars:
+    libvirt_objects_run: "{{ item.item | regex_replace(libvirt_objects_run_pattern, '\\1') }}"
+  loop: "{{ libvirt_objects_pool_xml.results }}"
+  loop_control:
+    label: "{{ item.item }}"

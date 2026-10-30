@@ -5,7 +5,8 @@
   vars:
     lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
     lifecycle_broad_rewritten: "{{ lifecycle_broad_selfcheck_case.rewritten | default([]) }}"
-    lifecycle_broad_raw: "{{ lifecycle_broad_selfcheck_raw }}"
+    lifecycle_broad_raw: >-
+      {{ lifecycle_broad_selfcheck_raw | combine(lifecycle_broad_selfcheck_case.before | default({})) }}
 
 - name: Lifecycle broad self-check | Remember the synthetic state before the case
   ansible.builtin.set_fact:

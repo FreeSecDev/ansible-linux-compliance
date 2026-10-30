@@ -1,0 +1,8 @@
+---
+molecule_yml:
+  platforms:
+    - name: probe
+      image: ubuntu
+      memory_mib: 1024
+      vcpus: 1
+      disk_gib: 8

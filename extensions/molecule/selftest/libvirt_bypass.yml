@@ -1,0 +1,301 @@
+---
+- name: Prepare real bypass attempts against the libvirt guard
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../shared/vars/libvirt.yml
+  vars:
+    selftest_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+    selftest_instances: "{{ lookup('ansible.builtin.file', molecule_instance_config) | from_yaml }}"
+    selftest_probe: "{{ selftest_instances | selectattr('instance', 'equalto', 'probe') | first }}"
+    selftest_prefix: "fsd-mol-{{ selftest_scenario }}-{{ selftest_probe.run_id }}"
+    selftest_ssh_args: >-
+      {{ molecule_libvirt_ssh_options | map('replace', '@KNOWN_HOSTS@', selftest_probe.known_hosts) | join(' ') }}
+    selftest_proxy_args: -o ProxyCommand=nc 192.0.2.1 22
+    selftest_jump_args: -o ProxyJump=jump.example.invalid
+    selftest_good_host:
+      ansible_host: "{{ selftest_probe.address }}"
+      ansible_connection: ssh
+      ansible_user: root
+      ansible_port: 22
+      ansible_private_key_file: "{{ selftest_probe.identity_file }}"
+      ansible_ssh_common_args: "{{ selftest_ssh_args }}"
+    selftest_decoys:
+      - name: shared
+        devices: >-
+          <filesystem type='mount' accessmode='passthrough'><source
+          dir='{{ molecule_selftest_dir }}/host-directory'/><target dir='host'/></filesystem>
+      - name: bridged
+        devices: >-
+          <interface type='bridge'><source bridge='{{ selftest_probe.bridge }}'/><model
+          type='virtio'/></interface>
+      - name: channel
+        devices: "<channel type='unix'><target type='virtio' name='org.freesecdev.selftest'/></channel>"
+    selftest_inventories:
+      good:
+        probe: "{{ selftest_good_host }}"
+      local:
+        probe: "{{ selftest_good_host | combine({'ansible_host': 'localhost', 'ansible_connection': 'local'}) }}"
+      localhost:
+        localhost: "{{ selftest_good_host }}"
+      loopback:
+        probe: "{{ selftest_good_host | combine({'ansible_host': '127.0.0.1'}) }}"
+      unknown:
+        probe: >-
+          {{ selftest_good_host | combine({'ansible_host': selftest_probe.address | regex_replace('[0-9]+$', '99')}) }}
+      proxy:
+        probe: "{{ selftest_good_host | combine(selftest_proxy_host) }}"
+      jump:
+        probe: "{{ selftest_good_host | combine(selftest_jump_host) }}"
+      port:
+        probe: "{{ selftest_good_host | combine({'ansible_port': 2222}) }}"
+      user:
+        probe: "{{ selftest_good_host | combine({'ansible_user': 'ubuntu'}) }}"
+      key:
+        probe: "{{ selftest_good_host | combine({'ansible_private_key_file': molecule_selftest_dir ~ '/other_key'}) }}"
+      password:
+        probe: "{{ selftest_good_host | combine({'ansible_password': 'selftest'}) }}"
+      hostkey:
+        probe: "{{ selftest_good_host | combine({'ansible_host_key_checking': false}) }}"
+      become:
+        probe: "{{ selftest_good_host | combine({'ansible_become_method': 'su'}) }}"
+    selftest_proxy_host:
+      ansible_ssh_common_args: "{{ selftest_proxy_args }}"
+    selftest_jump_host:
+      ansible_ssh_extra_args: "{{ selftest_jump_args }}"
+    selftest_shared_record: >-
+      {{ selftest_probe | combine({'instance': 'shared', 'domain': selftest_prefix ~ '-shared'}) }}
+    selftest_shared_instances: "{{ selftest_instances + [selftest_shared_record] }}"
+    selftest_shared_hosts:
+      shared: "{{ selftest_good_host }}"
+    selftest_pair_hosts:
+      probe: "{{ selftest_good_host }}"
+      shared: "{{ selftest_good_host }}"
+    selftest_probe_xml: "{{ selftest_probe_domain.get_xml }}"
+    selftest_extra_vars:
+      guard_scenario: "{{ selftest_scenario }}"
+      guard_driver: libvirt
+      guard_instances: "{{ selftest_shared_instances }}"
+      guard_instance: "{{ selftest_shared_record }}"
+      guard_record: "{{ selftest_shared_record }}"
+      guard_hostname: shared
+      guard_address: "{{ selftest_probe.address }}"
+      guard_connection: ssh
+      guard_connection_vars: "{{ selftest_good_host }}"
+      guard_connection_variable_pattern: "^$"
+      guard_outside_pattern: "^$"
+      guard_allowed_connections:
+        - ssh
+      guard_environment:
+        ANSIBLE_DOCKER_PRIVILEGED: ""
+      guard_driver_settings:
+        libvirt:
+          forbidden: "^$"
+          name: ".*"
+      guard_forbidden_variables: []
+      guard_matches:
+        - "{{ selftest_shared_record }}"
+      guard_name_pattern: ".*"
+      guard_expected_names: []
+      guard_expected_list: []
+      guard_expected_values: {}
+      guard_actual_values: []
+      guard_unexpected_values: []
+      guard_loopback_alternatives:
+        - "^$"
+      guard_loopback_pattern: "^$"
+      guard_normalised_hostname: shared
+      guard_normalised_address: "{{ selftest_probe.address }}"
+      guard_marker_variable: FREESECDEV_MOLECULE_MARKER
+      guard_domain:
+        get_xml: "{{ selftest_probe_xml }}"
+      guard_network:
+        get_xml: ""
+      guard_pool:
+        get_xml: ""
+      guard_domain_xml: "{{ selftest_probe_xml }}"
+      guard_network_xml: ""
+      guard_pool_xml: ""
+      guard_metadata_namespace: "{{ molecule_libvirt_metadata_namespace }}"
+      guard_pool_parent: "{{ molecule_libvirt_pool_parent }}"
+      guard_ssh_settings:
+        host_key_checking: true
+      guard_label_prefix: ".*"
+      guard_disk_source: ".*"
+      guard_domain_elements: []
+      guard_domain_sources: []
+      guard_domain_seclabels:
+        - "<seclabel type='dynamic' model='apparmor' relabel='yes'>"
+      guard_domain_labels: []
+      guard_domain_allowed_elements: "{{ selftest_probe_xml | regex_findall('<([A-Za-z][A-Za-z0-9:_.-]*)') | unique }}"
+      guard_network_allowed_elements: []
+      guard_pool_allowed_elements: []
+      guard_allowed_source_alternatives:
+        - ".*"
+      guard_allowed_sources: ".*"
+      guard_allowed_driver: ".*"
+      guard_allowed_emulator: ".*"
+      guard_allowed_input: ".*"
+      guard_allowed_seclabel: ".*"
+      guard_allowed_label_alternatives:
+        - ".*"
+      guard_allowed_label: ".*"
+      guard_host_apparmor: false
+      guard_allowed_watchdog: ".*"
+      guard_pool_owner: "0"
+      guard_key_owner:
+        stat:
+          uid: 0
+      guard_default_control_path_dir: /tmp
+      guard_molecule_control_path: /tmp/selftest
+      guard_default_ssh_args: ""
+      guard_libvirt_identity:
+        results: []
+      guard_serial: "{{ selftest_probe.marker }}"
+      guard_product_uuid: ""
+      guard_boot_id: ""
+      guard_machine_id: ""
+      guard_controller_boot_id: ""
+      guard_controller_machine_id: ""
+      guard_container: {}
+      guard_inspect:
+        container: {}
+      guard_daemon:
+        host_info:
+          ServerVersion: 29.0.0
+      guard_daemon_version: 29.0.0
+      guard_init_environ:
+        content: ""
+      guard_self_status:
+        content: ""
+      guard_environ: ""
+      guard_status: ""
+      molecule_target: "{{ selftest_probe }}"
+      molecule_libvirt_ssh_options: []
+      molecule_libvirt_metadata_namespace: ""
+      molecule_libvirt_pool_parent: /
+      molecule_instance_config: "{{ molecule_selftest_dir }}/instance_config_shared.yml"
+      molecule_allowed_connections:
+        - ssh
+      ansible_host: "{{ selftest_probe.address }}"
+      ansible_connection: ssh
+      inventory_hostname: probe
+    selftest_outside_names:
+      - molecule_target
+      - molecule_libvirt_ssh_options
+      - molecule_libvirt_metadata_namespace
+      - molecule_libvirt_pool_parent
+      - molecule_instance_config
+      - molecule_allowed_connections
+      - ansible_host
+      - ansible_connection
+      - inventory_hostname
+    selftest_guard_files:
+      - guard.yml
+      - tasks/guard.yml
+      - tasks/guard_libvirt_isolation.yml
+      - tasks/guard_libvirt_connection.yml
+      - tasks/guard_libvirt_reach.yml
+    selftest_guard_paths: "{{ selftest_guard_files | map('regex_replace', '^', playbook_dir ~ '/../shared/') | list }}"
+    selftest_guard_names: >-
+      {{ query('ansible.builtin.file', *selftest_guard_paths)
+      | map('regex_findall', '\bguard_[a-z0-9_]+\b(?!\.yml)') | flatten | unique | sort }}
+  tasks:
+    - name: Check that every variable the libvirt guard relies on has an extra-variable bypass attempt
+      ansible.builtin.assert:
+        that:
+          - selftest_guard_names | length > 0
+          - >-
+            selftest_guard_names | union(selftest_outside_names) | difference(selftest_extra_vars.keys())
+            | length == 0
+        fail_msg: >-
+          These guard variables have no extra-variable bypass attempt in selftest_extra_vars:
+          {{ selftest_guard_names | union(selftest_outside_names) | difference(selftest_extra_vars.keys()) }}.
+        quiet: true
+
+    - name: Read the definition of the probe that the create step booted
+      community.libvirt.virt:
+        uri: qemu:///system
+        name: "{{ selftest_probe.domain }}"
+        command: get_xml
+      register: selftest_probe_domain
+
+    - name: Define, but never start, decoys of this run that carry its labels and marker but share the host
+      community.libvirt.virt:
+        uri: qemu:///system
+        command: define
+        xml: "{{ molecule_libvirt_domain_xml }}"
+      vars:
+        libvirt_domain: "{{ selftest_probe | combine({'domain': selftest_prefix ~ '-' ~ item.name}) }}"
+        libvirt_domain_extra_devices: "{{ item.devices }}"
+      loop: "{{ selftest_decoys }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Write one instance config per decoy, recording it like the create step would
+      ansible.builtin.copy:
+        content: >-
+          {{ (selftest_instances + [selftest_probe | combine({'instance': item.name,
+          'domain': selftest_prefix ~ '-' ~ item.name})]) | to_nice_yaml }}
+        dest: "{{ molecule_selftest_dir }}/instance_config_{{ item.name }}.yml"
+        mode: "0600"
+      loop: "{{ selftest_decoys }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Write one inventory per decoy, reached with the probe's address and settings
+      ansible.builtin.copy:
+        content: "{{ {'all': {'hosts': {item.name: selftest_good_host}}} | to_nice_yaml }}"
+        dest: "{{ molecule_selftest_dir }}/{{ item.name }}.yml"
+        mode: "0600"
+      loop: "{{ selftest_decoys }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Write one inventory per bypass attempt
+      ansible.builtin.copy:
+        content: "{{ {'all': {'hosts': item.value}} | to_nice_yaml }}"
+        dest: "{{ molecule_selftest_dir }}/{{ item.key }}.yml"
+        mode: "0600"
+      loop: "{{ selftest_inventories | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Create one directory per extra-variable bypass attempt
+      ansible.builtin.file:
+        path: "{{ molecule_selftest_dir }}/extra-vars/{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: "{{ selftest_extra_vars.keys() | sort }}"
+
+    - name: Write the extra variable of each attempt, which disguises the shared decoy as the isolated probe
+      ansible.builtin.copy:
+        content: "{{ {item.key: item.value} | to_nice_yaml }}"
+        dest: "{{ molecule_selftest_dir }}/extra-vars/{{ item.key }}/vars.yml"
+        mode: "0600"
+      loop: "{{ selftest_extra_vars | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Write the instance config of each attempt, which records the shared decoy like the create step would
+      ansible.builtin.copy:
+        content: "{{ selftest_shared_instances | to_nice_yaml }}"
+        dest: "{{ molecule_selftest_dir }}/extra-vars/{{ item }}/instance_config.yml"
+        mode: "0600"
+      loop: "{{ selftest_extra_vars.keys() | sort }}"
+
+    - name: Write the inventory of each attempt, which targets the shared decoy
+      ansible.builtin.copy:
+        content: >-
+          {{ {'all': {'hosts': selftest_pair_hosts if item == 'inventory_hostname' else selftest_shared_hosts}}
+          | to_nice_yaml }}
+        dest: "{{ molecule_selftest_dir }}/extra-vars/{{ item }}/inventory.yml"
+        mode: "0600"
+      loop: "{{ selftest_extra_vars.keys() | sort }}"
+
+    - name: List the extra-variable bypass attempts for the self-test recipe
+      ansible.builtin.copy:
+        content: "{{ selftest_extra_vars.keys() | sort | join('\n') }}\n"
+        dest: "{{ molecule_selftest_dir }}/extra-vars/cases"
+        mode: "0600"

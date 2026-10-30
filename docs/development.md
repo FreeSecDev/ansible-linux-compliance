@@ -66,6 +66,7 @@ overriding them.
 | `toggles` | implemented | Regenerates the topic toggle defaults, the topic toggle argument specs and the allow-list choices of the `remediate` and `audit` roles and `docs/remediation-variables.md` from `roles/remediate/vars/rules.yml` |
 | `lint-role-guards` | implemented | `tools/roles/generate_role_guards.py --check`: fails with a diff when `roles/remediate/tasks/dispatch.yml` or a `tasks/internal_variables.yml` of the audit, evidence, remediate or verify role differs from what the family registry and the role files give, or a role with internal variables is not guarded (FREES-137, FREES-153) |
 | `lint-lifecycle` | implemented | `tools/roles/check_lifecycle_topics.py`: fails when a topic with a native rule in the catalogue has no Molecule toggle lifecycle declaration in `extensions/molecule/shared/vars/topics/`, when a declaration names a topic without a native rule, or when a declaration does not follow the format ([Molecule](molecule.md#toggle-lifecycle-of-every-native-topic), FREES-60) |
+| `molecule-matrix` | implemented | `tools/roles/molecule_matrix.py`: prints the CI legs of `MOLECULE_MATRIX_DRIVER` (`docker` or `libvirt`) as JSON, one per platform, native topic with a cycle of that driver and toggle mode; for libvirt also the base leg of each platform and the self-test ([libvirt](molecule-libvirt.md#ci)) |
 | `role-guards` | implemented | Regenerates the static family dispatch of the remediate role, with one include per family that has a native rule, and the internal-variable guards of the audit, evidence, remediate and verify roles |
 | `content` | implemented | `tools/content/fetch_content.py --output-dir build/content`: fetches the pinned release archive and extracts the verified datastreams |
 | `catalogue` | implemented | `tools/roles/generate_catalogue.py`, then `toggles` and `role-guards`: regenerates `roles/remediate/vars/rules.yml` and `docs/control-families.md` from the datastreams in `build/content` and the family mapping `content/catalogue.yml` (run `make content` first) |
@@ -117,7 +118,10 @@ overriding them.
 | `test-integration` | pending FREES-60 | Integration tests |
 | `test-idempotency` | pending FREES-60 | Idempotency checks |
 | `test-compliance` | pending FREES-62 | Compliance scan scenarios |
-| `test-molecule-libvirt` | pending FREES-61 | libvirt Molecule scenarios |
+| `test-molecule-libvirt` | implemented | `molecule-dependencies`, `molecule-content`, `molecule-libvirt-images`, `molecule-libvirt-preflight`, then `molecule test` for the base scenarios `libvirt-ubuntu` and `libvirt-rhel-compatible` and the lifecycle scenarios `libvirt-ubuntu-lifecycle` and `libvirt-rhel-compatible-lifecycle` in KVM virtual machines (stops at the first failure; `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one topic and mode), then `test-molecule-libvirt-selftest` unless `MOLECULE_LIBVIRT_SELFTEST=false`; needs `/dev/kvm` and `qemu:///system`, see [libvirt](molecule-libvirt.md) |
+| `test-molecule-libvirt-selftest` | implemented | Real guard bypass attempts, decoys, strangers and the destroy fallback against libvirt objects of the `libvirt-selftest` scenario, see [libvirt](molecule-libvirt.md#self-test-against-real-libvirt-objects) |
+| `molecule-libvirt-images` | implemented | `tools/molecule/fetch-cloud-images.sh`: fetches the cloud images and packages of `MOLECULE_LIBVIRT_PLATFORMS` into `build/molecule-libvirt/cache`, checks every SHA-256 and the vendors' signed checksum files |
+| `molecule-libvirt-preflight` | implemented | Fails unless `/dev/kvm` exists and `qemu:///system` is reachable |
 | `test-molecule-golden` | pending FREES-63 | Golden image scenarios |
 | `packer-validate` | pending FREES-64 | Packer template validation |
 | `packer-build` | pending FREES-64 | Packer image build |

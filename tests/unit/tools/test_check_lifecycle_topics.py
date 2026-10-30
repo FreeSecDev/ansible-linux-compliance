@@ -81,6 +81,10 @@ def make_root(
     versions = root / lifecycle.VERSIONS
     versions.parent.mkdir(parents=True)
     shutil.copyfile(REPOSITORY_ROOT / lifecycle.VERSIONS, versions)
+    for config in (REPOSITORY_ROOT / lifecycle.MOLECULE).glob("*/molecule.yml"):
+        target = root / lifecycle.MOLECULE / config.parent.name / config.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(config, target)
     topics = root / lifecycle.TOPICS
     topics.mkdir(parents=True)
     for family, content in declarations.items():
@@ -664,3 +668,161 @@ def test_an_item_expected_twice_for_one_platform_is_reported(tmp_path: Path) -> 
     )
     errors = errors_for(tmp_path, declaration)
     assert any("applied.files[1] expects /etc/crontab twice for a platform" in e for e in errors)
+
+
+LIBVIRT_PRE_STATE: dict[str, object] = {
+    "name": "customised ownership",
+    "audit": True,
+    "requires": ["libvirt"],
+    "files": [{"path": "/etc/crontab", "owner": "daemon", "group": "adm"}],
+}
+
+
+def without_scenario(root: Path, name: str) -> Path:
+    config = root / lifecycle.MOLECULE / name / "molecule.yml"
+    config.unlink()
+    config.parent.rmdir()
+    return root
+
+
+def test_the_repository_scenarios_run_every_platform_with_both_drivers() -> None:
+    platforms = lifecycle.platforms(REPOSITORY_ROOT)
+    assert lifecycle.scenarios(REPOSITORY_ROOT, platforms) == {
+        "docker": platforms,
+        "libvirt": platforms,
+    }
+
+
+def test_the_harness_knows_the_drivers_of_the_check() -> None:
+    harness = cast(
+        "dict[str, object]",
+        yaml.safe_load(
+            (REPOSITORY_ROOT / "extensions/molecule/shared/vars/lifecycle.yml").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+    assert harness["lifecycle_known_drivers"] == list(lifecycle.DRIVERS)
+    assert harness["lifecycle_unrestricted_drivers"] == sorted(lifecycle.UNRESTRICTED_DRIVERS)
+
+
+def test_a_topic_may_require_libvirt(tmp_path: Path) -> None:
+    declaration = changed(requires=["libvirt"], pre_states=[LIBVIRT_PRE_STATE])
+    assert errors_for(tmp_path, declaration) == []
+
+
+def test_a_pre_state_may_require_libvirt(tmp_path: Path) -> None:
+    pre_states = [*cast("list[object]", VALID["pre_states"]), LIBVIRT_PRE_STATE]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize(
+    ("declaration", "message"),
+    [
+        (changed(requires="libvirt"), "requires needs a non-empty list of drivers"),
+        (changed(requires=NO_ITEMS), "requires needs a non-empty list of drivers"),
+        (changed(requires=["vagrant"]), "requires names the unknown driver 'vagrant'"),
+        (changed(requires=["libvirt", "libvirt"]), "requires names a driver twice"),
+        (
+            changed(pre_states=[{**LIBVIRT_PRE_STATE, "requires": ["qemu"]}]),
+            "pre_states[0].requires names the unknown driver 'qemu'",
+        ),
+        (
+            changed(requires=["docker"], pre_states=[LIBVIRT_PRE_STATE]),
+            "pre_states[0] requires libvirt, which the topic does not require",
+        ),
+    ],
+)
+def test_an_invalid_driver_requirement_is_reported(
+    tmp_path: Path, declaration: object, message: str
+) -> None:
+    errors = errors_for(tmp_path, declaration)
+    assert any(message in error for error in errors), errors
+
+
+def test_a_required_driver_must_run_every_selected_platform(tmp_path: Path) -> None:
+    root = make_root(
+        tmp_path, {"file_permissions": changed(requires=["libvirt"], unselected_platforms=REMOVE)}
+    )
+    without_scenario(root, "libvirt-rhel-compatible-lifecycle")
+    assert lifecycle.check(root)[1] == [
+        (
+            f"{root / lifecycle.TOPICS / 'file_permissions.yml'}: the declaration requires "
+            f"libvirt, but no libvirt scenario in {lifecycle.MOLECULE} runs the platform "
+            "rhel_compatible, which unselected_platforms does not list"
+        )
+    ]
+
+
+def test_a_required_driver_need_not_run_an_unselected_platform(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": changed(requires=["libvirt"])})
+    without_scenario(root, "libvirt-rhel-compatible-lifecycle")
+    assert lifecycle.check(root)[1] == []
+
+
+def test_a_pre_state_driver_must_run_every_selected_platform(tmp_path: Path) -> None:
+    pre_states = [*cast("list[object]", VALID["pre_states"]), LIBVIRT_PRE_STATE]
+    root = make_root(
+        tmp_path,
+        {"file_permissions": changed(pre_states=pre_states, unselected_platforms=REMOVE)},
+    )
+    without_scenario(root, "libvirt-ubuntu-lifecycle")
+    errors = lifecycle.check(root)[1]
+    assert len(errors) == 1
+    assert "no libvirt scenario in extensions/molecule runs the platform ubuntu" in errors[0]
+
+
+def test_a_declaration_without_a_requirement_needs_no_driver_coverage(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": changed(unselected_platforms=REMOVE)})
+    without_scenario(root, "libvirt-ubuntu-lifecycle")
+    without_scenario(root, "libvirt-rhel-compatible-lifecycle")
+    assert lifecycle.check(root)[1] == []
+
+
+def test_a_pre_state_without_a_requirement_runs_in_the_docker_scenarios(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": changed(unselected_platforms=REMOVE)})
+    without_scenario(root, "docker-rhel-compatible-lifecycle")
+    errors = lifecycle.check(root)[1]
+    assert len(errors) == 1
+    assert "requires docker, but no docker scenario" in errors[0]
+    assert "rhel_compatible" in errors[0]
+
+
+def test_a_topic_requirement_applies_to_its_pre_states_without_one(tmp_path: Path) -> None:
+    declaration = changed(requires=["libvirt"], unselected_platforms=REMOVE)
+    root = make_root(tmp_path, {"file_permissions": declaration})
+    without_scenario(root, "docker-ubuntu-lifecycle")
+    without_scenario(root, "docker-rhel-compatible-lifecycle")
+    assert lifecycle.check(root)[1] == []
+
+
+def test_without_coverage_every_driver_counts_as_running_every_platform(tmp_path: Path) -> None:
+    path = tmp_path / "file_permissions.yml"
+    path.write_text("---\n" + yaml.safe_dump(changed(requires=["libvirt"])), encoding="utf-8")
+    platforms = lifecycle.platforms(REPOSITORY_ROOT)
+    assert lifecycle.check_declaration(path, "file_permissions", platforms, disruptive=False) == []
+
+
+@pytest.mark.parametrize(
+    ("directory", "config", "message"),
+    [
+        ("vagrant-ubuntu", "---\nplatforms:\n  - image: ubuntu\n", "a scenario name must start"),
+        ("libvirt-empty", "---\nplatforms: []\n", "the scenario has no platforms"),
+        ("libvirt-list", "---\n[]\n", "the scenario has no platforms"),
+        ("libvirt-debian", "---\nplatforms:\n  - image: debian\n", "every platform needs"),
+        ("libvirt-scalar", "---\nplatforms:\n  - ubuntu\n", "every platform needs"),
+    ],
+)
+def test_an_invalid_scenario_stops_the_check(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    directory: str,
+    config: str,
+    message: str,
+) -> None:
+    root = make_root(tmp_path, {"file_permissions": VALID})
+    scenario = root / lifecycle.MOLECULE / directory
+    scenario.mkdir()
+    (scenario / "molecule.yml").write_text(config, encoding="utf-8")
+    assert lifecycle.main(["--root", str(root)]) == 2
+    assert message in capsys.readouterr().err

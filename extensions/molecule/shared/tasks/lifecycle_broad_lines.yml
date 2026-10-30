@@ -10,12 +10,13 @@
       ~ ')(/|$)' -%}
       {%- for entry in lifecycle_broad_raw.files | sort(attribute='path') -%}
       {%- if entry.path not in lifecycle_broad_ignored_paths and entry.path is not match(ignored_trees) -%}
-      {%- set times = '-|-' if entry.path in declared or entry.path in parents
+      {%- set volatile = entry.path is match(contract_snapshot_volatile_contents) -%}
+      {%- set times = '-|-' if volatile or entry.path in declared or entry.path in parents
       or entry.path is match(contract_snapshot_volatile_times) else entry.mtime ~ '|' ~ entry.ctime -%}
       file|{{ entry.path }}|{{ 'link' if entry.islnk else 'file' if entry.isreg else 'directory' if entry.isdir
-      else 'other' }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|{{ entry.size }}|
-      {{- '-' if entry.path in rewritten else entry.inode }}|
-      {{- times }}|{{ entry.checksum | default('') }}{{ '\n' }}
+      else 'other' }}|{{ entry.mode }}|{{ entry.uid }}|{{ entry.gid }}|{{ '-' if volatile else entry.size }}|
+      {{- '-' if volatile or entry.path in rewritten else entry.inode }}|
+      {{- times }}|{{ '-' if volatile else entry.checksum | default('') }}{{ '\n' }}
       {%- endif -%}
       {%- endfor -%}
       {%- for entry in lifecycle_broad_raw.sysctl | sort(attribute='path') -%}

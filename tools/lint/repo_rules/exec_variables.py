@@ -135,6 +135,11 @@ PLAYBOOK_PYTHON_FILES: Final[tuple[str, ...]] = (
     "tests/playbooks/remediate-skip-always.yml",
 )
 MOLECULE_DOCKER: Final[str] = "community.docker.docker"
+LIBVIRT_SIMULATED_SSH_ARGUMENTS: Final[str] = (
+    "-F /dev/null -o UserKnownHostsFile=/simulated/ephemeral/libvirt/known_hosts "
+    "-o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o ControlMaster=auto "
+    "-o ControlPersist=60s -o ForwardAgent=no -o ForwardX11=no -o LogLevel=ERROR"
+)
 ALLOWED_SETTINGS: Final[frozenset[tuple[Path, str, str]]] = frozenset(
     {
         *(
@@ -173,6 +178,51 @@ ALLOWED_SETTINGS: Final[frozenset[tuple[Path, str, str]]] = frozenset(
             Path("extensions/molecule/selftest/bypass.yml"),
             "ansible_docker_extra_args",
             "--host tcp://192.0.2.1:2375",
+        ),
+        (
+            Path("extensions/molecule/shared/vars/guard_cases_libvirt.yml"),
+            "ansible_ssh_common_args",
+            LIBVIRT_SIMULATED_SSH_ARGUMENTS,
+        ),
+        (
+            Path("extensions/molecule/shared/vars/guard_cases_libvirt.yml"),
+            "ansible_connection",
+            "community.docker.docker",
+        ),
+        (
+            Path("extensions/molecule/shared/vars/guard_cases_libvirt.yml"),
+            "ansible_ssh_common_args",
+            "-o ProxyCommand=nc 192.0.2.1 22",
+        ),
+        (
+            Path("extensions/molecule/shared/vars/guard_cases_libvirt.yml"),
+            "ansible_ssh_common_args",
+            "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+        ),
+        (
+            Path("extensions/molecule/shared/vars/guard_cases_libvirt.yml"),
+            "ansible_ssh_extra_args",
+            "-J jump.example.invalid",
+        ),
+        (
+            Path("extensions/molecule/shared/vars/guard_cases_libvirt.yml"),
+            "ansible_ssh_executable",
+            "/opt/attacker/ssh",
+        ),
+        (
+            Path("extensions/molecule/selftest/libvirt_bypass.yml"),
+            "ansible_ssh_common_args",
+            "{{ selftest_ssh_args }}",
+        ),
+        (
+            Path("extensions/molecule/selftest/libvirt_bypass.yml"),
+            "ansible_ssh_common_args",
+            "{{ selftest_proxy_args }}",
+        ),
+        (
+            Path("extensions/molecule/selftest/libvirt_bypass.yml"),
+            "ansible_ssh_extra_args",
+            "{{ selftest_jump_args }}",
         ),
     }
 )

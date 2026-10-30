@@ -2,6 +2,18 @@
 - name: Guard the scenario targets
   ansible.builtin.import_playbook: guard.yml
 
+- name: Install the pinned scanner and quiet the scheduled jobs of a virtual machine
+  hosts: all
+  gather_facts: true
+  vars_files:
+    - vars/versions.yml
+    - vars/libvirt.yml
+  tasks:
+    - name: Prepare a libvirt instance
+      ansible.builtin.include_tasks:
+        file: tasks/prepare_libvirt.yml
+      when: molecule_target.driver == 'libvirt'
+
 - name: Place the pinned ComplianceAsCode datastream in the instance
   hosts: all
   gather_facts: false
@@ -24,7 +36,8 @@
           - prepare_content_source.stat.checksum == molecule_datastream.sha256
         fail_msg: >-
           {{ molecule_content_source }} is missing or does not match the SHA-256 pinned in content/manifest.yml.
-          Run make test-molecule-docker, which fetches it with tools/content/fetch_content.py.
+          Run make test-molecule-docker or make test-molecule-libvirt, which fetch it with
+          tools/content/fetch_content.py.
         quiet: true
 
     - name: Create a root-owned content directory

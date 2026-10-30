@@ -1276,7 +1276,11 @@ def test_a_fork_pull_request_neither_restores_nor_saves_the_scc_bundle_cache() -
         for step in job.get("steps", [])
         if str(step.get("uses", "")).startswith("actions/cache")
     ]
-    assert cache_actions == ["ci.yml:scc-smoke"]
+    assert cache_actions == ["ci.yml:scc-smoke", "ci.yml:molecule-libvirt"]
+    libvirt = [
+        step for step in workflow["jobs"]["molecule-libvirt"]["steps"] if is_cache_step(step)
+    ]
+    assert [step["if"] for step in libvirt] == [SCC_CACHE_CONDITION]
 
 
 @pytest.mark.parametrize(

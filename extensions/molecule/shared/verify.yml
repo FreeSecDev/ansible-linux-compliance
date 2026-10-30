@@ -7,12 +7,22 @@
   gather_facts: false
   vars_files:
     - vars/versions.yml
+    - vars/libvirt.yml
     - vars/guard_cases.yml
+    - vars/guard_cases_libvirt.yml
   tasks:
-    - name: Refuse simulated bypass attempts and accept a disposable instance
+    - name: Refuse simulated bypass attempts and accept a disposable container, whatever the driver
       ansible.builtin.include_tasks:
         file: tasks/guard_case.yml
       loop: "{{ guard_cases }}"
+      loop_control:
+        loop_var: guard_case
+        label: "{{ guard_case.name }}"
+
+    - name: Refuse simulated bypass attempts and accept a disposable virtual machine, whatever the driver
+      ansible.builtin.include_tasks:
+        file: tasks/guard_case_libvirt.yml
+      loop: "{{ guard_libvirt_cases }}"
       loop_control:
         loop_var: guard_case
         label: "{{ guard_case.name }}"
