@@ -91,6 +91,7 @@
       loop_control:
         loop_var: lifecycle_selfcheck_case
         label: "{{ lifecycle_selfcheck_case.name }}"
+      when: molecule_target.driver in lifecycle_unrestricted_drivers
 
     - name: Check that the whole-instance comparison refuses leftovers and allows only the listed differences
       ansible.builtin.include_tasks:
@@ -99,6 +100,8 @@
       loop_control:
         loop_var: lifecycle_broad_selfcheck_case
         label: "{{ lifecycle_broad_selfcheck_case.name }}"
+      when: >-
+        molecule_target.driver in lifecycle_broad_selfcheck_case.drivers | default(lifecycle_unrestricted_drivers)
 
     - name: Run the toggle lifecycle of every selected native topic
       ansible.builtin.include_tasks:

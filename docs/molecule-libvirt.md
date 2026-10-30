@@ -80,7 +80,7 @@ are identical but for the platform, which a unit test checks.
 | `converge` (base) | `converge_libvirt.yml` | a real scan, remediation of the reference rule and a second scan; the outcome moves from `molecule_libvirt_reference_outcomes[platform].before` to `.after` (`fail` to `pass` on Ubuntu) |
 | `idempotence` (base) | `converge_libvirt.yml` again | the second remediation finds the rule compliant and nothing changes |
 | `verify` (base) | `verify_libvirt.yml` | the cleanup restores `0644` and empties the ledger |
-| `side_effect` (lifecycle) | `lifecycle.yml` (shared) | the cycles of the selected topic and mode that require libvirt |
+| `side_effect` (lifecycle) | `lifecycle.yml` (shared) | the warm-up scan and the cycles of the selected topic and mode that require libvirt, plus the two whole-instance self-check cases whose outcome depends on the driver (a system log's contents and mode); the other self-check cases test controller-side logic and run in Docker only |
 
 The no-change snapshots around the run without the opt-in, the check-mode runs, the invalid inputs, the simulated guard
 cases and every cycle that does not require libvirt are container-capable and run in the Docker scenarios only. The

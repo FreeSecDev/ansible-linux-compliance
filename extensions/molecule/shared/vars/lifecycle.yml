@@ -116,6 +116,7 @@ lifecycle_broad_selfcheck_cases:
         - "{{ lifecycle_broad_selfcheck_ledger }}"
         - "{{ lifecycle_broad_selfcheck_syslog | combine({'size': 20, 'mtime': 2.0, 'ctime': 2.0, 'checksum': 'b'}) }}"
     refused: "{{ molecule_target.driver != 'libvirt' }}"
+    drivers: "{{ lifecycle_known_drivers }}"
   - name: mode of a system log
     before: "{{ lifecycle_broad_selfcheck_with_syslog }}"
     after:
@@ -125,6 +126,7 @@ lifecycle_broad_selfcheck_cases:
         - "{{ lifecycle_broad_selfcheck_ledger }}"
         - "{{ lifecycle_broad_selfcheck_syslog | combine({'mode': '0644'}) }}"
     refused: true
+    drivers: "{{ lifecycle_known_drivers }}"
   - name: times of a declared file
     after:
       files:
