@@ -75,6 +75,8 @@ regressions:
   - name: changes
     files:
       - lifecycle_login_defs_regressions.yml
+  - name: refusals
+    files:
       - lifecycle_login_defs_refusals.yml
   - name: profiles
     files:

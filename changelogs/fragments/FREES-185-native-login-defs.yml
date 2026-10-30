@@ -23,4 +23,5 @@ trivial:
   - >-
     Molecule - a lifecycle pre-state may set ``lines`` of a declared file that the topic rewrites; the harness puts
     the content back after the cycle. The ``login_defs`` lifecycle runs on Ubuntu 24.04 and Rocky Linux 9 from the
-    as-built and an administrator's ``login.defs``, with the regression groups ``changes`` and ``profiles``.
+    as-built and an administrator's ``login.defs``, with the regression groups ``changes``, ``refusals`` and
+    ``profiles``.

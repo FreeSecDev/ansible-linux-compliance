@@ -32,7 +32,7 @@ Every selected rule whose definition reaches an object that reads `/etc/login.de
 | `accounts_umask_etc_login_defs` | Ubuntu CIS (4), STIG; RHEL ANSSI enhanced and high, CCN advanced, CIS (4), STIG (2) | `^[\s]*UMASK[\s]+([^#\s]*)` (case-sensitive), its first three digits as an octal number, `bitwise and` with `var_accounts_user_umask` (027 for CIS and CCN, 077 for the STIG and ANSSI): every bit that the profile requires is set; platform `system_with_kernel` |
 | `accounts_logon_fail_delay` | RHEL STIG (2) | `^[\s]*(?i)FAIL_DELAY(?-i)[\s]+([^#\s]*)`, `greater than or equal` `var_accounts_fail_delay` (4) |
 | `accounts_have_homedir_login_defs` | RHEL STIG (2) | `^[\s]*(?i)CREATE_HOME(?-i)[\s]+yes[\s]*(?:#.*)?$`, and no `CREATE_HOME` in `/etc/login.defs.d/*.defs` (or `yes` there); no exported value |
-| `set_password_hashing_algorithm_logindefs` | Ubuntu CIS (4), STIG; RHEL CIS (4), CCN (3), PCI DSS, STIG (2) | `^[\s]*(?i)(ENCRYPT_METHOD[\s]+\w+)[\s]*(?:#.*)?$`, `pattern match` `var_password_hashing_algorithm` (`SHA512|YESCRYPT` for the Ubuntu CIS profiles) |
+| `set_password_hashing_algorithm_logindefs` | Ubuntu CIS (4), STIG; RHEL CIS (4), CCN (3), PCI DSS, STIG (2) | `^[\s]*(?i)(ENCRYPT_METHOD[\s]+\w+)[\s]*(?:#.*)?$`, `pattern match` `var_password_hashing_algorithm` (`SHA512\|YESCRYPT` for the Ubuntu CIS profiles) |
 | `no_shelllogin_for_systemaccounts` | Ubuntu CIS (4); RHEL CCN (2), CIS (4), ISM, PCI DSS, STIG (2) | Reads `UID_MIN`, `SYS_UID_MIN` and `SYS_UID_MAX` only to tell system accounts apart; the check is about the shells in `/etc/passwd` |
 
 `set_password_hashing_min_rounds_logindefs` (`SHA_CRYPT_MIN_ROUNDS`, `SHA_CRYPT_MAX_ROUNDS`) has a definition in the RHEL
@@ -109,7 +109,7 @@ a newline gets one when `lineinfile` appends a setting, and keeps it after the c
 
 | Rule | Reason |
 |---|---|
-| `set_password_hashing_algorithm_logindefs` | It stays in `pam`, whose former toggle and allow-list entry the legacy fixture pins (moving it would change what `linux_compliance_pam_enabled` and `allow_disruptive: [pam]` cover), and its value is a choice: the CIS profiles accept `SHA512|YESCRYPT`, and the algorithm must agree with the `pam_unix` hashing of the PAM stack (`set_password_hashing_algorithm_systemauth`, `..._passwordauth`), which the `pam` topic owns. Both pinned images already comply (`YESCRYPT` on Ubuntu 24.04, `SHA512` on RHEL 9). The `login_defs` tag switches it off with the topic |
+| `set_password_hashing_algorithm_logindefs` | It stays in `pam`, whose former toggle and allow-list entry the legacy fixture pins (moving it would change what `linux_compliance_pam_enabled` and `allow_disruptive: [pam]` cover), and its value is a choice: the CIS profiles accept `SHA512\|YESCRYPT`, and the algorithm must agree with the `pam_unix` hashing of the PAM stack (`set_password_hashing_algorithm_systemauth`, `..._passwordauth`), which the `pam` topic owns. Both pinned images already comply (`YESCRYPT` on Ubuntu 24.04, `SHA512` on RHEL 9). The `login_defs` tag switches it off with the topic |
 | `no_shelllogin_for_systemaccounts` (`root_access`) | It reads login.defs only for the system UID range; it changes the shells of accounts in `/etc/passwd`, which can stop services that run a shell, and it is not a login.defs setting |
 | `accounts_password_set_max_life_existing`, `accounts_password_set_min_life_existing`, `accounts_password_set_warn_age_existing` and the other existing-account rules of `password_aging` | They change fields of every account in `/etc/shadow`. That file holds the password hashes, so its content cannot be recorded in the ledger; an exact revert would need every prior field of every account and breaks as soon as an account is added or changes its password; and setting a maximum age on existing operators and service accounts can expire their passwords at once. Root in the Docker containers cannot even read `/etc/shadow` on Rocky Linux |
 | `set_password_hashing_min_rounds_logindefs` | No pinned profile selects it |
@@ -143,8 +143,8 @@ the root-only ledger are from a world-readable file.
 The Molecule lifecycle (`extensions/molecule/shared/vars/topics/login_defs.yml`) runs both toggle modes on both
 platforms from the as-built file and from a file that an administrator customised (a looser maximum age with extra
 blanks, a warning age in lower case and a stricter umask, set with the new pre-state key `lines`), and checks that the
-cleanup restores those lines and not a default. Two regression groups run in legs of their own
-(`regressions-changes`, `regressions-profiles`): `lifecycle_login_defs_regressions.yml` covers a change of method, a
+cleanup restores those lines and not a default. Three regression groups run in legs of their own
+(`regressions-changes`, `regressions-refusals`, `regressions-profiles`): `lifecycle_login_defs_regressions.yml` covers a change of method, a
 stricter value set by hand (`modified_since_apply`, then `restored` once the written line is put back), a removed line
 that existed before (`modified_since_apply`) and a line that the collection added and an administrator removed again
 (`restored` without a write), and checks the exact SHA-256 after the apply; `lifecycle_login_defs_refusals.yml` covers

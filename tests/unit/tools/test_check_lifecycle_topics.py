@@ -812,6 +812,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_and_sudo() -> N
     }
     assert found["login_defs"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "refusals": frozenset({"ubuntu", "rhel_compatible"}),
         "profiles": frozenset({"ubuntu", "rhel_compatible"}),
     }
     assert found["file_permissions"] == {}

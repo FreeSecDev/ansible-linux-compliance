@@ -527,7 +527,7 @@ owner and group of `/etc/sudoers` and `/etc/sudoers.d`), from a loosened `/etc/s
 administrator sets afterwards is kept as `modified_since_apply`, the recorded `0640` and not a default is restored, and
 a directory mode put back by hand is `restored` without a write.
 
-`login_defs` (FREES-185) has two groups, both on both platforms. In `changes`,
+`login_defs` (FREES-185) has three groups, all on both platforms. In `changes`,
 `shared/tasks/lifecycle_login_defs_regressions.yml` applies the topic and checks the SHA-256 of the whole
 `/etc/login.defs` against the as-built text with the two lines replaced in place; it records every entry as if another
 method had written it and checks `method_changed` at apply and at cleanup with every entry kept and the file
@@ -535,7 +535,7 @@ untouched; it makes `PASS_MAX_DAYS` stricter by hand (`modified_since_apply`, th
 puts the written line back (`restored`, the file byte for byte as built); it removes the `UMASK` line, which existed
 before, by hand (`modified_since_apply`) and checks that the recorded line, not a default, is written back once the
 collection's line is there again; and from a file without `PASS_MAX_DAYS` it checks that the added line is recorded as
-absent before and that removing it by hand is `restored` without a write (FREES-173).
+absent before and that removing it by hand is `restored` without a write (FREES-173). In `refusals`,
 `shared/tasks/lifecycle_login_defs_refusals.yml` runs each of these files through an apply and a cleanup that must
 restore it byte for byte: a second `PASS_MAX_DAYS` line and a second one in lower case (`duplicate_setting`, nothing
 written), a commented default (ignored), a lower-case name with a four-digit umask (`PASS_MAX_DAYS 365` and `UMASK 077`
@@ -590,8 +590,8 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `sudo` `changes` and `profiles`
-and `login_defs` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+modes of the topic, so 20 cycle legs and 13 regression legs (`pwquality` `changes`, `sudo` `changes` and `profiles`
+and `login_defs` `changes`, `refusals` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
