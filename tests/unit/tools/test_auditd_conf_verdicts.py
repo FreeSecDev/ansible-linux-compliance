@@ -126,9 +126,15 @@ def test_a_missing_table_is_empty_and_merging_replaces_one_platform(tmp_path: Pa
     table = verdicts.load_table(tmp_path / "missing.json")
     assert table == {"platforms": {}, "cases": {}}
     header: dict[str, object] = {"package": "auditd", "version": "1", "base": BASE}
-    built = {"verdict": "accepted", "status": 1, "read": [["freq", "50"]], "messages": []}
+    built: dict[str, object] = {
+        "verdict": "accepted",
+        "status": 1,
+        "read": [["freq", "50"]],
+        "messages": [],
+    }
     first = verdicts.merge(table, "ubuntu", header, {"as_built": built, "a": built})
-    refused = {"verdict": "refused", "status": 6, "read": [], "messages": ["bad"]}
+    refused: dict[str, object] = {"verdict": "refused", "status": 6, "read": []}
+    refused["messages"] = ["bad"]
     second = verdicts.merge(
         first, "ubuntu", {**header, "version": "2"}, {"as_built": built, "b": refused}
     )
@@ -145,7 +151,7 @@ def test_a_missing_table_is_empty_and_merging_replaces_one_platform(tmp_path: Pa
 
 def test_a_case_keeps_only_the_values_that_differ_from_the_file_as_built() -> None:
     base = {"freq": "50", "flush": "INCREMENTAL_ASYNC", "num_logs": "5"}
-    result = {
+    result: dict[str, object] = {
         "verdict": "accepted",
         "status": 1,
         "read": [["freq", "10"], ["freq", "60"], ["flush", "INCREMENTAL_ASYNC"]],
@@ -157,7 +163,7 @@ def test_a_case_keeps_only_the_values_that_differ_from_the_file_as_built() -> No
         "read": {"freq": "60"},
         "unread": ["num_logs"],
     }
-    unobservable = {**result, "verdict": "unobservable", "messages": ["x"]}
+    unobservable: dict[str, object] = {**result, "verdict": "unobservable", "messages": ["x"]}
     assert verdicts.compact(unobservable, base) == {
         "verdict": "unobservable",
         "status": 1,
