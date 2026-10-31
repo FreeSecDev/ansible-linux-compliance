@@ -252,6 +252,7 @@
       {%- set entries = {} -%}
       {%- for item in __linux_compliance_remediate_sc_found.files | default([]) -%}
       {%- set _ = entries.update({item.path: {'isreg': item.isreg, 'islnk': item.islnk,
+            'isdir': item.isdir | default(false),
             'readable': item.isreg or item.path in __linux_compliance_remediate_sc_linked,
             'checksum': item.checksum | default('')}}) -%}
       {%- endfor -%}
@@ -259,6 +260,7 @@
             if (__linux_compliance_remediate_sc_stats[path].exists | default(false)) -%}
       {%- set item = __linux_compliance_remediate_sc_stats[path] -%}
       {%- set _ = entries.update({path: {'isreg': item.isreg, 'islnk': item.islnk,
+            'isdir': item.isdir | default(false),
             'readable': item.isreg or path in __linux_compliance_remediate_sc_linked, 'checksum': ''}}) -%}
       {%- endfor -%}
       {{ entries }}
@@ -597,15 +599,16 @@
                                                           | join('|')) ~ ')/[^/]*\.conf$') | sort | list) -%}
       {%- set package_files = entries.keys() | select('match', '^(' ~ (checked.package_directories | default([])
             | map('regex_escape') | join('|')) ~ ')/[^/]*\.conf$') | sort | list -%}
-      {%- set boot = namespace(names=[], pairs=[]) -%}
-      {%- for directory_path in __linux_compliance_remediate_sysctl_boot_directories -%}
-      {%- for path in entries.keys() | select('match', '^' ~ (directory_path | regex_escape) ~ '/[^./][^/]*\.conf$')
-            | sort if (path | basename) not in boot.names and entries[path].readable -%}
-      {%- set boot.names = boot.names + [path | basename] -%}
-      {%- set boot.pairs = boot.pairs + [[path | basename, path]] -%}
+      {%- set boot_entries = [] -%}
+      {%- for entry_path, item in entries.items()
+            if ((entry_path | dirname) in __linux_compliance_remediate_sysctl_boot_directories
+                or entry_path in __linux_compliance_remediate_sysctl_boot_last)
+               and entry_path not in removed -%}
+      {%- set _ = boot_entries.append({'path': entry_path,
+            'kind': 'file' if item.isreg else 'link' if item.islnk else 'directory' if item.isdir | default(false)
+                    else 'other',
+            'text': texts[entry_path] | default(none)}) -%}
       {%- endfor -%}
-      {%- endfor -%}
-      {%- set boot_paths = boot.pairs | sort | map('last') | list -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
       {%- set path = rule.parameters.path -%}
       {%- set name = path | basename -%}
@@ -623,7 +626,7 @@
       {%- set content = __linux_compliance_remediate_sc_contents[rule.rule_id] -%}
       {%- set sha = content | hash('sha256') -%}
       {%- set ns = namespace(user=[], package=[], edits=[], duplicate=[], large=[], earlier=[], later=[],
-                             boot_value=none, boot_seen=false) -%}
+                             now_ok=true) -%}
       {%- for other in user_files if other != path and other not in removed and other in texts -%}
       {%- set found = texts[other] | regex_findall(pattern, multiline=true) -%}
       {%- set bad = [] -%}
@@ -647,14 +650,8 @@
             'written': (lines[0] | regex_search('^[^=]*=[ \t]*')) ~ value}] -%}
       {%- endif -%}
       {%- elif bad | length > 0 -%}
-      {%- set later = other in __linux_compliance_remediate_sysctl_boot_last
-            or (other in boot_paths and (other | basename) > name) -%}
-      {%- set described = other ~ ' sets ' ~ key ~ ' to ' ~ bad | join(', ') -%}
-      {%- if later -%}
-      {%- set ns.later = ns.later + [described ~ ', which is applied after the drop-in'] -%}
-      {%- else -%}
-      {%- set ns.earlier = ns.earlier + [described ~ ', and the content check reads every file'] -%}
-      {%- endif -%}
+      {%- set ns.earlier = ns.earlier + [other ~ ' sets ' ~ key ~ ' to ' ~ bad | join(', ')
+            ~ ', and the content check reads every file'] -%}
       {%- endif -%}
       {%- endfor -%}
       {%- for other in package_files if other in texts -%}
@@ -665,40 +662,43 @@
       {%- set ns.package = ns.package + [good] -%}
       {%- endfor -%}
       {%- endfor -%}
-      {%- set edited = ns.edits | map(attribute='path') | list -%}
-      {%- for other in boot_paths + (__linux_compliance_remediate_sysctl_boot_last | select('in', texts) | list)
-            if other != path and other not in removed and other in texts -%}
-      {%- set late = other in __linux_compliance_remediate_sysctl_boot_last or (other | basename) > name -%}
-      {%- for raw in texts[other].split(__linux_compliance_remediate_newline) -%}
-      {%- set line = raw | trim -%}
-      {%- if line and not line.startswith('#') and not line.startswith(';') and '=' in line -%}
-      {%- set setting = line | regex_replace('^-', '') -%}
-      {%- set assigned = (setting.split('=', 1)[0] | trim | replace('/', '.')) -%}
-      {%- set assigned_value = setting.split('=', 1)[1] | trim -%}
-      {%- set names_key = assigned == key or ('*' in assigned
-            and key is match('^' ~ (assigned | regex_escape
-                                    | replace(__linux_compliance_remediate_backslash ~ '*', '.*'))
-                            ~ '$')) -%}
-      {%- if names_key -%}
-      {%- set good = (assigned_value is match('^[+-]?[0-9]+$') and (assigned_value | int) in accepted_ints)
-            if integer else (assigned_value is search(wanted.pattern)) if wanted.pattern is string
-            else assigned_value in wanted.accepted -%}
-      {%- set ns.boot_seen = true -%}
-      {%- set ns.boot_value = good if not (other in edited) else true -%}
-      {%- if late and not good and other not in edited
-            and (ns.later | select('match', '^' ~ (other | regex_escape) ~ ' ') | list | length == 0) -%}
-      {%- set ns.later = ns.later + [other ~ ' sets ' ~ key ~ ' to ' ~ assigned_value
-            ~ ', which is applied after the drop-in'] -%}
-      {%- endif -%}
-      {%- endif -%}
+      {%- set edited = {} -%}
+      {%- for edit in ns.edits -%}
+      {%- set lines = [] -%}
+      {%- for line in texts[edit.path].split(__linux_compliance_remediate_newline) -%}
+      {%- set _ = lines.append(edit.written if line == edit.original else line) -%}
+      {%- endfor -%}
+      {%- set _ = edited.update({edit.path: lines | join(__linux_compliance_remediate_newline)}) -%}
+      {%- endfor -%}
+      {%- set planned_entries = [] -%}
+      {%- for item in boot_entries if item.path != path -%}
+      {%- set _ = planned_entries.append(item | combine({'text': edited[item.path]}) if item.path in edited
+            else item) -%}
+      {%- endfor -%}
+      {%- set _ = planned_entries.append({'path': path, 'kind': 'file', 'text': content}) -%}
+      {%- set planned_readers = planned_entries | freesecdev.linux_compliance.sysctl_effective(key,
+            after=__linux_compliance_remediate_sysctl_after_boot) -%}
+      {%- set current_readers = boot_entries | freesecdev.linux_compliance.sysctl_effective(key,
+            after=__linux_compliance_remediate_sysctl_after_boot) -%}
+      {%- for reader in ['systemd', 'procps'] -%}
+      {%- for setting, planned in [[planned_readers[reader], true], [current_readers[reader], false]] -%}
+      {%- set candidate = setting.value -%}
+      {%- set good = (rule.parameters.absent_accepted | default(false)) if candidate is none
+            else (candidate is match('^[+-]?[0-9]+$') and (candidate | int) in accepted_ints) if integer
+            else (candidate is search(wanted.pattern)) if wanted.pattern is string
+            else candidate in wanted.accepted -%}
+      {%- if planned and not good -%}
+      {%- set ns.later = ns.later + [__linux_compliance_remediate_sysctl_readers[reader] ~ ' would set ' ~ key ~ ' to '
+            ~ (candidate if candidate is not none else 'nothing') ~ ' from '
+            ~ (setting.source if setting.source is not none else 'no file') ~ ' instead of the drop-in'] -%}
+      {%- elif not planned and not good -%}
+      {%- set ns.now_ok = false -%}
       {%- endif -%}
       {%- endfor -%}
       {%- endfor -%}
       {%- set static_ok = (ns.user | length > 0 and ns.user | reject | list | length == 0)
             or (ns.user | length == 0 and ns.package | reject | list | length == 0
                 and (ns.package | length > 0 or rule.parameters.absent_accepted | default(false))) -%}
-      {%- set boot_ok = ns.boot_value is true or (not ns.boot_seen and rule.parameters.absent_accepted
-            | default(false)) -%}
       {%- set current = __linux_compliance_remediate_sc_running_values[key] | default(none) -%}
       {%- set current_normal = (current.split() | join(' ')) if current is string else none -%}
       {%- set runtime_ok = not __linux_compliance_remediate_sc_runtime
@@ -720,7 +720,7 @@
             else 'runtime_unavailable' if not runtime_ok
                  and not (__linux_compliance_remediate_sc_writable[key] | default(false))
             else 'compliant' if runtime_ok and ns.edits | length == 0
-                 and (exact or (entry is none and static_ok and boot_ok))
+                 and (exact or (entry is none and static_ok and ns.now_ok))
             else 'applied' -%}
       {%- set reason =
             ('the ledger entry was recorded by the ' ~ prior.method | default('unknown')

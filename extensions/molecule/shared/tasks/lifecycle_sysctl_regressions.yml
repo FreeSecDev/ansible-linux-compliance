@@ -102,7 +102,7 @@
     - path: "{{ regression_earlier }}"
       content: "net.ipv4.conf.all.send_redirects = 1\n"
     - path: "{{ regression_later }}"
-      content: "net.ipv4.conf.all.accept_redirects=1\n"
+      content: "net.ipv4.conf.all.accept_redirects=1\nnet.ipv4.conf.*.rp_filter = 0\n"
   loop_control:
     label: "{{ item.path }}"
 
@@ -131,7 +131,7 @@
     action: list
   register: regression_ledger_admin
 
-- name: Kernel parameter regressions | Check that the later file overrides and the earlier one conflicts
+- name: Kernel parameter regressions | Check that the later file overrides, its glob does not, the earlier conflicts
   ansible.builtin.assert:
     that:
       - >-

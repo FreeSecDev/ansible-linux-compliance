@@ -86,7 +86,7 @@ nothing changed and a reason, it refuses:
 
 | Status | When |
 |---|---|
-| `overridden` | a file applied after the drop-in sets another value: an administrator's later file in a directory that the check reads (the check fails as well), `/etc/sysctl.conf`, or a package file in `/usr/lib/sysctl.d` or `/lib/sysctl.d` that sorts later (the check ignores it, but it wins at boot); a glob line (`net.ipv4.conf.*.rp_filter`) counts for every key it names |
+| `overridden` | with the drop-in in place, `systemd-sysctl` or `sysctl --system` would still set another value (section 2b): an administrator's later file in a directory that the check reads (the check fails as well), `/etc/sysctl.conf` (which `sysctl --system` reads last), a package file in `/usr/lib/sysctl.d` or `/lib/sysctl.d` that sorts later (the check ignores it, but it wins at boot), or ufw's `/etc/ufw/sysctl.conf`; a glob line never overrides the drop-in's explicit assignment |
 | `conflicting_setting` | a file that the check reads and that is applied before the drop-in sets another value, so the drop-in would win at boot but the check, which reads every occurrence, would still fail; also a hidden `.*.conf`, which the check reads and the boot order skips |
 | `duplicate_setting`, `prior_too_large` | a vendor file sets the key more than once, or its conflicting line is longer than 1024 characters (section 2a) |
 | `runtime_unavailable` | the running value must change (section 4) but `/proc/sys` cannot be written, as in an unprivileged container |
@@ -96,9 +96,41 @@ nothing changed and a reason, it refuses:
 
 A rule is `compliant`, with nothing written, when its drop-in already holds exactly what the collection writes and
 the running value is accepted, or when there is no drop-in and the check would already pass (the static half over
-the other files, the last assignment of the boot order accepted, the running value accepted): for example
+the other files, the value that both readers of section 2b set accepted, the running value accepted): for example
 `kernel.yama.ptrace_scope` on Ubuntu, which `10-ptrace.conf` sets to 1, and `net.ipv4.conf.default.rp_filter` on
 RHEL 9, which only the package file `50-redhat.conf` sets.
+
+### 2b. The readers are the oracle
+
+What takes effect is decided by a model of the two programs that read the files, not by a lexer of our own guessing
+at them: `plugins/module_utils/compliance/sysctl_config.py`, used through the filter
+`freesecdev.linux_compliance.sysctl_effective`. For each rule it computes the value that `systemd-sysctl` (at boot)
+and `sysctl --system` (procps, run by administrators and packages) set last, once for the files as they are and once
+with the planned drop-in and vendor edits. A rule is `overridden` unless both readers would then set an accepted
+value, and `compliant` without a write only when both already do. The model follows what the readers do:
+
+- the directories `/etc/sysctl.d`, `/run/sysctl.d`, `/usr/local/lib/sysctl.d`, `/usr/lib/sysctl.d`, `/lib/sysctl.d`,
+  the first winning for a file name, every `*.conf` name sorted bytewise; an entry that is a directory or a link to
+  `/dev/null` masks the file of the same name; systemd skips hidden files, procps reads them; procps reads
+  `/etc/sysctl.conf` last, systemd only through a link such as `99-sysctl.conf`;
+- comments (`#`, `;`), lines without `=`, `-key` lines that exclude a key from globs, a leading `-`; the first
+  separator of a key decides its form, so `net/ipv4/conf/all.rp_filter` names another path than
+  `net.ipv4.conf.all.rp_filter`; a glob (`*`, `?`, `[...]`, never across `/`) never sets a key that any file
+  assigns explicitly; systemd strips only spaces, tabs and line ends (a value `1` followed by a form feed is written
+  as such, and the kernel refuses it), procps every white-space character but not the spaces after a `-`; a line ends
+  at a NUL byte; nothing continues a line.
+
+The model is not trusted on its own. `make sysctl-reader-verdicts` (`tools/molecule/sysctl-reader-verdicts.sh`) runs
+the real readers of the Molecule images on the cases of `tests/fixtures/sysctl_reader/cases.json` in throwaway
+containers without a network, whose `/proc/sys` is read-only, and commits what they set to
+`tests/fixtures/sysctl_reader/verdicts.json`: `systemd-sysctl` 255 with debug logging and procps-ng 4.0.4 on Ubuntu
+24.04, and procps-ng 3.3.17 on Rocky Linux 9, which reports the order of its settings but no values for a dry run
+there (the Rocky Linux image has no `systemd-sysctl`; the virtual machines run systemd 252, whose sysctl rules are
+the same). `tests/unit/plugins/module_utils/compliance/test_sysctl_config.py` checks the model against every verdict.
+The table replaced a hand-made boot order that had diverged from the readers in ways that could report `compliant`
+while a reader sets a looser value: a slash-first key with a dot counted as the rule's key, a form feed after the
+value was trimmed, and a file masked by a directory or a link to `/dev/null` was still read; it also refused some
+rules wrongly, for a later glob or for names that a case-insensitive sort misordered.
 
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 

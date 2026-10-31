@@ -14,6 +14,11 @@ minor_changes:
     ``linux_compliance_remediate_allow_disruptive``. Eleven rules stay ``audit_only`` with their reasons in ADR 0029,
     among them the three whose running value cannot be set back until the next boot.
   - >-
+    remediate - the kernel parameter topics decide what takes effect with a model of ``systemd-sysctl`` and
+    ``sysctl --system`` (the filter ``freesecdev.linux_compliance.sysctl_effective``), checked against what the real
+    readers of the Molecule images set (``make sysctl-reader-verdicts``); a rule is ``overridden`` unless both
+    readers would apply its drop-in, and ``compliant`` only when both already set an accepted value.
+  - >-
     remediate - new variable ``linux_compliance_remediate_sysctl_runtime`` (default ``true``); with ``false`` the
     kernel parameter topics write only the persistent drop-ins and neither read nor change the running kernel.
   - >-

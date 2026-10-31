@@ -1758,6 +1758,10 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_validator']
       - >-
+        __linux_compliance_remediate_sysctl_after_boot is not defined or __linux_compliance_remediate_sysctl_after_boot
+        == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_after_boot']
+      - >-
         __linux_compliance_remediate_sysctl_boot_directories is not defined or
         __linux_compliance_remediate_sysctl_boot_directories == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_boot_directories']
@@ -1801,6 +1805,10 @@
         __linux_compliance_remediate_sysctl_propagating is not defined or
         __linux_compliance_remediate_sysctl_propagating == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml')
         | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_propagating']
+      - >-
+        __linux_compliance_remediate_sysctl_readers is not defined or __linux_compliance_remediate_sysctl_readers ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_readers']
       - >-
         __linux_compliance_remediate_sysctl_side_effects is not defined or
         __linux_compliance_remediate_sysctl_side_effects == (lookup('ansible.builtin.file', role_path ~

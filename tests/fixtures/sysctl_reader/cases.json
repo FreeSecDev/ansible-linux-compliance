@@ -1,0 +1,562 @@
+{
+  "later_name_wins": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/50-a.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/60-b.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "names_sort_bytewise": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/Z-upper.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/a-lower.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "same_name_etc_over_usr_lib": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 2\n"
+      }
+    ]
+  },
+  "same_name_run_over_usr_lib": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "run/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "same_name_usr_local_over_usr_lib": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "usr/local/lib/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "masked_by_dev_null": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/60-x.conf",
+        "link": "/dev/null"
+      },
+      {
+        "path": "usr/lib/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "link_to_a_file": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-link.conf",
+        "link": "/srv/sysctl-target.conf"
+      },
+      {
+        "path": "srv/sysctl-target.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "directory_named_conf": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/60-x.conf",
+        "directory": true
+      },
+      {
+        "path": "usr/lib/sysctl.d/60-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "hidden_file": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/.70-hidden.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "other_suffix": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf.bak",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.CONF",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "sysctl_conf_and_its_link": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/99-sysctl.conf",
+        "link": "../sysctl.conf"
+      },
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "sysctl_conf_without_link": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "slash_form": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net/ipv4/conf/all/rp_filter = 0\n"
+      }
+    ]
+  },
+  "slash_first_with_a_dot": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net/ipv4/conf/all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "dot_first_with_a_slash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net.ipv4.conf/all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "glob_after_explicit": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 0\n"
+      }
+    ]
+  },
+  "glob_before_explicit": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-x.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "glob_excluded": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-x.conf",
+        "text": "-net.ipv4.conf.all.rp_filter\nnet.ipv4.conf.*.rp_filter = 0\n"
+      }
+    ]
+  },
+  "dash_prefix": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "-net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "comments_and_spacing": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "  net.ipv4.conf.all.rp_filter=1   \n# net.ipv4.conf.all.rp_filter = 0\n  ; net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "inline_comment": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0 # site\n"
+      }
+    ]
+  },
+  "no_assignment": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter 0\n"
+      }
+    ]
+  },
+  "duplicate_in_one_file": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\nnet.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "carriage_return": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\r\n"
+      }
+    ]
+  },
+  "form_feed_and_vertical_tab": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "kernel.dmesg_restrict"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\f\nkernel.dmesg_restrict = 1\u000b\n"
+      }
+    ]
+  },
+  "nul_byte": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\u0000 0\n"
+      }
+    ]
+  },
+  "no_final_newline": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0"
+      }
+    ]
+  },
+  "backslash_continuation": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "kernel.dmesg_restrict"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1 \\\nkernel.dmesg_restrict = 0\n"
+      }
+    ]
+  },
+  "empty_value": {
+    "keys": [
+      "kernel.core_pattern"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "kernel.core_pattern = |/bin/false\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "kernel.core_pattern =\n"
+      }
+    ]
+  },
+  "value_with_spaces_and_tabs": {
+    "keys": [
+      "net.ipv4.ip_local_port_range"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.ip_local_port_range =  32768\t65535  \n"
+      }
+    ]
+  },
+  "key_case": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "NET.IPV4.CONF.ALL.RP_FILTER = 0\n"
+      }
+    ]
+  },
+  "spaces_inside_the_key": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net.ipv4.conf. all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "long_line": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "long_key": "net.ipv4.conf.all.rp_filter",
+        "long_value": "0",
+        "padding": 5000
+      }
+    ]
+  },
+  "hidden_only": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/.70-hidden.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "sysctl_conf_only": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "dash_with_spaces": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-y.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "-  net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "glob_question_mark": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net.ipv4.conf.al?.rp_filter = 0\n"
+      }
+    ]
+  },
+  "slash_glob": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net/ipv4/conf/*/rp_filter = 0\n"
+      }
+    ]
+  },
+  "glob_in_a_later_name": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/70-x.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/80-y.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 2\n"
+      }
+    ]
+  }
+}

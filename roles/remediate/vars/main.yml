@@ -80,6 +80,11 @@ __linux_compliance_remediate_sysctl_vendor_files:
   - /etc/sysctl.d/10-ptrace.conf
   - /etc/sysctl.d/10-zeropage.conf
   - /etc/ufw/sysctl.conf
+__linux_compliance_remediate_sysctl_after_boot:
+  - /etc/ufw/sysctl.conf
+__linux_compliance_remediate_sysctl_readers:
+  systemd: systemd-sysctl
+  procps: sysctl --system
 __linux_compliance_remediate_sysctl_propagating:
   net.ipv4.ip_forward: net.ipv4.conf.*.forwarding
   net.ipv4.conf.all.forwarding: net.ipv4.conf.*.forwarding
