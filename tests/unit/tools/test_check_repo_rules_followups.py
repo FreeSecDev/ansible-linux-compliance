@@ -53,6 +53,7 @@ FREES_161_KEYWORDS = frozenset({"marked", "off_platform"})
 FREES_165_KEYWORDS = frozenset({"tags"})
 FREES_170_KEYWORDS = frozenset({"controlled", "with_control"})
 FREES_191_KEYWORDS = frozenset({"on_position", "on_markup"})
+FREES_200_KEYWORDS = frozenset({"client", "dropin", "effective"})
 PRODUCTION_KEYWORDS = (
     MERGED_PRODUCTION_KEYWORDS
     | PR_18_KEYWORDS
@@ -62,6 +63,7 @@ PRODUCTION_KEYWORDS = (
     | FREES_165_KEYWORDS
     | FREES_170_KEYWORDS
     | FREES_191_KEYWORDS
+    | FREES_200_KEYWORDS
 )
 
 

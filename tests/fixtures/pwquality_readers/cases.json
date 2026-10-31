@@ -1,0 +1,1756 @@
+{
+ "cases": [
+  {
+   "name": "absent_main",
+   "main": null
+  },
+  {
+   "name": "empty",
+   "main": ""
+  },
+  {
+   "name": "comments_only",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n"
+  },
+  {
+   "name": "no_trailing_newline",
+   "main": "difok = 1"
+  },
+  {
+   "name": "minlen_exact",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 1\n"
+  },
+  {
+   "name": "minlen_no_spaces",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen=14\n"
+  },
+  {
+   "name": "minlen_space_only",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen 14\n"
+  },
+  {
+   "name": "minlen_upper",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nMINLEN = 14\n"
+  },
+  {
+   "name": "minlen_upper_looser_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nMINLEN = 1\n"
+  },
+  {
+   "name": "minlen_space_looser_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nminlen 1\n"
+  },
+  {
+   "name": "minlen_duplicate",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nminlen = 1\n"
+  },
+  {
+   "name": "minlen_crlf",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nminlen = 14\r\n"
+  },
+  {
+   "name": "minlen_crlf_looser",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nminlen = 1\r\n"
+  },
+  {
+   "name": "minlen_cr_separator",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen\r=\r14\n"
+  },
+  {
+   "name": "minlen_vt_ff",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n\u000bminlen\f=\u000b14\f\n"
+  },
+  {
+   "name": "minlen_lone_cr_in_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\rdifok = 2\n"
+  },
+  {
+   "name": "minlen_lone_cr_in_comment",
+   "main": "# comment\rminlen = 1\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_lone_cr_comment_only",
+   "main": "# comment\rminlen = 1\n"
+  },
+  {
+   "name": "minlen_inline_comment",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14 # site\n"
+  },
+  {
+   "name": "minlen_commented",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n# minlen = 14\n"
+  },
+  {
+   "name": "minlen_hash_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = #14\n"
+  },
+  {
+   "name": "minlen_double_equals",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen == 14\n"
+  },
+  {
+   "name": "minlen_plus",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = +14\n"
+  },
+  {
+   "name": "minlen_trailing_garbage",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14x\n"
+  },
+  {
+   "name": "minlen_empty_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen =\n"
+  },
+  {
+   "name": "minlen_no_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen\n"
+  },
+  {
+   "name": "minlen_nul_first",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n\u0000minlen = 1\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_nul_in_line",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\u00009\n"
+  },
+  {
+   "name": "minlen_nul_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nx = 1\u0000\n"
+  },
+  {
+   "name": "minlen_unknown_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nfrobnicate = 1\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_unknown_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nfrobnicate = 1\n"
+  },
+  {
+   "name": "minlen_bad_int_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = x\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_overflow_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = 2147483647\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_large_ok_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = 2147483646\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_non_ascii_name",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen\u00e9 = 14\n"
+  },
+  {
+   "name": "minlen_text_setting",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nbadwords = foo bar\ndictpath =\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_comment_1021",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_comment_1022",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_comment_1023",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_comment_2047",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_comment_2048",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_long_comment_hides",
+   "main": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxminlen = 1\nminlen = 14\n"
+  },
+  {
+   "name": "minlen_last_line_1021",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minlen_last_line_1022",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minlen_last_line_1023",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minlen_last_line_1500",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minlen_last_line_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14"
+  },
+  {
+   "name": "minlen_dropin_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minlen = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_only",
+   "main": "",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minlen = 14\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_later_looser",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "minlen = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_upper_later",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "MINLEN 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_malformed_first",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "00-site.conf",
+     "type": "file",
+     "content": "bogus\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_malformed_last",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "99-site.conf",
+     "type": "file",
+     "content": "bogus\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_long_line",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "00-site.conf",
+     "type": "file",
+     "content": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_hidden",
+   "main": "",
+   "dropins": [
+    {
+     "name": ".hidden.conf",
+     "type": "file",
+     "content": "minlen = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_hidden_later",
+   "main": "",
+   "dropins": [
+    {
+     "name": ".zz.conf",
+     "type": "file",
+     "content": "x = 1\n"
+    },
+    {
+     "name": "90-a.conf",
+     "type": "file",
+     "content": "\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_double_suffix",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-a.conf.conf",
+     "type": "file",
+     "content": "minlen = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_other_suffix",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-a.cnf",
+     "type": "file",
+     "content": "minlen = 1\n"
+    },
+    {
+     "name": "90-b.conf~",
+     "type": "file",
+     "content": "minlen = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_directory",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-dir.conf",
+     "type": "directory"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_link",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-link.conf",
+     "type": "link",
+     "content": "minlen = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_dangling",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-gone.conf",
+     "type": "dangling"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dropin_crlf_lone_cr",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "# a\rb\r\nminlen = 14\r\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_pam_override_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so minlen=1\n"
+  },
+  {
+   "name": "minlen_pam_override_equal",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so try_first_pass MINLEN=14\n"
+  },
+  {
+   "name": "minlen_pam_override_broken",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so minlen=14x\n"
+  },
+  {
+   "name": "minlen_pam_commented",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "#password requisite pam_pwquality.so minlen=1\n"
+  },
+  {
+   "name": "minlen_pam_other_module",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_unix.so minlen=1\n"
+  },
+  {
+   "name": "minclass_exact",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 1\n"
+  },
+  {
+   "name": "minclass_no_spaces",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass=4\n"
+  },
+  {
+   "name": "minclass_space_only",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass 4\n"
+  },
+  {
+   "name": "minclass_upper",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nMINCLASS = 4\n"
+  },
+  {
+   "name": "minclass_upper_looser_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nMINCLASS = 1\n"
+  },
+  {
+   "name": "minclass_space_looser_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nminclass 1\n"
+  },
+  {
+   "name": "minclass_duplicate",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nminclass = 1\n"
+  },
+  {
+   "name": "minclass_crlf",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nminclass = 4\r\n"
+  },
+  {
+   "name": "minclass_crlf_looser",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nminclass = 1\r\n"
+  },
+  {
+   "name": "minclass_cr_separator",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass\r=\r4\n"
+  },
+  {
+   "name": "minclass_vt_ff",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n\u000bminclass\f=\u000b4\f\n"
+  },
+  {
+   "name": "minclass_lone_cr_in_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\rdifok = 2\n"
+  },
+  {
+   "name": "minclass_lone_cr_in_comment",
+   "main": "# comment\rminclass = 1\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_lone_cr_comment_only",
+   "main": "# comment\rminclass = 1\n"
+  },
+  {
+   "name": "minclass_inline_comment",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4 # site\n"
+  },
+  {
+   "name": "minclass_commented",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n# minclass = 4\n"
+  },
+  {
+   "name": "minclass_hash_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = #4\n"
+  },
+  {
+   "name": "minclass_double_equals",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass == 4\n"
+  },
+  {
+   "name": "minclass_plus",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = +4\n"
+  },
+  {
+   "name": "minclass_trailing_garbage",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4x\n"
+  },
+  {
+   "name": "minclass_empty_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass =\n"
+  },
+  {
+   "name": "minclass_no_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass\n"
+  },
+  {
+   "name": "minclass_nul_first",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n\u0000minclass = 1\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_nul_in_line",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\u00009\n"
+  },
+  {
+   "name": "minclass_nul_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nx = 1\u0000\n"
+  },
+  {
+   "name": "minclass_unknown_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nfrobnicate = 1\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_unknown_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nfrobnicate = 1\n"
+  },
+  {
+   "name": "minclass_bad_int_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = x\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_overflow_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = 2147483647\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_large_ok_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = 2147483646\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_non_ascii_name",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass\u00e9 = 4\n"
+  },
+  {
+   "name": "minclass_text_setting",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nbadwords = foo bar\ndictpath =\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_comment_1021",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_comment_1022",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_comment_1023",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_comment_2047",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_comment_2048",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_long_comment_hides",
+   "main": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxminclass = 1\nminclass = 4\n"
+  },
+  {
+   "name": "minclass_last_line_1021",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minclass_last_line_1022",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minclass_last_line_1023",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minclass_last_line_1500",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "minclass_last_line_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4"
+  },
+  {
+   "name": "minclass_dropin_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minclass = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_only",
+   "main": "",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minclass = 4\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_later_looser",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "minclass = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_upper_later",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "MINCLASS 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_malformed_first",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "00-site.conf",
+     "type": "file",
+     "content": "bogus\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_malformed_last",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "99-site.conf",
+     "type": "file",
+     "content": "bogus\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_long_line",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "00-site.conf",
+     "type": "file",
+     "content": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_hidden",
+   "main": "",
+   "dropins": [
+    {
+     "name": ".hidden.conf",
+     "type": "file",
+     "content": "minclass = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_hidden_later",
+   "main": "",
+   "dropins": [
+    {
+     "name": ".zz.conf",
+     "type": "file",
+     "content": "x = 1\n"
+    },
+    {
+     "name": "90-a.conf",
+     "type": "file",
+     "content": "\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_double_suffix",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-a.conf.conf",
+     "type": "file",
+     "content": "minclass = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_other_suffix",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-a.cnf",
+     "type": "file",
+     "content": "minclass = 1\n"
+    },
+    {
+     "name": "90-b.conf~",
+     "type": "file",
+     "content": "minclass = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_directory",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-dir.conf",
+     "type": "directory"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_link",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-link.conf",
+     "type": "link",
+     "content": "minclass = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_dangling",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-gone.conf",
+     "type": "dangling"
+    }
+   ]
+  },
+  {
+   "name": "minclass_dropin_crlf_lone_cr",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "# a\rb\r\nminclass = 4\r\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_pam_override_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so minclass=1\n"
+  },
+  {
+   "name": "minclass_pam_override_equal",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so try_first_pass MINCLASS=4\n"
+  },
+  {
+   "name": "minclass_pam_override_broken",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so minclass=4x\n"
+  },
+  {
+   "name": "minclass_pam_commented",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "#password requisite pam_pwquality.so minclass=1\n"
+  },
+  {
+   "name": "minclass_pam_other_module",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_unix.so minclass=1\n"
+  },
+  {
+   "name": "retry_exact",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n"
+  },
+  {
+   "name": "retry_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 1\n"
+  },
+  {
+   "name": "retry_no_spaces",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry=3\n"
+  },
+  {
+   "name": "retry_space_only",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry 3\n"
+  },
+  {
+   "name": "retry_upper",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nRETRY = 3\n"
+  },
+  {
+   "name": "retry_upper_looser_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nRETRY = 1\n"
+  },
+  {
+   "name": "retry_space_looser_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nretry 1\n"
+  },
+  {
+   "name": "retry_duplicate",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nretry = 1\n"
+  },
+  {
+   "name": "retry_crlf",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nretry = 3\r\n"
+  },
+  {
+   "name": "retry_crlf_looser",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nretry = 1\r\n"
+  },
+  {
+   "name": "retry_cr_separator",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry\r=\r3\n"
+  },
+  {
+   "name": "retry_vt_ff",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n\u000bretry\f=\u000b3\f\n"
+  },
+  {
+   "name": "retry_lone_cr_in_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\rdifok = 2\n"
+  },
+  {
+   "name": "retry_lone_cr_in_comment",
+   "main": "# comment\rretry = 1\nretry = 3\n"
+  },
+  {
+   "name": "retry_lone_cr_comment_only",
+   "main": "# comment\rretry = 1\n"
+  },
+  {
+   "name": "retry_inline_comment",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3 # site\n"
+  },
+  {
+   "name": "retry_commented",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n# retry = 3\n"
+  },
+  {
+   "name": "retry_hash_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = #3\n"
+  },
+  {
+   "name": "retry_double_equals",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry == 3\n"
+  },
+  {
+   "name": "retry_plus",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = +3\n"
+  },
+  {
+   "name": "retry_trailing_garbage",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3x\n"
+  },
+  {
+   "name": "retry_empty_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry =\n"
+  },
+  {
+   "name": "retry_no_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry\n"
+  },
+  {
+   "name": "retry_nul_first",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n\u0000retry = 1\nretry = 3\n"
+  },
+  {
+   "name": "retry_nul_in_line",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\u00009\n"
+  },
+  {
+   "name": "retry_nul_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nx = 1\u0000\n"
+  },
+  {
+   "name": "retry_unknown_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nfrobnicate = 1\nretry = 3\n"
+  },
+  {
+   "name": "retry_unknown_after",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nfrobnicate = 1\n"
+  },
+  {
+   "name": "retry_bad_int_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = x\nretry = 3\n"
+  },
+  {
+   "name": "retry_overflow_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = 2147483647\nretry = 3\n"
+  },
+  {
+   "name": "retry_large_ok_before",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\ndifok = 2147483646\nretry = 3\n"
+  },
+  {
+   "name": "retry_non_ascii_name",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry\u00e9 = 3\n"
+  },
+  {
+   "name": "retry_text_setting",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nbadwords = foo bar\ndictpath =\nretry = 3\n"
+  },
+  {
+   "name": "retry_comment_1021",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nretry = 3\n"
+  },
+  {
+   "name": "retry_comment_1022",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nretry = 3\n"
+  },
+  {
+   "name": "retry_comment_1023",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nretry = 3\n"
+  },
+  {
+   "name": "retry_comment_2047",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nretry = 3\n"
+  },
+  {
+   "name": "retry_comment_2048",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nretry = 3\n"
+  },
+  {
+   "name": "retry_long_comment_hides",
+   "main": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxretry = 1\nretry = 3\n"
+  },
+  {
+   "name": "retry_last_line_1021",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "retry_last_line_1022",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "retry_last_line_1023",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "retry_last_line_1500",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "name": "retry_last_line_value",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3"
+  },
+  {
+   "name": "retry_dropin_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "retry = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_only",
+   "main": "",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "retry = 3\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_later_looser",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "retry = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_upper_later",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "RETRY 1\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_malformed_first",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "00-site.conf",
+     "type": "file",
+     "content": "bogus\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_malformed_last",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "99-site.conf",
+     "type": "file",
+     "content": "bogus\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_long_line",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "00-site.conf",
+     "type": "file",
+     "content": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_hidden",
+   "main": "",
+   "dropins": [
+    {
+     "name": ".hidden.conf",
+     "type": "file",
+     "content": "retry = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_hidden_later",
+   "main": "",
+   "dropins": [
+    {
+     "name": ".zz.conf",
+     "type": "file",
+     "content": "x = 1\n"
+    },
+    {
+     "name": "90-a.conf",
+     "type": "file",
+     "content": "\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_double_suffix",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-a.conf.conf",
+     "type": "file",
+     "content": "retry = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_other_suffix",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-a.cnf",
+     "type": "file",
+     "content": "retry = 1\n"
+    },
+    {
+     "name": "90-b.conf~",
+     "type": "file",
+     "content": "retry = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_directory",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-dir.conf",
+     "type": "directory"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_link",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-link.conf",
+     "type": "link",
+     "content": "retry = 1\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_dangling",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-gone.conf",
+     "type": "dangling"
+    }
+   ]
+  },
+  {
+   "name": "retry_dropin_crlf_lone_cr",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "# a\rb\r\nretry = 3\r\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_pam_override_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so retry=1\n"
+  },
+  {
+   "name": "retry_pam_override_equal",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so try_first_pass RETRY=3\n"
+  },
+  {
+   "name": "retry_pam_override_broken",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so retry=3x\n"
+  },
+  {
+   "name": "retry_pam_commented",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "#password requisite pam_pwquality.so retry=1\n"
+  },
+  {
+   "name": "retry_pam_other_module",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_unix.so retry=1\n"
+  },
+  {
+   "name": "minlen_own_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minlen.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minlen.\n# Switching the rule or the pwquality topic off removes this file.\nminlen = 14\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_own_dropin_later_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minlen.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minlen.\n# Switching the rule or the pwquality topic off removes this file.\nminlen = 14\n"
+    },
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "MINLEN = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_own_dropin_main_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 0\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minlen.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minlen.\n# Switching the rule or the pwquality topic off removes this file.\nminlen = 14\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_own_dropin_earlier_malformed",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minlen == 3\n"
+    },
+    {
+     "name": "50-freesecdev-minlen.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minlen.\n# Switching the rule or the pwquality topic off removes this file.\nminlen = 14\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_own_dropin_crlf_main",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nminlen = 14\r\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minlen.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minlen.\n# Switching the rule or the pwquality topic off removes this file.\nminlen = 14\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_own_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minclass.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minclass.\n# Switching the rule or the pwquality topic off removes this file.\nminclass = 4\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_own_dropin_later_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minclass.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minclass.\n# Switching the rule or the pwquality topic off removes this file.\nminclass = 4\n"
+    },
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "MINCLASS = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_own_dropin_main_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 0\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minclass.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minclass.\n# Switching the rule or the pwquality topic off removes this file.\nminclass = 4\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_own_dropin_earlier_malformed",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minlen == 3\n"
+    },
+    {
+     "name": "50-freesecdev-minclass.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minclass.\n# Switching the rule or the pwquality topic off removes this file.\nminclass = 4\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_own_dropin_crlf_main",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nminclass = 4\r\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-minclass.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for minclass.\n# Switching the rule or the pwquality topic off removes this file.\nminclass = 4\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_own_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-retry.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for retry.\n# Switching the rule or the pwquality topic off removes this file.\nretry = 3\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_own_dropin_later_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-retry.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for retry.\n# Switching the rule or the pwquality topic off removes this file.\nretry = 3\n"
+    },
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "RETRY = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_own_dropin_main_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 0\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-retry.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for retry.\n# Switching the rule or the pwquality topic off removes this file.\nretry = 3\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_own_dropin_earlier_malformed",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minlen == 3\n"
+    },
+    {
+     "name": "50-freesecdev-retry.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for retry.\n# Switching the rule or the pwquality topic off removes this file.\nretry = 3\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_own_dropin_crlf_main",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nretry = 3\r\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-retry.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for retry.\n# Switching the rule or the pwquality topic off removes this file.\nretry = 3\n"
+    }
+   ]
+  },
+  {
+   "name": "enforce_for_root_own_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-enforce-for-root.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for enforce_for_root.\n# Switching the rule or the pwquality topic off removes this file.\nenforce_for_root\n"
+    }
+   ]
+  },
+  {
+   "name": "enforce_for_root_own_dropin_later_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-enforce-for-root.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for enforce_for_root.\n# Switching the rule or the pwquality topic off removes this file.\nenforce_for_root\n"
+    },
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "ENFORCE_FOR_ROOT = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "enforce_for_root_own_dropin_main_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root = 0\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-enforce-for-root.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for enforce_for_root.\n# Switching the rule or the pwquality topic off removes this file.\nenforce_for_root\n"
+    }
+   ]
+  },
+  {
+   "name": "enforce_for_root_own_dropin_earlier_malformed",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "10-site.conf",
+     "type": "file",
+     "content": "minlen == 3\n"
+    },
+    {
+     "name": "50-freesecdev-enforce-for-root.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for enforce_for_root.\n# Switching the rule or the pwquality topic off removes this file.\nenforce_for_root\n"
+    }
+   ]
+  },
+  {
+   "name": "enforce_for_root_own_dropin_crlf_main",
+   "main": "# Configuration for systemwide password quality limits\r\n# difok = 1\r\nenforce_for_root\r\n",
+   "dropins": [
+    {
+     "name": "50-freesecdev-enforce-for-root.conf",
+     "type": "file",
+     "content": "# Managed by freesecdev.linux_compliance for enforce_for_root.\n# Switching the rule or the pwquality topic off removes this file.\nenforce_for_root\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "directory": "link"
+  },
+  {
+   "name": "minlen_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minlen_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "minlen = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minlen_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nenforcing = 0\n"
+  },
+  {
+   "name": "minlen_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "minlen_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "minlen_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nlocal_users_only\n"
+  },
+  {
+   "name": "minlen_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "minlen_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "minlen_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "minclass_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "directory": "link"
+  },
+  {
+   "name": "minclass_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minclass_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "minclass = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minclass_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nenforcing = 0\n"
+  },
+  {
+   "name": "minclass_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "minclass_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "minclass_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nlocal_users_only\n"
+  },
+  {
+   "name": "minclass_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "minclass_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "minclass_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "retry_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "directory": "link"
+  },
+  {
+   "name": "retry_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "retry_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "retry = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "retry_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nenforcing = 0\n"
+  },
+  {
+   "name": "retry_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "retry_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "retry_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nlocal_users_only\n"
+  },
+  {
+   "name": "retry_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "retry_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "retry_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "enforce_for_root_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "directory": "link"
+  },
+  {
+   "name": "enforce_for_root_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "enforce_for_root_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforce_for_root = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "enforce_for_root_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\nenforcing = 0\n"
+  },
+  {
+   "name": "enforce_for_root_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "enforce_for_root_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "enforce_for_root_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "enforce_for_root_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\nlocal_users_only\n"
+  },
+  {
+   "name": "enforce_for_root_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "enforce_for_root_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "enforce_for_root_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "enforcing_rule_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforcing = 0\n"
+  },
+  {
+   "name": "efr_set",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n"
+  },
+  {
+   "name": "efr_zero",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root = 0\n"
+  },
+  {
+   "name": "efr_upper",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nENFORCE_FOR_ROOT\n"
+  },
+  {
+   "name": "efr_value_garbage",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root = yes please\n"
+  },
+  {
+   "name": "efr_pam_flag",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "pam": "password requisite pam_pwquality.so enforce_for_root\n"
+  },
+  {
+   "name": "efr_dropin_later",
+   "main": "",
+   "dropins": [
+    {
+     "name": "90-site.conf",
+     "type": "file",
+     "content": "enforce_for_root\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_clamped",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 3\n"
+  },
+  {
+   "name": "minclass_clamped",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 9\n"
+  },
+  {
+   "name": "ubuntu_as_built_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "pam": "password\trequisite\t\t\tpam_pwquality.so retry=3\n"
+  },
+  {
+   "name": "rocky_as_built_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "pam": "password    requisite     pam_pwquality.so try_first_pass local_users_only retry=3 authtok_type=\n"
+  },
+  {
+   "name": "non_utf8_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n# caf\udce9\n"
+  },
+  {
+   "name": "vt_in_value_line",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 1\u000b4\n"
+  }
+ ]
+}

@@ -241,3 +241,87 @@ cycles and two pwquality cycles per platform in addition to the four of `file_pe
 capability, so root cannot change ownership there: the owner and group rules are proven compliant on the as-built
 root-owned files, and their change and restore are not exercised in a container; the customised banner pre-state
 changes the mode only. Changing and restoring ownership needs the libvirt scenarios (FREES-61).
+
+## Amendment of 2026-10-31: password quality as libpwquality reads it (FREES-200)
+
+**Context.** The `pwquality` family found settings with regular expressions of its own (`^[ \t]*minlen[ \t]*=`,
+case-sensitive, `=` required) and wrote and restored the main file with `ansible.builtin.lineinfile`. Reviews of the
+other families found such parsers diverging from the real reader. libpwquality cannot print the configuration it
+uses, so a verdict table was produced with the real library of both Molecule images (libpwquality 1.4.5-3build1 on
+Ubuntu 24.04, 1.4.4-8.el9 on Rocky Linux 9), through `ctypes` calls of `pwquality_read_config`,
+`pwquality_set_option` and `pwquality_get_int_value`. It confirms what `src/settings.c` and `src/pam_pwquality.c`
+of those releases do:
+
+- Every directory entry whose name holds `.conf` only at its end is read, dot files included (`.x.conf`) and
+  `a.conf.conf` not, in `strcmp` order, and then the main file; a symbolic link is followed, a directory and a link
+  to nothing add nothing.
+- The first line that the library cannot read stops the whole configuration, and what was read until then stays:
+  an unknown name, a value that `strtol` does not read completely (`14x`, `= 14` after `=`, `minlen =`, a lone CR
+  inside the value), a NUL byte that is not the first byte of its line, and a line of 1023 bytes or more, comment or
+  not, including a last line of exactly 1023 bytes without a line break. A bad drop-in therefore means the main file
+  is never read. `pam_pwquality` logs the error and goes on.
+- `#` starts a comment anywhere; space, tab, CR, VT, FF and LF are white space around the name and the value; the
+  name ends at the first white space or `=` (`minlen 14` and `minlen=14` are read); names are compared without case
+  (`MINLEN = 8` is read); the last occurrence wins; `minlen` below 6 is read as 6, `minclass` above 4 as 4, and
+  `enforce_for_root = 0` sets the flag.
+- The arguments of `pam_pwquality` in every PAM stack override the files (`minlen=8`, `MINLEN=8`,
+  `enforce_for_root`), and an argument that the library refuses changes nothing.
+
+The table holds 273 cases, every file state that a decision of the family leaves (1795 states, read identically in
+both images) and the 2730 decisions of five rules (`minlen`, `minclass`, `retry`, `enforce_for_root`, `enforcing`)
+with both methods. Measured against it, the family on main reported a rule `compliant` or `applied` while the library held a
+looser value for: a looser second line in another case or without `=` (`MINLEN = 6`, `minlen 6`), a looser later
+drop-in written in upper case, a malformed or over-long line before the setting, a bad or over-long drop-in read
+before the main file, a dot file drop-in that stops the reading, a later drop-in that is a symbolic link, a
+`pam_pwquality` argument, and a `minlen` line without a value, after which the appended line was never read; and it
+rewrote a CRLF file or one with a lone CR other than byte for byte.
+
+**Decision.**
+
+- `plugins/module_utils/compliance/pwquality.py` reproduces the reader on the bytes of the files, and the filters
+  `pwquality_decide` and `pwquality_restore` decide and restore every rule with it. A rule is `compliant` or `applied`
+  only when the library, reading the files as they are or as they will be after the write, takes the profile's value
+  from the line or the drop-in that the rule writes. Otherwise nothing is written and the rule is `unreadable_file`
+  (the reading stops before the rule's value, a drop-in that libpwquality reads is a symbolic link or not a regular
+  file, or the main file is not UTF-8 text or holds a NUL), `overridden` (a later file sets another value, with the
+  file and line in the reason), `duplicate_setting` (two lines of the main file set the setting, in any case and
+  spacing) or `unreadable_value` (the setting's line holds a control character other than a tab or a CR, which the
+  ledger cannot record).
+- Every PAM file below `/etc/pam.d` and `/usr/lib/pam.d`, read through symbolic links, is searched: on every line that
+  names `pam_pwquality` and is not a comment line, with continued lines joined, every word that names the setting and
+  does not set exactly the profile's value makes the rule `overridden`, with the file and the argument in the reason.
+  This finds more than PAM passes to the module and never less; `retry=3` on the lines that both images ship
+  overrides only a `retry` rule whose value is not 3.
+- The family reads every entry of the drop-in directory, dot files included, and the main file is written and
+  restored with `ansible.builtin.copy` of the whole text read, with the setting's line replaced in place, appended or
+  removed with its line break, and the file's mode; CRs everywhere stay as they were. `lineinfile` is no longer used.
+- `tools/lint/pwquality_readers.sh <Ubuntu image> <Rocky image>` regenerates
+  `tests/fixtures/pwquality_readers/verdicts.json` from `cases.json`: the decisions are computed on the controller,
+  and `tools/lint/pwquality_readers_probe.py` reads every state in throwaway containers of both Molecule images with
+  `--network none` and read-only mounts. `tests/unit/tools/test_pwquality_verdicts.py`
+  checks that the reader of the collection reads every state as the library did, that every decision is the one in
+  the table, and that no `compliant` or `applied` decision leaves a value that the library does not hold.
+- A regression group `readers` (`shared/tasks/lifecycle_pwquality_readers_regressions.yml`, a Docker leg per
+  platform) applies `minlen` and `enforce_for_root` over a main file with CRLF line ends, a lone CR in a comment and
+  `minlen = 8` (rewritten in place on Ubuntu, `overridden` by the main file on Rocky Linux), cleans up byte for byte,
+  and refuses both rules, with nothing written, under a PAM file that passes `minlen=8` and a drop-in read first with
+  `minlen == 14`, which stops libpwquality.
+
+**Review of PR #89, round 1.**
+
+- *A linked drop-in directory is refused with both methods (F2).* libpwquality follows a symbolic link at
+  `/etc/security/pwquality.conf.d` with `scandir`; a bad drop-in there stops the reading before the main file. The
+  main file method, used on Ubuntu, now refuses with `not_directory` as the drop-in method does; the table has cases
+  with a linked directory, which the probe installs as a link to a real directory.
+- *`enforcing = 0` refuses every other rule, and `local_users_only` is reported (F7).* With `enforcing` at 0 in the
+  files or a `pam_pwquality` argument, libpwquality only warns, so a rule is `overridden` with that reason instead of
+  `applied`. With `local_users_only` set, an applied or compliant rule says in its message that it applies to local
+  users only; the shipped Rocky Linux stack sets it, so refusing would refuse every rule there.
+- *A PAM line that includes a file by absolute path refuses the rule (F8)*, because Linux-PAM opens that file
+  wherever it is and the collection reads only `/etc/pam.d` and `/usr/lib/pam.d`.
+- *Every write re-checks the file (F3), and a cleanup is `restored` only after a SHA-256 match (F5).* Right before the
+  main file is recorded and written, and right before it is written back, its SHA-256 must be that of the text read;
+  otherwise the rule is `modified_since_read` with nothing written. After it is written back, its SHA-256 must be
+  that of the text written, or the entry is kept with `write_mismatch`. The recorded `sha256` of the file before the
+  rule changed it is compared with the restored text: the message says when the file is byte for byte as recorded,
+  and that only the line is back when other lines changed since, for example by rules that are still applied.

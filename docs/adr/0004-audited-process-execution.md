@@ -1074,3 +1074,27 @@ gains one policy:
   `.alias` name, at most 256, adds `/dev/null` itself for the directives of the kernel command line, and runs with a
   30-second timeout and 4 MiB of output per run. Only a modprobe that is not found in the trusted directories is
   reported as `available: false`; one that the helper refuses or that cannot be started fails the module.
+
+## Amendment 2026-10-31: sshd's effective configuration (FREES-200)
+
+The `ssh` topic ([ADR 0023](0023-native-ssh-server-configuration.md), amendment of FREES-200) decides whether a
+drop-in takes effect from sshd itself, not from a lexer of its own: a drop-in counts as applied or compliant only when
+sshd prints the required value. The `sshd` policy grows by one narrow form:
+
+- A second command prefix, `-T -f /etc/ssh/sshd_config` (`SSHD_EFFECTIVE`), sshd's extended test mode. It reads and
+  validates the same configuration as `-t`, prints every setting as sshd will use it and exits; it starts no daemon
+  and binds no port. It takes the same `-o` pairs as `-t` (`SSHD_SETTING`), so `sshd -T -o Keyword=value` also prints
+  the value as sshd normalises it (`logingracetime 60`, `loglevel VERBOSE`), which the role compares with the value
+  that sshd uses without the option.
+- One more option, `-C`, with the pattern `SSHD_CONNECTION`: exactly `user=<name>,host=<name>,addr=<IPv4>`, a
+  lower-case user name of at most 32 characters, a lower-case host name and a dotted IPv4 address, so that sshd also
+  applies the `Match` blocks that match that connection. The policy model gains `ExecutablePolicy.option_prefixes`,
+  `(option, prefix)` pairs: such an option is permitted only after that one prefix and at most once. The `sshd`
+  policy has one pair, `-C` with `SSHD_EFFECTIVE`, so `-t ... -C`, a second `-C`, `laddr=`, `lport=`, `rdomain=`,
+  IPv6 and an upper-case user are refused by the helper itself (`tests/unit/plugins/module_utils/compliance/
+  test_process.py`). Every other policy leaves the field empty.
+- `freesecdev.linux_compliance.sshd_validate` gains `effective: true` and `client`; with them it runs `-T`
+  instead of `-t` and returns only the values of the 28 keywords of the native ssh rules, parsed from lines of
+  printable characters, and no values when sshd refuses the configuration, times out or prints more than 64 KiB.
+- The remediate role never passes `client`, so it never runs `-C`; only the Molecule reader regressions use it, to
+  read what sshd applies inside a `Match` block for one user.

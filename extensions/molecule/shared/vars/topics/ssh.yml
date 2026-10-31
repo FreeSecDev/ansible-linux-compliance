@@ -340,3 +340,6 @@ regressions:
   - name: vendor
     files:
       - lifecycle_ssh_vendor_regressions.yml
+  - name: readers
+    files:
+      - lifecycle_ssh_readers_regressions.yml

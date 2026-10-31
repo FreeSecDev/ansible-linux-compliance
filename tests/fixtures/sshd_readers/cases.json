@@ -1,0 +1,1412 @@
+{
+ "cases": [
+  {
+   "name": "global-000",
+   "text": "PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-000",
+   "text": "Match User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-001",
+   "text": "permitrootlogin yes\n"
+  },
+  {
+   "name": "match-001",
+   "text": "Match User freesecdev-probe\npermitrootlogin yes\n"
+  },
+  {
+   "name": "global-002",
+   "text": "Permit\"RootLogin\" yes\n"
+  },
+  {
+   "name": "match-002",
+   "text": "Match User freesecdev-probe\nPermit\"RootLogin\" yes\n"
+  },
+  {
+   "name": "global-003",
+   "text": "\"PermitRootLogin\" yes\n"
+  },
+  {
+   "name": "match-003",
+   "text": "Match User freesecdev-probe\n\"PermitRootLogin\" yes\n"
+  },
+  {
+   "name": "global-004",
+   "text": "=PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-004",
+   "text": "Match User freesecdev-probe\n=PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-005",
+   "text": " = PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-005",
+   "text": "Match User freesecdev-probe\n = PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-006",
+   "text": "\t=\tPermitRootLogin\tyes\n"
+  },
+  {
+   "name": "match-006",
+   "text": "Match User freesecdev-probe\n\t=\tPermitRootLogin\tyes\n"
+  },
+  {
+   "name": "global-007",
+   "text": "=\"PermitRootLogin\" yes\n"
+  },
+  {
+   "name": "match-007",
+   "text": "Match User freesecdev-probe\n=\"PermitRootLogin\" yes\n"
+  },
+  {
+   "name": "global-008",
+   "text": "PermitRootLogin=yes\n"
+  },
+  {
+   "name": "match-008",
+   "text": "Match User freesecdev-probe\nPermitRootLogin=yes\n"
+  },
+  {
+   "name": "global-009",
+   "text": "PermitRootLogin = yes\n"
+  },
+  {
+   "name": "match-009",
+   "text": "Match User freesecdev-probe\nPermitRootLogin = yes\n"
+  },
+  {
+   "name": "global-010",
+   "text": "PermitRootLogin == yes\n"
+  },
+  {
+   "name": "match-010",
+   "text": "Match User freesecdev-probe\nPermitRootLogin == yes\n"
+  },
+  {
+   "name": "global-011",
+   "text": "==PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-011",
+   "text": "Match User freesecdev-probe\n==PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-012",
+   "text": "= =PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-012",
+   "text": "Match User freesecdev-probe\n= =PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-013",
+   "text": "Permit\"Root\"Login yes\n"
+  },
+  {
+   "name": "match-013",
+   "text": "Match User freesecdev-probe\nPermit\"Root\"Login yes\n"
+  },
+  {
+   "name": "global-014",
+   "text": "PermitRootLogin\"\" yes\n"
+  },
+  {
+   "name": "match-014",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\"\" yes\n"
+  },
+  {
+   "name": "global-015",
+   "text": "\"\"PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-015",
+   "text": "Match User freesecdev-probe\n\"\"PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-016",
+   "text": "Permit\"RootLogin yes\n"
+  },
+  {
+   "name": "match-016",
+   "text": "Match User freesecdev-probe\nPermit\"RootLogin yes\n"
+  },
+  {
+   "name": "global-017",
+   "text": "PermitRootLogin\ryes\n"
+  },
+  {
+   "name": "match-017",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\ryes\n"
+  },
+  {
+   "name": "global-018",
+   "text": "\rPermitRootLogin yes\n"
+  },
+  {
+   "name": "match-018",
+   "text": "Match User freesecdev-probe\n\rPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-019",
+   "text": "\fPermitRootLogin yes\n"
+  },
+  {
+   "name": "match-019",
+   "text": "Match User freesecdev-probe\n\fPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-020",
+   "text": "PermitRootLogin yes\f\n"
+  },
+  {
+   "name": "match-020",
+   "text": "Match User freesecdev-probe\nPermitRootLogin yes\f\n"
+  },
+  {
+   "name": "global-021",
+   "text": "\u000bPermitRootLogin yes\n"
+  },
+  {
+   "name": "match-021",
+   "text": "Match User freesecdev-probe\n\u000bPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-022",
+   "text": "PermitRootLogin\u000byes\n"
+  },
+  {
+   "name": "match-022",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\u000byes\n"
+  },
+  {
+   "name": "global-023",
+   "text": "#PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-023",
+   "text": "Match User freesecdev-probe\n#PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-024",
+   "text": " #PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-024",
+   "text": "Match User freesecdev-probe\n #PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-025",
+   "text": "\"#PermitRootLogin\" yes\n"
+  },
+  {
+   "name": "match-025",
+   "text": "Match User freesecdev-probe\n\"#PermitRootLogin\" yes\n"
+  },
+  {
+   "name": "global-026",
+   "text": "\"\" PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-026",
+   "text": "Match User freesecdev-probe\n\"\" PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-027",
+   "text": "PermitRootLogin \"yes\"\n"
+  },
+  {
+   "name": "match-027",
+   "text": "Match User freesecdev-probe\nPermitRootLogin \"yes\"\n"
+  },
+  {
+   "name": "global-028",
+   "text": "PermitRootLogin yes # site\n"
+  },
+  {
+   "name": "match-028",
+   "text": "Match User freesecdev-probe\nPermitRootLogin yes # site\n"
+  },
+  {
+   "name": "global-029",
+   "text": "PermitRootLogin #yes\n"
+  },
+  {
+   "name": "match-029",
+   "text": "Match User freesecdev-probe\nPermitRootLogin #yes\n"
+  },
+  {
+   "name": "global-030",
+   "text": "PermitRootLogin\n"
+  },
+  {
+   "name": "match-030",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\n"
+  },
+  {
+   "name": "global-031",
+   "text": "PermitRootLogin \t\n"
+  },
+  {
+   "name": "match-031",
+   "text": "Match User freesecdev-probe\nPermitRootLogin \t\n"
+  },
+  {
+   "name": "global-032",
+   "text": "DSAAuthentication no\n"
+  },
+  {
+   "name": "match-032",
+   "text": "Match User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "global-033",
+   "text": "dsaAuthentication=no\n"
+  },
+  {
+   "name": "match-033",
+   "text": "Match User freesecdev-probe\ndsaAuthentication=no\n"
+  },
+  {
+   "name": "global-034",
+   "text": "DSA\"Authentication\" no\n"
+  },
+  {
+   "name": "match-034",
+   "text": "Match User freesecdev-probe\nDSA\"Authentication\" no\n"
+  },
+  {
+   "name": "global-035",
+   "text": "PubkeyAuthentication no\n"
+  },
+  {
+   "name": "match-035",
+   "text": "Match User freesecdev-probe\nPubkeyAuthentication no\n"
+  },
+  {
+   "name": "global-036",
+   "text": "Permit\u0000RootLogin yes\n"
+  },
+  {
+   "name": "match-036",
+   "text": "Match User freesecdev-probe\nPermit\u0000RootLogin yes\n"
+  },
+  {
+   "name": "global-037",
+   "text": "\"PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-037",
+   "text": "Match User freesecdev-probe\n\"PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-038",
+   "text": "P\"ermitRootLogin yes\n"
+  },
+  {
+   "name": "match-038",
+   "text": "Match User freesecdev-probe\nP\"ermitRootLogin yes\n"
+  },
+  {
+   "name": "global-039",
+   "text": "Pe\"rmitRootLogin yes\n"
+  },
+  {
+   "name": "match-039",
+   "text": "Match User freesecdev-probe\nPe\"rmitRootLogin yes\n"
+  },
+  {
+   "name": "global-040",
+   "text": "Per\"mitRootLogin yes\n"
+  },
+  {
+   "name": "match-040",
+   "text": "Match User freesecdev-probe\nPer\"mitRootLogin yes\n"
+  },
+  {
+   "name": "global-041",
+   "text": "Perm\"itRootLogin yes\n"
+  },
+  {
+   "name": "match-041",
+   "text": "Match User freesecdev-probe\nPerm\"itRootLogin yes\n"
+  },
+  {
+   "name": "global-042",
+   "text": "Permi\"tRootLogin yes\n"
+  },
+  {
+   "name": "match-042",
+   "text": "Match User freesecdev-probe\nPermi\"tRootLogin yes\n"
+  },
+  {
+   "name": "global-043",
+   "text": "Permit\"RootLogin yes\n"
+  },
+  {
+   "name": "match-043",
+   "text": "Match User freesecdev-probe\nPermit\"RootLogin yes\n"
+  },
+  {
+   "name": "global-044",
+   "text": "PermitR\"ootLogin yes\n"
+  },
+  {
+   "name": "match-044",
+   "text": "Match User freesecdev-probe\nPermitR\"ootLogin yes\n"
+  },
+  {
+   "name": "global-045",
+   "text": "PermitRo\"otLogin yes\n"
+  },
+  {
+   "name": "match-045",
+   "text": "Match User freesecdev-probe\nPermitRo\"otLogin yes\n"
+  },
+  {
+   "name": "global-046",
+   "text": "PermitRoo\"tLogin yes\n"
+  },
+  {
+   "name": "match-046",
+   "text": "Match User freesecdev-probe\nPermitRoo\"tLogin yes\n"
+  },
+  {
+   "name": "global-047",
+   "text": "PermitRoot\"Login yes\n"
+  },
+  {
+   "name": "match-047",
+   "text": "Match User freesecdev-probe\nPermitRoot\"Login yes\n"
+  },
+  {
+   "name": "global-048",
+   "text": "PermitRootL\"ogin yes\n"
+  },
+  {
+   "name": "match-048",
+   "text": "Match User freesecdev-probe\nPermitRootL\"ogin yes\n"
+  },
+  {
+   "name": "global-049",
+   "text": "PermitRootLo\"gin yes\n"
+  },
+  {
+   "name": "match-049",
+   "text": "Match User freesecdev-probe\nPermitRootLo\"gin yes\n"
+  },
+  {
+   "name": "global-050",
+   "text": "PermitRootLog\"in yes\n"
+  },
+  {
+   "name": "match-050",
+   "text": "Match User freesecdev-probe\nPermitRootLog\"in yes\n"
+  },
+  {
+   "name": "global-051",
+   "text": "PermitRootLogi\"n yes\n"
+  },
+  {
+   "name": "match-051",
+   "text": "Match User freesecdev-probe\nPermitRootLogi\"n yes\n"
+  },
+  {
+   "name": "global-052",
+   "text": "PermitRootLogin\" yes\n"
+  },
+  {
+   "name": "match-052",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\" yes\n"
+  },
+  {
+   "name": "global-053",
+   "text": "\"\"PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-053",
+   "text": "Match User freesecdev-probe\n\"\"PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-054",
+   "text": "P\"\"ermitRootLogin yes\n"
+  },
+  {
+   "name": "match-054",
+   "text": "Match User freesecdev-probe\nP\"\"ermitRootLogin yes\n"
+  },
+  {
+   "name": "global-055",
+   "text": "Pe\"\"rmitRootLogin yes\n"
+  },
+  {
+   "name": "match-055",
+   "text": "Match User freesecdev-probe\nPe\"\"rmitRootLogin yes\n"
+  },
+  {
+   "name": "global-056",
+   "text": "Per\"\"mitRootLogin yes\n"
+  },
+  {
+   "name": "match-056",
+   "text": "Match User freesecdev-probe\nPer\"\"mitRootLogin yes\n"
+  },
+  {
+   "name": "global-057",
+   "text": "Perm\"\"itRootLogin yes\n"
+  },
+  {
+   "name": "match-057",
+   "text": "Match User freesecdev-probe\nPerm\"\"itRootLogin yes\n"
+  },
+  {
+   "name": "global-058",
+   "text": "Permi\"\"tRootLogin yes\n"
+  },
+  {
+   "name": "match-058",
+   "text": "Match User freesecdev-probe\nPermi\"\"tRootLogin yes\n"
+  },
+  {
+   "name": "global-059",
+   "text": "Permit\"\"RootLogin yes\n"
+  },
+  {
+   "name": "match-059",
+   "text": "Match User freesecdev-probe\nPermit\"\"RootLogin yes\n"
+  },
+  {
+   "name": "global-060",
+   "text": "PermitR\"\"ootLogin yes\n"
+  },
+  {
+   "name": "match-060",
+   "text": "Match User freesecdev-probe\nPermitR\"\"ootLogin yes\n"
+  },
+  {
+   "name": "global-061",
+   "text": "PermitRo\"\"otLogin yes\n"
+  },
+  {
+   "name": "match-061",
+   "text": "Match User freesecdev-probe\nPermitRo\"\"otLogin yes\n"
+  },
+  {
+   "name": "global-062",
+   "text": "PermitRoo\"\"tLogin yes\n"
+  },
+  {
+   "name": "match-062",
+   "text": "Match User freesecdev-probe\nPermitRoo\"\"tLogin yes\n"
+  },
+  {
+   "name": "global-063",
+   "text": "PermitRoot\"\"Login yes\n"
+  },
+  {
+   "name": "match-063",
+   "text": "Match User freesecdev-probe\nPermitRoot\"\"Login yes\n"
+  },
+  {
+   "name": "global-064",
+   "text": "PermitRootL\"\"ogin yes\n"
+  },
+  {
+   "name": "match-064",
+   "text": "Match User freesecdev-probe\nPermitRootL\"\"ogin yes\n"
+  },
+  {
+   "name": "global-065",
+   "text": "PermitRootLo\"\"gin yes\n"
+  },
+  {
+   "name": "match-065",
+   "text": "Match User freesecdev-probe\nPermitRootLo\"\"gin yes\n"
+  },
+  {
+   "name": "global-066",
+   "text": "PermitRootLog\"\"in yes\n"
+  },
+  {
+   "name": "match-066",
+   "text": "Match User freesecdev-probe\nPermitRootLog\"\"in yes\n"
+  },
+  {
+   "name": "global-067",
+   "text": "PermitRootLogi\"\"n yes\n"
+  },
+  {
+   "name": "match-067",
+   "text": "Match User freesecdev-probe\nPermitRootLogi\"\"n yes\n"
+  },
+  {
+   "name": "global-068",
+   "text": "PermitRootLogin\"\" yes\n"
+  },
+  {
+   "name": "match-068",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\"\" yes\n"
+  },
+  {
+   "name": "global-069",
+   "text": "=PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-069",
+   "text": "Match User freesecdev-probe\n=PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-070",
+   "text": "P=ermitRootLogin yes\n"
+  },
+  {
+   "name": "match-070",
+   "text": "Match User freesecdev-probe\nP=ermitRootLogin yes\n"
+  },
+  {
+   "name": "global-071",
+   "text": "Pe=rmitRootLogin yes\n"
+  },
+  {
+   "name": "match-071",
+   "text": "Match User freesecdev-probe\nPe=rmitRootLogin yes\n"
+  },
+  {
+   "name": "global-072",
+   "text": "Per=mitRootLogin yes\n"
+  },
+  {
+   "name": "match-072",
+   "text": "Match User freesecdev-probe\nPer=mitRootLogin yes\n"
+  },
+  {
+   "name": "global-073",
+   "text": "Perm=itRootLogin yes\n"
+  },
+  {
+   "name": "match-073",
+   "text": "Match User freesecdev-probe\nPerm=itRootLogin yes\n"
+  },
+  {
+   "name": "global-074",
+   "text": "Permi=tRootLogin yes\n"
+  },
+  {
+   "name": "match-074",
+   "text": "Match User freesecdev-probe\nPermi=tRootLogin yes\n"
+  },
+  {
+   "name": "global-075",
+   "text": "Permit=RootLogin yes\n"
+  },
+  {
+   "name": "match-075",
+   "text": "Match User freesecdev-probe\nPermit=RootLogin yes\n"
+  },
+  {
+   "name": "global-076",
+   "text": "PermitR=ootLogin yes\n"
+  },
+  {
+   "name": "match-076",
+   "text": "Match User freesecdev-probe\nPermitR=ootLogin yes\n"
+  },
+  {
+   "name": "global-077",
+   "text": "PermitRo=otLogin yes\n"
+  },
+  {
+   "name": "match-077",
+   "text": "Match User freesecdev-probe\nPermitRo=otLogin yes\n"
+  },
+  {
+   "name": "global-078",
+   "text": "PermitRoo=tLogin yes\n"
+  },
+  {
+   "name": "match-078",
+   "text": "Match User freesecdev-probe\nPermitRoo=tLogin yes\n"
+  },
+  {
+   "name": "global-079",
+   "text": "PermitRoot=Login yes\n"
+  },
+  {
+   "name": "match-079",
+   "text": "Match User freesecdev-probe\nPermitRoot=Login yes\n"
+  },
+  {
+   "name": "global-080",
+   "text": "PermitRootL=ogin yes\n"
+  },
+  {
+   "name": "match-080",
+   "text": "Match User freesecdev-probe\nPermitRootL=ogin yes\n"
+  },
+  {
+   "name": "global-081",
+   "text": "PermitRootLo=gin yes\n"
+  },
+  {
+   "name": "match-081",
+   "text": "Match User freesecdev-probe\nPermitRootLo=gin yes\n"
+  },
+  {
+   "name": "global-082",
+   "text": "PermitRootLog=in yes\n"
+  },
+  {
+   "name": "match-082",
+   "text": "Match User freesecdev-probe\nPermitRootLog=in yes\n"
+  },
+  {
+   "name": "global-083",
+   "text": "PermitRootLogi=n yes\n"
+  },
+  {
+   "name": "match-083",
+   "text": "Match User freesecdev-probe\nPermitRootLogi=n yes\n"
+  },
+  {
+   "name": "global-084",
+   "text": "PermitRootLogin= yes\n"
+  },
+  {
+   "name": "match-084",
+   "text": "Match User freesecdev-probe\nPermitRootLogin= yes\n"
+  },
+  {
+   "name": "global-085",
+   "text": " PermitRootLogin yes\n"
+  },
+  {
+   "name": "match-085",
+   "text": "Match User freesecdev-probe\n PermitRootLogin yes\n"
+  },
+  {
+   "name": "global-086",
+   "text": "P ermitRootLogin yes\n"
+  },
+  {
+   "name": "match-086",
+   "text": "Match User freesecdev-probe\nP ermitRootLogin yes\n"
+  },
+  {
+   "name": "global-087",
+   "text": "Pe rmitRootLogin yes\n"
+  },
+  {
+   "name": "match-087",
+   "text": "Match User freesecdev-probe\nPe rmitRootLogin yes\n"
+  },
+  {
+   "name": "global-088",
+   "text": "Per mitRootLogin yes\n"
+  },
+  {
+   "name": "match-088",
+   "text": "Match User freesecdev-probe\nPer mitRootLogin yes\n"
+  },
+  {
+   "name": "global-089",
+   "text": "Perm itRootLogin yes\n"
+  },
+  {
+   "name": "match-089",
+   "text": "Match User freesecdev-probe\nPerm itRootLogin yes\n"
+  },
+  {
+   "name": "global-090",
+   "text": "Permi tRootLogin yes\n"
+  },
+  {
+   "name": "match-090",
+   "text": "Match User freesecdev-probe\nPermi tRootLogin yes\n"
+  },
+  {
+   "name": "global-091",
+   "text": "Permit RootLogin yes\n"
+  },
+  {
+   "name": "match-091",
+   "text": "Match User freesecdev-probe\nPermit RootLogin yes\n"
+  },
+  {
+   "name": "global-092",
+   "text": "PermitR ootLogin yes\n"
+  },
+  {
+   "name": "match-092",
+   "text": "Match User freesecdev-probe\nPermitR ootLogin yes\n"
+  },
+  {
+   "name": "global-093",
+   "text": "PermitRo otLogin yes\n"
+  },
+  {
+   "name": "match-093",
+   "text": "Match User freesecdev-probe\nPermitRo otLogin yes\n"
+  },
+  {
+   "name": "global-094",
+   "text": "PermitRoo tLogin yes\n"
+  },
+  {
+   "name": "match-094",
+   "text": "Match User freesecdev-probe\nPermitRoo tLogin yes\n"
+  },
+  {
+   "name": "global-095",
+   "text": "PermitRoot Login yes\n"
+  },
+  {
+   "name": "match-095",
+   "text": "Match User freesecdev-probe\nPermitRoot Login yes\n"
+  },
+  {
+   "name": "global-096",
+   "text": "PermitRootL ogin yes\n"
+  },
+  {
+   "name": "match-096",
+   "text": "Match User freesecdev-probe\nPermitRootL ogin yes\n"
+  },
+  {
+   "name": "global-097",
+   "text": "PermitRootLo gin yes\n"
+  },
+  {
+   "name": "match-097",
+   "text": "Match User freesecdev-probe\nPermitRootLo gin yes\n"
+  },
+  {
+   "name": "global-098",
+   "text": "PermitRootLog in yes\n"
+  },
+  {
+   "name": "match-098",
+   "text": "Match User freesecdev-probe\nPermitRootLog in yes\n"
+  },
+  {
+   "name": "global-099",
+   "text": "PermitRootLogi n yes\n"
+  },
+  {
+   "name": "match-099",
+   "text": "Match User freesecdev-probe\nPermitRootLogi n yes\n"
+  },
+  {
+   "name": "global-100",
+   "text": "PermitRootLogin  yes\n"
+  },
+  {
+   "name": "match-100",
+   "text": "Match User freesecdev-probe\nPermitRootLogin  yes\n"
+  },
+  {
+   "name": "global-101",
+   "text": "\tPermitRootLogin yes\n"
+  },
+  {
+   "name": "match-101",
+   "text": "Match User freesecdev-probe\n\tPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-102",
+   "text": "P\termitRootLogin yes\n"
+  },
+  {
+   "name": "match-102",
+   "text": "Match User freesecdev-probe\nP\termitRootLogin yes\n"
+  },
+  {
+   "name": "global-103",
+   "text": "Pe\trmitRootLogin yes\n"
+  },
+  {
+   "name": "match-103",
+   "text": "Match User freesecdev-probe\nPe\trmitRootLogin yes\n"
+  },
+  {
+   "name": "global-104",
+   "text": "Per\tmitRootLogin yes\n"
+  },
+  {
+   "name": "match-104",
+   "text": "Match User freesecdev-probe\nPer\tmitRootLogin yes\n"
+  },
+  {
+   "name": "global-105",
+   "text": "Perm\titRootLogin yes\n"
+  },
+  {
+   "name": "match-105",
+   "text": "Match User freesecdev-probe\nPerm\titRootLogin yes\n"
+  },
+  {
+   "name": "global-106",
+   "text": "Permi\ttRootLogin yes\n"
+  },
+  {
+   "name": "match-106",
+   "text": "Match User freesecdev-probe\nPermi\ttRootLogin yes\n"
+  },
+  {
+   "name": "global-107",
+   "text": "Permit\tRootLogin yes\n"
+  },
+  {
+   "name": "match-107",
+   "text": "Match User freesecdev-probe\nPermit\tRootLogin yes\n"
+  },
+  {
+   "name": "global-108",
+   "text": "PermitR\tootLogin yes\n"
+  },
+  {
+   "name": "match-108",
+   "text": "Match User freesecdev-probe\nPermitR\tootLogin yes\n"
+  },
+  {
+   "name": "global-109",
+   "text": "PermitRo\totLogin yes\n"
+  },
+  {
+   "name": "match-109",
+   "text": "Match User freesecdev-probe\nPermitRo\totLogin yes\n"
+  },
+  {
+   "name": "global-110",
+   "text": "PermitRoo\ttLogin yes\n"
+  },
+  {
+   "name": "match-110",
+   "text": "Match User freesecdev-probe\nPermitRoo\ttLogin yes\n"
+  },
+  {
+   "name": "global-111",
+   "text": "PermitRoot\tLogin yes\n"
+  },
+  {
+   "name": "match-111",
+   "text": "Match User freesecdev-probe\nPermitRoot\tLogin yes\n"
+  },
+  {
+   "name": "global-112",
+   "text": "PermitRootL\togin yes\n"
+  },
+  {
+   "name": "match-112",
+   "text": "Match User freesecdev-probe\nPermitRootL\togin yes\n"
+  },
+  {
+   "name": "global-113",
+   "text": "PermitRootLo\tgin yes\n"
+  },
+  {
+   "name": "match-113",
+   "text": "Match User freesecdev-probe\nPermitRootLo\tgin yes\n"
+  },
+  {
+   "name": "global-114",
+   "text": "PermitRootLog\tin yes\n"
+  },
+  {
+   "name": "match-114",
+   "text": "Match User freesecdev-probe\nPermitRootLog\tin yes\n"
+  },
+  {
+   "name": "global-115",
+   "text": "PermitRootLogi\tn yes\n"
+  },
+  {
+   "name": "match-115",
+   "text": "Match User freesecdev-probe\nPermitRootLogi\tn yes\n"
+  },
+  {
+   "name": "global-116",
+   "text": "PermitRootLogin\t yes\n"
+  },
+  {
+   "name": "match-116",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\t yes\n"
+  },
+  {
+   "name": "global-117",
+   "text": "\rPermitRootLogin yes\n"
+  },
+  {
+   "name": "match-117",
+   "text": "Match User freesecdev-probe\n\rPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-118",
+   "text": "P\rermitRootLogin yes\n"
+  },
+  {
+   "name": "match-118",
+   "text": "Match User freesecdev-probe\nP\rermitRootLogin yes\n"
+  },
+  {
+   "name": "global-119",
+   "text": "Pe\rrmitRootLogin yes\n"
+  },
+  {
+   "name": "match-119",
+   "text": "Match User freesecdev-probe\nPe\rrmitRootLogin yes\n"
+  },
+  {
+   "name": "global-120",
+   "text": "Per\rmitRootLogin yes\n"
+  },
+  {
+   "name": "match-120",
+   "text": "Match User freesecdev-probe\nPer\rmitRootLogin yes\n"
+  },
+  {
+   "name": "global-121",
+   "text": "Perm\ritRootLogin yes\n"
+  },
+  {
+   "name": "match-121",
+   "text": "Match User freesecdev-probe\nPerm\ritRootLogin yes\n"
+  },
+  {
+   "name": "global-122",
+   "text": "Permi\rtRootLogin yes\n"
+  },
+  {
+   "name": "match-122",
+   "text": "Match User freesecdev-probe\nPermi\rtRootLogin yes\n"
+  },
+  {
+   "name": "global-123",
+   "text": "Permit\rRootLogin yes\n"
+  },
+  {
+   "name": "match-123",
+   "text": "Match User freesecdev-probe\nPermit\rRootLogin yes\n"
+  },
+  {
+   "name": "global-124",
+   "text": "PermitR\rootLogin yes\n"
+  },
+  {
+   "name": "match-124",
+   "text": "Match User freesecdev-probe\nPermitR\rootLogin yes\n"
+  },
+  {
+   "name": "global-125",
+   "text": "PermitRo\rotLogin yes\n"
+  },
+  {
+   "name": "match-125",
+   "text": "Match User freesecdev-probe\nPermitRo\rotLogin yes\n"
+  },
+  {
+   "name": "global-126",
+   "text": "PermitRoo\rtLogin yes\n"
+  },
+  {
+   "name": "match-126",
+   "text": "Match User freesecdev-probe\nPermitRoo\rtLogin yes\n"
+  },
+  {
+   "name": "global-127",
+   "text": "PermitRoot\rLogin yes\n"
+  },
+  {
+   "name": "match-127",
+   "text": "Match User freesecdev-probe\nPermitRoot\rLogin yes\n"
+  },
+  {
+   "name": "global-128",
+   "text": "PermitRootL\rogin yes\n"
+  },
+  {
+   "name": "match-128",
+   "text": "Match User freesecdev-probe\nPermitRootL\rogin yes\n"
+  },
+  {
+   "name": "global-129",
+   "text": "PermitRootLo\rgin yes\n"
+  },
+  {
+   "name": "match-129",
+   "text": "Match User freesecdev-probe\nPermitRootLo\rgin yes\n"
+  },
+  {
+   "name": "global-130",
+   "text": "PermitRootLog\rin yes\n"
+  },
+  {
+   "name": "match-130",
+   "text": "Match User freesecdev-probe\nPermitRootLog\rin yes\n"
+  },
+  {
+   "name": "global-131",
+   "text": "PermitRootLogi\rn yes\n"
+  },
+  {
+   "name": "match-131",
+   "text": "Match User freesecdev-probe\nPermitRootLogi\rn yes\n"
+  },
+  {
+   "name": "global-132",
+   "text": "PermitRootLogin\r yes\n"
+  },
+  {
+   "name": "match-132",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\r yes\n"
+  },
+  {
+   "name": "global-133",
+   "text": "\fPermitRootLogin yes\n"
+  },
+  {
+   "name": "match-133",
+   "text": "Match User freesecdev-probe\n\fPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-134",
+   "text": "P\fermitRootLogin yes\n"
+  },
+  {
+   "name": "match-134",
+   "text": "Match User freesecdev-probe\nP\fermitRootLogin yes\n"
+  },
+  {
+   "name": "global-135",
+   "text": "Pe\frmitRootLogin yes\n"
+  },
+  {
+   "name": "match-135",
+   "text": "Match User freesecdev-probe\nPe\frmitRootLogin yes\n"
+  },
+  {
+   "name": "global-136",
+   "text": "Per\fmitRootLogin yes\n"
+  },
+  {
+   "name": "match-136",
+   "text": "Match User freesecdev-probe\nPer\fmitRootLogin yes\n"
+  },
+  {
+   "name": "global-137",
+   "text": "Perm\fitRootLogin yes\n"
+  },
+  {
+   "name": "match-137",
+   "text": "Match User freesecdev-probe\nPerm\fitRootLogin yes\n"
+  },
+  {
+   "name": "global-138",
+   "text": "Permi\ftRootLogin yes\n"
+  },
+  {
+   "name": "match-138",
+   "text": "Match User freesecdev-probe\nPermi\ftRootLogin yes\n"
+  },
+  {
+   "name": "global-139",
+   "text": "Permit\fRootLogin yes\n"
+  },
+  {
+   "name": "match-139",
+   "text": "Match User freesecdev-probe\nPermit\fRootLogin yes\n"
+  },
+  {
+   "name": "global-140",
+   "text": "PermitR\footLogin yes\n"
+  },
+  {
+   "name": "match-140",
+   "text": "Match User freesecdev-probe\nPermitR\footLogin yes\n"
+  },
+  {
+   "name": "global-141",
+   "text": "PermitRo\fotLogin yes\n"
+  },
+  {
+   "name": "match-141",
+   "text": "Match User freesecdev-probe\nPermitRo\fotLogin yes\n"
+  },
+  {
+   "name": "global-142",
+   "text": "PermitRoo\ftLogin yes\n"
+  },
+  {
+   "name": "match-142",
+   "text": "Match User freesecdev-probe\nPermitRoo\ftLogin yes\n"
+  },
+  {
+   "name": "global-143",
+   "text": "PermitRoot\fLogin yes\n"
+  },
+  {
+   "name": "match-143",
+   "text": "Match User freesecdev-probe\nPermitRoot\fLogin yes\n"
+  },
+  {
+   "name": "global-144",
+   "text": "PermitRootL\fogin yes\n"
+  },
+  {
+   "name": "match-144",
+   "text": "Match User freesecdev-probe\nPermitRootL\fogin yes\n"
+  },
+  {
+   "name": "global-145",
+   "text": "PermitRootLo\fgin yes\n"
+  },
+  {
+   "name": "match-145",
+   "text": "Match User freesecdev-probe\nPermitRootLo\fgin yes\n"
+  },
+  {
+   "name": "global-146",
+   "text": "PermitRootLog\fin yes\n"
+  },
+  {
+   "name": "match-146",
+   "text": "Match User freesecdev-probe\nPermitRootLog\fin yes\n"
+  },
+  {
+   "name": "global-147",
+   "text": "PermitRootLogi\fn yes\n"
+  },
+  {
+   "name": "match-147",
+   "text": "Match User freesecdev-probe\nPermitRootLogi\fn yes\n"
+  },
+  {
+   "name": "global-148",
+   "text": "PermitRootLogin\f yes\n"
+  },
+  {
+   "name": "match-148",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\f yes\n"
+  },
+  {
+   "name": "global-149",
+   "text": "\u000bPermitRootLogin yes\n"
+  },
+  {
+   "name": "match-149",
+   "text": "Match User freesecdev-probe\n\u000bPermitRootLogin yes\n"
+  },
+  {
+   "name": "global-150",
+   "text": "P\u000bermitRootLogin yes\n"
+  },
+  {
+   "name": "match-150",
+   "text": "Match User freesecdev-probe\nP\u000bermitRootLogin yes\n"
+  },
+  {
+   "name": "global-151",
+   "text": "Pe\u000brmitRootLogin yes\n"
+  },
+  {
+   "name": "match-151",
+   "text": "Match User freesecdev-probe\nPe\u000brmitRootLogin yes\n"
+  },
+  {
+   "name": "global-152",
+   "text": "Per\u000bmitRootLogin yes\n"
+  },
+  {
+   "name": "match-152",
+   "text": "Match User freesecdev-probe\nPer\u000bmitRootLogin yes\n"
+  },
+  {
+   "name": "global-153",
+   "text": "Perm\u000bitRootLogin yes\n"
+  },
+  {
+   "name": "match-153",
+   "text": "Match User freesecdev-probe\nPerm\u000bitRootLogin yes\n"
+  },
+  {
+   "name": "global-154",
+   "text": "Permi\u000btRootLogin yes\n"
+  },
+  {
+   "name": "match-154",
+   "text": "Match User freesecdev-probe\nPermi\u000btRootLogin yes\n"
+  },
+  {
+   "name": "global-155",
+   "text": "Permit\u000bRootLogin yes\n"
+  },
+  {
+   "name": "match-155",
+   "text": "Match User freesecdev-probe\nPermit\u000bRootLogin yes\n"
+  },
+  {
+   "name": "global-156",
+   "text": "PermitR\u000bootLogin yes\n"
+  },
+  {
+   "name": "match-156",
+   "text": "Match User freesecdev-probe\nPermitR\u000bootLogin yes\n"
+  },
+  {
+   "name": "global-157",
+   "text": "PermitRo\u000botLogin yes\n"
+  },
+  {
+   "name": "match-157",
+   "text": "Match User freesecdev-probe\nPermitRo\u000botLogin yes\n"
+  },
+  {
+   "name": "global-158",
+   "text": "PermitRoo\u000btLogin yes\n"
+  },
+  {
+   "name": "match-158",
+   "text": "Match User freesecdev-probe\nPermitRoo\u000btLogin yes\n"
+  },
+  {
+   "name": "global-159",
+   "text": "PermitRoot\u000bLogin yes\n"
+  },
+  {
+   "name": "match-159",
+   "text": "Match User freesecdev-probe\nPermitRoot\u000bLogin yes\n"
+  },
+  {
+   "name": "global-160",
+   "text": "PermitRootL\u000bogin yes\n"
+  },
+  {
+   "name": "match-160",
+   "text": "Match User freesecdev-probe\nPermitRootL\u000bogin yes\n"
+  },
+  {
+   "name": "global-161",
+   "text": "PermitRootLo\u000bgin yes\n"
+  },
+  {
+   "name": "match-161",
+   "text": "Match User freesecdev-probe\nPermitRootLo\u000bgin yes\n"
+  },
+  {
+   "name": "global-162",
+   "text": "PermitRootLog\u000bin yes\n"
+  },
+  {
+   "name": "match-162",
+   "text": "Match User freesecdev-probe\nPermitRootLog\u000bin yes\n"
+  },
+  {
+   "name": "global-163",
+   "text": "PermitRootLogi\u000bn yes\n"
+  },
+  {
+   "name": "match-163",
+   "text": "Match User freesecdev-probe\nPermitRootLogi\u000bn yes\n"
+  },
+  {
+   "name": "global-164",
+   "text": "PermitRootLogin\u000b yes\n"
+  },
+  {
+   "name": "match-164",
+   "text": "Match User freesecdev-probe\nPermitRootLogin\u000b yes\n"
+  },
+  {
+   "name": "header-000",
+   "text": "Match User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-000",
+   "text": "Match User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-001",
+   "text": "match user freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-001",
+   "text": "match user freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-002",
+   "text": "Ma\"tch\" User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-002",
+   "text": "Ma\"tch\" User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-003",
+   "text": "=\"Match\" User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-003",
+   "text": "=\"Match\" User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-004",
+   "text": "=Match User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-004",
+   "text": "=Match User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-005",
+   "text": "\"Match\" User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-005",
+   "text": "\"Match\" User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-006",
+   "text": "Match=User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-006",
+   "text": "Match=User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-007",
+   "text": "\tMatch\tUser\tfreesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-007",
+   "text": "\tMatch\tUser\tfreesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-008",
+   "text": "\rMatch User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-008",
+   "text": "\rMatch User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-009",
+   "text": "#Match User freesecdev-probe\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-009",
+   "text": "#Match User freesecdev-probe\nDSAAuthentication no\n"
+  },
+  {
+   "name": "header-010",
+   "text": "Match User \"freesecdev-probe\"\nPermitRootLogin yes\n"
+  },
+  {
+   "name": "header-alias-010",
+   "text": "Match User \"freesecdev-probe\"\nDSAAuthentication no\n"
+  }
+ ]
+}

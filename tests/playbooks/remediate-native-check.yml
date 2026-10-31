@@ -43,6 +43,10 @@
       - not_owned
       - prior_too_large
       - duplicate_setting
+      - unreadable_file
+      - unreadable_value
+      - not_directory
+      - modified_since_read
     watched_paths:
       - /etc/issue
       - /etc/issue.net
@@ -158,6 +162,7 @@
       - invalid_config
       - duplicate_setting
       - prior_too_large
+      - modified_since_read
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:

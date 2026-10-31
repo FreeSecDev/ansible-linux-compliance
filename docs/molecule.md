@@ -743,9 +743,9 @@ expected absent, they are neither recorded nor cleaned up, and the scan must rep
 `notapplicable`), which the harness checks for every overridden rule of a pre-state with scans; every other rule is
 applied and passes, and the cleanup leaves both site files alone. The two site files share one pre-state, which runs with the rule
 toggle only (`modes: [rule]`): the `rule` leg runs two cycles and the `topic` leg one. The declaration also expects `sshd_config` and `50-redhat.conf` to keep their checksums as built,
-because no rule of the lifecycle profiles conflicts with their lines. `ssh` has two regression groups, each a Docker leg of its own
-on both platforms: `changes` (`lifecycle_ssh_regressions.yml` and `lifecycle_ssh_rollback_regressions.yml`) and
-`vendor` (`lifecycle_ssh_vendor_regressions.yml`). `shared/tasks/lifecycle_ssh_regressions.yml` is narrowed like a
+because no rule of the lifecycle profiles conflicts with their lines. `ssh` has three regression groups, each a Docker leg of its own
+on both platforms: `changes` (`lifecycle_ssh_regressions.yml` and `lifecycle_ssh_rollback_regressions.yml`),
+`vendor` (`lifecycle_ssh_vendor_regressions.yml`) and `readers` (`lifecycle_ssh_readers_regressions.yml`, FREES-200). `shared/tasks/lifecycle_ssh_regressions.yml` is narrowed like a
 profile to
 `sshd_set_max_auth_tries` and `sshd_set_login_grace_time` so that each run stays short: a drop-in with a keyword that sshd does not know
 makes every rule `invalid_config` with nothing installed and nothing recorded; a ledger entry of another method makes
@@ -772,12 +772,32 @@ edited. It ends with the whole-instance comparison.
 to the same two rules,
 and reaches the end of the family that the cycles never reach. With an administrator's drop-in in place that sshd
 refuses, a cleanup removes the two drop-ins and forgets their entries, which validates nothing first; the final `sshd
--t` then refuses the configuration and the run fails at the task that stops it, before the reload, with the cleanup
+-T` then refuses the configuration and the run fails at the task that stops it, before the reload, with the cleanup
 kept, because that is the prior state. With the sshd binary removed, as removing openssh-server would, a cleanup
 succeeds and reports both rules `restored`. The binary is copied to `/tmp` and back with its mode; Rocky Linux
 ships `/usr/sbin` with mode `0555` and the instance drops the capability that lets root write it anyway, so the
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
+
+`shared/tasks/lifecycle_ssh_readers_regressions.yml`, the `readers` group (FREES-200), adds `sshd_disable_root_login`,
+`sshd_enable_pubkey_auth` and `sshd_disable_x11_forwarding` to the verified profile and checks that sshd itself decides
+([ADR 0023](adr/0023-native-ssh-server-configuration.md), amendment of FREES-200). With the vendor file rewritten with
+CRLF line ends and a lone CR in a comment, the three rules apply, `sshd -T` (`sshd_validate` with `effective: true`)
+prints the three values, only the `X11Forwarding` line changed, and the cleanup restores the file byte for byte. With
+an earlier drop-in `DSAAuthentication no`, the alias of `PubkeyAuthentication`, the drop-in in place is `overridden`
+(by the lexer, which reads the alias, or by `sshd -T`), and the rule is refused again after the cleanup, with no
+drop-in and no ledger entry left. With a later
+drop-in `="Match" User freesecdev-probe` holding `Permit"RootLogin" yes`, `=X11Forwarding yes` and
+`PubkeyAuthentication<CR>no`, `sshd -T -C user=freesecdev-probe,...` shows that sshd reads the three looser values for
+that user, and the three rules are `overridden` with `inside a Match block`. It ends with the
+whole-instance comparison.
+
+`pwquality` has a second group, `readers` (FREES-200, `shared/tasks/lifecycle_pwquality_readers_regressions.yml`, both
+platforms): with `minlen` and `enforce_for_root`, a main file with CRLF line ends, a lone CR in a comment and
+`minlen = 8` is applied (the line rewritten in place on Ubuntu, `overridden` by the main file on Rocky Linux, where the
+drop-ins are read first) and cleaned up byte for byte; then a PAM file that passes `minlen=8` to `pam_pwquality` makes
+`minlen` `overridden`, and a drop-in read first with `minlen == 14`, which stops libpwquality, makes
+`enforce_for_root` `unreadable_file`, with nothing written. It ends with the whole-instance comparison.
 
 `login_defs` (FREES-185, FREES-198) has six groups, `readers` on Rocky Linux and the others on both platforms. In
 `changes`,
