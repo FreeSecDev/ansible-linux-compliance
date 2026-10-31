@@ -68,7 +68,7 @@ def test_every_case_has_a_verdict_of_every_reader() -> None:
 def test_systemd_sets_what_the_model_decides(name: str) -> None:
     keys = [str(key) for key in cast("list[object]", CASES[name]["keys"])]
     settings = sysctl_config.sequence(case_entries(name), keys, sysctl_config.SYSTEMD)
-    found = dict.fromkeys(keys) | {key: value for key, value, _ in settings}
+    found = dict.fromkeys(keys) | {setting[0]: setting[1] for setting in settings}
     assert found == VERDICTS[name]["systemd"]
 
 
@@ -76,14 +76,14 @@ def test_systemd_sets_what_the_model_decides(name: str) -> None:
 def test_procps_4_makes_the_settings_of_the_model_in_its_order(name: str) -> None:
     keys = [str(key) for key in cast("list[object]", CASES[name]["keys"])]
     settings = sysctl_config.sequence(case_entries(name), keys, sysctl_config.PROCPS)
-    assert [[key, value] for key, value, _ in settings] == VERDICTS[name]["procps-4"]
+    assert [[setting[0], setting[1]] for setting in settings] == VERDICTS[name]["procps-4"]
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_procps_3_makes_the_settings_of_the_model_in_its_order(name: str) -> None:
     keys = [str(key) for key in cast("list[object]", CASES[name]["keys"])]
     settings = sysctl_config.sequence(case_entries(name), keys, sysctl_config.PROCPS)
-    assert [[key, None] for key, _, _ in settings] == VERDICTS[name]["procps-3"]
+    assert [[setting[0], None] for setting in settings] == VERDICTS[name]["procps-3"]
 
 
 def test_the_readers_disagree_on_etc_sysctl_conf() -> None:

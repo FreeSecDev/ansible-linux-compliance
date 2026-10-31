@@ -102,7 +102,7 @@ def ordered_files(entries: Sequence[Entry], reader: str, after: Sequence[str] = 
     chosen: dict[str, Entry] = {}
     for directory in DIRECTORIES:
         for entry in entries:
-            parent, _, name = entry.path.rpartition("/")
+            parent, name = entry.path.rsplit("/", 1)
             if parent != directory or not name.endswith(".conf"):
                 continue
             if reader == SYSTEMD and name.startswith("."):
