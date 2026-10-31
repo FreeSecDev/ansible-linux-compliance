@@ -175,7 +175,9 @@ def _keys(value: object) -> list[str]:
 def _variables_file(role_dir: Path, source: str) -> dict[str, object]:
     path = role_dir / source.lstrip("/")
     loaded = (
-        cast("object", yaml.safe_load(path.read_text(encoding="utf-8"))) if path.is_file() else None
+        cast("object", yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.CSafeLoader))
+        if path.is_file()
+        else None
     )
     if not isinstance(loaded, dict):
         message = f"{path} must exist and hold a mapping"
@@ -247,7 +249,7 @@ def role_variables(role_dir: Path, generated: dict[str, str]) -> RoleVariables:
     referenced: set[str] = set()
     for text in texts.values():
         referenced.update(re.findall(re.escape(prefix(role)) + r"[a-z0-9_]+", text))
-        for task in _tasks(yaml.safe_load(text)):
+        for task in _tasks(yaml.load(text, Loader=yaml.CSafeLoader)):
             if INCLUDE_VARS in task:
                 _include_vars(task, role_dir, found)
             _task_variables(task, found)
@@ -494,7 +496,7 @@ def role_outputs(roles_dir: Path) -> set[str]:
     """Return every public ``linux_compliance_*`` fact that a role below ``roles_dir`` sets."""
     found: set[str] = set()
     for path in sorted(roles_dir.glob("*/tasks/*.yml")):
-        for task in _tasks(yaml.safe_load(path.read_text(encoding="utf-8"))):
+        for task in _tasks(yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.CSafeLoader)):
             found.update(key for key in _keys(task.get(SET_FACT)) if key.startswith(PUBLIC_PREFIX))
     return found
 

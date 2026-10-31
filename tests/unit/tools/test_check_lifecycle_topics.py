@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 import yaml
 
+from tests.unit import yaml_cache
 from tools.roles import check_lifecycle_topics as lifecycle
 from tools.roles import generate_toggles
 from tools.roles import promote_native_rule as promote
@@ -55,7 +56,7 @@ def reference_only(target: Path) -> Path:
     """Write the repository catalogue with only the reference rule native, the rest audit_only."""
     data = cast(
         "dict[str, object]",
-        yaml.safe_load((REPOSITORY_ROOT / generate_toggles.CATALOGUE).read_text(encoding="utf-8")),
+        yaml_cache.load(REPOSITORY_ROOT / generate_toggles.CATALOGUE),
     )
     rules = cast("list[dict[str, object]]", data[generate_toggles.RULES_KEY])
     audit_only = cast("dict[str, list[str]]", data[generate_toggles.AUDIT_ONLY_KEY])

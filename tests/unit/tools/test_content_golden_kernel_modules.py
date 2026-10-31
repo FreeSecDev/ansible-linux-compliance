@@ -13,6 +13,7 @@ from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compli
     toggles,
     xmlsafe,
 )
+from tests.unit import yaml_cache
 from tests.unit.tools.test_content_golden_native import (
     REPOSITORY_ROOT,
     native_parameters,
@@ -214,7 +215,7 @@ def constants() -> dict[str, object]:
 def catalogue_families() -> dict[str, str]:
     data = cast(
         "dict[str, object]",
-        yaml.safe_load((REPOSITORY_ROOT / "roles/remediate/vars/rules.yml").read_text("utf-8")),
+        yaml_cache.load(REPOSITORY_ROOT / "roles/remediate/vars/rules.yml"),
     )
     rules = cast("list[dict[str, object]]", data["__linux_compliance_remediate_rules"])
     return {str(rule["rule_id"]): str(rule["family"]) for rule in rules}
