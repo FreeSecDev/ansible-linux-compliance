@@ -2295,7 +2295,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_accept_redirects_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2304,7 +2304,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2334,7 +2334,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_accept_source_route_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2343,7 +2343,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2373,7 +2373,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_arp_filter_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2394,7 +2394,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_arp_ignore_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2430,7 +2430,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_forwarding_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - stig
             - stig_gui
@@ -2450,7 +2450,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_log_martians_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2459,7 +2459,7 @@ __linux_compliance_remediate_rules:
           value:
             - "1"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - ccn_advanced
             - ccn_basic
@@ -2501,7 +2501,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_rp_filter_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2510,7 +2510,7 @@ __linux_compliance_remediate_rules:
           value:
             - "1"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2541,7 +2541,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_secure_redirects_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2550,7 +2550,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2596,7 +2596,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_all_shared_media_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2617,7 +2617,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_default_accept_redirects_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2626,7 +2626,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2657,7 +2657,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_default_accept_source_route_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2666,7 +2666,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2696,7 +2696,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_default_log_martians_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2705,7 +2705,7 @@ __linux_compliance_remediate_rules:
           value:
             - "1"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - ccn_advanced
             - ccn_basic
@@ -2732,7 +2732,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_default_rp_filter_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2741,7 +2741,7 @@ __linux_compliance_remediate_rules:
           value:
             - "1"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2771,7 +2771,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_default_secure_redirects_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2780,7 +2780,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2825,7 +2825,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_conf_default_shared_media_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2846,7 +2846,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_icmp_echo_ignore_broadcasts_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2855,7 +2855,7 @@ __linux_compliance_remediate_rules:
           value:
             - "1"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - ccn_advanced
             - ccn_basic
@@ -2883,7 +2883,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_icmp_ignore_bogus_error_responses_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2892,7 +2892,7 @@ __linux_compliance_remediate_rules:
           value:
             - "1"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2953,7 +2953,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_tcp_rfc1337_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -2974,7 +2974,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv4_tcp_syncookies_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -2984,7 +2984,7 @@ __linux_compliance_remediate_rules:
           value:
             - "1"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3015,7 +3015,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_accept_ra_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -3024,7 +3024,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - ccn_advanced
             - ccn_basic
@@ -3051,7 +3051,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_accept_ra_defrtr_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3072,7 +3072,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_accept_ra_pinfo_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3093,7 +3093,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_accept_ra_rtr_pref_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3114,7 +3114,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_accept_redirects_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -3123,7 +3123,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3153,7 +3153,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_accept_source_route_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -3162,7 +3162,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3192,7 +3192,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_autoconf_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3213,7 +3213,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_forwarding_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -3222,7 +3222,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - cis
             - cis_server_l1
@@ -3246,7 +3246,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_max_addresses_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3267,7 +3267,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_all_router_solicitations_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3288,7 +3288,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_accept_ra_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -3297,7 +3297,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - ccn_advanced
             - ccn_basic
@@ -3324,7 +3324,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_accept_ra_defrtr_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3345,7 +3345,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_accept_ra_pinfo_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3366,7 +3366,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_accept_ra_rtr_pref_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3387,7 +3387,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_accept_redirects_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -3396,7 +3396,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3426,7 +3426,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_accept_source_route_value"
       profile_values:
         - datastream: "ubuntu2404"
-          content_sha256: "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
           profiles:
             - cis_level1_server
             - cis_level1_workstation
@@ -3435,7 +3435,7 @@ __linux_compliance_remediate_rules:
           value:
             - "0"
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3466,7 +3466,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_autoconf_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3487,7 +3487,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_max_addresses_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
@@ -3508,7 +3508,7 @@ __linux_compliance_remediate_rules:
       value_id: "sysctl_net_ipv6_conf_default_router_solicitations_value"
       profile_values:
         - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
           profiles:
             - anssi_bp28_enhanced
             - anssi_bp28_high
