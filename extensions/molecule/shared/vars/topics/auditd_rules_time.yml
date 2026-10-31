@@ -220,12 +220,47 @@ applied:
 pre_states:
   - name: as built
     audit: true
+    reasons:
+      - step: apply
+        reason: takes_effect_at_start
+      - step: cleanup
+        reason: takes_effect_at_start
   - name: auditd running in a virtual machine
     audit: false
     requires:
       - libvirt
+    reasons:
+      - step: apply
+        reason: none
+      - step: cleanup
+        reason: none
     applied:
       files:
+        - path: /etc/audit/audit.rules
+          changes:
+            - checksum
+  - name: an administrator's rule file that auditd has loaded
+    audit: false
+    requires:
+      - libvirt
+    loads_audit_rules: true
+    files:
+      - path: /etc/audit/rules.d/40-site.rules
+        content: |
+          -a always,exit -F arch=b32 -S settimeofday -k time-change
+          -a always,exit -F arch=b64 -S settimeofday -k time-change
+    unchanged:
+      - rule: audit_rules_time_settimeofday
+        status: compliant
+    reasons:
+      - step: apply
+        reason: none
+      - step: cleanup
+        reason: none
+    applied:
+      files:
+        - path: /etc/audit/rules.d/50-freesecdev-audit-rules-time-settimeofday.rules
+          exists: false
         - path: /etc/audit/audit.rules
           changes:
             - checksum

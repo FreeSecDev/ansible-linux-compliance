@@ -43,8 +43,10 @@ lifecycle_pre_state_reading_keys:
   - unchanged
   - applied
   - requires
+  - reasons
 lifecycle_pre_state_writing_keys:
   - files
+  - loads_audit_rules
 lifecycle_watched_directories: >-
   {{ lifecycle_items.files | default([]) | map(attribute='path') | map('dirname') | unique | list }}
 lifecycle_broad_ignored_paths:

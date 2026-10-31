@@ -1098,6 +1098,12 @@ system of the audit log, which the mount facts of ansible-core did not report on
 `statvfs` in `FILE_IO_ATTRIBUTES`, which opens and writes nothing; `auditrules.py` joins `FILE_IO_IMPORTERS` to call
 it, and `audit_control` reports the size as `log_megabytes`.
 
+On a timeout the helper sends `SIGKILL` to the process group. `augenrules` keeps its merged rules in a temporary
+file, `mktemp /tmp/aurules.XXXXXXXX`, which only its trap on `HUP`, `INT`, `QUIT`, `PIPE` and `TERM` removes, so its
+policy names a grace (`ExecutablePolicy.term_grace_seconds`, five seconds): on a timeout the group first gets
+`SIGTERM`, and `SIGKILL` follows when the script has not exited by then. Every other policy keeps the grace of 0, an
+immediate `SIGKILL`.
+
 ## Amendment 2026-10-31: kmod's configuration reader (FREES-190)
 
 The kernel module topics ([ADR 0028](0028-native-kernel-module-drop-ins.md)) must know what each modprobe

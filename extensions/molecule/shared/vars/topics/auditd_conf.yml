@@ -52,6 +52,11 @@ applied:
 pre_states:
   - name: as built
     audit: true
+    reasons:
+      - step: apply
+        reason: takes_effect_at_start
+      - step: cleanup
+        reason: takes_effect_at_start
     unchanged:
       - rule: auditd_data_retention_action_mail_acct
         status: compliant
@@ -63,6 +68,51 @@ pre_states:
         status: compliant
         platforms:
           - rhel_compatible
+      - rule: auditd_log_format
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_overflow_action
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_write_logs
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_data_retention_max_log_file_action_stig
+        status: compliant
+        platforms:
+          - rhel_compatible
+  - name: auditd running in a virtual machine, with local events off
+    audit: false
+    requires:
+      - libvirt
+    files:
+      - path: /etc/audit/auditd.conf
+        lines:
+          - regexp: '^local_events = '
+            line: local_events = no
+    reasons:
+      - step: apply
+        reason: reload_not_confirmed
+      - step: apply
+        reason: restart_required
+        rules:
+          - auditd_local_events
+      - step: cleanup
+        reason: reload_not_confirmed
+      - step: cleanup
+        reason: restart_required
+        rules:
+          - auditd_local_events
+    unchanged:
+      - rule: auditd_data_retention_action_mail_acct
+        status: compliant
+      - rule: auditd_data_retention_max_log_file
+        status: compliant
+        platforms:
+          - ubuntu
       - rule: auditd_log_format
         status: compliant
         platforms:

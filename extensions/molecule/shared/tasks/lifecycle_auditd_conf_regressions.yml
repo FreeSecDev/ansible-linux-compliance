@@ -373,17 +373,13 @@
       content: "{{ regression_built_text ~ '# x' ~ ('AA==' | b64decode) ~ regression_newline }}"
       refused: true
       reason: NUL byte
-    - name: a space_left_action line that ends in a carriage return, which lineinfile would drop
+    - name: a space_left_action line and a comment that hold a carriage return, which the run rewrites and restores
       content: >-
         {{ regression_built_text
-           | regex_replace('(?m)^(space_left_action = [A-Za-z]+)$', '\1' ~ ('DQ==' | b64decode)) }}
-      refused: true
-      reason: holds a carriage return
-    - name: a comment that holds a carriage return before a setting, which lineinfile would split
-      content: >-
-        {{ regression_built_text ~ '# note' ~ ('DQ==' | b64decode) ~ 'num_logs = 1' ~ regression_newline }}
-      refused: true
-      reason: holds a carriage return
+           | regex_replace('(?m)^(space_left_action = [A-Za-z]+)$', '\1' ~ ('DQ==' | b64decode))
+           ~ '# note' ~ ('DQ==' | b64decode) ~ 'num_logs = 1' ~ regression_newline }}
+      refused: false
+      reason: ""
     - name: a num_logs line that ends in a carriage return, which auditd refuses
       content: >-
         {{ regression_built_text | regex_replace('(?m)^(num_logs = [0-9]+)$', '\1' ~ ('DQ==' | b64decode)) }}

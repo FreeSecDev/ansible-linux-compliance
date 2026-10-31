@@ -38,10 +38,10 @@ def test_every_pre_state_key_is_classified_once() -> None:
     assert reading | writing == set(check_lifecycle_topics.PRE_STATE_KEYS)
 
 
-def test_only_files_writes_and_keeps_the_record_from_being_reused() -> None:
+def test_only_files_and_loaded_audit_rules_write_and_keep_the_record_from_being_reused() -> None:
     reading, writing = classified()
-    assert writing == {"files"}
-    assert reading == {"name", "audit", "modes", "unchanged", "applied", "requires"}
+    assert writing == {"files", "loads_audit_rules"}
+    assert reading == {"name", "audit", "modes", "unchanged", "applied", "requires", "reasons"}
 
 
 def test_the_cycle_reuses_the_record_only_for_reading_keys() -> None:

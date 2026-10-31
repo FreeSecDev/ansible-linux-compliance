@@ -30,7 +30,13 @@ PARSERS = {
     "max_log_file_action": "max_log_size_action",
     "space_left_action": "space_action",
     "end_of_event_timeout": "eoe_timeout",
+    "dispatcher": "dispatch",
+    "tcp_client_ports": "tcp_listen_queue",
 }
+UNLOGGED = frozenset({"disp_qos"})
+KEYWORDS_OF_PARSER: dict[str, set[str]] = {}
+for _keyword in auditconf.KEYWORDS:
+    KEYWORDS_OF_PARSER.setdefault(PARSERS.get(_keyword, _keyword), set()).add(_keyword)
 SKIPPED = re.compile(r"Skipping line (\d+) in .*: too long")
 CONSERVATIVE = (
     "exec form",
@@ -110,19 +116,44 @@ def test_the_reader_never_accepts_what_auditd_does_not_read_as_it_does(
         assert reading.accepted is not True, f"{name}: auditd {result['verdict']} the file"
         return
     if reading.accepted is not True:
-        assert reading.accepted is None or any(part in reading.reason for part in CONSERVATIVE), (
+        conservative = reading.accepted is None or any(
+            part in reading.reason for part in CONSERVATIVE
+        )
+        assert conservative or auditconf.START_REASON in reading.reason, (
             f"{name}: auditd accepted the file, but the reader refused it: {reading.reason}"
         )
         return
     values = last_read(platform, result)
-    for keyword, settings in reading.settings.items():
-        assert values.get(PARSERS.get(keyword, keyword)) == settings[-1].value, name
+    for parser, keywords in KEYWORDS_OF_PARSER.items():
+        held = [
+            setting
+            for keyword in keywords - UNLOGGED
+            for setting in reading.settings.get(keyword, [])
+        ]
+        if held:
+            assert values.get(parser) == max(held, key=lambda setting: setting.line).value, name
+    for parser in values:
+        assert KEYWORDS_OF_PARSER.get(parser, set()) & set(reading.settings), (
+            f"{name}: auditd read {parser}, which the reader does not hold"
+        )
     skipped = sorted(
         int(found.group(1))
         for found in map(SKIPPED.search, cast("list[str]", result["messages"]))
         if found
     )
     assert reading.skipped == skipped, name
+
+
+@pytest.mark.parametrize("platform", sorted(PINS))
+def test_the_table_reaches_load_config_only_and_the_reader_adds_the_start_checks(
+    platform: str,
+) -> None:
+    cases = cast("dict[str, dict[str, dict[str, object]]]", table()["cases"])
+    assert cases["name_format_user_without_name"][platform]["verdict"] == "accepted"
+    data = texts(platform)["name_format_user_without_name"].encode("latin-1")
+    reading = auditconf.read(data, cast("int", platforms()[platform]["log_megabytes"]))
+    assert reading.accepted is False
+    assert auditconf.START_REASON in reading.reason
 
 
 @pytest.mark.parametrize("platform", sorted(PINS))

@@ -151,8 +151,22 @@ KERNEL_CATEGORIES: Final[frozenset[str]] = frozenset({"audit_rules"})
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
 PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
-    {"name", "audit", "modes", "files", "unchanged", "applied", "requires"}
+    {
+        "name",
+        "audit",
+        "modes",
+        "files",
+        "unchanged",
+        "applied",
+        "requires",
+        "loads_audit_rules",
+        "reasons",
+    }
 )
+REASON_KEYS: Final[frozenset[str]] = frozenset({"step", "reason", "rules", "platforms"})
+REASON_STEPS: Final[frozenset[str]] = frozenset({"apply", "cleanup"})
+NO_REASON: Final[str] = "none"
+REASON: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z_]{0,39}")
 TOGGLE_MODES: Final[frozenset[str]] = frozenset({"topic", "rule"})
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
 UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
@@ -566,6 +580,46 @@ class Declaration:
             if item.get("status") not in UNCHANGED_STATUSES:
                 self.error(f"{where} needs the status compliant, notapplicable or overridden")
 
+    def _pre_state_parts(self, item: dict[str, object], what: str) -> None:
+        """Check the optional parts of a pre-state."""
+        if "unchanged" in item:
+            self.pre_state_unchanged(item["unchanged"], what)
+        if "loads_audit_rules" in item:
+            self._pre_state_loads(item, what)
+        if "reasons" in item:
+            self.pre_state_reasons(item["reasons"], what)
+        if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
+            self.error(f"{what}.applied declares no expectation; leave it out instead")
+
+    def _pre_state_loads(self, item: dict[str, object], what: str) -> None:
+        """Check that a pre-state loads its audit rule files only where a kernel can load them."""
+        loads = item["loads_audit_rules"]
+        if not isinstance(loads, bool):
+            self.error(f"{what}.loads_audit_rules must be a boolean")
+            return
+        drivers = _strings(item.get(REQUIRES_KEY))
+        if loads and (not drivers or set(drivers) & UNRESTRICTED_DRIVERS):
+            self.error(f"{what} loads audit rules, so it must require drivers other than docker")
+
+    def pre_state_reasons(self, value: object, what: str) -> None:
+        """Check the reasons that the results of the rules of a pre-state's cycles must carry."""
+        for index, entry in enumerate(self.sequence(value, f"{what}.reasons")):
+            where = f"{what}.reasons[{index}]"
+            item = self.mapping(entry, where)
+            if item is None:
+                continue
+            self.keys(item, REASON_KEYS, where)
+            self.platform_list(item, where)
+            if item.get("step") not in REASON_STEPS:
+                self.error(f"{where} needs the step apply or cleanup")
+            reason = item.get("reason")
+            if not isinstance(reason, str) or REASON.fullmatch(reason) is None:
+                self.error(f"{where} needs a machine-readable reason, or {NO_REASON}")
+            if "rules" in item:
+                rules = _strings(item["rules"])
+                if rules is None or not set(rules) <= self.rules:
+                    self.error(f"{where}.rules needs short identifiers of the topic's native rules")
+
     def _pre_state_requires(self, item: dict[str, object], what: str) -> None:
         """Record the drivers of a pre-state, which must be drivers of its topic."""
         if REQUIRES_KEY not in item:
@@ -601,10 +655,7 @@ class Declaration:
             if "files" in item:
                 self.pre_state_files(item["files"], what)
             self._pre_state_requires(item, what)
-            if "unchanged" in item:
-                self.pre_state_unchanged(item["unchanged"], what)
-            if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
-                self.error(f"{what}.applied declares no expectation; leave it out instead")
+            self._pre_state_parts(item, what)
 
 
 def _kernel_drivers(declaration: Declaration, item: dict[str, object], what: str) -> None:

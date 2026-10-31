@@ -99,7 +99,8 @@
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_auditd_conf }}"
     follow: false
-    get_checksum: false
+    get_checksum: true
+    checksum_algorithm: sha256
     get_mime: false
     get_attributes: false
   register: __linux_compliance_remediate_ac_stat
@@ -156,9 +157,6 @@
                  or written is not match('^' ~ setting ~ ' = [^ ]+$')
                  or (original is not none and (original is not string
                      or __linux_compliance_remediate_newline in original))
-            else 'carriage_return' if found == [written] and (__linux_compliance_remediate_ac_lines
-                 | select('search', __linux_compliance_remediate_carriage_return) | list | length > 0
-                 or (original is string and __linux_compliance_remediate_carriage_return in original))
             else none if found == [written]
             else none if original is none and found == []
             else none if original is string and found == [original]
@@ -173,61 +171,9 @@
   tags:
     - always
 
-- name: Audit daemon settings | Write back the line that the collection replaced
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_auditd_conf }}"
-    regexp: "{{ '^' ~ (__linux_compliance_remediate_ac_cleanup_plan[__linux_compliance_remediate_ac_rule.rule_id]
-                       .written | regex_escape) ~ '$' }}"
-    line: "{{ __linux_compliance_remediate_ac_cleanup_plan[__linux_compliance_remediate_ac_rule.rule_id].original }}"
-    state: present
-    create: false
-  loop: >-
-    {{ __linux_compliance_remediate_family.cleanup
-       | selectattr('rule_id', 'in', __linux_compliance_remediate_ac_cleanup_plan | dict2items
-                                     | selectattr('value.edit', 'equalto', 'restore') | map(attribute='key') | list)
-       | list }}
-  loop_control:
-    loop_var: __linux_compliance_remediate_ac_rule
-    label: "{{ __linux_compliance_remediate_ac_rule.rule_id }}"
-  register: __linux_compliance_remediate_ac_restored
-  tags:
-    - always
-
-- name: Audit daemon settings | Remove the line that the collection added
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_auditd_conf }}"
-    regexp: "{{ '^' ~ (__linux_compliance_remediate_ac_cleanup_plan[__linux_compliance_remediate_ac_rule.rule_id]
-                       .written | regex_escape) ~ '$' }}"
-    state: absent
-  loop: >-
-    {{ __linux_compliance_remediate_family.cleanup
-       | selectattr('rule_id', 'in', __linux_compliance_remediate_ac_cleanup_plan | dict2items
-                                     | selectattr('value.edit', 'equalto', 'remove') | map(attribute='key') | list)
-       | list }}
-  loop_control:
-    loop_var: __linux_compliance_remediate_ac_rule
-    label: "{{ __linux_compliance_remediate_ac_rule.rule_id }}"
-  register: __linux_compliance_remediate_ac_removed
-  tags:
-    - always
-
-- name: Audit daemon settings | Forget the rules in the state ledger whose prior line is back
-  freesecdev.linux_compliance.control_state:
-    action: remove
-    rule_id: "{{ __linux_compliance_remediate_ac_rule.rule_id }}"
-  loop: >-
-    {{ __linux_compliance_remediate_family.cleanup
-       | selectattr('rule_id', 'in', __linux_compliance_remediate_ac_cleanup_plan | dict2items
-                                     | rejectattr('value.reason') | map(attribute='key') | list) | list }}
-  loop_control:
-    loop_var: __linux_compliance_remediate_ac_rule
-    label: "{{ __linux_compliance_remediate_ac_rule.rule_id }}"
-  register: __linux_compliance_remediate_ac_forget
-  tags:
-    - always
-
-- name: Audit daemon settings | Name the lines of the configuration file as the cleanup left them
+- name: Audit daemon settings | Name the lines of the configuration file as the cleanup leaves them
   ansible.builtin.set_fact:
+    __linux_compliance_remediate_ac_original_lines: "{{ __linux_compliance_remediate_ac_lines }}"
     __linux_compliance_remediate_ac_lines: >-
       {%- set edits = __linux_compliance_remediate_ac_cleanup_plan.values()
             | rejectattr('edit', 'equalto', 'none') | list -%}
@@ -329,8 +275,8 @@
   tags:
     - always
 
-- name: Audit daemon settings | Read the file as auditd will read it after the lines of this run
-  vars:
+- name: Audit daemon settings | Name the lines of the configuration file after the cleanup and the lines of this run
+  ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_final_lines: >-
       {%- set ns = namespace(lines=__linux_compliance_remediate_ac_lines | list) -%}
       {%- for rule in __linux_compliance_remediate_family.apply
@@ -351,6 +297,10 @@
       {%- endif -%}
       {%- endfor -%}
       {{ ns.lines }}
+  tags:
+    - always
+
+- name: Audit daemon settings | Read the file as auditd will read it after the lines of this run
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_final_reading: >-
       {{ __linux_compliance_remediate_ac_final_lines | join(__linux_compliance_remediate_newline)
@@ -365,9 +315,6 @@
          | length > 0 }}
     __linux_compliance_remediate_ac_unterminated: >-
       {{ __linux_compliance_remediate_ac_lines | length > 0 and __linux_compliance_remediate_ac_lines | last != '' }}
-    __linux_compliance_remediate_ac_carriage: >-
-      {{ __linux_compliance_remediate_ac_lines | select('search', __linux_compliance_remediate_carriage_return) | list
-         | length > 0 }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_ac_plan: >-
       {%- set plan = {} -%}
@@ -378,10 +325,6 @@
                         ~ (' with the lines of this run: ' if __linux_compliance_remediate_ac_changing
                            else ' as it is: ') ~ final.reason)
             if refused
-            else (__linux_compliance_remediate_auditd_conf ~ ' holds a carriage return, which lineinfile reads as'
-                  ~ ' the end of a line where auditd does not, so writing a line would drop it or split the line it'
-                  ~ ' is in')
-            if __linux_compliance_remediate_ac_carriage
             else (__linux_compliance_remediate_auditd_conf ~ ' does not end with a newline, so auditd skips its last'
                   ~ ' line, and writing a line would change that line as well') -%}
       {%- set statuses = ['applied', 'compliant'] if refused else ['applied'] -%}
@@ -392,8 +335,49 @@
       {{ plan }}
   when: >-
     __linux_compliance_remediate_ac_final_reading.accepted is not sameas true
-    or ((__linux_compliance_remediate_ac_unterminated or __linux_compliance_remediate_ac_carriage)
-        and __linux_compliance_remediate_ac_changing)
+    or (__linux_compliance_remediate_ac_unterminated and __linux_compliance_remediate_ac_changing)
+  tags:
+    - always
+
+- name: Audit daemon settings | Name the bytes of the file after the cleanup and every line still to write
+  vars:
+    __linux_compliance_remediate_ac_writing_lines: >-
+      {{ __linux_compliance_remediate_ac_plan.values() | selectattr('status', 'equalto', 'applied') | list
+         | length > 0 }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ac_original_text: >-
+      {{ __linux_compliance_remediate_ac_original_lines | join(__linux_compliance_remediate_newline) }}
+    __linux_compliance_remediate_ac_new_text: >-
+      {{ (__linux_compliance_remediate_ac_final_lines if __linux_compliance_remediate_ac_writing_lines
+          else __linux_compliance_remediate_ac_lines) | join(__linux_compliance_remediate_newline) }}
+  tags:
+    - always
+
+- name: Audit daemon settings | Read the checksum of the configuration file again before writing it
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_auditd_conf }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ac_before
+  when: __linux_compliance_remediate_ac_new_text != __linux_compliance_remediate_ac_original_text
+  tags:
+    - always
+
+- name: Audit daemon settings | Stop when the file changed since this run read it, before anything is written
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_ac_before.stat.isreg | default(false)
+      - >-
+        __linux_compliance_remediate_ac_before.stat.checksum | default('')
+        == __linux_compliance_remediate_ac_original_text | hash('sha256')
+    fail_msg: >-
+      {{ __linux_compliance_remediate_auditd_conf }} changed while this run read it; nothing was written and the
+      ledger is unchanged. Run again once nothing else edits the file.
+    quiet: true
+  when: __linux_compliance_remediate_ac_before is not skipped
   tags:
     - always
 
@@ -438,32 +422,70 @@
   tags:
     - always
 
-- name: Audit daemon settings | Set each setting on its one line, or add the line at the end when it is not set
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_auditd_conf }}"
-    regexp: "{{ '(?i)^[ \t]*' ~ __linux_compliance_remediate_ac_rule.parameters.setting ~ '[ \t]*=' }}"
-    line: "{{ __linux_compliance_remediate_ac_plan[__linux_compliance_remediate_ac_rule.rule_id].written }}"
-    state: present
-    create: false
-  loop: >-
-    {{ __linux_compliance_remediate_family.apply
-       | selectattr('rule_id', 'in', __linux_compliance_remediate_ac_plan | dict2items
-                                     | selectattr('value.status', 'equalto', 'applied') | map(attribute='key') | list)
-       | list }}
-  loop_control:
-    loop_var: __linux_compliance_remediate_ac_rule
-    label: "{{ __linux_compliance_remediate_ac_rule.rule_id }}"
-  register: __linux_compliance_remediate_ac_write
-  tags:
-    - always
-
-- name: Audit daemon settings | Find out whether this run is in check mode, which never reloads auditd
+- name: Audit daemon settings | Find out whether this run is in check mode, which writes nothing and never reloads
   freesecdev.linux_compliance.audit_control:
     action: status
   register: __linux_compliance_remediate_ac_audit
-  when: >-
-    __linux_compliance_remediate_ac_write is changed or __linux_compliance_remediate_ac_restored is changed
-    or __linux_compliance_remediate_ac_removed is changed
+  when: __linux_compliance_remediate_ac_before is not skipped
+  tags:
+    - always
+
+- name: Audit daemon settings | Write the file as a whole, the lines of the cleanup and of this run in place
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_ac_new_text }}"
+    dest: "{{ __linux_compliance_remediate_auditd_conf }}"
+    follow: false
+    force: true
+    mode: "{{ __linux_compliance_remediate_ac_before.stat.mode }}"
+    owner: "{{ __linux_compliance_remediate_ac_before.stat.pw_name }}"
+    group: "{{ __linux_compliance_remediate_ac_before.stat.gr_name }}"
+  register: __linux_compliance_remediate_ac_write
+  when: __linux_compliance_remediate_ac_before is not skipped
+  tags:
+    - always
+
+- name: Audit daemon settings | Read the checksum of the file that this run wrote
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_auditd_conf }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ac_after
+  when:
+    - __linux_compliance_remediate_ac_write is not skipped
+    - not __linux_compliance_remediate_ac_audit.check_mode
+  tags:
+    - always
+
+- name: Audit daemon settings | Stop when the file is not exactly what this run wrote
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_ac_after.stat.isreg | default(false)
+      - >-
+        __linux_compliance_remediate_ac_after.stat.checksum | default('')
+        == __linux_compliance_remediate_ac_new_text | hash('sha256')
+    fail_msg: >-
+      {{ __linux_compliance_remediate_auditd_conf }} is not what this run wrote; the ledger entries are kept, so no
+      cleanup is reported as restored. Check the file before the next run.
+    quiet: true
+  when: __linux_compliance_remediate_ac_after is not skipped
+  tags:
+    - always
+
+- name: Audit daemon settings | Forget the rules in the state ledger whose prior line is back
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_ac_rule.rule_id }}"
+  loop: >-
+    {{ __linux_compliance_remediate_family.cleanup
+       | selectattr('rule_id', 'in', __linux_compliance_remediate_ac_cleanup_plan | dict2items
+                                     | rejectattr('value.reason') | map(attribute='key') | list) | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ac_rule
+    label: "{{ __linux_compliance_remediate_ac_rule.rule_id }}"
+  register: __linux_compliance_remediate_ac_forget
   tags:
     - always
 
@@ -473,9 +495,7 @@
   when:
     - __linux_compliance_remediate_ac_audit is not skipped
     - not __linux_compliance_remediate_ac_audit.check_mode
-    - >-
-      __linux_compliance_remediate_ac_write is changed or __linux_compliance_remediate_ac_restored is changed
-      or __linux_compliance_remediate_ac_removed is changed
+    - __linux_compliance_remediate_ac_write is changed
   tags:
     - always
 
@@ -511,13 +531,12 @@
 - name: Audit daemon settings | Add the result of every cleanup and every rule to apply
   vars:
     __linux_compliance_remediate_ac_changed_ids: >-
-      {{ (__linux_compliance_remediate_ac_restored.results | default([]) | selectattr('changed')
-          | map(attribute='__linux_compliance_remediate_ac_rule.rule_id') | list)
-         + (__linux_compliance_remediate_ac_removed.results | default([]) | selectattr('changed')
-            | map(attribute='__linux_compliance_remediate_ac_rule.rule_id') | list)
+      {{ ((__linux_compliance_remediate_ac_cleanup_plan | dict2items | rejectattr('value.edit', 'equalto', 'none')
+           | map(attribute='key') | list)
+          + (__linux_compliance_remediate_ac_plan | dict2items | selectattr('value.status', 'equalto', 'applied')
+             | map(attribute='key') | list)
+          if __linux_compliance_remediate_ac_write is changed else [])
          + (__linux_compliance_remediate_ac_forget.results | default([]) | selectattr('changed')
-            | map(attribute='__linux_compliance_remediate_ac_rule.rule_id') | list)
-         + (__linux_compliance_remediate_ac_write.results | default([]) | selectattr('changed')
             | map(attribute='__linux_compliance_remediate_ac_rule.rule_id') | list)
          + (__linux_compliance_remediate_ac_record.results | default([]) | selectattr('changed')
             | map(attribute='__linux_compliance_remediate_ac_rule.rule_id') | list) }}

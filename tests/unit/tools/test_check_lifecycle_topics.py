@@ -1303,3 +1303,52 @@ def test_invalid_pre_state_lines_are_reported(
     root = make_root(tmp_path, {"file_permissions": declaration})
     found = lifecycle.check(root)[1]
     assert any(message in error for error in found), found
+
+
+def test_a_pre_state_may_load_audit_rules_and_name_the_reasons_of_its_results(
+    tmp_path: Path,
+) -> None:
+    loading = {
+        **LIBVIRT_PRE_STATE,
+        "loads_audit_rules": True,
+        "reasons": [
+            {"step": "apply", "reason": "none"},
+            {"step": "apply", "reason": "restart_required", "rules": ["file_permissions_crontab"]},
+            {"step": "cleanup", "reason": "takes_effect_at_start", "platforms": ["ubuntu"]},
+        ],
+    }
+    pre_states = [*cast("list[object]", VALID["pre_states"]), loading]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize(
+    ("pre_state", "message"),
+    [
+        (
+            {"name": "x", "loads_audit_rules": True},
+            "pre_states[0] loads audit rules, so it must require drivers other than docker",
+        ),
+        ({"name": "x", "loads_audit_rules": "yes"}, "loads_audit_rules must be a boolean"),
+        (
+            {"name": "x", "reasons": [{"step": "check", "reason": "none"}]},
+            "reasons[0] needs the step apply or cleanup",
+        ),
+        (
+            {"name": "x", "reasons": [{"step": "apply", "reason": "Not Readable"}]},
+            "reasons[0] needs a machine-readable reason",
+        ),
+        (
+            {"name": "x", "reasons": [{"step": "apply", "reason": "none", "rules": ["nope"]}]},
+            "reasons[0].rules needs short identifiers of the topic's native rules",
+        ),
+        (
+            {"name": "x", "reasons": [{"step": "apply", "reason": "none", "extra": 1}]},
+            "reasons[0] has the unknown key 'extra'",
+        ),
+    ],
+)
+def test_an_invalid_load_or_reason_is_reported(
+    tmp_path: Path, pre_state: dict[str, object], message: str
+) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[pre_state]))
+    assert any(message in error for error in errors), errors

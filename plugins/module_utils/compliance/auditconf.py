@@ -19,9 +19,24 @@ What the table shows, for auditd 3.1.2 (Ubuntu 24.04) and 3.1.5 (Rocky Linux 9):
   a missing ``=``, a missing or extra word, or a value outside the keyword's form refuses the
   whole file, and auditd does not start.
 * When a keyword is set twice, auditd reads both lines and the last one wins.
+* The four disk space and disk error actions take more words, an option that auditd ignores
+  unless the action is ``exec`` (a fifth word is only logged); every other keyword refuses a
+  fourth word.
+* ``log_file`` must lie in a directory whose name has at least four characters; auditd opens that
+  directory and the file when it reads the line. This reader knows only the default
+  ``/var/log/audit/audit.log``, which the table shows, and cannot tell for any other file.
+* ``action_mail_acct`` must have at least two characters while ``verify_email`` (``yes`` until a
+  line sets it) is on when auditd reads the line.
 * After reading, auditd refuses a ``space_left`` that is not larger than ``admin_space_left``
-  (both 0 when not set; percentages converted with the size of the log's file system) and
-  incremental flushing with ``freq`` 0 (``freq`` is 0 when not set).
+  (both 0 when not set; percentages converted with the size of the log's file system),
+  incremental flushing with ``freq`` 0 (``freq`` is 0 when not set), and a ``log_group`` other
+  than root for a ``log_file`` directly in ``/var/log`` (``sanity_check``).
+
+The table vouches for ``load_config`` only: in a container without capabilities auditd stops
+right after it, before it starts. One check that auditd makes later, when it starts, comes from
+its source (``resolve_node``) and is tested on its own: ``name_format = user`` without ``name``
+stops auditd, so this reader refuses it. ``fqd`` and ``numeric`` resolve the host name when
+auditd starts, which no reading of the file can tell.
 
 Every form that the table does not cover, such as the ``exec`` actions, is reported as unknown,
 so that the caller refuses instead of guessing.
@@ -39,6 +54,17 @@ COMMENT: Final[str] = "#"
 DIGITS: Final[str] = r"[0-9]{1,10}"
 PATH: Final[str] = r"/[A-Za-z0-9._/-]{0,127}"
 NAME: Final[str] = r"[A-Za-z0-9._-]{1,64}"
+ANY: Final[str] = r"[!-~]{1,128}"
+PORTS: Final[str] = r"([0-9]{1,5})(?:-([0-9]{1,5}))?"
+DEFAULT_LOG_FILE: Final[str] = "/var/log/audit/audit.log"
+SYSTEM_LOG_DIRECTORY: Final[str] = "/var/log"
+MIN_DIRECTORY_CHARACTERS: Final[int] = 4
+MIN_MAIL_CHARACTERS: Final[int] = 2
+MAX_PORT: Final[int] = 65535
+OPTION_KEYWORDS: Final[frozenset[str]] = frozenset(
+    {"space_left_action", "admin_space_left_action", "disk_full_action", "disk_error_action"}
+)
+START_REASON: Final[str] = "auditd reads the file but stops when it starts"
 BOOLEAN: Final[tuple[str, ...]] = ("yes", "no")
 DISK_ACTIONS: Final[tuple[str, ...]] = ("ignore", "syslog", "rotate", "suspend", "single", "halt")
 SPACE_ACTIONS: Final[tuple[str, ...]] = (*DISK_ACTIONS, "email")
@@ -93,6 +119,11 @@ KEYWORDS: Final[dict[str, Form]] = {
     "disk_full_action": Form(DISK_ACTIONS),
     "disk_error_action": Form(ERROR_ACTIONS),
     "use_libwrap": Form(BOOLEAN),
+    "tcp_listen_port": Form(pattern=DIGITS, minimum=1, maximum=MAX_PORT, lenient=True),
+    "tcp_client_ports": Form(pattern=PORTS, lenient=True),
+    "krb5_key_file": Form(pattern=ANY),
+    "dispatcher": Form(pattern=ANY),
+    "disp_qos": Form(pattern=ANY),
     "tcp_listen_queue": Form(pattern=DIGITS, minimum=1, maximum=65535, lenient=True),
     "tcp_max_per_addr": Form(pattern=DIGITS, minimum=1, maximum=1000, lenient=True),
     "tcp_client_max_idle": Form(pattern=DIGITS, lenient=True),
@@ -150,6 +181,24 @@ def _number_verdict(form: Form, value: str) -> bool | None:
     return False if form.refused is not None and number > form.refused else None
 
 
+def _ports_verdict(form: Form, value: str) -> bool | None:
+    found = re.fullmatch(form.pattern, value)
+    if found is None:
+        return None
+    low = int(found.group(1))
+    high = int(found.group(2)) if found.group(2) is not None else low
+    return True if low <= high <= MAX_PORT else None
+
+
+def c_dirname(path: str) -> str:
+    """Return the directory of ``path`` as the C library's ``dirname`` names it."""
+    stripped = path.rstrip("/")
+    if not stripped:
+        return "/"
+    head = stripped.rsplit("/", 1)[0] if "/" in stripped else "."
+    return head.rstrip("/") or "/"
+
+
 def _value_verdict(form: Form, value: str) -> bool | None:
     if form.choices:
         return value.lower() in form.choices
@@ -157,6 +206,8 @@ def _value_verdict(form: Form, value: str) -> bool | None:
         return _space_verdict(value)
     if form.pattern == DIGITS:
         return _number_verdict(form, value)
+    if form.pattern == PORTS:
+        return _ports_verdict(form, value)
     if re.fullmatch(form.pattern, value) is None:
         return None
     return True if not form.known or value in form.known else None
@@ -171,9 +222,10 @@ def _shape(words: list[str], number: int) -> tuple[bool | None, str]:
     if keyword not in KEYWORDS:
         return False, f"line {number} sets a keyword that auditd does not know"
     if len(words) > WORDS:
-        if keyword.endswith("_action") and words[2].lower() == "exec":
+        if keyword in OPTION_KEYWORDS and words[2].lower() == "exec":
             return None, f"line {number} uses the exec form, which the collection does not read"
-        return False, f"line {number} has more than one value"
+        if keyword not in OPTION_KEYWORDS:
+            return False, f"line {number} has more than one value"
     return True, ""
 
 
@@ -186,6 +238,8 @@ def _line_verdict(text: str, number: int) -> tuple[bool | None, str, Setting | N
     if verdict is not True:
         return verdict, reason, None
     keyword = words[0].lower()
+    if keyword == "log_file" and len(c_dirname(words[2])) < MIN_DIRECTORY_CHARACTERS:
+        return False, f"line {number} puts log_file in a directory whose name is too short", None
     found = _value_verdict(KEYWORDS[keyword], words[2])
     if found is None:
         return None, f"line {number}: the collection cannot tell whether auditd accepts it", None
@@ -202,12 +256,13 @@ def _space(value: str, size: int | None) -> tuple[bool, int | None]:
     return False, number
 
 
-def _sanity(settings: dict[str, list[Setting]], size: int | None) -> tuple[bool | None, str]:
-    def last(keyword: str, fallback: str) -> str:
-        found = settings.get(keyword, [])
-        return found[-1].value if found else fallback
+def _last(settings: dict[str, list[Setting]], keyword: str, fallback: str) -> str:
+    found = settings.get(keyword, [])
+    return found[-1].value if found else fallback
 
-    space, admin = last("space_left", "0"), last("admin_space_left", "0")
+
+def _space_sanity(settings: dict[str, list[Setting]], size: int | None) -> tuple[bool | None, str]:
+    space, admin = _last(settings, "space_left", "0"), _last(settings, "admin_space_left", "0")
     space_percent, space_size = _space(space, size)
     admin_percent, admin_size = _space(admin, size)
     if not space_percent and not admin_percent:
@@ -223,9 +278,41 @@ def _sanity(settings: dict[str, list[Setting]], size: int | None) -> tuple[bool 
             f"space_left {space} is not larger than admin_space_left {admin} in MiB; auditd only"
             " logs this when it starts, and the collection cannot tell"
         )
-    flush = last("flush", "none").lower()
-    if flush in ("incremental", "incremental_async") and int(last("freq", "0")) == 0:
+    return True, ""
+
+
+def _start_sanity(settings: dict[str, list[Setting]]) -> tuple[bool | None, str]:
+    flush = _last(settings, "flush", "none").lower()
+    if flush in ("incremental", "incremental_async") and int(_last(settings, "freq", "0")) == 0:
         return False, "flush is incremental, but freq is 0"
+    log_file = _last(settings, "log_file", DEFAULT_LOG_FILE)
+    group = _last(settings, "log_group", "root")
+    if group != "root" and c_dirname(log_file) == SYSTEM_LOG_DIRECTORY:
+        return False, f"log_group is not root, but log_file {log_file} is directly in /var/log"
+    if _last(settings, "name_format", "none").lower() == "user" and not settings.get("name"):
+        return False, f"name_format is user, but name is not set; {START_REASON} (resolve_node)"
+    if log_file != DEFAULT_LOG_FILE:
+        return None, (
+            f"auditd opens the directory and the file of log_file {log_file} when it reads it; the"
+            f" collection only knows {DEFAULT_LOG_FILE} and cannot tell"
+        )
+    return True, ""
+
+
+def _sanity(settings: dict[str, list[Setting]], size: int | None) -> tuple[bool | None, str]:
+    accepted, reason = _space_sanity(settings, size)
+    if accepted is not True:
+        return accepted, reason
+    return _start_sanity(settings)
+
+
+def _mail_verdict(setting: Setting, settings: dict[str, list[Setting]]) -> tuple[bool, str]:
+    """Refuse a short mail account while ``verify_email`` is on at the line that sets it."""
+    verify = settings.get("verify_email", [])
+    verifying = not verify or verify[-1].value.lower() == "yes"
+    short = len(setting.value) < MIN_MAIL_CHARACTERS
+    if setting.keyword == "action_mail_acct" and verifying and short:
+        return False, f"line {setting.line} gives action_mail_acct fewer than two characters"
     return True, ""
 
 
@@ -253,6 +340,8 @@ def read(data: bytes, log_megabytes: int | None = None) -> Reading:
         if re.search(r"[^\x00-\x7f]", text):
             return Reading(None, f"line {index} holds bytes outside ASCII", settings, skipped)
         accepted, reason, setting = _line_verdict(text, index)
+        if accepted is True and setting is not None:
+            accepted, reason = _mail_verdict(setting, settings)
         if accepted is not True:
             return Reading(accepted, reason, settings, sorted(skipped))
         if setting is not None:

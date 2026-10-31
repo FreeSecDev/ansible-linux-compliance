@@ -1,0 +1,55 @@
+---
+- name: Lifecycle audit rules load | Refuse to load outside a pre-state that loads audit rules where a kernel can
+  ansible.builtin.assert:
+    that:
+      - lifecycle_pre_state.loads_audit_rules | default(false) is sameas true
+      - molecule_target.driver != 'docker'
+    fail_msg: >-
+      {{ lifecycle_label }}: lifecycle_audit_rules_load.yml runs only for a pre-state with loads_audit_rules, in a
+      virtual machine; the driver is {{ molecule_target.driver }}.
+    quiet: true
+
+- name: Lifecycle audit rules load | Inspect the previous generated rule file, which augenrules replaces
+  ansible.builtin.stat:
+    path: /etc/audit/audit.rules.prev
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: lifecycle_rules_previous
+
+- name: Lifecycle audit rules load | Read the previous generated rule file
+  ansible.builtin.slurp:
+    src: /etc/audit/audit.rules.prev
+  register: lifecycle_rules_previous_text
+  when: lifecycle_rules_previous.stat.isreg | default(false)
+
+- name: Lifecycle audit rules load | Load the rule files as auditd does when it starts, {{ lifecycle_rules_load_step }}
+  freesecdev.linux_compliance.audit_control:
+    action: load
+  register: lifecycle_rules_loaded
+
+- name: Lifecycle audit rules load | Check that the rule files were loaded {{ lifecycle_rules_load_step }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rules_loaded.loaded | default(false)
+    fail_msg: >-
+      {{ lifecycle_label }}: loading the rule files {{ lifecycle_rules_load_step }}: {{ lifecycle_rules_loaded }}
+    quiet: true
+
+- name: Lifecycle audit rules load | Write back the previous generated rule file with its mode and owner
+  ansible.builtin.copy:
+    content: "{{ lifecycle_rules_previous_text.content | b64decode }}"
+    dest: /etc/audit/audit.rules.prev
+    follow: false
+    force: true
+    mode: "{{ lifecycle_rules_previous.stat.mode }}"
+    owner: "{{ lifecycle_rules_previous.stat.pw_name }}"
+    group: "{{ lifecycle_rules_previous.stat.gr_name }}"
+  when: lifecycle_rules_previous.stat.isreg | default(false)
+
+- name: Lifecycle audit rules load | Remove the copy that augenrules made when there was none before
+  ansible.builtin.file:
+    path: /etc/audit/audit.rules.prev
+    state: absent
+  when: not (lifecycle_rules_previous.stat.exists | default(false))

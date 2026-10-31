@@ -12,10 +12,12 @@ minor_changes:
     the profile's values, one line per setting with its prior line recorded. What the file sets is decided by a model of
     auditd's parser that unit tests check against a verdict table of the real auditd of each Molecule image
     (``make auditd-conf-verdicts``); a file that auditd would refuse after the run, or that the model cannot tell, is
-    refused (``invalid_config``), and a running auditd is asked to reload (``reload_not_confirmed``,
+    refused (``invalid_config``). The file is written as a whole, never line by line, only while its SHA-256 is that of
+    the bytes read and checked again afterwards, and a running auditd is asked to reload (``reload_not_confirmed``,
     ``restart_required`` for ``local_events``). Switching a rule or topic off reverts exactly what it changed.
   - >-
     audit_control - new module that reads the audit status, the loaded rules and the rule files, loads the rules of
     ``/etc/audit/rules.d`` with ``augenrules --load`` after checking them for repeated rules, and reloads auditd,
     through the audited process helper, whose allow-list gains ``auditctl`` (``-s``, ``-l``, ``--signal reload``) and
-    ``augenrules`` (``--load``, ``--check``) in these exact forms only.
+    ``augenrules`` (``--load``, ``--check``) in these exact forms only; on a timeout ``augenrules`` gets ``SIGTERM``
+    and a grace before ``SIGKILL``, so that its trap removes its temporary file.

@@ -542,7 +542,7 @@ The statuses that refuse to act, each with a reason, nothing changed and the led
 | `conflicting_rule` (apply) | Another rule file deletes rules that match this one (`-W`, `-d`, or `-D` with a selection such as `-D -k <key>`), which `augenrules` keeps in place |
 | `watch_target_missing` (apply) | The directory of a watched path does not exist; the kernel refuses such a watch |
 | `duplicate_setting` (apply) | `auditd.conf` sets the setting more than once (the check reads the first, auditd keeps the last) |
-| `invalid_config` (apply) | auditd would refuse `auditd.conf` with the lines of the run, or as it is (a line it cannot read: a TAB, CR, VT or FF in a word, a trailing comment, an unknown keyword or value; `space_left` not larger than `admin_space_left`; incremental flushing with `freq` 0, with auditd's compiled defaults for unset settings), the reader cannot tell (an `exec` action, a NUL byte, bytes outside ASCII, percentages it cannot compare), or the file does not end with a newline or holds a carriage return anywhere; nothing is written |
+| `invalid_config` (apply) | auditd would refuse `auditd.conf` with the lines of the run, or as it is (a line it cannot read: a TAB, CR, VT or FF in a word, a trailing comment, an unknown keyword or value; `space_left` not larger than `admin_space_left`; incremental flushing with `freq` 0, with auditd's compiled defaults for unset settings), the reader cannot tell (an `exec` action, a NUL byte, bytes outside ASCII, percentages it cannot compare, a `log_file` other than `/var/log/audit/audit.log`; also, from auditd's start, `name_format = user` without `name`), or the file does not end with a newline; nothing is written |
 | `unsupported_value` (apply) | An alternation of the profile offers none of the values that the collection writes |
 | `prior_too_large` (apply) | The line that sets the setting is longer than 1024 characters |
 | `not_regular_file`, `not_directory` | A drop-in, `auditd.conf` or `/etc/audit/rules.d` is a symbolic link or of the wrong type |
@@ -550,7 +550,6 @@ The statuses that refuse to act, each with a reason, nothing changed and the led
 | `method_changed` | The ledger entry records another method, or none |
 | `modified_since_apply` (cleanup) | The drop-in or the line is no longer what the collection wrote |
 | `no_final_newline` (cleanup) | `auditd.conf` no longer ends with a newline, so a line could not be written back byte for byte |
-| `carriage_return` (cleanup) | `auditd.conf` holds a carriage return, which `lineinfile` would drop or read as a line break, so a line could not be written back byte for byte |
 | `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `auditd.conf` is gone |
 
 A drop-in that is already gone at cleanup, or a setting that is already back at its recorded prior line, is

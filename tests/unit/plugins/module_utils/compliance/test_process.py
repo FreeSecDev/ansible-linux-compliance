@@ -926,6 +926,26 @@ class TestRunLimits:
         assert result.timed_out
         assert wait_until_dead(pid)
 
+    def test_a_grace_lets_a_trap_clean_up_before_the_kill(self, tmp_path: Path) -> None:
+        marker = tmp_path / "cleaned"
+        graceful = {"sh": dataclasses.replace(SHELL, term_grace_seconds=FAST)}
+        script = "trap 'echo done > \"$1\"; exit 1' TERM; while :; do sleep 0.05; done"
+        result = process.run(shell(script, str(marker), timeout=0.5), policies=graceful)
+        assert result.timed_out
+        assert marker.read_text(encoding="utf-8") == "done\n"
+
+    def test_without_a_grace_the_trap_never_runs(self, tmp_path: Path) -> None:
+        marker = tmp_path / "cleaned"
+        script = "trap 'echo done > \"$1\"; exit 1' TERM; while :; do sleep 0.05; done"
+        result = execute(shell(script, str(marker), timeout=0.5))
+        assert result.timed_out
+        assert result.returncode == -9
+        assert not marker.exists()
+
+    def test_augenrules_gets_a_grace_for_its_trap(self) -> None:
+        assert process.ALLOWED_EXECUTABLES["augenrules"].term_grace_seconds > 0
+        assert process.ALLOWED_EXECUTABLES["auditctl"].term_grace_seconds == 0
+
     def test_timeout_is_a_result_not_an_exception(self) -> None:
         result = execute(process.CommandSpec("sleep", ("30",), 0.2))
         assert isinstance(result, process.CommandResult)

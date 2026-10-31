@@ -102,6 +102,32 @@
   loop_control:
     label: "{{ item.path }}"
 
+- name: Lifecycle cycle | Load the audit rule files with those that the pre-state added
+  ansible.builtin.include_tasks:
+    file: lifecycle_audit_rules_load.yml
+  vars:
+    lifecycle_rules_load_step: with the files of the pre-state
+  when: lifecycle_pre_state.loads_audit_rules | default(false)
+
+- name: Lifecycle cycle | Name the reason that the result of every rule must carry after the apply and the cleanup
+  ansible.builtin.set_fact:
+    lifecycle_expected_reasons: >-
+      {%- set found = {'apply': {}, 'cleanup': {}} -%}
+      {%- set declared = lifecycle_pre_state.reasons | default([])
+            | selectattr('platforms', 'undefined') | list
+            + lifecycle_pre_state.reasons | default([]) | selectattr('platforms', 'defined')
+            | selectattr('platforms', 'contains', lifecycle_platform) | list -%}
+      {%- for entry in declared | rejectattr('rules', 'defined') | list
+            + declared | selectattr('rules', 'defined') | list -%}
+      {%- for rule_id in lifecycle_rule_ids -%}
+      {%- if entry.rules is not defined
+            or rule_id | regex_replace('^xccdf_org\.ssgproject\.content_rule_', '') in entry.rules -%}
+      {%- set _ = found[entry.step].update({rule_id: none if entry.reason == 'none' else entry.reason}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ found }}
+
 - name: Lifecycle cycle | Read the declared files whose lines the pre-state sets, to put them back after the cycle
   ansible.builtin.slurp:
     src: "{{ item.path }}"
@@ -211,6 +237,21 @@
       - lifecycle_results | selectattr('changed') | map(attribute='rule_id') | list == lifecycle_changed_ids
     fail_msg: "{{ lifecycle_label }}, apply: {{ lifecycle_results }}"
     quiet: true
+
+- name: Lifecycle cycle | Check the reason of every applied rule that the pre-state names one for
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'applied')
+        | selectattr('rule_id', 'in', lifecycle_expected_reasons.apply.keys() | list)
+        | items2dict(key_name='rule_id', value_name='reason')
+        == lifecycle_expected_reasons.apply | dict2items | selectattr('key', 'in', lifecycle_changed_ids)
+        | items2dict
+    fail_msg: >-
+      {{ lifecycle_label }}, apply: the reasons {{ lifecycle_results | items2dict(key_name='rule_id',
+      value_name='reason') }}, expected {{ lifecycle_expected_reasons.apply }}
+    quiet: true
+  when: lifecycle_expected_reasons.apply | length > 0
 
 - name: Lifecycle cycle | Take the declared state after the topic is applied
   ansible.builtin.include_tasks:
@@ -358,6 +399,20 @@
     fail_msg: "{{ lifecycle_label }}, cleanup: {{ lifecycle_results }}"
     quiet: true
 
+- name: Lifecycle cycle | Check the reason of every restored rule that the pre-state names one for
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', lifecycle_expected_reasons.cleanup.keys() | list)
+        | items2dict(key_name='rule_id', value_name='reason')
+        == lifecycle_expected_reasons.cleanup | dict2items | selectattr('key', 'in', lifecycle_changed_ids)
+        | items2dict
+    fail_msg: >-
+      {{ lifecycle_label }}, cleanup: the reasons {{ lifecycle_results | items2dict(key_name='rule_id',
+      value_name='reason') }}, expected {{ lifecycle_expected_reasons.cleanup }}
+    quiet: true
+  when: lifecycle_expected_reasons.cleanup | length > 0
+
 - name: Lifecycle cycle | Take the declared state after the cleanup
   ansible.builtin.include_tasks:
     file: lifecycle_state.yml
@@ -450,6 +505,13 @@
   loop: "{{ lifecycle_added_files }}"
   loop_control:
     label: "{{ item.path }}"
+
+- name: Lifecycle cycle | Load the audit rule files again without those that the pre-state added
+  ansible.builtin.include_tasks:
+    file: lifecycle_audit_rules_load.yml
+  vars:
+    lifecycle_rules_load_step: without the files of the pre-state
+  when: lifecycle_pre_state.loads_audit_rules | default(false)
 
 - name: Lifecycle cycle | Give the declared files back the mode and ownership they had before any cycle
   ansible.builtin.file:

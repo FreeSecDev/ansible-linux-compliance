@@ -70,3 +70,63 @@ def test_values_outside_what_the_table_shows_are_refused_or_unknown(
 ) -> None:
     reading = auditconf.read(b"space_left = 80\nadmin_space_left = 50\n" + line + b"\n", 1000)
     assert reading.accepted is expected, reading.reason
+
+
+BASE = b"space_left = 80\nadmin_space_left = 50\n"
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected", "reason"),
+    [
+        (b"log_group = adm\nlog_file = /var/log/audit.log\n", False, "directly in /var/log"),
+        (b"log_group = root\nlog_file = /var/log/audit.log\n", None, "cannot tell"),
+        (b"log_file = /x/audit.log\n", False, "too short"),
+        (b"log_file = /nonexistent/audit/audit.log\n", None, "cannot tell"),
+        (b"log_file = /var/log/audit/audit.log\nlog_group = adm\n", True, ""),
+        (b"action_mail_acct = x\n", False, "fewer than two characters"),
+        (b"verify_email = no\naction_mail_acct = x\n", True, ""),
+        (b"action_mail_acct = x\nverify_email = no\n", False, "fewer than two characters"),
+        (b"action_mail_acct = xy\n", True, ""),
+        (b"name_format = user\n", False, "stops when it starts"),
+        (b"name_format = user\nname = auditor\n", True, ""),
+        (b"space_left_action = email extra\n", True, ""),
+        (b"disk_full_action = halt extra\n", True, ""),
+        (b"space_left_action = email a b\n", True, ""),
+        (b"max_log_file_action = rotate extra\n", False, "more than one value"),
+        (b"space_left_action = exec /usr/bin/true\n", None, "exec form"),
+        (b"tcp_listen_port = 60\n", True, ""),
+        (b"tcp_listen_port = abc\n", None, "cannot tell"),
+        (b"tcp_client_ports = 1-1023\n", True, ""),
+        (b"tcp_client_ports = 10-5\n", None, "cannot tell"),
+        (b"tcp_client_ports = 70000\n", None, "cannot tell"),
+        (b"krb5_key_file = /etc/audit/audit.key\n", True, ""),
+        (b"dispatcher = /sbin/audispd\n", True, ""),
+        (b"disp_qos = lossy\n", True, ""),
+    ],
+)
+def test_the_start_rules_options_and_more_keywords(
+    lines: bytes, expected: bool | None, reason: str
+) -> None:
+    reading = auditconf.read(BASE + lines, 1000)
+    assert reading.accepted is expected, reading.reason
+    assert reason in reading.reason
+
+
+def test_an_option_does_not_change_the_value() -> None:
+    reading = auditconf.read(BASE + b"space_left_action = email extra\n", 1000)
+    assert auditconf.value(reading, "space_left_action") == "email"
+
+
+@pytest.mark.parametrize(
+    ("path", "directory"),
+    [
+        ("/var/log/audit/audit.log", "/var/log/audit"),
+        ("/var/log/audit/", "/var/log"),
+        ("/audit.log", "/"),
+        ("audit.log", "."),
+        ("//", "/"),
+        ("/var//audit.log", "/var"),
+    ],
+)
+def test_the_directory_is_named_as_the_c_library_names_it(path: str, directory: str) -> None:
+    assert auditconf.c_dirname(path) == directory

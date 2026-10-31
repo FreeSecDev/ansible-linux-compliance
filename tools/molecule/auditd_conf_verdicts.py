@@ -51,6 +51,8 @@ STARTED_MARKERS: Final[tuple[str, ...]] = (
 PARSER_LINE: Final[re.Pattern[str]] = re.compile(r"([a-z0-9_]+)_parser called with: (.*)")
 NOTICE: Final[re.Pattern[str]] = re.compile(
     r"Config file .* opened for parsing|Listener support is not enabled, ignoring value at line \d+"
+    r"|GSSAPI support is not enabled, ignoring value at line \d+"
+    r"|The (dispatcher|disp_qos) option is deprecated - line \d+"
     r"|The audit daemon is exiting\."
 )
 EVENT_STAMP: Final[re.Pattern[str]] = re.compile(r"audit\(\d+\.\d+:\d+\)")
@@ -75,6 +77,8 @@ PATTERN_SAMPLES: Final[dict[str, tuple[str, ...]]] = {
     auditconf.PATH: ("/var/log/audit/audit.log", "relative/path", "/a b"),
     auditconf.NAME: ("root", "adm", "nosuchgroupxyz", "a#b"),
     auditconf.SPACE: ("25%", "100%", "101%", "80", "0%", "x%", "99%"),
+    auditconf.ANY: ("x", "/etc/audit/audit.key", "lossy", "a,b;c"),
+    auditconf.PORTS: ("60", "1-1023", "0", "65536", "10-5", "a-b", "1-", "70000-70001"),
 }
 
 
@@ -161,6 +165,50 @@ def structural(base: str) -> dict[str, str]:
         "mail_with_domain_not_verified": setting(
             setting(base, "verify_email", "no"), "action_mail_acct", "admin@example.com"
         ),
+        **files_and_names(base),
+        **options(base),
+    }
+
+
+def files_and_names(base: str) -> dict[str, str]:
+    """Return the cases of the log file, the mail account and the node name."""
+    mail = without(without(base, "action_mail_acct"), "verify_email")
+    return {
+        "log_group_adm_log_file_in_var_log": setting(
+            setting(base, "log_file", "/var/log/audit.log"), "log_group", "adm"
+        ),
+        "log_group_root_log_file_in_var_log": setting(
+            setting(base, "log_file", "/var/log/audit.log"), "log_group", "root"
+        ),
+        "log_file_in_missing_directory": setting(base, "log_file", "/nonexistent/audit/audit.log"),
+        "log_file_in_short_directory": setting(base, "log_file", "/x/audit.log"),
+        "log_file_in_var": setting(base, "log_file", "/var/audit.log"),
+        "log_file_in_other_directory": setting(base, "log_file", "/var/lib/audit.log"),
+        "log_file_is_a_directory": setting(base, "log_file", "/var/log/audit"),
+        "mail_of_one_character": setting(base, "action_mail_acct", "x"),
+        "mail_of_two_characters": setting(base, "action_mail_acct", "xy"),
+        "mail_of_one_character_not_verified": mail + "verify_email = no\naction_mail_acct = x\n",
+        "mail_of_one_character_verified_later": mail + "action_mail_acct = x\nverify_email = no\n",
+        "name_format_user_without_name": setting(without(base, "name"), "name_format", "user"),
+        "name_format_user_with_name": setting(
+            setting(base, "name_format", "user"), "name", "auditor"
+        ),
+    }
+
+
+def options(base: str) -> dict[str, str]:
+    """Return the cases of an option after the value of a keyword."""
+    return {
+        "space_left_action_with_option": setting(base, "space_left_action", "email extra"),
+        "admin_space_left_action_with_option": setting(
+            base, "admin_space_left_action", "single extra"
+        ),
+        "disk_full_action_with_option": setting(base, "disk_full_action", "halt extra"),
+        "disk_error_action_with_option": setting(base, "disk_error_action", "syslog extra"),
+        "space_left_action_with_two_options": setting(base, "space_left_action", "email a b"),
+        "max_log_file_action_with_option": setting(base, "max_log_file_action", "rotate extra"),
+        "overflow_action_with_option": setting(base, "overflow_action", "syslog extra"),
+        "unknown_action_with_option": setting(base, "space_left_action", "frobnicate extra"),
     }
 
 
