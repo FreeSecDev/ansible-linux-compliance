@@ -53,6 +53,7 @@ NOTICE: Final[re.Pattern[str]] = re.compile(
     r"Config file .* opened for parsing|Listener support is not enabled, ignoring value at line \d+"
     r"|The audit daemon is exiting\."
 )
+EVENT_STAMP: Final[re.Pattern[str]] = re.compile(r"audit\(\d+\.\d+:\d+\)")
 PLATFORM: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]{0,30}")
 MAX_OUTPUT: Final[int] = 64 * 1024
 NUMBER_SAMPLES: Final[tuple[str, ...]] = (
@@ -198,12 +199,16 @@ def write_cases(base: Path, output: Path) -> list[str]:
 
 
 def verdict(status: int, output: str) -> dict[str, object]:
-    """Return what auditd did with one case: its verdict, the values it read and its messages."""
+    """Return what auditd did with one case: its verdict, the values it read and its messages.
+
+    The time and serial number of an audit event in a message are replaced, so that the table
+    made again from the same images is the same.
+    """
     read = [
         list(found.groups()) for found in map(PARSER_LINE.fullmatch, output.splitlines()) if found
     ]
     messages = [
-        line.strip()
+        EVENT_STAMP.sub("audit(<time>:<serial>)", line.strip())
         for line in output.splitlines()
         if line.strip() and not PARSER_LINE.fullmatch(line) and not NOTICE.fullmatch(line.strip())
     ]

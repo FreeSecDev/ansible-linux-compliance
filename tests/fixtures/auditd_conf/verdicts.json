@@ -6210,14 +6210,14 @@
     "status": 1,
     "messages": [
      "No plugins found, not dispatching events",
-     "type=DAEMON_START msg=audit(1793437587.163:9445): op=start ver=3.1.2 format=enriched kernel=6.18.33.2-microsoft-standard-WSL2 auid=4294967295 pid=1 uid=0 ses=4294967295 subj=kernel res=success",
+     "type=DAEMON_START msg=audit(<time>:<serial>): op=start ver=3.1.2 format=enriched kernel=6.18.33.2-microsoft-standard-WSL2 auid=4294967295 pid=1 uid=0 ses=4294967295 subj=kernel res=success",
      "AUID=\"unset\" UID=\"root\"",
      "Unable to adjust out of memory score",
      "config_manager init complete",
      "Error sending status request (Operation not permitted)",
      "Error sending enable request (Operation not permitted)",
      "Unable to set initial audit startup state to 'enable', exiting",
-     "type=DAEMON_ABORT msg=audit(1793437587.164:9446): op=set-enable auid=4294967295 pid=1 uid=0 ses=4294967295 subj=kernel res=failed",
+     "type=DAEMON_ABORT msg=audit(<time>:<serial>): op=set-enable auid=4294967295 pid=1 uid=0 ses=4294967295 subj=kernel res=failed",
      "AUID=\"unset\" UID=\"root\"",
      "Error setting audit daemon pid (Operation not permitted)"
     ]

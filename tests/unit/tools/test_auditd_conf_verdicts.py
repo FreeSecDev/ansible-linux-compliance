@@ -101,6 +101,11 @@ def test_the_verdict_keeps_the_values_read_and_the_messages_but_no_notices() -> 
     ]
 
 
+def test_the_verdict_drops_the_time_and_serial_of_an_audit_event() -> None:
+    found = verdicts.verdict(1, "type=DAEMON_START msg=audit(1793437587.163:9445): op=start\n")
+    assert found["messages"] == ["type=DAEMON_START msg=audit(<time>:<serial>): op=start"]
+
+
 def results_directory(tmp_path: Path, names: list[str]) -> Path:
     results = tmp_path / "results"
     results.mkdir()
