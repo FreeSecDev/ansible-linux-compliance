@@ -1345,6 +1345,7 @@ def test_a_pre_state_may_load_audit_rules_and_name_the_reasons_of_its_results(
             {"name": "x", "reasons": [{"step": "apply", "reason": "none", "extra": 1}]},
             "reasons[0] has the unknown key 'extra'",
         ),
+        ({"name": "x", "reasons": ["apply"]}, "reasons[0] must be a mapping"),
     ],
 )
 def test_an_invalid_load_or_reason_is_reported(

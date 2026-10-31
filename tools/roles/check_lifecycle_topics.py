@@ -587,7 +587,7 @@ class Declaration:
         if "loads_audit_rules" in item:
             self._pre_state_loads(item, what)
         if "reasons" in item:
-            self.pre_state_reasons(item["reasons"], what)
+            self._pre_state_reasons(item["reasons"], what)
         if "applied" in item and self._expectations(item["applied"], f"{what}.applied") == 0:
             self.error(f"{what}.applied declares no expectation; leave it out instead")
 
@@ -601,7 +601,7 @@ class Declaration:
         if loads and (not drivers or set(drivers) & UNRESTRICTED_DRIVERS):
             self.error(f"{what} loads audit rules, so it must require drivers other than docker")
 
-    def pre_state_reasons(self, value: object, what: str) -> None:
+    def _pre_state_reasons(self, value: object, what: str) -> None:
         """Check the reasons that the results of the rules of a pre-state's cycles must carry."""
         for index, entry in enumerate(self.sequence(value, f"{what}.reasons")):
             where = f"{what}.reasons[{index}]"
