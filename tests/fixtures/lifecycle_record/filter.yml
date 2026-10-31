@@ -13,7 +13,8 @@
           {{ filter_output | default({}) | combine({item.name: {
                'snapshot_lines': filter_result.snapshot.lines,
                'snapshot_count': filter_result.snapshot.count,
-               'instance_lines': filter_result.instance.lines.split('\n')}}) }}
+               'instance_lines': filter_result.instance.lines.split('\n'),
+               'entries': filter_result.entries}}) }}
       vars:
         filter_result: >-
           {{ {'walk': record_input.raw.files, 'walk_excluded': '^$', 'extra': [], 'metadata': [],
@@ -24,7 +25,7 @@
                  'snapshot': {'paths': none, 'volatile_directories': item.volatile_directories,
                               'volatile_contents': item.instance.volatile_contents,
                               'volatile_times': item.instance.volatile_times},
-                 'instance': item.instance}) }}
+                 'instance': item.instance | combine({'declared_times': 'masked'})}) }}
       loop: "{{ record_input.cases }}"
       loop_control:
         label: "{{ item.name }}"

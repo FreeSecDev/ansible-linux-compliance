@@ -406,12 +406,13 @@ the failure of a task inside the role.
 the evidence directory are part of it. On a mismatch the assertion prints up to 20 differing entries.
 `/usr` (`contract_snapshot_metadata_paths`) is listed without reading content (FREES-180), by the module
 `freesecdev.linux_compliance.tree_info`, which lists every entry below it as `find` would and fails on any
-directory or entry that it cannot read: every write of a file
-updates its mtime and ctime, and no process can set a ctime back without setting the clock of the instance back, so
-size, mtime and ctime catch a change of content there; the files in the directory of a path that a topic declares
-below `/usr` still get their SHA-256, because the whole-instance record does not count their times (see
-[what each record guarantees](#what-each-record-guarantees)); a checksum pass there that stops early fails the
-record. The lines are built by the filter `freesecdev.linux_compliance.lifecycle_record` (`plugins/filter`), in typed
+directory or entry that it cannot read. A write through the file system updates the mtime and ctime of the file,
+and the ctime cannot be set back through the file system; so size, mtime and ctime catch a change of content there,
+except for the writes that bypass or outrun those times, listed under
+[what each record guarantees](#what-each-record-guarantees). The files in the directory of a path that a topic
+declares below `/usr` still get their SHA-256 from `stat`, whatever their mode, as long as root can read them; a
+declared file there that root cannot read fails the record, and so does a listing of such a directory that stops
+early. A directory that does not exist yet holds no file to check and is left out. The lines are built by the filter `freesecdev.linux_compliance.lifecycle_record` (`plugins/filter`), in typed
 Python, byte for byte as the Jinja templates built them before, because templating the 100,000 entries of a virtual
 machine took up to half a minute per record. It reads the `find` entries as ansible-core stores them
 ([ADR 0031](adr/0031-fast-records-for-the-lifecycle-harness.md)), which takes about a second;
@@ -597,7 +598,7 @@ Only these differences are allowed, each listed in `shared/vars/lifecycle.yml`:
 
 | Difference | Why |
 |---|---|
-| mtime and ctime of the declared files and of their parent directories | changing a mode changes the ctime, and creating or removing a drop-in changes the times of its directory; everything else about these entries still counts, and the declared state compares the declared files exactly |
+| the ctime of a declared regular file, both times of a declared file that its topic rewrites and of any other declared entry, and both times of their parent directories | changing a mode or owner changes the ctime, rewriting content changes the mtime, and creating or removing a drop-in changes the times of its directory; the mtime of a declared regular file that is not rewritten still counts, as does everything else about these entries, and the declared state compares the declared files exactly |
 | the inode of a declared file with `rewritten: true` | rewriting a file's content (`copy`, `lineinfile`, `template`) replaces it through a new inode; its type, mode, uid, gid, size and SHA-256 still count, so the restored content must be byte for byte the original |
 | `/var/lib/freesecdev`, `/var/lib/freesecdev/linux_compliance` and its `state.json` | the ledger, compared entry by entry instead; any other file in that directory counts |
 | `/var/lib/freesecdev/linux_compliance/evidence` and everything below it | the evidence and output of the real scans of the cycle |
@@ -623,7 +624,7 @@ is the same moment of the instance, not a second look at it:
 | Record | Taken | Compared with | A difference means |
 |---|---|---|---|
 | Whole instance before any cycle | at the start of the topic | the whole instance after every cycle | the topic left something anywhere |
-| Whole instance before a cycle | its own walk, or the kept record (below) | the whole instance after the cleanup | the cycle left something anywhere |
+| Whole instance before a cycle | its own walk, or for the first cycle the record before any cycle (below) | the whole instance after the cleanup | the cycle left something anywhere |
 | No-change snapshot before check mode | the walk of the record above, limited to the watched paths | a snapshot after check mode | check mode with the topic on changed a watched path |
 | No-change snapshot of the applied topic | its own walk | snapshots after the second apply and after the check-mode cleanup | the second apply or the check-mode cleanup changed a watched path |
 | No-change snapshot of the switched-off topic | the walk of the cleanup record, or its own walk after a real scan | a snapshot after the second run with the topic off | that run changed a watched path |
@@ -634,23 +635,28 @@ What each record sees of a file:
 | Where | Content | Everything else |
 |---|---|---|
 | `/etc`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib` (the snapshot: `/var/lib/dpkg`, `rpm`, `linux_compliance` and `freesecdev`) | SHA-256 of every regular file that root can read, and size, mtime and ctime | path, type, mode, uid, gid, inode (whole instance), with the listed exceptions |
-| `/usr` | size, mtime and ctime; the SHA-256 of the files in the directory of a declared path | as above |
+| `/usr` | size, mtime and ctime; the SHA-256 of the files in the directory of a declared path that root can read, whatever their mode (a declared one that root cannot read fails the record) | as above |
 
-So a change of content of the same size is caught everywhere: in a declared file through its SHA-256, because the
-whole-instance record does not count the times of declared files, and in any other file also through its times. A
-change of content below `/usr` that kept the size, mtime and ctime of the file would need the clock of the instance
-set back or a write to the block device; neither the collection nor the harness does that, and the scenarios own
-their instances. The self-checks prove it: `shared/vars/lifecycle.yml` has synthetic cases for a declared file below
+So a change of content of the same size is caught everywhere: in a declared file through its SHA-256, and for one
+that is not rewritten also through its mtime, and in any other file also through its times. Below `/usr`, a change
+of content keeps the size, mtime and ctime of a file only if it sets the clock of the instance back to the exact
+earlier value, writes the block device, uses invisible I/O of XFS (root with `CAP_SYS_ADMIN`), falls within one tick
+of the coarse file system clock after an earlier write, or writes a page of a shared `mmap` that is already dirty
+before it is written back. The collection, its modules and `dpkg` or `rpm` do none of that: they write through a
+temporary file and a rename, which gives a new inode and ctime. The scenarios own their instances.
+The self-checks prove it: `shared/vars/lifecycle.yml` has synthetic cases for a declared file below
 `/etc` and below `/usr` left with other content of the same size and for a static file below `/usr` changed in place
 (only its ctime differs), and `shared/tasks/lifecycle_record_selfcheck.yml` rewrites, on the Docker instance, a
 declared file below `/etc` and one below `/usr` with content of the same size, with its times and inode not counted,
 and refuses unless exactly that file differs.
 
-A cycle keeps the last record of the whole instance instead of taking its own when nothing has written since it: the
-record before the first cycle when the pre-state adds or changes no file, and the record after the cleanup of the
-previous cycle when neither pre-state touches a file and no real scan ran after it. The cleanup is then compared with
-the kept record. A change made between the kept record and the cycle is therefore caught by the comparison after the
-cleanup, one cycle earlier than without the reuse, never later: `lifecycle_record_selfcheck.yml` adds a file and
+The first cycle of a topic keeps the record of the whole instance taken before any cycle instead of taking its own,
+when its pre-state has only keys that do not write (`lifecycle_pre_state_reading_keys` in `shared/vars/lifecycle.yml`;
+`files` writes, and a unit test requires every key of the declaration format to be classified). Between the two
+moments only reads and `set_fact` run, so the kept record is the instance at the start of the cycle. Later cycles take
+their own record: the second run with the topic off of the previous cycle could write outside the watched paths, and
+a cycle that undid that write would then compare equal to a record kept from before it. The cleanup of the first
+cycle is compared with the kept record, so a change made between the two moments is caught by that comparison: `lifecycle_record_selfcheck.yml` adds a file and
 rewrites a declared one after keeping a record and refuses unless the next record differs from the kept one in
 exactly those two, and the unit tests of the filter check the same with synthetic walks.
 

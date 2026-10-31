@@ -20,9 +20,15 @@
       vars:
         audit_published: "{{ linux_compliance_audited | default({}) }}"
 
-    - name: Audit | Fail on everything except a scanner timeout of this audit
+    - name: Audit | Fail on everything except a scanner timeout of this audit, with the scanner's own reason
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('The audit role failed.') }}"
+        msg: >-
+          {{ ansible_failed_result.msg | default('The audit role failed.') }} Scanner error:
+          {{ (audit_published.scan_run | default({})).error_message | default('none reported by the scanner', true)
+             if audit_published.run_id | default('none') != audit_previous_run_id
+             else 'none, since this audit published no result' }}
+      vars:
+        audit_published: "{{ linux_compliance_audited | default({}) }}"
       when: not audit_timed_out | bool
 
     - name: Audit | Record the timed-out scan

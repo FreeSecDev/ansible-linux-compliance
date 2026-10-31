@@ -160,32 +160,69 @@
          | select('match', '^(' ~ (find_metadata_paths | map('regex_escape') | join('|')) ~ ')(/|$)') | list
          if find_metadata_paths | default([]) | length > 0 else [] }}
 
-- name: Find with checksums | Take the checksum of every file of those directories that its owner may read
+- name: Find with checksums | Look up the watched directories below those paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: false
+  loop: "{{ find_metadata_watched }}"
+  register: find_metadata_watched_stat
+
+- name: Find with checksums | Keep the watched directories that exist, since a missing one holds no file to check
+  ansible.builtin.set_fact:
+    find_metadata_existing: >-
+      {{ find_metadata_watched_stat.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir')
+         | map(attribute='item') | list }}
+
+- name: Find with checksums | List the files of the watched directories below those paths
   ansible.builtin.find:
-    paths: "{{ find_metadata_watched }}"
+    paths: "{{ find_metadata_existing }}"
     file_type: file
     recurse: false
     hidden: true
     follow: false
-    mode: "0400"
-    exact_mode: false
-    get_checksum: true
-    checksum_algorithm: "{{ find_checksum_algorithm }}"
-  register: find_metadata_summed
-  when: find_metadata_watched | length > 0
+    get_checksum: false
+  register: find_metadata_files
+  when: find_metadata_existing | length > 0
 
-- name: Find with checksums | Refuse checksums of the watched directories below those paths that stopped early
+- name: Find with checksums | Refuse a listing of the watched directories below those paths that stopped early
   ansible.builtin.assert:
     that:
-      - find_metadata_summed.skipped_paths | default({}) | length == 0
+      - find_metadata_files.skipped_paths | default({}) | length == 0
     fail_msg: >-
-      The checksums of {{ find_metadata_watched }} stopped early in
-      {{ find_metadata_summed.skipped_paths | default({}) }}, so a
-      changed file there could go unseen. The listing itself fails on any entry that it cannot read.
+      The files of {{ find_metadata_existing }} could not all be listed:
+      {{ find_metadata_files.skipped_paths | default({}) }}, so a changed file there could go unseen.
     quiet: true
+
+- name: Find with checksums | Take the checksum of every file of those directories that root can read, whatever its mode
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: "{{ find_checksum_algorithm }}"
+    get_mime: false
+    get_attributes: false
+  loop: "{{ find_metadata_files.files | default([]) | map(attribute='path') | list }}"
+  register: find_metadata_summed
+
+- name: Find with checksums | Refuse a declared file below those paths whose content root cannot read
+  ansible.builtin.assert:
+    that:
+      - find_metadata_unread | length == 0
+    fail_msg: >-
+      Root cannot read {{ find_metadata_unread }}, which a topic declares below {{ find_metadata_paths }}. The
+      whole-instance record does not count the ctime of a declared file and lists these paths without content, so a
+      change of its content could go unseen; the harness needs a checksum of it.
+    quiet: true
+  vars:
+    find_metadata_unread: >-
+      {{ find_metadata_summed.results | default([]) | selectattr('item', 'in', find_declared_paths | default([]))
+         | rejectattr('stat.checksum', 'defined') | map(attribute='item') | list }}
 
 - name: Find with checksums | Keep the checksums of the watched files below those paths
   ansible.builtin.set_fact:
     find_metadata_sums: >-
-      {{ dict(find_metadata_summed.files | default([]) | map(attribute='path')
-              | zip(find_metadata_summed.files | default([]) | map(attribute='checksum'))) }}
+      {{ dict(find_metadata_summed.results | default([]) | selectattr('stat.checksum', 'defined')
+              | map(attribute='item')
+              | zip(find_metadata_summed.results | default([]) | selectattr('stat.checksum', 'defined')
+                    | map(attribute='stat.checksum'))) }}

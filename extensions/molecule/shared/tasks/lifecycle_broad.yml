@@ -7,6 +7,7 @@
     find_metadata_paths: "{{ lifecycle_broad_paths | select('in', contract_snapshot_metadata_paths) | list }}"
     find_checksum_algorithm: sha256
     find_watched_directories: "{{ lifecycle_watched_directories }}"
+    find_declared_paths: "{{ lifecycle_items.files | default([]) | map(attribute='path') | list }}"
 
 - name: Lifecycle broad | Read every kernel parameter that the instance may read
   ansible.builtin.find:
@@ -39,7 +40,7 @@
 
 - name: Lifecycle broad | Normalise the instance state
   ansible.builtin.include_tasks:
-    file: lifecycle_broad_lines.yml
+    file: lifecycle_broad_record.yml
   vars:
     lifecycle_broad_declared: "{{ lifecycle_items.files | map(attribute='path') | list }}"
     lifecycle_broad_rewritten: "{{ lifecycle_rewritten | default([]) }}"
