@@ -1,0 +1,179 @@
+---
+- name: Login defaults | Refuse to run outside the dispatcher or without the opt-in
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - __linux_compliance_remediate_family is defined
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name == 'login_defs'
+      - >-
+        __linux_compliance_remediate_family ==
+        (__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', 'login_defs') | list | first | default({}))
+    fail_msg: >-
+      The login_defs family file runs only from the remediate dispatcher with
+      linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Login defaults | Resolve the value that the profile or the rule requires for every rule to apply
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_values: >-
+      {%- set values = {} -%}
+      {%- for rule in __linux_compliance_remediate_family.apply -%}
+      {%- set found = rule.parameters.profile_values | default([])
+            | selectattr('content_sha256', 'equalto', linux_compliance_discovered.content_sha256)
+            | selectattr('profiles', 'contains', linux_compliance_remediate_profile)
+            | map(attribute='value') | map('join', '') | list -%}
+      {%- set _ = values.update({rule.rule_id: (found | first | default(none))
+            if rule.parameters.value_id is defined else rule.parameters.value | default(none)}) -%}
+      {%- endfor -%}
+      {{ values }}
+    __linux_compliance_remediate_ld_value_patterns:
+      at_most: "{{ __linux_compliance_remediate_login_defs_number_pattern }}"
+      at_least: "{{ __linux_compliance_remediate_login_defs_number_pattern }}"
+      umask: "{{ __linux_compliance_remediate_login_defs_umask_pattern }}"
+      equal: "{{ __linux_compliance_remediate_login_defs_word_pattern }}"
+  tags:
+    - always
+
+- name: Login defaults | Refuse a malformed rule or a missing profile value before anything changes
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_ld_rule.parameters.setting | default('') is string
+      - >-
+        __linux_compliance_remediate_ld_rule.parameters.setting | default('')
+        is match(__linux_compliance_remediate_login_defs_setting_pattern)
+      - >-
+        __linux_compliance_remediate_ld_rule.parameters.comparison | default('')
+        in __linux_compliance_remediate_ld_value_patterns
+      - >-
+        __linux_compliance_remediate_ld_rule not in __linux_compliance_remediate_family.apply
+        or (__linux_compliance_remediate_ld_values[__linux_compliance_remediate_ld_rule.rule_id] is string
+            and __linux_compliance_remediate_ld_values[__linux_compliance_remediate_ld_rule.rule_id]
+                is match(__linux_compliance_remediate_ld_value_patterns
+                         [__linux_compliance_remediate_ld_rule.parameters.comparison]))
+    fail_msg: >-
+      {{ __linux_compliance_remediate_ld_rule.rule_id }} cannot be written: it needs a login.defs setting name in
+      upper case, a comparison of {{ __linux_compliance_remediate_ld_value_patterns | list }} and, to be applied, the
+      value {{ __linux_compliance_remediate_ld_rule.parameters.value_id | default('of the rule') }} that the profile
+      {{ linux_compliance_remediate_profile }} gives it in the content
+      {{ linux_compliance_discovered.content_sha256 | default('') }}, in the form of its comparison, but the catalogue
+      holds {{ __linux_compliance_remediate_ld_values[__linux_compliance_remediate_ld_rule.rule_id] | default('') }}.
+      The values are generated from the pinned content (ADR 0021, ADR 0024); no login.defs setting was changed.
+    quiet: true
+  loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_ld_rule
+    label: "{{ __linux_compliance_remediate_ld_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Login defaults | Inspect the drop-in directory that libeconf builds of shadow-utils read, without a link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_login_defs_directory }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ld_directory
+  tags:
+    - always
+
+- name: Login defaults | List the regular drop-ins of the directory, hidden ones included, as the content reads them
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_login_defs_directory }}"
+    patterns: "*.defs"
+    file_type: file
+    follow: false
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_ld_dropins
+  when: __linux_compliance_remediate_ld_directory.stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Login defaults | List the drop-ins of the directory that are symbolic links
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_login_defs_directory }}"
+    patterns: "*.defs"
+    file_type: link
+    follow: false
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_ld_links
+  when: __linux_compliance_remediate_ld_directory.stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Login defaults | Inspect the target of every drop-in that is a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_ld_link }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: "{{ __linux_compliance_remediate_ld_links.files | default([]) | map(attribute='path') | sort }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_ld_link
+  register: __linux_compliance_remediate_ld_link_targets
+  tags:
+    - always
+
+- name: Login defaults | Read every drop-in, links to regular files included
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_ld_source }}"
+  loop: >-
+    {{ (__linux_compliance_remediate_ld_dropins.files | default([]) | map(attribute='path') | sort)
+       + (__linux_compliance_remediate_ld_link_targets.results | default([])
+          | selectattr('stat.isreg', 'defined') | selectattr('stat.isreg')
+          | map(attribute='__linux_compliance_remediate_ld_link') | list) }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_ld_source
+  register: __linux_compliance_remediate_ld_read
+  tags:
+    - always
+
+- name: Login defaults | Keep the text of every drop-in
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_dropin_texts: >-
+      {{ dict(__linux_compliance_remediate_ld_read.results | default([])
+              | map(attribute='__linux_compliance_remediate_ld_source')
+              | zip(__linux_compliance_remediate_ld_read.results | default([]) | map(attribute='content')
+                    | map('b64decode'))) }}
+    __linux_compliance_remediate_ld_not_directory: >-
+      {{ (__linux_compliance_remediate_ld_directory.stat.exists | default(false))
+         and not (__linux_compliance_remediate_ld_directory.stat.isdir | default(false)) }}
+  tags:
+    - always
+
+- name: Login defaults | Restore the settings of rules no longer effective
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/login_defs_cleanup.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.cleanup }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always
+
+- name: Login defaults | Set the settings of the effective rules
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/login_defs_apply.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_family.apply }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_rule
+    label: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  tags:
+    - always

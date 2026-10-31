@@ -64,6 +64,7 @@ def test_the_promoted_rule_is_a_native_disruptive_rule_of_its_family(tmp_path: P
         "ipv6_parameters",
         "ssh",
         "pwquality",
+        "login_defs",
         "sudo",
     ]
 

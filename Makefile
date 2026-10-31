@@ -522,7 +522,7 @@ test-coverage: require-uv collection-link
 
 test-content-golden: require-uv collection-link content
 	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py tests/unit/tools/test_content_golden_ssh.py \
-		tests/unit/tools/test_content_golden_sysctl.py --no-cov
+		tests/unit/tools/test_content_golden_login_defs.py tests/unit/tools/test_content_golden_sysctl.py --no-cov
 	$(GENERATE_CATALOGUE) --check
 	$(GENERATE_STIG_MAPPING) --check
 
@@ -661,6 +661,7 @@ test-remediate-check: require-uv collection-link test-remediate-disruptive
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --skip-tags file_permissions tests/playbooks/remediate-check-mode.yml
 	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-native-check.yml
+	$(REMEDIATE_CHECK) --diff tests/playbooks/remediate-login-defs-check.yml
 	$(REMEDIATE_CHECK) --skip-tags always tests/playbooks/remediate-skip-always.yml
 
 ROLE_GUARDS_DIR := build/test-role-guards

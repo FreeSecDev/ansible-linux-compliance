@@ -24,6 +24,7 @@ NATIVE_FAMILIES = (
     "ipv6_parameters",
     "ssh",
     "pwquality",
+    "login_defs",
     "sudo",
 )
 

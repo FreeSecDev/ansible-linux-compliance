@@ -728,6 +728,34 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
+`login_defs` (FREES-185) has four groups, all on both platforms. In `changes`,
+`shared/tasks/lifecycle_login_defs_regressions.yml` applies the topic and checks the SHA-256 of the whole
+`/etc/login.defs` against the as-built text with the two lines replaced in place; it records every entry as if another
+method had written it and checks `method_changed` at apply and at cleanup with every entry kept and the file
+untouched; it makes `PASS_MAX_DAYS` stricter by hand (`modified_since_apply`, the change kept, the umask restored) and
+puts the written line back (`restored`, the file byte for byte as built); it removes the `UMASK` line, which existed
+before, by hand (`modified_since_apply`) and checks that the recorded line, not a default, is written back once the
+collection's line is there again; and from a file without `PASS_MAX_DAYS` it checks that the added line is recorded as
+absent before and that removing it by hand is `restored` without a write (FREES-173). In `refusals`,
+`shared/tasks/lifecycle_login_defs_refusals.yml` runs each of these files through an apply and a cleanup that must
+restore it byte for byte: a second `PASS_MAX_DAYS` line and a second one in lower case (`duplicate_setting`, nothing
+written), a commented default (ignored), a lower-case name with a four-digit umask (`PASS_MAX_DAYS 365` and `UMASK 077`
+written, the lower-case line and `UMASK 0077` restored), a stricter maximum age and umask with a trailing comment
+(`PASS_MAX_DAYS 30` and `UMASK 077` written). In `values`, `shared/tasks/lifecycle_login_defs_values.yml` does the
+same for zero-padded numbers (`090` becomes `90`, `010` becomes `10`, `0365`
+becomes `245`), the forms refused as `unreadable_value` (`"30"`, `+30`, `1234567` and `0x10000` under a minimum,
+`00077`, `"077"`, `0x3f`, nothing written) and those that take the profile's value (`-1`, an empty value, `9x`,
+`1234567` under a maximum, `0`, `0x1e`); then a drop-in
+`/etc/login.defs.d/50-site.defs` that sets the maximum age and a symbolic link in place of `/etc/login.defs.d` (both
+ignored: the rules apply and clean up as usual), a symbolic link in place of `/etc/login.defs` (`not_regular_file`,
+nothing written through it) and a missing `/etc/login.defs` (`notapplicable`, nothing created). In `profiles`,
+`shared/tasks/lifecycle_login_defs_other_profiles.yml` applies in check mode and for real, repeats and cleans up the
+rules that the CIS level 1 profiles of the lifecycle do not select, with the STIG profile of each platform (on Rocky
+Linux from `CREATE_HOME no`, so that `accounts_have_homedir_login_defs` changes something) and the RHEL 9 ANSSI
+enhanced profile, and checks every written line and the byte-for-byte restore; on Rocky Linux it also checks that
+`CREATE_HOME`, whose check reads the drop-ins, is `overridden` by a drop-in that sets it and `not_directory` next to a
+linked drop-in directory.
+
 ### CI legs
 
 With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
@@ -772,12 +800,12 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
-`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). The kernel parameter topics
-(FREES-107) add 12 cycle legs and the two `ipv4_parameters` `changes` legs to the Docker matrix, and the
-`ipv4_parameters` `runtime` group, which requires libvirt, a leg per platform to the libvirt matrix.
-`tests/unit/tools/test_molecule_matrix.py` checks that every declared group gets its legs with the drivers it
-requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
+modes of the topic, so 24 cycle legs and 19 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
+`sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles` on both platforms, `sudo` `files` on
+Ubuntu). The kernel parameter topics (FREES-107) add 12 cycle legs and the two `ipv4_parameters` `changes` legs to
+the Docker matrix, and the `ipv4_parameters` `runtime` group, which requires libvirt, a leg per platform to the
+libvirt matrix. `tests/unit/tools/test_molecule_matrix.py` checks that every declared group gets its legs with the
+drivers it requires, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
 
@@ -877,7 +905,7 @@ pre_states:
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, the `content` of a declared file that the pre-state adds as root and removes after the cycle, or `lines`: a list of `regexp` and `line` that `lineinfile` sets in a declared file whose `rewritten` is true, as an administrator would, and whose content the harness puts back after the cycle; `content` and `lines` exclude each other), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes), optional `platforms` and optional `requires` (the drivers that run it, `docker` when left out; a group that requires libvirt runs only where a libvirt cycle of its topic runs); each group gets one CI leg per platform and driver, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |

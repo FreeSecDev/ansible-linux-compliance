@@ -173,11 +173,12 @@ through subsystem tags.
 | `linux_compliance_pwquality_enabled` | `pwquality` | `pam` | yes | `true` | 19 | 14 | 5 | 0 |
 | `linux_compliance_pwhistory_enabled` | `pwhistory` | `pam` | yes | `true` | 7 | 0 | 7 | 2 |
 | `linux_compliance_faillock_enabled` | `faillock` | `pam` | yes | `true` | 14 | 0 | 14 | 0 |
-| `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | umbrella | yes | `true` | 88 | 0 | 88 | 2 |
-| `linux_compliance_password_aging_enabled` | `password_aging` | `accounts` | yes | `true` | 9 | 0 | 9 | 0 |
+| `linux_compliance_accounts_enabled` | `password_aging`, `login_defs`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | umbrella | yes | `true` | 88 | 7 | 81 | 3 |
+| `linux_compliance_password_aging_enabled` | `password_aging` | `accounts` | yes | `true` | 5 | 0 | 5 | 4 |
+| `linux_compliance_login_defs_enabled` | `login_defs` | `accounts` | yes | `true` | 7 | 7 | 0 | 1 |
 | `linux_compliance_root_access_enabled` | `root_access` | `accounts` | yes | `true` | 19 | 0 | 19 | 0 |
-| `linux_compliance_umask_enabled` | `umask` | `accounts` | yes | `true` | 6 | 0 | 6 | 0 |
-| `linux_compliance_user_sessions_enabled` | `user_sessions` | `accounts` | yes | `true` | 14 | 0 | 14 | 0 |
+| `linux_compliance_umask_enabled` | `umask` | `accounts` | yes | `true` | 5 | 0 | 5 | 1 |
+| `linux_compliance_user_sessions_enabled` | `user_sessions` | `accounts` | yes | `true` | 12 | 0 | 12 | 2 |
 | `linux_compliance_smartcard_enabled` | `smartcard` | `accounts` | yes | `true` | 9 | 0 | 9 | 2 |
 | `linux_compliance_console_access_enabled` | `console_access` | `accounts` | yes | `true` | 7 | 0 | 7 | 0 |
 | `linux_compliance_user_accounts_enabled` | `user_accounts` | `accounts` | yes | `true` | 24 | 0 | 24 | 0 |
@@ -1447,15 +1448,40 @@ families through their subsystem tags:
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_accounts_maximum_age_login_defs_enabled` | `accounts_maximum_age_login_defs` | `audit_only` |
-| `linux_compliance_rule_accounts_minimum_age_login_defs_enabled` | `accounts_minimum_age_login_defs` | `audit_only` |
-| `linux_compliance_rule_accounts_password_minlen_login_defs_enabled` | `accounts_password_minlen_login_defs` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_max_life_existing_enabled` | `accounts_password_set_max_life_existing` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_max_life_root_enabled` | `accounts_password_set_max_life_root` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_min_life_existing_enabled` | `accounts_password_set_min_life_existing` | `audit_only` |
 | `linux_compliance_rule_accounts_password_set_warn_age_existing_enabled` | `accounts_password_set_warn_age_existing` | `audit_only` |
-| `linux_compliance_rule_accounts_password_warn_age_login_defs_enabled` | `accounts_password_warn_age_login_defs` | `audit_only` |
 | `linux_compliance_rule_accounts_set_post_pw_existing_enabled` | `accounts_set_post_pw_existing` | `audit_only` |
+
+`linux_compliance_password_aging_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_accounts_maximum_age_login_defs_enabled` | `accounts_maximum_age_login_defs` | `login_defs` |
+| `linux_compliance_rule_accounts_minimum_age_login_defs_enabled` | `accounts_minimum_age_login_defs` | `login_defs` |
+| `linux_compliance_rule_accounts_password_minlen_login_defs_enabled` | `accounts_password_minlen_login_defs` | `login_defs` |
+| `linux_compliance_rule_accounts_password_warn_age_login_defs_enabled` | `accounts_password_warn_age_login_defs` | `login_defs` |
+
+### `login_defs`
+
+| Variable | Rule | Strategy |
+|---|---|---|
+| `linux_compliance_rule_accounts_have_homedir_login_defs_enabled` | `accounts_have_homedir_login_defs` | `recorded_value` |
+| `linux_compliance_rule_accounts_logon_fail_delay_enabled` | `accounts_logon_fail_delay` | `recorded_value` |
+| `linux_compliance_rule_accounts_maximum_age_login_defs_enabled` | `accounts_maximum_age_login_defs` | `recorded_value` |
+| `linux_compliance_rule_accounts_minimum_age_login_defs_enabled` | `accounts_minimum_age_login_defs` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_minlen_login_defs_enabled` | `accounts_password_minlen_login_defs` | `recorded_value` |
+| `linux_compliance_rule_accounts_password_warn_age_login_defs_enabled` | `accounts_password_warn_age_login_defs` | `recorded_value` |
+| `linux_compliance_rule_accounts_umask_etc_login_defs_enabled` | `accounts_umask_etc_login_defs` | `recorded_value` |
+
+`linux_compliance_login_defs_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_set_password_hashing_algorithm_logindefs_enabled` | `set_password_hashing_algorithm_logindefs` | `pam` |
 
 ### `root_access`
 
@@ -1487,17 +1513,21 @@ families through their subsystem tags:
 |---|---|---|
 | `linux_compliance_rule_accounts_umask_etc_bashrc_enabled` | `accounts_umask_etc_bashrc` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_etc_csh_cshrc_enabled` | `accounts_umask_etc_csh_cshrc` | `audit_only` |
-| `linux_compliance_rule_accounts_umask_etc_login_defs_enabled` | `accounts_umask_etc_login_defs` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_etc_profile_enabled` | `accounts_umask_etc_profile` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_interactive_users_enabled` | `accounts_umask_interactive_users` | `audit_only` |
 | `linux_compliance_rule_accounts_umask_root_enabled` | `accounts_umask_root` | `audit_only` |
+
+`linux_compliance_umask_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_accounts_umask_etc_login_defs_enabled` | `accounts_umask_etc_login_defs` | `login_defs` |
 
 ### `user_sessions`
 
 | Variable | Rule | Strategy |
 |---|---|---|
-| `linux_compliance_rule_accounts_have_homedir_login_defs_enabled` | `accounts_have_homedir_login_defs` | `audit_only` |
-| `linux_compliance_rule_accounts_logon_fail_delay_enabled` | `accounts_logon_fail_delay` | `audit_only` |
 | `linux_compliance_rule_accounts_max_concurrent_login_sessions_enabled` | `accounts_max_concurrent_login_sessions` | `audit_only` |
 | `linux_compliance_rule_accounts_polyinstantiated_tmp_enabled` | `accounts_polyinstantiated_tmp` | `audit_only` |
 | `linux_compliance_rule_accounts_polyinstantiated_var_tmp_enabled` | `accounts_polyinstantiated_var_tmp` | `audit_only` |
@@ -1510,6 +1540,14 @@ families through their subsystem tags:
 | `linux_compliance_rule_accounts_users_home_files_groupownership_enabled` | `accounts_users_home_files_groupownership` | `audit_only` |
 | `linux_compliance_rule_accounts_users_home_files_ownership_enabled` | `accounts_users_home_files_ownership` | `audit_only` |
 | `linux_compliance_rule_accounts_users_home_files_permissions_enabled` | `accounts_users_home_files_permissions` | `audit_only` |
+
+`linux_compliance_user_sessions_enabled: false` also switches off these rules of other
+families through their subsystem tags:
+
+| Variable | Rule | Family |
+|---|---|---|
+| `linux_compliance_rule_accounts_have_homedir_login_defs_enabled` | `accounts_have_homedir_login_defs` | `login_defs` |
+| `linux_compliance_rule_accounts_logon_fail_delay_enabled` | `accounts_logon_fail_delay` | `login_defs` |
 
 ### `smartcard`
 

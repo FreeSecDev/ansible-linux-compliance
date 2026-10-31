@@ -50,6 +50,7 @@ argument_specs:
           - ipv4_parameters
           - ipv6_parameters
           - kernel_modules
+          - login_defs
           - mail
           - mandatory_access_control
           - mount_options
@@ -472,10 +473,10 @@ argument_specs:
         type: bool
         default: true
         description:
-          - "Umbrella toggle (ADR 0011); false switches off password_aging, root_access, umask,"
-          - "user_sessions, smartcard, console_access, user_accounts."
+          - "Umbrella toggle (ADR 0011); false switches off password_aging, login_defs, root_access,"
+          - "umask, user_sessions, smartcard, console_access, user_accounts."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 88, native: 0, tagged: 2. Generated; see docs/remediation-variables.md."
+          - "Rules: 88, native: 7, tagged: 3. Generated; see docs/remediation-variables.md."
       linux_compliance_password_aging_enabled:
         type: bool
         default: true
@@ -483,7 +484,15 @@ argument_specs:
           - "Topic toggle of the password_aging family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_accounts_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 9, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 5, native: 0, tagged: 4. Generated; see docs/remediation-variables.md."
+      linux_compliance_login_defs_enabled:
+        type: bool
+        default: true
+        description:
+          - "Topic toggle of the login_defs family (ADR 0011); false switches its rules off."
+          - "Only narrows its umbrella linux_compliance_accounts_enabled."
+          - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
+          - "Rules: 7, native: 7, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_root_access_enabled:
         type: bool
         default: true
@@ -499,7 +508,7 @@ argument_specs:
           - "Topic toggle of the umask family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_accounts_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 6, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 5, native: 0, tagged: 1. Generated; see docs/remediation-variables.md."
       linux_compliance_user_sessions_enabled:
         type: bool
         default: true
@@ -507,7 +516,7 @@ argument_specs:
           - "Topic toggle of the user_sessions family (ADR 0011); false switches its rules off."
           - "Only narrows its umbrella linux_compliance_accounts_enabled."
           - "Disruptive: needs linux_compliance_remediate_allow_disruptive."
-          - "Rules: 14, native: 0. Generated; see docs/remediation-variables.md."
+          - "Rules: 12, native: 0, tagged: 2. Generated; see docs/remediation-variables.md."
       linux_compliance_smartcard_enabled:
         type: bool
         default: true

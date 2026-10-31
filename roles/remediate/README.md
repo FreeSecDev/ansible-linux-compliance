@@ -8,7 +8,7 @@ opt-in. The full guide, including the family file contract, is [docs/remediation
 
 ## Status
 
-Dispatcher and safety model implemented (FREES-52). 139 rules have a native remediation: the reference rule
+Dispatcher and safety model implemented (FREES-52). 146 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (`file_permissions`), 15 rules of `banners` (the text,
 mode, owner and group of `/etc/issue`, `/etc/issue.net` and `/etc/motd`), 14 rules of `pwquality` (one line per
 setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on RHEL, where each content checks),
@@ -16,7 +16,9 @@ setting in `/etc/security/pwquality.conf` on Ubuntu, one drop-in per setting on 
 sshd reads first, validated with `sshd -t` through the module `freesecdev.linux_compliance.sshd_validate` before it is
 written; a conflicting later line of `/etc/ssh/sshd_config` or `50-redhat.conf` is set to the rule's value in place and
 written back on cleanup; sshd is reloaded only where it runs) and 10 rules of `sudo` (one `visudo`-checked drop-in
-per setting below `/etc/sudoers.d`, and the mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d`) and 65
+per setting below `/etc/sudoers.d`, and the mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d`), 7 rules
+of `login_defs` (one recorded line per setting in `/etc/login.defs`: `PASS_MAX_DAYS`, `PASS_MIN_DAYS`,
+`PASS_WARN_AGE`, `PASS_MIN_LEN`, `UMASK`, `FAIL_DELAY`, `CREATE_HOME`) and 65
 kernel parameter rules of `sysctl` (20), `ipv4_parameters` (26) and `ipv6_parameters` (19) (one drop-in per rule,
 `/etc/sysctl.d/999-freesecdev-<rule>.conf`, which sorts after the distributions' files, and, unless
 `linux_compliance_remediate_sysctl_runtime` is `false`, the running value through the module
@@ -25,8 +27,9 @@ file in `/etc/sysctl.d` is set to the rule's value and written back on cleanup),
 values of the selected profile ([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md),
 [ADR 0022](../../docs/adr/0022-native-sudo-drop-ins.md),
 [ADR 0023](../../docs/adr/0023-native-ssh-server-configuration.md),
+[ADR 0024](../../docs/adr/0024-native-login-defs.md),
 [ADR 0029](../../docs/adr/0029-native-kernel-parameters.md)). The catalogue `vars/rules.yml` holds
-every rule of the 25 pinned profiles, 1203 rules in 55 families, generated from the pinned content (FREES-53,
+every rule of the 25 pinned profiles, 1203 rules in 56 families, generated from the pinned content (FREES-53,
 [control families](../../docs/control-families.md)); every rule without a native remediation has the strategy
 `audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated from the
 catalogue (FREES-55). Further topics follow the [native remediation guide](../../docs/native-remediation-guide.md).
