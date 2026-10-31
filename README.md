@@ -13,6 +13,11 @@ baselines, using [OpenSCAP](https://www.open-scap.org/) and
 - Audit-only by default; remediation needs explicit opt-in, and disruptive controls need explicit allow-listing.
 - Remediation uses only native Ansible modules and this collection's typed modules. There is no shell, command,
   raw or script module anywhere ([ADR 0003](docs/adr/0003-native-module-remediation.md)).
+- Every remediation is this project's own Ansible. ComplianceAsCode and OpenSCAP remediation (their playbooks, Bash
+  fixes, `fix` elements and `oscap --remediate`) is never run, read or shipped. The scanner content is used only to
+  audit and as a reference in tests. Values come from the profile's XCCDF values through our own pinned mappings. A
+  rule without a native remediation is scan-only and is reported as `not_implemented`
+  ([ADR 0025](docs/adr/0025-own-ansible-remediation-only.md)).
 - Restricted benchmark content (such as CIS benchmark documents) is never redistributed, and coverage is never invented.
 - A host scan never proves ISO 27001, PCI DSS, NIST or NIS2 compliance on its own. Mappings are evidence only.
 

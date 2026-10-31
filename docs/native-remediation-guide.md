@@ -5,11 +5,24 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 (cleanup per family). Decisions: [ADR 0003](adr/0003-native-module-remediation.md) (native modules only),
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup, ledger),
 [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values, banners, password quality),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
+[ADR 0025](adr/0025-own-ansible-remediation-only.md) (our own Ansible only).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
 procedure. `file_permissions`, `banners`, `pwquality`, `ssh`, `sudo`
 ([ADR 0022](adr/0022-native-sudo-drop-ins.md)) and `login_defs` ([ADR 0024](adr/0024-native-login-defs.md)) are the
 worked examples.
+
+## The rule: our own Ansible, never theirs
+
+Every remediation is Ansible that you write in `roles/remediate`. Do not run, import, copy, translate or parse the
+remediation of ComplianceAsCode or OpenSCAP: not their generated playbooks or Bash fixes, not the `fix` elements of the
+datastream, not `oscap --remediate` or `generate fix`, and not any script that the scanner provides. Read the OVAL
+check to learn what the audit expects, and pin your method against it in a golden test. The OVAL is a reference and
+an audit, never a source of remediation code. Take values only from the profile's XCCDF values through
+`profile_value` or `profile_value_id` (step 3). A rule that you cannot implement natively and safely stays
+`audit_only`: it is scanned, reported as `not_implemented` and never remediated by another tool. `make lint-repo`
+refuses Python that reads `fix` elements, committed upstream remediation content and invocations of the scanner's
+remediation ([ADR 0025](adr/0025-own-ansible-remediation-only.md)).
 
 ## 1. Read what the content expects
 
@@ -17,7 +30,7 @@ Never infer a rule from its name. Fetch the pinned content (`make content`) and 
 both pinned datastreams of `content/manifest.yml`:
 
 - which profiles select it (`Profile/select`), so you know which platforms and profiles the lifecycle will run;
-- its description and its OVAL definition: the files, the patterns, `check` (`all`, `at least one`),
+- its description and its OVAL definition (never its `fix` elements): the files, the patterns, `check` (`all`, `at least one`),
   `check_existence` (does a missing file pass?), the filters (are symbolic links excluded?) and the states;
 - the `check-export` of its checks: a rule that exports a `Value` must use the profile's value (step 3);
 - its `platform` elements: `system_with_kernel` and `machine` exclude containers, `package_<name>` makes the rule
@@ -65,6 +78,14 @@ found: >-
      | selectattr('profiles', 'contains', linux_compliance_remediate_profile)
      | map(attribute='value') | map('join', '') | list }}
 ```
+
+When the check accepts a range and exports nothing (the `timestamp_timeout` check accepts any non-negative number),
+pin the full identifier of the `Value` that the profile refines instead:
+`profile_value_id: xccdf_org.ssgproject.content_value_var_sudo_timestamp_timeout`. The generator then resolves it from
+each selecting profile's `refine-value` and the `Value`'s default and selectors, and fails when a pinned datastream
+does not define it. Add a golden test that pins the identifier and the value of every profile that selects the rule
+(`test_the_pinned_sudo_timeout_value_gives_every_selecting_profile_its_value`). Never take a value from the content's
+`fix` elements; `profile_value_source` no longer exists (ADR 0025).
 
 Never hard-code a value that a profile refines, and never fall back to another profile's value. A value that the
 operator chooses (the banner text) is a role variable with the content's default, validated against the profile's
@@ -159,6 +180,6 @@ role README and add a changelog fragment.
 | `banners` | text of `/etc/issue`, `/etc/issue.net`, `/etc/motd` (CIS and STIG/CCN rules), their mode, owner and group | `recorded_value` per attribute | Text from `linux_compliance_remediate_banner_text`, validated against the profile's value; a missing file is created `0644 root:root` and removed again on cleanup |
 | `pwquality` | `dcredit`, `dictcheck`, `difok`, `enforce_for_root`, `enforcing`, `lcredit`, `maxclassrepeat`, `maxrepeat`, `maxsequence`, `minclass`, `minlen`, `ocredit`, `retry` (STIG rule), `ucredit` | `recorded_value`: one line per setting in the main file where the content checks only it (Ubuntu), one drop-in per rule where it checks the drop-ins (RHEL) | Values from the profile; the method per platform follows the content's OVAL (`main_file_benchmarks`, checked by a golden test); `duplicate_setting` and `overridden` refuse to claim a change that would not take effect |
 | `ssh` | 34 sshd keyword rules (`PermitRootLogin`, `MaxAuthTries`, `ClientAliveInterval`, `Ciphers`, `Banner` and the others) | `recorded_value`: one drop-in per rule, `00-freesecdev-<rule>.conf`, which sshd reads before every other file, and the one conflicting later line of a vendor file (`sshd_config`, `50-redhat.conf`) set to the rule's value in place | Both contents read the drop-ins and every later line (golden test); fixed values from the check, numeric and algorithm values from the profile; a conflicting later line in an administrator's drop-in or a `Match` block is `overridden`; every change validated with `sshd -t` through the `sshd_validate` module before it is written (`invalid_config`), `overridden` for an earlier setting, `not_included` without the `Include`, `crypto_policy` on RHEL; sshd reloaded only where it runs; 29 rules `audit_only` with the reasons in ADR 0023 |
-| `sudo` | `use_pty`, `logfile`, `timestamp_timeout`, `!targetpw`/`!rootpw`/`!runaspw` (STIG); mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d` (ANSSI) | `recorded_value`: one drop-in per rule below `/etc/sudoers.d` with its SHA-256, or the prior attribute and the one written | Every write is checked by `visudo` through `copy` `validate` (the one reviewed exception of the repository guard); `timestamp_timeout` comes from the content's fix (`profile_value_source: fix`); `conflicting_setting`, `not_included` and `invalid_sudoers` refuse to claim a change that would not take effect; rules that remove other people's `NOPASSWD`, `!authenticate` or user specifications stay `audit_only` |
+| `sudo` | `use_pty`, `logfile`, `timestamp_timeout`, `!targetpw`/`!rootpw`/`!runaspw` (STIG); mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d` (ANSSI) | `recorded_value`: one drop-in per rule below `/etc/sudoers.d` with its SHA-256, or the prior attribute and the one written | Every write is checked by `visudo` through `copy` `validate` (the one reviewed exception of the repository guard); `timestamp_timeout` comes from the profile through the pinned `profile_value_id`; `conflicting_setting`, `not_included` and `invalid_sudoers` refuse to claim a change that would not take effect; rules that remove other people's `NOPASSWD`, `!authenticate` or user specifications stay `audit_only` |
 | `login_defs` | `PASS_MAX_DAYS`, `PASS_MIN_DAYS`, `PASS_WARN_AGE`, `PASS_MIN_LEN`, `UMASK`, `FAIL_DELAY`, `CREATE_HOME` in `/etc/login.defs` | `recorded_value`: one line per setting, the prior line (or `null`) and the line written | A new family whose rules came from three others, which keep their toggles as subsystem tags; the strict form that both the check and shadow-utils read decides `compliant`, a stricter value is kept, and `duplicate_setting`, `overridden` (a libeconf drop-in) and symbolic links refuse; a pre-state sets an administrator's `lines` |
 | `filesystem_modules`, `protocol_modules`, `wireless_modules` | 21 `kernel_module_<module>_disabled` rules, usb-storage included | `recorded_value`: one drop-in per rule, `/etc/modprobe.d/freesecdev-<module>.conf`, with the `install <module> /bin/false` and `blacklist <module>` lines that both contents require ([ADR 0028](adr/0028-native-kernel-module-drop-ins.md)) | Three families share the umbrella's helpers (`kernel_modules_*.yml`); the family reads every file that `modprobe` reads in its order, so a site file that already disables the module is `compliant` and one read first that lets it load is `overridden`; no module is unloaded and no initramfs rebuilt; the lifecycle runs them with the profiles that select them (`profiles` in the declaration) |
