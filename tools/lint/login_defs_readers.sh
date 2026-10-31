@@ -26,4 +26,6 @@ run_reader() {
 run_reader "${ubuntu_image}" sh /src/tools/lint/login_defs_readers_shadow.sh /states /src/tools/lint >"${work}/states/ubuntu-shadow.tsv"
 run_reader "${rocky_image}" sh /src/tools/lint/login_defs_readers_shadow.sh /states /src/tools/lint >"${work}/states/rocky-shadow.tsv"
 run_reader "${rocky_image}" python3 /src/tools/lint/login_defs_readers.py econf /states >"${work}/states/rocky-econf.json"
+run_reader "${ubuntu_image}" python3 /src/tools/lint/login_defs_readers.py pam /states >"${work}/states/ubuntu-pam.json"
+run_reader "${rocky_image}" python3 /src/tools/lint/login_defs_readers.py pam /states >"${work}/states/rocky-pam.json"
 uv run --frozen python -m tools.lint.login_defs_readers merge "${work}/states" "${fixtures}/verdicts.json"

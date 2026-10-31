@@ -48,6 +48,7 @@
       - duplicate_setting
       - unreadable_value
       - long_line
+      - modified_during_apply
       - unreadable_file
   tasks:
     - name: Refuse to run outside check mode

@@ -2,10 +2,12 @@
  "readers": {
   "rocky": {
    "libeconf": "libeconf-0.4.1-5.el9.x86_64",
+   "pam": "pam-1.5.1-28.el9.x86_64",
    "shadow": "shadow-utils-4.9-16.el9.x86_64",
    "util-linux": "util-linux-2.37.4-25.el9.x86_64"
   },
   "ubuntu": {
+   "pam": "libpam0g 1.5.3-5ubuntu5.7",
    "shadow": "passwd 1:4.13+dfsg1-4ubuntu3.2"
   }
  },
@@ -17,6 +19,7 @@
     "libeconf": 1,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -24,6 +27,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -34,6 +38,7 @@
     "libeconf": 4,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -41,6 +46,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -51,6 +57,7 @@
     "libeconf": "nokey",
     "maximum": 365,
     "minimum": 0,
+    "pam": "022",
     "warning": -1
    },
    "ubuntu": {
@@ -58,6 +65,7 @@
     "home_mode": "755",
     "maximum": 365,
     "minimum": 0,
+    "pam": "022\r",
     "warning": -1
    }
   },
@@ -68,6 +76,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -75,6 +84,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -85,6 +95,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -92,6 +103,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -102,6 +114,7 @@
     "libeconf": 400,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -109,6 +122,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -119,6 +133,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -126,6 +141,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -136,6 +152,7 @@
     "libeconf": 99999,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -143,6 +160,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -153,6 +171,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -160,6 +179,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -170,6 +190,7 @@
     "libeconf": 8,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -177,6 +198,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -184,9 +206,10 @@
    "rocky": {
     "home_created": false,
     "home_mode": "755",
-    "libeconf": "null",
+    "libeconf": "crash",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -194,6 +217,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -204,6 +228,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -211,6 +236,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -221,6 +247,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 245,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -228,6 +255,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 245,
+    "pam": null,
     "warning": -1
    }
   },
@@ -238,6 +266,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -245,6 +274,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -255,6 +285,7 @@
     "libeconf": "nokey",
     "maximum": 400,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -262,6 +293,7 @@
     "home_mode": "755",
     "maximum": 400,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -272,6 +304,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0077",
     "warning": -1
    },
    "ubuntu": {
@@ -279,6 +312,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0077",
     "warning": -1
    }
   },
@@ -289,6 +323,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -296,6 +331,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -306,6 +342,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -313,6 +350,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "\"077\" ",
     "warning": -1
    }
   },
@@ -323,6 +361,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": "027",
     "warning": -1
    },
    "ubuntu": {
@@ -330,6 +369,7 @@
     "home_mode": "750",
     "maximum": 30,
     "minimum": -1,
+    "pam": "027\r",
     "warning": -1
    }
   },
@@ -340,6 +380,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -347,6 +388,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -357,6 +399,7 @@
     "libeconf": "nokey",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -364,6 +407,7 @@
     "home_mode": "755",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -374,6 +418,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -381,6 +426,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -391,6 +437,7 @@
     "libeconf": 1,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -398,6 +445,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -408,6 +456,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -415,6 +464,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -425,6 +475,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -432,6 +483,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -442,6 +494,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -449,6 +502,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -459,6 +513,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 400,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -466,6 +521,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 400,
+    "pam": null,
     "warning": -1
    }
   },
@@ -476,6 +532,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -483,6 +540,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -493,6 +551,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -500,6 +559,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -510,6 +570,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -517,7 +578,27 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
+   }
+  },
+  "1e50fe8d70cfad25eb6ba4241938e766310baeb4fba2ca2cd835977b07c9a0ce": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
    }
   },
   "1edb3d762cee4f557e6c3c445478fed249cd66c87623356b0fdb3f8c08f69dfd": {
@@ -527,6 +608,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -534,6 +616,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "1f25e3fdcf75b265c5e7340578a7f4be33bef2c4bf13ce3f7abb5de66b8f50a2": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -544,6 +646,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -551,6 +654,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -561,6 +665,7 @@
     "libeconf": 9,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -568,6 +673,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -578,6 +684,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "027",
     "warning": -1
    },
    "ubuntu": {
@@ -585,6 +692,26 @@
     "home_mode": "750",
     "maximum": -1,
     "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   }
+  },
+  "21147ad466f18b70d4e0ad35003537e9d2bfbe25d28e7b2c34f6ee20618f5202": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -595,6 +722,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -602,6 +730,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -612,6 +741,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -619,6 +749,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -629,6 +760,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -636,6 +768,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -646,6 +779,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -653,6 +787,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -663,6 +798,7 @@
     "libeconf": "nokey",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -670,6 +806,7 @@
     "home_mode": "755",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -680,6 +817,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -687,6 +825,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -697,6 +836,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -704,6 +844,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -714,6 +855,7 @@
     "libeconf": "nokey",
     "maximum": 99999,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -721,6 +863,7 @@
     "home_mode": "755",
     "maximum": 99999,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -731,6 +874,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 1
    },
    "ubuntu": {
@@ -738,6 +882,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 1
    }
   },
@@ -748,6 +893,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -755,6 +901,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -765,6 +912,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -772,6 +920,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -782,6 +931,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -789,6 +939,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -799,6 +950,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -806,6 +958,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -816,6 +969,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -823,6 +977,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -833,6 +988,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -840,6 +996,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -850,6 +1007,7 @@
     "libeconf": 0,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -857,6 +1015,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2ef394ab1e26ee21f8d283837313d8a47254f9ca255e10526ea06b6448cad101": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -867,6 +1045,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -874,6 +1053,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -884,6 +1064,7 @@
     "libeconf": 365,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -891,6 +1072,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -901,6 +1083,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -908,6 +1091,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -918,6 +1102,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -925,6 +1110,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    }
   },
@@ -935,6 +1121,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -942,6 +1129,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "33709383129f4144539ddcc905122f6cf8c1fbb361b57c77976a6fd1f2d9487d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
     "warning": -1
    }
   },
@@ -952,6 +1159,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -959,6 +1167,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -969,6 +1178,7 @@
     "libeconf": "nokey",
     "maximum": 245,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -976,6 +1186,7 @@
     "home_mode": "755",
     "maximum": 245,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -986,6 +1197,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 365,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -993,6 +1205,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 365,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "365b39d7a8ec44d51763346be18da6c6509ce5221135cf2de61393b584e71a64": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1003,6 +1235,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1010,6 +1243,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1020,6 +1254,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1027,6 +1262,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1037,6 +1273,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1044,6 +1281,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1054,6 +1292,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "277",
     "warning": -1
    },
    "ubuntu": {
@@ -1061,6 +1300,7 @@
     "home_mode": "352",
     "maximum": -1,
     "minimum": -1,
+    "pam": "277",
     "warning": -1
    }
   },
@@ -1071,6 +1311,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1078,6 +1319,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1088,6 +1330,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1095,6 +1338,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1105,6 +1349,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1112,6 +1357,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1122,6 +1368,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1129,6 +1376,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1139,6 +1387,7 @@
     "libeconf": "nokey",
     "maximum": 8,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1146,6 +1395,7 @@
     "home_mode": "755",
     "maximum": 8,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1156,6 +1406,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1163,6 +1414,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1173,6 +1425,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1180,6 +1433,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1190,6 +1444,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1197,6 +1452,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": "",
     "warning": -1
    }
   },
@@ -1207,6 +1463,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 99999
    },
    "ubuntu": {
@@ -1214,6 +1471,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 99999
    }
   },
@@ -1224,6 +1482,7 @@
     "libeconf": 99999,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1231,6 +1490,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1241,6 +1501,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1248,6 +1509,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1258,6 +1520,7 @@
     "libeconf": 4294967295,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1265,6 +1528,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1275,6 +1539,7 @@
     "libeconf": 10,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1282,6 +1547,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1292,6 +1558,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1299,23 +1566,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
-    "warning": -1
-   }
-  },
-  "46d35784363a811db22824b976277afee919b31ff0ef2073541ed3545a218303": {
-   "rocky": {
-    "home_created": false,
-    "home_mode": "755",
-    "libeconf": 4,
-    "maximum": -1,
-    "minimum": -1,
-    "warning": -1
-   },
-   "ubuntu": {
-    "home_created": false,
-    "home_mode": "755",
-    "maximum": -1,
-    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1326,6 +1577,7 @@
     "libeconf": 4,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1333,6 +1585,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1343,6 +1596,7 @@
     "libeconf": "nokey",
     "maximum": 99999,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1350,6 +1604,7 @@
     "home_mode": "755",
     "maximum": 99999,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1360,6 +1615,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1367,6 +1623,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1377,6 +1634,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -1384,6 +1642,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -1394,6 +1653,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "000",
     "warning": -1
    },
    "ubuntu": {
@@ -1401,6 +1661,7 @@
     "home_mode": "750",
     "maximum": -1,
     "minimum": -1,
+    "pam": "000",
     "warning": -1
    }
   },
@@ -1411,6 +1672,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1418,6 +1680,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1428,6 +1691,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1435,6 +1699,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1445,6 +1710,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1452,6 +1718,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1462,6 +1729,7 @@
     "libeconf": "nokey",
     "maximum": 400,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1469,6 +1737,7 @@
     "home_mode": "755",
     "maximum": 400,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1479,6 +1748,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1486,6 +1756,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1496,6 +1767,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -1503,6 +1775,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1513,6 +1786,7 @@
     "libeconf": 4,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1520,6 +1794,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1530,6 +1805,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "77",
     "warning": -1
    },
    "ubuntu": {
@@ -1537,6 +1813,7 @@
     "home_mode": "662",
     "maximum": -1,
     "minimum": -1,
+    "pam": "77",
     "warning": -1
    }
   },
@@ -1547,6 +1824,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -1554,6 +1832,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077\r",
     "warning": -1
    }
   },
@@ -1564,6 +1843,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1571,6 +1851,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1581,6 +1862,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1588,6 +1870,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1598,6 +1881,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": " 077",
     "warning": -1
    },
    "ubuntu": {
@@ -1605,6 +1889,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "\" 077\"",
     "warning": -1
    }
   },
@@ -1615,6 +1900,7 @@
     "libeconf": 99,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1622,6 +1908,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1632,6 +1919,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1639,6 +1927,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1649,6 +1938,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -1656,6 +1946,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -1666,6 +1957,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -1673,6 +1965,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -1683,6 +1976,7 @@
     "libeconf": 4,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1690,6 +1984,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1700,6 +1995,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1707,6 +2003,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1717,6 +2014,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 10
    },
    "ubuntu": {
@@ -1724,6 +2022,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 10
    }
   },
@@ -1734,6 +2033,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -1741,6 +2041,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -1751,6 +2052,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 131072
    },
    "ubuntu": {
@@ -1758,6 +2060,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 131072
    }
   },
@@ -1768,6 +2071,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1775,6 +2079,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1785,6 +2090,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 1234567,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1792,6 +2098,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 1234567,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1802,6 +2109,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -1809,7 +2117,27 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
+   }
+  },
+  "63e544f1574fbe30793b2751852b222bc6a726a0b97291bf0af1f0eaff6889df": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 9,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
    }
   },
   "6497f9bbd7989508db8f914cc5ab0118f665013d361b9d3bdf9192b60bf14b7f": {
@@ -1819,6 +2147,7 @@
     "libeconf": "nokey",
     "maximum": 1234567,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1826,6 +2155,26 @@
     "home_mode": "755",
     "maximum": 1234567,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "65b93597273936d753724e3d34aef02e4ef96d7d6f7aba4492a1d32b4ce4a2af": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1836,6 +2185,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 8,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1843,6 +2193,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 8,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1853,6 +2204,7 @@
     "libeconf": 400,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1860,6 +2212,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "6ab7e53405ccf0453399c9df8ca28eabea0b5c07dfcdd13d4562fe98de106aeb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
     "warning": -1
    }
   },
@@ -1870,6 +2242,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -1877,6 +2250,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -1887,6 +2261,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "07",
     "warning": -1
    },
    "ubuntu": {
@@ -1894,6 +2269,7 @@
     "home_mode": "770",
     "maximum": -1,
     "minimum": -1,
+    "pam": "07",
     "warning": -1
    }
   },
@@ -1904,6 +2280,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1911,6 +2288,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1921,6 +2299,7 @@
     "libeconf": 0,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1928,6 +2307,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1938,6 +2318,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -1945,6 +2326,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077 \r",
     "warning": -1
    }
   },
@@ -1955,6 +2337,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 0
    },
    "ubuntu": {
@@ -1962,6 +2345,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 0
    }
   },
@@ -1972,6 +2356,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -1979,6 +2364,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -1989,6 +2375,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -1996,6 +2383,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -2006,6 +2394,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 99999,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2013,6 +2402,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 99999,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2023,6 +2413,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2030,6 +2421,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2040,6 +2432,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "\"\"077",
     "warning": -1
    },
    "ubuntu": {
@@ -2047,6 +2440,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "\"\"077",
     "warning": -1
    }
   },
@@ -2057,6 +2451,7 @@
     "libeconf": 10,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2064,6 +2459,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2074,6 +2470,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2081,6 +2478,26 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "732378fab375969cdf1c27f890a5c4c7377c52c9d1c38d769033df697e4e0e00": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2091,6 +2508,7 @@
     "libeconf": 1234567,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2098,6 +2516,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2108,6 +2527,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2115,6 +2535,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2125,6 +2546,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2132,6 +2554,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2142,6 +2565,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2149,6 +2573,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2159,6 +2584,7 @@
     "libeconf": 90,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2166,6 +2592,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2176,6 +2603,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 8
    },
    "ubuntu": {
@@ -2183,6 +2611,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 8
    }
   },
@@ -2193,6 +2622,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2200,6 +2630,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2210,6 +2641,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2217,6 +2649,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2227,6 +2660,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -2234,6 +2668,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -2244,6 +2679,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2251,6 +2687,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2261,6 +2698,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2268,6 +2706,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2278,6 +2717,7 @@
     "libeconf": 400,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2285,6 +2725,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2295,6 +2736,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2302,6 +2744,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2312,6 +2755,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2319,6 +2763,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2329,6 +2774,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2336,6 +2782,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7f3e0c206827cf7b6b0537ec94a8678712be6f5d1822efd80a5489ee3e765c3a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2346,6 +2812,7 @@
     "libeconf": "nokey",
     "maximum": 65536,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2353,6 +2820,7 @@
     "home_mode": "755",
     "maximum": 65536,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2363,6 +2831,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2370,6 +2839,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2380,6 +2850,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2387,6 +2858,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2397,6 +2869,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2404,6 +2877,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2414,6 +2888,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2421,6 +2896,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2431,6 +2907,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -2438,6 +2915,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -2448,6 +2926,7 @@
     "libeconf": 90,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2455,6 +2934,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2465,6 +2945,7 @@
     "libeconf": "nokey",
     "maximum": 8,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2472,6 +2953,7 @@
     "home_mode": "755",
     "maximum": 8,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2482,6 +2964,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2489,6 +2972,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2499,6 +2983,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2506,6 +2991,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2516,6 +3002,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2523,6 +3010,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2533,6 +3021,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 245
    },
    "ubuntu": {
@@ -2540,6 +3029,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 245
    }
   },
@@ -2550,6 +3040,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2557,6 +3048,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2567,6 +3059,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2574,6 +3067,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2584,6 +3078,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "000",
     "warning": -1
    },
    "ubuntu": {
@@ -2591,6 +3086,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   }
+  },
+  "89cf806a5cd4d09d5c81202a190698e48c7a164d27b69ff51fe9f3e9eaefb225": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2601,6 +3116,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2608,6 +3124,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8a45d778e164bf34a8572867cbce280ce540371b4d980fd20266da66417435d5": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "002",
     "warning": -1
    }
   },
@@ -2618,6 +3154,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2625,6 +3162,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2635,6 +3173,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2642,6 +3181,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2652,6 +3192,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2659,6 +3200,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2669,6 +3211,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -2676,6 +3219,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077 ",
     "warning": -1
    }
   },
@@ -2686,6 +3230,7 @@
     "libeconf": 4294967295,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2693,6 +3238,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2703,6 +3249,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2710,6 +3257,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2720,6 +3268,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2727,6 +3276,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2737,6 +3287,7 @@
     "libeconf": "error",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2744,6 +3295,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2754,6 +3306,7 @@
     "libeconf": 0,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2761,6 +3314,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2771,6 +3325,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2778,6 +3333,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2788,6 +3344,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2795,6 +3352,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2805,6 +3363,7 @@
     "libeconf": 4,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2812,6 +3371,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2822,6 +3382,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2829,6 +3390,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2839,6 +3401,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2846,6 +3409,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2856,6 +3420,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2863,6 +3428,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2873,6 +3439,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 131072,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2880,6 +3447,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 131072,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2890,6 +3458,7 @@
     "libeconf": 99,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2897,6 +3466,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2907,6 +3477,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -2914,6 +3485,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -2924,6 +3496,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2931,6 +3504,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2941,6 +3515,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 400
    },
    "ubuntu": {
@@ -2948,6 +3523,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 400
    }
   },
@@ -2958,6 +3534,7 @@
     "libeconf": 9,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2965,6 +3542,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -2975,6 +3553,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -2982,6 +3561,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -2992,6 +3572,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -2999,6 +3580,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3009,6 +3591,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3016,6 +3599,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3026,6 +3610,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3033,6 +3618,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3043,6 +3629,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3050,6 +3637,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3060,6 +3648,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 131072,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3067,6 +3656,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 131072,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3077,6 +3667,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077\u000b5",
     "warning": -1
    },
    "ubuntu": {
@@ -3084,6 +3675,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077\u000b5",
     "warning": -1
    }
   },
@@ -3094,6 +3686,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3101,6 +3694,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3111,6 +3705,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -3118,6 +3713,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -3128,6 +3724,7 @@
     "libeconf": "nokey",
     "maximum": 0,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3135,6 +3732,7 @@
     "home_mode": "755",
     "maximum": 0,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3145,6 +3743,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "022",
     "warning": -1
    },
    "ubuntu": {
@@ -3152,6 +3751,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": "022\r",
     "warning": -1
    }
   },
@@ -3162,6 +3762,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 65536
    },
    "ubuntu": {
@@ -3169,6 +3770,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 65536
    }
   },
@@ -3179,6 +3781,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0",
     "warning": -1
    },
    "ubuntu": {
@@ -3186,6 +3789,7 @@
     "home_mode": "777",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0",
     "warning": -1
    }
   },
@@ -3196,6 +3800,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3203,6 +3808,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3213,6 +3819,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3220,6 +3827,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3230,6 +3838,7 @@
     "libeconf": "nokey",
     "maximum": 1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3237,6 +3846,7 @@
     "home_mode": "755",
     "maximum": 1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3247,6 +3857,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 400
    },
    "ubuntu": {
@@ -3254,6 +3865,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 400
    }
   },
@@ -3264,6 +3876,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3271,6 +3884,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3281,6 +3895,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3288,6 +3903,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3298,6 +3914,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3305,6 +3922,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3315,6 +3933,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3322,6 +3941,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3332,6 +3952,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3339,6 +3960,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3349,6 +3971,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3356,6 +3979,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3366,6 +3990,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3373,6 +3998,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3383,6 +4009,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "7",
     "warning": -1
    },
    "ubuntu": {
@@ -3390,6 +4017,7 @@
     "home_mode": "770",
     "maximum": -1,
     "minimum": -1,
+    "pam": "7",
     "warning": -1
    }
   },
@@ -3400,6 +4028,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3407,6 +4036,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3417,6 +4047,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3424,6 +4055,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3434,6 +4066,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3441,6 +4074,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3451,6 +4085,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 8
    },
    "ubuntu": {
@@ -3458,6 +4093,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 8
    }
   },
@@ -3468,6 +4104,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 1234567
    },
    "ubuntu": {
@@ -3475,6 +4112,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 1234567
    }
   },
@@ -3485,6 +4123,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3492,6 +4131,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3502,6 +4142,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3509,6 +4150,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3519,6 +4161,7 @@
     "libeconf": 4,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3526,6 +4169,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b1b685e6a52a696c8a80223a1fdb3f4e33e13b612df206996f65b81b4fbfb857": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": 9,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
     "warning": -1
    }
   },
@@ -3536,6 +4199,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3543,6 +4207,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3553,6 +4218,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3560,6 +4226,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3570,6 +4237,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3577,6 +4245,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3587,6 +4256,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3594,6 +4264,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3604,6 +4275,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3611,6 +4283,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3621,6 +4294,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3628,6 +4302,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3638,6 +4313,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3645,6 +4321,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3655,6 +4332,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3662,6 +4340,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b767a44635b03b4fc772a77df8319f16ee6ac992059491e6d19bbefdfe656d47": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3672,6 +4370,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3679,6 +4378,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3689,6 +4389,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 10,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3696,6 +4397,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 10,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3706,6 +4408,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3713,6 +4416,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3723,6 +4427,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3730,6 +4435,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3740,6 +4446,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3747,6 +4454,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3757,6 +4465,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3764,6 +4473,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3774,6 +4484,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3781,6 +4492,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3791,6 +4503,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 90,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3798,6 +4511,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 90,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3808,6 +4522,7 @@
     "libeconf": 0,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3815,6 +4530,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3825,6 +4541,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3832,6 +4549,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3842,6 +4560,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -3849,6 +4568,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -3859,6 +4579,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 7
    },
    "ubuntu": {
@@ -3866,6 +4587,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 7
    }
   },
@@ -3876,6 +4598,7 @@
     "libeconf": "nokey",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3883,6 +4606,7 @@
     "home_mode": "755",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3893,6 +4617,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3900,6 +4625,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3910,6 +4636,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0700",
     "warning": -1
    },
    "ubuntu": {
@@ -3917,6 +4644,7 @@
     "home_mode": "77",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0700",
     "warning": -1
    }
   },
@@ -3927,6 +4655,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3934,6 +4663,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3944,6 +4674,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 65536,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3951,6 +4682,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 65536,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3961,6 +4693,7 @@
     "libeconf": "nokey",
     "maximum": 99999,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3968,6 +4701,7 @@
     "home_mode": "755",
     "maximum": 99999,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -3978,6 +4712,7 @@
     "libeconf": 0,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -3985,6 +4720,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cae332332d64c39caf0c8f1e8ab05f9940a28a2d3099a640749b16e6c81cf213": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": "027",
     "warning": -1
    }
   },
@@ -3995,6 +4750,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4002,6 +4758,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4012,6 +4769,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0177",
     "warning": -1
    },
    "ubuntu": {
@@ -4019,6 +4777,7 @@
     "home_mode": "600",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0177",
     "warning": -1
    }
   },
@@ -4029,6 +4788,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4036,6 +4796,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cd80c648f8d6cddb5752a767fcc00ca2fc7a011eb7e76ba3a32819075f009705": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
     "warning": -1
    }
   },
@@ -4046,6 +4826,7 @@
     "libeconf": "nokey",
     "maximum": 131072,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4053,6 +4834,7 @@
     "home_mode": "755",
     "maximum": 131072,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4063,6 +4845,7 @@
     "libeconf": 365,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4070,6 +4853,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4080,6 +4864,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4087,6 +4872,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4097,6 +4883,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4104,6 +4891,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4114,6 +4902,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4121,6 +4910,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4131,6 +4921,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4138,6 +4929,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4148,6 +4940,7 @@
     "libeconf": 0,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4155,6 +4948,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4165,6 +4959,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "002",
     "warning": -1
    },
    "ubuntu": {
@@ -4172,6 +4967,7 @@
     "home_mode": "775",
     "maximum": -1,
     "minimum": -1,
+    "pam": "002",
     "warning": -1
    }
   },
@@ -4182,6 +4978,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4189,6 +4986,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4199,6 +4997,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4206,6 +5005,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4216,6 +5016,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4223,6 +5024,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d3212e834e0e1ebea3962cac5444d655968523c0c30428a4dac7e06dcc59419d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4233,6 +5054,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4240,6 +5062,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4250,6 +5073,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4257,6 +5081,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4267,6 +5092,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -4274,6 +5100,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    }
   },
@@ -4284,6 +5111,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4291,6 +5119,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4301,6 +5130,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "027",
     "warning": -1
    },
    "ubuntu": {
@@ -4308,6 +5138,7 @@
     "home_mode": "750",
     "maximum": -1,
     "minimum": -1,
+    "pam": "000",
     "warning": -1
    }
   },
@@ -4318,6 +5149,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4325,6 +5157,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4335,6 +5168,7 @@
     "libeconf": "nokey",
     "maximum": 400,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4342,6 +5176,7 @@
     "home_mode": "755",
     "maximum": 400,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4352,6 +5187,7 @@
     "libeconf": "nokey",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4359,6 +5195,7 @@
     "home_mode": "755",
     "maximum": 365,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4369,6 +5206,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4376,6 +5214,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4386,6 +5225,7 @@
     "libeconf": "nokey",
     "maximum": 8,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4393,6 +5233,7 @@
     "home_mode": "755",
     "maximum": 8,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4403,6 +5244,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4410,6 +5252,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4420,6 +5263,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "022",
     "warning": -1
    },
    "ubuntu": {
@@ -4427,6 +5271,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": "022",
     "warning": -1
    }
   },
@@ -4437,6 +5282,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4444,6 +5290,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4454,6 +5301,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 400,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4461,6 +5309,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 400,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4471,6 +5320,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -4478,6 +5328,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "\"077\"",
     "warning": -1
    }
   },
@@ -4488,6 +5339,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 8,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4495,6 +5347,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 8,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4505,6 +5358,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 0,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4512,6 +5366,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 0,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4522,6 +5377,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4529,6 +5385,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4539,6 +5396,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -4546,6 +5404,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -4556,6 +5415,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4563,6 +5423,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4573,6 +5434,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4580,6 +5442,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4590,6 +5453,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -4597,6 +5461,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -4607,6 +5472,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 365
    },
    "ubuntu": {
@@ -4614,6 +5480,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 365
    }
   },
@@ -4624,6 +5491,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4631,6 +5499,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4641,6 +5510,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4648,6 +5518,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": 30,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4658,6 +5529,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4665,6 +5537,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4675,6 +5548,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4682,6 +5556,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4692,6 +5567,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4699,6 +5575,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4709,6 +5586,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 131072
    },
    "ubuntu": {
@@ -4716,6 +5594,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 131072
    }
   },
@@ -4726,6 +5605,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    },
    "ubuntu": {
@@ -4733,6 +5613,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 30
    }
   },
@@ -4743,6 +5624,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4750,6 +5632,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4760,6 +5643,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 90
    },
    "ubuntu": {
@@ -4767,6 +5651,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 90
    }
   },
@@ -4777,6 +5662,7 @@
     "libeconf": 400000,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4784,6 +5670,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4794,6 +5681,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4801,6 +5689,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4811,6 +5700,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4818,6 +5708,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4828,6 +5719,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4835,6 +5727,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4845,6 +5738,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4852,6 +5746,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4862,6 +5757,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -4869,6 +5765,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    }
   },
@@ -4879,6 +5776,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4886,6 +5784,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4896,6 +5795,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4903,6 +5803,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4913,6 +5814,7 @@
     "libeconf": "nokey",
     "maximum": 245,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4920,6 +5822,7 @@
     "home_mode": "755",
     "maximum": 245,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4927,9 +5830,10 @@
    "rocky": {
     "home_created": false,
     "home_mode": "755",
-    "libeconf": "null",
+    "libeconf": "crash",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4937,6 +5841,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4947,6 +5852,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4954,6 +5860,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4964,6 +5871,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0x3f",
     "warning": -1
    },
    "ubuntu": {
@@ -4971,6 +5879,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "0x3f",
     "warning": -1
    }
   },
@@ -4981,6 +5890,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -4988,6 +5898,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -4998,6 +5909,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5005,6 +5917,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f301aaf98d8dcaba1b7fe278cbf1f7e3c25a5cdd679a7317f17c43783c367b86": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 3,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5015,6 +5947,7 @@
     "libeconf": "nokey",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5022,6 +5955,7 @@
     "home_mode": "755",
     "maximum": 30,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5032,6 +5966,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5039,6 +5974,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5049,6 +5985,7 @@
     "libeconf": 8,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5056,6 +5993,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5066,6 +6004,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5073,6 +6012,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5083,6 +6023,7 @@
     "libeconf": 0,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5090,6 +6031,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5100,6 +6042,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "27",
     "warning": -1
    },
    "ubuntu": {
@@ -5107,6 +6050,7 @@
     "home_mode": "744",
     "maximum": -1,
     "minimum": -1,
+    "pam": "27",
     "warning": -1
    }
   },
@@ -5117,6 +6061,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5124,6 +6069,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5134,6 +6080,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5141,6 +6088,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5151,6 +6099,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    },
    "ubuntu": {
@@ -5158,6 +6107,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "077",
     "warning": -1
    }
   },
@@ -5168,6 +6118,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 8
    },
    "ubuntu": {
@@ -5175,6 +6126,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": 8
    }
   },
@@ -5185,6 +6137,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5192,6 +6145,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5202,6 +6156,7 @@
     "libeconf": "nokey",
     "maximum": 99999,
     "minimum": 0,
+    "pam": "022",
     "warning": -1
    },
    "ubuntu": {
@@ -5209,6 +6164,7 @@
     "home_mode": "755",
     "maximum": 99999,
     "minimum": 0,
+    "pam": "022\r",
     "warning": -1
    }
   },
@@ -5219,6 +6175,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "00077",
     "warning": -1
    },
    "ubuntu": {
@@ -5226,6 +6183,7 @@
     "home_mode": "700",
     "maximum": -1,
     "minimum": -1,
+    "pam": "00077",
     "warning": -1
    }
   },
@@ -5236,6 +6194,7 @@
     "libeconf": 30,
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5243,6 +6202,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5253,6 +6213,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": "007",
     "warning": -1
    },
    "ubuntu": {
@@ -5260,6 +6221,7 @@
     "home_mode": "770",
     "maximum": -1,
     "minimum": -1,
+    "pam": "007",
     "warning": -1
    }
   },
@@ -5270,6 +6232,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5277,6 +6240,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "fd7b8d7c892ba93746dc98d06b75a3ba4e69e73e4dcf11dbbbf51af78789d19f": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5287,6 +6270,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5294,6 +6278,26 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ff29432e335dd794b0c493d732e0db9338508a9dcd1b78920f78e4878ec54f9c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "error",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
     "warning": -1
    }
   },
@@ -5304,6 +6308,7 @@
     "libeconf": "nokey",
     "maximum": 90,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5311,6 +6316,7 @@
     "home_mode": "755",
     "maximum": 90,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   },
@@ -5321,6 +6327,7 @@
     "libeconf": "nokey",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    },
    "ubuntu": {
@@ -5328,6 +6335,7 @@
     "home_mode": "755",
     "maximum": -1,
     "minimum": -1,
+    "pam": null,
     "warning": -1
    }
   }

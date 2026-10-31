@@ -4,11 +4,13 @@
     __linux_compliance_remediate_ld_text: >-
       {{ (__linux_compliance_remediate_ld_current.content | b64decode)
          if __linux_compliance_remediate_ld_current is not skipped else '' }}
-    __linux_compliance_remediate_ld_libeconf: >-
-      {{ __linux_compliance_remediate_rule.parameters.libeconf | default(false) }}
+    __linux_compliance_remediate_ld_libeconf: "{{ __linux_compliance_remediate_rule.parameters.libeconf is defined }}"
+    __linux_compliance_remediate_ld_econf_reader: >-
+      {{ __linux_compliance_remediate_login_defs_libeconf_readers[__linux_compliance_remediate_rule.parameters.libeconf]
+         if __linux_compliance_remediate_rule.parameters.libeconf is defined else {} }}
     __linux_compliance_remediate_ld_reads_dropins: >-
       {{ (__linux_compliance_remediate_rule.parameters.reads_dropins | default(false))
-         or (__linux_compliance_remediate_rule.parameters.libeconf | default(false)) }}
+         or __linux_compliance_remediate_rule.parameters.libeconf is defined }}
   tags:
     - always
 
@@ -87,6 +89,10 @@
     __linux_compliance_remediate_ld_econf_separated: >-
       {{ __linux_compliance_remediate_ld_one | regex_replace('#.*$', '')
          is match('^[ \t]*' ~ __linux_compliance_remediate_rule.parameters.setting ~ '[ \t].*[ \t=]') }}
+    __linux_compliance_remediate_ld_econf_null: >-
+      {{ (__linux_compliance_remediate_ld_econf_reader.numbers | default(false))
+         and __linux_compliance_remediate_ld_one | regex_replace('#.*$', '')
+             is match('^[ \t]*' ~ __linux_compliance_remediate_rule.parameters.setting ~ '[ \t]?$') }}
     __linux_compliance_remediate_ld_econf_value: >-
       {{ __linux_compliance_remediate_ld_one | regex_replace('#.*$', '')
          | regex_replace('^[ \t]*' ~ __linux_compliance_remediate_rule.parameters.setting
@@ -115,13 +121,19 @@
       {%- if token is match('^0[xX][0-9a-fA-F]{1,4}$') -%}
       {%- set _ = readings.append(token[2:] | int(base=16)) -%}
       {%- endif -%}
-      {%- if __linux_compliance_remediate_ld_libeconf
+      {%- if (__linux_compliance_remediate_ld_econf_reader.numbers | default(false))
             and __linux_compliance_remediate_ld_econf_value
                 is match(__linux_compliance_remediate_login_defs_econf_number_pattern) -%}
       {%- set _ = readings.append(__linux_compliance_remediate_ld_econf_value
             | regex_replace(__linux_compliance_remediate_login_defs_econf_number_pattern ~ '.*$', '\\1') | int) -%}
       {%- endif -%}
       {{ readings }}
+    __linux_compliance_remediate_ld_defaults: >-
+      {{ [__linux_compliance_remediate_ld_econf_reader.default]
+         if (__linux_compliance_remediate_ld_econf_reader.numbers | default(false))
+            and (__linux_compliance_remediate_ld_found | length == 0
+                 or not __linux_compliance_remediate_ld_econf_separated)
+         else [] }}
     __linux_compliance_remediate_ld_bits: >-
       {%- set required = __linux_compliance_remediate_ld_required | int(base=8) -%}
       {%- set actual = (__linux_compliance_remediate_ld_token
@@ -148,12 +160,14 @@
               or (__linux_compliance_remediate_ld_comparison == 'umask'
                   and __linux_compliance_remediate_ld_bits.missing == 0)
               or __linux_compliance_remediate_ld_comparison == 'equal')
-         and (__linux_compliance_remediate_ld_econf_separated or not __linux_compliance_remediate_ld_libeconf) }}
+         and (__linux_compliance_remediate_ld_econf_separated
+              or not (__linux_compliance_remediate_ld_econf_reader.glues | default(false))) }}
     __linux_compliance_remediate_ld_unreadable: >-
       {{ __linux_compliance_remediate_ld_nul or __linux_compliance_remediate_ld_unrecordable
+         or __linux_compliance_remediate_ld_econf_null
          or (__linux_compliance_remediate_ld_found | length == 0 and __linux_compliance_remediate_ld_keys | length > 0)
          or (__linux_compliance_remediate_ld_comparison != 'equal' and __linux_compliance_remediate_ld_inner_control)
-         or (__linux_compliance_remediate_ld_libeconf
+         or ((__linux_compliance_remediate_ld_econf_reader.numbers | default(false))
              and __linux_compliance_remediate_ld_econf_value
                  is match(__linux_compliance_remediate_login_defs_econf_unread_pattern))
          or (__linux_compliance_remediate_ld_token | length > 0
@@ -174,11 +188,12 @@
                       is match(__linux_compliance_remediate_login_defs_getdef_number_pattern)))) }}
     __linux_compliance_remediate_ld_line: >-
       {{ __linux_compliance_remediate_rule.parameters.setting
-         ~ ('  ' if __linux_compliance_remediate_ld_libeconf else ' ')
+         ~ ('  ' if __linux_compliance_remediate_ld_econf_reader.glues | default(false) else ' ')
          ~ (__linux_compliance_remediate_ld_bits.union if __linux_compliance_remediate_ld_comparison == 'umask'
             else ([__linux_compliance_remediate_ld_required | int] + __linux_compliance_remediate_ld_readings) | min
             if __linux_compliance_remediate_ld_comparison == 'at_most'
-            else ([__linux_compliance_remediate_ld_required | int] + __linux_compliance_remediate_ld_readings) | max
+            else ([__linux_compliance_remediate_ld_required | int] + __linux_compliance_remediate_ld_readings
+                  + __linux_compliance_remediate_ld_defaults) | max
             if __linux_compliance_remediate_ld_comparison == 'at_least'
             else __linux_compliance_remediate_ld_required) | string }}
   tags:

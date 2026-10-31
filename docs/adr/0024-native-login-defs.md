@@ -41,8 +41,9 @@ Every selected rule whose definition reaches an object that reads `/etc/login.de
 word after it as the value, ignores lines whose first non-blank character is `#`, trims trailing white space and
 keeps the last line of a name. It parses numbers with base 0 (`strtol`) and requires the whole value to be the
 number, so a value followed by a comment (`PASS_MAX_DAYS 30 # site`) or a zero-padded decimal (`090`, `08`) does not
-parse and shadow-utils falls back to its default, and `010` reads as 8. `pam_umask` (Ubuntu's `common-session`)
-takes the first `UMASK` line, its name in any case, and reads the first word as octal, ignoring a trailing comment.
+parse and shadow-utils falls back to its default, and `010` reads as 8. `pam_umask` (Ubuntu's `common-session`,
+Rocky Linux's `postlogin`) takes the first `UMASK` line and reads its value as octal, ignoring a trailing comment;
+on Rocky Linux libpam reads login.defs through libeconf, with its drop-ins (amendment).
 Neither image ships `/etc/login.defs.d`, and neither pinned shadow-utils reads it: `useradd` and `chage` do not link
 libeconf on Ubuntu 24.04 (4.13) or Rocky Linux 9 (4.9), and a `PASS_MAX_DAYS 5` there left new accounts at 99999 in
 the review of the pull request. Only the `CREATE_HOME` check reads it. `login` and `su` on Rocky Linux 9 are
@@ -113,13 +114,14 @@ Apply reports, with a reason and without a change:
 |---|---|
 | `notapplicable` | `/etc/login.defs` does not exist (shadow-utils is not installed; the content's `package_shadow-utils` platform) |
 | `not_regular_file` | `/etc/login.defs` is a symbolic link or not a regular file; nothing is written through a link |
-| `not_directory` | Only for a rule whose drop-ins are read (`reads_dropins` for `CREATE_HOME`, whose check reads them, and `libeconf` for `FAIL_DELAY`): `/etc/login.defs.d` exists but is a symbolic link or not a directory, so its drop-ins cannot be read |
+| `not_directory` | Only for a rule whose drop-ins are read (`reads_dropins` for `CREATE_HOME`, whose check reads them, and `libeconf` for `FAIL_DELAY` and `UMASK`): `/etc/login.defs.d` exists but is a symbolic link or not a directory, so its drop-ins cannot be read |
 | `long_line` | A line of `/etc/login.defs` is 1023 bytes or longer: shadow-utils reads it in pieces, and a piece can set any setting (amendment) |
-| `overridden` | Only for those two rules: a drop-in `/etc/login.defs.d/*.defs` (a regular file, or a link to one) mentions the name anywhere, and the check or libeconf reads it whatever the main file says, so the collection does not claim a change that would not take effect and does not edit a file it does not own. For the other five rules a drop-in is ignored, as by their checks and the pinned shadow-utils |
-| `unreadable_file` | Only for `FAIL_DELAY`: libeconf would not read the configuration as one, because a line of login.defs or of a drop-in starts a section (`[`) or a drop-in is a link to no regular file (amendment) |
+| `overridden` | Only for those three rules: a drop-in `/etc/login.defs.d/*.defs` (a regular file, or a link to one) mentions the name anywhere, and the check or libeconf reads it whatever the main file says, so the collection does not claim a change that would not take effect and does not edit a file it does not own. For the other five rules a drop-in is ignored, as by their checks and the pinned shadow-utils |
+| `unreadable_file` | Only for `FAIL_DELAY` and `UMASK`: libeconf would not read the configuration as one, because a line of login.defs or of a drop-in starts a section (`[`) or a drop-in is a link to no regular file (amendment) |
 | `duplicate_setting` | The name is set on more than one line, in any case, also counting for `UMASK` and `FAIL_DELAY` the forms that `pam_modutil_search_key` and libeconf read (amendment): `pam_umask` and libeconf take the first line, shadow-utils the last, and the check requires every one to comply, so no single rewrite is right |
 | `unreadable_value` | The one line of the setting has a value in a form that shadow-utils, libeconf or `pam_umask` may read but the family does not (see above and the amendment), a NUL, or the only line that sets the name is in a form that only another reader reads; the reason names the line |
 | `method_changed` | The ledger entry was recorded by another method, or none; clean it up first |
+| `modified_during_apply` | login.defs changed between the read that the decision was made from and the write; nothing is written over the change (amendment) |
 | `compliant` | Exactly one line, in the strict form, satisfies the check; nothing is written or recorded |
 
 When the profile value changes while a rule stays on, apply writes the new line and replaces the entry with the same
@@ -197,7 +199,8 @@ profile, and refuses `CREATE_HOME` next to a drop-in that sets it (`overridden`)
 ## Amendment of 2026-10-31: every reader of a line, byte for byte (FREES-198)
 
 The review of FREES-194 read the sources of the readers (shadow-utils 4.9 and 4.13 `def_load` and `getdef_num`,
-libeconf 0.4.1 `read_file`, util-linux 2.37.4 `login-utils/logindefs.c`, Linux-PAM 1.5.1 `pam_modutil_search_key`),
+libeconf 0.4.1 `read_file`, util-linux 2.37.4 `login-utils/logindefs.c` and `login.c`, Linux-PAM 1.5.1 and 1.5.3
+`pam_modutil_search_key` and `pam_umask`),
 ran them in the Molecule images, and found forms that the family read differently, most of them already on `main`.
 This amendment replaces the refusal of FREES-194, which refused every number line with a carriage return, vertical
 tab or form feed, and so never remediated a login.defs with Windows line endings.
@@ -229,13 +232,19 @@ tab or form feed, and so never remediated a login.defs with Windows line endings
   that has no space, tab or `=` after the one that ends its name, such as `FAIL_DELAY 4`, is glued to the value of an
   entry on the line before it, so the stock file's last line `HMAC_CRYPTO_ALGO SHA512` swallowed an appended
   `FAIL_DELAY 4`. A line that starts a section (`[…]`) moves every later name into that section, and a drop-in that
-  cannot be read makes libeconf read nothing. The rule carries the catalogue parameter `libeconf: true`, which the
-  golden test pins to `FAIL_DELAY`, and the family then:
+  cannot be read makes libeconf read nothing. A key without a value (`FAIL_DELAY` alone, or before a comment) makes
+  libeconf 0.4.1 crash in `econf_getUInt64Value`, and `login` with it. Without a reading `login` sleeps its default,
+  `LOGIN_EXIT_TIMEOUT`, 5 seconds (`login.c:89,220`). The rule carries the catalogue parameter `libeconf: util-linux`
+  (`roles/remediate/vars/main.yml` names the reader, its default and that it glues lines), which the golden test pins,
+  and the family then:
   - writes `FAIL_DELAY  <value>` with two spaces, which libeconf always reads as an entry of its own, and counts a line
     as compliant only when libeconf cannot glue it (a second space, tab or `=` after the one that ends the name), so a
     compliant-looking `FAIL_DELAY 30` after another setting is rewritten as `FAIL_DELAY  30`;
   - adds libeconf's reading to the readings of the line, so the value written under the minimum is never below what
-    libeconf read: `FAIL_DELAY = 30`, `=30`, `= "30"`, `30junk`, `030` become `FAIL_DELAY  30`;
+    libeconf read: `FAIL_DELAY = 30`, `=30`, `= "30"`, `30junk`, `030` become `FAIL_DELAY  30`; and when libeconf may
+    read no value (no line, or one that it can glue to the line before) it adds `login`'s default, so a stock Rocky
+    Linux file, where `login` sleeps 5 seconds, gets `FAIL_DELAY  5` and never the profile's 4;
+  - refuses as `unreadable_value` a line that sets `FAIL_DELAY` without a value, on which `login` would crash;
   - refuses as `unreadable_value` a value that libeconf reads as negative or as seven digits or more, and a line in a
     form that libeconf reads but the family does not write (`FAIL_DELAY=30`, `\vFAIL_DELAY 30`, `FAIL_DELAY\v30`),
     or as `duplicate_setting` when another line sets the name;
@@ -246,20 +255,31 @@ tab or form feed, and so never remediated a login.defs with Windows line endings
   `su` also reads `/etc/default/su`, which can set `FAIL_DELAY` for `su` alone; the rule's check and the STIG requirement
   concern the login prompt, so that file is out of scope. `pam_faildelay` without `delay=` reads `FAIL_DELAY` with
   `pam_modutil_search_key`, whose forms the next item refuses as well.
-- **`pam_modutil_search_key`.** `pam_umask` (and `pam_faildelay`) read the first line whose name, in any case, follows
-  any `isspace` characters and ends at a space, tab or `=`, so `\vUMASK 000` and `UMASK=000` set the session umask
-  although shadow-utils ignores them. For `UMASK` and `FAIL_DELAY` such a line counts as a line of the setting: a
-  second one is `duplicate_setting`, an only one `unreadable_value`.
-- **Drop-ins.** For `CREATE_HOME` and `FAIL_DELAY` a drop-in overrides when it mentions the name anywhere: libeconf
-  reads `CREATE_HOME=no` and `\vCREATE_HOME no`, which the former line pattern missed, and a comment that mentions the
-  name refuses too, on the safe side.
+- **`pam_modutil_search_key` and `UMASK`.** `pam_umask` (in Ubuntu's `common-session` and Rocky Linux's `postlogin`)
+  and `pam_faildelay` without `delay=` read login.defs with `pam_modutil_search_key`, in two ways. Linux-PAM 1.5.3 of
+  Ubuntu 24.04 parses the lines itself: it takes the first line whose name, in any case, follows any `isspace`
+  characters and ends at a space, tab or `=`, so `\vUMASK 000` and `UMASK=000` set the session umask although
+  shadow-utils ignores them. Linux-PAM 1.5.1 of Rocky Linux 9 (`pam-1.5.1-28.el9`) is built with libeconf and reads
+  with `econf_search_key("login", ".defs", key)`, delimiters `" \t"`: the first line of the name, case-sensitively,
+  `/etc/login.defs` and then the drop-ins `/etc/login.defs.d/*.defs`, which override it, and nothing after a section
+  line or when a drop-in cannot be read; it never glues lines. The `UMASK` rule carries `libeconf: pam`, so on both
+  platforms (erring on the safe side on Ubuntu) a drop-in that mentions `UMASK` is `overridden`, a linked drop-in
+  directory `not_directory`, and a section line or a drop-in link to no file `unreadable_file`; the line written stays
+  `UMASK <bits>`. For `UMASK` and `FAIL_DELAY` a line in a form that only one of these readers reads counts as a line
+  of the setting: a second one is `duplicate_setting`, an only one `unreadable_value`.
+- **Drop-ins.** For `CREATE_HOME`, `FAIL_DELAY` and `UMASK` a drop-in overrides when it mentions the name anywhere:
+  libeconf reads `CREATE_HOME=no` and `\vCREATE_HOME no`, which the former line pattern missed, and a comment that
+  mentions the name refuses too, on the safe side.
 - **Writes.** `ansible.builtin.lineinfile` reads with Python's universal newlines and writes every `\r\n` and lone
   `\r` back as `\n`, so a write rewrote every line of a file with Windows line endings and the cleanup could not
   restore it. The family now writes the whole file with `ansible.builtin.copy` from the text it read and recorded:
   the line of the setting is replaced in place, or the line is appended (after an added newline, and then without a
   trailing one, when the file does not end in a newline), and every other byte is kept. The cleanup removes exactly
   the written line with the newline that the apply added, or puts the recorded line back in its place, so a file with
-  Windows line endings or without a final newline is restored byte for byte.
+  Windows line endings or without a final newline is restored byte for byte. Right before each write, apply and
+  cleanup read the SHA-256 of login.defs again and compare it with that of the bytes the decision was made from (which
+  the ledger now records as `sha256`): a file changed in between is not written over, and the rule is
+  `modified_during_apply`, or the cleanup `cleanup_incomplete` with `modified_during_cleanup`, and runs again later.
 
 **The reader is the oracle.** The decision tasks live in `roles/remediate/tasks/login_defs_decide.yml`, which
 `login_defs_apply.yml` includes. `tests/fixtures/login_defs_readers/verdicts.json` records what the real readers read,
@@ -273,5 +293,9 @@ drop-ins and links to no file) and every text that the role writes for them. `to
 ROCKY_IMAGE` regenerates it in throwaway `--network none` containers of the Molecule images with read-only mounts.
 `tests/unit/roles/test_login_defs_readers.py` decides every case with the role's own tasks and fails when a decision
 claims `compliant` while a reader reads a looser value, writes a value that a reader does not read, writes one looser
-than what a reader read before, or writes a text that the table lacks. `PASS_MIN_LEN` has no reader in the images
-that prints it (only `passwd` uses it), so its decisions are not checked against the table.
+than what a reader read before, or writes a text that the table lacks. The table also records
+`pam_modutil_search_key` of libpam through `ctypes` on both images (`libpam0g 1.5.3` and `pam-1.5.1`), which the test
+reads as `pam_umask`'s `set_umask` does; a libeconf miss counts as `login`'s default of 5 seconds and a key without a
+value as no delay. `PASS_MIN_LEN` has no reader at all on either image: only a `passwd` built without PAM reads it
+(shadow-utils 4.13 `src/passwd.c`, `#ifndef USE_PAM`), and both images ship a PAM-built `passwd`, so only the content's
+check reads the setting and its decisions are not checked against the table.

@@ -76,6 +76,19 @@
         text: "{{ ldo_text }}"
         dropin: "CREATE_HOME=no\n"
         expected: overridden
+      - name: FAIL_DELAY without a value, on which libeconf 0.4.1 and so login crash
+        rule: accounts_logon_fail_delay
+        text: "{{ ldo_text ~ '# site\nFAIL_DELAY\n' }}"
+        expected: unreadable_value
+      - name: a drop-in that sets UMASK 000, which pam_umask reads through libeconf after login.defs
+        rule: accounts_umask_etc_login_defs
+        text: "{{ ldo_text }}"
+        dropin: "UMASK 000\n"
+        expected: overridden
+      - name: a section line, after which pam_umask reads no UMASK of login.defs through libeconf
+        rule: accounts_umask_etc_login_defs
+        text: "{{ ldo_text ~ '[site]\n' }}"
+        expected: unreadable_file
 
 - name: Login defaults readers | Take the state of the whole instance before the reader forms
   ansible.builtin.include_tasks:

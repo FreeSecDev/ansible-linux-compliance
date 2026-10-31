@@ -692,7 +692,7 @@ native_rules:
     parameters:
       setting: FAIL_DELAY
       comparison: at_least
-      libeconf: true
+      libeconf: util-linux
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs
     revert_strategy: recorded_value
     runbook: null
@@ -728,6 +728,7 @@ native_rules:
     parameters:
       setting: UMASK
       comparison: umask
+      libeconf: pam
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit
     revert_strategy: recorded_value
     runbook: null

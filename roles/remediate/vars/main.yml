@@ -18,6 +18,16 @@ __linux_compliance_remediate_login_defs_base0_pattern: '^"?[+-]?(0[xX][0-9a-fA-F
 __linux_compliance_remediate_login_defs_getdef_number_pattern: '^\+?(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)$'
 __linux_compliance_remediate_login_defs_long_line_pattern: '^(.{1365,}|.{1363}[^=])$'
 __linux_compliance_remediate_login_defs_unrecordable_pattern: '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‪-‮⁦-⁩\ud800-\udfff]'
+__linux_compliance_remediate_login_defs_libeconf_readers:
+  util-linux:
+    program: util-linux login
+    glues: true
+    numbers: true
+    default: 5
+  pam:
+    program: pam_umask
+    glues: false
+    numbers: false
 __linux_compliance_remediate_login_defs_section_pattern: '(?m)^[ \t\r\v\f]*\['
 __linux_compliance_remediate_login_defs_econf_number_pattern: '^[ \t\r\v\f]*\+?([0-9]{1,6})(?![0-9])'
 __linux_compliance_remediate_login_defs_econf_unread_pattern: '^[ \t\r\v\f]*(-|\+?[0-9]{7})'

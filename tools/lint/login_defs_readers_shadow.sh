@@ -6,10 +6,12 @@ readers=${2:?$usage}
 export LC_ALL=C
 if command -v dpkg-query >/dev/null 2>&1; then
     printf '#shadow\t%s\n' "$(dpkg-query -W -f '${Package} ${Version}' passwd)"
+    printf '#pam\t%s\n' "$(dpkg-query -W -f '${Package} ${Version}' libpam0g)"
 else
     printf '#shadow\t%s\n' "$(rpm -q shadow-utils)"
     printf '#libeconf\t%s\n' "$(rpm -q libeconf)"
     printf '#util-linux\t%s\n' "$(rpm -q util-linux)"
+    printf '#pam\t%s\n' "$(rpm -q pam)"
 fi
 number=0
 for directory in "$states"/*/; do

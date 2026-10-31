@@ -180,7 +180,7 @@ __linux_compliance_remediate_rules:
     parameters:
       setting: "FAIL_DELAY"
       comparison: "at_least"
-      libeconf: true
+      libeconf: "util-linux"
       value_id: "var_accounts_fail_delay"
       profile_values:
         - datastream: "rhel9"
@@ -850,6 +850,7 @@ __linux_compliance_remediate_rules:
     parameters:
       setting: "UMASK"
       comparison: "umask"
+      libeconf: "pam"
       value_id: "var_accounts_user_umask"
       profile_values:
         - datastream: "ubuntu2404"

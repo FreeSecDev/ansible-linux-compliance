@@ -70,6 +70,30 @@
   tags:
     - always
 
+- name: Login defaults | Inspect login.defs again right before the write, with its SHA-256
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_login_defs }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ld_restat
+  when: __linux_compliance_remediate_ld_status == 'applied'
+  tags:
+    - always
+
+- name: Login defaults | Refuse to write over a change made to login.defs since it was read
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_status: modified_during_apply
+  when:
+    - __linux_compliance_remediate_ld_status == 'applied'
+    - >-
+      (__linux_compliance_remediate_ld_restat.stat.checksum | default(''))
+      != (__linux_compliance_remediate_ld_current.content | b64decode | hash('sha256'))
+  tags:
+    - always
+
 - name: Login defaults | Record the prior line of the setting, the line written and the state of login.defs
   freesecdev.linux_compliance.control_state:
     action: record
@@ -90,7 +114,7 @@
       - name: group
         value: "{{ __linux_compliance_remediate_ld_stat.stat.gid | string }}"
       - name: sha256
-        value: "{{ __linux_compliance_remediate_ld_stat.stat.checksum }}"
+        value: "{{ __linux_compliance_remediate_ld_current.content | b64decode | hash('sha256') }}"
     collection_version: "{{ __linux_compliance_remediate_collection_version }}"
   register: __linux_compliance_remediate_ld_record
   when:
@@ -152,8 +176,12 @@
                            ~ ' as well; the collection does not change files it does not own',
              'long_line': __linux_compliance_remediate_login_defs ~ ' has a line of 1023 bytes or more, which'
                           ~ ' shadow-utils reads in pieces that can each set a setting; nothing was written',
-             'unreadable_file': 'libeconf, through which util-linux reads '
-                                ~ __linux_compliance_remediate_rule.parameters.setting ~ ', does not read '
+             'modified_during_apply': __linux_compliance_remediate_login_defs ~ ' changed after it was read;'
+                                      ~ ' nothing was written over the change',
+             'unreadable_file': 'libeconf, through which '
+                                ~ (__linux_compliance_remediate_ld_econf_reader.program | default('a reader'))
+                                ~ ' reads ' ~ __linux_compliance_remediate_rule.parameters.setting
+                                ~ ', does not read '
                                 ~ (__linux_compliance_remediate_ld_econf_blockers | join(', '))
                                 ~ ' as one configuration (a line that starts a section, or a drop-in that is a'
                                 ~ ' symbolic link to no regular file), so a written value would not take effect;'
@@ -166,7 +194,13 @@
                                  ~ ((__linux_compliance_remediate_ld_found + __linux_compliance_remediate_ld_keys)
                                     | first | default('') | to_json)
                                  ~ ' of ' ~ __linux_compliance_remediate_login_defs
-                                 ~ ((' holds a control character other than a tab or a carriage return, which the'
+                                 ~ ((' sets ' ~ __linux_compliance_remediate_rule.parameters.setting
+                                     ~ ' without a value, on which libeconf 0.4.1 crashes, and with it '
+                                     ~ (__linux_compliance_remediate_ld_econf_reader.program | default('its reader'))
+                                     ~ '; nothing was written')
+                                    if __linux_compliance_remediate_ld_econf_null
+                                       and not __linux_compliance_remediate_ld_nul
+                                    else (' holds a control character other than a tab or a carriage return, which the'
                                      ~ ' state ledger does not record, so the line could not be restored exactly;'
                                      ~ ' nothing was written')
                                     if __linux_compliance_remediate_ld_unrecordable

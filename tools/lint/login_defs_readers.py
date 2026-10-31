@@ -39,6 +39,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 LIBECONF: Final[str] = "libeconf.so.0"
+LIBPAM: Final[str] = "libpam.so.0"
+LOGIN_DEFS: Final[bytes] = b"/etc/login.defs"
+PAM_KEY: Final[bytes] = b"UMASK"
+ECONF_NOKEY: Final[int] = 5
 ECONF_KEY: Final[bytes] = b"FAIL_DELAY"
 ECONF_ARGUMENTS: Final[tuple[bytes, ...]] = (b"/etc", b"login", b"defs", b"= \t", b"#")
 UNSIGNED_INT: Final[int] = 2**32
@@ -221,20 +225,24 @@ def read_econf(library: ctypes.CDLL, key: bytes = ECONF_KEY) -> int | str:
     """Read ``key`` as util-linux ``getlogindefs_num`` does through libeconf.
 
     Returns the number that ``login`` uses (``strtoull`` in base 10, cast to an unsigned int),
-    ``"error"`` when libeconf reads no configuration, ``"nokey"`` when the key is not set and
-    ``"null"`` when it is set without a value, where ``login`` would pass a null pointer.
+    ``"error"`` when libeconf reads no configuration or fails to convert, and ``"nokey"`` when the
+    key is not set; in both cases ``login`` falls back to its default. A key without a value is
+    ``"crash"``: libeconf 0.4.1 dereferences the missing value in ``econf_getUInt64Value``, so it
+    is never asked for the number.
     """
     handle = ctypes.c_void_p()
     if library.econf_readDirs(ctypes.pointer(handle), None, *ECONF_ARGUMENTS):
         return "error"
     try:
         text = ctypes.c_char_p()
-        if library.econf_getStringValue(handle, None, key, ctypes.pointer(text)):
-            return "nokey"
+        code = library.econf_getStringValue(handle, None, key, ctypes.pointer(text))
+        if code:
+            return "nokey" if code == ECONF_NOKEY else "error"
         if text.value is None:
-            return "null"
+            return "crash"
         number = ctypes.c_uint64(0)
-        library.econf_getUInt64Value(handle, None, key, ctypes.pointer(number))
+        if library.econf_getUInt64Value(handle, None, key, ctypes.pointer(number)):
+            return "error"
         return int(number.value) % UNSIGNED_INT
     finally:
         library.econf_freeFile(handle)
@@ -247,6 +255,41 @@ def econf_readings(directory: Path, library: ctypes.CDLL, root: Path) -> dict[st
     for key in sorted(cast("Mapping[str, State]", read_json(directory / STATES_FILE))):
         install(directory / key, root)
         readings[key] = read_econf(library)
+    return readings
+
+
+def configure_pam(library: ctypes.CDLL, libc: ctypes.CDLL) -> None:
+    """Declare ``pam_modutil_search_key`` of libpam and ``free`` of the C library."""
+    library.pam_modutil_search_key.restype = ctypes.c_void_p
+    library.pam_modutil_search_key.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+    libc.free.argtypes = [ctypes.c_void_p]
+
+
+def read_pam(library: ctypes.CDLL, libc: ctypes.CDLL, key: bytes = PAM_KEY) -> str | None:
+    """Read ``key`` as ``pam_umask`` does, through ``pam_modutil_search_key`` of libpam.
+
+    Linux-PAM 1.5.1 of Rocky Linux 9 is built with libeconf and reads with
+    ``econf_search_key("login", ".defs", key)``; 1.5.3 of Ubuntu 24.04 parses the lines itself.
+    Returns the value as the bytes it found, decoded as Latin-1, or ``None`` when it found none.
+    """
+    pointer = library.pam_modutil_search_key(None, LOGIN_DEFS, key)
+    if not pointer:
+        return None
+    try:
+        return ctypes.string_at(pointer).decode("latin-1")
+    finally:
+        libc.free(pointer)
+
+
+def pam_readings(
+    directory: Path, library: ctypes.CDLL, libc: ctypes.CDLL, root: Path
+) -> dict[str, str | None]:
+    """Install every state of ``directory`` below ``root`` in turn and read it with libpam."""
+    configure_pam(library, libc)
+    readings: dict[str, str | None] = {}
+    for key in sorted(cast("Mapping[str, State]", read_json(directory / STATES_FILE))):
+        install(directory / key, root)
+        readings[key] = read_pam(library, libc)
     return readings
 
 
@@ -286,35 +329,49 @@ def merge(directory: Path) -> dict[str, object]:
             (directory / f"{platform}-shadow.tsv").read_text(encoding="utf-8")
         )
     econf = cast("Mapping[str, object]", read_json(directory / "rocky-econf.json"))
+    pam = {
+        platform: cast("Mapping[str, object]", read_json(directory / f"{platform}-pam.json"))
+        for platform in PLATFORMS
+    }
     table: dict[str, object] = {}
     for key in sorted(states):
-        rocky = dict(shadow["rocky"][key])
-        rocky["libeconf"] = econf[key]
-        table[key] = {"ubuntu": shadow["ubuntu"][key], "rocky": rocky}
+        found = {
+            platform: {**shadow[platform][key], "pam": pam[platform][key]} for platform in PLATFORMS
+        }
+        found["rocky"]["libeconf"] = econf[key]
+        table[key] = found
     return {"readers": readers, "states": table}
 
 
-def main(
-    argv: Sequence[str] | None = None, library: ctypes.CDLL | None = None, root: Path = Path("/")
-) -> int:
-    """Run one subcommand; ``library`` and ``root`` exist so that unit tests need no container."""
+SUBCOMMANDS: Final[Mapping[str, tuple[str, ...]]] = {
+    "decide": ("cases", "output"),
+    "prepare": ("cases", "decisions", "directory"),
+    "install": ("state",),
+    "econf": ("directory",),
+    "pam": ("directory",),
+    "merge": ("directory", "output"),
+}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Return the parser of the subcommands, each with its path arguments."""
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     commands = parser.add_subparsers(dest="command", required=True)
-    decide_command = commands.add_parser("decide")
-    decide_command.add_argument("cases", type=Path)
-    decide_command.add_argument("output", type=Path)
-    prepare = commands.add_parser("prepare")
-    prepare.add_argument("cases", type=Path)
-    prepare.add_argument("decisions", type=Path)
-    prepare.add_argument("directory", type=Path)
-    install_command = commands.add_parser("install")
-    install_command.add_argument("state", type=Path)
-    econf = commands.add_parser("econf")
-    econf.add_argument("directory", type=Path)
-    merge_command = commands.add_parser("merge")
-    merge_command.add_argument("directory", type=Path)
-    merge_command.add_argument("output", type=Path)
-    arguments = parser.parse_args(argv)
+    for name, paths in SUBCOMMANDS.items():
+        command = commands.add_parser(name)
+        for path in paths:
+            command.add_argument(path, type=Path)
+    return parser
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    library: ctypes.CDLL | None = None,
+    root: Path = Path("/"),
+    libc: ctypes.CDLL | None = None,
+) -> int:
+    """Run one subcommand; ``library``, ``libc`` and ``root`` let unit tests skip the container."""
+    arguments = build_parser().parse_args(argv)
     if arguments.command == "decide":
         decide(arguments.cases, arguments.output)
     elif arguments.command == "prepare":
@@ -326,6 +383,11 @@ def main(
     elif arguments.command == "econf":
         readings = econf_readings(arguments.directory, library or ctypes.CDLL(LIBECONF), root)
         sys.stdout.write(json.dumps(readings, sort_keys=True) + "\n")
+    elif arguments.command == "pam":
+        found = pam_readings(
+            arguments.directory, library or ctypes.CDLL(LIBPAM), libc or ctypes.CDLL(None), root
+        )
+        sys.stdout.write(json.dumps(found, sort_keys=True) + "\n")
     else:
         table = json.dumps(merge(arguments.directory), indent=1, sort_keys=True)
         arguments.output.write_text(table + "\n", encoding="utf-8")

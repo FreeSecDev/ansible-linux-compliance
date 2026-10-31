@@ -345,6 +345,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_current$') == [] or
         '__linux_compliance_remediate_ld_current' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_defaults$') == [] or
+        '__linux_compliance_remediate_ld_defaults' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_directory$') == [] or
         '__linux_compliance_remediate_ld_directory' in (hostvars[inventory_hostname] | list)
       - >-
@@ -359,6 +362,12 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_econf_blockers$') == [] or
         '__linux_compliance_remediate_ld_econf_blockers' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_econf_null$') == [] or
+        '__linux_compliance_remediate_ld_econf_null' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_econf_reader$') == [] or
+        '__linux_compliance_remediate_ld_econf_reader' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_econf_separated$') == [] or
         '__linux_compliance_remediate_ld_econf_separated' in (hostvars[inventory_hostname] | list)
@@ -461,6 +470,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_rerecord$') == [] or
         '__linux_compliance_remediate_ld_rerecord' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_restat$') == [] or
+        '__linux_compliance_remediate_ld_restat' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_restored$') == [] or
         '__linux_compliance_remediate_ld_restored' in (hostvars[inventory_hostname] | list)
@@ -1150,6 +1162,8 @@
     __linux_compliance_remediate_ld_dropin_texts: __linux_compliance_unset__
     __linux_compliance_remediate_ld_dropins: __linux_compliance_unset__
     __linux_compliance_remediate_ld_econf_blockers: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_econf_null: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_econf_reader: __linux_compliance_unset__
     __linux_compliance_remediate_ld_econf_separated: __linux_compliance_unset__
     __linux_compliance_remediate_ld_econf_value: __linux_compliance_unset__
     __linux_compliance_remediate_ld_entry: __linux_compliance_unset__
@@ -1176,6 +1190,7 @@
     __linux_compliance_remediate_ld_record: __linux_compliance_unset__
     __linux_compliance_remediate_ld_regexp: __linux_compliance_unset__
     __linux_compliance_remediate_ld_rerecord: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_restat: __linux_compliance_unset__
     __linux_compliance_remediate_ld_restored: __linux_compliance_unset__
     __linux_compliance_remediate_ld_satisfied: __linux_compliance_unset__
     __linux_compliance_remediate_ld_set: __linux_compliance_unset__
@@ -1410,6 +1425,8 @@
       - __linux_compliance_remediate_ld_dropin_texts == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_dropins == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_econf_blockers == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_econf_null == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_econf_reader == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_econf_separated == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_econf_value == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_entry == '__linux_compliance_unset__'
@@ -1436,6 +1453,7 @@
       - __linux_compliance_remediate_ld_record == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_regexp == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_rerecord == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_restat == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_restored == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_satisfied == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_set == '__linux_compliance_unset__'
@@ -1601,6 +1619,7 @@
       - __linux_compliance_remediate_ld_bits == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_cleanup_status == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_comparison == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_defaults == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_index == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_lines == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_link == '__linux_compliance_unset__'
@@ -1709,6 +1728,10 @@
         __linux_compliance_remediate_login_defs_getdef_number_pattern is not defined or
         __linux_compliance_remediate_login_defs_getdef_number_pattern == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_getdef_number_pattern']
+      - >-
+        __linux_compliance_remediate_login_defs_libeconf_readers is not defined or
+        __linux_compliance_remediate_login_defs_libeconf_readers == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_login_defs_libeconf_readers']
       - >-
         __linux_compliance_remediate_login_defs_long_line_pattern is not defined or
         __linux_compliance_remediate_login_defs_long_line_pattern == (lookup('ansible.builtin.file', role_path ~
@@ -1898,6 +1921,7 @@
     __linux_compliance_remediate_ld_bits: __linux_compliance_unset__
     __linux_compliance_remediate_ld_cleanup_status: __linux_compliance_unset__
     __linux_compliance_remediate_ld_comparison: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_defaults: __linux_compliance_unset__
     __linux_compliance_remediate_ld_index: __linux_compliance_unset__
     __linux_compliance_remediate_ld_lines: __linux_compliance_unset__
     __linux_compliance_remediate_ld_link: __linux_compliance_unset__
@@ -2048,6 +2072,8 @@
     __linux_compliance_remediate_ld_dropin_texts: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_dropins: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_econf_blockers: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_econf_null: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_econf_reader: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_econf_separated: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_econf_value: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_entry: __linux_compliance_unset_again__
@@ -2074,6 +2100,7 @@
     __linux_compliance_remediate_ld_record: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_regexp: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_rerecord: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_restat: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_restored: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_satisfied: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_set: __linux_compliance_unset_again__
@@ -2308,6 +2335,8 @@
       - __linux_compliance_remediate_ld_dropin_texts == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_dropins == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_econf_blockers == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_econf_null == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_econf_reader == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_econf_separated == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_econf_value == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_entry == '__linux_compliance_unset_again__'
@@ -2334,6 +2363,7 @@
       - __linux_compliance_remediate_ld_record == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_regexp == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_rerecord == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_restat == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_restored == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_satisfied == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_set == '__linux_compliance_unset_again__'
@@ -2499,6 +2529,7 @@
       - __linux_compliance_remediate_ld_bits == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_cleanup_status == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_comparison == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_defaults == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_index == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_lines == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_link == '__linux_compliance_unset_again__'
@@ -2588,6 +2619,7 @@
     __linux_compliance_remediate_ld_bits: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_cleanup_status: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_comparison: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_defaults: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_index: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_lines: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_link: __linux_compliance_unset_again__
@@ -2738,6 +2770,8 @@
     __linux_compliance_remediate_ld_dropin_texts: __linux_compliance_unset__
     __linux_compliance_remediate_ld_dropins: __linux_compliance_unset__
     __linux_compliance_remediate_ld_econf_blockers: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_econf_null: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_econf_reader: __linux_compliance_unset__
     __linux_compliance_remediate_ld_econf_separated: __linux_compliance_unset__
     __linux_compliance_remediate_ld_econf_value: __linux_compliance_unset__
     __linux_compliance_remediate_ld_entry: __linux_compliance_unset__
@@ -2764,6 +2798,7 @@
     __linux_compliance_remediate_ld_record: __linux_compliance_unset__
     __linux_compliance_remediate_ld_regexp: __linux_compliance_unset__
     __linux_compliance_remediate_ld_rerecord: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_restat: __linux_compliance_unset__
     __linux_compliance_remediate_ld_restored: __linux_compliance_unset__
     __linux_compliance_remediate_ld_satisfied: __linux_compliance_unset__
     __linux_compliance_remediate_ld_set: __linux_compliance_unset__

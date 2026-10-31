@@ -110,6 +110,33 @@
   tags:
     - always
 
+- name: Login defaults | Inspect login.defs again right before the restore, with its SHA-256
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_login_defs }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_ld_restat
+  when:
+    - __linux_compliance_remediate_ld_reason is none
+    - not __linux_compliance_remediate_ld_already
+  tags:
+    - always
+
+- name: Login defaults | Refuse to write over a change made to login.defs since it was read
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_ld_reason: modified_during_cleanup
+  when:
+    - __linux_compliance_remediate_ld_reason is none
+    - not __linux_compliance_remediate_ld_already
+    - >-
+      (__linux_compliance_remediate_ld_restat.stat.checksum | default(''))
+      != (__linux_compliance_remediate_ld_current.content | b64decode | hash('sha256'))
+  tags:
+    - always
+
 - name: Login defaults | Write back the line that login.defs had before in its place, or remove the line written
   vars:
     __linux_compliance_remediate_ld_lines: >-

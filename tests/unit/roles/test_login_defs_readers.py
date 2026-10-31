@@ -31,11 +31,13 @@ READERS: Final[Mapping[str, tuple[tuple[str, str], ...]]] = {
     "PASS_MAX_DAYS": (("ubuntu", "maximum"), ("rocky", "maximum")),
     "PASS_MIN_DAYS": (("ubuntu", "minimum"), ("rocky", "minimum")),
     "PASS_WARN_AGE": (("ubuntu", "warning"), ("rocky", "warning")),
-    "UMASK": (("ubuntu", "home_mode"), ("rocky", "home_mode")),
+    "UMASK": (("ubuntu", "home_mode"), ("rocky", "home_mode"), ("ubuntu", "pam"), ("rocky", "pam")),
     "CREATE_HOME": (("ubuntu", "home_created"), ("rocky", "home_created")),
     "FAIL_DELAY": (("rocky", "libeconf"),),
     "PASS_MIN_LEN": (),
 }
+LOGIN_DEFAULT_DELAY: Final[int] = 5
+C_SPACE: Final[str] = " \t\n\v\f\r"
 CASE_GROUPS: Final[tuple[str, ...]] = ("values", "control", "review", "readers")
 BYTES: Final[tuple[str, ...]] = ("\r", "\v", "\f", "\x00")
 
@@ -65,14 +67,38 @@ def decisions(tmp_path_factory: pytest.TempPathFactory) -> dict[str, dict[str, o
     return cast("dict[str, dict[str, object]]", json.loads(output.read_text(encoding="utf-8")))
 
 
+def pam_umask(value: object) -> int | None:
+    """Return the umask that ``pam_umask`` sets from a value of ``pam_modutil_search_key``.
+
+    ``set_umask`` takes ``strtoul(value, &end, 8) & 0777`` and sets nothing when no digit was read.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.lstrip(C_SPACE)
+    sign = -1 if text.startswith("-") else 1
+    text = text[1:] if text[:1] in "+-" else text
+    digits = len(text) - len(text.lstrip("01234567"))
+    if not digits:
+        return None
+    return (sign * int(text[:digits], 8)) % 2**64 & 0o777
+
+
 def reading(platform: str, reader: str, state: str) -> object:
-    """Return what ``reader`` read on ``platform`` from a state, as a number where it is one."""
+    """Return what the program behind ``reader`` uses on ``platform`` for a state.
+
+    A miss of libeconf is the default of util-linux ``login`` (``LOGIN_EXIT_TIMEOUT``, five
+    seconds), and a key without a value, on which libeconf crashes, is no delay at all.
+    """
     table = states()
     if state not in table:
         return "missing from the table"
     value = table[state][platform][reader]
     if reader == "home_mode":
         return 0o777 & ~int(str(value), 8) if str(value).isdigit() else None
+    if reader == "pam":
+        return pam_umask(value)
+    if reader == "libeconf" and not isinstance(value, int):
+        return 0 if value == "crash" else LOGIN_DEFAULT_DELAY
     if reader == "home_created" or isinstance(value, int):
         return value
     return None
@@ -190,3 +216,5 @@ def test_the_readers_are_named_with_their_packages() -> None:
     assert readers["rocky"]["shadow"].startswith("shadow-utils-")
     assert readers["rocky"]["libeconf"].startswith("libeconf-")
     assert readers["rocky"]["util-linux"].startswith("util-linux-")
+    assert readers["ubuntu"]["pam"].startswith("libpam0g ")
+    assert readers["rocky"]["pam"].startswith("pam-")

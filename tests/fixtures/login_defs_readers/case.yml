@@ -12,7 +12,7 @@
       family: login_defs
       parameters: >-
         {{ {'setting': readers_case.setting, 'comparison': readers_case.comparison}
-           | combine({'libeconf': true} if readers_case.libeconf | default(false) else {})
+           | combine({'libeconf': readers_case.libeconf} if readers_case.libeconf is defined else {})
            | combine({'reads_dropins': true} if readers_case.reads_dropins | default(false) else {}) }}
     __linux_compliance_remediate_ld_values: "{{ {readers_case.name: readers_case.required} }}"
     __linux_compliance_remediate_ld_dropin_texts: >-

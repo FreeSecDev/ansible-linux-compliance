@@ -20,3 +20,12 @@ bugfixes:
     remediate - ``login_defs`` writes ``/etc/login.defs`` with ``ansible.builtin.copy`` from the text it read instead
     of ``lineinfile``, whose universal newlines rewrote every Windows line ending of the file; the cleanup now
     restores a file with Windows line endings or without a final newline byte for byte (FREES-198).
+  - >-
+    remediate - ``login_defs`` never writes ``FAIL_DELAY`` below the 5 seconds that util-linux ``login`` uses when
+    libeconf reads no value, so a stock Rocky Linux 9 file gets ``FAIL_DELAY  5``, refuses a ``FAIL_DELAY`` without a
+    value, on which libeconf 0.4.1 crashes, and refuses ``UMASK`` next to a drop-in that mentions it, a section line or
+    a drop-in link to no file, because Rocky Linux's ``pam_umask`` reads login.defs through libeconf (FREES-198).
+  - >-
+    remediate - ``login_defs`` reads the SHA-256 of ``/etc/login.defs`` again right before every write and refuses to
+    write over a change made since the decision (``modified_during_apply``, ``modified_during_cleanup``); the ledger
+    records the SHA-256 of the bytes the decision was made from (FREES-198).

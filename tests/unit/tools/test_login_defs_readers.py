@@ -47,10 +47,18 @@ def function(method: Callable[..., object]) -> Callable[..., object]:
 class FakeEconf:
     """Stands for libeconf 0.4.1: one configuration whose ``FAIL_DELAY`` is ``value``."""
 
-    def __init__(self, value: bytes | None, *, readable: bool = True, present: bool = True) -> None:
+    def __init__(
+        self,
+        value: bytes | None,
+        *,
+        readable: bool = True,
+        string_code: int = 0,
+        number_code: int = 0,
+    ) -> None:
         self.value = value
         self.readable = readable
-        self.present = present
+        self.string_code = string_code
+        self.number_code = number_code
         self.freed = 0
         self.library = types.SimpleNamespace(
             econf_readDirs=function(self.read_dirs),
@@ -71,8 +79,8 @@ class FakeEconf:
         assert isinstance(handle, ctypes.c_void_p)
         assert group is None
         assert key == readers.ECONF_KEY
-        if not self.present:
-            return ECONF_NOKEY
+        if self.string_code:
+            return self.string_code
         cast("Pointer", out).contents.value = self.value
         return 0
 
@@ -82,7 +90,7 @@ class FakeEconf:
         number = int(digits or b"0")
         value = (-number if (self.value or b"").startswith(b"-") else number) % 2**64
         cast("Pointer", out).contents.value = value
-        return 0
+        return self.number_code
 
     def free(self, handle: object) -> None:
         assert isinstance(handle, ctypes.c_void_p)
@@ -170,8 +178,10 @@ def test_a_drop_in_directory_that_is_a_file_or_a_link_is_replaced(
     [
         (FakeEconf(b"30"), 30),
         (FakeEconf(b"-1"), 2**32 - 1),
-        (FakeEconf(None), "null"),
-        (FakeEconf(b"30", present=False), "nokey"),
+        (FakeEconf(None), "crash"),
+        (FakeEconf(b"30", string_code=ECONF_NOKEY), "nokey"),
+        (FakeEconf(b"30", string_code=1), "error"),
+        (FakeEconf(b"30", number_code=1), "error"),
     ],
 )
 def test_libeconf_is_read_as_util_linux_login_reads_it(fake: FakeEconf, expected: object) -> None:
@@ -214,6 +224,8 @@ def write_outputs(directory: Path, key: str) -> None:
     for platform in readers.PLATFORMS:
         line = f"#shadow\t{platform}\n{key}\t0\t365\t7\t750\tyes\n"
         (directory / f"{platform}-shadow.tsv").write_text(line, encoding="utf-8")
+        found = json.dumps({key: "027" if platform == "rocky" else None})
+        (directory / f"{platform}-pam.json").write_text(found, encoding="utf-8")
     (directory / "rocky-econf.json").write_text(json.dumps({key: 4}), encoding="utf-8")
 
 
@@ -250,6 +262,8 @@ def test_the_main_entry_prepares_installs_reads_and_merges(
     assert table["states"][key]["rocky"]["libeconf"] == 4
     assert table["states"][key]["ubuntu"]["maximum"] == 365
     assert "libeconf" not in table["states"][key]["ubuntu"]
+    assert table["states"][key]["rocky"]["pam"] == "027"
+    assert table["states"][key]["ubuntu"]["pam"] is None
 
 
 def test_the_script_entry_point_runs_a_subcommand(
@@ -261,6 +275,10 @@ def test_the_script_entry_point_runs_a_subcommand(
         reading = "state\t0\t1\t2\t700\tno\n"
         (tmp_path / f"{platform}-shadow.tsv").write_text(reading, encoding="utf-8")
     (tmp_path / "rocky-econf.json").write_text(json.dumps({"state": "nokey"}), encoding="utf-8")
+    for platform in readers.PLATFORMS:
+        (tmp_path / f"{platform}-pam.json").write_text(
+            json.dumps({"state": None}), encoding="utf-8"
+        )
     monkeypatch.setattr(sys, "argv", ["login_defs_readers.py", "merge", str(tmp_path), str(output)])
     with pytest.raises(SystemExit) as raised:
         runpy.run_path(readers.__file__, run_name="__main__")
@@ -357,3 +375,57 @@ def test_the_decide_subcommand_decides_the_cases(
     monkeypatch.setattr(readers, "decide", decide)
     assert readers.main(["decide", str(tmp_path / "c.json"), str(tmp_path / "d.json")]) == 0
     assert seen == [(tmp_path / "c.json", tmp_path / "d.json")]
+
+
+class FakePam:
+    """Stands for libpam and the C library: ``pam_modutil_search_key`` finds ``value``."""
+
+    def __init__(self, value: bytes | None) -> None:
+        self.value = value
+        self.buffer = ctypes.create_string_buffer(value or b"")
+        self.freed: list[object] = []
+        self.library = types.SimpleNamespace(pam_modutil_search_key=function(self.search_key))
+        self.libc = types.SimpleNamespace(free=function(self.freed.append))
+
+    def search_key(self, handle: object, path: bytes, key: bytes) -> int | None:
+        assert handle is None
+        assert path == readers.LOGIN_DEFS
+        assert key == readers.PAM_KEY
+        return ctypes.addressof(self.buffer) if self.value is not None else None
+
+    def cdll(self) -> tuple[ctypes.CDLL, ctypes.CDLL]:
+        return cast("ctypes.CDLL", self.library), cast("ctypes.CDLL", self.libc)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"), [(b"027", "027"), (b"0\xe977 ", "0\u00e977 "), (None, None)]
+)
+def test_pam_is_read_as_pam_umask_reads_it(value: bytes | None, expected: str | None) -> None:
+    fake = FakePam(value)
+    library, libc = fake.cdll()
+    readers.configure_pam(library, libc)
+    assert readers.read_pam(library, libc) == expected
+    assert len(fake.freed) == (0 if value is None else 1)
+
+
+def test_the_pam_subcommand_reads_every_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    directory = tmp_path / "states"
+    readers.write_states({"state": readers.state_of("UMASK 027\n", {}, [])}, directory)
+    root = tmp_path / "root"
+    (root / "etc").mkdir(parents=True)
+    fake = FakePam(b"027")
+    library, libc = fake.cdll()
+    assert readers.main(["pam", str(directory)], library=library, root=root, libc=libc) == 0
+    assert json.loads(capsys.readouterr().out) == {"state": "027"}
+    loaded: list[str | None] = []
+
+    def load_library(name: str | None) -> ctypes.CDLL:
+        loaded.append(name)
+        return library if name == readers.LIBPAM else libc
+
+    monkeypatch.setattr(ctypes, "CDLL", load_library)
+    assert readers.main(["pam", str(directory)], root=root) == 0
+    assert json.loads(capsys.readouterr().out) == {"state": "027"}
+    assert loaded == [readers.LIBPAM, None]
