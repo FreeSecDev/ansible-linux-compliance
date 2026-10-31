@@ -107,9 +107,71 @@ On slow runs the snapshot answered at 128 to 239 kB/s, and installing QEMU and l
   file, `tools/molecule/libvirt-host-packages.sh fetch` checks each one and downloads only what is missing or wrong,
   `actions/cache/save` stores them on a miss, and `install` checks them again and installs them with `apt-get`
   configured with no package source, so that `apt` can neither download nor install a file that was not verified. A
-  cache entry is therefore only a speed-up: its content is never trusted. As for the cloud images, a pull request from
-  a fork neither restores nor saves it.
+  corrupt or stale cache entry therefore costs only a download. A crafted one is not stopped by these checks, because
+  `actions/cache` restores with `tar -P` and can rewrite the checker before it runs; the boundary is write access to
+  the cache scope (amended by FREES-182, T-MOLECULE-1 and T-LIBVIRT-1 in the
+  [threat model](../security/threat-model.md)). As for the cloud images, a pull request from a fork neither restores
+  nor saves it.
 - **Timings from the job log.** A timing callback such as `ansible.posix.profile_tasks` is code that Ansible loads,
   and the repository rules refuse `callbacks_enabled` and `ANSIBLE_CALLBACKS_ENABLED` (ADR 0004). The per-task times
   come instead from the timestamps that GitHub Actions puts on every log line: `make molecule-task-timings` reads a
   job log and prints the slowest tasks, so the runs need no change.
+
+## Amendment 2026-10-30: instance images and collections prepared once per run (FREES-182, FREES-184)
+
+Every Docker leg built both instance images in `create`, and every Molecule leg and `lint` installed the collections
+from Galaxy, about 35 times per run. Two flakes took pull requests out of the merge queue, whose check timeout is 30
+minutes: building the Rocky Linux image took 532 to 540 seconds on a slow package mirror instead of about 24, and
+Galaxy answered HTTP 500, cut downloads short, failed TLS or left its cache incomplete. These refinements apply
+([Molecule guide](../molecule.md#images-and-collections-built-once-per-run)).
+
+- **One job per input.** `molecule-images` builds the instance images and `molecule-collections` fetches the
+  collections, each once per run, with `contents: read` only. The Docker legs need both, the libvirt legs and `lint`
+  need `molecule-collections`, and `ci-gate` needs both. The jobs run before the legs start, so they add no
+  concurrent jobs at the peak of a run.
+- **Images: verify, never rebuild in a leg.** `make molecule-images-build` restores each image's archive from an
+  `actions/cache` entry keyed by its tag, which already hashes every build input, and reuses it only when the image
+  carries the label `org.freesecdev.molecule.inputs=<tag>` on exactly the layers of the pinned base, which it pulls by
+  digest. Otherwise it builds, with each pull and build attempt bounded by `timeout` and retried up to three times.
+  The job passes the image IDs as an output and the archives as a run artifact. A leg loads the archive and refuses an
+  image whose ID is not the recorded one; it never pulls or builds, because `MOLECULE_OFFLINE` is `true` in GitHub
+  Actions. `create.yml` builds nothing: it requires the record of verified images with its own tag and the recorded
+  ID. The tag scheme is unchanged. Images are never pushed, and they keep the digest-pinned bases.
+- **Collections: pinned by SHA-256, installed offline.** Galaxy publishes no signatures for the pinned collections.
+  `extensions/molecule/collections.pins` records the SHA-256 and size of each artifact, including the dependency
+  `community.library_inventory_filtering_v1`, which `requirements.yml` now pins as well. `make
+  molecule-collections-fetch` downloads only what a cached file does not match, with bounded `curl` retries, and every
+  install checks every file again and runs `ansible-galaxy collection install --offline` on verified copies, with an
+  unresolvable Galaxy server. No step after the fetch contacts Galaxy.
+- **Trust in caches.** As for the libvirt host packages, a pull request from a fork neither restores nor saves these
+  caches. Every collection file is checked against its pin, and a restored image against its inputs label and the
+  pinned base layers. These checks catch a corrupt or stale entry. They are no boundary against whoever can write an
+  entry in a restored scope: `actions/cache` restores with `tar -xf … -P`, so a crafted entry can rewrite any file
+  the runner user can write, the checking scripts included, before they run. The boundary is write access to the
+  `main` cache scope, which any code running in a workflow run on `main` has (T-MOLECULE-1 in the
+  [threat model](../security/threat-model.md)). The image cache, unlike the others, has no content pin, because
+  builds are not reproducible. It stays, because a hit keeps a slow mirror out of the run, under two limits: its key
+  carries the ISO week of the run (`make -s molecule-images-plan` prints `week=<YYYY-Www>`), so a planted entry is
+  restored at most until the week ends and every image is rebuilt at least once a week; and a scheduled run never
+  saves an entry (`actions/cache/save` runs only on a miss and not on `schedule`). The job always re-saves the verified
+  image with `docker save`, so the legs never receive the cache's bytes, and both the job and the legs refuse an
+  archive that loads any image other than the target. Within a run the artifact's digest is checked by
+  `actions/download-artifact` and the image ID by the leg.
+- **Copies of the collections.** `install` verifies the copies in a `mktemp -d` directory with mode `0700` that the
+  invoking user owns, and `ansible-galaxy` runs as that user into a path it owns. A process of the same user could
+  swap a copy after its check, but it could as well edit the installed collection afterwards; no privilege boundary is
+  crossed, and the copy still protects against a change through the downloaded file's path.
+- **Dependencies are matched by name.** `make molecule-collections-lock` refuses a dependency that
+  `requirements.yml` does not pin, but compares names only, not the dependency's version range. A pinned version
+  outside the range passes the lock and then fails the `--offline` install, so it fails closed, only later.
+- **Shell scripts, not Ansible.** The image and collection steps are `tools/molecule/instance-images.sh` and
+  `tools/molecule/galaxy-collections.sh`, called by `make`, for the same reason as the cloud image fetch: tools and
+  plugins stay free of `subprocess` outside the audited process helper, and playbooks use no `shell` or `command`.
+  The tag computation, which needs YAML, is the pure Python `tools/molecule/instance_images.py`.
+
+- **Measured.** Before, on runs 41112773853 and 41113885988, the Docker legs spent a median of 27 to 29 seconds
+  building images and up to 472 when the mirror was slow, and every Molecule job and `lint` spent a median of 17 to 18
+  seconds installing collections from Galaxy. After, on both attempts of run 41128905509, no leg built an image or
+  contacted Galaxy: loading and verifying an image took a median of 7 to 9 seconds, the offline install 4 seconds,
+  `molecule-images` 56 seconds when it built both images and 32 on cache hits, and `molecule-collections` 7 to 11
+  seconds. The tables are in the [Molecule guide](../molecule.md#durations).

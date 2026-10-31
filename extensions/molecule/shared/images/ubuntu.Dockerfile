@@ -8,8 +8,9 @@ ARG LIBPAM_PWQUALITY_VERSION=1.4.5-3build1
 ARG OPENSSH_SERVER_VERSION=1:9.6p1-3ubuntu13.20
 ARG SUDO_VERSION=1.9.15p5-3ubuntu5.24.04.4
 ARG AUDITD_VERSION=1:3.1.2-2.1ubuntu0.1
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes \
+RUN apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 \
+        install --no-install-recommends --yes \
         "python3=${PYTHON3_VERSION}" \
         "openscap-scanner=${OPENSCAP_SCANNER_VERSION}" \
         "cron=${CRON_VERSION}" \

@@ -75,6 +75,11 @@ def gate_needs(
             "lint": {"result": other, "outputs": {}},
             "scc-changes": {"result": changes, "outputs": outputs},
             "scc-smoke": {"result": smoke, "outputs": {}},
+            "molecule-plan": {
+                "result": "success",
+                "outputs": {"scope": "full", "lifecycle_legs": "1"},
+            },
+            "molecule-lifecycle": {"result": "success", "outputs": {}},
         }
     )
 

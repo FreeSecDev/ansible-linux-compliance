@@ -7,7 +7,8 @@ reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogu
 [ADR 0011](adr/0011-control-toggles-and-cleanup.md) (toggles, cleanup and the state ledger, with the amendments of
 FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
 banners and password quality), [ADR 0022](adr/0022-native-sudo-drop-ins.md) (sudo, FREES-175),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109). How to make a further topic
+[ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109),
+[ADR 0024](adr/0024-native-login-defs.md) (login.defs, FREES-185). How to make a further topic
 native is in the
 [native remediation guide](native-remediation-guide.md).
 
@@ -17,11 +18,11 @@ compliance: only a later audit shows whether the rule now passes, and a host sca
 
 ## Status
 
-The dispatcher, the safety model and four native families are implemented. The catalogue holds every rule that a
-pinned profile selects, 1203 rules in 55 families (FREES-53), generated from the digest-verified content and listed in
-the [control family reference](control-families.md). 74 rules have a native remediation: the reference rule
+The dispatcher, the safety model and six native families are implemented. The catalogue holds every rule that a
+pinned profile selects, 1203 rules in 56 families (FREES-53), generated from the digest-verified content and listed in
+the [control family reference](control-families.md). 81 rules have a native remediation: the reference rule
 `xccdf_org.ssgproject.content_rule_file_permissions_crontab` (family `file_permissions`), 15 rules of `banners`, 14
-of `pwquality`, 34 of `ssh` and 10 of `sudo` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
+of `pwquality`, 34 of `ssh`, 7 of `login_defs` and 10 of `sudo` ([native families](#native-families)); every other rule has the strategy `audit_only`: it can be
 switched off per rule and per topic, the audit excludes it and reports it as `disabled`, and remediation reports it as
 `not_implemented` and never changes anything for it. The native remediations land topic by topic on top of this
 catalogue, following the [native remediation guide](native-remediation-guide.md). Every native topic is exercised for
@@ -311,7 +312,7 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md),
+[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0024](adr/0024-native-login-defs.md),
 [ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
@@ -527,6 +528,46 @@ A drop-in that is already gone at cleanup, or a setting that is already back at 
 `tests/unit/tools/test_content_golden_auditd.py` checks every line and setting against the OVAL of both pinned
 datastreams for every profile that selects the rule.
 
+### Account defaults in login.defs
+
+`login_defs` is disruptive (umbrella `accounts`), so it is applied and cleaned up only with `login_defs` or `accounts`
+in `linux_compliance_remediate_allow_disruptive`. Every check of the pinned content reads the setting from
+`/etc/login.defs` alone on both platforms, so the family edits one line per setting there
+([ADR 0024](adr/0024-native-login-defs.md); `tests/unit/tools/test_content_golden_login_defs.py` pins each check's
+pattern, comparison and value against the OVAL of both datastreams). The tags `password_aging`, `umask` and
+`user_sessions` keep the toggles of the families that held these rules before, and the tag `login_defs` lets the topic
+toggle also switch off `set_password_hashing_algorithm_logindefs`, which stays in `pam`.
+
+| Rules | What is applied | Record and cleanup |
+|---|---|---|
+| `accounts_maximum_age_login_defs` (`PASS_MAX_DAYS`, at most the value), `accounts_minimum_age_login_defs` (`PASS_MIN_DAYS`), `accounts_password_warn_age_login_defs` (`PASS_WARN_AGE`), `accounts_password_minlen_login_defs` (`PASS_MIN_LEN`), `accounts_logon_fail_delay` (`FAIL_DELAY`, each at least the value) | `<NAME> <value>` with the profile's value, written with `lineinfile` in place of the one line of the setting (found in any case), or appended when the setting is absent; a stricter value in the strict form is kept | `recorded_value` of `method` (`line`), `setting_line` (the prior line, or `null`), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup writes the prior line back in its place, or removes the line when the setting was absent |
+| `accounts_umask_etc_login_defs` (`UMASK`) | Three octal digits with every bit that the profile requires; the bits of the current value are kept (`UMASK 0077` becomes `077` under 027) | as above |
+| `accounts_have_homedir_login_defs` (`CREATE_HOME`) | `CREATE_HOME yes` | as above |
+
+The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `notapplicable` (apply) | `/etc/login.defs` does not exist (shadow-utils is not installed) |
+| `not_regular_file` | `/etc/login.defs` is a symbolic link or not a regular file; nothing is written through a link |
+| `overridden`, `not_directory` (apply) | Only `CREATE_HOME`, whose check also reads `/etc/login.defs.d`: a drop-in there sets the name, or the directory is a symbolic link or not a directory. The other rules ignore the directory, as their checks and the pinned shadow-utils do |
+| `duplicate_setting` (apply) | The name is set on more than one line, in any case (`pam_umask` reads the first, shadow-utils the last) |
+| `unreadable_value` (apply) | The value is in a form that shadow-utils or `pam_umask` may read but the family cannot compare (quoted, signed, longer, another base, such as `"30"`, `+30`, `00077` or `0x3f`), so a written value could be looser; the reason names the line |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The setting is not exactly the line the collection wrote any more (changed or removed by hand), or the file's mode or ownership changed; an administrator's later change is never overwritten |
+| `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `/etc/login.defs` is gone |
+
+A line counts as compliant only in the form that both shadow-utils and the check read: the name in upper case, one
+decimal value without a leading zero and no trailing comment (shadow-utils parses with base 0, so it does not read
+`PASS_MAX_DAYS 30 # site` or `090` and reads `010` as 8). Any other line is rewritten, never looser than any
+reading of its first word (`PASS_MAX_DAYS 30 # site` becomes `PASS_MAX_DAYS 30`, `UMASK 077 # site` becomes `UMASK 077`). Commented lines are
+never touched. When the file already holds the recorded prior state at cleanup (an added line removed again by hand),
+the rule is `restored`, its entry is removed and nothing is written (FREES-173). Kept `audit_only`, with the reasons in
+ADR 0024: `set_password_hashing_algorithm_logindefs` (`pam`: its CIS value accepts two algorithms and must agree with
+the `pam_unix` hashing of the PAM stack), `no_shelllogin_for_systemaccounts` (it changes shells in `/etc/passwd`) and
+the rules of `password_aging` that change existing accounts in `/etc/shadow` (password hashes that cannot be recorded,
+no exact revert, and immediate expiry of existing passwords).
+
 ## Results
 
 The role publishes `linux_compliance_remediated`:
@@ -618,6 +659,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements, exports and the values that fixes substitute, digest and safety refusals, oversized values, chunking, grouping per profile, and every error of the generator integration, including `profile_value_source`. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_content_golden_native.py`, sudo | With the pinned content: every sudo drop-in is read by every check of its rule on both platforms, satisfies the check's pattern and state for every profile value (and matches none of its `none_exist` patterns), and every attribute rule restricts the path and the mode bits that the OVAL checks | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-native-check.yml`, sudo | A sudo rule without a profile value fails before any sudoers file is read, and every sudo family file and helper refuses to run without the opt-in. The sudo rules are not run against localhost, because `/etc/sudoers` is readable only by root | `make test-remediate-check`, CI job `test-playbooks` |
+| `tests/unit/tools/test_content_golden_login_defs.py` | With the pinned content: every native login_defs rule reads only `/etc/login.defs` (and, for `CREATE_HOME`, `/etc/login.defs.d/*.defs`) with the pinned object pattern, its comparison is the operation of the check's state and its value the external variable of the check, on both platforms; and every selected rule whose check reads `/etc/login.defs` is native or one of the two documented `audit_only` rules | `make test-content-golden`, CI job `test` |
+| `tests/playbooks/remediate-login-defs-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS level 2, RHEL 9 STIG and RHEL 9 ANSSI enhanced profiles every login_defs rule gets exactly one result, `changed` exactly when it is `applied`, a reason for every refusal, and `/etc/login.defs` is unchanged; a rule without a profile value fails before login.defs is read; the family file and helpers refuse to run without the opt-in; a ledger entry of another method or without one, a written line of another setting, a prior line over two lines and a malformed mode are refused and kept | `make test-remediate-check`, CI job `test-playbooks` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where
 `/var/lib/freesecdev/linux_compliance` already exists and is root-only it fails instead of reading it.

@@ -38,6 +38,10 @@ FAMILY_PARAMETERS: dict[str, list[set[str]]] = {
         {"path", "keyword"} | PROFILE_VALUE_PARAMETERS,
         {"path", "keyword", "crypto_policy_benchmarks"} | PROFILE_VALUE_PARAMETERS,
     ],
+    "login_defs": [
+        {"setting", "comparison", "value", "reads_dropins"},
+        {"setting", "comparison"} | PROFILE_VALUE_PARAMETERS,
+    ],
     "sudo": [
         {"method", "path", "options", "lines"},
         {"method", "path", "options", "lines", "value_pattern"} | PROFILE_VALUE_PARAMETERS,
@@ -60,9 +64,23 @@ NATIVE_FAMILIES = [
     "auditd_conf",
     "ssh",
     "pwquality",
+    "login_defs",
     "sudo",
 ]
-DISRUPTIVE_NATIVE_FAMILIES = ["auditd_rules_time", "auditd_conf", "ssh", "pwquality", "sudo"]
+DISRUPTIVE_NATIVE_FAMILIES = [
+    "auditd_rules_time",
+    "auditd_conf",
+    "ssh",
+    "pwquality",
+    "login_defs",
+    "sudo",
+]
+LOGIN_DEFS_VALUES = {
+    "at_most": r"(0|[1-9][0-9]{0,5})",
+    "at_least": r"(0|[1-9][0-9]{0,5})",
+    "umask": r"[0-7]{3}",
+    "equal": r"[a-z]{1,8}",
+}
 
 
 def load(path: Path) -> dict[str, object]:
@@ -235,6 +253,32 @@ def test_native_file_permission_rules_have_an_absolute_path_and_an_octal_maximum
         assert ".." not in parameters["path"]
         maximum = parameters["max_mode"]
         assert restricted_mode.restricted_mode(maximum, maximum) == maximum.zfill(4)
+
+
+def test_native_login_defs_rules_name_one_setting_each_and_a_value_of_their_form() -> None:
+    settings: list[str] = []
+    role_vars = load(ROLE / "vars" / "main.yml")
+    for comparison, pattern in LOGIN_DEFS_VALUES.items():
+        key = "word" if comparison == "equal" else "umask" if comparison == "umask" else "number"
+        assert role_vars[f"__linux_compliance_remediate_login_defs_{key}_pattern"] == f"^{pattern}$"
+    for rule in native():
+        if rule["family"] != "login_defs":
+            continue
+        parameters = cast("dict[str, object]", rule["parameters"])
+        setting = str(parameters["setting"])
+        settings.append(setting)
+        assert re.fullmatch(r"[A-Z][A-Z0-9_]{1,31}", setting)
+        pattern = LOGIN_DEFS_VALUES[str(parameters["comparison"])]
+        if "value" in parameters:
+            assert re.fullmatch(pattern, str(parameters["value"]))
+            continue
+        entries = cast("list[dict[str, object]]", parameters["profile_values"])
+        assert entries
+        for entry in entries:
+            value = "".join(cast("list[str]", entry["value"]))
+            assert re.fullmatch(pattern, value), (rule["rule_id"], value)
+    assert sorted(settings) == sorted(set(settings))
+    assert len(settings) == 7
 
 
 def test_native_sudo_rules_write_only_drop_ins_that_sudo_reads_and_restrict_two_paths() -> None:

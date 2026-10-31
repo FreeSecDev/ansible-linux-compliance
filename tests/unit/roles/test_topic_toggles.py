@@ -37,6 +37,7 @@ SUBSYSTEMS = {
     },
     "accounts": {
         "password_aging",
+        "login_defs",
         "root_access",
         "umask",
         "user_sessions",
@@ -229,7 +230,7 @@ def test_the_tags_widen_exactly_eight_former_toggles() -> None:
         "firewall": 1,
         "ssh": 4,
         "pam": 1,
-        "accounts": 2,
+        "accounts": 3,
         "sudo": 3,
         "mandatory_access_control": 1,
     }

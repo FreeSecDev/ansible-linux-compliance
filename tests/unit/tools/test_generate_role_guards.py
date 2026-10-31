@@ -23,6 +23,7 @@ NATIVE_FAMILIES = (
     "auditd_conf",
     "ssh",
     "pwquality",
+    "login_defs",
     "sudo",
 )
 

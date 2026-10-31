@@ -1259,6 +1259,7 @@ def test_the_guard_refuses_other_permissions_for_the_scc_jobs(
     ]
 
 
+RESTORES = ("actions/cache@", "actions/cache/restore@")
 SCC_CACHE_CONDITION = (
     "github.event_name != 'pull_request'"
     " || (!github.event.pull_request.head.repo.fork"
@@ -1266,7 +1267,7 @@ SCC_CACHE_CONDITION = (
 )
 
 
-def test_a_fork_pull_request_neither_restores_nor_saves_the_scc_bundle_cache() -> None:
+def test_a_fork_pull_request_neither_restores_nor_saves_any_cache() -> None:
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     cache = [step for step in workflow["jobs"]["scc-smoke"]["steps"] if is_cache_step(step)]
     assert [step["if"] for step in cache] == [SCC_CACHE_CONDITION]
@@ -1277,7 +1278,16 @@ def test_a_fork_pull_request_neither_restores_nor_saves_the_scc_bundle_cache() -
         for step in job.get("steps", [])
         if str(step.get("uses", "")).startswith("actions/cache")
     ]
-    assert cache_actions == ["ci.yml:scc-smoke"] + ["ci.yml:molecule-libvirt"] * 3
+    assert (
+        cache_actions
+        == ["ci.yml:scc-smoke", "ci.yml:molecule-collections"]
+        + ["ci.yml:molecule-images"] * 4
+        + ["ci.yml:molecule-libvirt"] * 3
+    )
+    for job_name in ("molecule-collections", "molecule-images"):
+        job_steps = workflow["jobs"][job_name]["steps"]
+        caches = [step for step in job_steps if str(step.get("uses", "")).startswith(RESTORES)]
+        assert [step["if"] for step in caches] == [SCC_CACHE_CONDITION] * len(caches) != []
     libvirt_steps = workflow["jobs"]["molecule-libvirt"]["steps"]
     libvirt = [step for step in libvirt_steps if is_cache_step(step)]
     assert [step["if"] for step in libvirt] == [SCC_CACHE_CONDITION]

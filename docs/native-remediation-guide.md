@@ -8,8 +8,9 @@ lifecycle in Molecule. Audience: family authors and reviewers. Jira: FREES-53 (n
 [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server),
 [ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md) (auditd settings and audit rules).
 The contract of a family file is in [remediation.md](remediation.md#family-file-contract); this guide is the
-procedure. `file_permissions`, `banners`, `pwquality`, `ssh` and `sudo`
-([ADR 0022](adr/0022-native-sudo-drop-ins.md)) are the worked examples.
+procedure. `file_permissions`, `banners`, `pwquality`, `ssh`, `sudo`
+([ADR 0022](adr/0022-native-sudo-drop-ins.md)) and `login_defs` ([ADR 0024](adr/0024-native-login-defs.md)) are the
+worked examples.
 
 ## 1. Read what the content expects
 
@@ -162,3 +163,4 @@ role README and add a changelog fragment.
 | `auditd_rules_time` | the five time change rules (`adjtimex`, `clock_settime`, `settimeofday`, `stime`, the `/etc/localtime` watch) | `recorded_value`: one drop-in per rule, `/etc/audit/rules.d/50-freesecdev-<rule>.rules`, with the collection's own lines per benchmark (`lines` keyed by benchmark identifier) | The shared helper `auditd_rules_dropins.yml` is the framework of every audit rule topic: a strict line form, `compliant` when another file already holds every line, `duplicate_rule` when only part, `watch_target_missing`; the set is checked for repeated rules, loaded with `augenrules --load` through `audit_control` only where auditd runs, verified with `auditctl -l` and rolled back when it fails; a declaration may choose the lifecycle profile (`profiles`) and declare loaded rules for libvirt (`audit_rules` with `drivers`) |
 | `auditd_conf` | 20 settings of `/etc/audit/auditd.conf` | `recorded_value` of the prior line and the line written | Values from the profile or the check; an alternation is written least disruptive first; `duplicate_setting`, and `invalid_config` when auditd would refuse `space_left` and `admin_space_left` or `flush` and `freq` together; a running auditd reloads with `auditctl --signal reload` |
 | `sudo` | `use_pty`, `logfile`, `timestamp_timeout`, `!targetpw`/`!rootpw`/`!runaspw` (STIG); mode, owner and group of `/etc/sudoers` and `/etc/sudoers.d` (ANSSI) | `recorded_value`: one drop-in per rule below `/etc/sudoers.d` with its SHA-256, or the prior attribute and the one written | Every write is checked by `visudo` through `copy` `validate` (the one reviewed exception of the repository guard); `timestamp_timeout` comes from the content's fix (`profile_value_source: fix`); `conflicting_setting`, `not_included` and `invalid_sudoers` refuse to claim a change that would not take effect; rules that remove other people's `NOPASSWD`, `!authenticate` or user specifications stay `audit_only` |
+| `login_defs` | `PASS_MAX_DAYS`, `PASS_MIN_DAYS`, `PASS_WARN_AGE`, `PASS_MIN_LEN`, `UMASK`, `FAIL_DELAY`, `CREATE_HOME` in `/etc/login.defs` | `recorded_value`: one line per setting, the prior line (or `null`) and the line written | A new family whose rules came from three others, which keep their toggles as subsystem tags; the strict form that both the check and shadow-utils read decides `compliant`, a stricter value is kept, and `duplicate_setting`, `overridden` (a libeconf drop-in) and symbolic links refuse; a pre-state sets an administrator's `lines` |

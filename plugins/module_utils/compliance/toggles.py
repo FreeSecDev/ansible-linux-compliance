@@ -68,6 +68,7 @@ DISRUPTIVE_FAMILIES: Final[frozenset[str]] = frozenset(
         "ipsec",
         "ipv4_parameters",
         "ipv6_parameters",
+        "login_defs",
         "mail",
         "mount_options",
         "network_services",

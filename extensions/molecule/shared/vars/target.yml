@@ -18,6 +18,7 @@ molecule_other_native_topics:
   - auditd_conf
   - auditd_rules_time
   - banners
+  - login_defs
   - pwquality
   - ssh
   - sudo

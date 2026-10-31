@@ -1,0 +1,276 @@
+---
+- name: Login defaults refusals | Refuse to run unless the login_defs topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'login_defs'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['login_defs']
+    fail_msg: >-
+      The login_defs refusals reuse the facts of the login_defs lifecycle, which must have just run; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Login defaults refusals | Name the rules, the toggles and the cases of the refusals
+  ansible.builtin.set_fact:
+    ldf_label: login_defs refusals
+    ldf_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    ldf_max: xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs
+    ldf_warn: xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs
+    ldf_umask: xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs
+    ldf_link_target: /etc/freesecdev-login.defs
+
+- name: Login defaults refusals | Take the state of the whole instance before the refusals
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Login defaults refusals | Remember the state of the whole instance before the refusals
+  ansible.builtin.set_fact:
+    ldf_broad_before: "{{ lifecycle_broad_lines }}"
+
+- name: Login defaults refusals | Read login.defs as built
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldf_original
+
+- name: Login defaults refusals | Inspect login.defs as built
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+  register: ldf_original_stat
+
+- name: Login defaults refusals | Name the text as built and the texts of the cases
+  ansible.builtin.set_fact:
+    ldf_text: "{{ ldf_original.content | b64decode }}"
+    ldf_cases:
+      - name: a second maximum age line in lower case
+        text: "{{ ldf_original.content | b64decode ~ '  pass_max_days\t30\n' }}"
+        expected:
+          max: duplicate_setting
+          umask: applied
+      - name: a hexadecimal maximum age in lower case, a four-digit umask and a commented default
+        text: "{{ (ldf_original.content | b64decode
+          | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'pass_max_days 0x1e')
+          | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 0077')) ~ '#PASS_MAX_DAYS 1\n' }}"
+        expected:
+          max: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 30
+          - UMASK 077
+      - name: a stricter maximum age and umask with trailing comments, which pam_umask and the check read
+        text: >-
+          {{ ldf_original.content | b64decode
+             | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', 'PASS_MAX_DAYS 30 # site')
+             | regex_replace('(?m)^UMASK[ \t].*$', 'UMASK 077 # site') }}
+        expected:
+          max: applied
+          umask: applied
+        lines:
+          - PASS_MAX_DAYS 30
+          - UMASK 077
+
+- name: Login defaults refusals | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldf_toggles }}"
+
+- name: Login defaults refusals | Run every case of login.defs through an apply and a cleanup
+  ansible.builtin.include_tasks:
+    file: lifecycle_login_defs_case.yml
+  loop: "{{ ldf_cases }}"
+  loop_control:
+    loop_var: ldf_case
+    label: "{{ ldf_case.name }}"
+
+- name: Login defaults refusals | Give login.defs its content as built back after the cases
+  ansible.builtin.copy:
+    content: "{{ ldf_text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldf_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults refusals | Create the drop-in directory that the CREATE_HOME check reads
+  ansible.builtin.file:
+    path: /etc/login.defs.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Login defaults refusals | Put a drop-in setting the maximum age, which neither shadow-utils nor the check reads
+  ansible.builtin.copy:
+    content: "PASS_MAX_DAYS 400\n"
+    dest: /etc/login.defs.d/50-site.defs
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Login defaults refusals | Apply the topic with the drop-in in place
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults refusals | Check that a drop-in does not stop a rule whose check reads only login.defs
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+        == {ldf_max: 'applied', ldf_warn: 'compliant', ldf_umask: 'applied'}
+    fail_msg: "{{ ldf_label }}, drop-in: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults refusals | Replace the drop-in directory by a symbolic link
+  ansible.builtin.file:
+    path: /etc/login.defs.d
+    state: absent
+
+- name: Login defaults refusals | Put a symbolic link in place of the drop-in directory
+  ansible.builtin.file:
+    path: /etc/login.defs.d
+    src: /tmp
+    state: link
+
+- name: Login defaults refusals | Switch every rule of the topic off with the symbolic link in place
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ ldf_toggles }}"
+
+- name: Login defaults refusals | Clean up the topic with a symbolic link in place of the drop-in directory
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults refusals | Inspect login.defs after the cleanup next to the link
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldf_linked_cleanup
+
+- name: Login defaults refusals | Check that both rules were restored and login.defs is as built
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [ldf_max, ldf_umask]
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - ldf_linked_cleanup.stat.checksum == ldf_text | hash('sha256')
+    fail_msg: "{{ ldf_label }}, cleanup with a symbolic link for the drop-in directory: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults refusals | Remove the symbolic link in place of the drop-in directory
+  ansible.builtin.file:
+    path: /etc/login.defs.d
+    state: absent
+
+- name: Login defaults refusals | Switch every rule of the topic on again
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldf_toggles }}"
+
+- name: Login defaults refusals | Move login.defs aside and put a symbolic link to it in its place
+  ansible.builtin.copy:
+    content: "{{ ldf_text }}"
+    dest: "{{ ldf_link_target }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Login defaults refusals | Replace login.defs by the symbolic link
+  ansible.builtin.file:
+    path: /etc/login.defs
+    src: "{{ ldf_link_target }}"
+    state: link
+    force: true
+
+- name: Login defaults refusals | Apply the topic with login.defs as a symbolic link
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults refusals | Inspect the target of the symbolic link after the apply
+  ansible.builtin.stat:
+    path: "{{ ldf_link_target }}"
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldf_link_after
+
+- name: Login defaults refusals | Check that every rule refused the link and nothing was written through it
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['not_regular_file']
+      - lifecycle_results | selectattr('changed') | list == []
+      - ldf_link_after.stat.checksum == ldf_text | hash('sha256')
+    fail_msg: "{{ ldf_label }}, symbolic link for login.defs: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults refusals | Remove the symbolic link and the file it pointed to
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/login.defs
+    - "{{ ldf_link_target }}"
+
+- name: Login defaults refusals | Apply the topic without login.defs, as without shadow-utils
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults refusals | Check that every rule is notapplicable and nothing was created
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+  register: ldf_absent
+
+- name: Login defaults refusals | Check that every rule is notapplicable without login.defs and nothing was created
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['notapplicable']
+      - lifecycle_results | selectattr('reason', 'none') | list == []
+      - lifecycle_results | selectattr('changed') | list == []
+      - not ldf_absent.stat.exists
+    fail_msg: "{{ ldf_label }}, without login.defs: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults refusals | Give login.defs its content as built back
+  ansible.builtin.copy:
+    content: "{{ ldf_text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldf_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults refusals | Read the ledger after the refusals
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldf_ledger_after
+
+- name: Login defaults refusals | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - ldf_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ ldf_label }}: the ledger still holds {{ ldf_ledger_after.entries }}"
+    quiet: true
+
+- name: Login defaults refusals | Assert that the whole instance is back to its state before the refusals
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: login_defs refusals
+    lifecycle_broad_step: the refusals
+    lifecycle_broad_reference: "{{ ldf_broad_before }}"
+
+- name: Login defaults refusals | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_login_defs_refusals.yml'] }}"

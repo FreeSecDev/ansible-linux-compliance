@@ -54,6 +54,7 @@ linux_compliance_pwhistory_enabled: true
 linux_compliance_faillock_enabled: true
 linux_compliance_accounts_enabled: true
 linux_compliance_password_aging_enabled: true
+linux_compliance_login_defs_enabled: true
 linux_compliance_root_access_enabled: true
 linux_compliance_umask_enabled: true
 linux_compliance_user_sessions_enabled: true

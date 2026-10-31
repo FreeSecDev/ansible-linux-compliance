@@ -7,6 +7,14 @@ __linux_compliance_remediate_prior_content_max_bytes: 3072
 __linux_compliance_remediate_pwquality_main: /etc/security/pwquality.conf
 __linux_compliance_remediate_pwquality_directory: /etc/security/pwquality.conf.d
 __linux_compliance_remediate_pwquality_marker: /etc/security/pwquality.conf.d/.freesecdev-created
+__linux_compliance_remediate_login_defs: /etc/login.defs
+__linux_compliance_remediate_login_defs_directory: /etc/login.defs.d
+__linux_compliance_remediate_login_defs_setting_pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+__linux_compliance_remediate_login_defs_number_pattern: '^(0|[1-9][0-9]{0,5})$'
+__linux_compliance_remediate_login_defs_umask_pattern: '^[0-7]{3}$'
+__linux_compliance_remediate_login_defs_word_pattern: '^[a-z]{1,8}$'
+__linux_compliance_remediate_login_defs_umask_read_pattern: '^(0[0-7]{0,2}|00[0-7]{2}|[0-7])$'
+__linux_compliance_remediate_login_defs_base0_pattern: '^"?[+-]?(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)"?$'
 __linux_compliance_remediate_newline: "\n"
 __linux_compliance_remediate_backslash: "\\"
 __linux_compliance_remediate_sshd_main: /etc/ssh/sshd_config
