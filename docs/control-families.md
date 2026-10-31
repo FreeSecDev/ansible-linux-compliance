@@ -105,22 +105,23 @@ the family it came from, so the split changes nothing that the allow-list gates.
 | 38 | `pwquality` | `pam` | Password quality (pam_pwquality) | yes | Password quality rules in the PAM stack can reject every password change, including root's | 19 | 14 | 5 |
 | 39 | `pwhistory` | `pam` | Password reuse (pam_pwhistory) | yes | Password history rules in the PAM stack can reject password changes and break automated rotation | 7 | 0 | 7 |
 | 40 | `faillock` | `pam` | Account lock-out after failed logins (pam_faillock, pam_faildelay) | yes | Lock-out after failed logins can lock out every user, including root | 14 | 0 | 14 |
-| 41 | `password_aging` | `accounts` | Password ageing (login.defs and existing accounts) | yes | Maximum password ages and inactivity settings can expire the passwords of operators and service accounts | 9 | 0 | 9 |
-| 42 | `root_access` | `accounts` | Root logins, su, UID 0 accounts and the root PATH | yes | Restricting root logins, su and system account shells can lock out administrators and break services | 19 | 0 | 19 |
-| 43 | `umask` | `accounts` | Default umask of users and shells | yes | A stricter umask changes the modes of files that applications and users create and can break sharing | 6 | 0 | 6 |
-| 44 | `user_sessions` | `accounts` | Login sessions, shell time-outs, home directories and polyinstantiation | yes | Session time-outs and limits end sessions, and polyinstantiated directories change what processes see | 14 | 0 | 14 |
-| 45 | `smartcard` | `accounts` | Smart card login (pcscd, OpenSC, PAM smart card authentication) | yes | Requiring smart card authentication locks out every user without a working card and reader | 9 | 0 | 9 |
-| 46 | `console_access` | `accounts` | Physical console access (Ctrl-Alt-Del, single-user and emergency mode, console locking) | yes | Requiring authentication for single-user and emergency mode can leave a broken host unrecoverable | 7 | 0 | 7 |
-| 47 | `user_accounts` | `accounts` | User and group accounts (unique identifiers, expiry, password storage, authselect) | yes | Expiring accounts, locking accounts without passwords and switching to authselect can lock out operators | 24 | 0 | 24 |
-| 48 | `sudo` | none | sudo | yes | Can remove administrative access | 22 | 10 | 12 |
-| 49 | `selinux` | `mandatory_access_control` | SELinux | yes | Enforcing SELinux or changing its policy can stop services and needs a relabel or reboot | 27 | 0 | 27 |
-| 50 | `apparmor` | `mandatory_access_control` | AppArmor | yes | Enforcing AppArmor profiles can stop services that the profiles do not allow | 6 | 0 | 6 |
-| 51 | `crypto_policy` | none | Cryptographic policy and FIPS mode | yes | Can break TLS and SSH with older peers; FIPS mode needs a reboot | 17 | 0 | 17 |
-| 52 | `autofs` | `mounts` | autofs automounter | yes | Removing autofs stops the on-demand mounts, such as home directories, that users rely on | 2 | 0 | 2 |
-| 53 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
-| 54 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
-| 55 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
-|  | All |  |  |  |  | 1203 | 74 | 1129 |
+| 41 | `password_aging` | `accounts` | Password ageing of existing accounts and account inactivity | yes | Maximum password ages and inactivity settings can expire the passwords of operators and service accounts | 5 | 0 | 5 |
+| 42 | `login_defs` | `accounts` | Account defaults in /etc/login.defs (password ageing and length, umask, home directories, login delay) | yes | The defaults apply to every password that shadow-utils sets and every account it creates, and on Ubuntu pam_umask takes the umask of every login session from them; a maximum password age expires passwords and a stricter umask changes the modes of the files that users and applications create | 7 | 7 | 0 |
+| 43 | `root_access` | `accounts` | Root logins, su, UID 0 accounts and the root PATH | yes | Restricting root logins, su and system account shells can lock out administrators and break services | 19 | 0 | 19 |
+| 44 | `umask` | `accounts` | Default umask of users and shells | yes | A stricter umask changes the modes of files that applications and users create and can break sharing | 5 | 0 | 5 |
+| 45 | `user_sessions` | `accounts` | Login sessions, shell time-outs, home directories and polyinstantiation | yes | Session time-outs and limits end sessions, and polyinstantiated directories change what processes see | 12 | 0 | 12 |
+| 46 | `smartcard` | `accounts` | Smart card login (pcscd, OpenSC, PAM smart card authentication) | yes | Requiring smart card authentication locks out every user without a working card and reader | 9 | 0 | 9 |
+| 47 | `console_access` | `accounts` | Physical console access (Ctrl-Alt-Del, single-user and emergency mode, console locking) | yes | Requiring authentication for single-user and emergency mode can leave a broken host unrecoverable | 7 | 0 | 7 |
+| 48 | `user_accounts` | `accounts` | User and group accounts (unique identifiers, expiry, password storage, authselect) | yes | Expiring accounts, locking accounts without passwords and switching to authselect can lock out operators | 24 | 0 | 24 |
+| 49 | `sudo` | none | sudo | yes | Can remove administrative access | 22 | 10 | 12 |
+| 50 | `selinux` | `mandatory_access_control` | SELinux | yes | Enforcing SELinux or changing its policy can stop services and needs a relabel or reboot | 27 | 0 | 27 |
+| 51 | `apparmor` | `mandatory_access_control` | AppArmor | yes | Enforcing AppArmor profiles can stop services that the profiles do not allow | 6 | 0 | 6 |
+| 52 | `crypto_policy` | none | Cryptographic policy and FIPS mode | yes | Can break TLS and SSH with older peers; FIPS mode needs a reboot | 17 | 0 | 17 |
+| 53 | `autofs` | `mounts` | autofs automounter | yes | Removing autofs stops the on-demand mounts, such as home directories, that users rely on | 2 | 0 | 2 |
+| 54 | `mount_options` | `mounts` | Mount options (nodev, noexec, nosuid) | yes | noexec and nosuid on shared, temporary or remote file systems can break running software | 34 | 0 | 34 |
+| 55 | `partitioning` | `mounts` | Separate partitions and disk encryption | yes | Partitioning and encryption are irreversible and need a reinstall or a maintenance window | 12 | 0 | 12 |
+| 56 | `bootloader` | none | Boot loader and firmware | yes | A wrong boot configuration can leave the host unbootable | 45 | 0 | 45 |
+|  | All |  |  |  |  | 1203 | 81 | 1122 |
 
 ## Umbrellas
 
@@ -138,7 +139,7 @@ entry that names an umbrella allows every disruptive family it groups.
 | `linux_compliance_kernel_modules_enabled` | `filesystem_modules`, `protocol_modules`, `wireless_modules` | 21 |
 | `linux_compliance_firewall_enabled` | `firewalld`, `nftables`, `iptables`, `ufw` | 42 |
 | `linux_compliance_pam_enabled` | `pam`, `pwquality`, `pwhistory`, `faillock` | 55 |
-| `linux_compliance_accounts_enabled` | `password_aging`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | 88 |
+| `linux_compliance_accounts_enabled` | `password_aging`, `login_defs`, `root_access`, `umask`, `user_sessions`, `smartcard`, `console_access`, `user_accounts` | 88 |
 | `linux_compliance_mandatory_access_control_enabled` | `selinux`, `apparmor` | 33 |
 | `linux_compliance_mounts_enabled` | `autofs`, `mount_options`, `partitioning` | 48 |
 
@@ -184,6 +185,8 @@ drift past a decision. The rules of these families are never tagged:
 | `faillock` | `faildelay`, `faillock` | none | 0 |
 | `firewalld` | `firewalld` | none | 1 |
 | `journald` | `journal` | none | 3 |
+| `login_defs` | `login_defs`, `logindefs` | none | 1 |
+| `password_aging` | `accounts_maximum_age_login_defs`, `accounts_minimum_age_login_defs`, `accounts_password_minlen_login_defs`, `accounts_password_warn_age_login_defs` | none | 4 |
 | `pwhistory` | `pwhistory`, `remember` | none | 2 |
 | `pwquality` | `pwquality` | none | 0 |
 | `rsyslog` | `rsyslog` | none | 0 |
@@ -193,6 +196,8 @@ drift past a decision. The rules of these families are never tagged:
 | `sssd` | `sssd` | none | 3 |
 | `sudo` | `sudo` | none | 3 |
 | `time_sync` | `chrony`, `ntp`, `timesyncd` | `ntp` | 3 |
+| `umask` | `accounts_umask_etc_login_defs` | none | 1 |
+| `user_sessions` | `accounts_have_homedir_login_defs`, `accounts_logon_fail_delay` | none | 2 |
 
 ### Tag `aide`
 
@@ -273,6 +278,21 @@ Not tagged:
 
 - `audit_rules_var_log_journal`: An audit rule that watches the journal directory; it stays with auditd alone.
 
+### Tag `login_defs`
+
+| Rule | Family |
+|---|---|
+| `set_password_hashing_algorithm_logindefs` | `pam` |
+
+### Tag `password_aging`
+
+| Rule | Family |
+|---|---|
+| `accounts_maximum_age_login_defs` | `login_defs` |
+| `accounts_minimum_age_login_defs` | `login_defs` |
+| `accounts_password_minlen_login_defs` | `login_defs` |
+| `accounts_password_warn_age_login_defs` | `login_defs` |
+
 ### Tag `pwhistory`
 
 | Rule | Family |
@@ -348,6 +368,19 @@ Not tagged:
 | `file_owner_etc_chrony_keys` | `file_permissions` |
 | `file_permissions_etc_chrony_keys` | `file_permissions` |
 
+### Tag `umask`
+
+| Rule | Family |
+|---|---|
+| `accounts_umask_etc_login_defs` | `login_defs` |
+
+### Tag `user_sessions`
+
+| Rule | Family |
+|---|---|
+| `accounts_have_homedir_login_defs` | `login_defs` |
+| `accounts_logon_fail_delay` | `login_defs` |
+
 ## What a toggle switches off through tags
 
 Every topic and umbrella toggle switches off the rules of the families it governs and,
@@ -369,7 +402,11 @@ in addition.
 | `linux_compliance_ssh_enabled` | 63 | 4 | `harden_sshd_ciphers_openssh_conf_crypto_policy`, `harden_sshd_ciphers_opensshserver_conf_crypto_policy`, `harden_sshd_macs_openssh_conf_crypto_policy`, `harden_sshd_macs_opensshserver_conf_crypto_policy` |
 | `linux_compliance_pam_enabled` | 55 | 1 | `accounts_password_pam_unix_no_remember` |
 | `linux_compliance_pwhistory_enabled` | 7 | 2 | `accounts_password_pam_unix_no_remember`, `accounts_password_pam_unix_remember` |
-| `linux_compliance_accounts_enabled` | 88 | 2 | `dconf_gnome_lock_screen_on_smartcard_removal`, `sssd_enable_smartcards` |
+| `linux_compliance_accounts_enabled` | 88 | 3 | `dconf_gnome_lock_screen_on_smartcard_removal`, `set_password_hashing_algorithm_logindefs`, `sssd_enable_smartcards` |
+| `linux_compliance_password_aging_enabled` | 5 | 4 | `accounts_maximum_age_login_defs`, `accounts_minimum_age_login_defs`, `accounts_password_minlen_login_defs`, `accounts_password_warn_age_login_defs` |
+| `linux_compliance_login_defs_enabled` | 7 | 1 | `set_password_hashing_algorithm_logindefs` |
+| `linux_compliance_umask_enabled` | 5 | 1 | `accounts_umask_etc_login_defs` |
+| `linux_compliance_user_sessions_enabled` | 12 | 2 | `accounts_have_homedir_login_defs`, `accounts_logon_fail_delay` |
 | `linux_compliance_smartcard_enabled` | 9 | 2 | `dconf_gnome_lock_screen_on_smartcard_removal`, `sssd_enable_smartcards` |
 | `linux_compliance_sudo_enabled` | 22 | 3 | `disallow_bypass_password_sudo`, `ensure_sudo_group_restricted`, `selinux_context_elevation_for_sudo` |
 | `linux_compliance_mandatory_access_control_enabled` | 33 | 1 | `account_password_selinux_faillock_dir` |
@@ -424,9 +461,10 @@ or datastreams is one catalogue entry with one toggle.
 | `pwquality` | 14 | 14 | 14 | 14 | 10 |
 | `pwhistory` | 4 | 4 | 4 | 4 | 0 |
 | `faillock` | 3 | 3 | 4 | 4 | 6 |
-| `password_aging` | 4 | 4 | 6 | 6 | 2 |
+| `password_aging` | 2 | 2 | 3 | 3 | 0 |
+| `login_defs` | 3 | 3 | 4 | 4 | 3 |
 | `root_access` | 12 | 12 | 12 | 12 | 1 |
-| `umask` | 4 | 4 | 4 | 4 | 1 |
+| `umask` | 3 | 3 | 3 | 3 | 0 |
 | `user_sessions` | 4 | 4 | 4 | 4 | 2 |
 | `smartcard` | 0 | 0 | 0 | 0 | 6 |
 | `console_access` | 0 | 0 | 0 | 0 | 2 |
@@ -440,7 +478,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 2 | 2 | 7 | 7 | 1 |
 | `bootloader` | 4 | 4 | 4 | 4 | 3 |
 | All families | 408 | 399 | 510 | 507 | 239 |
-| Native remediation | 45 | 47 | 47 | 47 | 21 |
+| Native remediation | 48 | 50 | 51 | 51 | 24 |
 
 ### `rhel9` (content 0.1.82)
 
@@ -486,10 +524,11 @@ or datastreams is one catalogue entry with one toggle.
 | `pwquality` | 7 | 7 | 7 | 7 | 0 | 6 | 6 | 6 | 8 | 8 | 8 | 8 | 5 | 0 | 0 | 1 | 5 | 3 | 14 | 14 |
 | `pwhistory` | 0 | 0 | 0 | 0 | 0 | 2 | 2 | 2 | 3 | 3 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `faillock` | 4 | 4 | 4 | 4 | 0 | 2 | 0 | 0 | 5 | 4 | 4 | 5 | 3 | 0 | 0 | 4 | 3 | 2 | 9 | 9 |
-| `password_aging` | 2 | 2 | 2 | 2 | 0 | 7 | 7 | 7 | 7 | 5 | 5 | 7 | 0 | 0 | 0 | 3 | 0 | 5 | 4 | 4 |
+| `password_aging` | 1 | 1 | 1 | 1 | 0 | 3 | 3 | 3 | 4 | 3 | 3 | 4 | 0 | 0 | 0 | 0 | 0 | 3 | 2 | 2 |
+| `login_defs` | 2 | 2 | 1 | 1 | 0 | 5 | 4 | 4 | 4 | 3 | 3 | 4 | 0 | 0 | 0 | 3 | 0 | 2 | 5 | 5 |
 | `root_access` | 1 | 1 | 1 | 0 | 0 | 4 | 0 | 4 | 13 | 13 | 13 | 13 | 1 | 1 | 3 | 2 | 1 | 9 | 3 | 3 |
-| `umask` | 3 | 3 | 0 | 0 | 0 | 3 | 0 | 0 | 3 | 3 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 |
-| `user_sessions` | 8 | 8 | 8 | 0 | 0 | 1 | 0 | 0 | 4 | 4 | 4 | 4 | 0 | 0 | 0 | 0 | 0 | 1 | 7 | 7 |
+| `umask` | 2 | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 4 |
+| `user_sessions` | 8 | 8 | 8 | 0 | 0 | 1 | 0 | 0 | 4 | 4 | 4 | 4 | 0 | 0 | 0 | 0 | 0 | 1 | 5 | 5 |
 | `smartcard` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 5 |
 | `console_access` | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 | 4 | 2 | 5 | 0 | 6 | 5 |
 | `user_accounts` | 3 | 3 | 3 | 3 | 5 | 2 | 1 | 2 | 13 | 13 | 13 | 13 | 2 | 2 | 2 | 3 | 2 | 10 | 12 | 12 |
@@ -502,7 +541,7 @@ or datastreams is one catalogue entry with one toggle.
 | `partitioning` | 7 | 7 | 6 | 0 | 8 | 1 | 0 | 0 | 7 | 2 | 2 | 7 | 1 | 0 | 1 | 0 | 1 | 0 | 7 | 7 |
 | `bootloader` | 21 | 21 | 12 | 0 | 16 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | 13 | 0 | 4 | 0 | 13 | 7 | 9 | 9 |
 | All families | 310 | 388 | 227 | 40 | 192 | 153 | 101 | 140 | 401 | 295 | 288 | 395 | 139 | 94 | 131 | 146 | 139 | 252 | 481 | 477 |
-| Native remediation | 14 | 14 | 14 | 6 | 13 | 13 | 12 | 13 | 39 | 37 | 39 | 39 | 11 | 9 | 9 | 15 | 11 | 25 | 33 | 33 |
+| Native remediation | 16 | 16 | 15 | 7 | 13 | 18 | 16 | 17 | 43 | 40 | 42 | 43 | 11 | 9 | 9 | 18 | 11 | 27 | 38 | 38 |
 
 ## Mapping
 
@@ -549,6 +588,7 @@ or datastreams is one catalogue entry with one toggle.
 | `pwhistory` | none | `accounts_password_pam_pwhistory_` | none |
 | `faillock` | none | `account_password_pam_faillock_`, `account_password_selinux_faillock_`, `accounts_passwords_pam_faildelay_`, `accounts_passwords_pam_faillock_` | none |
 | `password_aging` | none | none | `password_expiration` |
+| `login_defs` | none | `accounts_have_homedir_login_`, `accounts_logon_fail_`, `accounts_maximum_age_login_`, `accounts_minimum_age_login_`, `accounts_password_minlen_login_`, `accounts_password_warn_age_login_`, `accounts_umask_etc_login_` | none |
 | `root_access` | none | none | `root_logins`, `root_paths` |
 | `umask` | none | none | `user_umask` |
 | `user_sessions` | none | none | `accounts-session` |

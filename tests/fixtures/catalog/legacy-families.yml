@@ -142,6 +142,7 @@ families:
     rule_ids_sha256: adda970874f002698954b0e41b9720fe2a239565449352a9e917ccbfdccb7366
     added_by_tags:
       - dconf_gnome_lock_screen_on_smartcard_removal
+      - set_password_hashing_algorithm_logindefs
       - sssd_enable_smartcards
   - name: sudo
     toggle: linux_compliance_sudo_enabled
