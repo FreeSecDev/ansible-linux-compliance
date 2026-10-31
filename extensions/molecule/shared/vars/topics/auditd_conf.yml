@@ -8,8 +8,15 @@ containment: >-
   connection test after every remediate run proves that it still reaches the same unprivileged container. The
   allow-list names auditd_conf only for the runs of this topic.
 profiles:
-  ubuntu: cis_level2_server
-  rhel_compatible: stig
+  - platform: ubuntu
+    profile: cis_level2_server
+    reason: >-
+      cis_level1_server selects no auditd.conf rule; the Level 2 server profile selects the CIS settings.
+  - platform: rhel_compatible
+    profile: stig
+    reason: >-
+      cis_server_l1 selects no auditd.conf rule; the STIG profile selects the most settings, the other profiles
+      run in the profiles regression.
 audit:
   applied_outcomes:
     - notapplicable

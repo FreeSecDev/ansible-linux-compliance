@@ -230,10 +230,13 @@ by removing the entry, without a write (FREES-173).
 
 ### 7. The lifecycle harness
 
-- A declaration may name `profiles`, the profile per platform with which the topic's cycles, scans and regressions run
-  (the default lifecycle profiles, CIS level 1, select no audit rule). The harness discovers that profile at the start
-  of the topic and the platform's own profile again at its end; `check_lifecycle_topics.py` refuses a profile that the
-  platform's datastream does not have. `auditd_conf` runs with `cis_level2_server` (Ubuntu) and `stig` (Rocky Linux),
+- The declarations name `profiles` (the declaration key that the kernel module topics introduced, FREES-190: per
+  platform a `profile` with a `reason`), because the default lifecycle profiles, CIS level 1, select no audit rule. The
+  harness discovers that profile at the start of the topic and the platform's own profile again at its end;
+  `check_lifecycle_topics.py` refuses a profile that the platform's datastream does not have, and
+  `test_content_golden_lifecycle_profiles.py` one that selects fewer rules than the platform's own; of the native rules
+  that some pinned profile selects, only two run outside the topic cycles (`auditd_data_retention_flush`, in the
+  profiles regression with `ospp`, and `auditd_data_retention_space_left`, below). `auditd_conf` runs with `cis_level2_server` (Ubuntu) and `stig` (Rocky Linux),
   `auditd_rules_time` with `cis_level2_server` and `e8`. The remediate, audit and verify roles refuse profile identifiers
   with a hyphen (`pci-dss`), so that profile cannot be used yet; `auditd_data_retention_space_left`, which only
   `pci-dss` selects, is therefore proven by the golden test and not yet by a lifecycle cycle.

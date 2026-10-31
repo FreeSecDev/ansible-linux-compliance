@@ -1,0 +1,543 @@
+---
+- name: Kernel module regressions | Refuse to run unless the filesystem_modules topic has just run
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'filesystem_modules'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['filesystem_modules']
+    fail_msg: >-
+      The kernel module regressions reuse the facts of the filesystem_modules lifecycle, which must have just run;
+      the topic was {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Kernel module regressions | Name the rules, drop-ins and site files of the regressions
+  ansible.builtin.set_fact:
+    regression_label: kernel module regressions
+    regression_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    regression_edited: xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled
+    regression_edited_dropin: /etc/modprobe.d/freesecdev-cramfs.conf
+    regression_removed: xccdf_org.ssgproject.content_rule_kernel_module_freevxfs_disabled
+    regression_removed_dropin: /etc/modprobe.d/freesecdev-freevxfs.conf
+    regression_elsewhere: xccdf_org.ssgproject.content_rule_kernel_module_hfsplus_disabled
+    regression_elsewhere_dropin: /etc/modprobe.d/freesecdev-hfsplus.conf
+    regression_elsewhere_file: /usr/lib/modprobe.d/site-hfsplus.conf
+    regression_elsewhere_link: /etc/modprobe.d/site-hfsplus.conf
+    regression_masked: xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled
+    regression_masked_dropin: /etc/modprobe.d/freesecdev-usb-storage.conf
+    regression_masked_file: /usr/lib/modprobe.d/site-usb-storage.conf
+    regression_masked_link: /etc/modprobe.d/site-usb-storage.conf
+    regression_overridden: xccdf_org.ssgproject.content_rule_kernel_module_jffs2_disabled
+    regression_overridden_file: /etc/modprobe.d/00-site-jffs2.conf
+    regression_foreign: xccdf_org.ssgproject.content_rule_kernel_module_udf_disabled
+    regression_foreign_dropin: /etc/modprobe.d/freesecdev-udf.conf
+    regression_foreign_content: |
+      blacklist udf
+    regression_early: xccdf_org.ssgproject.content_rule_kernel_module_hfs_disabled
+    regression_early_dropin: /etc/modprobe.d/freesecdev-hfs.conf
+    regression_early_file: /etc/modprobe.d/00-site-hfs.conf
+    regression_dropins: "{{ lifecycle_rules | map(attribute='parameters') | map(attribute='path') | list }}"
+    regression_items: >-
+      {{ lifecycle_items | combine({'files': lifecycle_items.files + [{'path': '/usr/lib/modprobe.d'}]}) }}
+    regression_rewritten: "{{ lifecycle_rewritten + ['/usr/lib/modprobe.d'] }}"
+
+- name: Kernel module regressions | Check that the rules of the regressions run on this platform
+  ansible.builtin.assert:
+    that:
+      - >-
+        [regression_edited, regression_removed, regression_elsewhere, regression_overridden, regression_foreign,
+         regression_early, regression_masked] is subset(lifecycle_rule_ids)
+    fail_msg: "{{ regression_label }}: the profile selects only {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Kernel module regressions | Take the state of the whole instance before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+  vars:
+    lifecycle_items: "{{ regression_items }}"
+    lifecycle_rewritten: "{{ regression_rewritten }}"
+
+- name: Kernel module regressions | Remember the state of the whole instance before the regressions
+  ansible.builtin.set_fact:
+    regression_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Kernel module regressions | Disable hfsplus and usb-storage in vendor files, as a package would
+  ansible.builtin.copy:
+    content: |
+      install {{ item }} /bin/true
+      blacklist {{ item }}
+    dest: "/usr/lib/modprobe.d/site-{{ item }}.conf"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - hfsplus
+    - usb-storage
+
+- name: Kernel module regressions | Give the hfsplus file's name to a link to a directory, which modprobe skips
+  ansible.builtin.file:
+    src: /usr/lib
+    dest: "{{ regression_elsewhere_link }}"
+    state: link
+    follow: false
+
+- name: Kernel module regressions | Mask the usb-storage vendor file with a link to /dev/null, as administrators do
+  ansible.builtin.file:
+    src: /dev/null
+    dest: "{{ regression_masked_link }}"
+    state: link
+    follow: false
+
+- name: Kernel module regressions | Write a file of the administrator at the path of the udf drop-in
+  ansible.builtin.copy:
+    content: "{{ regression_foreign_content }}"
+    dest: "{{ regression_foreign_dropin }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Kernel module regressions | Let hfs load again in a file that modprobe reads before the drop-in
+  ansible.builtin.copy:
+    content: |
+      install hfs /sbin/modprobe --ignore-install hfs
+    dest: "{{ regression_early_file }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Kernel module regressions | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Apply the topic next to the administrator's files
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Read the ledger after the apply
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_applied
+
+- name: Kernel module regressions | Read the drop-ins after the apply
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  loop: "{{ regression_dropins }}"
+  register: regression_applied_files
+
+- name: Kernel module regressions | Read the file of the administrator at the path of the udf drop-in
+  ansible.builtin.slurp:
+    src: "{{ regression_foreign_dropin }}"
+  register: regression_foreign_read
+
+- name: Kernel module regressions | Name the rules that the apply recorded and their entries
+  ansible.builtin.set_fact:
+    regression_recorded: >-
+      {{ regression_ledger_applied.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+         | sort(attribute='rule_id') }}
+    regression_applied_ids: >-
+      {{ lifecycle_results | selectattr('status', 'equalto', 'applied') | map(attribute='rule_id') | list }}
+    regression_statuses: "{{ lifecycle_results | items2dict(key_name='rule_id', value_name='status') }}"
+
+- name: Kernel module regressions | Check the site files' effects, hfsplus compliant, hfs overridden, udf not owned
+  ansible.builtin.assert:
+    that:
+      - regression_statuses[regression_elsewhere] == 'compliant'
+      - regression_statuses[regression_masked] == 'applied'
+      - regression_masked in regression_applied_ids
+      - >-
+        regression_applied_files.results | selectattr('item', 'equalto', regression_masked_dropin)
+        | map(attribute='stat') | map(attribute='exists') | list == [true]
+      - regression_statuses[regression_foreign] == 'not_owned'
+      - regression_statuses[regression_early] == 'overridden'
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_foreign) | map(attribute='reason')
+        | first is search('without the header')
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_early) | map(attribute='reason')
+        | first is search(regression_early_file)
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', [regression_elsewhere, regression_foreign, regression_early])
+        | selectattr('changed') | list == []
+      - >-
+        regression_statuses | dict2items
+        | rejectattr('key', 'in', [regression_elsewhere, regression_foreign, regression_early])
+        | map(attribute='value') | unique | list == ['applied']
+      - regression_early not in regression_applied_ids
+      - >-
+        regression_applied_files.results | selectattr('item', 'equalto', regression_early_dropin)
+        | map(attribute='stat') | map(attribute='exists') | list == [false]
+      - regression_recorded | map(attribute='rule_id') | list == regression_applied_ids
+      - regression_elsewhere not in regression_applied_ids
+      - regression_foreign not in regression_applied_ids
+      - regression_foreign_read.content | b64decode == regression_foreign_content
+      - >-
+        regression_applied_files.results | selectattr('item', 'equalto', regression_elsewhere_dropin)
+        | map(attribute='stat') | map(attribute='exists') | list == [false]
+    fail_msg: "{{ regression_label }}, apply next to the administrator's files: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Pretend that another method recorded every entry, as after a change of method
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: filesystem_modules
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | combine({'method': 'main_file'}) | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ regression_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Kernel module regressions | Apply over ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Check that the apply refused every recorded rule and changed nothing
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', regression_applied_ids) | map(attribute='status') | unique
+        | list == ['method_changed']
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'method_changed') | selectattr('reason', 'none')
+        | list == []
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ regression_label }}, apply after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Clean up ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Read the ledger after the refused cleanup
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_refused
+
+- name: Kernel module regressions | Read the drop-ins after the refused runs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  loop: "{{ regression_dropins }}"
+  register: regression_refused_files
+
+- name: Kernel module regressions | Check that the cleanup refused every rule, kept every entry and every drop-in
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == regression_applied_ids
+      - lifecycle_results | map(attribute='status') | unique | list == ['cleanup_incomplete']
+      - lifecycle_results | map(attribute='reason') | unique | list == ['method_changed']
+      - lifecycle_results | selectattr('changed') | list == []
+      - >-
+        regression_ledger_refused.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='rule_id') | sort == regression_applied_ids | sort
+      - >-
+        regression_refused_files.results | map(attribute='stat') | map(attribute='checksum', default='') | list
+        == regression_applied_files.results | map(attribute='stat') | map(attribute='checksum', default='') | list
+    fail_msg: "{{ regression_label }}, cleanup after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Give every entry back the method that recorded it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: filesystem_modules
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ regression_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Kernel module regressions | Switch every rule of the topic on again
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Let jffs2 load again through a wildcard in a file read before the drop-in
+  ansible.builtin.copy:
+    content: |
+      install jff* /sbin/modprobe --ignore-install jffs2
+    dest: "{{ regression_overridden_file }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Kernel module regressions | Apply the topic after the administrator let jffs2 load
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Check that jffs2 is overridden, the others compliant, and nothing changed
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_overridden) | map(attribute='status')
+        | list == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_overridden) | map(attribute='reason')
+        | first is search(regression_overridden_file)
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_overridden) | map(attribute='reason')
+        | first is search('install ' ~ ('jff*' | regex_escape) ~ ' ')
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', regression_applied_ids)
+        | rejectattr('rule_id', 'equalto', regression_overridden) | map(attribute='status') | unique
+        | list == ['compliant']
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ regression_label }}, apply after a site file let jffs2 load: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Read the cramfs drop-in that the collection wrote
+  ansible.builtin.slurp:
+    src: "{{ regression_edited_dropin }}"
+  register: regression_edited_written
+
+- name: Kernel module regressions | Change the cramfs drop-in by hand, as an administrator would
+  ansible.builtin.lineinfile:
+    path: "{{ regression_edited_dropin }}"
+    regexp: '^install cramfs '
+    line: install cramfs /bin/true
+
+- name: Kernel module regressions | Remove the freevxfs drop-in by hand, so the state already equals the prior state
+  ansible.builtin.file:
+    path: "{{ regression_removed_dropin }}"
+    state: absent
+
+- name: Kernel module regressions | Switch every rule of the topic off again
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Clean up the topic after the administrator's changes
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Read the cramfs drop-in that the administrator changed
+  ansible.builtin.slurp:
+    src: "{{ regression_edited_dropin }}"
+  register: regression_edited_after
+
+- name: Kernel module regressions | Read the ledger after the cleanup that kept the administrator's change
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_admin
+
+- name: Kernel module regressions | Check that only cramfs was refused, its change kept and the others restored
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == regression_applied_ids
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_edited)
+        | map(attribute='reason') | list == ['modified_since_apply']
+      - >-
+        lifecycle_results | rejectattr('rule_id', 'equalto', regression_edited)
+        | map(attribute='status') | unique | list == ['restored']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_removed) | map(attribute='message') | first
+        is search('already gone')
+      - lifecycle_results | rejectattr('rule_id', 'equalto', regression_edited) | rejectattr('changed') | list == []
+      - lifecycle_results | selectattr('rule_id', 'equalto', regression_edited) | selectattr('changed') | list == []
+      - regression_edited_after.content | b64decode is search('(?m)^install cramfs /bin/true$')
+      - >-
+        regression_ledger_admin.entries | selectattr('rule_id', 'in', lifecycle_rule_ids)
+        | map(attribute='rule_id') | list == [regression_edited]
+    fail_msg: "{{ regression_label }}, cleanup after a change by hand: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Put back the cramfs drop-in that the collection wrote
+  ansible.builtin.copy:
+    content: "{{ regression_edited_written.content | b64decode }}"
+    dest: "{{ regression_edited_dropin }}"
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Kernel module regressions | Clean up cramfs now that it is what the collection wrote
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Check that cramfs was restored
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [regression_edited]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
+      - lifecycle_results | map(attribute='changed') | list == [true]
+    fail_msg: "{{ regression_label }}, cleanup after the drop-in was put back: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Remove the administrator's files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ regression_elsewhere_file }}"
+    - "{{ regression_overridden_file }}"
+    - "{{ regression_foreign_dropin }}"
+    - "{{ regression_early_file }}"
+    - "{{ regression_elsewhere_link }}"
+    - "{{ regression_masked_file }}"
+    - "{{ regression_masked_link }}"
+
+- name: Kernel module regressions | Name the site files that kmod's own reader reads differently from the text
+  ansible.builtin.set_fact:
+    regression_lexed:
+      - path: /etc/modprobe.d/00-r3-escaped.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_freevxfs_disabled
+        content: |
+          install \*freevxfs /sbin/modprobe --ignore-install freevxfs
+      - path: /etc/modprobe.d/00-r3-directive.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_udf_disabled
+        content: |
+          ins\tall udf /sbin/modprobe --ignore-install udf
+      - path: /etc/modprobe.d/00-r3-continuation.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_jffs2_disabled
+        content: |
+          install foo /bin/true \\
+          install jffs2 /sbin/modprobe --ignore-install jffs2
+      - path: /etc/modprobe.d/00-r3-bracket.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled
+        content: |
+          install cr[]a[a]mfs /sbin/modprobe --ignore-install cramfs
+
+- name: Kernel module regressions | Let four modules load again in lines that only kmod's reader reads right
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.path }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ regression_lexed }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Kernel module regressions | Switch every rule of the topic on for the lexed lines
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Apply the topic next to the lexed lines
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Read the drop-ins of the four modules after the apply
+  ansible.builtin.stat:
+    path: "/etc/modprobe.d/freesecdev-{{ item }}.conf"
+    follow: false
+  loop:
+    - freevxfs
+    - udf
+    - jffs2
+    - cramfs
+  register: regression_lexed_files
+
+- name: Kernel module regressions | Check that the four rules are overridden and the others applied
+  vars:
+    regression_lexed_rules: "{{ regression_lexed | map(attribute='rule') | list }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', regression_lexed_rules)
+        | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', regression_lexed_rules) | selectattr('changed')
+        | list == []
+      - >-
+        lifecycle_results | rejectattr('rule_id', 'in', regression_lexed_rules)
+        | map(attribute='status') | unique | list == ['applied']
+      - regression_lexed_files.results | map(attribute='stat') | selectattr('exists') | list == []
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_lexed[3].rule)
+        | map(attribute='reason') | first is search('install ' ~ ('cr[]a[a]mfs' | regex_escape) ~ ' ')
+    fail_msg: "{{ regression_label }}, apply next to the lexed lines: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Switch every rule of the topic off after the lexed lines
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Clean up the topic after the lexed lines
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Check that every applied rule was restored
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+    fail_msg: "{{ regression_label }}, cleanup after the lexed lines: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Remove the lexed site files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ regression_lexed }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Kernel module regressions | Read the ledger after the regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: regression_ledger_after
+
+- name: Kernel module regressions | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - regression_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ regression_label }}: the ledger still holds {{ regression_ledger_after.entries }}"
+    quiet: true
+
+- name: Kernel module regressions | Assert that the whole instance is back to its state before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: kernel module regressions
+    lifecycle_broad_step: the regressions
+    lifecycle_broad_reference: "{{ regression_broad_before }}"
+    lifecycle_items: "{{ regression_items }}"
+    lifecycle_rewritten: "{{ regression_rewritten }}"
+
+- name: Kernel module regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: >-
+      {{ lifecycle_regression_files_run + ['lifecycle_kernel_modules_regressions.yml'] }}

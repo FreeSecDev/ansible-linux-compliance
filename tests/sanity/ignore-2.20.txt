@@ -3,6 +3,7 @@ plugins/modules/audit_control.py validate-modules:missing-gplv3-license
 plugins/modules/benchmark_info.py validate-modules:missing-gplv3-license
 plugins/modules/compliance_scan.py validate-modules:missing-gplv3-license
 plugins/modules/control_state.py validate-modules:missing-gplv3-license
+plugins/modules/modprobe_config.py validate-modules:missing-gplv3-license
 plugins/modules/profile_info.py validate-modules:missing-gplv3-license
 plugins/modules/sshd_validate.py validate-modules:missing-gplv3-license
 plugins/modules/tree_info.py validate-modules:missing-gplv3-license

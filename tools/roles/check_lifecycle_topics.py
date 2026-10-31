@@ -44,6 +44,12 @@ recording that it ran, which the harness checks for every file of the group of a
 ``regression_platforms`` returns, per topic and group, the platforms whose Docker lifecycle scenario
 runs it; ``make molecule-matrix`` plans one leg per group and platform, with the mode
 ``regressions-<group>``, so that the regressions do not lengthen the cycle legs.
+
+A topic may declare ``profiles`` (FREES-190): per platform, the profile of that platform's pinned
+datastream that its cycles and regressions run with instead of the platform's own, with a reason,
+for a topic whose rules the platform's own profile does not select. The profile must be one that
+``content/manifest.yml`` lists for the datastream of the platform, and a platform that
+``unselected_platforms`` lists cannot have one.
 """
 
 from __future__ import annotations
@@ -86,6 +92,11 @@ RECORD_KEYS: Final[frozenset[str]] = frozenset({"name", SET_FACT})
 RECORD_FACT: Final[str] = "lifecycle_regression_files_run"
 REGRESSION_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9_]{0,31}")
 REGRESSION_FILE: Final[re.Pattern[str]] = re.compile(r"lifecycle_[a-z0-9_]{1,64}\.yml")
+MANIFEST: Final[Path] = Path("content/manifest.yml")
+PROFILE_PREFIX: Final[str] = "xccdf_org.ssgproject.content_profile_"
+PROFILE_NAME: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_]{0,127}")
+PROFILES_KEY: Final[str] = "profiles"
+PROFILE_KEYS: Final[frozenset[str]] = frozenset({"platform", "profile", "reason"})
 TOP_KEYS: Final[frozenset[str]] = frozenset(
     {
         "family",
@@ -98,7 +109,7 @@ TOP_KEYS: Final[frozenset[str]] = frozenset(
         "unselected_platforms",
         "requires",
         "regressions",
-        "profiles",
+        PROFILES_KEY,
     }
 )
 REQUIRED_KEYS: Final[tuple[str, ...]] = ("family", "disruptive", "state", "applied")
@@ -137,10 +148,6 @@ ATTRIBUTES: Final[dict[str, frozenset[str]]] = {
 }
 DRIVERS_KEY: Final[str] = "drivers"
 KERNEL_CATEGORIES: Final[frozenset[str]] = frozenset({"audit_rules"})
-PROFILES_KEY: Final[str] = "profiles"
-PROFILE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9][a-z0-9_-]{0,127}")
-MANIFEST: Final[Path] = Path("content/manifest.yml")
-PROFILE_PREFIX: Final[str] = "xccdf_org.ssgproject.content_profile_"
 AUDIT_KEYS: Final[frozenset[str]] = frozenset({"applied_outcomes", "reason"})
 EXTRA_AUDIT_OUTCOMES: Final[frozenset[str]] = frozenset({"notapplicable"})
 PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
@@ -187,7 +194,9 @@ class Context(NamedTuple):
     """What a declaration is checked against besides the platforms.
 
     ``coverage`` maps each driver to the platforms of its lifecycle scenarios (``None``: every
-    driver runs every platform); ``rules`` holds the short identifiers of the topic's native rules.
+    driver runs every platform); ``rules`` holds the short identifiers of the topic's native rules;
+    ``profiles`` maps each platform to the profiles of its pinned datastream (``None``: any
+    well-formed profile).
     """
 
     coverage: dict[str, frozenset[str]] | None = None
@@ -199,27 +208,23 @@ class Context(NamedTuple):
 class Declaration:
     """The validation of one topic declaration; ``errors`` collects every finding."""
 
-    def __init__(
-        self, where: str, platforms: frozenset[str], context: Context | None = None
-    ) -> None:
-        """Start the validation of ``where`` for the platforms and the ``context`` of the topic.
+    def __init__(self, where: str, platforms: frozenset[str], context: Context) -> None:
+        """Start the validation of ``where`` for the platforms and the ``context`` of the check.
 
         ``context.coverage`` maps each driver to the platforms that its lifecycle scenarios run;
         without it every driver counts as running every platform. ``context.rules`` holds the short
         identifiers of the native rules of the topic, which a pre-state may declare ``unchanged``.
         ``context.dispatched`` holds the regression files that the static dispatch includes
-        (``None``: any file), ``context.profiles`` the profiles of each platform's datastream
-        (``None``: any profile).
+        (``None``: any file), and ``context.profiles`` the profiles of each platform's datastream.
         """
-        found = context if context is not None else Context()
         self.where = where
         self.platforms = platforms
         self.coverage: dict[str, frozenset[str]] = (
-            found.coverage if found.coverage is not None else dict.fromkeys(DRIVERS, platforms)
+            context.coverage if context.coverage is not None else dict.fromkeys(DRIVERS, platforms)
         )
-        self.rules = found.rules
-        self.dispatched = found.dispatched
-        self.profiles = found.profiles
+        self.rules = context.rules
+        self.dispatched = context.dispatched
+        self.known_profiles = context.profiles
         self.regressions: dict[str, frozenset[str]] = {}
         self.regression_files: set[str] = set()
         self.errors: list[str] = []
@@ -613,34 +618,35 @@ def _kernel_drivers(declaration: Declaration, item: dict[str, object], what: str
         declaration.error(f"{what} cannot be recorded with docker, whose containers cannot read it")
 
 
-def topic_profiles(declaration: Declaration, value: object) -> None:
-    """Check the profiles that the cycles of the topic use instead of the platform's profile.
-
-    A topic whose rules the lifecycle profile of a platform does not select runs its cycles,
-    scans and regressions with a profile of the same datastream that does, named per platform.
-    """
-    mapping = declaration.mapping(value, PROFILES_KEY)
-    if mapping is None:
-        return
-    if not mapping:
-        declaration.error(f"{PROFILES_KEY} must name at least one platform; leave it out instead")
-    for platform, profile in sorted(mapping.items()):
-        what = f"{PROFILES_KEY}.{platform}"
-        if platform not in declaration.platforms:
-            declaration.error(f"{what} names an unknown platform")
+def check_profiles(declaration: Declaration, value: object) -> None:
+    """Check the profiles that the topic runs with instead of the profiles of the platforms."""
+    seen: set[str] = set()
+    for index, entry in enumerate(declaration.sequence(value, PROFILES_KEY)):
+        what = f"{PROFILES_KEY}[{index}]"
+        item = declaration.mapping(entry, what)
+        if item is None:
             continue
-        if not isinstance(profile, str) or PROFILE.fullmatch(profile) is None:
+        declaration.keys(item, PROFILE_KEYS, what)
+        platform = item.get("platform")
+        if not isinstance(platform, str) or platform not in declaration.platforms:
+            declaration.error(f"{what} needs a known platform")
+            platform = None
+        elif platform in seen:
+            declaration.error(f"{what} names {platform} twice")
+        elif platform in declaration.skipped_platforms:
+            declaration.error(f"{what} names {platform}, which unselected_platforms lists")
+        seen.add(str(platform))
+        profile = item.get("profile")
+        if not isinstance(profile, str) or PROFILE_NAME.fullmatch(profile) is None:
             declaration.error(f"{what} needs the short identifier of a profile")
-            continue
-        known = (
-            None
-            if declaration.profiles is None
-            else declaration.profiles.get(platform, frozenset())
-        )
-        if known is not None and profile not in known:
-            declaration.error(
-                f"{what} names {profile}, which the datastream of {platform} does not have"
-            )
+        elif (
+            platform is not None
+            and declaration.known_profiles is not None
+            and profile not in declaration.known_profiles.get(platform, frozenset())
+        ):
+            declaration.error(f"{what} names {profile}, which the datastream of {platform} lacks")
+        if not _text(item.get("reason")):
+            declaration.error(f"{what} needs a reason")
 
 
 def _pre_state_file_lines(
@@ -766,7 +772,8 @@ def check_declaration(
 def _declaration(
     path: Path, family: str, platforms: frozenset[str], *, disruptive: bool, context: Context | None
 ) -> Declaration:
-    declaration = Declaration(str(path), platforms, context)
+    found = context if context is not None else Context()
+    declaration = Declaration(str(path), platforms, found)
     data = declaration.mapping(_load(path), "the declaration")
     if data is None:
         return declaration
@@ -779,12 +786,12 @@ def _declaration(
         declaration.applied(data["applied"])
     if "audit" in data:
         declaration.audit(data["audit"])
-    if PROFILES_KEY in data:
-        topic_profiles(declaration, data[PROFILES_KEY])
     if "pre_states" in data:
         declaration.pre_states(data["pre_states"])
     if "unselected_platforms" in data:
         declaration.unselected(data["unselected_platforms"])
+    if PROFILES_KEY in data:
+        check_profiles(declaration, data[PROFILES_KEY])
     if REGRESSIONS_KEY in data:
         _regression_groups(declaration, data[REGRESSIONS_KEY])
     declaration.covered()
@@ -802,25 +809,20 @@ def platforms(root: Path) -> frozenset[str]:
     return frozenset(images)
 
 
-def platform_profiles(root: Path) -> dict[str, frozenset[str]]:
+def datastream_profiles(root: Path) -> dict[str, frozenset[str]]:
     """Return, per Molecule platform, the short identifiers of the profiles of its datastream."""
-    data = toggles.as_mapping(_load(root / VERSIONS))
-    images = toggles.as_mapping(data.get(IMAGES_KEY)) if data is not None else None
-    manifest = toggles.as_mapping(_load(root / MANIFEST))
-    streams = toggles.as_sequence(manifest.get("datastreams")) if manifest is not None else None
-    if not images or not streams:
-        message = f"{root / VERSIONS} or {root / MANIFEST} lists no platform or datastream"
-        raise GenerationError(message)
-    by_name: dict[str, frozenset[str]] = {}
-    for entry in streams:
+    versions = toggles.as_mapping(_load(root / VERSIONS)) or {}
+    images = toggles.as_mapping(versions.get(IMAGES_KEY)) or {}
+    manifest = toggles.as_mapping(_load(root / MANIFEST)) or {}
+    streams: dict[str, frozenset[str]] = {}
+    for entry in toggles.as_sequence(manifest.get("datastreams")) or []:
         stream = toggles.as_mapping(entry) or {}
-        profiles = toggles.as_sequence(stream.get("profiles")) or []
-        by_name[str(stream.get("name"))] = frozenset(
+        streams[str(stream.get("name"))] = frozenset(
             str((toggles.as_mapping(profile) or {}).get("id", "")).removeprefix(PROFILE_PREFIX)
-            for profile in profiles
+            for profile in toggles.as_sequence(stream.get("profiles")) or []
         )
     return {
-        str(platform): by_name.get(
+        str(platform): streams.get(
             str((toggles.as_mapping(image) or {}).get("datastream")), frozenset()
         )
         for platform, image in images.items()
@@ -950,7 +952,7 @@ def check(root: Path) -> tuple[list[str], list[str]]:
     known = platforms(root)
     coverage = scenarios(root, known)
     dispatched = dispatched_regressions(root)
-    profiles = platform_profiles(root)
+    profiles = datastream_profiles(root)
     directory = root / TOPICS
     declared = sorted(path.stem for path in directory.glob("*.yml")) if directory.is_dir() else []
     errors = [

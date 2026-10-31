@@ -9,8 +9,15 @@ containment: >-
   machine, neither of which an audit rule can block, and the guard's connection test after every remediate run proves
   that it still reaches the same instance. The allow-list names auditd_rules_time only for the runs of this topic.
 profiles:
-  ubuntu: cis_level2_server
-  rhel_compatible: e8
+  - platform: ubuntu
+    profile: cis_level2_server
+    reason: >-
+      cis_level1_server selects no audit rule; the Level 2 server profile selects the five time rules.
+  - platform: rhel_compatible
+    profile: e8
+    reason: >-
+      cis_server_l1 selects no audit rule; the Essential Eight profile selects the five time rules (pci-dss, which
+      also does, has a hyphen that the roles refuse as a profile identifier).
 audit:
   applied_outcomes:
     - notapplicable

@@ -30,8 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-COPIED = ("roles", "extensions/molecule", "playbooks")
-COPIED_FILES = ("content/manifest.yml",)
+COPIED = ("roles", "extensions/molecule", "playbooks", "content")
 SUDO_DROPIN = "roles/remediate/tasks/sudo_dropin_apply.yml"
 SUDO_STATES = "extensions/molecule/shared/tasks/lifecycle_sudo_states.yml"
 PWQUALITY_TASKS = "roles/remediate/tasks/pwquality.yml"
@@ -54,9 +53,6 @@ class Trees:
         for tree in (self.base, self.head):
             for part in COPIED:
                 shutil.copytree(REPOSITORY_ROOT / part, tree / part, symlinks=True)
-            for part in COPIED_FILES:
-                (tree / part).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(REPOSITORY_ROOT / part, tree / part)
 
     def write(self, relative: str, text: str) -> None:
         path = self.head / relative
@@ -207,37 +203,48 @@ def role_task_files() -> list[str]:
     )
 
 
+def umbrellas() -> dict[str, str | None]:
+    """Return every family of the registry with its umbrella, or ``None``."""
+    data = cast(
+        "dict[str, list[dict[str, object]]]",
+        load_yaml((REPOSITORY_ROOT / generate_toggles.CATALOGUE).read_text(encoding="utf-8")),
+    )
+    return {
+        str(entry["name"]): str(entry["umbrella"]) if "umbrella" in entry else None
+        for entry in data["__linux_compliance_remediate_families"]
+    }
+
+
 def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Trees) -> None:
-    """A task file belongs to the native family that names it; a helper that no family names,
-    such as the audit rule drop-ins that several auditd topics share (named as helpers of the
-    ``auditd`` umbrella family), to the topics of the task files that include it. A family
-    without native rules may own a file as well, as ``auditd`` owns ``auditd_conf.yml``, whose
-    name starts with ``auditd_``; it plans no leg."""
+    """A task file belongs to the native family that names it, with the families whose names
+    its name starts with (``auditd_conf.yml`` also to the ``auditd`` umbrella family); a helper
+    that no native family names, such as the kernel module or audit rule helpers that several
+    topics share, belongs to the topics of the task files that include it."""
     files = role_task_files()
     assert files
     families = native()
-    helpers = 0
+    umbrella_of = umbrellas()
+    shared = 0
     for relative in files:
         stem = Path(relative).stem
-        named = [family for family in families if stem == family or stem.startswith(family + "_")]
-        assert len(named) <= 1, relative
-        found = set(trees.context.classify(relative)[0]) & set(families)
-        if named:
-            assert found == set(named), relative
-            continue
-        helpers += 1
-        includers = [
-            other
-            for other in files
-            if other != relative
-            and Path(relative).name in (REPOSITORY_ROOT / other).read_text(encoding="utf-8")
-        ]
-        assert includers, relative
-        expected = {
-            topic for other in includers for topic in trees.context.classify(other)[0]
-        } & set(families)
-        assert found == expected, relative
-    assert helpers == 2
+        named = {
+            family for family in umbrella_of if stem == family or stem.startswith(family + "_")
+        }
+        if named & set(families):
+            assert len(named & set(families)) == 1, relative
+            expected = named
+        else:
+            shared += 1
+            includers = [
+                other
+                for other in files
+                if other != relative
+                and Path(relative).name in (REPOSITORY_ROOT / other).read_text(encoding="utf-8")
+            ]
+            assert includers, relative
+            expected = {topic for other in includers for topic in trees.context.classify(other)[0]}
+        assert set(trees.context.classify(relative)[0]) == expected, relative
+    assert shared == 5
 
 
 def test_every_regression_file_belongs_to_the_topics_whose_groups_name_it(trees: Trees) -> None:

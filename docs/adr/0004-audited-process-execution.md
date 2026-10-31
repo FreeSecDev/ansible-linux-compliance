@@ -1097,3 +1097,25 @@ system of the audit log, which the mount facts of ansible-core did not report on
 `plugins/module_utils/compliance/fileio.py` therefore gains `filesystem_megabytes`, with the one new `os` attribute
 `statvfs` in `FILE_IO_ATTRIBUTES`, which opens and writes nothing; `auditrules.py` joins `FILE_IO_IMPORTERS` to call
 it, and `audit_control` reports the size as `log_megabytes`.
+
+## Amendment 2026-10-31: kmod's configuration reader (FREES-190)
+
+The kernel module topics ([ADR 0028](0028-native-kernel-module-drop-ins.md)) must know what each modprobe
+configuration file says to kmod, which only kmod's own line reader decides (backslashes, continued lines, rejected
+lines). The module `freesecdev.linux_compliance.modprobe_config` is the fourth caller of the helper, and the allow-list
+gains one policy:
+
+- `modprobe`, resolved in the trusted directories like `oscap` (the `kmod` multi-call binary keeps its name through the
+  vetted path inside the trusted directory), with exactly two argument lists: the standalone command `-c -d /dev`
+  (`MODPROBE_SHOW_CONFIG`), which prints the whole configuration, and the form `-c -d /dev -C <path>`, which prints the
+  directives of one file. `<path>` is `/dev/null` or a `.conf` or `.alias` file directly inside one of the five
+  modprobe directories, and must still be one once every symbolic link is resolved (`is_modprobe_config()`): kmod
+  echoes the first word of every line that it rejects, so `-C` on a link to `/etc/shadow` would print a password hash
+  to standard error. `-c` only prints; `-d /dev` names a root without `lib/modules`, so no module index is dumped.
+  The helper refuses every other argument list, so it cannot load (`modprobe cramfs`), unload (`-r`), run an install
+  command (`-n` is not allowed either) or read the kernel's module tree
+  (`tests/unit/plugins/module_utils/compliance/test_process.py`).
+- The module accepts only absolute, normalised paths directly inside the five modprobe directories with a `.conf` or
+  `.alias` name, at most 256, adds `/dev/null` itself for the directives of the kernel command line, and runs with a
+  30-second timeout and 4 MiB of output per run. Only a modprobe that is not found in the trusted directories is
+  reported as `available: false`; one that the helper refuses or that cannot be started fails the module.

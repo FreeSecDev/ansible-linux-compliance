@@ -23,8 +23,20 @@ The audit tools are allow-listed for the auditd topics (FREES-110) in exact argu
 ``auditctl -s`` and ``auditctl -l`` read the kernel's audit status and loaded rules,
 ``auditctl --signal reload`` asks a running auditd to read ``/etc/audit/auditd.conf`` again, and
 ``augenrules --load`` builds ``/etc/audit/audit.rules`` from ``/etc/audit/rules.d`` and loads it,
-exactly as ``auditd.service`` does when it starts. No rule, file or option is ever passed on the
-command line.
+exactly as ``auditd.service`` does when it starts, and ``augenrules --check`` only compares the
+rules it would build with ``/etc/audit/audit.rules``. No rule, file or option is ever passed on
+the command line.
+
+kmod's ``modprobe`` is allow-listed only to print the configuration that it reads,
+``modprobe -c -d /dev`` for the default configuration directories and
+``modprobe -c -d /dev -C <path>`` for one file (FREES-190): it parses the files with kmod's own
+reader and prints the normalised directives, and loads, unloads or runs nothing. ``-d /dev`` points
+kmod at a root without ``lib/modules``, so it dumps no module index after the configuration.
+``<path>`` there is not any path: it must be ``/dev/null`` or a ``.conf`` or ``.alias`` file
+directly inside one of the five modprobe directories, and must still be one after every symbolic
+link is resolved (:func:`is_modprobe_config`). kmod echoes the first word of every line that it
+rejects, so ``-C`` on a link to ``/etc/shadow`` would print a password hash; the policy never lets
+it read one.
 
 An executable that does not live in a trusted directory, such as the SCAP
 Compliance Checker at ``/opt/scc/cscc`` (ADR 0019), is permitted only through a
@@ -56,7 +68,7 @@ import subprocess
 import time
 from contextlib import suppress
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, NoReturn, Protocol, cast
 
@@ -84,6 +96,20 @@ PATH_ARGUMENT: Final[str] = "<path>"
 FIXED_ENVIRONMENT_NAMES: Final[frozenset[str]] = frozenset({"TZ", "HOME"})
 SCC_EXECUTABLE_PATH: Final[str] = "/opt/scc/cscc"
 SSHD_CONFIG_PATH: Final[str] = "/etc/ssh/sshd_config"
+MODPROBE_INDEX_ROOT: Final[str] = "/dev"
+MODPROBE_SHOW_CONFIG: Final[tuple[str, ...]] = ("-c", "-d", MODPROBE_INDEX_ROOT)
+MODPROBE_CONFIG_ARGUMENT: Final[str] = "<modprobe-config>"
+MODPROBE_NO_FILES: Final[str] = "/dev/null"
+MODPROBE_CONFIG_DIRECTORIES: Final[frozenset[str]] = frozenset(
+    {
+        "/etc/modprobe.d",
+        "/run/modprobe.d",
+        "/usr/local/lib/modprobe.d",
+        "/usr/lib/modprobe.d",
+        "/lib/modprobe.d",
+    }
+)
+MODPROBE_CONFIG_NAME: Final[str] = r"[^./][^/]{0,250}\.(?:conf|alias)"
 SSHD_KEYWORDS: Final[tuple[str, ...]] = (
     "AllowTcpForwarding",
     "Banner",
@@ -184,8 +210,9 @@ class ExecutablePolicy:
         argument_forms: Exact complete argument lists. When any is given,
             every argument list that is not a standalone command must match one
             of them token for token, where :data:`PATH_ARGUMENT` stands for one
-            absolute, normalised path. Command prefixes and options are then not
-            consulted.
+            absolute, normalised path and :data:`MODPROBE_CONFIG_ARGUMENT` for
+            one path that :func:`is_modprobe_config` accepts. Command prefixes
+            and options are then not consulted.
         environment: Fixed ``(name, value)`` pairs added to the child
             environment. Names must be in :data:`FIXED_ENVIRONMENT_NAMES`.
         option_values: ``(option, pattern)`` pairs. When any is given, every
@@ -227,6 +254,11 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
         ),
         "auditctl": ExecutablePolicy("auditctl", argument_forms=AUDITCTL_FORMS),
         "augenrules": ExecutablePolicy("augenrules", argument_forms=AUGENRULES_FORMS),
+        "modprobe": ExecutablePolicy(
+            "modprobe",
+            standalone_commands=(MODPROBE_SHOW_CONFIG,),
+            argument_forms=((*MODPROBE_SHOW_CONFIG, "-C", MODPROBE_CONFIG_ARGUMENT),),
+        ),
     }
 )
 
@@ -384,11 +416,42 @@ def _is_form_path(argument: str) -> bool:
     )
 
 
+def _names_modprobe_config(path: str) -> bool:
+    return path == MODPROBE_NO_FILES or (
+        _is_form_path(path)
+        and str(PurePosixPath(path).parent) in MODPROBE_CONFIG_DIRECTORIES
+        and re.fullmatch(MODPROBE_CONFIG_NAME, PurePosixPath(path).name) is not None
+    )
+
+
+def is_modprobe_config(path: str) -> bool:
+    """Return whether ``modprobe -C`` may read ``path``.
+
+    ``path`` must be ``/dev/null`` or a ``.conf`` or ``.alias`` file directly inside one of
+    :data:`MODPROBE_CONFIG_DIRECTORIES`, with a name that does not start with a dot, and must
+    still be one after every symbolic link is resolved, and not a directory. A link to a file
+    elsewhere, such as ``/etc/shadow``, is refused, because kmod echoes the first word of every
+    line that it rejects.
+    """
+    return (
+        _names_modprobe_config(path)
+        and _names_modprobe_config(os.path.realpath(path))
+        and not Path(path).is_dir()
+    )
+
+
+def _matches_token(token: str, argument: str) -> bool:
+    if token == PATH_ARGUMENT:
+        return _is_form_path(argument)
+    if token == MODPROBE_CONFIG_ARGUMENT:
+        return is_modprobe_config(argument)
+    return argument == token
+
+
 def _match_form(args: tuple[str, ...], policy: ExecutablePolicy) -> None:
     for form in policy.argument_forms:
         if len(form) == len(args) and all(
-            _is_form_path(argument) if token == PATH_ARGUMENT else argument == token
-            for token, argument in zip(form, args)
+            _matches_token(token, argument) for token, argument in zip(form, args)
         ):
             return
     _deny(f"arguments do not match an allowed form for {policy.name}: {_safe(' '.join(args))}")

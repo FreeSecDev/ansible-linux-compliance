@@ -55,6 +55,48 @@
   tags:
     - always
 
+- name: Remediate | Dispatch the filesystem_modules family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/filesystem_modules.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'filesystem_modules'
+  tags:
+    - always
+
+- name: Remediate | Dispatch the protocol_modules family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/protocol_modules.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'protocol_modules'
+  tags:
+    - always
+
+- name: Remediate | Dispatch the wireless_modules family when the plan gives it work
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/wireless_modules.yml"
+    apply:
+      tags:
+        - always
+  loop: "{{ __linux_compliance_remediate_plan.families }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_family
+    label: "{{ __linux_compliance_remediate_family.name }}"
+  when: __linux_compliance_remediate_family.name == 'wireless_modules'
+  tags:
+    - always
+
 - name: Remediate | Dispatch the ssh family when the plan gives it work
   ansible.builtin.include_tasks:
     file: "{{ role_path }}/tasks/ssh.yml"
