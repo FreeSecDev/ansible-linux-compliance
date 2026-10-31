@@ -111,7 +111,11 @@ The only reliable control is therefore the content: an SCE check or script that 
    STIG mapping. A published datastream with scripts no longer has a pinned digest.
 3. **The hosts refuse script checks at run time, whatever the source of the content.**
    - `catalog.refuse_script_check` refuses an XCCDF `check` whose system is not OVAL or OCIL, any element of the SCE
-     namespace, any `ds:extended-component`, and any XCCDF `fix`.
+     namespace, any `ds:extended-component`, and any XCCDF `fix` that holds remediation code. Such a `fix` has an
+     attribute other than `id` (a `system`, a `platform`), a child element, or text other than white space.
+   - An empty `fix` with only an `id` is accepted. It holds no code, and DISA's STIG benchmarks use it as the target of
+     a `fixtext` `fixref`. The `U_CAN_Ubuntu_24-04_LTS_V1R5_STIG` benchmark that the SCC backend scans has 165 of them
+     and no other kind of `fix`.
    - The refusal runs on every parse of a datastream (`benchmark_info`, `profile_info` and the audit's profile check)
      and on the bytes of the private copy that `oscap` reads, which `audit.copy_content` parses while it hashes them.
    - Modules report `script_check_content`, and nothing is scanned. Operator-supplied content is held to the same rule.

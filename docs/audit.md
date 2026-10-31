@@ -258,7 +258,9 @@ A rule whose only automated check was SCE keeps its OCIL check, which `oscap` do
 file-system-wide checks for world-writable files and for files without a known owner or group.
 
 Any datastream that still holds a script check or remediation code is refused, whoever supplied it: an XCCDF
-`check` whose system is not OVAL or OCIL, an SCE element, a `ds:extended-component`, or an XCCDF `fix`. The discover role (`benchmark_info`, `profile_info`), the
+`check` whose system is not OVAL or OCIL, an SCE element, a `ds:extended-component`, or an XCCDF `fix` with
+remediation code (an attribute other than `id`, a child element or text). An empty `fix` with only an `id`, the
+`fixref` target that DISA's STIG benchmarks use, holds no code and is accepted. The discover role (`benchmark_info`, `profile_info`), the
 audit's profile check and the private copy that `oscap` reads all refuse it with `script_check_content`, and nothing
 is scanned. The threat model records the former risk as
 [T-AUDIT-2](security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).

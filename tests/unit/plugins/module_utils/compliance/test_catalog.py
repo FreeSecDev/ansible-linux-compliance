@@ -823,10 +823,38 @@ class TestScriptChecks:
                 collection(
                     benchmark(rule("a", inner=f"<x:{FIX_WORD}>chmod 0600 x</x:{FIX_WORD}>"))
                 ),
-                "holds an XCCDF fix element, remediation code of the content",
+                "holds an XCCDF fix element with remediation code of the content",
+            ),
+            (
+                collection(
+                    benchmark(rule("a", inner=f'<x:{FIX_WORD} id="f" system="urn:example"/>'))
+                ),
+                "holds an XCCDF fix element with remediation code",
+            ),
+            (
+                collection(benchmark(rule("a", inner=f'<x:{FIX_WORD} platform="cpe:/o:x"/>'))),
+                "holds an XCCDF fix element with remediation code",
+            ),
+            (
+                collection(
+                    benchmark(
+                        rule("a", inner=f'<x:{FIX_WORD} id="f"><x:sub idref="v"/></x:{FIX_WORD}>')
+                    )
+                ),
+                "holds an XCCDF fix element with remediation code",
             ),
         ],
-        ids=["sce-check", "other-system", "no-system", "extended-component", "sce-script", "fix"],
+        ids=[
+            "sce-check",
+            "other-system",
+            "no-system",
+            "extended-component",
+            "sce-script",
+            "fix-text",
+            "fix-system",
+            "fix-platform",
+            "fix-child",
+        ],
     )
     def test_a_script_check_is_refused_wherever_the_content_is_parsed(
         self, tmp_path: Path, data: bytes, message: str
@@ -839,6 +867,18 @@ class TestScriptChecks:
         assert catalog.error_type(raised.value) == "script_check_content"
         with pytest.raises(catalog.ScriptCheckError):
             catalog.profile_report(path, sha, "xccdf_org.example.synthetic_profile_a")
+
+    def test_an_empty_fix_anchor_of_a_fixtext_is_accepted(self) -> None:
+        anchors = (
+            '<x:fixtext fixref="F-1_fix">Set the mode.</x:fixtext>'
+            f'<x:{FIX_WORD} id="F-1_fix" />'
+            f'<x:{FIX_WORD} id="F-2_fix">\n  </x:{FIX_WORD}>'
+        )
+        found = parse(collection(benchmark(rule("a", inner=anchors))))
+        assert [item.rule_id for parsed in found for item in parsed.rules] == [RULE + "a"]
+        scanner = catalog.ScriptCheckScanner()
+        xmlsafe.parse_chunks([collection(benchmark(rule("a", inner=anchors)))], scanner)
+        assert scanner.in_fix is False
 
     def test_oval_and_ocil_checks_are_accepted(self) -> None:
         inner = check(catalog.OVAL_CHECK_SYSTEM) + check(catalog.OCIL_CHECK_SYSTEM)

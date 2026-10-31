@@ -111,6 +111,7 @@ _REFERENCE: Final[str] = _qualified("reference")
 _COLLECTION: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}data-stream-collection"
 _CHECK: Final[str] = _qualified("check")
 _FIX: Final[str] = _qualified("fix")
+_FIX_ANCHOR_ATTRIBUTES: Final[frozenset[str]] = frozenset({"id"})
 _EXTENDED_COMPONENT: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}extended-component"
 _SCE_PREFIX: Final[str] = f"{{{SCE_NAMESPACE}}}"
 
@@ -189,8 +190,11 @@ def refuse_script_check(name: str, attributes: dict[str, str]) -> None:
 
     That is an XCCDF ``check`` whose ``system`` is not OVAL or OCIL (the Script Check Engine
     uses ``http://open-scap.org/page/SCE``), any element of the SCE namespace, any data
-    stream ``extended-component``, which is where a datastream embeds its scripts, and any
-    XCCDF ``fix``, the remediation code of the content (ADR 0026).
+    stream ``extended-component``, which is where a datastream embeds its scripts, and an
+    XCCDF ``fix`` that names a system or a platform or has any attribute other than ``id``
+    (ADR 0026). An empty ``fix`` with only an ``id`` is the target of a ``fixtext`` ``fixref``
+    in DISA's benchmarks and holds no code; :class:`ScriptCheckScanner` refuses one with any
+    content.
 
     Raises:
         ScriptCheckError: When ``name`` and ``attributes`` are such an element.
@@ -202,12 +206,8 @@ def refuse_script_check(name: str, attributes: dict[str, str]) -> None:
             "collection did not write; only OVAL and OCIL checks are accepted"
         )
         raise ScriptCheckError(message)
-    if name == _FIX:
-        message = (
-            "the content holds an XCCDF fix element, remediation code of the content that has no "
-            "place on a managed host; fetch the content with make content, which removes them"
-        )
-        raise ScriptCheckError(message)
+    if name == _FIX and set(attributes) - _FIX_ANCHOR_ATTRIBUTES:
+        _refuse_fix()
     if name == _EXTENDED_COMPONENT or name.startswith(_SCE_PREFIX):
         message = (
             "the content embeds a Script Check Engine script or an extended component, which the "
@@ -216,18 +216,41 @@ def refuse_script_check(name: str, attributes: dict[str, str]) -> None:
         raise ScriptCheckError(message)
 
 
+def _refuse_fix() -> NoReturn:
+    message = (
+        "the content holds an XCCDF fix element with remediation code of the content, which has "
+        "no place on a managed host; fetch the content with make content, which removes them"
+    )
+    raise ScriptCheckError(message)
+
+
 class ScriptCheckScanner:
-    """Parse events that only refuse script checks, for a document that is otherwise copied."""
+    """Parse events that refuse script checks and remediation code (:func:`refuse_script_check`).
+
+    It also refuses a ``fix`` that has a child element or text other than white space, so the
+    only ``fix`` it accepts is an empty anchor with an ``id``.
+    """
+
+    def __init__(self) -> None:
+        """Start outside any ``fix``."""
+        self.in_fix = False
 
     def start(self, name: str, attributes: dict[str, str], /) -> None:
-        """Refuse a script check (:func:`refuse_script_check`)."""
+        """Refuse a script check, or any element inside a ``fix``."""
+        if self.in_fix:
+            _refuse_fix()
         refuse_script_check(name, attributes)
+        self.in_fix = name == _FIX
 
     def end(self, name: str, /) -> None:
-        """Ignore an element end."""
+        """Leave a ``fix``."""
+        if name == _FIX:
+            self.in_fix = False
 
     def text(self, data: str, /) -> None:
-        """Ignore character data."""
+        """Refuse text other than white space inside a ``fix``."""
+        if self.in_fix and data.strip():
+            _refuse_fix()
 
 
 def _unsafe(message: str) -> NoReturn:
@@ -452,6 +475,7 @@ class _Collector:
         self.profile_ids: set[str] = set()
         self.rule_ids: set[str] = set()
         self.group_path: list[str] = []
+        self.scripts = ScriptCheckScanner()
         self.openers: dict[tuple[str, str], Callable[[dict[str, str]], _Frame]] = {
             (_BENCH, _RULE): self._open_rule,
             (_GROUP_KIND, _RULE): self._open_rule,
@@ -469,7 +493,7 @@ class _Collector:
         }
 
     def start(self, name: str, attributes: dict[str, str]) -> None:
-        refuse_script_check(name, attributes)
+        self.scripts.start(name, attributes)
         if not self.frames:
             if name not in {_COLLECTION, _BENCHMARK}:
                 _fail("the root is not a SCAP 1.2 data stream collection or an XCCDF 1.2 Benchmark")
@@ -590,7 +614,8 @@ class _Collector:
         profile.selects[idref] = flag
         return _Frame(_SELECT_KIND)
 
-    def end(self, _name: str) -> None:
+    def end(self, name: str) -> None:
+        self.scripts.end(name)
         frame = self.frames.pop()
         kind = frame.kind
         if kind == _GROUP_KIND:
@@ -631,6 +656,7 @@ class _Collector:
             target.title = value
 
     def text(self, data: str) -> None:
+        self.scripts.text(data)
         if self.frames[-1].kind in _COLLECTING and sum(map(len, self.parts)) < _TEXT_BUDGET:
             self.parts.append(data)
 

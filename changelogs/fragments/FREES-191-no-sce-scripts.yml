@@ -11,8 +11,9 @@ security_fixes:
     write (ADR 0026).
   - >-
     benchmark_info, profile_info, compliance_scan - a datastream that holds an XCCDF check whose system is not OVAL or
-    OCIL, a Script Check Engine element, a data stream extended component or an XCCDF ``fix`` is refused with
-    ``script_check_content``,
+    OCIL, a Script Check Engine element, a data stream extended component or an XCCDF ``fix`` with remediation code
+    (an attribute other than ``id``, a child element or text) is refused with ``script_check_content``. The empty
+    ``fix`` anchors of DISA's STIG benchmarks are accepted. Such content is refused
     whoever supplied it. The audit also refuses it in the private copy that ``oscap`` reads, and nothing is scanned
     (ADR 0026).
 minor_changes:
