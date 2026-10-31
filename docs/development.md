@@ -68,7 +68,7 @@ overriding them.
 | `lint-lifecycle` | implemented | `tools/roles/check_lifecycle_topics.py`: fails when a topic with a native rule in the catalogue has no Molecule toggle lifecycle declaration in `extensions/molecule/shared/vars/topics/`, when a declaration names a topic without a native rule, or when a declaration does not follow the format ([Molecule](molecule.md#toggle-lifecycle-of-every-native-topic), FREES-60) |
 | `molecule-matrix` | implemented | `tools/roles/molecule_matrix.py`: prints the CI legs of `MOLECULE_MATRIX_DRIVER` (`docker` or `libvirt`) as JSON, one per platform, native topic with a cycle of that driver and toggle mode; for libvirt also the base leg of each platform and the self-test ([libvirt](molecule-libvirt.md#ci)) |
 | `role-guards` | implemented | Regenerates the static family dispatch of the remediate role, with one include per family that has a native rule, and the internal-variable guards of the audit, evidence, remediate and verify roles |
-| `content` | implemented | `tools/content/fetch_content.py --output-dir build/content`: fetches the pinned release archive and extracts the verified datastreams |
+| `content` | implemented | `python -m tools.content.fetch_content --output-dir build/content`: fetches the pinned release archive, extracts the verified datastreams and removes their Script Check Engine checks and scripts and their XCCDF `fix` elements, writing only the processed datastream with its pinned `sha256` ([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) |
 | `catalogue` | implemented | `tools/roles/generate_catalogue.py`, then `toggles` and `role-guards`: regenerates `roles/remediate/vars/rules.yml` and `docs/control-families.md` from the datastreams in `build/content` and the family mapping `content/catalogue.yml` (run `make content` first) |
 | `lint-python` | implemented | Ruff lint, Ruff format check, Pylint (`tools`, `tests`, `plugins`) |
 | `lint-yaml` | implemented | `yamllint --strict` |
@@ -79,8 +79,8 @@ overriding them.
 | `aws-bootstrap` | implemented | Renders and runs the one-time interactive AWS account bootstrap ([docs/aws/bootstrap.md](aws/bootstrap.md)); never run by CI |
 | `typecheck` | implemented | mypy strict, Pyright strict |
 | `test` | implemented | Alias for `test-unit` |
-| `test-unit` | implemented | `pytest tests/unit`, including the collection plugin tests |
-| `test-coverage` | implemented | Unit tests with branch coverage, 95% overall, 100% on `tools/` and on `plugins/` |
+| `test-unit` | implemented | `pytest tests/unit`, including the collection plugin tests, on `PYTEST_WORKERS` pytest-xdist workers (default `auto`, one per CPU; `PYTEST_WORKERS=0` runs serially) |
+| `test-coverage` | implemented | Unit tests with branch coverage, 95% overall, 100% on `tools/` and on `plugins/`, on `PYTEST_WORKERS` workers like `test-unit`; pytest-cov combines the data of the workers before both 100% gates run |
 | `test-name-sets` | implemented | `NAME_SET_PYTHON=<version>`: probes that interpreter with `python -I -S` and checks the guard name sets against it (subset, and equality with the recorded snapshot of the same release); run by the `name-sets` CI matrix |
 | `name-sets` | implemented | Probes Python 3.9 to 3.15 (`uv python find`) and regenerates `tools/lint/name_sets.json` and the name-set constants of the guard |
 | `test-sanity` | implemented | `ansible-test sanity --local` on the temporary collection tree, no Docker; installs Python 3.9 to 3.14 with `uv python install` |
@@ -398,7 +398,8 @@ Configuration relaxations, each with its reason:
 |---|---|
 | `lint` | `make lint` |
 | `typecheck` | `make typecheck` |
-| `test` | `make test-coverage`, `make test-audit-exceptions`, `make test-content-golden`, `make test-browser` |
+| `test` | `make test-coverage` (on the four workers of the hosted runner) |
+| `test-suites` | `make test-audit-exceptions`, `make test-content-golden`, `make test-browser`, alongside `test` |
 | `test-playbooks` | `make test-evidence`, `make test-remediate-check`, `make test-role-guards`, `make test-verify` |
 | `name-sets` | matrix over the pinned Python releases 3.9.25, 3.10.21, 3.11.16, 3.12.14, 3.13.15 and 3.14.6: `uv python install`, then `make test-name-sets` |
 | `security` | `make security` |

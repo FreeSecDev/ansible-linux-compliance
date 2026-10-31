@@ -1,0 +1,11 @@
+---
+trivial:
+  - >-
+    Molecule: only the first cycle of a topic keeps the whole-instance record taken before any cycle, and only when its
+    pre-state has no key that writes; later cycles take their own record again. The mtime of a declared regular file
+    that its topic does not rewrite now counts. The files next to a declared path below /usr get their SHA-256 from
+    stat whatever their mode, a declared one that root cannot read fails the record, and a missing directory there is
+    left out. The Docker self-check asserts that the lifecycle_record filter reads find entries as stored (ADR 0031).
+  - >-
+    Molecule: an audit whose scan fails, not by a timeout, now ends with the scanner's own error_message (or says that
+    none was reported), so the reason survives the destroyed instance.

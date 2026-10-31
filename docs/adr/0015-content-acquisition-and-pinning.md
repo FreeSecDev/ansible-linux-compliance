@@ -36,7 +36,10 @@ verify. Verification happens twice, at two different places:
 
 1. **Controller, at fetch time.** `tools/content/fetch_content.py` verifies the archive SHA-512 before it opens the
    archive and the SHA-256 of every extracted datastream before it is renamed into place. A mismatch deletes the
-   partial file and fails.
+   partial file and fails. Amended by [ADR 0026](0026-no-content-scripts-on-hosts.md) (FREES-191): the extracted
+   member is checked against `source_sha256` and `source_size_bytes`, its Script Check Engine checks and scripts are
+   removed (`removed_sce_checks`, `removed_sce_scripts`), and the processed datastream must have `sha256` and
+   `size_bytes`, which every later step pins. Only the processed datastream is written.
 2. **Managed host, at use time.** The `benchmark_info` and `profile_info` modules (and every later consumer) take the
    expected SHA-256 as an argument, hash the file and refuse to parse it when the digest differs. The file is opened
    once, hashed, rewound and hashed again while it is parsed, so content that changes between the two reads, or a path
@@ -114,7 +117,7 @@ the identifier, because rule identifiers such as `..._rule_ensure_pam_wheel_grou
 identifier that is neither, or both, fails closed. A golden file (`tests/fixtures/catalog/golden-rules.yml`) records, for
 every profile of both pinned datastreams (all 25), the rule count and the SHA-256 of the sorted rule list, and
 `make test-content-golden` fetches the pinned content through the digest-verified downloader and compares the catalog
-with it. The CI `test` job runs that target and fails, rather than skips, when the content cannot be fetched. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
+with it. The CI `test-suites` job runs that target and fails, rather than skips, when the content cannot be fetched. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
 Since FREES-126 `openscap.py` parses through `xmlsafe.py` too and no longer carries its own copy of the parser.
 
 One residual risk remains: the open helper of `xmlsafe` (`_open_regular`, private since FREES-129) checks the type with `lstat` and then opens the path. If an attacker who

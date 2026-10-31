@@ -48,10 +48,31 @@ SCAN_TIMEOUT_SECONDS = 3600.0
 MISSING_RESULT = "the results contain no rule-result for this rule"
 HOST = model.HostIdentity("oscap-integration", "ubuntu", "24.04", "x86_64", None)
 UID = os.getuid()
-SCE = "http://open-scap.org/page/SCE"
-OVAL = "http://oval.mitre.org/XMLSchema/oval-definitions-5"
-SCE_SCRIPT_COUNT = 81
-SCE_ONLY_PROFILE_RULES = 16
+SCE = catalog.SCE_CHECK_SYSTEM
+OVAL = catalog.OVAL_CHECK_SYSTEM
+OCIL = catalog.OCIL_CHECK_SYSTEM
+FORMER_SCE_ONLY = tuple(
+    RULE + name
+    for name in (
+        "file_permissions_unauthorized_world_writable",
+        "file_permissions_ungroupowned",
+        "ip6tables_rules_for_open_ports",
+        "iptables_rules_for_open_ports",
+        "nftables_ensure_default_deny_policy",
+        "no_files_unowned_by_user",
+        "set_ip6tables_default_rule",
+        "set_iptables_default_rule",
+        "set_ipv6_loopback_traffic",
+        "set_loopback_traffic",
+        "set_nftables_base_chain",
+        "set_nftables_loopback_traffic",
+        "set_nftables_table",
+        "set_ufw_default_rule",
+        "set_ufw_loopback_traffic",
+        "ufw_rules_for_open_ports",
+    )
+)
+NOT_EVALUATED = frozenset({"notchecked", "notapplicable"})
 DATASTREAM_RULE = re.compile(
     r"<xccdf-1\.2:Rule\b[^>]*?\bid=\"([^\"]+)\".*?</xccdf-1\.2:Rule>", re.DOTALL
 )
@@ -195,29 +216,27 @@ def check_systems(text: str, element: re.Pattern[str]) -> dict[str, set[str]]:
     }
 
 
-def sce_only_rules(path: Path) -> set[str]:
-    text = path.read_text(encoding="utf-8")
-    assert len(SCE_SCRIPT.findall(text)) == SCE_SCRIPT_COUNT
+def check_no_scripts(results: Path, datastream: Path, findings: dict[str, Any]) -> None:
+    """The fetched datastream holds no script check, and none ran (FREES-191).
+
+    The 16 rules of the profile whose only automated check was a Script Check Engine script
+    keep only their OCIL check, so they are never passed or failed by a script.
+    """
+    text = datastream.read_text(encoding="utf-8")
+    assert SCE_SCRIPT.findall(text) == []
     systems = check_systems(text, DATASTREAM_RULE)
-    assert sum(1 for found in systems.values() if SCE in found) == SCE_SCRIPT_COUNT
-    return {rule_id for rule_id, found in systems.items() if SCE in found and OVAL not in found}
-
-
-def check_sce_usage(results: Path, datastream: Path, profile_rules: set[str]) -> None:
-    sce_only = sce_only_rules(datastream) & profile_rules
-    assert len(sce_only) == SCE_ONLY_PROFILE_RULES
+    assert all(SCE not in found for found in systems.values())
+    assert all(systems[rule_id] == {OCIL} for rule_id in FORMER_SCE_ONLY)
     used = check_systems(results.read_text(encoding="utf-8"), RESULT_RULE)
     assert any(OVAL in found for found in used.values())
-    evaluated_with_sce = {rule_id for rule_id, found in used.items() if SCE in found}
-    assert evaluated_with_sce <= sce_only - set(DISABLED)
-    report(
-        "sce",
-        {
-            "datastream_sce_scripts": SCE_SCRIPT_COUNT,
-            "profile_sce_only_rules": len(sce_only),
-            "evaluated_with_sce": sorted(evaluated_with_sce),
-        },
-    )
+    assert [rule_id for rule_id, found in used.items() if SCE in found] == []
+    outcomes = {
+        rule_id: findings[rule_id]["outcome"]
+        for rule_id in FORMER_SCE_ONLY
+        if rule_id not in DISABLED
+    }
+    assert set(outcomes.values()) <= NOT_EVALUATED, outcomes
+    report("scripts", {"datastream_sce_scripts": 0, "former_sce_only_rules": outcomes})
 
 
 def check_raw_results(path: Path, enabled: set[str]) -> None:
@@ -266,7 +285,7 @@ def test_a_tailored_scan_excludes_the_disabled_rules(
     assert all(item["outcome"] != "disabled" for item in enabled.values())
     assert [key for key, item in enabled.items() if item["message"] == MISSING_RESULT] == []
     check_raw_results(run_dir / "scan" / "results.xml", set(enabled))
-    check_sce_usage(run_dir / "scan" / "results.xml", datastream[0], set(findings))
+    check_no_scripts(run_dir / "scan" / "results.xml", datastream[0], findings)
     report(
         "raw results",
         {

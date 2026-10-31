@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    CI: make test-unit and make test-coverage run pytest on PYTEST_WORKERS pytest-xdist workers (default auto, one per
+    CPU; 0 runs serially), and pytest-cov combines the data of the workers, so the 100% gates on tools/ and plugins/
+    still run on the whole suite. The test job runs only make test-coverage; the audit-exception, golden-content and
+    browser tests moved to the new test-suites job, which runs alongside it and which ci-gate needs. pytest-xdist is
+    pinned in the dev group of the lock (FREES-174).
