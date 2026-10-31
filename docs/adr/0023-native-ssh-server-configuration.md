@@ -88,8 +88,9 @@ still fail the audit. A later line whose value equals the rule's value is compli
 A conflicting later line is changed in place when it is in a vendor file, the two files that the packages ship and that
 sshd reads after the drop-ins (`__linux_compliance_remediate_sshd_vendor_files`: `/etc/ssh/sshd_config` and
 `/etc/ssh/sshd_config.d/50-redhat.conf`), outside any `Match` block, and set exactly once in that file. This is the
-`recorded_value` method that `pwquality` uses for the package-owned `/etc/security/pwquality.conf` on Ubuntu, and
-ComplianceAsCode's own fix removes the keyword from these files too. Before the change, the rule's ledger entry records
+`recorded_value` method that `pwquality` uses for the package-owned `/etc/security/pwquality.conf` on Ubuntu; the
+check reads these files with `check="all"` (golden test), so the line must agree with the rule's value. The content's
+fix is not a reference ([ADR 0025](0025-own-ansible-remediation-only.md)). Before the change, the rule's ledger entry records
 for each such file the exact original line (`vendor_line:<path>`), the line written (`vendor_written:<path>`, the same
 `<Keyword> <value>` as the drop-in); a file is recorded once, by the first run that changes it.
 `ansible.builtin.lineinfile` then replaces that one line, keeping the file's mode and owner. It runs with `backrefs:
