@@ -7,7 +7,7 @@
     {
       "name": "ubuntu2404",
       "file_name": "ssg-ubuntu2404-ds.xml",
-      "sha256": "e311189ac70ff73be54121311fca324d6188f8c12ab53416090f595ff00e070c",
+      "sha256": "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393",
       "benchmark_id": "xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04",
       "benchmark_version": "0.1.82",
       "profiles": [
@@ -652,7 +652,7 @@
     {
       "name": "rhel9",
       "file_name": "ssg-rhel9-ds.xml",
-      "sha256": "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f",
+      "sha256": "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069",
       "benchmark_id": "xccdf_org.ssgproject.content_benchmark_RHEL-9",
       "benchmark_version": "0.1.82",
       "profiles": [

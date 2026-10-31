@@ -14,14 +14,10 @@ molecule_reference_rule: xccdf_org.ssgproject.content_rule_file_permissions_cron
 molecule_reference_path: /etc/crontab
 molecule_reference_toggle: linux_compliance_rule_file_permissions_crontab_enabled
 molecule_reference_family: file_permissions
-molecule_other_native_topics:
-  - auditd_conf
-  - auditd_rules_time
-  - banners
-  - login_defs
-  - pwquality
-  - ssh
-  - sudo
+molecule_other_native_topics: >-
+  {{ (lookup('ansible.builtin.file', molecule_repository ~ '/roles/remediate/vars/rules.yml') | from_yaml)
+  .__linux_compliance_remediate_rules | map(attribute='family') | unique
+  | reject('equalto', molecule_reference_family) | sort }}
 molecule_evidence_directory: /var/lib/freesecdev/linux_compliance/evidence
 molecule_native_results: >-
   {{ linux_compliance_remediated.results | rejectattr('status', 'equalto', 'not_implemented') | list }}

@@ -25,6 +25,9 @@ Commands:
   mention the software's expiry.
 - ``install``: install a stream with SCC's own installer. This is test set-up
   only, in a throwaway container: the backend never installs content.
+- ``negative``: the same run with the backend's own per-run options, so with
+  ``downloadExternalFiles`` at ``0``. The module refuses the probe stream before SCC
+  runs (it refers outside the datastream, FREES-191), so this shows SCC's own setting.
 - ``positive``: the positive control of the egress test. It builds the per-run
   options with the backend's own functions, sets ``downloadExternalFiles`` to
   ``1``, runs ``cscc`` in the backend's scan form and reports whether the
@@ -369,17 +372,32 @@ def install(options: argparse.Namespace) -> dict[str, object]:
 
 def positive(options: argparse.Namespace) -> dict[str, object]:
     """Run the backend's scan form with ``downloadExternalFiles`` set to 1."""
+    return _direct(options, download=True)
 
+
+def negative(options: argparse.Namespace) -> dict[str, object]:
+    """Run the backend's scan form with the backend's own per-run options (downloads off).
+
+    The module refuses the probe stream before SCC runs, because it refers to a component
+    outside the datastream (FREES-191). This run gives SCC the stream anyway, so the egress
+    test still shows that SCC's own download setting keeps it off the network (ADR 0019).
+    """
+    return _direct(options, download=False)
+
+
+def _direct(options: argparse.Namespace, *, download: bool) -> dict[str, object]:
     record = scc.read_installed_content(INSTALLED_OPTIONS, Path(options.content).name)
     document = scc.options_document(record, PROFILE)
     if document.count(DOWNLOAD_OFF) != 1:
         message = "the per-run options do not set downloadExternalFiles exactly once"
         raise ValueError(message)
-    work = Path(tempfile.mkdtemp(prefix="positive-", dir="/root"))
+    work = Path(tempfile.mkdtemp(prefix="positive-" if download else "negative-", dir="/root"))
     user = work / "user"
     user.mkdir(mode=0o700)
     path = work / "options.xml"
-    path.write_text(document.replace(DOWNLOAD_OFF, DOWNLOAD_ON), encoding="utf-8")
+    path.write_text(
+        document.replace(DOWNLOAD_OFF, DOWNLOAD_ON) if download else document, encoding="utf-8"
+    )
     path.chmod(0o600)
     completed = subprocess.run(
         [SCC, "-o", str(path), "-u", str(user), "-q", "-d"],
@@ -591,6 +609,7 @@ COMMANDS = {
     "scan": scan,
     "install": install,
     "positive": positive,
+    "negative": negative,
     "egress-scan": egress_scan,
     "off-platform": off_platform,
     "oscap-scan": oscap_scan,

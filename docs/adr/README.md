@@ -27,6 +27,7 @@
 | [0023](0023-native-ssh-server-configuration.md) | Native SSH server configuration through validated drop-ins | proposed |
 | [0024](0024-native-login-defs.md) | Native login.defs remediation, one recorded line per setting | proposed |
 | [0025](0025-own-ansible-remediation-only.md) | Remediation is our own Ansible only; scanner remediation content is never used | proposed |
+| [0026](0026-no-content-scripts-on-hosts.md) | No script or remediation code of the scanner content reaches a managed host | proposed |
 | [0030](0030-native-auditd-settings-and-audit-rules.md) | Native auditd settings and audit rule drop-ins | proposed |
 | [0031](0031-fast-records-for-the-lifecycle-harness.md) | Fast records for the Molecule lifecycle harness | proposed |
 

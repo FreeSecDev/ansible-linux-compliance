@@ -14,8 +14,10 @@ another tool. This rule group makes that decision a check:
   exactly and with their number per file (a file that no longer has any of them passes): the
   STIG checklist export shows ``fixtext`` to the reader (``tools/reporting/stig_content.py``),
   the process helper refuses the ``generate fix`` sequence and the remediation words
-  (``process.py``), and the Grype parser reads the ``fix`` object of a Grype vulnerability,
-  which is not XCCDF.
+  (``process.py``), the Grype parser reads the ``fix`` object of a Grype vulnerability,
+  which is not XCCDF, and the controller removes every ``fix`` element from the content
+  (``tools/content/script_checks.py``) and the hosts refuse one (``catalog.py``), without
+  reading what it holds (ADR 0026).
 * No file of the repository may be remediation content of ComplianceAsCode or OpenSCAP: a file
   named ``ssg-*``, ``*-playbook-*.yml`` or ``*-script-*.sh`` as the release archive names them,
   ``*-ks.cfg``, a path below ``scap-security-guide*``, a generated Bash fix, a generated
@@ -78,6 +80,8 @@ PINNED_EXCEPTIONS: Final[dict[tuple[Path, str], tuple[str, ...]]] = {
         "generate " + FIX,
     ),
     (Path("tools/reporting/parsers/grype.py"), FIX_READER): (FIX, FIX),
+    (Path("tools/content/script_checks.py"), FIX_READER): (PLACEHOLDER + FIX,),
+    (Path("plugins/module_utils/compliance/catalog.py"), FIX_READER): (FIX, FIX),
 }
 
 FIX_ELEMENT: Final[re.Pattern[str]] = re.compile(

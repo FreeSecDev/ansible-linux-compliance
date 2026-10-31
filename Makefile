@@ -8,6 +8,7 @@ UV := $(shell command -v uv 2>/dev/null)
 RUN := uv run --frozen
 TRACKED := git ls-files -z --cached --others --exclude-standard
 ZIZMOR_PERSONA := pedantic
+CONTENT_GOLDEN_TESTS := $(sort $(wildcard tests/unit/tools/test_content_golden*.py))
 COLLECTION_PATH := ansible_collections/freesecdev/linux_compliance
 COLLECTION_TREE := build/collection/$(COLLECTION_PATH)
 COLLECTION_LINK := build/collections/$(COLLECTION_PATH)
@@ -87,6 +88,8 @@ BOOTSTRAP_RENDER_SED := -e 's|@@AWS_ACCOUNT_ID@@|$(AWS_ACCOUNT_ID)|g' -e 's|@@AW
 MANAGED_NODE_PYTHONS := 3.9 3.10 3.11 3.13 3.14
 UNIT_PYTHONS := 3.9 3.12 3.14
 BROWSER_TEST_DIR := build/browser-test
+PYTEST_WORKERS ?= auto
+PYTEST_PARALLEL := -n $(PYTEST_WORKERS) --dist worksteal
 NAME_SET_PYTHONS := 3.9 3.10 3.11 3.12 3.13 3.14 3.15
 NAME_SET_PYTHON ?=
 NAME_SET_DIRECTORY := build/name-sets
@@ -229,6 +232,7 @@ OSCAP_IMAGE ?= localhost/freesecdev-oscap:local
 OSCAP_CONTAINERFILE := extensions/ci/oscap/Containerfile
 OPENSCAP_SCANNER_VERSION := 1.3.9+dfsg-1.1ubuntu2
 GENERATE_STIG_MAPPING := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.content.generate_stig_mapping
+FETCH_CONTENT := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.content.fetch_content
 SCC_FETCH_ENV := SCC_VERSION='$(SCC_VERSION)' SCC_BUNDLE='$(SCC_BUNDLE)' SCC_BUNDLE_URL='$(SCC_BUNDLE_URL)' \
 	SCC_BUNDLE_SIZE='$(SCC_BUNDLE_SIZE)' SCC_BUNDLE_SHA256='$(SCC_BUNDLE_SHA256)' SCC_CHECKSUMS_URL='$(SCC_CHECKSUMS_URL)' \
 	SCC_DEB_MEMBER='$(SCC_DEB_MEMBER)' SCC_DEB_SHA256='$(SCC_DEB_SHA256)' SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)'
@@ -291,10 +295,10 @@ Security and types
 
 Tests
   test                  Alias for test-unit
-  test-unit             Unit tests, including the collection plugin tests
+  test-unit             Unit tests, including the collection plugin tests, on PYTEST_WORKERS workers (auto; 0 is serial)
   test-sanity           ansible-test sanity on a temporary collection tree, no Docker
   test-ansible-units    ansible-test units on the temporary collection tree, no Docker
-  test-coverage         Unit tests with branch coverage thresholds
+  test-coverage         Unit tests with branch coverage thresholds, on PYTEST_WORKERS workers (auto; 0 is serial)
   test-content-golden   Fetch the pinned content, compare the catalog with the recorded rule lists and check the catalogue and STIG mapping for drift
   test-oscap-integration Fetch the pinned Ubuntu 24.04 content and scan the host with a real oscap, also through the audit role
   test-browser          Dashboard browser and accessibility tests in the pinned headless Chromium
@@ -409,8 +413,8 @@ GENERATE_CATALOGUE := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m 
 toggles: require-uv collection-link
 	$(GENERATE_TOGGLES)
 
-content: require-uv
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content
+content: require-uv collection-link
+	$(FETCH_CONTENT) --output-dir build/content
 
 catalogue: require-uv collection-link
 	$(GENERATE_CATALOGUE)
@@ -520,20 +524,20 @@ typecheck: require-uv collection-link
 test: test-unit
 
 test-unit: require-uv collection-link
-	$(RUN) pytest tests/unit
+	$(RUN) pytest tests/unit $(PYTEST_PARALLEL)
 
 test-coverage: require-uv collection-link
-	$(RUN) pytest tests/unit --cov --cov-report=term-missing --cov-report=xml
+	$(RUN) pytest tests/unit $(PYTEST_PARALLEL) --cov --cov-report=term-missing --cov-report=xml
 	$(RUN) coverage report --include='tools/*' --fail-under=100
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 
 test-content-golden: require-uv collection-link content
-	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py tests/unit/tools/test_content_golden_ssh.py tests/unit/tools/test_content_golden_login_defs.py tests/unit/tools/test_content_golden_auditd.py --no-cov
+	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest $(CONTENT_GOLDEN_TESTS) --no-cov
 	$(GENERATE_CATALOGUE) --check
 	$(GENERATE_STIG_MAPPING) --check
 
 test-oscap-integration: require-uv collection-link
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
+	$(FETCH_CONTENT) --output-dir build/content --datastream ubuntu2404
 	$(RUN) pytest tests/system --no-cov -v -s -p no:cacheprovider
 	$(RUN) ansible-playbook -i localhost, tests/playbooks/audit-toggles-oscap.yml
 
@@ -845,8 +849,8 @@ molecule-images-build: require-uv
 molecule-images-ids:
 	@$(MOLECULE_INSTANCE_IMAGES) ids '$(FREESECDEV_MOLECULE_IMAGES)'
 
-molecule-content: require-uv
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404 --datastream rhel9
+molecule-content: require-uv collection-link
+	$(FETCH_CONTENT) --output-dir build/content --datastream ubuntu2404 --datastream rhel9
 
 test-molecule-docker: require-uv molecule-dependencies molecule-content
 	@docker info >/dev/null 2>&1 || { printf 'error: a running Docker daemon is required\n' >&2; exit 1; }
@@ -1067,7 +1071,7 @@ oscap-image: lint-containerfile
 
 scc-integration: scc-image scc-image-ubuntu2604 oscap-image require-uv collection-link
 	uv python install
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
+	$(FETCH_CONTENT) --output-dir build/content --datastream ubuntu2404
 	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_SCC_IMAGE_UBUNTU2604='$(SCC_IMAGE_UBUNTU2604)' FREESECDEV_REQUIRE_SCC=1 \
 		FREESECDEV_OSCAP_IMAGE='$(OSCAP_IMAGE)' FREESECDEV_SCC_EXPIRY_LOG='$(SCC_EXPIRY_LOG)' \
 		$(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider

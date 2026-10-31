@@ -36,6 +36,15 @@ lifecycle_broad_paths:
   - /var/spool
   - /var/log
   - /var/lib
+lifecycle_pre_state_reading_keys:
+  - name
+  - audit
+  - modes
+  - unchanged
+  - applied
+  - requires
+lifecycle_pre_state_writing_keys:
+  - files
 lifecycle_watched_directories: >-
   {{ lifecycle_items.files | default([]) | map(attribute='path') | map('dirname') | unique | list }}
 lifecycle_broad_ignored_paths:
@@ -151,13 +160,20 @@ lifecycle_broad_selfcheck_cases:
         - "{{ lifecycle_broad_selfcheck_syslog | combine({'mode': '0644'}) }}"
     refused: true
     drivers: "{{ lifecycle_known_drivers }}"
-  - name: times of a declared file
+  - name: ctime of a declared file
+    after:
+      files:
+        - "{{ lifecycle_broad_selfcheck_file }}"
+        - "{{ lifecycle_broad_selfcheck_crontab | combine({'ctime': 2.0}) }}"
+        - "{{ lifecycle_broad_selfcheck_ledger }}"
+    refused: false
+  - name: mtime of a declared file that its topic does not rewrite
     after:
       files:
         - "{{ lifecycle_broad_selfcheck_file }}"
         - "{{ lifecycle_broad_selfcheck_crontab | combine({'mtime': 2.0, 'ctime': 2.0}) }}"
         - "{{ lifecycle_broad_selfcheck_ledger }}"
-    refused: false
+    refused: true
   - name: ledger rewritten and new evidence written
     after:
       files:
@@ -227,17 +243,17 @@ lifecycle_broad_selfcheck_cases:
         - "{{ lifecycle_broad_selfcheck_static | combine({'ctime': 2.0}) }}"
         - "{{ lifecycle_broad_selfcheck_usr_declared }}"
     refused: true
-  - name: declared file in /usr left with other content of the same size
+  - name: declared file in /usr left with other content of the same size and its times put back
     after:
       metadata:
         - "{{ lifecycle_broad_selfcheck_static }}"
-        - "{{ lifecycle_broad_selfcheck_usr_declared | combine({'checksum': 'b', 'mtime': 2.0, 'ctime': 2.0}) }}"
+        - "{{ lifecycle_broad_selfcheck_usr_declared | combine({'checksum': 'b', 'ctime': 2.0}) }}"
     refused: true
-  - name: declared file in /usr only touched
+  - name: declared file in /usr only given another mode or owner
     after:
       metadata:
         - "{{ lifecycle_broad_selfcheck_static }}"
-        - "{{ lifecycle_broad_selfcheck_usr_declared | combine({'mtime': 2.0, 'ctime': 2.0}) }}"
+        - "{{ lifecycle_broad_selfcheck_usr_declared | combine({'ctime': 2.0}) }}"
     refused: false
   - name: declared file replaced by another inode
     after:

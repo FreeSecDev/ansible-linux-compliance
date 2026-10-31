@@ -319,6 +319,9 @@ expiry at `min(started_at, controller time)` (a lagging host clock would extend 
 
 ### Note 2026-10-26: content directory and SCE checks (FREES-134)
 
+Superseded for SCE by [ADR 0026](0026-no-content-scripts-on-hosts.md) (FREES-191): the SCE checks and scripts are
+removed on the controller, the hosts refuse content that has them, and the former SCE-only rules are `notchecked`.
+
 - **The content directory is vetted before root opens the datastream.** The plan refuses, with
   `unsafe_content_dir`, a datastream reached through a symlink, a directory above it (including the one that holds it)
   that is not owned by root or is writable by group or others without the sticky bit, and a datastream that is not

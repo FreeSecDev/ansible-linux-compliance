@@ -757,6 +757,14 @@ off. Result on 2026-10-26:
 The evidence that the backend reads therefore matches SCC's behaviour, and open item 11 is closed for 5.15. strace
 is not in the image and is not used; `--network none` is not used as evidence.
 
+Amended by FREES-191 ([ADR 0026](0026-no-content-scripts-on-hosts.md)). `compliance_scan` now refuses the probe
+stream before SCC runs, because its remote `component-ref` points outside the datastream (`script_check_content`).
+The egress test asserts that refusal, and that the sink sees no event at all. To keep the evidence above, the test
+also runs `cscc` itself on the probe stream with the backend's own per-run options, that is with
+`downloadExternalFiles` at `0` (`scc_driver.py negative`). That run must be accepted by the backend's confirmation,
+must write one results file, and must send no probe-host query and open no connection. The positive control is
+unchanged.
+
 ### Completion (decision 4)
 
 A run is `completed` only when the backend created the output and user directories fresh for the run, the

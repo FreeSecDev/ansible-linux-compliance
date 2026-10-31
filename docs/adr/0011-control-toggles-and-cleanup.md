@@ -365,7 +365,7 @@ how many have a native remediation. These refinements apply.
   `content/manifest.yml` through `catalog.read_benchmarks`, which verifies the pinned SHA-256 before it parses a byte,
   and writes `roles/remediate/vars/rules.yml` and `docs/control-families.md`. All 25 pinned profiles are covered: the 5
   Ubuntu 24.04 and the 20 RHEL 9 profiles of ComplianceAsCode 0.1.82, 1203 distinct rules. A rule that several
-  profiles or datastreams select is one entry with one toggle. The CI job `test` fetches the content
+  profiles or datastreams select is one entry with one toggle. The CI job `test-suites` fetches the content
   (`make test-content-golden`), regenerates the catalogue in memory and fails on any difference, so the catalogue cannot
   drift from the pinned content. Only rule, group and profile identifiers of the BSD-3-Clause content are used; no
   benchmark prose and no rule titles are written.
@@ -635,7 +635,7 @@ gains secondary subsystem tags. These refinements apply.
 - **Derived from the content.** `content/catalogue.yml` declares, per tag, `rule_patterns` (a pattern tags every
   catalogued rule whose short identifier, in lower case, contains it), `groups` (every rule below the group in any
   pinned datastream) and `exclusions` (rules that a pattern or group finds but that are not about the subsystem, each
-  group of them with a reason). The generator derives the tags and writes them into the catalogue; the CI job `test`
+  group of them with a reason). The generator derives the tags and writes them into the catalogue; the CI job `test-suites`
   regenerates them from the pinned content. A rule of the tag's own family is never tagged.
 - **Drift check.** `untagged_families` lists families whose rules are never tagged, with a reason. Generation fails when
   a pattern or group finds a rule of such a family that no exclusion lists, when a pattern or group finds no catalogued
@@ -794,7 +794,7 @@ refinements apply ([Molecule guide](../molecule.md#affected-legs-on-pull-request
   `roles/remediate/vars/rules.yml` is compared per family (registry entry, rules, `audit_only` list, subsystem tags and
   the families of the rules a tag gains or loses), and a changed key of `roles/remediate/vars/main.yml` affects the
   topics of the files that use it. Generated files (the role guards, the family dispatch, `playbooks/run_start.yml`)
-  and generator inputs (`content/catalogue.yml`) have no effect of their own: the required `lint` and `test` jobs
+  and generator inputs (`content/catalogue.yml`) have no effect of their own: the required `lint` and `test-suites` jobs
   check them against their generators, and their effect is classified through the files they are generated from. An
   argument-spec change that only rewrites descriptions has no effect. Documentation, changelog fragments, unit tests,
   check-mode playbooks and the reporting, lint, docs and IaC tools, the SCC and OpenSCAP image definitions have no lifecycle effect. Everything else plans
@@ -837,5 +837,51 @@ Residual risk, accepted for the throughput it buys:
   variable uses plans the full matrix. The family dispatch and the
   regression dispatch name their files literally, and `make lint-lifecycle` and `make lint-role-guards` keep them so.
 - **Generated files rely on their drift checks.** A generated file whose sources did not change in the same way is
-  refused by the required `lint` or `test` job of the same run, so such a pull request cannot merge; the plan of that
+  refused by the required `lint` or `test-suites` job of the same run, so such a pull request cannot merge; the plan of that
   run may have been too small.
+
+## Amendment 2026-10-31: topic files and generated toggles plan only their topics (FREES-195)
+
+The FREES-189 mapping planned the full matrix for every topic pull request, because each one edited shared files: the
+lists of native topics that `converge.yml`, `verify.yml`, their libvirt counterparts and `shared/vars/target.yml`
+switch off, the golden test list of the `Makefile`, and the generated toggles of `make catalogue toggles` (the role
+defaults and argument specs, and a registry that gains a family). With the auditd stack that was 85 Docker lifecycle
+legs and 23 libvirt legs per run, against 60 concurrent jobs and the 30 minutes of the merge queue, and about 1100
+`audit_only` rules remain to be converted. These refinements apply
+([Molecule guide](../molecule.md#adding-a-topic-without-touching-shared-files)).
+
+- **No hand-edited topic lists in the shared harness.** `molecule_other_native_topics` is derived from
+  `roles/remediate/vars/rules.yml` at run time, with the expression that the plays' first assertion already compared
+  it with, and `shared/tasks/other_topics_off.yml` sets each of those topic toggles to `false` and then asserts both
+  conditions of the former first task: the list equals the catalogue's, and every toggle of it is `false`. The toggles
+  are facts now, not play variables, which only raises their precedence; no task of these plays sets a topic toggle.
+  The golden tests are found by `make test-content-golden` with a wildcard. A full-matrix run plans the same legs as
+  before and runs the same assertions.
+- **The registry may gain or lose a family.** A family added to or removed from the registry affects that family and
+  the umbrella of its entry. The families that both revisions register must keep their order; a family listed twice
+  and a gained or lost family that heads an umbrella still plan the full matrix, because they change the toggles of
+  other families.
+- **Generated toggles are classified per variable and option.** In `roles/{audit,remediate}/defaults/main.yml` a
+  gained, lost or changed topic toggle `linux_compliance_<topic>_enabled` whose values are booleans affects every
+  family that the toggle controls, as `toggles.controlling_topics` resolves a rule's toggles: the family `<topic>`,
+  the families whose umbrella is `<topic>`, and the families of the rules of every subsystem tag that is `<topic>` or
+  whose umbrella it is, in either revision. In the argument specs, after descriptions are removed, every entry point
+  and every key besides `options` must be unchanged; a changed option must be such a topic toggle with exactly the
+  generated `type: bool` and `default: true`, or `linux_compliance_remediate_allow_disruptive` with only choices
+  gained or lost (each a family or umbrella, mapped the same way) and the remaining choices in the same order. The
+  topic must be a valid topic name and a family or umbrella of either registry. Values are compared by type as well
+  (`true` is not `1`). Anything else in these four files plans the full matrix.
+- **Shared code still plans the full matrix**: the harness, its tasks and variables (including
+  `other_topics_off.yml`), the images, plugins and `module_utils`, `tools/roles`, `tools/molecule`, `ci.yml`, the
+  `Makefile`, and every path that the mapping does not know. The base revision's planner still decides, so this
+  amendment takes effect for the pull requests that run after it merges.
+
+Residual risk, in addition to the FREES-189 amendment's:
+
+- **A toggle default is attributed to the families that it controls.** A topic toggle can only switch rules off, and
+  only the rules that `toggles.controlling_topics` names; the converge and verify scenarios, which run on every pull
+  request, and the controlled families' legs see the change. A default that is no boolean, or a toggle option that is
+  not the generated one, plans the full matrix, so a templated default cannot reach other topics' legs.
+- **A registry insertion changes the order in which a local full run takes the topics.** CI runs each topic and mode
+  in a container of its own, so the order does not reach a planned leg; the full matrix on `main` and nightly still
+  runs every leg.

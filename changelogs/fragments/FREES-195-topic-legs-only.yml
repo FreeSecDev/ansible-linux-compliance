@@ -1,0 +1,10 @@
+---
+trivial:
+  - >-
+    CI: a topic pull request now plans only that topic's Molecule lifecycle legs. converge, verify and their libvirt
+    counterparts derive the native topics that they switch off from roles/remediate/vars/rules.yml at run time
+    (shared/tasks/other_topics_off.yml) instead of hand-edited lists, and make test-content-golden runs every
+    tests/unit/tools/test_content_golden*.py. tools/roles/affected_topics.py maps a family that the registry gains or
+    loses to that family and its umbrella, and the generated toggle defaults and argument specs per variable and option
+    to the families that each topic toggle controls; any other change of them, and every shared or unknown path, still
+    plans the full matrix (ADR 0011, FREES-195).
