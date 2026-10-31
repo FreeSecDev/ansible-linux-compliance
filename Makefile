@@ -314,6 +314,7 @@ Tests
   molecule-images-build Build or reuse the Docker instance images, verify them and save them for the Molecule legs
   molecule-images-plan  Print the tag of each Docker instance image for $$GITHUB_OUTPUT
   molecule-images-ids   Print the verified image ID of each Docker instance image
+  pam-reader-verdicts   Rebuild tests/fixtures/pam_conf/reader_verdicts.json from the pam readers of the Molecule images
   molecule-matrix       Print the CI matrix of the toggle lifecycle legs of MOLECULE_MATRIX_DRIVER (docker or libvirt)
   molecule-plan         Print the legs that a pull request against MOLECULE_PLAN_BASE runs, as the base's planner decides
   molecule-affected     Keep the legs of the topics that a change affects (run by the base revision's planner in CI)
@@ -367,7 +368,7 @@ export HELP_TEXT
 	lint-containerfile oscap-image scc-expiry-check scc-fetch scc-image scc-image-ubuntu2604 scc-smoke scc-integration scc-own-expiry-check scc-image-clean scc-release-watch lint-iac lock-check tofu-validate aws-bootstrap-render lint-packer lint-repo lint-skills security typecheck test test-unit test-sanity test-audit-exceptions test-evidence test-remediate-check test-remediate-disruptive test-role-guards test-verify \
 	test-ansible-units package-check collection-tree collection-link sanity-pythons name-sets test-name-sets \
 	test-integration test-coverage test-content-golden test-oscap-integration test-browser browser-test-deps molecule-dependencies molecule-content molecule-matrix \
-	molecule-affected molecule-plan molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids \
+	molecule-affected molecule-plan molecule-collections-fetch molecule-collections-lock molecule-images-build molecule-images-plan molecule-images-ids pam-reader-verdicts \
 	test-molecule-docker test-molecule-docker-selftest test-molecule-libvirt \
 	test-molecule-libvirt-selftest molecule-libvirt-images molecule-libvirt-preflight \
 	molecule-libvirt-host-fetch molecule-libvirt-host-install molecule-libvirt-host-pins molecule-task-timings \
@@ -838,6 +839,10 @@ molecule-images-build: require-uv
 
 molecule-images-ids:
 	@$(MOLECULE_INSTANCE_IMAGES) ids '$(FREESECDEV_MOLECULE_IMAGES)'
+
+pam-reader-verdicts: require-uv collection-link molecule-images-build
+	PYTHONPATH='$(CURDIR)/build/collections:$(CURDIR)' $(RUN) bash tools/pam/generate-reader-verdicts.sh \
+		$$($(MOLECULE_INSTANCE_IMAGES) ids '$(FREESECDEV_MOLECULE_IMAGES)')
 
 molecule-content: require-uv
 	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404 --datastream rhel9

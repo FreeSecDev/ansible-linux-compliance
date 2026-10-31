@@ -61,12 +61,6 @@
         in __linux_compliance_remediate_security_conf_comparisons
       - __linux_compliance_remediate_sc_check.stack_checked | default('') is boolean
       - >-
-        __linux_compliance_remediate_sc_check.alternative is not defined
-        or (__linux_compliance_remediate_sc_check.alternative is string
-            and __linux_compliance_remediate_sc_check.alternative
-                is match(__linux_compliance_remediate_security_conf_setting_pattern)
-            and __linux_compliance_remediate_sc_check.alternative != __linux_compliance_remediate_sc_check.setting)
-      - >-
         (__linux_compliance_remediate_sc_check.comparison | default('') == 'present')
         == (__linux_compliance_remediate_sc_check.value_id is not defined)
       - >-
@@ -95,34 +89,28 @@
   tags:
     - always
 
-- name: PAM configuration line | Inspect the PAM stack files whose module lines the content's checks read
-  ansible.builtin.stat:
-    path: "{{ __linux_compliance_remediate_sc_stack_file }}"
+- name: PAM configuration line | List every PAM service file, since any service can load the module with arguments
+  ansible.builtin.find:
+    paths: "{{ __linux_compliance_remediate_pam_directory }}"
+    file_type: file
     follow: true
-    get_checksum: false
-    get_mime: false
-    get_attributes: false
-  loop: "{{ __linux_compliance_remediate_pam_stack_files }}"
-  loop_control:
-    loop_var: __linux_compliance_remediate_sc_stack_file
-  register: __linux_compliance_remediate_sc_stack_stats
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_sc_stack_files
   tags:
     - always
 
-- name: PAM configuration line | Read the PAM stack files that exist, as PAM reads them through a link
+- name: PAM configuration line | Read every PAM service file, as libpam reads it through a link
   ansible.builtin.slurp:
     src: "{{ __linux_compliance_remediate_sc_stack_source }}"
-  loop: >-
-    {{ __linux_compliance_remediate_sc_stack_stats.results
-       | selectattr('stat.isreg', 'defined') | selectattr('stat.isreg')
-       | map(attribute='__linux_compliance_remediate_sc_stack_file') | list }}
+  loop: "{{ __linux_compliance_remediate_sc_stack_files.files | map(attribute='path') | sort }}"
   loop_control:
     loop_var: __linux_compliance_remediate_sc_stack_source
   register: __linux_compliance_remediate_sc_stack_read
   tags:
     - always
 
-- name: PAM configuration line | Keep the text of every PAM stack file
+- name: PAM configuration line | Keep the text of every PAM service file
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_stack_texts: >-
       {{ dict(__linux_compliance_remediate_sc_stack_read.results | default([])

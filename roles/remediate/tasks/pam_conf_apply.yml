@@ -66,96 +66,31 @@
   tags:
     - always
 
-- name: PAM configuration line | Find the lines that set the setting and the module lines of the stack that set it
+- name: PAM configuration line | Decide the setting as pam reads the file and every PAM service file
   vars:
     __linux_compliance_remediate_sc_setting: "{{ __linux_compliance_remediate_rule.parameters.setting }}"
-    __linux_compliance_remediate_sc_alternative: >-
-      {{ __linux_compliance_remediate_rule.parameters.alternative | default('') }}
     __linux_compliance_remediate_sc_text: >-
       {{ (__linux_compliance_remediate_sc_current.content | b64decode)
          if __linux_compliance_remediate_sc_current is not skipped else '' }}
-    __linux_compliance_remediate_sc_options: >-
-      {{ ([__linux_compliance_remediate_sc_setting
-           ~ ('' if __linux_compliance_remediate_rule.parameters.comparison == 'present' else '=')]
-          + ([__linux_compliance_remediate_sc_alternative] if __linux_compliance_remediate_sc_alternative else []))
-         if __linux_compliance_remediate_rule.parameters.stack_checked else [] }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_sc_regexp: "{{ '^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '(?:[ \t=]|$)' }}"
+    __linux_compliance_remediate_sc_decision: >-
+      {{ __linux_compliance_remediate_sc_text | freesecdev.linux_compliance.pam_conf_decision({
+           'reader': __linux_compliance_remediate_sc.family,
+           'setting': __linux_compliance_remediate_sc_setting,
+           'comparison': __linux_compliance_remediate_rule.parameters.comparison,
+           'required': __linux_compliance_remediate_sc_values[__linux_compliance_remediate_rule.rule_id],
+           'stack_checked': __linux_compliance_remediate_rule.parameters.stack_checked},
+           __linux_compliance_remediate_sc_stack_texts) }}
+  tags:
+    - always
+
+- name: PAM configuration line | Name the line to write and the one line of the setting that it replaces
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_line: "{{ __linux_compliance_remediate_sc_decision.line }}"
     __linux_compliance_remediate_sc_found: >-
-      {{ __linux_compliance_remediate_sc_text
-         | regex_findall('(?m)^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '(?:[ \t=].*)?$') }}
-    __linux_compliance_remediate_sc_alternative_found: >-
-      {{ (__linux_compliance_remediate_sc_text
-          | regex_findall('(?m)^[ \t]*' ~ __linux_compliance_remediate_sc_alternative ~ '(?:[ \t=].*)?$'))
-         if __linux_compliance_remediate_sc_alternative else [] }}
-    __linux_compliance_remediate_sc_flag: "{{ '^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '[ \t]*$' }}"
-    __linux_compliance_remediate_sc_alternative_flag: >-
-      {{ '^[ \t]*' ~ __linux_compliance_remediate_sc_alternative ~ '[ \t]*$' }}
-    __linux_compliance_remediate_sc_strict: >-
-      {{ '^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '[ \t]*=[ \t]*(0|[1-9][0-9]{0,8})[ \t]*$' }}
-    __linux_compliance_remediate_sc_leading: >-
-      {{ '^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '[ \t]*=[ \t]*([0-9]{1,9})(?:[^0-9].*)?$' }}
-    __linux_compliance_remediate_sc_overriding: >-
-      {%- set files = [] -%}
-      {%- for path, text in __linux_compliance_remediate_sc_stack_texts.items() -%}
-      {%- for option in __linux_compliance_remediate_sc_options -%}
-      {%- if text is search(__linux_compliance_remediate_pam_option_pattern
-            | replace('{type}', __linux_compliance_remediate_sc.type)
-            | replace('{module}', __linux_compliance_remediate_sc.module)
-            | replace('{option}', option)) and path not in files -%}
-      {%- set _ = files.append(path) -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {%- endfor -%}
-      {{ files }}
-  tags:
-    - always
-
-- name: PAM configuration line | Read the value of the one line of the setting as pam and the check read it
-  vars:
-    __linux_compliance_remediate_sc_one: >-
-      {{ __linux_compliance_remediate_sc_found | first
-         if __linux_compliance_remediate_sc_found | length == 1 else '' }}
-  ansible.builtin.set_fact:
-    __linux_compliance_remediate_sc_set: >-
-      {{ __linux_compliance_remediate_sc_one | regex_replace(__linux_compliance_remediate_sc_strict, '\1')
-         if __linux_compliance_remediate_sc_one is match(__linux_compliance_remediate_sc_strict) else none }}
-    __linux_compliance_remediate_sc_number: >-
-      {{ __linux_compliance_remediate_sc_one | regex_replace(__linux_compliance_remediate_sc_leading, '\1') | int
-         if __linux_compliance_remediate_sc_one is match(__linux_compliance_remediate_sc_leading) else none }}
-    __linux_compliance_remediate_sc_flag_set: >-
-      {{ __linux_compliance_remediate_sc_one is match(__linux_compliance_remediate_sc_flag) }}
-    __linux_compliance_remediate_sc_alternative_set: >-
-      {{ __linux_compliance_remediate_sc_alternative_found | length == 1
-         and __linux_compliance_remediate_sc_alternative_found | first
-             is match(__linux_compliance_remediate_sc_alternative_flag) }}
-  tags:
-    - always
-
-- name: PAM configuration line | Decide whether the setting satisfies the content's check and the line to write
-  vars:
-    __linux_compliance_remediate_sc_comparison: "{{ __linux_compliance_remediate_rule.parameters.comparison }}"
-    __linux_compliance_remediate_sc_required: >-
-      {{ __linux_compliance_remediate_sc_values[__linux_compliance_remediate_rule.rule_id] }}
-    __linux_compliance_remediate_sc_stricter: >-
-      {{ __linux_compliance_remediate_sc_number is not none
-         and ((__linux_compliance_remediate_sc_comparison == 'at_most'
-               and 1 <= __linux_compliance_remediate_sc_number | int <= __linux_compliance_remediate_sc_required | int)
-              or (__linux_compliance_remediate_sc_comparison == 'at_least'
-                  and __linux_compliance_remediate_sc_number | int
-                      >= __linux_compliance_remediate_sc_required | int)) }}
-  ansible.builtin.set_fact:
-    __linux_compliance_remediate_sc_satisfied: >-
-      {{ (__linux_compliance_remediate_sc_comparison == 'present' and __linux_compliance_remediate_sc_flag_set)
-         or (__linux_compliance_remediate_sc_comparison != 'present'
-             and __linux_compliance_remediate_sc_set is not none and __linux_compliance_remediate_sc_stricter)
-         or __linux_compliance_remediate_sc_alternative_set }}
-    __linux_compliance_remediate_sc_line: >-
-      {{ __linux_compliance_remediate_rule.parameters.setting
-         if __linux_compliance_remediate_sc_comparison == 'present'
-         else __linux_compliance_remediate_rule.parameters.setting ~ ' = '
-              ~ (__linux_compliance_remediate_sc_number | int | string
-                 if __linux_compliance_remediate_sc_stricter else __linux_compliance_remediate_sc_required) }}
+      {{ [] if __linux_compliance_remediate_sc_decision.setting_line is none
+         else [__linux_compliance_remediate_sc_decision.setting_line] }}
   tags:
     - always
 
@@ -168,19 +103,18 @@
     __linux_compliance_remediate_sc_shared: >-
       {{ __linux_compliance_remediate_rule.ledger_entry is none
          and __linux_compliance_remediate_sc_by_sibling is not none
+         and __linux_compliance_remediate_sc_decision.status in ['applied', 'compliant']
          and __linux_compliance_remediate_sc_found == [__linux_compliance_remediate_sc_by_sibling.line] }}
     __linux_compliance_remediate_sc_status: >-
       {{ 'method_changed' if __linux_compliance_remediate_sc_entry_method not in [none, 'line']
          else 'notapplicable' if not __linux_compliance_remediate_sc_stat.stat.exists
          else 'not_regular_file' if not __linux_compliance_remediate_sc_stat.stat.isreg
-         else 'overridden' if __linux_compliance_remediate_sc_overriding | length > 0
-         else 'duplicate_setting' if __linux_compliance_remediate_sc_found | length > 1
-              or __linux_compliance_remediate_sc_alternative_found | length > 1
+         else __linux_compliance_remediate_sc_decision.status
+              if __linux_compliance_remediate_sc_decision.status not in ['applied', 'compliant']
          else 'applied' if __linux_compliance_remediate_rule.ledger_entry is none
               and __linux_compliance_remediate_sc_by_sibling is not none
               and __linux_compliance_remediate_sc_found == [__linux_compliance_remediate_sc_by_sibling.line]
-         else 'compliant' if __linux_compliance_remediate_sc_satisfied
-         else 'applied' }}
+         else __linux_compliance_remediate_sc_decision.status }}
   tags:
     - always
 
@@ -290,18 +224,8 @@
                               ~ ' does not exist, so the PAM package that ships it is not installed; nothing is'
                               ~ ' created',
              'not_regular_file': __linux_compliance_remediate_sc.path
-                                 ~ ' is a symbolic link or not a regular file; nothing is written through it',
-             'overridden': 'the ' ~ __linux_compliance_remediate_sc.module ~ ' lines of '
-                           ~ (__linux_compliance_remediate_sc_overriding | join(', ')) ~ ' set '
-                           ~ __linux_compliance_remediate_rule.parameters.setting
-                           ~ ' as a module argument, which takes precedence over the file and which the check'
-                           ~ ' reads instead; the collection does not edit the PAM stack',
-             'duplicate_setting': __linux_compliance_remediate_sc.path ~ ' sets '
-                                  ~ __linux_compliance_remediate_rule.parameters.setting ~ ' on '
-                                  ~ ([__linux_compliance_remediate_sc_found | length,
-                                      __linux_compliance_remediate_sc_alternative_found | length] | max)
-                                  ~ ' lines'
-           }[__linux_compliance_remediate_sc_status] | default(none),
+                                 ~ ' is a symbolic link or not a regular file; nothing is written through it'
+           }[__linux_compliance_remediate_sc_status] | default(__linux_compliance_remediate_sc_decision.reason),
            'changed': (__linux_compliance_remediate_sc_write is changed)
                       or (__linux_compliance_remediate_sc_record is changed)
                       or (__linux_compliance_remediate_sc_rerecord is changed),

@@ -35,15 +35,10 @@ __linux_compliance_remediate_sudo_backslash: '\'
 __linux_compliance_remediate_sudo_read_name: '^[^.]*[^.~]$'
 __linux_compliance_remediate_faillock_conf: /etc/security/faillock.conf
 __linux_compliance_remediate_pwhistory_conf: /etc/security/pwhistory.conf
-__linux_compliance_remediate_pam_stack_files:
-  - /etc/pam.d/common-auth
-  - /etc/pam.d/common-password
-  - /etc/pam.d/password-auth
-  - /etc/pam.d/system-auth
+__linux_compliance_remediate_pam_directory: /etc/pam.d
 __linux_compliance_remediate_security_conf_setting_pattern: '^[a-z][a-z_]{1,31}$'
 __linux_compliance_remediate_security_conf_number_pattern: '^(0|[1-9][0-9]{0,8})$'
 __linux_compliance_remediate_security_conf_comparisons:
   - present
   - at_most
   - at_least
-__linux_compliance_remediate_pam_option_pattern: '(?m)^[ \t]*-?{type}[ \t]+\S.*[ \t/]{module}\.so[ \t].*{option}'

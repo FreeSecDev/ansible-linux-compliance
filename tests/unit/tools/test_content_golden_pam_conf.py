@@ -6,8 +6,9 @@ The remediate role writes one line per setting into /etc/security/faillock.conf 
 both datastreams and check that the written line satisfies the object and the state that
 read the file, that a commented line does not, that the value the state compares with is the
 profile value of the catalogue, that ``stack_checked`` is true exactly when the check also
-reads the setting on a module line of the stack, that the role's detector finds every module
-line that the check's pattern finds, and that no other catalogued rule reads either file.
+reads the setting on a module line of the stack, that the filter's stack detector finds every
+module line that the check's pattern finds, that every stack file of a check is a file of
+/etc/pam.d, which the role reads whole, and that no other catalogued rule reads either file.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import cast
 
 import yaml
 
+from ansible_collections.freesecdev.linux_compliance.plugins.filter import pam_conf
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     toggles,
     xmlsafe,
@@ -191,34 +193,14 @@ def catalogued_rule_ids() -> set[str]:
     return native | {rule for rules in audit_only.values() for rule in rules}
 
 
-def option_pattern(family: str, option: str) -> str:
-    variables = cast(
-        "dict[str, object]",
-        yaml.safe_load(
-            (REPOSITORY_ROOT / "roles" / "remediate" / "vars" / "main.yml").read_text(
-                encoding="utf-8"
-            )
-        ),
-    )
-    kind, module = MODULE[family]
-    return (
-        str(variables["__linux_compliance_remediate_pam_option_pattern"])
-        .replace("{type}", kind)
-        .replace("{module}", module)
-        .replace("{option}", option)
-    )
+def under_pam_directory(path: str) -> bool:
+    """Return whether every file that an OVAL filepath names is a file of /etc/pam.d."""
+    names = path.removeprefix("^").removesuffix("$").strip("()").split("|")
+    return all(re.fullmatch(r"/etc/pam\\?\.d/[A-Za-z0-9_-]+", name.strip("()^$")) for name in names)
 
 
-def stack_files() -> list[str]:
-    variables = cast(
-        "dict[str, object]",
-        yaml.safe_load(
-            (REPOSITORY_ROOT / "roles" / "remediate" / "vars" / "main.yml").read_text(
-                encoding="utf-8"
-            )
-        ),
-    )
-    return cast("list[str]", variables["__linux_compliance_remediate_pam_stack_files"])
+def stack_file_of(collector: Oval, item: dict[str, list[str]]) -> bool:
+    return any("/etc/pam" in collector.resolve(entry) for entry in item.get("filepath", []))
 
 
 def reads_file(collector: Oval, item: dict[str, list[str]], path: str) -> bool:
@@ -269,7 +251,7 @@ def stack_patterns(collector: Oval, definition: str, family: str, setting: str) 
     found: list[str] = []
     for test in collector.tests_of(definition):
         item = collector.objects[str(test["object"])]
-        if not any(reads_file(collector, item, path) for path in stack_files()):
+        if not stack_file_of(collector, item):
             continue
         found.extend(
             pattern
@@ -355,7 +337,7 @@ def test_every_written_line_satisfies_the_checks_that_read_the_configuration_fil
     }
 
 
-def detected_lines(family: str, option: str, argument: str, oval_patterns: list[str]) -> int:
+def detected_lines(family: str, setting: str, argument: str, oval_patterns: list[str]) -> int:
     kind, module = MODULE[family]
     lines = [
         f"{kind} required {module}.so preauth {argument}",
@@ -363,12 +345,15 @@ def detected_lines(family: str, option: str, argument: str, oval_patterns: list[
         f"{kind} [default=die] {module}.so authfail {argument}",
         f"{kind} requisite /usr/lib64/security/{module}.so use_authtok {argument}",
     ]
-    detector = option_pattern(family, option + "=" if "=" in argument else argument)
     found = 0
     for pattern in oval_patterns:
         for line in lines:
             if re.search(pattern, line + "\n", re.MULTILINE):
-                assert re.search(detector, line + "\n"), (pattern, line)
+                stack = {"/etc/pam.d/service": line + "\n"}
+                assert pam_conf.stack_overrides(stack, family, setting, checked=True), (
+                    pattern,
+                    line,
+                )
                 found += 1
     return found
 
@@ -377,14 +362,10 @@ def stack_rule(collector: Oval, definition: str, rule: dict[str, object]) -> int
     family = str(rule["family"])
     parameters = cast("dict[str, object]", rule["parameters"])
     setting = str(parameters["setting"])
-    options = [setting] + ([str(parameters["alternative"])] if "alternative" in parameters else [])
-    found = {option: stack_patterns(collector, definition, family, option) for option in options}
-    assert bool(found[setting]) is parameters["stack_checked"], rule["rule_id"]
-    checked = 0
-    for option, oval_patterns in found.items():
-        value = option == setting and parameters["comparison"] != "present"
-        checked += detected_lines(family, option, f"{option}=5" if value else option, oval_patterns)
-    return checked
+    oval_patterns = stack_patterns(collector, definition, family, setting)
+    assert bool(oval_patterns) is parameters["stack_checked"], rule["rule_id"]
+    argument = setting if parameters["comparison"] == "present" else f"{setting}=5"
+    return detected_lines(family, setting, argument, oval_patterns)
 
 
 def test_stack_checked_is_true_exactly_when_the_check_reads_the_module_line_and_detects_it() -> (
@@ -402,7 +383,7 @@ def test_stack_checked_is_true_exactly_when_the_check_reads_the_module_line_and_
 
 
 def test_the_role_reads_every_stack_file_in_which_the_checks_read_a_setting() -> None:
-    names = set(stack_files())
+    """The role reads every file of /etc/pam.d, so every stack file of a check must be one."""
     checked = 0
     for path, sha256, _ in pinned_benchmarks():
         profile_values.read_values(path, sha256)
@@ -422,11 +403,7 @@ def test_the_role_reads_every_stack_file_in_which_the_checks_read_a_setting() ->
                     continue
                 for entry in item.get("filepath", []):
                     value = collector.resolve(entry)
-                    assert any(reads_file(collector, item, name) for name in names), (
-                        rule_id,
-                        value,
-                    )
-                    assert set(re.findall(r"/etc/pam\.d/[a-z-]+", value)) <= names, (rule_id, value)
+                    assert under_pam_directory(value), (rule_id, value)
                     checked += 1
     assert checked > 0
 

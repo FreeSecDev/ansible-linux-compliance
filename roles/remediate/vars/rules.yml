@@ -1015,19 +1015,9 @@ __linux_compliance_remediate_rules:
     toggle: linux_compliance_rule_accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time_enabled
     runbook: null
     parameters:
-      setting: "root_unlock_time"
-      comparison: "at_least"
-      alternative: "even_deny_root"
+      setting: "even_deny_root"
+      comparison: "present"
       stack_checked: true
-      value_id: "var_accounts_passwords_pam_faillock_root_unlock_time"
-      profile_values:
-        - datastream: "rhel9"
-          content_sha256: "92204daafbf4f38011671ef034fae4cffb48f708516186710346a9ec702a1f8f"
-          profiles:
-            - cis
-            - cis_workstation_l2
-          value:
-            - "60"
   - rule_id: "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_interval"
     family: faillock
     disruptive: true

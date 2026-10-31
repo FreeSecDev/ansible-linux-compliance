@@ -900,11 +900,9 @@ native_rules:
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time
     revert_strategy: recorded_value
     runbook: null
-    profile_value: var_accounts_passwords_pam_faillock_root_unlock_time
     parameters:
-      setting: root_unlock_time
-      comparison: at_least
-      alternative: even_deny_root
+      setting: even_deny_root
+      comparison: present
       stack_checked: true
   - rule_id: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_interval
     revert_strategy: recorded_value
