@@ -24,14 +24,17 @@ make test-molecule-docker MOLECULE_DOCKER_SCENARIOS=docker-ubuntu-lifecycle MOLE
 make test-molecule-docker-selftest
 ```
 
-`test-molecule-docker` installs the pinned collections from `extensions/molecule/requirements.yml` into
-`build/collections` (`make molecule-dependencies`), fetches and verifies the pinned ComplianceAsCode datastreams into
-`build/content` (`make molecule-content`, the same `tools/content/fetch_content.py` as `test-oscap-integration`), runs
-`molecule test -s <scenario>` for each scenario and stops at the first failure, and then runs the self-test. Without
+`test-molecule-docker` installs the collections pinned in `extensions/molecule/collections.pins` into
+`build/collections` from verified local files (`make molecule-dependencies`), fetches and verifies the pinned
+ComplianceAsCode datastreams into `build/content` (`make molecule-content`, the same `tools/content/fetch_content.py`
+as `test-oscap-integration`), prepares the instance images of the selected scenarios, runs `molecule test -s
+<scenario>` for each scenario and stops at the first failure, and then runs the self-test. Without
 `MOLECULE_DOCKER_SCENARIOS` it runs all four scenarios, so the lifecycle scenarios run every native topic in both
 toggle modes; `MOLECULE_LIFECYCLE_TOPIC` and `MOLECULE_LIFECYCLE_MODE` select one topic and one mode, as a
-[CI leg](#ci-legs) does. The first run builds the images. The images stay in the local Docker cache
-(`freesecdev-molecule/*`); remove them with `docker image rm` when no longer needed.
+[CI leg](#ci-legs) does. Outside GitHub Actions the first run builds the images and later runs reuse them; in CI the
+legs load the images and collections of the run instead ([built once per run](#images-and-collections-built-once-per-run)).
+The images stay in the local Docker cache (`freesecdev-molecule/*`); remove them with `docker image rm` when no longer
+needed.
 
 CI runs the same target in two jobs on `ubuntu-24.04` GitHub-hosted runners: `molecule-docker`, one matrix entry per
 standard scenario plus `docker-selftest`, and `molecule-lifecycle`, one leg per platform, native topic and toggle mode
@@ -83,7 +86,124 @@ manager reads `versions.yml` or the Dockerfiles yet (FREES-81).
 
 The image tag is `<first 12 hex digits of the base digest>-<first 12 hex digits of a SHA-256 over the base reference
 and the Dockerfile>`. Every build input is in that hash (the Dockerfiles copy nothing from the build context), so a
-changed Dockerfile or base image builds a new image even though `community.docker.docker_image` uses `state: present`.
+changed Dockerfile or base image gives a new tag and a new image. The hash input is
+`<reference>:<tag>@<digest>`, a literal backslash and `n` (Jinja leaves `'\n'` in the folded scalar of `create.yml`
+as two characters), and the Dockerfile without trailing whitespace. `tools/molecule/instance_images.py` computes the
+same tag outside Ansible, and `create.yml` compares the tag that the preparation recorded with its own.
+
+`create.yml` builds nothing. It reads the record of verified images that `make` writes
+(`build/molecule-images.verified.yml`, named by the `FREESECDEV_MOLECULE_IMAGES` environment variable), requires an
+entry with its own tag for every platform, inspects `freesecdev-molecule/<image>:<tag>` and refuses to start a
+container when the image is missing or its ID is not the recorded one. Run the scenarios through `make`, which prepares
+the images; `molecule test` alone fails in `create` with a message that says so.
+
+## Images and collections built once per run
+
+Before FREES-182 and FREES-184 every Docker leg built both instance images in `create` and every Molecule leg and
+`lint` installed the collections from Galaxy. About 35 legs per run did the same work, and two flakes took PRs out of
+the merge queue: the Rocky Linux image took 532 to 540 seconds on a slow package mirror (jobs 124055287121 and
+124276806503) instead of about 24, and Galaxy answered HTTP 500 (job 124276806541), cut downloads short
+(`IncompleteRead`), failed TLS or left its cache without `results`. Each input is now prepared once per run, in its
+own job, and every leg verifies what it receives ([ADR 0009](adr/0009-molecule-layout-and-drivers.md)).
+
+### Instance images
+
+| Step | Where | What it does |
+|---|---|---|
+| Plan | `molecule-images`, `make -s molecule-images-plan` | Prints `<image>=<tag>` for every image of `shared/vars/versions.yml`, and `week=<YYYY-Www>` |
+| Cache | `molecule-images`, `actions/cache/restore` and `actions/cache/save` per image | Restores `build/molecule-images/<image>/image.tar.zst` under the key `molecule-image-<image>-<tag>-<ISO week>`, except in a pull request from a fork; saves it on a miss, except in a scheduled run |
+| Build | `molecule-images`, `make molecule-images-build` | Both images in parallel, see below |
+| Share | `molecule-images` | The job output `ids` (`<image>=<image ID>` pairs) and the artifact `molecule-images` (retention one day) |
+| Load | each `molecule-docker` and `molecule-lifecycle` leg | Downloads the artifact; `make test-molecule-docker` loads only the images its scenarios use and verifies each |
+
+`tools/molecule/instance-images.sh build` pulls each pinned base by digest (`docker pull`, up to three attempts of at
+most 120 seconds) and reads its layers. It reuses a restored archive or an image that the local daemon already holds
+only when the image carries the label `org.freesecdev.molecule.inputs=<tag>` and its layers start with exactly the
+base's layers and add at least one; otherwise it discards the image and builds. A build is `docker build` with the
+pinned `BASE_IMAGE`, that label and the tag, up to three attempts of at most 200 seconds each (`timeout` ends a stuck
+attempt; a build takes about 25 seconds on a normal mirror), so three slow attempts end within ten minutes, inside the
+15-minute limit of the job. Both images are prepared in parallel and their output is prefixed with the image key. The
+package managers themselves move on from a slow mirror: the Rocky Linux Dockerfile gives `dnf` a minimum rate, a
+per-mirror timeout and retries, so that a mirror slower than 256 KiB/s for 20 seconds is left for the next one of the
+mirror list, and the Ubuntu Dockerfile gives `apt-get` retries and a timeout. With `save`, the job always writes the archive with `docker save` and `zstd` from the verified image, also when
+the image came from the cache, so the legs never receive the cache's bytes, and records the tag and image ID of
+each image in `build/molecule-images.verified.yml`, from which `make -s molecule-images-ids` prints the job output.
+On an unchanged image the cache hit means no package mirror is contacted at all, so a slow mirror matters only in the
+first run after a Dockerfile or base digest changes.
+
+`load` in a leg never pulls or builds. It requires an archive and an expected ID for every planned image, loads the
+archive, requires `docker load` to report exactly `freesecdev-molecule/<image>:<tag>`, compares the image ID with the
+one of the job output and the inputs label with the tag, removes a mismatched image and fails. Then it writes the
+record that `create.yml` checks. `make` decides between the two with `MOLECULE_OFFLINE`, which is `true` in GitHub
+Actions (`GITHUB_ACTIONS=true`) and `false` elsewhere, so a CI leg cannot fall back to building.
+
+`docker load` must report only the target: an archive that also loads another name or an untagged image is refused,
+in the job (the image is then built) and in a leg (the leg fails).
+
+The label, the base layers and the collection pins catch a corrupt or stale cache entry, not a crafted one:
+`actions/cache` restores with `tar -P`, so whoever can write an entry in a scope that a run restores can rewrite the
+checking scripts before they run. That boundary, write access to the `main` cache scope, and why the image cache has
+no content pin are in T-MOLECULE-1 of the [threat model](security/threat-model.md). The image cache key carries the
+ISO week of the run, so a planted entry lasts at most until the week ends and every image is rebuilt at least once a
+week, and a scheduled run never saves an image entry. Images are never pushed: `freesecdev-molecule/*` exists only in the runner's local daemon and in
+the run's artifact, and no workflow, Makefile line or script runs `docker push`, `docker login` or `docker tag`
+(`tests/unit/tools/test_instance_images_script.py`).
+
+### Galaxy collections
+
+`extensions/molecule/requirements.yml` pins each collection and its dependency
+`community.library_inventory_filtering_v1` exactly; `extensions/molecule/collections.pins` adds the SHA-256 and size
+of each artifact, from Galaxy's metadata (`make molecule-collections-lock`, which refuses a dependency that
+`requirements.yml` does not pin). Galaxy publishes no signatures for these collections, so the pins are SHA-256.
+
+| Step | Where | What it does |
+|---|---|---|
+| Cache | `molecule-collections`, `actions/cache` | Restores `build/molecule-collections` under the key `galaxy-collections-<hash of the pins>`, except in a pull request from a fork |
+| Fetch | `molecule-collections`, `make molecule-collections-fetch` | Checks every cached file and downloads only what is missing or wrong |
+| Share | `molecule-collections` | The artifact `molecule-collections` (retention one day) |
+| Install | `lint`, `molecule-docker`, `molecule-lifecycle`, `molecule-libvirt` | Downloads the artifact; `make molecule-dependencies` installs offline |
+
+`tools/molecule/galaxy-collections.sh fetch` downloads `<namespace>-<name>-<version>.tar.gz` from Galaxy's artifact
+URL over HTTPS only, with `curl --retry 4 --retry-delay 10 --retry-all-errors`, at most 90 seconds per attempt and no
+more bytes than the pinned size. It keeps a file only when its size and SHA-256 match the pin, checks a cached file the
+same way before it reuses it and removes files that are not pinned. `install` checks every file again, copies it into
+a private directory, checks the copy and runs `ansible-galaxy collection install --offline --force` on those copies
+only, with `ANSIBLE_GALAXY_SERVER=https://galaxy.invalid`, so that a missing dependency fails instead of reaching
+Galaxy. In GitHub Actions `molecule-dependencies` does not fetch; outside it, it fetches first, which reuses verified
+files and needs no network once they are there. When Renovate raises a version in `requirements.yml`, run
+`make molecule-collections-lock`; `tests/unit/tools/test_galaxy_collections.py` fails until the pins match.
+
+### Durations
+
+Before, on two runs at the base of this change (seconds; a leg is one `molecule-docker`, `molecule-lifecycle` or
+`molecule-libvirt` job, from the GitHub API; the steps are timed from the job logs with
+`make molecule-task-timings` and the log timestamps):
+
+| Run | Legs | Lifecycle median / max | Docker median / max | libvirt median / max | Image build per Docker leg, median / max | Galaxy install per job, median / max |
+|---|---|---|---|---|---|---|
+| 41112773853 (merge group of #68, bf23ba9) | 33 | 487 / 767 | 439 / 571 | 572 / 1019 | 27 / 81 (26 legs, 770 in all) | 17.8 / 22.4 (34 jobs, 606 in all) |
+| 41113885988 (pull request #70, b4f4ee1) | 43 | 503 / 927 | 385 / 543 | 483 / 1187 | 29 / 472 (36 legs, 2089 in all) | 17.0 / 21.4 (44 jobs, 745 in all) |
+
+In the second run the Rocky Linux mirror was slow for six legs: one build took 472 seconds and another 421, and those
+two legs took 819 and 927 seconds of their 18-minute limit. Every one of the 76 Docker legs built an image and every
+one of the 78 jobs that installed collections downloaded them from Galaxy.
+
+After, on two runs of the pull request of this change (#71 at c5d9634, after the merge of #61, so with the `ssh`
+topic's legs): the first attempt of run 41128905509 built both images because their tags were new, the second
+attempt of the same run restored them from the cache.
+
+| Run | Legs | Lifecycle median / max | Docker median / max | libvirt median / max | `molecule-images` | `molecule-collections` | Image load per Docker leg, median / max | Offline install per job, median / max |
+|---|---|---|---|---|---|---|---|---|
+| 41128905509, attempt 1 | 41 | 427 / 826 | 444 / 518 | 618 / 1128 | 56 (built both) | 7 | 8.9 / 12.9 (34 legs, 287 in all) | 4.4 / 5.5 (42 jobs, 180 in all) |
+| 41128905509, attempt 2 | 41 | 396 / 806 | 498 / 543 | 468 / 1154 | 32 (cache hits) | 11 | 7.2 / 11.8 (34 legs, 245 in all) | 4.3 / 4.9 (42 jobs, 171 in all) |
+
+The artifact downloads took a median of 2 seconds per step. In both attempts no leg logged a Galaxy URL, an image
+build or a `docker build`, and every leg logged `installed 4 verified collections offline; Galaxy was not contacted`
+and, for the Docker legs, `loaded freesecdev-molecule/<image>:<tag> and verified its image ID ...; nothing was built`.
+Per leg the two inputs now cost about 15 seconds (download, load, install) instead of about 45 in the median, and nothing in a leg depends on a
+package mirror or on Galaxy any more; a slow mirror can delay only the `molecule-images` job, and only when an image
+changed. The leg durations themselves are dominated by the lifecycle cycles and vary by a minute or two between
+runs, so the medians above move by more than the saving.
 
 The datastreams are the ones pinned in `content/manifest.yml`. `prepare` checks the SHA-256 of the fetched file on the
 controller, then copies it into the instance as `/usr/share/freesecdev-molecule/content/<file>` (root-owned, directory
@@ -634,6 +754,34 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
+`login_defs` (FREES-185) has four groups, all on both platforms. In `changes`,
+`shared/tasks/lifecycle_login_defs_regressions.yml` applies the topic and checks the SHA-256 of the whole
+`/etc/login.defs` against the as-built text with the two lines replaced in place; it records every entry as if another
+method had written it and checks `method_changed` at apply and at cleanup with every entry kept and the file
+untouched; it makes `PASS_MAX_DAYS` stricter by hand (`modified_since_apply`, the change kept, the umask restored) and
+puts the written line back (`restored`, the file byte for byte as built); it removes the `UMASK` line, which existed
+before, by hand (`modified_since_apply`) and checks that the recorded line, not a default, is written back once the
+collection's line is there again; and from a file without `PASS_MAX_DAYS` it checks that the added line is recorded as
+absent before and that removing it by hand is `restored` without a write (FREES-173). In `refusals`,
+`shared/tasks/lifecycle_login_defs_refusals.yml` runs each of these files through an apply and a cleanup that must
+restore it byte for byte: a second `PASS_MAX_DAYS` line and a second one in lower case (`duplicate_setting`, nothing
+written), a commented default (ignored), a lower-case name with a four-digit umask (`PASS_MAX_DAYS 365` and `UMASK 077`
+written, the lower-case line and `UMASK 0077` restored), a stricter maximum age and umask with a trailing comment
+(`PASS_MAX_DAYS 30` and `UMASK 077` written). In `values`, `shared/tasks/lifecycle_login_defs_values.yml` does the
+same for zero-padded numbers (`090` becomes `90`, `010` becomes `10`, `0365`
+becomes `245`), the forms refused as `unreadable_value` (`"30"`, `+30`, `1234567` and `0x10000` under a minimum,
+`00077`, `"077"`, `0x3f`, nothing written) and those that take the profile's value (`-1`, an empty value, `9x`,
+`1234567` under a maximum, `0`, `0x1e`); then a drop-in
+`/etc/login.defs.d/50-site.defs` that sets the maximum age and a symbolic link in place of `/etc/login.defs.d` (both
+ignored: the rules apply and clean up as usual), a symbolic link in place of `/etc/login.defs` (`not_regular_file`,
+nothing written through it) and a missing `/etc/login.defs` (`notapplicable`, nothing created). In `profiles`,
+`shared/tasks/lifecycle_login_defs_other_profiles.yml` applies in check mode and for real, repeats and cleans up the
+rules that the CIS level 1 profiles of the lifecycle do not select, with the STIG profile of each platform (on Rocky
+Linux from `CREATE_HOME no`, so that `accounts_have_homedir_login_defs` changes something) and the RHEL 9 ANSSI
+enhanced profile, and checks every written line and the byte-for-byte restore; on Rocky Linux it also checks that
+`CREATE_HOME`, whose check reads the drop-ins, is `overridden` by a drop-in that sets it and `not_directory` next to a
+linked drop-in directory.
+
 ### CI legs
 
 With `file_permissions` (four cycles), `banners` (four cycles) and `pwquality` (two cycles), one lifecycle step per
@@ -669,7 +817,8 @@ duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 20 for `test` (
 (10.8). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
 on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
 in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
-Building the instance images once per run and reusing them in every leg is tracked as FREES-182. A leg that
+Since FREES-182 the images are built once per run and every leg loads them
+([built once per run](#images-and-collections-built-once-per-run)). A leg that
 approaches 20 minutes should be split further, for example per pre-state, rather than given a longer limit, so that
 no required job comes near the merge queue's 30 minutes. The `test` job, 21 minutes at 6628b92, was split the same way: `test` keeps
 the coverage, audit-exception, golden-content and browser tests, and `test-playbooks` runs the check-mode playbooks
@@ -677,8 +826,9 @@ the coverage, audit-exception, golden-content and browser tests, and `test-playb
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 20 cycle legs and 11 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
-`sudo` `changes` and `profiles` on both platforms, `sudo` `files` on Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
+modes of the topic, so 24 cycle legs and 19 regression legs (`pwquality` `changes`, `ssh` `changes` and `vendor`,
+`sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles` on both platforms, `sudo` `files` on
+Ubuntu). `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
 group did not run. Before the split the `sudo` cycle legs carried up to four minutes of regressions each and took 14 to
 19 minutes on slow runners.
@@ -779,7 +929,7 @@ pre_states:
 | `state` | yes | The items to record, per category: `files` (`path`), `packages`, `services`, `sysctl`, `users`, `groups` (`name`). Any item may name `platforms` (keys of `shared/vars/versions.yml`); without it the item applies to every platform. A file may set `rewritten: true` when the topic rewrites its content: its inode and mtime are then not compared after a cleanup, everything else is |
 | `applied` | yes, with at least one expectation | Expectations after apply, per category, for declared items only: an attribute with its value (for files `exists`, `type`, `mode`, `owner`, `group`, `uid`, `gid`, `inode`, `mtime`, `attributes`, `checksum`, `link_target`; for packages `installed`, `versions`; for services `exists`, `state`, `status`; for kernel parameters `value`; for users and groups `exists`, `entry`), or `changes`, a list of attributes that must differ from before without a fixed value (for example the `checksum` of an owned drop-in). Every attribute that is not named must stay unchanged. An item may be expected once per platform, with `platforms`, when its expected value differs per platform |
 | `audit` | no | `applied_outcomes`: outcomes accepted after apply in addition to `pass` and `fixed`, only `notapplicable`, with a `reason` |
-| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, or the `content` of a declared file that the pre-state adds as root and removes after the cycle), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
+| `pre_states` | no | The states each cycle starts from, each with a unique `name`, `audit` (run real scans in its cycles: `true`, or a list of the platforms on which to run them), `modes` (the toggle modes in which its cycles run, `topic`, `rule` or both; the default is both; every driver of the topic must run a pre-state in each mode, and a leg counts its topic as proven only after a cycle of its own mode ran), `files` (mode, owner or group of declared files, the `content` of a declared file that the pre-state adds as root and removes after the cycle, or `lines`: a list of `regexp` and `line` that `lineinfile` sets in a declared file whose `rewritten` is true, as an administrator would, and whose content the harness puts back after the cycle; `content` and `lines` exclude each other), `unchanged` (rules of the topic, by short identifier, that the pre-state already satisfies with the `status` `compliant`, that are `notapplicable` or that an earlier setting leaves `overridden`, optionally with `platforms`), `applied` (expectations that replace those of the declaration in this pre-state, by item) and `requires` (the drivers that can set it, see below); the default is the as-built state with scans |
 | `unselected_platforms` | no | Platforms whose profile selects no native rule of the topic, each with `platform` and `reason`; it may not list every platform |
 | `regressions` | no | Named groups of regression task files, each with a unique `name` (lower case), `files` (file names of `shared/tasks` that `shared/tasks/lifecycle_regressions.yml` includes) and optional `platforms`; each group gets one Docker CI leg per platform, mode `regressions-<name>` |
 | `requires` | no | The drivers whose scenarios run the cycles of the topic, `docker` or `libvirt`; without it, the cycles of a pre-state without `requires` run in the Docker scenarios ([driver requirements](molecule-libvirt.md#driver-requirements-of-a-topic)) |

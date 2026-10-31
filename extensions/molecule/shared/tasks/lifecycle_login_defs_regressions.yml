@@ -1,0 +1,465 @@
+---
+- name: Login defaults regressions | Refuse to run unless the login_defs topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'login_defs'
+      - lifecycle_rule_ids | length > 0
+      - lifecycle_allow_disruptive == ['login_defs']
+    fail_msg: >-
+      The login_defs regressions reuse the facts of the login_defs lifecycle, which must have just run; the topic was
+      {{ lifecycle_topic.family | default('none') }}.
+    quiet: true
+
+- name: Login defaults regressions | Name the rules, the toggles and the lines of the regressions
+  ansible.builtin.set_fact:
+    ldr_label: login_defs regressions
+    ldr_toggles: "{{ lifecycle_rules | map(attribute='toggle') | list }}"
+    ldr_max: xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs
+    ldr_warn: xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs
+    ldr_umask: xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs
+    ldr_max_line: PASS_MAX_DAYS 365
+    ldr_umask_line: UMASK 027
+
+- name: Login defaults regressions | Check that the profile of the lifecycle selects the three rules of the regressions
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rule_ids | sort == [ldr_max, ldr_warn, ldr_umask] | sort
+    fail_msg: "{{ ldr_label }}: the lifecycle runs {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Login defaults regressions | Take the state of the whole instance before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Login defaults regressions | Remember the state of the whole instance before the regressions
+  ansible.builtin.set_fact:
+    ldr_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Login defaults regressions | Read login.defs as built
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldr_original
+
+- name: Login defaults regressions | Inspect login.defs as built
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_original_stat
+
+- name: Login defaults regressions | Name the text as built and the text that the apply must write
+  ansible.builtin.set_fact:
+    ldr_text: "{{ ldr_original.content | b64decode }}"
+    ldr_applied_sha256: >-
+      {{ ldr_original.content | b64decode
+         | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*$', ldr_max_line)
+         | regex_replace('(?m)^UMASK[ \t].*$', ldr_umask_line) | hash('sha256') }}
+
+- name: Login defaults regressions | Switch every rule of the topic on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldr_toggles }}"
+
+- name: Login defaults regressions | Apply the topic
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Read the ledger after the apply
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldr_ledger_applied
+
+- name: Login defaults regressions | Inspect login.defs after the apply
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_applied_stat
+
+- name: Login defaults regressions | Name the entries that the apply recorded
+  ansible.builtin.set_fact:
+    ldr_recorded: >-
+      {{ ldr_ledger_applied.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | sort(attribute='rule_id') }}
+
+- name: Login defaults regressions | Check that the apply wrote exactly the two lines in their place and recorded them
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='status')
+        == {ldr_max: 'applied', ldr_warn: 'compliant', ldr_umask: 'applied'}
+      - ldr_recorded | map(attribute='rule_id') | list == [ldr_max, ldr_umask]
+      - ldr_applied_stat.stat.checksum == ldr_applied_sha256
+      - ldr_applied_stat.stat.mode == ldr_original_stat.stat.mode
+    fail_msg: "{{ ldr_label }}, apply: {{ lifecycle_results }}, ledger {{ ldr_recorded }}"
+    quiet: true
+
+- name: Login defaults regressions | Pretend that another method recorded every entry, as after a change of method
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: login_defs
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | combine({'method': 'main_file'}) | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ ldr_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Login defaults regressions | Apply over ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Check that the apply refused every recorded rule and changed nothing
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', [ldr_max, ldr_umask]) | map(attribute='status') | unique
+        | list == ['method_changed']
+      - >-
+        lifecycle_results | selectattr('status', 'equalto', 'method_changed') | selectattr('reason', 'none')
+        | list == []
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ ldr_label }}, apply after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults regressions | Switch every rule of the topic off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ ldr_toggles }}"
+
+- name: Login defaults regressions | Clean up ledger entries that another method recorded
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Read the ledger after the refused cleanup
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldr_ledger_refused
+
+- name: Login defaults regressions | Inspect login.defs after the refused runs
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_refused_stat
+
+- name: Login defaults regressions | Check that the cleanup refused every rule, kept every entry and changed nothing
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [ldr_max, ldr_umask]
+      - lifecycle_results | map(attribute='status') | unique | list == ['cleanup_incomplete']
+      - lifecycle_results | map(attribute='reason') | unique | list == ['method_changed']
+      - lifecycle_results | selectattr('changed') | list == []
+      - >-
+        ldr_ledger_refused.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | map(attribute='rule_id')
+        | sort == [ldr_max, ldr_umask]
+      - ldr_refused_stat.stat.checksum == ldr_applied_sha256
+    fail_msg: "{{ ldr_label }}, cleanup after a change of method: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults regressions | Give every entry back the method that recorded it
+  freesecdev.linux_compliance.control_state:
+    action: record
+    rule_id: "{{ item.rule_id }}"
+    family: login_defs
+    revert_strategy: recorded_value
+    prior_values: >-
+      {{ item.prior_values | items2dict(key_name='name', value_name='value')
+         | dict2items(key_name='name', value_name='value') }}
+    collection_version: "{{ item.collection_version }}"
+    replace: true
+  loop: "{{ ldr_recorded }}"
+  loop_control:
+    label: "{{ item.rule_id }}"
+
+- name: Login defaults regressions | Make the maximum age stricter by hand, as an administrator would
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^PASS_MAX_DAYS[ \t]'
+    line: PASS_MAX_DAYS 30
+
+- name: Login defaults regressions | Clean up the topic after the administrator's change
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Read login.defs after the cleanup that kept the administrator's change
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldr_admin
+
+- name: Login defaults regressions | Read the ledger after the cleanup that kept the administrator's change
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldr_ledger_admin
+
+- name: Login defaults regressions | Check that only the maximum age was refused, its change kept and the umask restored
+  vars:
+    ldr_admin_text: "{{ ldr_admin.content | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='reason')
+        == {ldr_max: 'modified_since_apply', ldr_umask: none}
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', ldr_umask) | map(attribute='status') | list
+        == ['restored']
+      - ldr_admin_text is search('(?m)^PASS_MAX_DAYS 30$')
+      - >-
+        ldr_admin_text | regex_findall('(?m)^UMASK[ \t].*$') == ldr_text | regex_findall('(?m)^UMASK[ \t].*$')
+      - >-
+        ldr_ledger_admin.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | map(attribute='rule_id')
+        | list == [ldr_max]
+    fail_msg: "{{ ldr_label }}, cleanup after a change by hand: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults regressions | Put back the line that the collection wrote, in its place
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^PASS_MAX_DAYS[ \t]'
+    line: "{{ ldr_max_line }}"
+
+- name: Login defaults regressions | Clean up the maximum age now that it is what the collection wrote
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Inspect login.defs after the restore
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_restored_stat
+
+- name: Login defaults regressions | Check that the maximum age was restored and login.defs is byte for byte as built
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [ldr_max]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
+      - lifecycle_results | map(attribute='changed') | list == [true]
+      - ldr_restored_stat.stat.checksum == ldr_original_stat.stat.checksum
+    fail_msg: "{{ ldr_label }}, cleanup after the line was put back: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults regressions | Switch every rule of the topic on again
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldr_toggles }}"
+
+- name: Login defaults regressions | Apply the topic again
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Remove the umask line by hand, which login.defs had before the apply
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^UMASK[ \t]'
+    state: absent
+
+- name: Login defaults regressions | Switch every rule of the topic off again
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ ldr_toggles }}"
+
+- name: Login defaults regressions | Clean up the topic after the administrator removed the umask line
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Read login.defs after the cleanup that kept the removal
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldr_removed
+
+- name: Login defaults regressions | Check that a removed line that existed before is kept removed and the entry kept
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | items2dict(key_name='rule_id', value_name='reason')
+        == {ldr_max: none, ldr_umask: 'modified_since_apply'}
+      - ldr_removed.content | b64decode is not search('(?mi)^[ \t]*UMASK([ \t]|$)')
+    fail_msg: "{{ ldr_label }}, cleanup after the umask line was removed: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults regressions | Put the line that the collection wrote back, at the end of the file
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^UMASK[ \t]'
+    line: "{{ ldr_umask_line }}"
+
+- name: Login defaults regressions | Clean up the umask now that it is what the collection wrote
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Read login.defs after the umask was restored
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldr_umask_restored
+
+- name: Login defaults regressions | Check that the recorded umask line, not a default, was written back
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='rule_id') | list == [ldr_umask]
+      - lifecycle_results | map(attribute='status') | list == ['restored']
+      - >-
+        ldr_umask_restored.content | b64decode | regex_findall('(?m)^UMASK[ \t].*$')
+        == ldr_text | regex_findall('(?m)^UMASK[ \t].*$')
+    fail_msg: "{{ ldr_label }}, restore of the umask line: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults regressions | Remove the maximum age line, so that login.defs does not set it before the apply
+  ansible.builtin.copy:
+    content: "{{ ldr_text | regex_replace('(?m)^PASS_MAX_DAYS[ \t].*\n', '') }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldr_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults regressions | Inspect login.defs without the maximum age
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_without_stat
+
+- name: Login defaults regressions | Switch every rule of the topic on for the setting that was absent
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldr_toggles }}"
+
+- name: Login defaults regressions | Apply the topic to login.defs without the maximum age
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Read the ledger after the apply that added the maximum age
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldr_ledger_added
+
+- name: Login defaults regressions | Read login.defs after the apply that added the maximum age
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: ldr_added
+
+- name: Login defaults regressions | Check that the maximum age was added once and recorded as absent before
+  vars:
+    ldr_max_entry: >-
+      {{ ldr_ledger_added.entries | selectattr('rule_id', 'equalto', ldr_max) | map(attribute='prior_values')
+         | first | items2dict(key_name='name', value_name='value') }}
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | selectattr('rule_id', 'equalto', ldr_max) | map(attribute='status') | list == ['applied']
+      - ldr_max_entry.setting_line is none
+      - ldr_max_entry.written_line == ldr_max_line
+      - ldr_added.content | b64decode | regex_findall('(?mi)^[ \t]*PASS_MAX_DAYS([ \t].*)?$') | length == 1
+      - ldr_added.content | b64decode is search('(?m)^' ~ ldr_max_line ~ '$')
+    fail_msg: "{{ ldr_label }}, apply of an absent setting: {{ lifecycle_results }}, entry {{ ldr_max_entry }}"
+    quiet: true
+
+- name: Login defaults regressions | Remove the added maximum age line by hand, so login.defs is as before the apply
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^PASS_MAX_DAYS[ \t]'
+    state: absent
+
+- name: Login defaults regressions | Switch every rule of the topic off for the setting that was absent
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ ldr_toggles }}"
+
+- name: Login defaults regressions | Clean up after the administrator removed the line that the collection added
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: login_defs
+
+- name: Login defaults regressions | Inspect login.defs after the cleanup of the absent setting
+  ansible.builtin.stat:
+    path: /etc/login.defs
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: ldr_absent_stat
+
+- name: Login defaults regressions | Check that the removed line was restored without a write and both entries forgotten
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', ldr_max) | map(attribute='message') | first
+        is search('already as before')
+      - ldr_absent_stat.stat.checksum == ldr_without_stat.stat.checksum
+    fail_msg: "{{ ldr_label }}, cleanup of a line removed by hand: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Login defaults regressions | Give login.defs its content as built back
+  ansible.builtin.copy:
+    content: "{{ ldr_text }}"
+    dest: /etc/login.defs
+    follow: false
+    mode: "{{ ldr_original_stat.stat.mode }}"
+    owner: root
+    group: root
+
+- name: Login defaults regressions | Switch every rule of the topic on, as the lifecycle left them
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ ldr_toggles }}"
+
+- name: Login defaults regressions | Read the ledger after the regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: ldr_ledger_after
+
+- name: Login defaults regressions | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - ldr_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ ldr_label }}: the ledger still holds {{ ldr_ledger_after.entries }}"
+    quiet: true
+
+- name: Login defaults regressions | Assert that the whole instance is back to its state before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: login_defs regressions
+    lifecycle_broad_step: the regressions
+    lifecycle_broad_reference: "{{ ldr_broad_before }}"
+
+- name: Login defaults regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_login_defs_regressions.yml'] }}"

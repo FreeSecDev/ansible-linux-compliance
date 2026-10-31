@@ -451,7 +451,7 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         dirs_exist_ok=True,
     )
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "ssh", "pwquality", "sudo"]
+    assert native == ["file_permissions", "banners", "ssh", "pwquality", "login_defs", "sudo"]
     assert errors == []
 
 
@@ -954,8 +954,14 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "vendor": frozenset({"ubuntu", "rhel_compatible"}),
     }
+    assert found["login_defs"] == {
+        "changes": frozenset({"ubuntu", "rhel_compatible"}),
+        "refusals": frozenset({"ubuntu", "rhel_compatible"}),
+        "values": frozenset({"ubuntu", "rhel_compatible"}),
+        "profiles": frozenset({"ubuntu", "rhel_compatible"}),
+    }
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 9
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 13
 
 
 @pytest.mark.parametrize(
@@ -1097,3 +1103,66 @@ def test_regression_platforms_fail_on_an_invalid_declaration(tmp_path: Path) -> 
     root = make_root(tmp_path, {"file_permissions": changed(regressions=NO_ITEMS)})
     with pytest.raises(lifecycle.GenerationError, match="regressions must not be empty"):
         lifecycle.regression_platforms(root)
+
+
+REWRITTEN_STATE = {
+    **cast("dict[str, object]", VALID["state"]),
+    "files": [{"path": "/etc/crontab", "rewritten": True}, {"path": "/etc/cron.d/x"}],
+}
+LINE = {"regexp": "^MAILTO=", "line": "MAILTO=root"}
+
+
+def lines_state(lines: object, path: str = "/etc/crontab") -> dict[str, object]:
+    return changed(
+        state=REWRITTEN_STATE,
+        pre_states=[{"name": "a", "files": [{"path": path, "lines": lines}]}],
+    )
+
+
+def test_a_pre_state_may_set_lines_of_a_rewritten_file(tmp_path: Path) -> None:
+    root = make_root(tmp_path, {"file_permissions": lines_state([LINE])})
+    assert lifecycle.check(root)[1] == []
+
+
+@pytest.mark.parametrize(
+    ("declaration", "message"),
+    [
+        (lines_state(NO_ITEMS), "pre_states[0].files[0].lines must not be empty"),
+        (lines_state({"x": 1}), "pre_states[0].files[0].lines must be a list"),
+        (lines_state(["x"]), "pre_states[0].files[0].lines[0] must be a mapping"),
+        (
+            lines_state([{**LINE, "x": 1}]),
+            "pre_states[0].files[0].lines[0] has the unknown key 'x'",
+        ),
+        (
+            lines_state([{"regexp": "^a"}]),
+            "pre_states[0].files[0].lines[0] needs a line on one line",
+        ),
+        (
+            lines_state([{**LINE, "regexp": "^a\nb"}]),
+            "pre_states[0].files[0].lines[0] needs a regexp on one line",
+        ),
+        (
+            lines_state([LINE], "/etc/cron.d/x"),
+            "pre_states[0].files[0] sets lines of /etc/cron.d/x, which state.files must declare",
+        ),
+        (
+            changed(
+                state=REWRITTEN_STATE,
+                pre_states=[
+                    {
+                        "name": "a",
+                        "files": [{"path": "/etc/crontab", "lines": [LINE], "content": "x\n"}],
+                    }
+                ],
+            ),
+            "pre_states[0].files[0] sets both content and lines",
+        ),
+    ],
+)
+def test_invalid_pre_state_lines_are_reported(
+    tmp_path: Path, declaration: object, message: str
+) -> None:
+    root = make_root(tmp_path, {"file_permissions": declaration})
+    found = lifecycle.check(root)[1]
+    assert any(message in error for error in found), found
