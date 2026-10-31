@@ -149,6 +149,9 @@
         | selectattr('changed') | list == []
       - regression_refused_dropins.results | map(attribute='stat.exists') | list == [false, false]
       - >-
+        lifecycle_results | selectattr('rule_id', 'in', [regression_gone, regression_vendor])
+        | map(attribute='reason') | unique | list == ['running_value_not_read']
+      - >-
         regression_ledger_admin.entries | map(attribute='rule_id') | select('in', lifecycle_rule_ids) | sort
         == [regression_vendor, regression_gone] | sort
     fail_msg: "{{ regression_label }}, administrator's files: {{ lifecycle_results }}"

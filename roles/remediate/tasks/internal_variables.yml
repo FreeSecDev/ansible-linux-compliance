@@ -1795,6 +1795,10 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_families']
       - >-
+        __linux_compliance_remediate_sysctl_interface_combination is not defined or
+        __linux_compliance_remediate_sysctl_interface_combination == (lookup('ansible.builtin.file', role_path ~
+        '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_interface_combination']
+      - >-
         __linux_compliance_remediate_sysctl_key_pattern is not defined or
         __linux_compliance_remediate_sysctl_key_pattern == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml')
         | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_key_pattern']

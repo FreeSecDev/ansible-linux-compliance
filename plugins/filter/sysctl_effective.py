@@ -61,7 +61,9 @@ RETURN = r"""
 _value:
   description:
     - V(systemd) and V(procps), each with C(value) and C(source), null when the reader sets
-      nothing.
+      nothing, and V(unsupported), the reasons why the model cannot decide what procps reads (a
+      configuration file name that procps expands as a pattern); the caller refuses when it is not
+      empty.
   type: dict
 """
 

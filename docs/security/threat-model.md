@@ -401,6 +401,35 @@ running values below `/proc/sys` as root ([ADR 0029](../adr/0029-native-kernel-p
 - **Residual:** an apply that finds the running value changed after an earlier apply sets it again, because the rule
   is switched on; switching the rule off is how an administrator keeps a value of their own.
 
+### T-SYSCTL-4: a rule reports compliant while the kernel uses a looser value
+
+- **Attacker:** none, or an administrator or package that adds a configuration file; the failure is a false claim.
+- **Failure:** a real reader of the configuration (`systemd-sysctl` at boot, `sysctl --system`) writes a value other
+  than the drop-in's, or an interface keeps a looser value that the kernel combines with `all`, while the rule
+  reports `applied` or `compliant` and the scan, which reads only `all` and `default`, passes.
+- **Impact:** the host is believed hardened while redirects, source routes or reverse-path filtering are not.
+- **Mitigation:** the model of both readers (ADR 0029, section 2b) is checked against the values that the real
+  readers of the Molecule images write into a private tmpfs over `/proc/sys`, for 67 cases; a rule is `overridden`
+  unless both readers would write its value, and a configuration file name that procps would expand as a pattern
+  refuses the family as `unparsed_configuration`. With the running values on, every interface's value of a combined
+  parameter is read, and a looser interface refuses the rule as `interface_override`. With the running values off,
+  every result carries the reason `running_value_not_read`.
+- **Residual:** systemd 252 of Rocky Linux is assumed to read as systemd 255 does; the loopback interface is not
+  checked; other writers (a `sysctl.extra` credential, Docker, libvirt or systemd-networkd `IPForward=`, tuned) can
+  change a running value after the run.
+
+### T-SYSCTL-5: the reader oracle writes to the host kernel
+
+- **Attacker:** none; the generator of the reader verdicts runs `systemd-sysctl` and `sysctl --system`, which always
+  write, on cases that include non-namespaced `kernel.*` parameters.
+- **Failure:** on a container runtime whose `/proc/sys` is writable, a case is written into the host kernel.
+- **Impact:** the developer's or runner's host changes kernel parameters.
+- **Mitigation:** each container drops every capability but `CAP_SYS_ADMIN`, has no network, and refuses to run any
+  reader unless `/proc/sys` was the read-only proc mount and is now a private tmpfs in its own mount namespace; the
+  values are read back from that tmpfs. The generator never runs in CI.
+- **Residual:** `CAP_SYS_ADMIN` would allow the container to remount `/proc/sys`; only the script runs there, and it
+  does not.
+
 ## Libvirt CI caches
 
 The `molecule-libvirt` legs of `ci.yml` restore two Actions caches whose contents are installed or booted:

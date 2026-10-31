@@ -539,7 +539,10 @@ def test_a_rewritten_file_and_unchanged_rules_are_accepted(tmp_path: Path) -> No
                     }
                 ]
             ),
-            "pre_states[0].unchanged[0] needs the status compliant, notapplicable or overridden",
+            (
+                "pre_states[0].unchanged[0] needs the status compliant, notapplicable,"
+                " overridden or interface_override"
+            ),
         ),
         (
             changed(

@@ -22,8 +22,8 @@
     regression_parameters:
       - net.ipv4.ip_forward
       - net.ipv4.conf.*.forwarding
-      - net.ipv4.conf.all.rp_filter
-      - net.ipv4.conf.all.accept_redirects
+      - net.ipv4.conf.*.rp_filter
+      - net.ipv4.conf.*.accept_redirects
 
 - name: Running kernel regressions | Refuse to run anywhere but on a machine whose kernel the collection may set
   ansible.builtin.assert:
@@ -71,6 +71,10 @@
       {{ regression_built.running.keys() | select('match', '^net\.ipv4\.conf\..*\.forwarding$')
          | reject('in', ['net.ipv4.conf.all.forwarding', 'net.ipv4.conf.default.forwarding']) | sort | list }}
     regression_filter_by_hand: "{{ '0' if regression_built.running['net.ipv4.conf.all.rp_filter'] == '2' else '2' }}"
+    regression_devices: >-
+      {{ regression_built.running.keys() | select('match', '^net\.ipv4\.conf\.[^.]+\.rp_filter$')
+         | map('regex_replace', '^net\.ipv4\.conf\.', '') | map('regex_replace', '\.rp_filter$', '')
+         | reject('in', ['all', 'default', 'lo']) | sort | list }}
 
 - name: Running kernel regressions | Check that the machine has an interface besides the loopback
   ansible.builtin.assert:
@@ -87,6 +91,52 @@
 - name: Running kernel regressions | Remember the state of the whole instance before the regressions
   ansible.builtin.set_fact:
     regression_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Running kernel regressions | Give every interface a looser rp_filter and accept_redirects, as a glob might
+  freesecdev.linux_compliance.sysctl_runtime:
+    set: >-
+      {%- set items = [] -%}
+      {%- for device in regression_devices -%}
+      {%- set _ = items.append({'name': 'net.ipv4.conf.' ~ device ~ '.rp_filter', 'value': '2'}) -%}
+      {%- set _ = items.append({'name': 'net.ipv4.conf.' ~ device ~ '.accept_redirects', 'value': '1'}) -%}
+      {%- endfor -%}
+      {{ items }}
+
+- name: Running kernel regressions | Switch every rule of the topic on for the interface check
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Running kernel regressions | Plan the rules in check mode while the interfaces are looser
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: true
+
+- name: Running kernel regressions | Check that rp_filter and accept_redirects are refused for every interface
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', [regression_filter, regression_redirects])
+        | map(attribute='status') | unique | list == ['interface_override']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', [regression_filter, regression_redirects])
+        | selectattr('changed') | list == []
+      - >-
+        regression_devices | select('in', lifecycle_results | selectattr('rule_id', 'equalto', regression_filter)
+        | map(attribute='reason') | first) | list == regression_devices
+    fail_msg: "{{ regression_label }}, looser interfaces {{ regression_devices }}: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Running kernel regressions | Give every interface a compliant rp_filter and accept_redirects by hand
+  freesecdev.linux_compliance.sysctl_runtime:
+    set: >-
+      {%- set items = [] -%}
+      {%- for device in regression_devices -%}
+      {%- set _ = items.append({'name': 'net.ipv4.conf.' ~ device ~ '.rp_filter', 'value': '1'}) -%}
+      {%- set _ = items.append({'name': 'net.ipv4.conf.' ~ device ~ '.accept_redirects', 'value': '0'}) -%}
+      {%- endfor -%}
+      {{ items }}
 
 - name: Running kernel regressions | Enable forwarding as a router would, with the loopback interface left out
   freesecdev.linux_compliance.sysctl_runtime:
@@ -273,6 +323,12 @@
       {%- endfor -%}
       {%- set _ = items.append({'name': 'net.ipv4.conf.all.accept_redirects',
                                 'value': regression_built.running['net.ipv4.conf.all.accept_redirects']}) -%}
+      {%- for device in regression_devices -%}
+      {%- for parameter in ['rp_filter', 'accept_redirects'] -%}
+      {%- set name = 'net.ipv4.conf.' ~ device ~ '.' ~ parameter -%}
+      {%- set _ = items.append({'name': name, 'value': regression_built.running[name]}) -%}
+      {%- endfor -%}
+      {%- endfor -%}
       {{ items }}
 
 - name: Running kernel regressions | Read the running values after they were given back

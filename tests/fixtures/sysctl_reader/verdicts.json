@@ -1,812 +1,920 @@
 {
   "backslash_continuation": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "kernel.dmesg_restrict",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1 \\"
-      ],
-      [
-        "kernel.dmesg_restrict",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "kernel.dmesg_restrict": "0",
+      "net.ipv4.conf.all.rp_filter": "1 \\"
+    },
+    "procps-4": {
+      "kernel.dmesg_restrict": "0",
+      "net.ipv4.conf.all.rp_filter": "1 \\"
+    },
     "systemd": {
       "kernel.dmesg_restrict": "0",
       "net.ipv4.conf.all.rp_filter": "1 \\"
     }
   },
   "carriage_return": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
   "comments_and_spacing": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
+  "cr_only_line_ends": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "2\rnet.ipv4.conf.all.rp_filter = 0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "2\rnet.ipv4.conf.all.rp_filter = 0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "crlf_line_ends": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
   "dash_prefix": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
+  "dash_unset_before_ours": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "dash_unset_same_value": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": null,
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "dash_unset_then_set": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
   "dash_with_spaces": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
   "directory_named_conf": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
+    }
+  },
+  "dot_dot_component": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
     }
   },
   "dot_first_with_a_slash": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
+  "double_slash": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
   "duplicate_in_one_file": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "empty_value": {
-    "procps-3": [
-      [
-        "kernel.core_pattern",
-        null
-      ],
-      [
-        "kernel.core_pattern",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "kernel.core_pattern",
-        "|/bin/false"
-      ],
-      [
-        "kernel.core_pattern",
-        ""
-      ]
-    ],
+    "procps-3": {
+      "kernel.core_pattern": ""
+    },
+    "procps-4": {
+      "kernel.core_pattern": ""
+    },
     "systemd": {
       "kernel.core_pattern": ""
     }
   },
+  "explicit_reassigned_same_value": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "ff_value_after_ours": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0\f",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "filename_question_mark": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "filename_star_in_usr_lib": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "2",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "2",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "2",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "filename_tilde": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
   "form_feed_and_vertical_tab": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "kernel.dmesg_restrict",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "kernel.dmesg_restrict",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "kernel.dmesg_restrict": "1",
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "kernel.dmesg_restrict": "1",
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "kernel.dmesg_restrict": "1\u000b",
       "net.ipv4.conf.all.rp_filter": "1\f"
     }
   },
   "glob_after_explicit": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.default.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "net.ipv4.conf.default.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": "0"
     }
   },
   "glob_before_explicit": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.default.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.default.rp_filter",
-        "0"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1",
       "net.ipv4.conf.default.rp_filter": "0"
     }
   },
   "glob_excluded": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.default.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.default.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": null,
+      "net.ipv4.conf.default.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": null,
+      "net.ipv4.conf.default.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": null,
       "net.ipv4.conf.default.rp_filter": "0"
     }
   },
   "glob_in_a_later_name": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "2"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "2"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "2"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "2"
     }
   },
   "glob_question_mark": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
+  "glob_reassigned_other_value": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "2",
+      "net.ipv4.conf.default.rp_filter": "2",
+      "net.ipv4.conf.eth0.rp_filter": "2"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "2",
+      "net.ipv4.conf.default.rp_filter": "2",
+      "net.ipv4.conf.eth0.rp_filter": "2"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "2",
+      "net.ipv4.conf.default.rp_filter": "2",
+      "net.ipv4.conf.eth0.rp_filter": "2"
+    }
+  },
   "hidden_file": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "hidden_only": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": null
     }
   },
   "inline_comment": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0 # site"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0 # site"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0 # site"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0 # site"
     }
   },
   "key_case": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "later_name_wins": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "link_to_a_file": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
   "long_line": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
   "masked_by_dev_null": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "names_sort_bytewise": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "no_assignment": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "no_final_newline": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
   "nul_byte": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "other_suffix": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
+  "review_cr_then_line": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_dash_unset_after": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": null,
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_dot_component": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_double_dot": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_filename_brace": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_filename_glob": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_glob_only": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "1",
+      "net.ipv4.conf.eth0.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "1",
+      "net.ipv4.conf.eth0.rp_filter": "1"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "1",
+      "net.ipv4.conf.eth0.rp_filter": "1"
+    }
+  },
+  "review_glob_same_value_reassigned": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "1",
+      "net.ipv4.conf.eth0.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "1",
+      "net.ipv4.conf.eth0.rp_filter": "1"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": "0",
+      "net.ipv4.conf.eth0.rp_filter": "1"
+    }
+  },
+  "review_leading_equals": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_leading_slash": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_nul_then_line": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_trailing_dot": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "review_vt_value_after_ours": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0\u000b",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
   "same_name_etc_over_usr_lib": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "2"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "same_name_run_over_usr_lib": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "same_name_usr_local_over_usr_lib": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "slash_first_with_a_dot": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "slash_form": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
   "slash_glob": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "0"
     }
   },
   "spaces_inside_the_key": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "sysctl_conf_and_its_link": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
   "sysctl_conf_only": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": null
     }
   },
   "sysctl_conf_without_link": {
-    "procps-3": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "1"
-      ],
-      [
-        "net.ipv4.conf.all.rp_filter",
-        "0"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
     "systemd": {
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
+  "tab_inside_key": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
+  "trailing_slash": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0",
+      "net.ipv4.conf.default.rp_filter": null,
+      "net.ipv4.conf.eth0.rp_filter": null
+    }
+  },
   "value_with_spaces_and_tabs": {
-    "procps-3": [
-      [
-        "net.ipv4.ip_local_port_range",
-        null
-      ]
-    ],
-    "procps-4": [
-      [
-        "net.ipv4.ip_local_port_range",
-        "32768\t65535"
-      ]
-    ],
+    "procps-3": {
+      "net.ipv4.ip_local_port_range": "32768\t65535"
+    },
+    "procps-4": {
+      "net.ipv4.ip_local_port_range": "32768\t65535"
+    },
     "systemd": {
       "net.ipv4.ip_local_port_range": "32768\t65535"
     }

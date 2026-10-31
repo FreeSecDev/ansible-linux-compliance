@@ -150,6 +150,16 @@ pre_states:
       - ubuntu
     requires:
       - libvirt
+    unchanged: &running_kernel_unchanged
+      - rule: sysctl_net_ipv6_conf_all_accept_ra
+        status: interface_override
+        platforms:
+          - rhel_compatible
+      - rule: sysctl_net_ipv6_conf_all_accept_redirects
+        status: interface_override
+        platforms:
+          - rhel_compatible
+          - ubuntu
     applied: &running_kernel_applied
       files:
         - path: /etc/sysctl.d
@@ -157,6 +167,14 @@ pre_states:
           platforms:
             - rhel_compatible
         - path: /etc/sysctl.d/.freesecdev-created
+          exists: false
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-ra.conf
+          exists: false
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-redirects.conf
           exists: false
           platforms:
             - rhel_compatible
@@ -174,16 +192,7 @@ pre_states:
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-redirects.conf
-          exists: true
-          type: file
-          attributes:
-            - extents
-          mode: "0644"
-          owner: root
-          group: root
-          uid: 0
-          gid: 0
-          checksum: b7cfcb662f195bd45a49564d5c51c96854ec52d243c853f094dcccf36bfa9908
+          exists: false
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv6-conf-all-accept-source-route.conf
@@ -254,8 +263,8 @@ pre_states:
       sysctl:
         - name: net.ipv6.conf.all.accept_ra
           value: "0"
-        - name: net.ipv6.conf.all.accept_redirects
-          value: "0"
+          platforms:
+            - ubuntu
         - name: net.ipv6.conf.all.accept_source_route
           value: "0"
         - name: net.ipv6.conf.all.forwarding
@@ -271,4 +280,5 @@ pre_states:
       - topic
     requires:
       - libvirt
+    unchanged: *running_kernel_unchanged
     applied: *running_kernel_applied

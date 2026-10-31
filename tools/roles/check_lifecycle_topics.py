@@ -15,7 +15,8 @@ a disruptive topic without a containment note, a declaration without an ``applie
 expectation, an expectation or a pre-state for an item that is not declared, an unknown
 attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
-status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
+status other than ``compliant``, ``notapplicable``, ``overridden`` or ``interface_override``
+(FREES-107), a pre-state file whose
 ``content`` is not a non-empty text or that also sets an owner or group, pre-state ``lines``
 (``regexp`` and ``line`` on one line each) of a file that ``state.files`` does not declare
 ``rewritten`` or of an entry that also sets ``content`` (FREES-185), a pre-state ``applied``
@@ -142,7 +143,9 @@ PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
 )
 TOGGLE_MODES: Final[frozenset[str]] = frozenset({"topic", "rule"})
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
-UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
+UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset(
+    {"compliant", "notapplicable", "overridden", "interface_override"}
+)
 REWRITTEN_KEY: Final[str] = "rewritten"
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset(
     {"path", "mode", "owner", "group", "content", "lines"}
@@ -548,7 +551,10 @@ class Declaration:
             else:
                 seen.add(rule)
             if item.get("status") not in UNCHANGED_STATUSES:
-                self.error(f"{where} needs the status compliant, notapplicable or overridden")
+                self.error(
+                    f"{where} needs the status compliant, notapplicable, overridden or"
+                    " interface_override"
+                )
 
     def _pre_state_requires(self, item: dict[str, object], what: str) -> None:
         """Record the drivers of a pre-state, which must be drivers of its topic."""

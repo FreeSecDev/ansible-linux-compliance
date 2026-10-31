@@ -5,13 +5,15 @@ tool twice around the real readers in the Molecule images:
 
 * ``materialise CASES OUT`` writes every case of ``tests/fixtures/sysctl_reader/cases.json`` below
   ``OUT/<case>/root`` as regular files, directories and symbolic links, relative to the root of an
-  instance;
-* ``parse CASES RAW OUT_JSON`` reads what ``systemd-sysctl`` (with debug logging) and ``sysctl
-  --system --dry-run`` reported for each case in each image and writes the verdicts: for
-  ``systemd`` the value set for every key of the case, or ``null``, and for ``procps-4`` and
-  ``procps-3`` the settings of those keys in the order procps made them.
+  instance, and ``OUT/proc.list``, the parameters of the private ``/proc/sys`` tree: every key of
+  every case, and each per-interface key for the interfaces ``all``, ``default``, ``eth0`` and
+  ``lo``, so that globs have interfaces to match;
+* ``parse CASES RAW OUT_JSON`` reads the files of that tree as each reader left them, recorded as
+  base64, and writes the verdicts: for each reader (``systemd``, ``procps-4``, ``procps-3``) the
+  value written to every key of the case, or ``null`` when the key still holds the preset ``9``.
 
-``tests/unit/plugins/module_utils/compliance/test_sysctl_config.py`` checks the role's model of both
+No reader output is parsed: what a reader opened and wrote is what the kernel would have taken.
+``tests/unit/plugins/module_utils/compliance/test_sysctl_config.py`` checks the role's model of the
 readers against the committed verdicts, so that a case where the model and a real reader disagree
 fails the unit tests.
 """
@@ -19,19 +21,16 @@ fails the unit tests.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import re
 import sys
 from pathlib import Path
 from typing import Final, cast
 
-SYSTEMD_SETTING: Final[re.Pattern[str]] = re.compile(
-    r"^Setting '/proc/sys/(?P<path>[^']+)' to '(?P<value>.*)'$"
-)
-PROCPS_SETTING: Final[re.Pattern[str]] = re.compile(r"^(?P<key>[^\s=*]+) = (?P<value>.*)$")
-PROCPS_DENIED: Final[re.Pattern[str]] = re.compile(
-    r'^sysctl: permission denied on key "(?P<key>[^"]+)"(, ignoring)?$'
-)
+PRESET: Final[bytes] = b"9\n"
+INTERFACES: Final[tuple[str, ...]] = ("all", "default", "eth0", "lo")
+INTERFACE_KEY: Final[re.Pattern[str]] = re.compile(r"^(net\.ipv[46]\.conf)\.[^.]+\.([^.]+)$")
 READERS: Final[dict[str, tuple[str, str]]] = {
     "systemd": ("ubuntu", "systemd"),
     "procps-4": ("ubuntu", "procps"),
@@ -61,8 +60,32 @@ def file_text(entry: dict[str, object]) -> str | None:
     return None
 
 
+def case_keys(case: dict[str, object]) -> list[str]:
+    """Return the keys of a case."""
+    return [str(key) for key in cast("list[object]", case["keys"])]
+
+
+def parameters(cases: dict[str, dict[str, object]]) -> list[str]:
+    """Return the paths below ``/proc/sys`` of the private tree, sorted."""
+    found: set[str] = set()
+    for case in cases.values():
+        for key in case_keys(case):
+            interface = INTERFACE_KEY.match(key)
+            names = (
+                [f"{interface.group(1)}.{name}.{interface.group(2)}" for name in INTERFACES]
+                if interface
+                else [key]
+            )
+            found.update(name.replace(".", "/") for name in names)
+    return sorted(found)
+
+
 def materialise(cases: dict[str, dict[str, object]], out: Path) -> None:
-    """Write every case below ``out/<case>/root``."""
+    """Write every case below ``out/<case>/root`` and the tree's parameters to ``out/proc.list``."""
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "proc.list").write_text(
+        "".join(f"{path}\n" for path in parameters(cases)), encoding="utf-8"
+    )
     for name, case in cases.items():
         root = out / name / "root"
         for raw in cast("list[dict[str, object]]", case["files"]):
@@ -81,68 +104,35 @@ def materialise(cases: dict[str, dict[str, object]], out: Path) -> None:
                 raise CaseError(message)
 
 
-def key_path(key: str) -> str:
-    """Return the path below ``/proc/sys`` of a key in the dotted form."""
-    return key.replace(".", "/")
+def written(record: str) -> dict[str, str | None]:
+    """Return what a reader left in each file of the tree: its first line, or None for the preset.
 
-
-def systemd_values(log: str) -> dict[str, str]:
-    """Return the value that ``systemd-sysctl`` set for every path below ``/proc/sys``.
-
-    systemd applies every key once, after merging all files. Lines are split at line feeds only: a
-    form feed or vertical tab inside a value is part of it.
+    systemd writes without truncating, so a shorter value leaves the rest of the preset behind it;
+    only the first line is the value.
     """
-    values: dict[str, str] = {}
-    for line in log.split("\n"):
-        found = SYSTEMD_SETTING.match(line)
-        if found:
-            values[found.group("path")] = found.group("value")
+    values: dict[str, str | None] = {}
+    for line in record.split("\n"):
+        if not line:
+            continue
+        path, _, encoded = line.partition("\t")
+        content = base64.b64decode(encoded)
+        values[path] = (
+            None
+            if content == PRESET
+            else content.split(b"\n", 1)[0].decode("utf-8", "surrogateescape")
+        )
     return values
 
 
-def procps_sequence(log: str, program: str) -> list[tuple[str, str | None]]:
-    """Return every setting that ``sysctl --system --dry-run`` reported, as ``(path, value)``.
-
-    procps reads every file before it sets anything, so its output names no file per setting.
-    procps-ng 4 prints ``key = value`` for each setting. procps-ng 3.3 prints only
-    ``permission denied on key "<key>"`` for a dry run on a read-only ``/proc/sys``, so its values
-    stay ``None``.
-    """
-    sequence: list[tuple[str, str | None]] = []
-    for line in log.split("\n"):
-        denied = PROCPS_DENIED.match(line)
-        found = PROCPS_SETTING.match(line)
-        if program == "procps-3" and denied:
-            sequence.append((key_path(denied.group("key")), None))
-        elif program == "procps-4" and found:
-            sequence.append((key_path(found.group("key")), found.group("value")))
-    return sequence
-
-
 def parse(cases: dict[str, dict[str, object]], raw: Path) -> dict[str, dict[str, object]]:
-    """Return the verdict of every reader for the keys of every case.
-
-    ``systemd`` maps each key to the value set, or ``None``. ``procps-4`` and ``procps-3`` list the
-    settings of the case's keys in the order procps made them, as ``[key, value]``.
-    """
+    """Return, for every case and reader, the value written to each key of the case, or ``None``."""
     verdicts: dict[str, dict[str, object]] = {}
     for name, case in cases.items():
-        keys = [str(key) for key in cast("list[object]", case["keys"])]
-        paths = {key_path(key): key for key in keys}
         verdict: dict[str, object] = {}
         for reader, (image, program) in READERS.items():
-            log = (raw / image / f"{name}.{program}.log").read_text(
-                encoding="utf-8", errors="surrogateescape"
-            )
-            if program == "systemd":
-                values = systemd_values(log)
-                verdict[reader] = {key: values.get(key_path(key)) for key in keys}
-            else:
-                verdict[reader] = [
-                    [paths[path], value]
-                    for path, value in procps_sequence(log, reader)
-                    if path in paths
-                ]
+            record = (raw / image / f"{name}.{program}.values").read_text(encoding="utf-8")
+            values = written(record)
+            verdict[reader] = {key: values[key.replace(".", "/")] for key in case_keys(case)}
         verdicts[name] = verdict
     return verdicts
 

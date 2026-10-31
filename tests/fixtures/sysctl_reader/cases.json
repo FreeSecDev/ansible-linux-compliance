@@ -558,5 +558,509 @@
         "text": "net.ipv4.conf.*.rp_filter = 2\n"
       }
     ]
+  },
+  "review_dash_unset_after": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "-net.ipv4.conf.all.rp_filter\n"
+      }
+    ]
+  },
+  "review_nul_then_line": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "# note\u0000net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "review_cr_then_line": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "# note\rnet.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "review_double_dot": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf..all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "review_dot_component": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net/ipv4/conf/./all/rp_filter = 0\n"
+      }
+    ]
+  },
+  "review_leading_slash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "/net/ipv4/conf/all/rp_filter = 0\n"
+      }
+    ]
+  },
+  "review_trailing_dot": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.all.rp_filter. = 0\n"
+      }
+    ]
+  },
+  "review_leading_equals": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "=net.ipv4.conf.all.rp_filter=0\n"
+      }
+    ]
+  },
+  "review_glob_same_value_reassigned": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "net.ipv4.conf.d*.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 1\n"
+      }
+    ]
+  },
+  "review_filename_glob": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/10-loose.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/[1]0-loose.conf",
+        "text": ""
+      }
+    ]
+  },
+  "review_filename_brace": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/10-loose.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/{10-loose,nothing}.conf",
+        "text": ""
+      }
+    ]
+  },
+  "review_glob_only": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 1\n"
+      }
+    ]
+  },
+  "review_vt_value_after_ours": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\u000b\n"
+      }
+    ]
+  },
+  "dot_dot_component": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net/ipv4/conf/lo/../all/rp_filter = 0\n"
+      }
+    ]
+  },
+  "double_slash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net/ipv4//conf/all/rp_filter = 0\n"
+      }
+    ]
+  },
+  "trailing_slash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net/ipv4/conf/all/rp_filter/ = 0\n"
+      }
+    ]
+  },
+  "crlf_line_ends": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "# note\r\nnet.ipv4.conf.all.rp_filter = 0\r\n"
+      }
+    ]
+  },
+  "cr_only_line_ends": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 2\rnet.ipv4.conf.all.rp_filter = 0\r"
+      }
+    ]
+  },
+  "dash_unset_before_ours": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "-net.ipv4.conf.all.rp_filter\n"
+      },
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
+  },
+  "dash_unset_then_set": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "-net.ipv4.conf.all.rp_filter\nnet.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "dash_unset_same_value": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n-net.ipv4.conf.all.rp_filter\n"
+      }
+    ]
+  },
+  "filename_question_mark": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/10-loose.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/1?-loose.conf",
+        "text": ""
+      }
+    ]
+  },
+  "filename_tilde": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/~.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      }
+    ]
+  },
+  "filename_star_in_usr_lib": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/10-loose.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/z*.conf",
+        "text": ""
+      },
+      {
+        "path": "usr/lib/sysctl.d/zz-x.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 2\n"
+      }
+    ]
+  },
+  "ff_value_after_ours": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\f\n"
+      }
+    ]
+  },
+  "tab_inside_key": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/zz-site.conf",
+        "text": "net.ipv4.conf.all.rp_filter\t= 0\n"
+      }
+    ]
+  },
+  "glob_reassigned_other_value": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "net.ipv4.conf.d*.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "net.ipv4.conf.*.rp_filter = 2\n"
+      }
+    ]
+  },
+  "explicit_reassigned_same_value": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter",
+      "net.ipv4.conf.default.rp_filter",
+      "net.ipv4.conf.eth0.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/10-a.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "etc/sysctl.d/20-b.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "etc/sysctl.d/30-c.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 1\n"
+      }
+    ]
   }
 }

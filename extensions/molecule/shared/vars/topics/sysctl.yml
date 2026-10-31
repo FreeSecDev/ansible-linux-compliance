@@ -157,6 +157,8 @@ pre_states:
           value: "2"
         - name: kernel.yama.ptrace_scope
           value: "1"
+          platforms:
+            - rhel_compatible
   - name: as built, with the running kernel, topic toggle
     modes:
       - topic

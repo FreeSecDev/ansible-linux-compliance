@@ -82,6 +82,28 @@ __linux_compliance_remediate_sysctl_vendor_files:
   - /etc/ufw/sysctl.conf
 __linux_compliance_remediate_sysctl_after_boot:
   - /etc/ufw/sysctl.conf
+__linux_compliance_remediate_sysctl_interface_combination:
+  net.ipv4.conf.all.accept_local: or
+  net.ipv4.conf.all.accept_redirects: or
+  net.ipv4.conf.all.accept_source_route: and
+  net.ipv4.conf.all.arp_filter: or
+  net.ipv4.conf.all.arp_ignore: max
+  net.ipv4.conf.all.drop_gratuitous_arp: device
+  net.ipv4.conf.all.log_martians: or
+  net.ipv4.conf.all.route_localnet: or
+  net.ipv4.conf.all.rp_filter: max
+  net.ipv4.conf.all.secure_redirects: or
+  net.ipv4.conf.all.send_redirects: or
+  net.ipv4.conf.all.shared_media: or
+  net.ipv6.conf.all.accept_ra: device
+  net.ipv6.conf.all.accept_ra_defrtr: device
+  net.ipv6.conf.all.accept_ra_pinfo: device
+  net.ipv6.conf.all.accept_ra_rtr_pref: device
+  net.ipv6.conf.all.accept_redirects: device
+  net.ipv6.conf.all.accept_source_route: min
+  net.ipv6.conf.all.autoconf: device
+  net.ipv6.conf.all.max_addresses: device
+  net.ipv6.conf.all.router_solicitations: device
 __linux_compliance_remediate_sysctl_readers:
   systemd: systemd-sysctl
   procps: sysctl --system

@@ -323,6 +323,10 @@
       {%- set _ = names.append(__linux_compliance_remediate_sysctl_propagating[rule.parameters.key]) -%}
       {%- endif -%}
       {%- set _ = names.extend(__linux_compliance_remediate_sysctl_side_effects[rule.parameters.key] | default([])) -%}
+      {%- if rule.parameters.key in __linux_compliance_remediate_sysctl_interface_combination -%}
+      {%- set parts = rule.parameters.key.split('.') -%}
+      {%- set _ = names.append((parts[:3] + ['*', parts[4]]) | join('.')) -%}
+      {%- endif -%}
       {%- endfor -%}
       {%- endif -%}
       {{ names | unique | list }}
@@ -626,7 +630,7 @@
       {%- set content = __linux_compliance_remediate_sc_contents[rule.rule_id] -%}
       {%- set sha = content | hash('sha256') -%}
       {%- set ns = namespace(user=[], package=[], edits=[], duplicate=[], large=[], earlier=[], later=[],
-                             now_ok=true) -%}
+                             now_ok=true, interfaces=[]) -%}
       {%- for other in user_files if other != path and other not in removed and other in texts -%}
       {%- set found = texts[other] | regex_findall(pattern, multiline=true) -%}
       {%- set bad = [] -%}
@@ -707,6 +711,30 @@
                      if integer else (current_normal is search(wanted.pattern)) if wanted.pattern is string
                      else current_normal in (wanted.accepted | map('split') | map('join', ' ') | list))) -%}
       {%- set exact = entry is not none and entry.isreg and entry.checksum == sha -%}
+      {%- set combination = __linux_compliance_remediate_sysctl_interface_combination[key] | default(none) -%}
+      {%- if __linux_compliance_remediate_sc_runtime and combination is not none -%}
+      {%- set parts = key.split('.') -%}
+      {%- set interface_pattern = '^' ~ ((parts[:3] | join('.')) | regex_escape) ~ '\\.([^.]+)\\.'
+            ~ (parts[4] | regex_escape) ~ '$' -%}
+      {%- for name, own in __linux_compliance_remediate_sc_running_values | dictsort
+            if name is match(interface_pattern)
+               and name.split('.')[3] not in ['all', 'default', 'lo'] -%}
+      {%- set interface = name.split('.')[3] -%}
+      {%- set written = value | int if value is match('^-?[0-9]+$') else none -%}
+      {%- set device = own | trim | int if own is string and own | trim is match('^-?[0-9]+$') else none -%}
+      {%- set combined = none if written is none or device is none
+            else ([written, device] | max) if combination == 'max'
+            else ([written, device] | min) if combination == 'min'
+            else (1 if written != 0 or device != 0 else 0) if combination == 'or'
+            else (1 if written != 0 and device != 0 else 0) if combination == 'and'
+            else device -%}
+      {%- if combined is none or combined not in accepted_ints -%}
+      {%- set ns.interfaces = ns.interfaces + [interface ~ ' (' ~ name ~ ' = ' ~ (own | trim) ~ ', so the kernel uses '
+            ~ (combined if combined is not none else 'an unknown value') ~ ')'] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- set restorable = current is not string or current is match('^[\\t -~]{0,255}$') -%}
       {%- set status =
             'method_changed' if prior is mapping and prior.method | default('unknown') != 'dropin'
             else 'notapplicable' if __linux_compliance_remediate_sc_runtime and current is none
@@ -715,8 +743,11 @@
             else 'not_owned' if entry is not none and not exact and not text.startswith(header)
             else 'duplicate_setting' if ns.duplicate | length > 0
             else 'prior_too_large' if ns.large | length > 0
+            else 'unparsed_configuration' if planned_readers.unsupported | length > 0
             else 'overridden' if ns.later | length > 0
             else 'conflicting_setting' if ns.earlier | length > 0
+            else 'interface_override' if ns.interfaces | length > 0
+            else 'prior_unrestorable' if not runtime_ok and not restorable
             else 'runtime_unavailable' if not runtime_ok
                  and not (__linux_compliance_remediate_sc_writable[key] | default(false))
             else 'compliant' if runtime_ok and ns.edits | length == 0
@@ -731,11 +762,19 @@
             else (path ~ ' exists without the header of the collection') if status == 'not_owned'
             else (ns.duplicate | join('; ')) if status == 'duplicate_setting'
             else (ns.large | join('; ')) if status == 'prior_too_large'
+            else (planned_readers.unsupported | join('; ')) if status == 'unparsed_configuration'
             else ((ns.later + ns.earlier) | join('; ')) if status == 'overridden'
             else (ns.earlier | join('; ')) if status == 'conflicting_setting'
+            else ('the kernel combines ' ~ key ~ ' with the value of each interface, and these interfaces keep a'
+                  ~ ' looser effective value, which the collection does not change: '
+                  ~ ns.interfaces | join(', ')) if status == 'interface_override'
+            else ('the running value of ' ~ key ~ ' cannot be written back on cleanup: it is longer than 255'
+                  ~ ' characters or holds a character other than printable ASCII and tab')
+                 if status == 'prior_unrestorable'
             else ('the running value of ' ~ key ~ ' is ' ~ current ~ ' and cannot be set here: /proc/sys is'
                   ~ ' read-only or the parameter is protected; set linux_compliance_remediate_sysctl_runtime to'
                   ~ ' false to write only the persistent value') if status == 'runtime_unavailable'
+            else 'running_value_not_read' if not __linux_compliance_remediate_sc_runtime
             else none -%}
       {%- set pins = [] -%}
       {%- for companion in __linux_compliance_remediate_sysctl_side_effects[key] | default([])
@@ -949,7 +988,8 @@
             'reason': planned.reason,
             'changed': rule.rule_id in __linux_compliance_remediate_sc_changed_ids,
             'message': rule.parameters.path ~ ': ' ~ planned.status
-                       ~ ((' (' ~ planned.reason ~ '; nothing was changed)') if planned.reason else '')
+                       ~ ((' (' ~ planned.reason ~ '; nothing was changed)')
+                          if planned.reason and planned.status not in ['applied', 'compliant'] else '')
                        ~ ((' (the conflicting line of ' ~ planned.edits | map(attribute='path') | join(', ')
                            ~ ' now sets ' ~ rule.parameters.key ~ ' to the same value; the original line is'
                            ~ ' recorded and written back on cleanup)') if planned.edits | length > 0 else '')
@@ -957,7 +997,11 @@
                            ~ ' the value before is recorded and set again on cleanup)')
                           if planned.runtime | length > 0 else '')
                        ~ (' (only the persistent value was written; the running kernel takes it at the next boot)'
-                          if planned.status == 'applied' and not __linux_compliance_remediate_sc_runtime else '')}) -%}
+                          if planned.status == 'applied' and not __linux_compliance_remediate_sc_runtime else '')
+                       ~ (' (only the persistent value is compliant: the running value was not read, because'
+                          ~ ' linux_compliance_remediate_sysctl_runtime is false)'
+                          if planned.status == 'compliant' and not __linux_compliance_remediate_sc_runtime
+                          else '')}) -%}
       {%- endfor -%}
       {{ __linux_compliance_remediate_results + results }}
   tags:

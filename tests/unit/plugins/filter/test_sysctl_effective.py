@@ -21,12 +21,21 @@ def test_each_reader_gets_its_value_and_source() -> None:
     assert sysctl_effective.sysctl_effective(ENTRIES, RP_FILTER) == {
         "systemd": {"value": "2", "source": "/etc/sysctl.d/10-a.conf"},
         "procps": {"value": "0", "source": "/etc/sysctl.conf"},
+        "unsupported": [],
     }
 
 
 def test_the_files_read_after_boot_come_last() -> None:
     found = sysctl_effective.sysctl_effective(ENTRIES, RP_FILTER, ["/etc/ufw/sysctl.conf"])
-    assert {reader: setting["source"] for reader, setting in found.items()} == {
-        "systemd": "/etc/ufw/sysctl.conf",
-        "procps": "/etc/ufw/sysctl.conf",
-    }
+    assert found["systemd"] == found["procps"] == {"value": "1", "source": "/etc/ufw/sysctl.conf"}
+
+
+def test_a_name_that_procps_expands_is_reported() -> None:
+    entries = [*ENTRIES, {"path": "/etc/sysctl.d/z*.conf", "kind": "file", "text": ""}]
+    found = sysctl_effective.sysctl_effective(entries, RP_FILTER)
+    assert found["unsupported"] == [
+        (
+            "/etc/sysctl.d/z*.conf: sysctl --system expands the name of this file as a pattern,"
+            " which may read other files a second time"
+        )
+    ]
