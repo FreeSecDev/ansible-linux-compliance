@@ -7,12 +7,13 @@ tool twice around the real readers in the Molecule images:
   ``OUT/<case>/root`` as regular files, directories and symbolic links, relative to the root of an
   instance;
 * ``parse CASES RAW OUT_JSON`` reads what ``systemd-sysctl`` (with debug logging) and ``sysctl
-  --system --dry-run`` reported for each case in each image and writes, for every key of the case,
-  the value that each reader sets last, or ``null`` when it sets none.
+  --system --dry-run`` reported for each case in each image and writes the verdicts: for
+  ``systemd`` the value set for every key of the case, or ``null``, and for ``procps-4`` and
+  ``procps-3`` the settings of those keys in the order procps made them.
 
-``tests/unit/plugins/filter/test_sysctl_effective.py`` checks the role's model of both readers
-against the committed verdicts, so that a case where the model and a real reader disagree fails the
-unit tests.
+``tests/unit/plugins/module_utils/compliance/test_sysctl_config.py`` checks the role's model of both
+readers against the committed verdicts, so that a case where the model and a real reader disagree
+fails the unit tests.
 """
 
 from __future__ import annotations
