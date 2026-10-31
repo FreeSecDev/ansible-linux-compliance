@@ -3,7 +3,7 @@
   "rhel_compatible": {
    "package": "audit",
    "version": "3.1.5-8.el9",
-   "image": "freesecdev-molecule/rhel_compatible:8101994123cf-e1c9dae1e101",
+   "image": "freesecdev-molecule/rhel_compatible:8101994123cf-839860b2818c",
    "log_megabytes": 1031019,
    "base": "#\n# This file controls the configuration of the audit daemon\n#\n\nlocal_events = yes\nwrite_logs = yes\nlog_file = /var/log/audit/audit.log\nlog_group = root\nlog_format = ENRICHED\nflush = INCREMENTAL_ASYNC\nfreq = 50\nmax_log_file = 8\nnum_logs = 5\npriority_boost = 4\nname_format = NONE\n##name = mydomain\nmax_log_file_action = ROTATE\nspace_left = 75\nspace_left_action = SYSLOG\nverify_email = yes\naction_mail_acct = root\nadmin_space_left = 50\nadmin_space_left_action = SUSPEND\ndisk_full_action = SUSPEND\ndisk_error_action = SUSPEND\nuse_libwrap = yes\n##tcp_listen_port = 60\ntcp_listen_queue = 5\ntcp_max_per_addr = 1\n##tcp_client_ports = 1024-65535\ntcp_client_max_idle = 0\ntransport = TCP\nkrb5_principal = auditd\n##krb5_key_file = /etc/audit/audit.key\ndistribute_network = no\nq_depth = 2000\noverflow_action = SYSLOG\nmax_restarts = 10\nplugin_dir = /etc/audit/plugins.d\nend_of_event_timeout = 2\n",
    "read": {
@@ -44,7 +44,7 @@
   "ubuntu": {
    "package": "auditd",
    "version": "1:3.1.2-2.1ubuntu0.1",
-   "image": "freesecdev-molecule/ubuntu:68ee22004a91-bd442891cd80",
+   "image": "freesecdev-molecule/ubuntu:68ee22004a91-74e1c86b0ae4",
    "log_megabytes": 1031019,
    "base": "#\n# This file controls the configuration of the audit daemon\n#\n\nlocal_events = yes\nwrite_logs = yes\nlog_file = /var/log/audit/audit.log\nlog_group = adm\nlog_format = ENRICHED\nflush = INCREMENTAL_ASYNC\nfreq = 50\nmax_log_file = 8\nnum_logs = 5\npriority_boost = 4\nname_format = NONE\n##name = mydomain\nmax_log_file_action = ROTATE\nspace_left = 75\nspace_left_action = SYSLOG\nverify_email = yes\naction_mail_acct = root\nadmin_space_left = 50\nadmin_space_left_action = SUSPEND\ndisk_full_action = SUSPEND\ndisk_error_action = SUSPEND\nuse_libwrap = yes\n##tcp_listen_port = 60\ntcp_listen_queue = 5\ntcp_max_per_addr = 1\n##tcp_client_ports = 1024-65535\ntcp_client_max_idle = 0\ntransport = TCP\nkrb5_principal = auditd\n##krb5_key_file = /etc/audit/audit.key\ndistribute_network = no\nq_depth = 2000\noverflow_action = SYSLOG\nmax_restarts = 10\nplugin_dir = /etc/audit/plugins.d\nend_of_event_timeout = 2\n",
    "read": {
