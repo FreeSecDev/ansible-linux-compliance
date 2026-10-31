@@ -86,10 +86,14 @@ The family reads every file that `modprobe` reads, as `modprobe` orders them, be
 the directories of the platform's kmod (`__linux_compliance_remediate_modprobe_read_directories`, per pinned benchmark;
 another benchmark is refused before any change). A masking entry takes its name and holds nothing, and a link to a
 directory is skipped (revised after the review of PR #76). It keeps every `install` and `blacklist` command, and
-matches the name of each `install` command as `modprobe` does with `fnmatch`: `*`, `?` and bracket expressions, `-` and
-`_` alike outside brackets. A pattern with a backslash, a character class (`[:alpha:]`) or an equivalence class is
-taken to match every module, so it can only make the family refuse, and an `install` line that kmod rejects (an
-unterminated `[` or a stray `]`) is ignored, as kmod ignores it:
+matches the name of each `install` command as `modprobe` does, with the filter
+`freesecdev.linux_compliance.modprobe_pattern`: kmod's `underscores()` first (`-` and `_` alike outside brackets, a
+bracket ends at the first `]`), then `fnmatch` without flags (`*`, `?`, `\x` as the literal `x`, brackets with ranges
+in byte order and `!` or `^` for negation; a reversed range such as `[z-a]` matches nothing). A line that kmod rejects
+is ignored, as kmod ignores it: an unterminated `[`, a stray `]`, every `[[:class:]]` or `[[=x=]]` form, and a bracket
+closed straight after `[`, `[!` or `[^` (revised after the second review of PR #76). Only two forms, which `fnmatch`
+would read differently from where kmod ends the bracket, are taken to match every module, so they can only make the
+family refuse: a bracket whose content ends with `\`, and one that holds `[` followed by `:`, `.` or `=`:
 
 | Status | When |
 |---|---|
@@ -142,8 +146,9 @@ revert and a refusal whenever a site file would make the drop-in ineffective.
 
 ## Trade-offs
 
-An `install` pattern with a backslash or a character or equivalence class is treated as matching every module, so
-such a site file makes every rule that it precedes `overridden` even where it would not match. A same-named file in `/run/modprobe.d` or
+An `install` pattern with a bracket that ends with `\`, or that holds `[` followed by `:`, `.` or `=`, is treated as
+matching every module, so such a site file makes every rule that it precedes `overridden` even where it would not
+match; no shipped or realistic configuration has one. A same-named file in `/run/modprobe.d` or
 `/usr/lib/modprobe.d` is assumed to be hidden by the collection's drop-in even before it exists. Kernel command-line
 settings (`modprobe.blacklist=`, `module_blacklist=`) are neither read nor written. The blacklisted file system modules
 (overlay, squashfs, udf) and usb-storage can break container runtimes, snaps, optical media and USB storage, which is

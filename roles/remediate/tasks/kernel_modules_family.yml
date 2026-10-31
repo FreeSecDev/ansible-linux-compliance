@@ -217,37 +217,11 @@
       {%- set words = line.split(none, 2) -%}
       {%- if not line.startswith('#') and ((words | length >= 2 and words[0] == 'blacklist')
             or (words | length == 3 and words[0] == 'install' and words[2] | trim != '')) -%}
-      {%- set glob = namespace(rx='', cls=none, bad=false, any=false) -%}
-      {%- for c in words[1] -%}
-      {%- if glob.cls is not none -%}
-      {%- if c == ']' and glob.cls not in ['', '^'] -%}
-      {%- set glob.rx = glob.rx ~ '[' ~ glob.cls ~ ']' -%}
-      {%- set glob.cls = none -%}
-      {%- elif glob.cls == '' and c in ['!', '^'] -%}
-      {%- set glob.cls = '^' -%}
-      {%- else -%}
-      {%- set glob.cls = glob.cls ~ ((__linux_compliance_remediate_modprobe_backslash ~ c)
-            if c in [__linux_compliance_remediate_modprobe_backslash, '[', ']', '^'] else c) -%}
-      {%- set glob.any = glob.any or c in [':', '='] -%}
-      {%- endif -%}
-      {%- elif c == '[' -%}
-      {%- set glob.cls = '' -%}
-      {%- elif c == ']' -%}
-      {%- set glob.bad = true -%}
-      {%- elif c == '*' -%}
-      {%- set glob.rx = glob.rx ~ '.*' -%}
-      {%- elif c == '?' -%}
-      {%- set glob.rx = glob.rx ~ '.' -%}
-      {%- elif c == __linux_compliance_remediate_modprobe_backslash -%}
-      {%- set glob.any = true -%}
-      {%- else -%}
-      {%- set glob.rx = glob.rx ~ (c | replace('-', '_') | regex_escape) -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {%- if glob.cls is none and not glob.bad -%}
+      {%- set pattern = words[1] | freesecdev.linux_compliance.modprobe_pattern
+            if words[0] == 'install' else (words[1] | replace('-', '_') | regex_escape) -%}
+      {%- if pattern is not none -%}
       {%- set _ = found.append({'path': path, 'name': path | basename, 'command': words[0],
-            'token': words[1], 'module': words[1] | replace('-', '_'),
-            'pattern': '.*' if glob.any else glob.rx,
+            'token': words[1], 'module': words[1] | replace('-', '_'), 'pattern': pattern,
             'argument': (words[2] | trim) if words | length > 2 else ''}) -%}
       {%- endif -%}
       {%- endif -%}
