@@ -43,6 +43,8 @@
       - not_owned
       - prior_too_large
       - duplicate_setting
+      - unreadable_file
+      - unreadable_value
     watched_paths:
       - /etc/issue
       - /etc/issue.net

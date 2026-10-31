@@ -4,6 +4,11 @@
     file: lifecycle_pwquality_regressions.yml
   when: "'lifecycle_pwquality_regressions.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the pwquality reader regressions for CRLF files, PAM arguments and drop-ins
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwquality_readers_regressions.yml
+  when: "'lifecycle_pwquality_readers_regressions.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Run the sudo regressions for a change of method and changes by hand
   ansible.builtin.include_tasks:
     file: lifecycle_sudo_regressions.yml
@@ -43,6 +48,11 @@
   ansible.builtin.include_tasks:
     file: lifecycle_ssh_vendor_regressions.yml
   when: "'lifecycle_ssh_vendor_regressions.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the ssh reader regressions for CRLF files, an alias read first and a Match block
+  ansible.builtin.include_tasks:
+    file: lifecycle_ssh_readers_regressions.yml
+  when: "'lifecycle_ssh_readers_regressions.yml' in lifecycle_regression.files"
 
 - name: Lifecycle regressions | Run the kernel module regressions for a change of method, changes by hand and site files
   ansible.builtin.include_tasks:

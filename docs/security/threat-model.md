@@ -282,16 +282,18 @@ print a password hash. A configuration that kmod and the family read differently
 makes every rule refuse (`config_unreadable`), so a misread file can never produce a false `applied` or `compliant`.
 
 The `ssh` family of the `remediate` role writes sshd drop-ins and changes conflicting lines of the vendor files
-`/etc/ssh/sshd_config` and `/etc/ssh/sshd_config.d/50-redhat.conf`, and the module `sshd_validate` runs `sshd -t` as
-root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-server-configuration.md),
-[ADR 0004](../adr/0004-audited-process-execution.md), FREES-109).
+`/etc/ssh/sshd_config` and `/etc/ssh/sshd_config.d/50-redhat.conf`, and the module `sshd_validate` runs `sshd -t` and
+the extended test mode `sshd -T` as root through the audited process helper
+([ADR 0023](../adr/0023-native-ssh-server-configuration.md), [ADR 0004](../adr/0004-audited-process-execution.md),
+FREES-109, FREES-200). `sshd -T` prints the effective configuration, from which the family decides whether a drop-in
+takes effect, so a drop-in that sshd does not use is never reported applied or compliant.
 
 ### Assets
 
 | Asset | Why it matters |
 |---|---|
 | Remote access to the host | A wrong or refused sshd configuration locks out every operator who logs in over SSH |
-| Root execution of `sshd -t` | The helper runs `/usr/sbin/sshd` as root; it reads every included file and the host keys |
+| Root execution of `sshd -t` and `sshd -T` | The helper runs `/usr/sbin/sshd` as root; it reads every included file and the host keys, and `-T` prints the effective settings, of which the module returns only the 28 native keywords |
 | The vendor files and their recorded lines | The collection changes package-owned files and must restore them exactly |
 
 ### Trust boundaries and entry points
@@ -300,6 +302,7 @@ root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-serve
 |---|---|---|
 | `/usr/sbin/sshd` | The distribution package manager | Trusted: resolved only in the trusted directories, root-owned and not writable by group or others; anything else fails the module |
 | The `-o` settings of `sshd_validate` | The catalogue values and the profile values generated from the pinned content | Checked twice: by the family (keyword and one-word value) and by the helper's policy (`option_values`, 28 keywords) |
+| The `client` of `sshd_validate` (`-C`) | The Molecule regressions | Checked twice: by the module and by the helper's policy (`option_prefixes`: only with `-T`, at most once, a lower-case user and host name and an IPv4 address) |
 | `/etc/ssh/sshd_config` and `/etc/ssh/sshd_config.d/*.conf` | Root, packages, administrators | Read as data; a symbolic link or non-regular file is never written through |
 | `linux_compliance_remediate_allow_disruptive` | The operator | The acknowledgement that the topic may change and revert sshd settings |
 

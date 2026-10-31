@@ -57,71 +57,66 @@
     __linux_compliance_remediate_pwq_entry_method: >-
       {{ __linux_compliance_remediate_pwq_records.method | default('unknown') }}
     __linux_compliance_remediate_pwq_regexp: >-
-      {{ '^[ \t]*' ~ __linux_compliance_remediate_pwq_setting
-         ~ ('[ \t]*$' if __linux_compliance_remediate_rule.parameters.value_id is not defined else '[ \t]*=') }}
-    __linux_compliance_remediate_pwq_found: >-
-      {{ ((__linux_compliance_remediate_pwq_current.content | b64decode)
-          | regex_findall('(?m)^[ \t]*' ~ __linux_compliance_remediate_pwq_setting
-                          ~ ('[ \t]*$' if __linux_compliance_remediate_rule.parameters.value_id is not defined
-                             else '[ \t]*=.*$')))
-         if __linux_compliance_remediate_pwq_current is not skipped else [] }}
+      {{ __linux_compliance_remediate_pwquality_line_start ~ __linux_compliance_remediate_pwq_setting
+         ~ '(?![A-Za-z0-9_])' }}
   tags:
     - always
 
-- name: Password quality | Name the reason the prior state cannot be restored
+- name: Password quality | Name the reason the prior state cannot be restored, or that it is already as before
+  vars:
+    __linux_compliance_remediate_pwq_valid: >-
+      {{ 'setting_line' in __linux_compliance_remediate_pwq_prior
+         and (__linux_compliance_remediate_pwq_prior.setting_line is none
+              or (__linux_compliance_remediate_pwq_prior.setting_line is string
+                  and __linux_compliance_remediate_newline
+                      not in __linux_compliance_remediate_pwq_prior.setting_line
+                  and __linux_compliance_remediate_pwq_prior.setting_line
+                      is search(__linux_compliance_remediate_pwq_regexp)))
+         and __linux_compliance_remediate_pwq_prior.written_line | default(none) is string
+         and __linux_compliance_remediate_newline
+             not in __linux_compliance_remediate_pwq_prior.written_line | default('')
+         and __linux_compliance_remediate_pwq_prior.written_line | default('')
+             is search(__linux_compliance_remediate_pwq_regexp)
+         and __linux_compliance_remediate_pwq_prior.mode | default('') is match('^[0-7]{4}$')
+         and __linux_compliance_remediate_pwq_prior.owner | default('') is match('^[0-9]{1,10}$')
+         and __linux_compliance_remediate_pwq_prior.group | default('') is match('^[0-9]{1,10}$') }}
+    __linux_compliance_remediate_pwq_restore: >-
+      {{ (__linux_compliance_remediate_pwq_current.content | b64decode)
+         | freesecdev.linux_compliance.pwquality_restore(__linux_compliance_remediate_rule.parameters.setting,
+                                                         __linux_compliance_remediate_pwq_prior.written_line,
+                                                         __linux_compliance_remediate_pwq_prior.setting_line)
+         if __linux_compliance_remediate_pwq_current is not skipped and __linux_compliance_remediate_pwq_valid
+         else {} }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_reason: >-
       {{ 'method_changed' if __linux_compliance_remediate_pwq_entry_method != 'main_file'
          else 'target_absent' if not __linux_compliance_remediate_pwq_stat.stat.exists
          else 'not_regular_file' if not __linux_compliance_remediate_pwq_stat.stat.isreg
-         else 'invalid_record' if not (
-              'setting_line' in __linux_compliance_remediate_pwq_prior
-              and (__linux_compliance_remediate_pwq_prior.setting_line is none
-                   or (__linux_compliance_remediate_pwq_prior.setting_line is string
-                       and __linux_compliance_remediate_newline
-                           not in __linux_compliance_remediate_pwq_prior.setting_line
-                       and __linux_compliance_remediate_pwq_prior.setting_line
-                           is search(__linux_compliance_remediate_pwq_regexp)))
-              and __linux_compliance_remediate_pwq_prior.written_line | default(none) is string
-              and __linux_compliance_remediate_pwq_prior.written_line
-                  is search(__linux_compliance_remediate_pwq_regexp)
-              and __linux_compliance_remediate_pwq_prior.mode | default('') is match('^[0-7]{4}$')
-              and __linux_compliance_remediate_pwq_prior.owner | default('') is match('^[0-9]{1,10}$')
-              and __linux_compliance_remediate_pwq_prior.group | default('') is match('^[0-9]{1,10}$'))
-         else 'modified_since_apply' if
-              __linux_compliance_remediate_pwq_found != [__linux_compliance_remediate_pwq_prior.written_line]
+         else 'invalid_record' if not __linux_compliance_remediate_pwq_valid
+         else none if __linux_compliance_remediate_pwq_restore.already
+         else 'modified_since_apply' if __linux_compliance_remediate_pwq_restore.reason is not none
               or __linux_compliance_remediate_pwq_stat.stat.mode != __linux_compliance_remediate_pwq_prior.mode
               or (__linux_compliance_remediate_pwq_stat.stat.uid | string)
                  != __linux_compliance_remediate_pwq_prior.owner
               or (__linux_compliance_remediate_pwq_stat.stat.gid | string)
                  != __linux_compliance_remediate_pwq_prior.group
          else none }}
+    __linux_compliance_remediate_pwq_restored_text: "{{ __linux_compliance_remediate_pwq_restore.text | default('') }}"
+    __linux_compliance_remediate_pwq_already: "{{ __linux_compliance_remediate_pwq_restore.already | default(false) }}"
   tags:
     - always
 
-- name: Password quality | Remove the setting that the main file did not have before
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_pwquality_main }}"
-    regexp: "{{ __linux_compliance_remediate_pwq_regexp }}"
-    state: absent
-  register: __linux_compliance_remediate_pwq_removal
-  when:
-    - __linux_compliance_remediate_pwq_reason is none
-    - __linux_compliance_remediate_pwq_prior.setting_line is none
-  tags:
-    - always
-
-- name: Password quality | Write back the line that the main file had before
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_pwquality_main }}"
-    regexp: "{{ __linux_compliance_remediate_pwq_regexp }}"
-    line: "{{ __linux_compliance_remediate_pwq_prior.setting_line }}"
-    state: present
-    create: false
+- name: Password quality | Write the main file with the setting as it was before, every other byte as it was read
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_pwq_restored_text }}"
+    dest: "{{ __linux_compliance_remediate_pwquality_main }}"
+    follow: false
+    force: true
+    mode: "{{ __linux_compliance_remediate_pwq_stat.stat.mode }}"
   register: __linux_compliance_remediate_pwq_restored
   when:
     - __linux_compliance_remediate_pwq_reason is none
-    - __linux_compliance_remediate_pwq_prior.setting_line is not none
+    - not __linux_compliance_remediate_pwq_already
   tags:
     - always
 
@@ -146,15 +141,16 @@
            'action': 'cleanup',
            'status': __linux_compliance_remediate_pwq_cleanup_status,
            'reason': __linux_compliance_remediate_pwq_reason,
-           'changed': (__linux_compliance_remediate_pwq_removal is changed)
-                      or (__linux_compliance_remediate_pwq_restored is changed)
+           'changed': (__linux_compliance_remediate_pwq_restored is changed)
                       or (__linux_compliance_remediate_pwq_forget is changed),
            'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_pwq_cleanup_status
                       ~ ((' (' ~ __linux_compliance_remediate_pwq_reason ~ ': '
                           ~ __linux_compliance_remediate_pwquality_main
                           ~ '; nothing was changed, the ledger entry is kept and the cleanup is retried on the'
                           ~ ' next run)')
-                         if __linux_compliance_remediate_pwq_reason else '')
+                         if __linux_compliance_remediate_pwq_reason
+                         else ' (the setting was already as before; only the ledger entry was removed)'
+                         if __linux_compliance_remediate_pwq_already else '')
          }] }}
   tags:
     - always

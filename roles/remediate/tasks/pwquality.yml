@@ -50,40 +50,116 @@
   tags:
     - always
 
-- name: Password quality | List the drop-ins of the directory
+- name: Password quality | List every entry of the drop-in directory, as libpwquality lists it, without following links
   ansible.builtin.find:
     paths: "{{ __linux_compliance_remediate_pwquality_directory }}"
-    patterns: "*.conf"
-    file_type: file
+    file_type: any
     follow: false
-    hidden: false
+    hidden: true
     recurse: false
   register: __linux_compliance_remediate_pwq_dropins
   when: __linux_compliance_remediate_pwq_directory_stat.isdir | default(false)
   tags:
     - always
 
-- name: Password quality | Read the main file and every drop-in that the collection does not own
+- name: Password quality | Name the entries that libpwquality reads, whose name holds .conf only at its end
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_entries: >-
+      {{ __linux_compliance_remediate_pwq_dropins.files | default([])
+         | selectattr('path', 'match', '^.*/(?:(?!\.conf)[^/])*\.conf$') | list }}
+  tags:
+    - always
+
+- name: Password quality | Read the main file
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_pwquality_main }}"
+  register: __linux_compliance_remediate_pwq_main_read
+  when: __linux_compliance_remediate_pwq_main_stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Password quality | Read every regular drop-in that libpwquality reads
   ansible.builtin.slurp:
     src: "{{ __linux_compliance_remediate_pwq_source }}"
   loop: >-
-    {{ ([__linux_compliance_remediate_pwquality_main]
-        if __linux_compliance_remediate_pwq_main_stat.isreg | default(false) else [])
-       + ((__linux_compliance_remediate_pwq_dropins.files | default([]) | map(attribute='path') | list)
-          | difference(__linux_compliance_remediate_pwq_owned)) }}
+    {{ __linux_compliance_remediate_pwq_entries | selectattr('isreg') | map(attribute='path') | list }}
   loop_control:
     loop_var: __linux_compliance_remediate_pwq_source
   register: __linux_compliance_remediate_pwq_read
   tags:
     - always
 
-- name: Password quality | Keep the text of the files that libpwquality reads besides the collection's drop-ins
-  ansible.builtin.set_fact:
-    __linux_compliance_remediate_pwq_sources: >-
+- name: Password quality | Inspect the PAM directories
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwq_path }}"
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: "{{ __linux_compliance_remediate_pwquality_pam_directories }}"
+  loop_control:
+    loop_var: __linux_compliance_remediate_pwq_path
+  register: __linux_compliance_remediate_pwq_pam_directories
+  when: __linux_compliance_remediate_family.apply | length > 0
+  tags:
+    - always
+
+- name: Password quality | List the PAM files, through symbolic links, whose pam_pwquality arguments override the files
+  ansible.builtin.find:
+    paths: >-
+      {{ __linux_compliance_remediate_pwq_pam_directories.results | selectattr('stat', 'defined')
+         | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir')
+         | map(attribute='__linux_compliance_remediate_pwq_path') | list }}
+    file_type: file
+    follow: true
+    hidden: true
+    recurse: false
+  register: __linux_compliance_remediate_pwq_pam_found
+  when:
+    - __linux_compliance_remediate_family.apply | length > 0
+    - >-
+      __linux_compliance_remediate_pwq_pam_directories.results | selectattr('stat', 'defined')
+      | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir') | list | length > 0
+  tags:
+    - always
+
+- name: Password quality | Read every PAM file
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_pwq_source }}"
+  loop: >-
+    {{ __linux_compliance_remediate_pwq_pam_found.files | default([]) | map(attribute='path') | sort | list }}
+  loop_control:
+    loop_var: __linux_compliance_remediate_pwq_source
+  register: __linux_compliance_remediate_pwq_pam_read
+  tags:
+    - always
+
+- name: Password quality | Keep every drop-in entry with its type and text, and the text of every PAM file
+  vars:
+    __linux_compliance_remediate_pwq_texts: >-
       {{ dict(__linux_compliance_remediate_pwq_read.results | default([])
               | map(attribute='__linux_compliance_remediate_pwq_source')
               | zip(__linux_compliance_remediate_pwq_read.results | default([]) | map(attribute='content')
                     | map('b64decode'))) }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_main_text: >-
+      {{ (__linux_compliance_remediate_pwq_main_read.content | b64decode)
+         if __linux_compliance_remediate_pwq_main_read is not skipped else none }}
+    __linux_compliance_remediate_pwq_state: >-
+      {%- set entries = [] -%}
+      {%- for entry in __linux_compliance_remediate_pwq_entries -%}
+      {%- set _ = entries.append({'path': entry.path,
+            'type': 'file' if entry.isreg else 'directory' if entry.isdir
+                    else 'link' if entry.islnk else 'other',
+            'content': __linux_compliance_remediate_pwq_texts[entry.path] | default(none)}) -%}
+      {%- endfor -%}
+      {{ entries }}
+    __linux_compliance_remediate_pwq_pam: >-
+      {%- set files = [] -%}
+      {%- for item in __linux_compliance_remediate_pwq_pam_read.results | default([]) -%}
+      {%- set _ = files.append({'path': item.__linux_compliance_remediate_pwq_source,
+                                'content': item.content | b64decode}) -%}
+      {%- endfor -%}
+      {{ files }}
   tags:
     - always
 
