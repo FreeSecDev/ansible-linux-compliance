@@ -1,4 +1,4 @@
-# 0027. Fast records for the Molecule lifecycle harness
+# 0031. Fast records for the Molecule lifecycle harness
 
 - **Status:** proposed
 - **Date:** 2026-10-31

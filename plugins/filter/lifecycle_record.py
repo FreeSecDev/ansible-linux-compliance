@@ -37,7 +37,7 @@ description:
     paths that are listed without their content (C(metadata)). The checksum of an entry is
     its own C(checksum), else its C(checksums) entry, else empty.
   - An entry that ansible-core stores as a plain mapping of text, numbers, booleans and nulls,
-    as every C(find) entry is, is read as stored; every other item is rendered (ADR 0027).
+    as every C(find) entry is, is read as stored; every other item is rendered (ADR 0031).
   - Raises an error for input of the wrong shape; it never guesses a value.
 author:
   - FreeSecDev (@FreeSecDev)
@@ -300,7 +300,7 @@ def _is_plain_entry(value: object) -> bool:
 def stored_items(value: object, what: str) -> list[object]:
     """Return the items of the list ``value``, read as stored when that is the same as rendered.
 
-    This is the one adapter of ADR 0027 to the lazy containers of ansible-core. A filter gets a
+    This is the one adapter of ADR 0031 to the lazy containers of ansible-core. A filter gets a
     list from the variables as a lazy container that renders each item when it is read, which
     costs about 30 microseconds for a ``find`` entry, three seconds for the 100,000 entries of a
     walk. The container stores each item that it has not rendered yet in a wrapper named

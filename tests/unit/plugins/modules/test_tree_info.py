@@ -1,4 +1,4 @@
-"""The metadata listing of the Molecule lifecycle harness (FREES-180, ADR 0027).
+"""The metadata listing of the Molecule lifecycle harness (FREES-180, ADR 0031).
 
 ``tree_info`` lists every entry below directories, as ``ansible.builtin.find`` with ``recurse``,
 ``hidden`` and ``file_type: any`` lists them, without following a symbolic link and without

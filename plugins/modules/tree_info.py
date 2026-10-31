@@ -12,7 +12,7 @@ description:
   - Walks every directory below each of O(paths) without following symbolic links and returns,
     for every entry below it, its path, type, mode, uid, gid, size, inode, mtime and ctime.
   - Used by the Molecule harness of this collection to record C(/usr) for its no-change
-    snapshots and whole-instance records (FREES-180, ADR 0027), where it replaces an
+    snapshots and whole-instance records (FREES-180, ADR 0031), where it replaces an
     C(ansible.builtin.find) without checksums that took about fifteen seconds per record.
   - Reads no file content. A directory that cannot be listed, or an entry whose metadata cannot be
     read, fails the module, so that no entry is left out without notice.

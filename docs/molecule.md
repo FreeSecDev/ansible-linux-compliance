@@ -414,7 +414,7 @@ below `/usr` still get their SHA-256, because the whole-instance record does not
 record. The lines are built by the filter `freesecdev.linux_compliance.lifecycle_record` (`plugins/filter`), in typed
 Python, byte for byte as the Jinja templates built them before, because templating the 100,000 entries of a virtual
 machine took up to half a minute per record. It reads the `find` entries as ansible-core stores them
-([ADR 0027](adr/0027-fast-records-for-the-lifecycle-harness.md)), which takes about a second;
+([ADR 0031](adr/0031-fast-records-for-the-lifecycle-harness.md)), which takes about a second;
 `tests/unit/plugins/filter/test_lifecycle_record.py` proves the bytes
 against a recorded walk and the old templates (`tests/fixtures/lifecycle_record`). Both this snapshot and the
 whole-instance record take their entries from

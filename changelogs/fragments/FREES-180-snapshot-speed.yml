@@ -7,7 +7,7 @@ minor_changes:
   - >-
     tree_info - new read-only module used only by the Molecule harness of the collection. It lists every entry below
     directories with its type, mode, owner, size, inode and times, without reading content and without following
-    symbolic links, as one text, and fails on any directory or entry that it cannot read (FREES-180, ADR 0027).
+    symbolic links, as one text, and fails on any directory or entry that it cannot read (FREES-180, ADR 0031).
 trivial:
   - >-
     Molecule: the no-change snapshots and whole-instance records list /usr with tree_info, without its content, so
