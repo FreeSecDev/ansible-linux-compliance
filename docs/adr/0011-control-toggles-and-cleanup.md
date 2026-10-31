@@ -838,3 +838,49 @@ Residual risk, accepted for the throughput it buys:
 - **Generated files rely on their drift checks.** A generated file whose sources did not change in the same way is
   refused by the required `lint` or `test` job of the same run, so such a pull request cannot merge; the plan of that
   run may have been too small.
+
+## Amendment 2026-10-31: topic files and generated toggles plan only their topics (FREES-195)
+
+The FREES-189 mapping planned the full matrix for every topic pull request, because each one edited shared files: the
+lists of native topics that `converge.yml`, `verify.yml`, their libvirt counterparts and `shared/vars/target.yml`
+switch off, the golden test list of the `Makefile`, and the generated toggles of `make catalogue toggles` (the role
+defaults and argument specs, and a registry that gains a family). With the auditd stack that was 85 Docker lifecycle
+legs and 23 libvirt legs per run, against 60 concurrent jobs and the 30 minutes of the merge queue, and about 1100
+`audit_only` rules remain to be converted. These refinements apply
+([Molecule guide](../molecule.md#adding-a-topic-without-touching-shared-files)).
+
+- **No hand-edited topic lists in the shared harness.** `molecule_other_native_topics` is derived from
+  `roles/remediate/vars/rules.yml` at run time, with the expression that the plays' first assertion already compared
+  it with, and `shared/tasks/other_topics_off.yml` sets each of those topic toggles to `false` and then asserts both
+  conditions of the former first task: the list equals the catalogue's, and every toggle of it is `false`. The toggles
+  are facts now, not play variables, which only raises their precedence; no task of these plays sets a topic toggle.
+  The golden tests are found by `make test-content-golden` with a wildcard. A full-matrix run plans the same legs as
+  before and runs the same assertions.
+- **The registry may gain or lose a family.** A family added to or removed from the registry affects that family and
+  the umbrella of its entry. The families that both revisions register must keep their order; a family listed twice
+  and a gained or lost family that heads an umbrella still plan the full matrix, because they change the toggles of
+  other families.
+- **Generated toggles are classified per variable and option.** In `roles/{audit,remediate}/defaults/main.yml` a
+  gained, lost or changed topic toggle `linux_compliance_<topic>_enabled` whose values are booleans affects every
+  family that the toggle controls, as `toggles.controlling_topics` resolves a rule's toggles: the family `<topic>`,
+  the families whose umbrella is `<topic>`, and the families of the rules of every subsystem tag that is `<topic>` or
+  whose umbrella it is, in either revision. In the argument specs, after descriptions are removed, every entry point
+  and every key besides `options` must be unchanged; a changed option must be such a topic toggle with exactly the
+  generated `type: bool` and `default: true`, or `linux_compliance_remediate_allow_disruptive` with only choices
+  gained or lost (each a family or umbrella, mapped the same way) and the remaining choices in the same order. The
+  topic must be a valid topic name and a family or umbrella of either registry. Values are compared by type as well
+  (`true` is not `1`). Anything else in these four files plans the full matrix.
+- **Shared code still plans the full matrix**: the harness, its tasks and variables (including
+  `other_topics_off.yml`), the images, plugins and `module_utils`, `tools/roles`, `tools/molecule`, `ci.yml`, the
+  `Makefile`, and every path that the mapping does not know. The base revision's planner still decides, so this
+  amendment takes effect for the pull requests that run after it merges.
+
+Residual risk, in addition to the FREES-189 amendment's:
+
+- **A toggle default is attributed to the families that it controls.** A topic toggle can only switch rules off, and
+  only the rules that `toggles.controlling_topics` names; the converge and verify scenarios, which run on every pull
+  request, and the controlled families' legs see the change. A default that is no boolean, or a toggle option that is
+  not the generated one, plans the full matrix, so a templated default cannot reach other topics' legs.
+- **A registry insertion changes the order in which a local full run takes the topics.** CI runs each topic and mode
+  in a container of its own, so the order does not reach a planned leg; the full matrix on `main` and nightly still
+  runs every leg.

@@ -20,13 +20,22 @@ the file names. A path that the mapping cannot confine to topics plans the full 
   (``generate_catalogue --check`` in the ``test`` job), which is classified by its entries.
 * **The catalogue.** ``roles/remediate/vars/rules.yml`` is compared entry by entry: a family's
   registry entry, its rules, its ``audit_only`` list and the subsystem tags affect that family,
-  and the families of the rules that a tag gains or loses. A change to the order or the set of
-  families, to the order of entries of unchanged families or to any other key plans the full
+  and the families of the rules that a tag gains or loses. A family that the registry gains or
+  loses affects that family and its umbrella (FREES-195). A change to the order of the families
+  that both revisions register, a family registered twice, a gained or lost family that heads an
+  umbrella, a change to the order of entries of unchanged families or to any other key plans the
+  full matrix.
+* **Generated toggles.** The toggle defaults of the remediate and audit roles and their argument
+  specs are compared per variable and per option (FREES-195). A topic toggle
+  ``linux_compliance_<topic>_enabled`` of a family or an umbrella, with a boolean default and the
+  generated specification, affects every family that it controls: the family, the families of
+  the umbrella, and the families of the rules of a subsystem tag that it or its umbrella names.
+  A family or umbrella that the choices of ``linux_compliance_remediate_allow_disruptive`` gain
+  or lose affects the same families. A change that only rewrites descriptions has no lifecycle
+  effect. Any other change plans the full matrix.
+* **Role variables.** A changed key of ``roles/remediate/vars/main.yml`` affects the topics of
+  the files that use it; a key that no file uses, or that a shared file uses, plans the full
   matrix.
-* **Role variables and argument specs.** A changed key of ``roles/remediate/vars/main.yml``
-  affects the topics of the files that use it; a key that no file uses, or that a shared file
-  uses, plans the full matrix. A change of the argument specs that only rewrites descriptions
-  has no lifecycle effect; any other plans the full matrix.
 * **Topic files.** A task file of ``roles/remediate/tasks`` named ``<family>.yml`` or
   ``<family>_*.yml``, a topic declaration ``extensions/molecule/shared/vars/topics/<topic>.yml``,
   and a file of ``extensions/molecule/shared/tasks`` that a topic's regression group names belong
@@ -76,8 +85,16 @@ MOLECULE_TASKS: Final[str] = check_lifecycle_topics.REGRESSION_DISPATCH.parent.a
 REGRESSION_DISPATCH: Final[str] = check_lifecycle_topics.REGRESSION_DISPATCH.as_posix()
 TOPICS: Final[str] = check_lifecycle_topics.TOPICS.as_posix()
 ARGUMENT_SPECS: Final[frozenset[str]] = frozenset(
-    {"roles/audit/meta/argument_specs.yml", "roles/remediate/meta/argument_specs.yml"}
+    {generate_toggles.SPECS.as_posix(), generate_toggles.AUDIT_SPECS.as_posix()}
 )
+TOGGLE_DEFAULTS: Final[frozenset[str]] = frozenset(
+    {generate_toggles.DEFAULTS.as_posix(), generate_toggles.AUDIT_DEFAULTS.as_posix()}
+)
+TOPIC_TOGGLE: Final[re.Pattern[str]] = re.compile(r"linux_compliance_([a-z][a-z0-9_]*)_enabled")
+TOGGLE_OPTION: Final[dict[str, object]] = {"type": "bool", "default": True}
+ALLOW_LIST: Final[str] = generate_toggles.ALLOW_LIST
+CHOICES_KEY: Final[str] = "choices"
+UMBRELLA_KEY: Final[str] = toggles.UMBRELLA_KEY
 GENERATED: Final[frozenset[str]] = frozenset(
     {
         "roles/remediate/tasks/dispatch.yml",
@@ -174,6 +191,7 @@ class Catalogue(NamedTuple):
     tags: dict[str, list[str]]
     rest: dict[str, object]
     family_of: dict[str, str]
+    umbrellas: dict[str, str]
 
 
 def _file_reference(name: str) -> re.Pattern[str]:
@@ -317,7 +335,59 @@ def _catalogue(tree: Tree) -> Catalogue:
         for key, value in data.items()
         if key not in {FAMILIES_KEY, RULES_KEY, AUDIT_ONLY_KEY, TAGS_KEY}
     }
-    return Catalogue(families, rules, audit_only, _tags(data), rest, family_of)
+    return Catalogue(
+        families, rules, audit_only, _tags(data), rest, family_of, _umbrellas(families)
+    )
+
+
+def _umbrellas(families: Sequence[tuple[str, object]]) -> dict[str, str]:
+    """Return the umbrella of every family that names one as text."""
+    found: dict[str, str] = {}
+    for name, entry in families:
+        umbrella = cast("dict[str, object]", entry).get(UMBRELLA_KEY)
+        if isinstance(umbrella, str):
+            found[name] = umbrella
+    return found
+
+
+def _umbrellas_of(*entries: object) -> set[str]:
+    """Return the umbrellas that the registry entries name as text."""
+    found: set[str] = set()
+    for entry in entries:
+        umbrella = (toggles.as_mapping(entry) or {}).get(UMBRELLA_KEY)
+        if isinstance(umbrella, str):
+            found.add(umbrella)
+    return found
+
+
+def _registry_topics(base: Catalogue, head: Catalogue) -> set[str]:
+    """Return the families whose registry entry changed, was added or was removed, and umbrellas.
+
+    Raises:
+        FullMatrixError: When a family is registered twice, the families that both revisions
+            register changed their order, or a gained or lost family heads an umbrella.
+    """
+    before, after = dict(base.families), dict(head.families)
+    if len(before) != len(base.families) or len(after) != len(head.families):
+        message = "the family registry lists a family twice"
+        raise FullMatrixError(message)
+    if [name for name, _ in base.families if name in after] != [
+        name for name, _ in head.families if name in before
+    ]:
+        message = "the family registry reordered a family"
+        raise FullMatrixError(message)
+    heads = set(base.umbrellas.values()) | set(head.umbrellas.values())
+    found: set[str] = set()
+    for name in sorted(before.keys() | after.keys()):
+        if name in before and name in after:
+            if before[name] == after[name]:
+                continue
+        elif name in heads:
+            message = f"the family registry gained or lost {name}, which heads an umbrella"
+            raise FullMatrixError(message)
+        found.add(name)
+        found.update(_umbrellas_of(before.get(name), after.get(name)))
+    return found
 
 
 def _projected(
@@ -344,24 +414,17 @@ def _projected(
 
 
 def _catalogue_topics(base: Catalogue, head: Catalogue) -> set[str]:
-    if [name for name, _ in base.families] != [name for name, _ in head.families]:
-        message = "the family registry gained, lost or reordered a family"
-        raise FullMatrixError(message)
+    found = _registry_topics(base, head)
     if base.rest != head.rest:
         message = "a key other than the families, rules, audit_only rules and tags changed"
         raise FullMatrixError(message)
-    found = {
-        name
-        for (name, before), (_, after) in zip(base.families, head.families, strict=True)
-        if before != after
-    }
     found.update(cast("set[str]", _projected(base.rules, head.rules)))
     found.update(
         family
         for family in base.audit_only.keys() | head.audit_only.keys()
         if base.audit_only.get(family) != head.audit_only.get(family)
     )
-    names = {name for name, _ in head.families}
+    names = {name for catalogue in (base, head) for name, _ in catalogue.families}
     for tag in base.tags.keys() | head.tags.keys():
         before, after = base.tags.get(tag, []), head.tags.get(tag, [])
         if before == after:
@@ -383,13 +446,63 @@ def _catalogue_topics(base: Catalogue, head: Catalogue) -> set[str]:
     return found
 
 
-def _without_descriptions(value: object, relative: str) -> object:
+def _same(before: object, after: object) -> bool:
+    """Return whether two YAML values are equal in value and in type (``true`` is not ``1``).
+
+    Values that cannot be compared this way, such as a mapping with keys of mixed types or a
+    recursive structure built from YAML aliases, count as different.
+    """
+    try:
+        return json.dumps(before, sort_keys=True, default=repr) == json.dumps(
+            after, sort_keys=True, default=repr
+        )
+    except (TypeError, ValueError, RecursionError):
+        return False
+
+
+def _without(item: dict[str, object], name: str) -> dict[str, object]:
+    return {key: value for key, value in item.items() if key != name}
+
+
+def _differences(
+    before: dict[str, object], after: dict[str, object]
+) -> list[tuple[str, list[object]]]:
+    """Return every key that only one side has or whose values differ, with its values."""
+    return [
+        (key, [data[key] for data in (before, after) if key in data])
+        for key in sorted(before.keys() | after.keys())
+        if key not in before or key not in after or not _same(before[key], after[key])
+    ]
+
+
+def _choices(value: object) -> tuple[dict[str, object], list[str]]:
+    """Return an option of the allowed disruptive topics without its choices, and the choices.
+
+    Raises:
+        FullMatrixError: When the option is not a mapping with a list of text choices.
+    """
+    item = toggles.as_mapping(value)
+    choices = toggles.as_sequence(item.get(CHOICES_KEY)) if item is not None else None
+    if item is None or choices is None or not all(isinstance(choice, str) for choice in choices):
+        message = f"{ALLOW_LIST} has no list of choices"
+        raise FullMatrixError(message)
+    return _without(item, CHOICES_KEY), [str(choice) for choice in choices]
+
+
+def _without_descriptions(
+    value: object, relative: str
+) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
+    """Return the keys beside ``argument_specs`` and every entry point without its descriptions.
+
+    Raises:
+        FullMatrixError: When the file has no mapping of entry points.
+    """
     data = toggles.as_mapping(value)
     entries = toggles.as_mapping(data.get("argument_specs")) if data is not None else None
     if data is None or entries is None:
         message = f"{relative} has no argument_specs mapping"
         raise FullMatrixError(message)
-    stripped: dict[str, object] = {}
+    stripped: dict[str, dict[str, object]] = {}
     for name, entry in entries.items():
         item = toggles.as_mapping(entry)
         if item is None:
@@ -400,7 +513,7 @@ def _without_descriptions(value: object, relative: str) -> object:
             for key, found in item.items()
             if key not in DESCRIPTION_KEYS
         }
-    return {**data, "argument_specs": stripped}
+    return _without(data, "argument_specs"), stripped
 
 
 def _options(value: object) -> object:
@@ -562,19 +675,120 @@ class Context:
         if relative == ROLE_VARIABLES:
             return self._variables(), "role variables"
         if relative in ARGUMENT_SPECS:
-            return self._specs(relative), "only descriptions of the argument specs"
+            return self._specs(relative), "toggle options of the argument specs"
+        if relative in TOGGLE_DEFAULTS:
+            return self._defaults(relative), "toggle defaults"
         if relative == REGRESSION_DISPATCH:
             return self._dispatch(), "includes of the regression dispatch"
         return self.owners(relative), "topic file"
 
+    def controlled(self, topic: str) -> frozenset[str]:
+        """Return the families whose rules the toggle of ``topic`` controls in either revision.
+
+        These are the family named ``topic``, the families of the umbrella ``topic``, and the
+        families of the rules of every subsystem tag that is ``topic`` or whose umbrella it is,
+        as :func:`toggles.controlling_topics` resolves a rule's toggles.
+
+        Raises:
+            FullMatrixError: When ``topic`` is no family or umbrella of either revision, or a tag
+                that it controls names a rule that no family catalogues.
+        """
+        if not toggles.is_topic_name(topic):
+            message = f"{topic} cannot name a family or an umbrella"
+            raise FullMatrixError(message)
+        found: set[str] = set()
+        for catalogue in self.catalogues:
+            found.update(
+                name
+                for name, _ in catalogue.families
+                if topic in (name, catalogue.umbrellas.get(name))
+            )
+            for tag, rules in sorted(catalogue.tags.items()):
+                if topic not in (tag, catalogue.umbrellas.get(tag)):
+                    continue
+                for rule in rules:
+                    if rule not in catalogue.family_of:
+                        message = (
+                            f"the subsystem tag {tag} names {rule}, which no family catalogues"
+                        )
+                        raise FullMatrixError(message)
+                    found.add(catalogue.family_of[rule])
+        if not found:
+            message = f"{topic} is no family or umbrella of the family registry"
+            raise FullMatrixError(message)
+        return frozenset(found)
+
+    def _toggle(self, name: str, *, generated: bool) -> frozenset[str]:
+        """Return the families that a changed topic toggle controls.
+
+        Raises:
+            FullMatrixError: When ``name`` is no topic toggle or a value is not the generated one.
+        """
+        match = TOPIC_TOGGLE.fullmatch(name)
+        if match is None or not generated:
+            message = f"{name} is not a generated topic toggle"
+            raise FullMatrixError(message)
+        return self.controlled(match.group(1))
+
+    def _defaults(self, relative: str) -> frozenset[str]:
+        before, after = (toggles.as_mapping(tree.data(relative)) for tree in self.trees)
+        if before is None or after is None:
+            message = f"{relative} is missing or not a mapping"
+            raise FullMatrixError(message)
+        found: set[str] = set()
+        for key, values in _differences(before, after):
+            found.update(
+                self._toggle(key, generated=all(isinstance(value, bool) for value in values))
+            )
+        return frozenset(found)
+
     def _specs(self, relative: str) -> frozenset[str]:
-        before, after = (
+        (before_rest, before), (after_rest, after) = (
             _without_descriptions(tree.data(relative), relative) for tree in self.trees
         )
-        if before != after:
-            message = "the argument specs changed beyond their descriptions"
+        if not _same(before_rest, after_rest) or before.keys() != after.keys():
+            message = "the argument specs gained, lost or changed an entry point or a key"
             raise FullMatrixError(message)
-        return frozenset()
+        found: set[str] = set()
+        for entry in sorted(before):
+            old, new = (
+                toggles.as_mapping(item.get("options", {}))
+                for item in (before[entry], after[entry])
+            )
+            if (
+                old is None
+                or new is None
+                or not _same(_without(before[entry], "options"), _without(after[entry], "options"))
+            ):
+                message = f"the entry point {entry} changed beyond its options and descriptions"
+                raise FullMatrixError(message)
+            for option, values in _differences(old, new):
+                if option == ALLOW_LIST and len(values) == len(self.trees):
+                    found.update(self._allowed(old[option], new[option]))
+                    continue
+                found.update(
+                    self._toggle(
+                        option, generated=all(_same(value, TOGGLE_OPTION) for value in values)
+                    )
+                )
+        return frozenset(found)
+
+    def _allowed(self, before: object, after: object) -> frozenset[str]:
+        """Return the families of the choices that the list of allowed disruptive topics changed.
+
+        Raises:
+            FullMatrixError: When anything but the gained or lost choices changed.
+        """
+        (old_rest, old), (new_rest, new) = _choices(before), _choices(after)
+        if not _same(old_rest, new_rest) or [choice for choice in old if choice in new] != [
+            choice for choice in new if choice in old
+        ]:
+            message = f"{ALLOW_LIST} changed beyond the choices that it gained or lost"
+            raise FullMatrixError(message)
+        found: set[str] = set()
+        for choice in sorted(set(old) ^ set(new)):
+            found.update(self.controlled(choice))
+        return frozenset(found)
 
     def _variables(self) -> frozenset[str]:
         before, after = (toggles.as_mapping(tree.data(ROLE_VARIABLES) or {}) for tree in self.trees)
