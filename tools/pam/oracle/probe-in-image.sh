@@ -72,6 +72,12 @@ gcc "${flags[@]}" "-I${src}/modules/pam_faillock" -o "${work}/probe_faillock" \
 gcc "${flags[@]}" "-I${src}/modules/pam_pwhistory" -o "${work}/probe_pwhistory" \
   "${ORACLE}/probe_pwhistory.c" "${src}/modules/pam_pwhistory/pwhistory_config.c" \
   "${src}/libpam/pam_modutil_searchkey.c" "${ORACLE}/stubs.c" -Wl,--unresolved-symbols=ignore-all
+stack_flags=(-DLIBPAM_COMPILE "-DDEFAULT_MODULE_PATH=\"/lib/security/\"")
+if grep -q 'struct line_buffer' "${src}/libpam/pam_handlers.c"; then
+  stack_flags+=(-DPAM_LINE_BUFFER)
+fi
+gcc "${flags[@]}" "${stack_flags[@]}" -o "${work}/probe_stack" "${ORACLE}/probe_stack.c" \
+  "${src}/libpam/pam_misc.c" "${ORACLE}/stubs.c" -Wl,--unresolved-symbols=ignore-all
 
 output="${OUT}/${platform}.jsonl"
 printf '{"platform": "%s", "installed": "%s", "source": "%s"}\n' "${platform}" "${installed}" "${source_version}" >"${output}"
@@ -83,5 +89,10 @@ for case_dir in "${CASES}"/*/; do
     args+=("${arg//@conf/${case_dir}conf}")
   done <"${case_dir}/args"
   reading="$("${work}/probe_${reader}" "${args[@]}" 2>/dev/null)"
-  printf '{"id": "%s", "reading": %s}\n' "${id}" "${reading}" >>"${output}"
+  if [[ -f "${case_dir}stack" ]]; then
+    stack="$("${work}/probe_stack" "${case_dir}stack" 2>/dev/null)"
+    printf '{"id": "%s", "reading": %s, "stack": %s}\n' "${id}" "${reading}" "${stack}" >>"${output}"
+  else
+    printf '{"id": "%s", "reading": %s}\n' "${id}" "${reading}" >>"${output}"
+  fi
 done

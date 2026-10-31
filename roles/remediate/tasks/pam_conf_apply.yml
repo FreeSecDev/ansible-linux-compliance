@@ -73,7 +73,6 @@
       {{ (__linux_compliance_remediate_sc_current.content | b64decode)
          if __linux_compliance_remediate_sc_current is not skipped else '' }}
   ansible.builtin.set_fact:
-    __linux_compliance_remediate_sc_regexp: "{{ '^[ \t]*' ~ __linux_compliance_remediate_sc_setting ~ '(?:[ \t=]|$)' }}"
     __linux_compliance_remediate_sc_decision: >-
       {{ __linux_compliance_remediate_sc_text | freesecdev.linux_compliance.pam_conf_decision({
            'reader': __linux_compliance_remediate_sc.family,
@@ -130,7 +129,37 @@
                'mode': __linux_compliance_remediate_sc_stat.stat.mode | default(none),
                'owner': __linux_compliance_remediate_sc_stat.stat.uid | default('') | string,
                'group': __linux_compliance_remediate_sc_stat.stat.gid | default('') | string,
-               'sha256': __linux_compliance_remediate_sc_stat.stat.checksum | default(none)} }}
+               'sha256': __linux_compliance_remediate_sc_stat.stat.checksum | default(none),
+               'baseline_sha256': __linux_compliance_remediate_sc_baseline
+                                  if __linux_compliance_remediate_sc_baseline is not none
+                                  else __linux_compliance_remediate_sc_stat.stat.checksum | default(none)} }}
+  tags:
+    - always
+
+- name: PAM configuration line | Inspect the configuration file again just before the write, without a link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_sc.path }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_sc_recheck
+  when:
+    - __linux_compliance_remediate_sc_status == 'applied'
+    - not __linux_compliance_remediate_sc_shared
+  tags:
+    - always
+
+- name: PAM configuration line | Refuse the write when the file changed since it was read
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_status: >-
+      {{ 'changed_during_run'
+         if __linux_compliance_remediate_sc_recheck is not skipped
+            and not (__linux_compliance_remediate_sc_recheck.stat.isreg | default(false)
+                     and __linux_compliance_remediate_sc_recheck.stat.checksum
+                         == __linux_compliance_remediate_sc_stat.stat.checksum)
+         else __linux_compliance_remediate_sc_status }}
   tags:
     - always
 
@@ -155,6 +184,10 @@
         value: "{{ __linux_compliance_remediate_sc_prior.group }}"
       - name: sha256
         value: "{{ __linux_compliance_remediate_sc_prior.sha256 }}"
+      - name: baseline_sha256
+        value: >-
+          {{ __linux_compliance_remediate_sc_prior.baseline_sha256
+             | default(__linux_compliance_remediate_sc_prior.sha256) }}
     collection_version: "{{ __linux_compliance_remediate_collection_version }}"
   register: __linux_compliance_remediate_sc_record
   when:
@@ -163,13 +196,26 @@
   tags:
     - always
 
-- name: PAM configuration line | Write the setting with the value that the content's check accepts
-  ansible.builtin.lineinfile:
-    path: "{{ __linux_compliance_remediate_sc.path }}"
-    regexp: "{{ __linux_compliance_remediate_sc_regexp }}"
-    line: "{{ __linux_compliance_remediate_sc_line }}"
-    state: present
-    create: false
+- name: PAM configuration line | Remember that the family holds the file and the file's SHA-256 before its first write
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_entries: >-
+      {{ __linux_compliance_remediate_sc_entries | union([__linux_compliance_remediate_rule.rule_id]) }}
+    __linux_compliance_remediate_sc_baseline: >-
+      {{ __linux_compliance_remediate_sc_prior.baseline_sha256
+         | default(__linux_compliance_remediate_sc_prior.sha256) }}
+  when: __linux_compliance_remediate_sc_record is not skipped
+  tags:
+    - always
+
+- name: PAM configuration line | Write the exact text that the decision computed, every other byte unchanged
+  ansible.builtin.copy:
+    content: "{{ __linux_compliance_remediate_sc_decision.new_text }}"
+    dest: "{{ __linux_compliance_remediate_sc.path }}"
+    follow: false
+    force: true
+    mode: "{{ __linux_compliance_remediate_sc_stat.stat.mode }}"
+    owner: "{{ __linux_compliance_remediate_sc_stat.stat.uid | string }}"
+    group: "{{ __linux_compliance_remediate_sc_stat.stat.gid | string }}"
   register: __linux_compliance_remediate_sc_write
   when:
     - __linux_compliance_remediate_sc_status == 'applied'
@@ -224,7 +270,10 @@
                               ~ ' does not exist, so the PAM package that ships it is not installed; nothing is'
                               ~ ' created',
              'not_regular_file': __linux_compliance_remediate_sc.path
-                                 ~ ' is a symbolic link or not a regular file; nothing is written through it'
+                                 ~ ' is a symbolic link or not a regular file; nothing is written through it',
+             'changed_during_run': __linux_compliance_remediate_sc.path
+                                   ~ ' changed between the read and the write; nothing was written, and the rule'
+                                   ~ ' is decided again on the next run'
            }[__linux_compliance_remediate_sc_status] | default(__linux_compliance_remediate_sc_decision.reason),
            'changed': (__linux_compliance_remediate_sc_write is changed)
                       or (__linux_compliance_remediate_sc_record is changed)

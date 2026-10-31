@@ -69,6 +69,11 @@
     file: lifecycle_pwhistory_regressions.yml
   when: "'lifecycle_pwhistory_regressions.yml' in lifecycle_regression.files"
 
+- name: Lifecycle regressions | Run the pwhistory regressions for lines that pam_pwhistory reads its own way
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwhistory_readers.yml
+  when: "'lifecycle_pwhistory_readers.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Run the kernel module regressions for a change of method, changes by hand and site files
   ansible.builtin.include_tasks:
     file: lifecycle_kernel_modules_regressions.yml

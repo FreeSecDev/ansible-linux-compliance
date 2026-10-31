@@ -52,6 +52,19 @@ def recorded() -> dict[Key, dict[str, dict[str, int]]]:
     return found
 
 
+@functools.cache
+def stack_lines() -> dict[str, dict[str, dict[str, object]]]:
+    """Return the logical lines and tokens that libpam read of every stack case, by case."""
+    return {
+        str(entry["id"]): cast("dict[str, dict[str, object]]", entry["stack_lines"])
+        for entry in cast("list[dict[str, object]]", table()["cases"])
+        if "stack_lines" in entry
+    }
+
+
+VARIANTS = {"ubuntu": "buffer", "rhel_compatible": "getline"}
+
+
 def readings(case: reader_corpus.Case) -> dict[str, dict[str, int]]:
     key = reader_corpus.key_of(case)
     assert key in recorded(), f"{case.case_id} is not in the table; run make pam-reader-verdicts"
@@ -107,7 +120,21 @@ def test_the_model_reads_every_case_as_both_real_readers(case: reader_corpus.Cas
 )
 def test_the_module_lines_pass_the_arguments_that_libpam_passes(case: reader_corpus.Case) -> None:
     module = pam_conf.READERS[case.reader][0]
-    assert list(pam_conf.module_arguments(case.stack, module)) == [list(case.args)]
+    assert list(case.args) in list(pam_conf.module_arguments(case.stack, module))
+
+
+@pytest.mark.parametrize(
+    "case",
+    [case for case in reader_corpus.all_cases() if case.stack],
+    ids=lambda case: case.case_id,
+)
+def test_the_stack_is_assembled_and_split_as_libpam_does(case: reader_corpus.Case) -> None:
+    for platform, recorded_lines in stack_lines()[case.case_id].items():
+        model = [
+            pam_conf.strtok(line)
+            for line in pam_conf.assembled_lines(case.stack, VARIANTS[platform], exact=True)
+        ]
+        assert model == recorded_lines["lines"], platform
 
 
 @pytest.mark.parametrize("case", reader_corpus.base_cases(), ids=lambda case: case.case_id)
@@ -125,6 +152,37 @@ def test_no_decision_claims_a_setting_that_pam_reads_looser(case: reader_corpus.
             continue
         for platform, reading in observed.items():
             assert satisfies(case.reader, reading, rule), (case.case_id, rule, decision, platform)
+
+
+SEQUENCE_CASES = [
+    (case, rules)
+    for case in reader_corpus.base_cases()
+    if "-fuzz-" not in case.case_id
+    for rules in reader_corpus.SEQUENCES[case.reader]
+]
+
+
+@pytest.mark.parametrize(
+    ("case", "rules"),
+    SEQUENCE_CASES,
+    ids=[f"{case.case_id}-{rules[0][0]}-{rules[1][0]}" for case, rules in SEQUENCE_CASES],
+)
+def test_no_rule_of_two_in_a_row_ends_looser_than_it_claims(
+    case: reader_corpus.Case,
+    rules: tuple[tuple[str, str, str], tuple[str, str, str]],
+) -> None:
+    first, second = rules
+    middle = reader_corpus.after_text(case, first, case.text)
+    final = reader_corpus.after_text(case, second, middle)
+    claims = [
+        rule
+        for rule, text in ((first, case.text), (second, middle))
+        if reader_corpus.decide(case, rule, text)["status"] in {"applied", "compliant"}
+    ]
+    observed = readings(reader_corpus.Case("final", case.reader, final, case.args, case.stack))
+    for rule in claims:
+        for platform, reading in observed.items():
+            assert satisfies(case.reader, reading, rule), (case.case_id, rules, rule, platform)
 
 
 REVIEWED: dict[tuple[str, tuple[str, str, str]], str] = {
@@ -151,6 +209,21 @@ REVIEWED: dict[tuple[str, tuple[str, str, str]], str] = {
     ("faillock-unlock-600", ("unlock_time", "at_least", "604801")): "unsupported_value",
     ("faillock-unlock-600", ("fail_interval", "at_least", "999999999")): "unsupported_value",
     ("faillock-unlock-600", ("unlock_time", "at_least", "604800")): "applied",
+    ("faillock-comment-cr-deny-later", ("deny", "at_most", "4")): "compliant",
+    ("faillock-crlf-file", ("deny", "at_most", "4")): "applied",
+    ("faillock-crlf-audit", ("audit", "present", "")): "compliant",
+    ("faillock-multibyte-600", ("deny", "at_most", "4")): "unreadable_file",
+    ("faillock-multibyte-1023", ("deny", "at_most", "4")): "unreadable_file",
+    ("faillock-multibyte-1022", ("deny", "at_most", "4")): "compliant",
+    ("faillock-deny-65540", ("deny", "at_most", "4")): "unreadable_value",
+    ("faillock-deny-65536", ("deny", "at_most", "4")): "unreadable_value",
+    ("faillock-deny-control", ("deny", "at_most", "4")): "unreadable_value",
+    ("faillock-unlock-600", ("deny", "at_most", "65536")): "unsupported_value",
+    ("faillock-stack-bracket-glued", ("deny", "at_most", "4")): "overridden",
+    ("faillock-stack-continuation-comment", ("deny", "at_most", "4")): "overridden",
+    ("pwhistory-remember-comment-cr-later", ("remember", "at_least", "24")): "applied",
+    ("pwhistory-comment-cr-remember-then-24", ("remember", "at_least", "24")): "compliant",
+    ("pwhistory-stack-bracket-glued", ("remember", "at_least", "24")): "overridden",
 }
 
 

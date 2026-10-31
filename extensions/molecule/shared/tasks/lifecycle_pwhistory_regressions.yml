@@ -18,7 +18,6 @@
     pwr_stack: /etc/pam.d/system-auth
     pwr_service: /etc/pam.d/fsd-regression-pwhistory
     pwr_newline: "\n"
-    pwr_vt: "\v"
 
 - name: Pwhistory regressions | Name the three rules and their toggles
   ansible.builtin.set_fact:
@@ -150,23 +149,6 @@
         line: remember = 24
       statuses: [none, restored, restored]
       text: "{{ pwr_text }}"
-      recorded: []
-    - name: REMEMBER in upper case, which pam_pwhistory reads, refuses both remember rules and writes no remember
-      toggles: [true, true, true]
-      conf: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}"
-      statuses: [applied, hidden_setting, hidden_setting]
-      text: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}enforce_for_root{{ pwr_newline }}"
-      recorded: [enforce_for_root]
-    - name: the cleanup after the upper-case REMEMBER restores enforce_for_root alone
-      toggles: [false, false, false]
-      statuses: [restored, none, none]
-      text: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}"
-      recorded: []
-    - name: remember after a vertical tab, which pam_pwhistory reads, refuses both remember rules
-      toggles: [false, true, true]
-      conf: "{{ pwr_text ~ pwr_vt ~ 'remember = 1' ~ pwr_newline }}"
-      statuses: [none, hidden_setting, hidden_setting]
-      text: "{{ pwr_text ~ pwr_vt ~ 'remember = 1' ~ pwr_newline }}"
       recorded: []
     - name: conf= on the pam_pwhistory line of system-auth overrides every rule, enforce_for_root as well
       toggles: [true, true, true]

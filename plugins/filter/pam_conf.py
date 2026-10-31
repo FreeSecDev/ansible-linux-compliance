@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, cast
 
@@ -17,11 +18,15 @@ version_added: "0.1.0"
 description:
   - Reads the text of C(/etc/security/faillock.conf) or C(/etc/security/pwhistory.conf) the way
     the readers of linux-pam 1.5.1 and 1.5.3 do (C(read_config_file) and C(set_conf_opt) of
-    pam_faillock, C(pam_modutil_search_key) of pam_pwhistory), and the module lines of every
-    PAM service file the way libpam assembles and splits them.
-  - Returns the status of the rule (C(applied), C(compliant), C(overridden), C(hidden_setting),
-    C(duplicate_setting), C(stricter_setting), C(unreadable_file) or C(unsupported_value)), its
-    reason, the line to write and the one line of the setting that the collection would replace.
+    pam_faillock, C(pam_modutil_search_key) of pam_pwhistory), and the module lines of the PAM
+    service files the way libpam assembles them (both C(_pam_assemble_line) variants) and splits
+    them (C(_pam_StrTok)), with the service files of C(/etc/pam.d), C(/usr/lib/pam.d) and
+    C(/usr/share/pam.d) taken in libpam's order.
+  - Returns the status of the rule (C(applied), C(compliant), C(overridden), C(unreadable_stack),
+    C(hidden_setting), C(duplicate_setting), C(stricter_setting), C(unreadable_file),
+    C(unreadable_value) or C(unsupported_value)), its reason, the physical line to write, the
+    one physical line of the setting that the collection would replace and, for C(applied), the
+    exact new text of the file, every other byte unchanged.
   - A time that the profile requires above 604800 seconds is C(unsupported_value), because
     pam_faillock ignores such a value and keeps its default; the collection never writes one.
   - The model is checked against a verdict table that the real readers produce in the Molecule
@@ -43,7 +48,7 @@ options:
     type: dict
     required: true
   stack:
-    description: The text of every PAM service file, by path.
+    description: The text of every file of the PAM service directories, by path.
     type: dict
     required: true
 """
@@ -73,6 +78,9 @@ _value:
       type: str
     setting_line:
       description: The one line of the setting that the collection would replace, or null.
+      type: str
+    new_text:
+      description: The text of the file after the change, or null when nothing is written.
       type: str
 """
 
@@ -108,6 +116,13 @@ TIME_SETTINGS: Final[frozenset[str]] = frozenset(
 FAILLOCK_FLAGS: Final[frozenset[str]] = frozenset({"even_deny_root", "audit", "silent"})
 NUMBER: Final[str] = r"(0|[1-9][0-9]{0,8})"
 PAM_TYPES: Final[frozenset[str]] = frozenset({"auth", "account", "password", "session"})
+PAM_DIRECTORIES: Final[tuple[str, ...]] = ("/etc/pam.d", "/usr/lib/pam.d", "/usr/share/pam.d")
+PAM_LINE_LIMIT: Final[int] = 1023
+MAX_DENY: Final[int] = 65535
+ASSEMBLY_VARIANTS: Final[tuple[str, ...]] = ("buffer", "getline")
+BIDI_CONTROLS: Final[frozenset[str]] = frozenset(
+    chr(code) for code in (0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069)
+)
 RULE_KEYS: Final[frozenset[str]] = frozenset(
     {"reader", "setting", "comparison", "required", "stack_checked"}
 )
@@ -124,6 +139,11 @@ def scan_unsigned(value: str, bits: int) -> int | None:
     elif match.group(1) == "-":
         number = (ULONG_MAX + 1 - number) % (ULONG_MAX + 1)
     return number & ((1 << bits) - 1)
+
+
+def byte_length(text: str) -> int:
+    """Return the length of a text in the bytes that C(fgets) counts."""
+    return len(text.encode("utf-8", "surrogateescape"))
 
 
 def _faillock_line(line: str) -> tuple[str, str] | None:
@@ -156,7 +176,7 @@ def faillock_lines(text: str) -> tuple[list[tuple[int, str, str]], bool]:
     for index, line in enumerate(physical):
         if not line and not terminated[index]:
             continue
-        if len(line) >= FAILLOCK_BUFFER - 1 or ("\0" in line and terminated[index]):
+        if byte_length(line) >= FAILLOCK_BUFFER - 1 or ("\0" in line and terminated[index]):
             return found, False
         parsed = _faillock_line(line.split("\0", 1)[0])
         if parsed is not None:
@@ -250,71 +270,198 @@ def read_pwhistory(text: str, args: tuple[str, ...] = ()) -> dict[str, int]:
     return options
 
 
-def assembled_lines(text: str) -> Iterator[str]:
-    """Yield the logical lines of a PAM service file as C(_pam_assemble_line) joins them."""
-    logical = ""
-    pending = False
-    for line in text.split("\n"):
-        stripped = line.lstrip(PAM_SPLIT)
+def _newline_lines(text: str) -> list[str]:
+    lines = [line + "\n" for line in text.split("\n")]
+    lines[-1] = lines[-1][:-1]
+    return [line for line in lines if line]
+
+
+def assembled_lines(text: str, variant: str = "buffer", *, exact: bool = False) -> Iterator[str]:
+    """Yield the logical lines of a PAM service file as C(_pam_assemble_line) joins them.
+
+    C(buffer) is the fixed-buffer reader of the Ubuntu 1.5.3 package, which skips blank and
+    comment lines inside a continued line; C(getline) is the line-buffer reader of 1.5.1 on Rocky
+    Linux, which ends a continued line at a blank or comment line. libpam drops a continued line
+    at the end of the file; unless C(exact), it is yielded, so a decision reads at least what pam
+    reads.
+    """
+    lines = _buffer_lines(text) if variant == "buffer" else _getline_lines(text)
+    for line, complete in lines:
+        if complete or not exact:
+            yield line
+
+
+def _buffer_lines(text: str) -> Iterator[tuple[str, bool]]:
+    logical: str | None = None
+    for raw in _newline_lines(text):
+        stripped = raw.lstrip(PAM_SPLIT)
         if not stripped or stripped.startswith("#"):
             continue
         if "#" in stripped:
-            yield logical + stripped.split("#", 1)[0]
-            logical, pending = "", False
+            yield (logical or "") + stripped.split("#", 1)[0], True
+            logical = None
             continue
-        stripped = stripped.rstrip(PAM_SPLIT)
-        if stripped.endswith("\\"):
-            logical += stripped[:-1] + " "
-            pending = True
+        body = stripped.rstrip(PAM_SPLIT)
+        if body.endswith("\\"):
+            logical = (logical or "") + body[:-1] + " "
             continue
-        yield logical + stripped
-        logical, pending = "", False
-    if pending:
-        yield logical
+        yield (logical or "") + stripped, True
+        logical = None
+    if logical is not None:
+        yield logical, False
 
 
-def _tokens(text: str) -> list[str]:
-    """Split the arguments of a module line as C(_pam_mkargv) does, with brackets kept together."""
+def _getline_lines(text: str) -> Iterator[tuple[str, bool]]:
+    assembled: str | None = None
+    for raw in _newline_lines(text):
+        body = raw.rstrip(PAM_SPLIT)
+        continued = body.endswith("\\")
+        content = body[:-1] + " " if continued else raw
+        start = content.lstrip(" \t")
+        start = start.split("#", 1)[0]
+        if continued and "#" not in raw:
+            if start:
+                assembled = (assembled or "") + start
+            continue
+        if assembled is not None or (start and not start.startswith("\n")):
+            assembled = (assembled or "") + start
+        if assembled:
+            yield assembled, True
+        assembled = None
+    if assembled is not None:
+        yield assembled, False
+
+
+def strtok(line: str) -> list[str]:
+    r"""Split a logical line into tokens as libpam's C(_pam_StrTok) does.
+
+    A token that starts with C([) runs to the first C(]) that is not escaped as C(\]), and the
+    next token starts right after that C(]); any other token ends at a blank, tab or newline.
+    """
     found: list[str] = []
     position = 0
-    while position < len(text):
-        while position < len(text) and text[position] in PAM_SPLIT:
+    while True:
+        while position < len(line) and line[position] in PAM_SPLIT:
             position += 1
-        if position >= len(text):
-            break
-        if text[position] == "[":
+        if position >= len(line):
+            return found
+        if line[position] == "[":
+            token = []
             end = position + 1
-            while end < len(text) and not (text[end] == "]" and text[end - 1] != "\\"):
+            while end < len(line) and line[end] != "]":
+                if line[end] == "\\" and end + 1 < len(line) and line[end + 1] == "]":
+                    end += 1
+                token.append(line[end])
                 end += 1
-            found.append(text[position + 1 : end].replace("\\]", "]"))
-            position = end + 1
+            found.append("".join(token))
+        else:
+            end = position
+            while end < len(line) and line[end] not in PAM_SPLIT:
+                end += 1
+            found.append(line[position:end])
+        position = end + 1
+
+
+@dataclass(frozen=True)
+class ModuleLine:
+    """One logical line of a service file, read the way C(_pam_parse_conf_file) reads it."""
+
+    module: str | None
+    arguments: tuple[str, ...]
+    include: str | None
+
+
+def _token(tokens: list[str], index: int) -> str | None:
+    return tokens[index] if index < len(tokens) else None
+
+
+def module_lines(text: str, variant: str) -> Iterator[ModuleLine]:
+    """Yield the module and include lines of a service file for one assembly variant."""
+    for line in assembled_lines(text, variant):
+        tokens = strtok(line)
+        kind = (_token(tokens, 0) or "").removeprefix("-").lower()
+        control = (_token(tokens, 1) or "").lower()
+        if kind == "@include":
+            yield ModuleLine(None, (), _token(tokens, 1))
+        elif kind not in PAM_TYPES or not control:
             continue
-        end = position
-        while end < len(text) and text[end] not in PAM_SPLIT:
-            end += 1
-        found.append(text[position:end])
-        position = end
-    return found
-
-
-MODULE_LINE: Final[str] = r"[ \t\n]*([^ \t\n]+)[ \t\n]+(?:\[[^\]]*\]|[^ \t\n]+)[ \t\n]+(.*)"
+        elif control in {"include", "substack"}:
+            yield ModuleLine(None, (), _token(tokens, 2))
+        elif _token(tokens, 2) is not None:
+            yield ModuleLine(_token(tokens, 2), tuple(tokens[3:]), None)
 
 
 def module_arguments(text: str, module: str) -> Iterator[list[str]]:
-    """Yield the arguments of every line of a PAM service file that loads C(module).
+    """Yield the arguments of every line of a service file that loads C(module), in either variant.
 
-    libpam compares the type without case and drops one leading C(-); the control is a word or
-    a bracketed list that may contain blanks.
+    libpam compares the type without case and drops one leading C(-); the control is a word or a
+    bracketed list, which may be followed by the module path without a blank.
     """
-    for line in assembled_lines(text):
-        match = re.match(MODULE_LINE, line, re.DOTALL)
-        if match is None:
+    seen: set[tuple[str, ...]] = set()
+    for variant in ASSEMBLY_VARIANTS:
+        for line in module_lines(text, variant):
+            if line.module is None or line.module.rsplit("/", 1)[-1] != module + ".so":
+                continue
+            if line.arguments not in seen:
+                seen.add(line.arguments)
+                yield list(line.arguments)
+
+
+def _winners(stack: Mapping[str, str]) -> dict[str, str]:
+    """Return the service files that libpam opens by name: the first directory that has the name."""
+    effective: dict[str, str] = {}
+    names: dict[str, tuple[int, str]] = {}
+    for path in sorted(stack):
+        directory, _slash, name = path.rpartition("/")
+        if directory not in PAM_DIRECTORIES:
+            effective[path] = stack[path]
             continue
-        kind = match.group(1)
-        kind = kind.removeprefix("-")
-        parts = _tokens(match.group(2))
-        if kind.lower() in PAM_TYPES and parts and parts[0].rsplit("/", 1)[-1] == module + ".so":
-            yield parts[1:]
+        rank = PAM_DIRECTORIES.index(directory)
+        if name not in names or names[name][0] > rank:
+            names[name] = (rank, path)
+    effective.update({path: stack[path] for _rank, path in names.values()})
+    return effective
+
+
+def _targets(text: str) -> set[str]:
+    """Return the include and substack targets of a service file that name a directory."""
+    return {
+        line.include
+        for variant in ASSEMBLY_VARIANTS
+        for line in module_lines(text, variant)
+        if line.include is not None and "/" in line.include
+    }
+
+
+def effective_stack(stack: Mapping[str, str]) -> tuple[dict[str, str], list[str]]:
+    """Return the service files that libpam reads and what the collection cannot read for it.
+
+    A service name is read from the first of C(/etc/pam.d), C(/usr/lib/pam.d) and
+    C(/usr/share/pam.d) that has it; an include or substack of an absolute path, or of a path
+    with a directory, reads that file, which must be one of the files read. A file with a line of
+    1023 bytes or more, which the Ubuntu reader splits into two lines, or with a NUL byte, is not
+    read either.
+    """
+    effective = _winners(stack)
+    problems: set[str] = set()
+    pending = list(effective)
+    while pending:
+        path = pending.pop()
+        text = effective[path]
+        if "\0" in text or any(byte_length(line) >= PAM_LINE_LIMIT for line in text.split("\n")):
+            problems.add(f"{path} has a NUL byte or a line of {PAM_LINE_LIMIT} bytes or more")
+            continue
+        for target in sorted(_targets(text)):
+            candidates = (
+                [target] if target.startswith("/") else [f"{d}/{target}" for d in PAM_DIRECTORIES]
+            )
+            found = next((candidate for candidate in candidates if candidate in stack), None)
+            if found is None:
+                problems.add(f"{path} includes {target}, which the collection does not read")
+            elif found not in effective:
+                effective[found] = stack[found]
+                pending.append(found)
+    return effective, sorted(problems)
 
 
 def overrides(argument: str, reader: str, setting: str) -> bool:
@@ -332,7 +479,10 @@ def overrides(argument: str, reader: str, setting: str) -> bool:
 def stack_overrides(
     stack: Mapping[str, str], reader: str, setting: str, *, checked: bool
 ) -> list[str]:
-    """Return the PAM service files whose module lines override the setting in the file."""
+    """Return the service files whose module lines override the setting in the file.
+
+    C(stack) holds the service files that libpam reads (see C(effective_stack)).
+    """
     module = READERS[reader][0]
     found: list[str] = []
     for path in sorted(stack):
@@ -348,11 +498,50 @@ def stack_overrides(
 
 def _strict(line: str, setting: str, *, flag: bool) -> bool:
     pattern = rf"[ \t]*{setting}[ \t]*" if flag else rf"[ \t]*{setting}[ \t]*=[ \t]*{NUMBER}[ \t]*"
-    return re.fullmatch(pattern, line) is not None
+    return re.fullmatch(pattern, body_of(line)) is not None
 
 
 def _editable(line: str, setting: str) -> bool:
-    return re.match(rf"[ \t]*{setting}(?:[ \t=]|$)", line) is not None
+    return re.match(rf"[ \t]*{setting}(?:[ \t=]|$)", body_of(line)) is not None
+
+
+def body_of(line: str) -> str:
+    """Return a physical line without the carriage return of a CRLF line ending."""
+    return line.removesuffix("\r")
+
+
+def recordable(text: str) -> bool:
+    """Return whether the state ledger records a text: no control character but tab and CR."""
+    return not any(
+        character in BIDI_CONTROLS
+        or unicodedata.category(character) == "Cs"
+        or (unicodedata.category(character) == "Cc" and character not in "\t\r")
+        for character in text
+    )
+
+
+def edited_lines(text: str, setting: str) -> list[int]:
+    """Return the indexes of the physical lines that the collection edits for a setting."""
+    return [index for index, line in enumerate(text.split("\n")) if _editable(line, setting)]
+
+
+def written_text(text: str, index: int | None, line: str) -> str:
+    """Return the text with the physical line at C(index) replaced by C(line), or C(line) appended.
+
+    The line is written without a carriage return, which pam_pwhistory would read as part of a
+    flag's name; a file without a final newline keeps having none, so the cleanup that removes
+    the line gives back the same bytes.
+    """
+    lines = text.split("\n")
+    if index is not None:
+        lines[index] = line
+    elif text == "":
+        lines = [line, ""]
+    elif lines[-1] == "":
+        lines.insert(len(lines) - 1, line)
+    else:
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def satisfies(setting: str, comparison: str, number: int, required: int) -> bool:
@@ -402,7 +591,13 @@ class Rule:
 def _decision(
     status: str, reason: str | None, line: str, setting_line: str | None
 ) -> dict[str, object]:
-    return {"status": status, "reason": reason, "line": line, "setting_line": setting_line}
+    return {
+        "status": status,
+        "reason": reason,
+        "line": line,
+        "setting_line": setting_line,
+        "new_text": None,
+    }
 
 
 def _rule(value: object) -> Rule:
@@ -449,8 +644,25 @@ def pam_conf_decision(text: object, rule: object, stack: object) -> dict[str, ob
             "nothing is written"
         )
         return _decision("unsupported_value", reason, decided.line, None)
+    if decided.setting == "deny" and int(decided.required) > MAX_DENY:
+        reason = (
+            f"the profile requires deny = {decided.required}, above the {MAX_DENY} that "
+            "pam_faillock stores in 16 bits, so it would read another value; nothing is written"
+        )
+        return _decision("unsupported_value", reason, decided.line, None)
     files = {str(key): str(value) for key, value in cast("dict[object, object]", stack).items()}
-    overriding = stack_overrides(files, decided.reader, decided.setting, checked=decided.checked)
+    effective, problems = effective_stack(files)
+    if problems:
+        unread = "; ".join(problems)
+        reason = (
+            f"libpam reads service files that the collection cannot read as it does ({unread}), "
+            f"so it cannot tell whether a {READERS[decided.reader][0]} line overrides the file; "
+            "nothing is written"
+        )
+        return _decision("unreadable_stack", reason, decided.line, None)
+    overriding = stack_overrides(
+        effective, decided.reader, decided.setting, checked=decided.checked
+    )
     if overriding:
         names = ", ".join(overriding)
         reason = (
@@ -459,27 +671,32 @@ def pam_conf_decision(text: object, rule: object, stack: object) -> dict[str, ob
             "precedence over the file; the collection does not edit the PAM stack"
         )
         return _decision("overridden", reason, decided.line, None)
-    return _file_decision(text, decided)
+    decision = _file_decision(text, decided)
+    if decision["status"] == "applied":
+        index = decision.pop("index")
+        decision["new_text"] = written_text(text, cast("int | None", index), str(decision["line"]))
+    decision.pop("index", None)
+    return decision
 
 
-def _file_decision(text: str, rule: Rule) -> dict[str, object]:
-    """Return the decision from the lines of the file that pam reads for the setting."""
-    lines, readable = faillock_lines(text)
+def _file_refusal(text: str, rule: Rule) -> dict[str, object] | None:
+    """Return the refusal for a file that the collection cannot decide or write, or None."""
+    readable = faillock_lines(text)[1]
     if "\0" in text or (rule.reader == "faillock" and not readable):
         reason = (
-            "the file holds a NUL character or a line of 1023 characters or more: pam_faillock "
+            "the file holds a NUL character or a line of 1023 bytes or more: pam_faillock "
             "fails on such a file instead of using any setting, and a rewrite could turn a NUL "
             "that pam still skips into one that breaks it; nothing is written"
         )
         return _decision("unreadable_file", reason, rule.line, None)
-    if rule.reader == "faillock":
-        read = [index for index, name, _value in lines if name == rule.setting]
-    else:
-        read = [
-            index for index, name, _value in pwhistory_lines(text) if name.lower() == rule.setting
-        ]
-    physical = text.split("\n")
-    edited = [index for index, value in enumerate(physical) if _editable(value, rule.setting)]
+    if any("\udc80" <= character <= "\udcff" for character in text):
+        reason = (
+            "the file is not valid UTF-8, so the collection cannot write it back with every other "
+            "byte unchanged; nothing is written"
+        )
+        return _decision("unreadable_file", reason, rule.line, None)
+    read = _read_lines(text, rule)
+    edited = edited_lines(text, rule.setting)
     if read != edited:
         reason = (
             f"pam reads {len(read)} line(s) of {rule.setting}, {len(edited)} of them in the form "
@@ -491,13 +708,36 @@ def _file_decision(text: str, rule: Rule) -> dict[str, object]:
         winner = "last" if rule.reader == "faillock" else "first"
         reason = f"the file sets {rule.setting} on {len(read)} lines and pam takes the {winner}"
         return _decision("duplicate_setting", reason, rule.line, None)
-    current = physical[read[0]] if read else None
-    if current is None:
-        return _decision("applied", None, rule.line, None)
+    current = text.split("\n")[read[0]] if read else ""
+    if not recordable(current):
+        reason = (
+            f"the line {current!r} holds a control character that the state ledger does not "
+            "record, so the line could not be restored exactly; nothing is written"
+        )
+        return _decision("unreadable_value", reason, rule.line, None)
+    return None
+
+
+def _read_lines(text: str, rule: Rule) -> list[int]:
+    """Return the indexes of the lines of the setting that pam reads."""
+    if rule.reader == "faillock":
+        return [index for index, name, _value in faillock_lines(text)[0] if name == rule.setting]
+    return [index for index, name, _value in pwhistory_lines(text) if name.lower() == rule.setting]
+
+
+def _file_decision(text: str, rule: Rule) -> dict[str, object]:
+    """Return the decision from the lines of the file that pam reads for the setting."""
+    refusal = _file_refusal(text, rule)
+    if refusal is not None:
+        return refusal
+    read = _read_lines(text, rule)
+    if not read:
+        return {**_decision("applied", None, rule.line, None), "index": None}
+    current = text.split("\n")[read[0]]
     if rule.flag:
         status = "compliant" if _strict(current, rule.setting, flag=True) else "applied"
-        return _decision(status, None, rule.line, current)
-    return _number_decision(rule, current)
+        return {**_decision(status, None, rule.line, current), "index": read[0]}
+    return {**_number_decision(rule, current), "index": read[0]}
 
 
 def _number_decision(rule: Rule, current: str) -> dict[str, object]:
@@ -505,6 +745,14 @@ def _number_decision(rule: Rule, current: str) -> dict[str, object]:
     parsed = _faillock_line(current) if rule.reader == "faillock" else _pwhistory_line(current)
     number = _value_of(rule.reader, rule.setting, parsed[1]) if parsed is not None else None
     required = int(rule.required)
+    literal = re.match(r"[ \t\n\v\f\r]*\+?([0-9]+)", parsed[1]) if parsed is not None else None
+    if rule.setting == "deny" and literal is not None and int(literal.group(1)) > MAX_DENY:
+        reason = (
+            f"deny is {literal.group(1)}, above the {MAX_DENY} that pam_faillock stores in 16 "
+            f"bits: pam reads {number} while the check reads {literal.group(1)}, so the "
+            "collection cannot tell which the site meant; nothing is written"
+        )
+        return _decision("unreadable_value", reason, rule.line, current)
     if number == 0 and rule.setting in NEVER_SETTINGS and required > 0:
         reason = (
             f"{rule.setting} = 0 never unlocks, which is stricter than the {required} that the "

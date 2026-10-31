@@ -1,0 +1,179 @@
+---
+- name: Pwhistory readers | Refuse to run unless the pwhistory topic has just run its cycles
+  ansible.builtin.assert:
+    that:
+      - lifecycle_topic.family == 'pwhistory'
+      - lifecycle_rule_ids | length == 3
+      - lifecycle_allow_disruptive == ['pwhistory']
+    fail_msg: >-
+      The pwhistory reader regressions reuse the facts of the pwhistory lifecycle, which must have just run with its
+      three rules; the topic was {{ lifecycle_topic.family | default('none') }} with {{ lifecycle_rule_ids }}.
+    quiet: true
+
+- name: Pwhistory readers | Name the rules, the toggles and the lines of the regressions
+  ansible.builtin.set_fact:
+    pwr_label: pwhistory reader regressions
+    pwr_prefix: xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_
+    pwr_conf: /etc/security/pwhistory.conf
+    pwr_stack: /etc/pam.d/system-auth
+    pwr_service: /etc/pam.d/fsd-regression-pwhistory
+    pwr_newline: "\n"
+    pwr_vt: "\v"
+    pwr_cr: "\r"
+
+- name: Pwhistory readers | Name the three rules and their toggles
+  ansible.builtin.set_fact:
+    pwr_root: "{{ pwr_prefix }}enforce_for_root"
+    pwr_password: "{{ pwr_prefix }}remember_password_auth"
+    pwr_system: "{{ pwr_prefix }}remember_system_auth"
+    pwr_root_toggle: linux_compliance_rule_accounts_password_pam_pwhistory_enforce_for_root_enabled
+    pwr_password_toggle: linux_compliance_rule_accounts_password_pam_pwhistory_remember_password_auth_enabled
+    pwr_system_toggle: linux_compliance_rule_accounts_password_pam_pwhistory_remember_system_auth_enabled
+
+- name: Pwhistory readers | Check that the lifecycle ran exactly these three rules
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rule_ids | sort == [pwr_root, pwr_password, pwr_system] | sort
+      - lifecycle_rules | map(attribute='toggle') | sort == [pwr_root_toggle, pwr_password_toggle, pwr_system_toggle]
+    fail_msg: "{{ pwr_label }}: {{ lifecycle_rule_ids }}"
+    quiet: true
+
+- name: Pwhistory readers | Read pwhistory.conf and system-auth as built
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - "{{ pwr_conf }}"
+    - "{{ pwr_stack }}"
+  register: pwr_original
+
+- name: Pwhistory readers | Inspect pwhistory.conf and system-auth as built
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ pwr_conf }}"
+    - "{{ pwr_stack }}"
+  register: pwr_original_stats
+
+- name: Pwhistory readers | Keep the texts as built and after the apply
+  ansible.builtin.set_fact:
+    pwr_text: "{{ pwr_original.results[0].content | b64decode }}"
+    pwr_applied_text: >-
+      {{ pwr_original.results[0].content | b64decode ~ 'enforce_for_root' ~ pwr_newline ~ 'remember = 24'
+         ~ pwr_newline }}
+
+- name: Pwhistory readers | Take the state of the whole instance before the reader regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: Pwhistory readers | Remember the state of the whole instance before the reader regressions
+  ansible.builtin.set_fact:
+    pwr_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: Pwhistory readers | Run each step of the reader regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_pwhistory_step.yml
+  loop:
+    - name: REMEMBER in upper case, which pam_pwhistory reads, refuses both remember rules and writes no remember
+      toggles: [true, true, true]
+      conf: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}"
+      statuses: [applied, hidden_setting, hidden_setting]
+      text: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}enforce_for_root{{ pwr_newline }}"
+      recorded: [enforce_for_root]
+    - name: the cleanup after the upper-case REMEMBER restores enforce_for_root alone
+      toggles: [false, false, false]
+      statuses: [restored, none, none]
+      text: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}"
+      recorded: []
+    - name: remember after a vertical tab, which pam_pwhistory reads, refuses both remember rules
+      toggles: [false, true, true]
+      conf: "{{ pwr_text ~ pwr_vt ~ 'remember = 1' ~ pwr_newline }}"
+      statuses: [none, hidden_setting, hidden_setting]
+      text: "{{ pwr_text ~ pwr_vt ~ 'remember = 1' ~ pwr_newline }}"
+      recorded: []
+    - name: a comment that hides a remember behind a CR keeps its bytes when remember is rewritten
+      toggles: [true, true, true]
+      conf: "{{ pwr_text ~ 'remember = 5 # x' ~ pwr_cr ~ 'remember = 1' ~ pwr_newline }}"
+      statuses: [applied, applied, applied]
+      text: "{{ pwr_text }}remember = 24{{ pwr_newline }}enforce_for_root{{ pwr_newline }}"
+      recorded: [enforce_for_root, remember_password_auth, remember_system_auth]
+    - name: the cleanup gives the line with the CR back byte for byte
+      toggles: [false, false, false]
+      statuses: [restored, restored, restored]
+      text: "{{ pwr_text ~ 'remember = 5 # x' ~ pwr_cr ~ 'remember = 1' ~ pwr_newline }}"
+      recorded: []
+    - name: a CR in a comment before a compliant remember is kept when enforce_for_root is written
+      toggles: [true, true, true]
+      conf: "{{ pwr_text ~ '# x' ~ pwr_cr ~ 'remember = 1' ~ pwr_newline ~ 'remember = 24' ~ pwr_newline }}"
+      statuses: [applied, compliant, compliant]
+      text: >-
+        {{ pwr_text ~ '# x' ~ pwr_cr ~ 'remember = 1' ~ pwr_newline ~ 'remember = 24' ~ pwr_newline
+           ~ 'enforce_for_root' ~ pwr_newline }}
+      recorded: [enforce_for_root]
+    - name: the cleanup removes enforce_for_root and keeps the CR
+      toggles: [false, false, false]
+      statuses: [restored, none, none]
+      text: "{{ pwr_text ~ '# x' ~ pwr_cr ~ 'remember = 1' ~ pwr_newline ~ 'remember = 24' ~ pwr_newline }}"
+      recorded: []
+    - name: a CRLF file gets remember in place, and a flag with a CR, which pam_pwhistory does not read, is refused
+      toggles: [true, true, true]
+      conf: >-
+        {{ '# pwhistory' ~ pwr_cr ~ pwr_newline ~ 'remember = 5' ~ pwr_cr ~ pwr_newline ~ 'enforce_for_root'
+           ~ pwr_cr ~ pwr_newline }}
+      statuses: [hidden_setting, applied, applied]
+      text: >-
+        {{ '# pwhistory' ~ pwr_cr ~ pwr_newline ~ 'remember = 24' ~ pwr_newline ~ 'enforce_for_root'
+           ~ pwr_cr ~ pwr_newline }}
+      recorded: [remember_password_auth, remember_system_auth]
+    - name: the cleanup gives the CRLF file back byte for byte
+      toggles: [false, false, false]
+      statuses: [none, restored, restored]
+      text: >-
+        {{ '# pwhistory' ~ pwr_cr ~ pwr_newline ~ 'remember = 5' ~ pwr_cr ~ pwr_newline ~ 'enforce_for_root'
+           ~ pwr_cr ~ pwr_newline }}
+      recorded: []
+  loop_control:
+    loop_var: pwr_step
+    label: "{{ pwr_step.name }}"
+
+- name: Pwhistory readers | Give pwhistory.conf its content, mode and ownership as built back
+  ansible.builtin.copy:
+    content: "{{ pwr_text }}"
+    dest: "{{ pwr_conf }}"
+    follow: false
+    mode: "{{ pwr_original_stats.results[0].stat.mode }}"
+    owner: root
+    group: root
+
+- name: Pwhistory readers | Give system-auth its content, mode and ownership as built back
+  ansible.builtin.copy:
+    content: "{{ pwr_original.results[1].content | b64decode }}"
+    dest: "{{ pwr_stack }}"
+    follow: false
+    mode: "{{ pwr_original_stats.results[1].stat.mode }}"
+    owner: root
+    group: root
+
+- name: Pwhistory readers | Read the ledger after the reader regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: pwr_ledger_after
+
+- name: Pwhistory readers | Check that the ledger records no rule of the topic any more
+  ansible.builtin.assert:
+    that:
+      - pwr_ledger_after.entries | selectattr('rule_id', 'in', lifecycle_rule_ids) | list == []
+    fail_msg: "{{ pwr_label }}: the ledger still holds {{ pwr_ledger_after.entries }}"
+    quiet: true
+
+- name: Pwhistory readers | Assert that the whole instance is back to its state before the reader regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: pwhistory reader regressions
+    lifecycle_broad_step: the reader regressions
+    lifecycle_broad_reference: "{{ pwr_broad_before }}"
+
+- name: Pwhistory readers | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_pwhistory_readers.yml'] }}"

@@ -43,11 +43,14 @@
       - notapplicable
       - not_regular_file
       - overridden
+      - unreadable_stack
       - hidden_setting
       - duplicate_setting
       - stricter_setting
       - unreadable_file
+      - unreadable_value
       - unsupported_value
+      - changed_during_run
     pam_conf_watched:
       - /etc/security/faillock.conf
       - /etc/security/pwhistory.conf

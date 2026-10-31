@@ -284,6 +284,10 @@ def assert_line_matches(
             line = written_line(parameters, value)
             match = re.search(pattern, f"# comment\n{line}\n", re.MULTILINE)
             assert match is not None, (rule_id, pattern, line)
+            crlf = re.search(pattern, f"# comment\r\n{line}\r\n", re.MULTILINE)
+            assert crlf is not None, (rule_id, pattern, "a CRLF line that stays compliant")
+            if parameters["comparison"] != "present":
+                assert crlf.group(1) == value, (rule_id, pattern)
             assert re.search(pattern, f"# {line}\n", re.MULTILINE) is None, (rule_id, pattern)
             if parameters["comparison"] != "present":
                 assert match.group(1) == value, (rule_id, pattern)

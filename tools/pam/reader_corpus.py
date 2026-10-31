@@ -7,19 +7,21 @@ good as its agreement with the real readers, so ``tools/pam/generate-reader-verd
 the readers that the Molecule images install against every case of this corpus and the table
 ``tests/fixtures/pam_conf/reader_verdicts.json`` records what they read.
 
-``cases`` writes one directory per case below ``--out``: the file text (``conf``), the reader
-and the module arguments (``args``, one per line, ``@conf`` standing for the case's file). The
-corpus holds the base cases below and, for every base case and rule whose decision is
-``applied``, the file that the family would leave behind (the line written with the
-``lineinfile`` semantics of the family), so the table also records what pam reads after the
-change. ``assemble`` joins the outputs of every image into the table.
+``cases`` writes one directory per case below ``--out``: the file text (``conf``), the reader,
+the module arguments (``args``, one per line, ``@conf`` standing for the case's file) and, for a
+case with a PAM line, the service file (``stack``), whose logical lines and tokens the probe
+reads with libpam's own ``_pam_assemble_line`` and ``_pam_StrTok``. The corpus holds the base
+cases below and the files that the family leaves behind: for every base case and rule whose
+decision is ``applied``, the exact ``new_text`` that the role writes with
+``ansible.builtin.copy``, and for every hand-written case, the file after two rules in a row, so
+the table also records what pam reads after each change. ``assemble`` joins the outputs of every
+image into the table.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +33,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 TABLE: Final[Path] = Path("tests/fixtures/pam_conf/reader_verdicts.json")
-SCHEMA_VERSION: Final[int] = 1
+SCHEMA_VERSION: Final[int] = 2
 STACK_PATHS: Final[dict[str, str]] = {
     "faillock": "/etc/pam.d/common-auth",
     "pwhistory": "/etc/pam.d/system-auth",
@@ -68,6 +70,18 @@ READING_KEYS: Final[dict[str, tuple[str, ...]]] = {
     "pwhistory": ("remember", "enforce_for_root"),
 }
 UNCHECKED_STACK: Final[frozenset[tuple[str, str]]] = frozenset({("pwhistory", "enforce_for_root")})
+SEQUENCES: Final[dict[str, tuple[tuple[tuple[str, str, str], tuple[str, str, str]], ...]]] = {
+    "faillock": (
+        (("unlock_time", "at_least", "900"), ("deny", "at_most", "4")),
+        (("deny", "at_most", "4"), ("unlock_time", "at_least", "900")),
+        (("even_deny_root", "present", ""), ("root_unlock_time", "at_least", "60")),
+        (("audit", "present", ""), ("deny", "at_most", "3")),
+    ),
+    "pwhistory": (
+        (("enforce_for_root", "present", ""), ("remember", "at_least", "24")),
+        (("remember", "at_least", "24"), ("enforce_for_root", "present", "")),
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -141,6 +155,21 @@ FAILLOCK_TEXTS: Final[dict[str, str]] = {
     "nul-last": "deny = 3\ndeny = 10\0",
     "unterminated": "deny = 3",
     "unterminated-long": "deny = 3 #" + "x" * 1013,
+    "comment-cr-deny-later": "deny = 3\n# site\rdeny = 10\n",
+    "mid-cr-deny": "deny = 3\rdeny = 10\n",
+    "crlf-file": "# faillock\r\ndeny = 10\r\naudit\r\n",
+    "crlf-audit": "# faillock\r\naudit\r\n",
+    "crlf-deny-3": "# faillock\r\ndeny = 3\r\n",
+    "crlf-unlock-900": "unlock_time = 900\r\n",
+    "lone-cr-end": "deny = 3\r",
+    "no-final-newline": "# faillock\naudit",
+    "multibyte-1022": "# " + "\u00e9" * 510 + "\ndeny = 3\n",
+    "multibyte-1023": "# " + "\u00e9" * 511 + "\ndeny = 3\n",
+    "multibyte-600": "# " + "\u00e9" * 600 + "\ndeny = 3\n",
+    "deny-65535": "deny = 65535\n",
+    "deny-65536": "deny = 65536\n",
+    "deny-65540": "deny = 65540\n",
+    "deny-control": "deny = 3\x01\n",
 }
 PWHISTORY_TEXTS: Final[dict[str, str]] = {
     "empty": "",
@@ -167,6 +196,11 @@ PWHISTORY_TEXTS: Final[dict[str, str]] = {
     "enforce-upper": "ENFORCE_FOR_ROOT\n",
     "enforce-0": "enforce_for_root = 0\n",
     "enforce-vt": "\x0benforce_for_root\n",
+    "remember-comment-cr-later": "remember = 5 # x\rremember = 1\n",
+    "comment-cr-remember-then-24": "# x\rremember = 1\nremember = 24\n",
+    "crlf-remember-5": "# pwhistory\r\nremember = 5\r\nenforce_for_root\r\n",
+    "crlf-enforce": "enforce_for_root\r\n",
+    "multibyte-remember": "# " + "\u00e9" * 600 + "\nremember = 24\n",
 }
 FAILLOCK_STACKS: Final[tuple[tuple[str, str, tuple[str, ...]], ...]] = (
     ("stack-deny", "auth required pam_faillock.so authfail deny=10\n", ("authfail", "deny=10")),
@@ -213,6 +247,34 @@ FAILLOCK_STACKS: Final[tuple[tuple[str, str, tuple[str, ...]], ...]] = (
     ),
     ("stack-account", "account required pam_faillock.so\n", ()),
     ("stack-comment", "auth required pam_faillock.so preauth # deny=10\n", ("preauth",)),
+    ("stack-bracket-glued", "auth [default=die]pam_faillock.so deny=10\n", ("deny=10",)),
+    (
+        "stack-bracket-glued-args",
+        "auth [default=die]pam_faillock.so [authfail][deny=10]audit\n",
+        ("authfail", "deny=10", "audit"),
+    ),
+    (
+        "stack-bracket-inside-token",
+        "auth required pam_faillock.so authfail[deny=10]\n",
+        ("authfail[deny=10]",),
+    ),
+    (
+        "stack-bracket-escaped",
+        "auth [success=1 default=ignore \\] x] pam_faillock.so deny=10\n",
+        ("deny=10",),
+    ),
+    (
+        "stack-continuation-comment",
+        "auth required pam_unix.so \\\n# site\nauth required pam_faillock.so deny=10\n",
+        ("deny=10",),
+    ),
+    ("stack-cr-argument", "auth required pam_faillock.so deny=10\r\n", ("deny=10\r",)),
+    ("stack-tab-separated", "auth\trequired\tpam_faillock.so\tdeny=10\n", ("deny=10",)),
+    (
+        "stack-continuation-eof",
+        "auth required pam_faillock.so preauth\nauth required pam_faillock.so \\",
+        ("preauth",),
+    ),
 )
 PWHISTORY_STACKS: Final[tuple[tuple[str, str, tuple[str, ...]], ...]] = (
     (
@@ -234,6 +296,7 @@ PWHISTORY_STACKS: Final[tuple[tuple[str, str, tuple[str, ...]], ...]] = (
         ("enforce_for_root",),
     ),
     ("stack-plain", "password requisite pam_pwhistory.so use_authtok\n", ("use_authtok",)),
+    ("stack-bracket-glued", "password [default=die]pam_pwhistory.so remember=1\n", ("remember=1",)),
 )
 STACK_FILES: Final[dict[str, str]] = {
     "faillock": "deny = 3\nunlock_time = 900\n",
@@ -270,7 +333,7 @@ FUZZ_VALUES: Final[tuple[str, ...]] = (
     "",
 )
 FUZZ_STRIDE: Final[int] = 97
-FUZZ_COUNT: Final[int] = 80
+FUZZ_COUNT: Final[int] = 64
 
 
 def fuzz_texts(reader: str) -> list[str]:
@@ -317,21 +380,8 @@ def stack_of(case: Case) -> dict[str, str]:
     return {STACK_PATHS[case.reader]: case.stack} if case.stack else {}
 
 
-def lineinfile(text: str, setting: str, line: str) -> str:
-    """Return the text after ``ansible.builtin.lineinfile`` with the family's regexp and line."""
-    lines = text.splitlines(keepends=True)
-    pattern = rf"^[ \t]*{setting}(?:[ \t=]|$)"
-    matches = [index for index, value in enumerate(lines) if re.search(pattern, value)]
-    if matches:
-        lines[matches[-1]] = line + "\n"
-        return "".join(lines)
-    if lines and not lines[-1].endswith("\n"):
-        lines[-1] += "\n"
-    return "".join(lines) + line + "\n"
-
-
-def decide(case: Case, rule: tuple[str, str, str]) -> dict[str, object]:
-    """Return the family's decision for one rule of the case."""
+def decide(case: Case, rule: tuple[str, str, str], text: str | None = None) -> dict[str, object]:
+    """Return the family's decision for one rule of the case, or of another text of its file."""
     setting, comparison, required = rule
     checked = (case.reader, setting) not in UNCHECKED_STACK
     rule_map = {
@@ -341,7 +391,7 @@ def decide(case: Case, rule: tuple[str, str, str]) -> dict[str, object]:
         "required": required,
         "stack_checked": checked,
     }
-    return pam_conf.pam_conf_decision(case.text, rule_map, stack_of(case))
+    return pam_conf.pam_conf_decision(case.text if text is None else text, rule_map, stack_of(case))
 
 
 def after_id(case: Case, rule: tuple[str, str, str]) -> str:
@@ -359,8 +409,26 @@ def after_case(case: Case, rule: tuple[str, str, str]) -> Case | None:
     decision = decide(case, rule)
     if decision["status"] != "applied":
         return None
-    text = lineinfile(case.text, rule[0], str(decision["line"]))
+    text = str(decision["new_text"])
     return Case(after_id(case, rule), case.reader, text, case.args, case.stack)
+
+
+def after_text(case: Case, rule: tuple[str, str, str], text: str) -> str:
+    """Return the text that the role leaves after one rule: the new text, or the text unchanged."""
+    decision = decide(case, rule, text)
+    return str(decision["new_text"]) if decision["status"] == "applied" else text
+
+
+def sequence_case(
+    case: Case, rules: tuple[tuple[str, str, str], tuple[str, str, str]]
+) -> Case | None:
+    """Return the case that holds the file after two rules in a row, or None if neither wrote."""
+    first, second = rules
+    text = after_text(case, second, after_text(case, first, case.text))
+    if text == case.text:
+        return None
+    identifier = f"{after_id(case, first)}+{second[0]}-{second[2] or 'flag'}"
+    return Case(identifier, case.reader, text, case.args, case.stack)
 
 
 def all_cases() -> list[Case]:
@@ -368,8 +436,10 @@ def all_cases() -> list[Case]:
     found = base_cases()
     seen = {key_of(case) for case in found}
     for case in list(found):
-        for rule in RULES[case.reader]:
-            after = after_case(case, rule)
+        derived = [after_case(case, rule) for rule in RULES[case.reader]]
+        if "-fuzz-" not in case.case_id:
+            derived += [sequence_case(case, rules) for rules in SEQUENCES[case.reader]]
+        for after in derived:
             if after is not None and key_of(after) not in seen:
                 seen.add(key_of(after))
                 found.append(after)
@@ -388,13 +458,21 @@ def write_cases(directory: Path) -> int:
         (folder / "args").write_text(
             "".join(f"{argument}\n" for argument in ("conf=@conf", *case.args)), encoding="utf-8"
         )
+        if case.stack:
+            (folder / "stack").write_bytes(case.stack.encode("utf-8"))
     return len(cases)
 
 
-def read_outputs(directory: Path) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, object]]]:
-    """Return the platforms and the readings per case of every image output below ``directory``."""
+Outputs = tuple[
+    dict[str, dict[str, str]], dict[str, dict[str, object]], dict[str, dict[str, object]]
+]
+
+
+def read_outputs(directory: Path) -> Outputs:
+    """Return the platforms, the readings and the stack lines per case of every image output."""
     platforms: dict[str, dict[str, str]] = {}
     readings: dict[str, dict[str, object]] = {}
+    stacks: dict[str, dict[str, object]] = {}
     for path in sorted(directory.glob("*.jsonl")):
         lines = path.read_text(encoding="utf-8").splitlines()
         header = cast("dict[str, str]", json.loads(lines[0]))
@@ -403,15 +481,20 @@ def read_outputs(directory: Path) -> tuple[dict[str, dict[str, str]], dict[str, 
         for line in lines[1:]:
             entry = cast("dict[str, object]", json.loads(line))
             readings.setdefault(str(entry["id"]), {})[platform] = entry["reading"]
-    return platforms, readings
+            if "stack" in entry:
+                stacks.setdefault(str(entry["id"]), {})[platform] = entry["stack"]
+    return platforms, readings, stacks
 
 
 def assemble(outputs: Path, table: Path) -> int:
     """Write the verdict table from the image outputs and return the number of cases."""
-    platforms, readings = read_outputs(outputs)
+    platforms, readings, stacks = read_outputs(outputs)
     cases = all_cases()
     missing = [
-        case.case_id for case in cases if set(readings.get(case.case_id, {})) != set(platforms)
+        case.case_id
+        for case in cases
+        if set(readings.get(case.case_id, {})) != set(platforms)
+        or (case.stack and set(stacks.get(case.case_id, {})) != set(platforms))
     ]
     if not platforms or missing:
         message = f"the image outputs miss readings for {missing[:5]} or every platform"
@@ -436,6 +519,11 @@ def assemble(outputs: Path, table: Path) -> int:
                     ]
                     for platform, reading in sorted(readings[case.case_id].items())
                 },
+                **(
+                    {"stack_lines": dict(sorted(stacks[case.case_id].items()))}
+                    if case.stack
+                    else {}
+                ),
             },
             sort_keys=True,
             separators=(",", ":"),

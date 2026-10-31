@@ -53,3 +53,8 @@ regressions:
       - rhel_compatible
     files:
       - lifecycle_pwhistory_regressions.yml
+  - name: readers
+    platforms:
+      - rhel_compatible
+    files:
+      - lifecycle_pwhistory_readers.yml

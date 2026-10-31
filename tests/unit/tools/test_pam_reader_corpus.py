@@ -33,7 +33,10 @@ def write_outputs(directory: Path, *, skip: str | None = None) -> None:
                 continue
             values = cast("dict[str, list[int]]", entry["readings"])[platform]
             reading = dict(zip(keys[str(entry["reader"])], values, strict=True))
-            lines.append(json.dumps({"id": entry["id"], "reading": reading}))
+            row: dict[str, object] = {"id": entry["id"], "reading": reading}
+            if "stack_lines" in entry:
+                row["stack"] = cast("dict[str, object]", entry["stack_lines"])[platform]
+            lines.append(json.dumps(row))
         (directory / f"{platform}.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
