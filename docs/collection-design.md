@@ -258,10 +258,12 @@ Jira: FREES-42 and FREES-43. Decision: [ADR 0015](adr/0015-content-acquisition-a
 
 ### Fetching content
 
-`uv run python tools/content/fetch_content.py` reads `content/manifest.yml`, downloads the pinned release zip over
-HTTPS (or reads `--from-file <zip>` without any network access), verifies the archive SHA-512, extracts only the
-datastreams the manifest lists (`--datastream <name>` narrows the choice) into `build/content` (or `--output-dir`) and
-verifies each SHA-256. It refuses members that are symlinks, directories, special files, encrypted, duplicated or of a
+`make content` (`PYTHONPATH=build/collections uv run python -m tools.content.fetch_content`) reads
+`content/manifest.yml`, downloads the pinned release zip over HTTPS (or reads `--from-file <zip>` without any network
+access), verifies the archive SHA-512, extracts only the datastreams the manifest lists (`--datastream <name>` narrows
+the choice) and verifies each against `source_sha256`. It then removes every Script Check Engine check and script and every XCCDF `fix`
+([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) and writes the result into `build/content` (or `--output-dir`)
+only when it has the pinned `sha256`. It refuses members that are symlinks, directories, special files, encrypted, duplicated or of a
 different size, never builds a path from an archive member name, and leaves no partial file on failure. The pinned
 content is `v0.1.82`, with `ssg-ubuntu2404-ds.xml` (5 profiles) and `ssg-rhel9-ds.xml` (20 profiles); the manifest lists
 each profile by identifier and title as read from the datastream.
@@ -279,7 +281,7 @@ only through it, so a failing close is a `CatalogError` or an `XccdfParseError`,
 expected_sha256)` (hash first, parse second, hash again during the parse), `locate_datastreams(directory)`,
 `resolve_content_path(path)`, `single_benchmark`, `find_profile`, `profile_rules` and the module reports
 `benchmark_report` and `profile_report`. A digest mismatch raises `DigestMismatchError` before any parsing. Errors map
-to the stable `error_type` values `digest_mismatch`, `profile_not_found`, `unsupported_content` (a profile with `extends`, or a selected rule below a deselected group) and `invalid_content`.
+to the stable `error_type` values `digest_mismatch`, `profile_not_found`, `unsupported_content` (a profile with `extends`, or a selected rule below a deselected group), `script_check_content` (a check or embedded script that would make the scanner run a script of the content, [ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) and `invalid_content`.
 
 | Module | Options | Returns |
 |---|---|---|
@@ -295,7 +297,7 @@ Unit tests use the synthetic datastream `tests/fixtures/catalog/synthetic-ds.xml
 selects an undefined rule); oversized, missing-profile and tampered-digest cases are built in the tests. The tests for
 the fetch tool build tiny synthetic zips and mock the network. A golden file, `tests/fixtures/catalog/golden-rules.yml`, records the rule count and the SHA-256 of the sorted rule list of
 every profile of the two pinned datastreams (25 profiles). `make test-content-golden` fetches the pinned content with
-`fetch_content.py` and compares the catalog with it; the CI `test` job runs it and fails when the fetch fails. Without
+`fetch_content.py` and compares the catalog with it; the CI `test-suites` job runs it and fails when the fetch fails. Without
 fetched content the comparison is skipped locally. The same target regenerates the rule catalogue
 `roles/remediate/vars/rules.yml` and `docs/control-families.md` from the fetched content
 (`tools/roles/generate_catalogue.py --check`) and fails on any difference, and checks that every rule of every pinned
