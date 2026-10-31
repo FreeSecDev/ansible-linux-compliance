@@ -1,0 +1,8 @@
+---
+trivial:
+  - >-
+    CI: the check-mode playbook tests of the test-playbooks job, which took up to 15.9 minutes, run in two jobs
+    alongside each other: test-playbooks-remediate runs make test-remediate-check (timeout 15) and
+    test-playbooks-evidence runs make test-evidence, make test-role-guards and make test-verify (timeout 10). Neither
+    has a condition, ci-gate needs both, and a unit test pins that every former step runs in exactly one job and that
+    only the Molecule legs read the plan of molecule-plan (FREES-174).

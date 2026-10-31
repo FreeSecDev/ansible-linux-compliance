@@ -839,7 +839,7 @@ On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the lon
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
 duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 20 for `test` (11.2 then; 15 on `main` by 2026-10-30, so FREES-189 raised it from 17; 12 since FREES-174, below) and 16 for `test-playbooks`
-(10.8). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
+(10.8; split in two since FREES-174, below). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
 on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
 in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
 Since FREES-182 the images are built once per run and every leg loads them
@@ -861,6 +861,17 @@ on the slower of the two runner classes seen, `test` took 5.0 minutes (`make tes
 829 to 853) and `test-suites` 4.4. `test` now has a timeout of 12 minutes: one and a half times its longest duration
 is 7.5, and the rest covers the runner variance (the slower runners took up to 1.9 times as long before) and the
 growth of the suite, while a hung run is still cancelled long before the merge queue's 30 minutes.
+
+`test-playbooks` then grew in the same way: over the 15 latest successful runs before 5a97b7b it took 8.9 to 15.9
+minutes, `make test-remediate-check` 4.4 to 9.4 of them (it runs every native topic's check-mode plays, so it grows
+with every topic), `make test-evidence` 2.9 to 4.7, `make test-role-guards` 0.5 to 1.0 and `make test-verify` 0.6 to
+1.0. Since FREES-174 two jobs run them alongside each other: `test-playbooks-remediate` runs `make
+test-remediate-check` (with `test-remediate-disruptive`), timeout 15, one and a half times its longest 9.5 minutes;
+`test-playbooks-evidence` runs `make test-evidence`, `make test-role-guards` and `make test-verify`, timeout 10, one and
+a half times its longest 6.6 minutes. Neither has a condition or `needs`, and only `molecule-lifecycle` and
+`molecule-libvirt` read the plan of `molecule-plan`, so every event that ran `test-playbooks` runs both;
+`ci-gate` needs both. When `test-playbooks-remediate` nears its limit, its playbooks can be split across jobs the same
+way.
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
