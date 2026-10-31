@@ -20,6 +20,7 @@ concurrency:
 jobs:
   lint:
     name: lint
+    needs: molecule-collections
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -34,6 +35,11 @@ jobs:
         with:
           version: 0.13.1
           enable-cache: false
+      - name: Download the verified Galaxy collections of this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: molecule-collections
+          path: build/molecule-collections
       - name: Run lint
         run: make lint
 
@@ -318,12 +324,121 @@ jobs:
       - name: Run lint-iac
         run: make lint-iac
 
+  molecule-collections:
+    name: molecule-collections
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Restore the verified Galaxy collections, except in a pull request from a fork
+        if: >-
+          github.event_name != 'pull_request'
+          || (!github.event.pull_request.head.repo.fork
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-collections
+          key: galaxy-collections-${{ hashFiles('extensions/molecule/collections.pins') }}
+      - name: Fetch what is missing from Galaxy with bounded retries and verify every collection by SHA-256
+        run: make molecule-collections-fetch
+      - name: Share the verified collections with the jobs of this run
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: molecule-collections
+          path: build/molecule-collections
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  molecule-images:
+    name: molecule-images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.13.1
+          enable-cache: false
+      - name: Compute the tag of each instance image from its pinned inputs
+        id: plan
+        run: make -s molecule-images-plan >> "$GITHUB_OUTPUT"
+      - name: Restore the Ubuntu instance image of these inputs and this week, except in a pull request from a fork
+        id: cache-ubuntu
+        if: >-
+          github.event_name != 'pull_request'
+          || (!github.event.pull_request.head.repo.fork
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-images/ubuntu
+          key: molecule-image-ubuntu-${{ steps.plan.outputs.ubuntu }}-${{ steps.plan.outputs.week }}
+      - name: Restore the Rocky Linux instance image of these inputs and this week, except in a pull request from a fork
+        id: cache-rhel-compatible
+        if: >-
+          github.event_name != 'pull_request'
+          || (!github.event.pull_request.head.repo.fork
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-images/rhel_compatible
+          key: molecule-image-rhel_compatible-${{ steps.plan.outputs.rhel_compatible }}-${{ steps.plan.outputs.week }}
+      - name: Build what the cache lacks with bounded retries and verify every image
+        run: make molecule-images-build
+      - name: Record the verified image IDs for the Molecule legs
+        id: ids
+        run: |
+          ids="$(make -s molecule-images-ids)"
+          printf 'ids=%s\n' "$ids" >> "$GITHUB_OUTPUT"
+      - name: Share the verified images with the Molecule legs of this run
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: molecule-images
+          path: |
+            build/molecule-images/ubuntu
+            build/molecule-images/rhel_compatible
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Save the verified Ubuntu instance image, except in a scheduled run
+        if: >-
+          steps.cache-ubuntu.outcome == 'success'
+          && steps.cache-ubuntu.outputs.cache-hit != 'true' && github.event_name != 'schedule'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-images/ubuntu
+          key: molecule-image-ubuntu-${{ steps.plan.outputs.ubuntu }}-${{ steps.plan.outputs.week }}
+      - name: Save the verified Rocky Linux instance image, except in a scheduled run
+        if: >-
+          steps.cache-rhel-compatible.outcome == 'success'
+          && steps.cache-rhel-compatible.outputs.cache-hit != 'true' && github.event_name != 'schedule'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/molecule-images/rhel_compatible
+          key: molecule-image-rhel_compatible-${{ steps.plan.outputs.rhel_compatible }}-${{ steps.plan.outputs.week }}
+
   molecule-docker:
     name: molecule-docker (${{ matrix.scenario }})
+    needs: [molecule-collections, molecule-images]
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     permissions:
       contents: read
+    env:
+      MOLECULE_IMAGE_IDS: ${{ needs.molecule-images.outputs.ids }}
     strategy:
       fail-fast: false
       matrix:
@@ -338,6 +453,16 @@ jobs:
         with:
           version: 0.13.1
           enable-cache: false
+      - name: Download the verified Galaxy collections of this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: molecule-collections
+          path: build/molecule-collections
+      - name: Download the verified instance images of this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: molecule-images
+          path: build/molecule-images
       - name: Run Molecule scenario
         if: matrix.scenario != 'docker-selftest'
         env:
@@ -410,12 +535,14 @@ jobs:
 
   molecule-lifecycle:
     name: molecule-lifecycle (${{ matrix.platform }}, ${{ matrix.topic }}, ${{ matrix.mode }})
-    needs: molecule-plan
+    needs: [molecule-plan, molecule-collections, molecule-images]
     if: needs.molecule-plan.outputs.lifecycle_legs != '0'
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     permissions:
       contents: read
+    env:
+      MOLECULE_IMAGE_IDS: ${{ needs.molecule-images.outputs.ids }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.molecule-plan.outputs.matrix) }}
@@ -429,6 +556,16 @@ jobs:
         with:
           version: 0.13.1
           enable-cache: false
+      - name: Download the verified Galaxy collections of this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: molecule-collections
+          path: build/molecule-collections
+      - name: Download the verified instance images of this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: molecule-images
+          path: build/molecule-images
       - name: Run the toggle lifecycle of one topic and mode
         env:
           MOLECULE_SCENARIO: ${{ matrix.scenario }}
@@ -442,7 +579,7 @@ jobs:
     name: >-
       molecule-libvirt (${{ matrix.scenario }}${{ matrix.topic && format(', {0}, {1}', matrix.topic, matrix.mode)
       || '' }})
-    needs: molecule-plan
+    needs: [molecule-plan, molecule-collections]
     runs-on: ubuntu-24.04
     timeout-minutes: 28
     permissions:
@@ -499,6 +636,11 @@ jobs:
         with:
           version: 0.13.1
           enable-cache: false
+      - name: Download the verified Galaxy collections of this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: molecule-collections
+          path: build/molecule-collections
       - name: Restore the verified cloud images and packages, except in a pull request from a fork
         if: >-
           github.event_name != 'pull_request'
@@ -548,6 +690,8 @@ jobs:
       - security
       - collection
       - iac
+      - molecule-collections
+      - molecule-images
       - molecule-docker
       - molecule-plan
       - molecule-lifecycle

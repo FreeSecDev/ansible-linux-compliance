@@ -40,7 +40,8 @@ make molecule-libvirt-images
 make molecule-task-timings MOLECULE_TIMINGS_LOG=<GitHub Actions job log> MOLECULE_TIMINGS_TOP=15
 ```
 
-`test-molecule-libvirt` installs the pinned collections (`make molecule-dependencies`), fetches the datastreams
+`test-molecule-libvirt` installs the pinned collections from verified local files (`make molecule-dependencies`,
+[collections](molecule.md#galaxy-collections)), fetches the datastreams
 (`make molecule-content`), fetches and verifies the cloud images and packages (`make molecule-libvirt-images`), checks
 that KVM and `qemu:///system` are usable (`make molecule-libvirt-preflight`), runs `molecule test -s <scenario>` for each
 scenario and stops at the first failure, and then runs the self-test. `molecule test` runs `destroy` after a failed

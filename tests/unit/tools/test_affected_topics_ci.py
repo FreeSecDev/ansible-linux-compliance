@@ -444,8 +444,20 @@ def gate_needs(
             "molecule-plan": {"result": plan, "outputs": outputs},
             "molecule-lifecycle": {"result": lifecycle, "outputs": {}},
             "molecule-libvirt": {"result": libvirt, "outputs": {}},
+            "molecule-collections": {"result": "success", "outputs": {}},
+            "molecule-images": {
+                "result": "success",
+                "outputs": {"ids": "ubuntu=sha256:" + "a" * 64},
+            },
         }
     )
+
+
+def with_inputs(needs: str, result: str) -> str:
+    document = json.loads(needs)
+    for job in ("molecule-collections", "molecule-images"):
+        document[job]["result"] = result
+    return json.dumps(document)
 
 
 @pytest.mark.parametrize(
@@ -464,6 +476,12 @@ def gate_needs(
         ("pull_request", gate_needs(scope="affected", legs="2", lifecycle="failure"), False),
         ("pull_request", gate_needs(scope="affected", legs="2", lifecycle="cancelled"), False),
         ("pull_request", gate_needs(scope="partial", legs="2"), False),
+        ("pull_request", with_inputs(gate_needs(), "failure"), False),
+        (
+            "merge_group",
+            with_inputs(gate_needs(scope="affected", legs="0", lifecycle="skipped"), "skipped"),
+            False,
+        ),
         ("pull_request", gate_needs(scope=None, legs="2"), False),
         (
             "pull_request",
@@ -503,7 +521,7 @@ def test_ci_gate_accepts_a_skipped_lifecycle_only_when_the_plan_says_so(
 def test_the_lifecycle_job_runs_only_when_the_plan_has_legs() -> None:
     found = jobs()
     lifecycle = found["molecule-lifecycle"]
-    assert lifecycle["needs"] == "molecule-plan"
+    assert lifecycle["needs"] == ["molecule-plan", "molecule-collections", "molecule-images"]
     assert lifecycle["if"] == "needs.molecule-plan.outputs.lifecycle_legs != '0'"
     assert "if" not in found["molecule-libvirt"]
     plan = found["molecule-plan"]
