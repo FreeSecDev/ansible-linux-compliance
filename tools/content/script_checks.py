@@ -303,6 +303,4 @@ def strip_script_checks(data: bytes) -> Stripped:
     except (xmlsafe.XmlSafetyError, catalog.ScriptCheckError) as error:
         message = f"the datastream without its scripts is not acceptable: {error}"
         raise ScriptCheckError(message) from error
-    return Stripped(
-        result, len(collector.checks), scripts, references, uris, len(collector.fixes)
-    )
+    return Stripped(result, len(collector.checks), scripts, references, uris, len(collector.fixes))
