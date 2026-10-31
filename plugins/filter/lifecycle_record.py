@@ -112,6 +112,8 @@ MASKED: Final[str] = "-"
 LINE_END: Final[str] = "\\n"
 STORED_WRAPPER: Final[str] = "_LazyValue"
 PLAIN_TYPES: Final[frozenset[type]] = frozenset({str, int, float, bool, type(None)})
+TEXT_TYPES: Final[frozenset[type]] = frozenset({str})
+MAPPING_TYPES: Final[frozenset[type]] = frozenset({dict})
 
 
 class _Wrapped(Protocol):
@@ -273,10 +275,12 @@ def _is_plain_entry(value: object) -> bool:
     Ansible renders only text that is trusted as a template, and such text is a tagged subclass
     of ``str``; a value of exactly these types is therefore what rendering it returns.
     """
-    if type(value) is not dict:
+    if type(value) not in MAPPING_TYPES:
         return False
     fields = cast("dict[object, object]", value)
-    return all(type(key) is str and type(item) in PLAIN_TYPES for key, item in fields.items())
+    return all(
+        type(key) in TEXT_TYPES and type(item) in PLAIN_TYPES for key, item in fields.items()
+    )
 
 
 def stored_items(value: object, what: str) -> list[object]:
