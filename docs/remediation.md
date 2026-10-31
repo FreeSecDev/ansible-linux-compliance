@@ -549,15 +549,17 @@ this against the OVAL of both datastreams.
 |---|---|---|
 | `kernel_module_cramfs_disabled`, `_freevxfs_`, `_hfs_`, `_hfsplus_`, `_jffs2_`, `_overlayfs_` (module `overlay`), `_squashfs_`, `_udf_`, `_usb-storage_` (`filesystem_modules`); `_atm_`, `_can_`, `_dccp_`, `_firewire-core_`, `_rds_`, `_sctp_`, `_tipc_` (`protocol_modules`); `_bluetooth_`, `_cfg80211_`, `_iwlmvm_`, `_iwlwifi_`, `_mac80211_` (`wireless_modules`) | `/etc/modprobe.d/freesecdev-<module>.conf`, mode `0644`, owner and group root, with a header that names the rule and the two lines `install <module> /bin/false` and `blacklist <module>`; no other file is written | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
 
-The family reads every `*.conf` and `*.alias` file that `modprobe` reads, in its order (a name in `/etc/modprobe.d`
-hides the same name in `/run/modprobe.d`, `/usr/local/lib/modprobe.d`, `/usr/lib/modprobe.d` and `/lib/modprobe.d`;
-files are read by name), joins lines continued with `\` and skips comments. `modprobe` runs the first `install`
-command for a module, so:
+The family reads every `*.conf` and `*.alias` file that `modprobe` reads, in its order: a name in `/etc/modprobe.d`
+hides the same name in `/run/modprobe.d`, `/usr/local/lib/modprobe.d` (read by kmod 31 on Ubuntu 24.04, not by kmod
+28 on RHEL 9), `/usr/lib/modprobe.d` and `/lib/modprobe.d`, also when it is a link to `/dev/null`, a dangling link or
+another non-regular entry, which masks the lower file and holds nothing; only a directory or a link to one is skipped.
+Files are read by name, lines continued with `\` are joined and comments skipped. `modprobe` runs the first `install`
+command whose name, a `fnmatch` pattern, matches the module, so:
 
 | Status (apply) or reason (cleanup) | When |
 |---|---|
 | `compliant` (apply) | The first `install` command for the module is `/bin/false` or `/bin/true` and a `blacklist` line names it, in the form the check matches; nothing is written or recorded. Or the drop-in already holds exactly its content |
-| `overridden` (apply) | The first `install` command for the module is another command in a file read before the drop-in (for example `install hfs /sbin/modprobe --ignore-install hfs` in `00-site.conf`), so the drop-in would not take effect; the collection does not edit that file |
+| `overridden` (apply) | The first `install` command that matches the module, by name or by a pattern such as `install cram* ...`, is another command in a file read before the drop-in (for example `install hfs /sbin/modprobe --ignore-install hfs` in `00-site.conf`), so the drop-in would not take effect; the collection does not edit that file |
 | `not_directory` | `/etc/modprobe.d` is missing (kmod is not installed), a symbolic link or not a directory |
 | `not_regular_file` | The drop-in path is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in path does not carry the collection's header |
@@ -665,6 +667,7 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_content_golden_login_defs.py` | With the pinned content: every native login_defs rule reads only `/etc/login.defs` (and, for `CREATE_HOME`, `/etc/login.defs.d/*.defs`) with the pinned object pattern, its comparison is the operation of the check's state and its value the external variable of the check, on both platforms; and every selected rule whose check reads `/etc/login.defs` is native or one of the two documented `audit_only` rules | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-login-defs-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS level 2, RHEL 9 STIG and RHEL 9 ANSSI enhanced profiles every login_defs rule gets exactly one result, `changed` exactly when it is `applied`, a reason for every refusal, and `/etc/login.defs` is unchanged; a rule without a profile value fails before login.defs is read; the family file and helpers refuse to run without the opt-in; a ledger entry of another method or without one, a written line of another setting, a prior line over two lines and a malformed mode are refused and kept | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_content_golden_kernel_modules.py` | With the pinned content: the check of every native kernel module rule on both platforms is an `AND` of two `check="all"` tests that read `.conf` files of the modprobe directories, the drop-in matches both patterns, the patterns are exactly the drop-in's `install` and `blacklist` lines and equal the family's constants, every rule is limited to `system_with_kernel`, and the lifecycle profiles select exactly the drop-ins that the declarations expect | `make test-content-golden`, CI job `test` |
+| `tests/unit/tools/test_content_golden_lifecycle_profiles.py` | With the pinned content: every `profiles` entry of a topic declaration selects at least the native rules of the topic that the platform's own profile selects, and the cycles of all platforms together run every native rule of the topic that some pinned profile selects | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-native-check.yml`, kernel modules | Against localhost in check mode with all 21 kernel module rules and `kernel_modules` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/modprobe.d` is unchanged; the three family files and the shared helpers refuse to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 
 `make test-remediate-check` reads the ledger directory as the calling user; on a host where

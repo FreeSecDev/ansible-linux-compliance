@@ -40,12 +40,15 @@ same check on both platforms, with only the module name changing:
 | `protocol_modules` | CIS Level 2 (dccp, rds, sctp, tipc) | `cis` and `cis_workstation_l2` (dccp, rds, sctp, tipc), the STIG (atm, can, firewire-core, sctp, tipc), OSPP and CUI (can, sctp, tipc), PCI DSS (dccp, sctp), BSI (firewire-core) |
 | `wireless_modules` | none | BSI (all five), the STIG, OSPP and CUI (bluetooth) |
 
-kmod's `modprobe` reads every `*.conf` and `*.alias` file, except hidden ones, of `/etc/modprobe.d`, `/run/modprobe.d`,
-`/usr/local/lib/modprobe.d`, `/usr/lib/modprobe.d` and `/lib/modprobe.d`; a file name in an earlier directory hides the
-same name in a later one, and the remaining files are read in the byte order of their names. A line ending in `\` is
-joined with the next one and a line that starts with `#` is a comment. Module names in `install` and `blacklist` treat
-`-` and `_` as the same. For one module, `modprobe` runs the first `install` command it read instead of loading the
-module, and `blacklist` stops loading through an alias (as udev does for hardware), not an explicit `modprobe`. So
+kmod's `modprobe` reads every `*.conf` and `*.alias` entry, except hidden ones, of `/etc/modprobe.d`,
+`/run/modprobe.d`, `/usr/lib/modprobe.d` and `/lib/modprobe.d`, and kmod 31 (Ubuntu 24.04) also of
+`/usr/local/lib/modprobe.d`, which kmod 28 (RHEL 9) does not read. An entry in an earlier directory hides the same name
+in a later one, whatever it is, except a directory or a symbolic link to a directory: a symbolic link to `/dev/null`, a
+dangling link or any other entry that is not a regular file is read as empty, which is how a vendor file is masked.
+The remaining files are read in the byte order of their names. A line ending in `\` is joined with the next one and a
+line that starts with `#` is a comment. Module names in `install` and `blacklist` treat `-` and `_` as the same, and
+the name of an `install` command is a `fnmatch` pattern (`install cram* ...` applies to cramfs). For one module,
+`modprobe` runs the first `install` command whose pattern matches it instead of loading the module, and `blacklist` stops loading through an alias (as udev does for hardware), not an explicit `modprobe`. So
 `install <module> /bin/false` stops every load through `modprobe`, including the kernel's own requests, and `blacklist`
 adds nothing to that but is what the checks also require.
 
@@ -79,8 +82,14 @@ family run), `kernel_modules_apply.yml` and `kernel_modules_cleanup.yml`, which 
 
 ### 2. Another file that already sets the module is respected, never edited
 
-The family reads every file that `modprobe` reads, as `modprobe` orders them, besides the collection's drop-ins, and
-keeps every `install` and `blacklist` command:
+The family reads every file that `modprobe` reads, as `modprobe` orders them, besides the collection's drop-ins, with
+the directories of the platform's kmod (`__linux_compliance_remediate_modprobe_read_directories`, per pinned benchmark;
+another benchmark is refused before any change). A masking entry takes its name and holds nothing, and a link to a
+directory is skipped (revised after the review of PR #76). It keeps every `install` and `blacklist` command, and
+matches the name of each `install` command as `modprobe` does with `fnmatch`: `*`, `?` and bracket expressions, `-` and
+`_` alike outside brackets. A pattern with a backslash, a character class (`[:alpha:]`) or an equivalence class is
+taken to match every module, so it can only make the family refuse, and an `install` line that kmod rejects (an
+unterminated `[` or a stray `]`) is ignored, as kmod ignores it:
 
 | Status | When |
 |---|---|
@@ -133,8 +142,8 @@ revert and a refusal whenever a site file would make the drop-in ineffective.
 
 ## Trade-offs
 
-The `install` comparison is by module name with `-` and `_` treated alike, not by `modprobe`'s `fnmatch` wildcards: a
-site file with `install * ...` is not recognised as overriding. A same-named file in `/run/modprobe.d` or
+An `install` pattern with a backslash or a character or equivalence class is treated as matching every module, so
+such a site file makes every rule that it precedes `overridden` even where it would not match. A same-named file in `/run/modprobe.d` or
 `/usr/lib/modprobe.d` is assumed to be hidden by the collection's drop-in even before it exists. Kernel command-line
 settings (`modprobe.blacklist=`, `module_blacklist=`) are neither read nor written. The blacklisted file system modules
 (overlay, squashfs, udf) and usb-storage can break container runtimes, snaps, optical media and USB storage, which is
@@ -153,7 +162,10 @@ no protocol or wireless module rule, so a topic declaration may now name `profil
 platform's datastream that its cycles run with (`docs/molecule.md`): `filesystem_modules` runs with
 `cis_level2_server` on Ubuntu and `cis` on Rocky Linux, `protocol_modules` with `cis_level2_server` and `stig`, and
 `wireless_modules` with `bsi` on Rocky Linux only, because the Ubuntu datastream has no such rule. A golden test checks
-that these profiles select exactly the drop-ins that the declarations expect.
+that these profiles select exactly the drop-ins that the declarations expect, and
+`tests/unit/tools/test_content_golden_lifecycle_profiles.py` that a declared profile selects at least the native rules
+of its topic that the platform's own profile selects, and that the cycles of all platforms together run every native
+rule of the topic that some pinned profile selects, so a `profiles` entry can never narrow a topic's cycles.
 `shared/tasks/lifecycle_kernel_modules_regressions.yml` (group `changes`, both platforms) proves a change of method, a
 drop-in changed and one removed by hand, a site file that already disables a module (`compliant`), a site file read
 first that lets a module load, before the apply and after it (`overridden`), and a file of the administrator at the

@@ -8,7 +8,9 @@ minor_changes:
     ``blacklist <module>``, the two lines that the checks of both pinned contents require, and records it in the
     ledger; switching a rule or the topic off removes exactly that drop-in and never overwrites a later change
     (``modified_since_apply``). A module that another file already disables is ``compliant`` without a drop-in, and an
-    ``install`` command of another file that ``modprobe`` reads first is reported ``overridden`` and left alone. No
+    ``install`` command of another file that ``modprobe`` reads first, by name or by a ``fnmatch`` pattern such as
+    ``cram*``, is reported ``overridden`` and left alone. A vendor file masked by a link to ``/dev/null`` counts as
+    empty, as for ``modprobe``, and ``/usr/local/lib/modprobe.d`` is read only where kmod reads it (Ubuntu 24.04). No
     module is unloaded and no initramfs is rebuilt (ADR 0028). The topics stay disruptive and need their family or
     ``kernel_modules`` in ``linux_compliance_remediate_allow_disruptive``.
 trivial:

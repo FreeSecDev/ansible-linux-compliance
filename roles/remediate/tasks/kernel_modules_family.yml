@@ -22,6 +22,22 @@
   tags:
     - always
 
+- name: Kernel modules | Refuse a platform whose modprobe directories the family does not know, before any change
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_discovered is mapping
+      - >-
+        linux_compliance_discovered.benchmark_id | default('')
+        in __linux_compliance_remediate_modprobe_read_directories
+    fail_msg: >-
+      The kernel module families know the directories that modprobe reads only for the benchmarks
+      {{ __linux_compliance_remediate_modprobe_read_directories | list }}, not for
+      {{ linux_compliance_discovered.benchmark_id | default('none') }} (ADR 0028). No modprobe configuration was
+      changed.
+    quiet: true
+  tags:
+    - always
+
 - name: Kernel modules | Refuse a rule whose drop-in, module or lines the family cannot write, before any change
   vars:
     __linux_compliance_remediate_km_parameters: "{{ __linux_compliance_remediate_km_rule.parameters | default({}) }}"
@@ -70,6 +86,13 @@
   tags:
     - always
 
+- name: Kernel modules | Name the directories that the modprobe of this platform reads, in its order
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_read_paths: >-
+      {{ __linux_compliance_remediate_modprobe_read_directories[linux_compliance_discovered.benchmark_id] }}
+  tags:
+    - always
+
 - name: Kernel modules | Inspect every directory that modprobe reads its configuration from
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_km_path }}"
@@ -77,7 +100,7 @@
     get_checksum: false
     get_mime: false
     get_attributes: false
-  loop: "{{ __linux_compliance_remediate_modprobe_read_directories }}"
+  loop: "{{ __linux_compliance_remediate_km_read_paths }}"
   loop_control:
     loop_var: __linux_compliance_remediate_km_path
   register: __linux_compliance_remediate_km_read_directories
@@ -98,68 +121,69 @@
   tags:
     - always
 
-- name: Kernel modules | List the configuration files of those directories, as modprobe reads them
+- name: Kernel modules | List every entry of those directories with a name that modprobe reads, of any type
   ansible.builtin.find:
     paths: "{{ __linux_compliance_remediate_km_existing_directories }}"
     patterns: "{{ __linux_compliance_remediate_modprobe_read_patterns }}"
-    file_type: file
+    file_type: any
     follow: false
     hidden: false
     recurse: false
-  register: __linux_compliance_remediate_km_files
+  register: __linux_compliance_remediate_km_entries
   when: __linux_compliance_remediate_km_existing_directories | length > 0
   tags:
     - always
 
-- name: Kernel modules | List the symbolic links among them, which modprobe follows to a regular file
-  ansible.builtin.find:
-    paths: "{{ __linux_compliance_remediate_km_existing_directories }}"
-    patterns: "{{ __linux_compliance_remediate_modprobe_read_patterns }}"
-    file_type: link
-    follow: false
-    hidden: false
-    recurse: false
-  register: __linux_compliance_remediate_km_links
-  when: __linux_compliance_remediate_km_existing_directories | length > 0
-  tags:
-    - always
-
-- name: Kernel modules | Inspect the target of every symbolic link
+- name: Kernel modules | Inspect the target of every symbolic link among them
   ansible.builtin.stat:
     path: "{{ __linux_compliance_remediate_km_link }}"
     follow: true
     get_checksum: false
     get_mime: false
     get_attributes: false
-  loop: "{{ __linux_compliance_remediate_km_links.files | default([]) | map(attribute='path') | sort }}"
+  loop: >-
+    {{ __linux_compliance_remediate_km_entries.files | default([]) | selectattr('islnk')
+       | map(attribute='path') | sort }}
   loop_control:
     loop_var: __linux_compliance_remediate_km_link
   register: __linux_compliance_remediate_km_link_targets
   tags:
     - always
 
-- name: Kernel modules | Keep, per file name, the file that modprobe reads, in the order in which it reads them
+- name: Kernel modules | Keep, per file name, the entry that modprobe reads, and which of them hold text
   vars:
+    __linux_compliance_remediate_km_link_types: >-
+      {{ dict(__linux_compliance_remediate_km_link_targets.results | default([])
+              | map(attribute='__linux_compliance_remediate_km_link')
+              | zip(__linux_compliance_remediate_km_link_targets.results | default([])
+                    | map(attribute='stat') | list)) }}
     __linux_compliance_remediate_km_candidates: >-
-      {{ (__linux_compliance_remediate_km_files.files | default([]) | map(attribute='path') | list)
-         + (__linux_compliance_remediate_km_link_targets.results | default([])
-            | selectattr('stat.isreg', 'defined') | selectattr('stat.isreg')
-            | map(attribute='__linux_compliance_remediate_km_link') | list) }}
+      {%- set kept = [] -%}
+      {%- for entry in __linux_compliance_remediate_km_entries.files | default([]) -%}
+      {%- set target = __linux_compliance_remediate_km_link_types[entry.path] | default({}) -%}
+      {%- if entry.islnk and not (target.isdir | default(false)) -%}
+      {%- set _ = kept.append({'path': entry.path, 'text': target.isreg | default(false)}) -%}
+      {%- elif not entry.islnk and not entry.isdir -%}
+      {%- set _ = kept.append({'path': entry.path, 'text': entry.isreg}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ kept }}
   ansible.builtin.set_fact:
     __linux_compliance_remediate_km_read_files: >-
       {%- set chosen = {} -%}
-      {%- for directory in __linux_compliance_remediate_modprobe_read_directories -%}
-      {%- for path in __linux_compliance_remediate_km_candidates | sort -%}
-      {%- if (path | dirname) == directory and (path | basename) not in chosen -%}
-      {%- set _ = chosen.update({path | basename: path}) -%}
+      {%- for directory in __linux_compliance_remediate_km_read_paths -%}
+      {%- for entry in __linux_compliance_remediate_km_candidates | sort(attribute='path') -%}
+      {%- if (entry.path | dirname) == directory and (entry.path | basename) not in chosen -%}
+      {%- set _ = chosen.update({entry.path | basename: entry}) -%}
       {%- endif -%}
       {%- endfor -%}
       {%- endfor -%}
       {%- for path in __linux_compliance_remediate_km_owned
             if (path | dirname) == __linux_compliance_remediate_modprobe_directory -%}
-      {%- set _ = chosen.update({path | basename: path}) -%}
+      {%- set _ = chosen.update({path | basename: {'path': path, 'text': false}}) -%}
       {%- endfor -%}
-      {{ chosen | dictsort(true) | map('last') | reject('in', __linux_compliance_remediate_km_owned) | list }}
+      {{ chosen | dictsort(true) | map('last') | selectattr('text')
+         | map(attribute='path') | reject('in', __linux_compliance_remediate_km_owned) | list }}
   tags:
     - always
 
@@ -193,9 +217,39 @@
       {%- set words = line.split(none, 2) -%}
       {%- if not line.startswith('#') and ((words | length >= 2 and words[0] == 'blacklist')
             or (words | length == 3 and words[0] == 'install' and words[2] | trim != '')) -%}
+      {%- set glob = namespace(rx='', cls=none, bad=false, any=false) -%}
+      {%- for c in words[1] -%}
+      {%- if glob.cls is not none -%}
+      {%- if c == ']' and glob.cls not in ['', '^'] -%}
+      {%- set glob.rx = glob.rx ~ '[' ~ glob.cls ~ ']' -%}
+      {%- set glob.cls = none -%}
+      {%- elif glob.cls == '' and c in ['!', '^'] -%}
+      {%- set glob.cls = '^' -%}
+      {%- else -%}
+      {%- set glob.cls = glob.cls ~ ((__linux_compliance_remediate_modprobe_backslash ~ c)
+            if c in [__linux_compliance_remediate_modprobe_backslash, '[', ']', '^'] else c) -%}
+      {%- set glob.any = glob.any or c in [':', '='] -%}
+      {%- endif -%}
+      {%- elif c == '[' -%}
+      {%- set glob.cls = '' -%}
+      {%- elif c == ']' -%}
+      {%- set glob.bad = true -%}
+      {%- elif c == '*' -%}
+      {%- set glob.rx = glob.rx ~ '.*' -%}
+      {%- elif c == '?' -%}
+      {%- set glob.rx = glob.rx ~ '.' -%}
+      {%- elif c == __linux_compliance_remediate_modprobe_backslash -%}
+      {%- set glob.any = true -%}
+      {%- else -%}
+      {%- set glob.rx = glob.rx ~ (c | replace('-', '_') | regex_escape) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if glob.cls is none and not glob.bad -%}
       {%- set _ = found.append({'path': path, 'name': path | basename, 'command': words[0],
-            'module': words[1] | replace('-', '_'),
+            'token': words[1], 'module': words[1] | replace('-', '_'),
+            'pattern': '.*' if glob.any else glob.rx,
             'argument': (words[2] | trim) if words | length > 2 else ''}) -%}
+      {%- endif -%}
       {%- endif -%}
       {%- endfor -%}
       {%- endfor -%}

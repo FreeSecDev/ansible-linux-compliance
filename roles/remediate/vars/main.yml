@@ -38,11 +38,17 @@ __linux_compliance_remediate_modprobe_families:
   - wireless_modules
 __linux_compliance_remediate_modprobe_directory: /etc/modprobe.d
 __linux_compliance_remediate_modprobe_read_directories:
-  - /etc/modprobe.d
-  - /run/modprobe.d
-  - /usr/local/lib/modprobe.d
-  - /usr/lib/modprobe.d
-  - /lib/modprobe.d
+  xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04:
+    - /etc/modprobe.d
+    - /run/modprobe.d
+    - /usr/local/lib/modprobe.d
+    - /usr/lib/modprobe.d
+    - /lib/modprobe.d
+  xccdf_org.ssgproject.content_benchmark_RHEL-9:
+    - /etc/modprobe.d
+    - /run/modprobe.d
+    - /usr/lib/modprobe.d
+    - /lib/modprobe.d
 __linux_compliance_remediate_modprobe_checked_directories:
   - /etc/modprobe.d
   - /run/modprobe.d

@@ -195,6 +195,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_directory_stat$') == [] or
         '__linux_compliance_remediate_km_directory_stat' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_entries$') == [] or
+        '__linux_compliance_remediate_km_entries' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_entry$') == [] or
         '__linux_compliance_remediate_km_entry' in (hostvars[inventory_hostname] | list)
       - >-
@@ -209,9 +212,6 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_existing_text$') == [] or
         '__linux_compliance_remediate_km_existing_text' in (hostvars[inventory_hostname] | list)
-      - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_files$') == [] or
-        '__linux_compliance_remediate_km_files' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_first_install$') == [] or
         '__linux_compliance_remediate_km_first_install' in (hostvars[inventory_hostname] | list)
@@ -237,8 +237,8 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_link_targets$') == [] or
         '__linux_compliance_remediate_km_link_targets' in (hostvars[inventory_hostname] | list)
       - >-
-        query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_links$') == [] or
-        '__linux_compliance_remediate_km_links' in (hostvars[inventory_hostname] | list)
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_link_types$') == [] or
+        '__linux_compliance_remediate_km_link_types' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_module$') == [] or
         '__linux_compliance_remediate_km_module' in (hostvars[inventory_hostname] | list)
@@ -269,6 +269,9 @@
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_read_files$') == [] or
         '__linux_compliance_remediate_km_read_files' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_read_paths$') == [] or
+        '__linux_compliance_remediate_km_read_paths' in (hostvars[inventory_hostname] | list)
       - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_km_reason$') == [] or
         '__linux_compliance_remediate_km_reason' in (hostvars[inventory_hostname] | list)
@@ -1044,22 +1047,22 @@
     __linux_compliance_remediate_km_current: __linux_compliance_unset__
     __linux_compliance_remediate_km_directory: __linux_compliance_unset__
     __linux_compliance_remediate_km_directory_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_km_entries: __linux_compliance_unset__
     __linux_compliance_remediate_km_entry: __linux_compliance_unset__
     __linux_compliance_remediate_km_entry_method: __linux_compliance_unset__
     __linux_compliance_remediate_km_existing_directories: __linux_compliance_unset__
     __linux_compliance_remediate_km_existing_text: __linux_compliance_unset__
-    __linux_compliance_remediate_km_files: __linux_compliance_unset__
     __linux_compliance_remediate_km_first_install: __linux_compliance_unset__
     __linux_compliance_remediate_km_forget: __linux_compliance_unset__
     __linux_compliance_remediate_km_header: __linux_compliance_unset__
     __linux_compliance_remediate_km_lines: __linux_compliance_unset__
     __linux_compliance_remediate_km_link_targets: __linux_compliance_unset__
-    __linux_compliance_remediate_km_links: __linux_compliance_unset__
     __linux_compliance_remediate_km_owned: __linux_compliance_unset__
     __linux_compliance_remediate_km_prior: __linux_compliance_unset__
     __linux_compliance_remediate_km_read: __linux_compliance_unset__
     __linux_compliance_remediate_km_read_directories: __linux_compliance_unset__
     __linux_compliance_remediate_km_read_files: __linux_compliance_unset__
+    __linux_compliance_remediate_km_read_paths: __linux_compliance_unset__
     __linux_compliance_remediate_km_reason: __linux_compliance_unset__
     __linux_compliance_remediate_km_record: __linux_compliance_unset__
     __linux_compliance_remediate_km_removal: __linux_compliance_unset__
@@ -1285,22 +1288,22 @@
       - __linux_compliance_remediate_km_current == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_directory == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_directory_stat == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_km_entries == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_entry == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_entry_method == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_existing_directories == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_existing_text == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_km_files == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_first_install == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_forget == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_header == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_lines == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_link_targets == '__linux_compliance_unset__'
-      - __linux_compliance_remediate_km_links == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_owned == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_prior == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_read == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_read_directories == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_read_files == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_km_read_paths == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_reason == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_record == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_removal == '__linux_compliance_unset__'
@@ -1480,6 +1483,7 @@
       - __linux_compliance_remediate_km_install == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_key == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_link == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_km_link_types == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_module == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_name == '__linux_compliance_unset__'
       - __linux_compliance_remediate_km_overriding == '__linux_compliance_unset__'
@@ -1753,6 +1757,7 @@
     __linux_compliance_remediate_km_install: __linux_compliance_unset__
     __linux_compliance_remediate_km_key: __linux_compliance_unset__
     __linux_compliance_remediate_km_link: __linux_compliance_unset__
+    __linux_compliance_remediate_km_link_types: __linux_compliance_unset__
     __linux_compliance_remediate_km_module: __linux_compliance_unset__
     __linux_compliance_remediate_km_name: __linux_compliance_unset__
     __linux_compliance_remediate_km_overriding: __linux_compliance_unset__
@@ -1876,22 +1881,22 @@
     __linux_compliance_remediate_km_current: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_directory: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_directory_stat: __linux_compliance_unset_again__
+    __linux_compliance_remediate_km_entries: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_entry: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_entry_method: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_existing_directories: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_existing_text: __linux_compliance_unset_again__
-    __linux_compliance_remediate_km_files: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_first_install: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_forget: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_header: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_lines: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_link_targets: __linux_compliance_unset_again__
-    __linux_compliance_remediate_km_links: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_owned: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_prior: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_read: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_read_directories: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_read_files: __linux_compliance_unset_again__
+    __linux_compliance_remediate_km_read_paths: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_reason: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_record: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_removal: __linux_compliance_unset_again__
@@ -2117,22 +2122,22 @@
       - __linux_compliance_remediate_km_current == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_directory == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_directory_stat == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_km_entries == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_entry == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_entry_method == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_existing_directories == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_existing_text == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_km_files == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_first_install == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_forget == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_header == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_lines == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_link_targets == '__linux_compliance_unset_again__'
-      - __linux_compliance_remediate_km_links == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_owned == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_prior == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_read == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_read_directories == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_read_files == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_km_read_paths == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_reason == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_record == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_removal == '__linux_compliance_unset_again__'
@@ -2312,6 +2317,7 @@
       - __linux_compliance_remediate_km_install == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_key == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_link == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_km_link_types == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_module == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_name == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_km_overriding == '__linux_compliance_unset_again__'
@@ -2397,6 +2403,7 @@
     __linux_compliance_remediate_km_install: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_key: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_link: __linux_compliance_unset_again__
+    __linux_compliance_remediate_km_link_types: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_module: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_name: __linux_compliance_unset_again__
     __linux_compliance_remediate_km_overriding: __linux_compliance_unset_again__
@@ -2520,22 +2527,22 @@
     __linux_compliance_remediate_km_current: __linux_compliance_unset__
     __linux_compliance_remediate_km_directory: __linux_compliance_unset__
     __linux_compliance_remediate_km_directory_stat: __linux_compliance_unset__
+    __linux_compliance_remediate_km_entries: __linux_compliance_unset__
     __linux_compliance_remediate_km_entry: __linux_compliance_unset__
     __linux_compliance_remediate_km_entry_method: __linux_compliance_unset__
     __linux_compliance_remediate_km_existing_directories: __linux_compliance_unset__
     __linux_compliance_remediate_km_existing_text: __linux_compliance_unset__
-    __linux_compliance_remediate_km_files: __linux_compliance_unset__
     __linux_compliance_remediate_km_first_install: __linux_compliance_unset__
     __linux_compliance_remediate_km_forget: __linux_compliance_unset__
     __linux_compliance_remediate_km_header: __linux_compliance_unset__
     __linux_compliance_remediate_km_lines: __linux_compliance_unset__
     __linux_compliance_remediate_km_link_targets: __linux_compliance_unset__
-    __linux_compliance_remediate_km_links: __linux_compliance_unset__
     __linux_compliance_remediate_km_owned: __linux_compliance_unset__
     __linux_compliance_remediate_km_prior: __linux_compliance_unset__
     __linux_compliance_remediate_km_read: __linux_compliance_unset__
     __linux_compliance_remediate_km_read_directories: __linux_compliance_unset__
     __linux_compliance_remediate_km_read_files: __linux_compliance_unset__
+    __linux_compliance_remediate_km_read_paths: __linux_compliance_unset__
     __linux_compliance_remediate_km_reason: __linux_compliance_unset__
     __linux_compliance_remediate_km_record: __linux_compliance_unset__
     __linux_compliance_remediate_km_removal: __linux_compliance_unset__

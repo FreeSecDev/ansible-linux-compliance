@@ -85,8 +85,13 @@
          + (['blacklist ' ~ __linux_compliance_remediate_km_module]
             if __linux_compliance_remediate_km_blacklist else []) }}
     __linux_compliance_remediate_km_first_install: >-
-      {{ __linux_compliance_remediate_km_commands | selectattr('command', 'equalto', 'install')
-         | selectattr('module', 'equalto', __linux_compliance_remediate_km_key) | list | first | default(none) }}
+      {%- set first = namespace(found=none) -%}
+      {%- for command in __linux_compliance_remediate_km_commands
+            if command.command == 'install' and first.found is none
+            and __linux_compliance_remediate_km_key is match('^(?:' ~ command.pattern ~ ')$') -%}
+      {%- set first.found = command -%}
+      {%- endfor -%}
+      {{ first.found }}
     __linux_compliance_remediate_km_blacklisted: >-
       {{ __linux_compliance_remediate_km_commands | selectattr('command', 'equalto', 'blacklist')
          | selectattr('module', 'equalto', __linux_compliance_remediate_km_key) | list | length > 0 }}
@@ -163,9 +168,11 @@
                               ~ ' is a symbolic link or another non-regular file',
           'not_owned': __linux_compliance_remediate_rule.parameters.path
                        ~ ' exists without the header of the collection',
-          'overridden': 'modprobe runs the first install command for '
-                        ~ __linux_compliance_remediate_rule.parameters.module ~ ', which is '
-                        ~ ((__linux_compliance_remediate_km_first_install or {}).argument | default('') | truncate(128))
+          'overridden': 'modprobe runs the first install command that matches '
+                        ~ __linux_compliance_remediate_rule.parameters.module ~ ', install '
+                        ~ ((__linux_compliance_remediate_km_first_install or {}).token | default('') | truncate(64))
+                        ~ ' ' ~ ((__linux_compliance_remediate_km_first_install or {}).argument | default('')
+                                 | truncate(128))
                         ~ ' in ' ~ (__linux_compliance_remediate_km_first_install or {}).path | default('')
                         ~ ', read before the drop-in; the collection does not edit that file'}
          [__linux_compliance_remediate_km_status] | default(none) }}

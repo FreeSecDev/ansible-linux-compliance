@@ -323,6 +323,25 @@ def test_native_kernel_module_rules_write_one_drop_in_per_module_below_modprobe_
     role_vars = load(ROLE / "vars" / "main.yml")
     pattern = re.compile(str(role_vars["__linux_compliance_remediate_modprobe_module_pattern"]))
     assert role_vars["__linux_compliance_remediate_modprobe_families"] == KERNEL_MODULE_FAMILIES
+    directories = cast(
+        "dict[str, list[str]]", role_vars["__linux_compliance_remediate_modprobe_read_directories"]
+    )
+    manifest = load(REPOSITORY_ROOT / "content" / "manifest.yml")
+    streams = cast("list[dict[str, object]]", manifest["datastreams"])
+    assert set(directories) == {str(stream["benchmark_id"]) for stream in streams}
+    assert directories["xccdf_org.ssgproject.content_benchmark_UBUNTU_24-04"] == [
+        "/etc/modprobe.d",
+        "/run/modprobe.d",
+        "/usr/local/lib/modprobe.d",
+        "/usr/lib/modprobe.d",
+        "/lib/modprobe.d",
+    ]
+    assert directories["xccdf_org.ssgproject.content_benchmark_RHEL-9"] == [
+        "/etc/modprobe.d",
+        "/run/modprobe.d",
+        "/usr/lib/modprobe.d",
+        "/lib/modprobe.d",
+    ]
     paths: list[str] = []
     for rule in modules:
         parameters = cast("dict[str, object]", rule["parameters"])
