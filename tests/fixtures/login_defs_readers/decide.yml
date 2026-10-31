@@ -1,0 +1,23 @@
+---
+- name: Decide every login.defs case with the decision tasks of the remediate role, writing nothing on the host
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Read the cases
+      ansible.builtin.set_fact:
+        readers_cases: "{{ (lookup('ansible.builtin.file', readers_cases_path) | from_json).cases }}"
+        readers_decisions: {}
+
+    - name: Decide every case
+      ansible.builtin.include_tasks:
+        file: case.yml
+      loop: "{{ readers_cases }}"
+      loop_control:
+        loop_var: readers_case
+        label: "{{ readers_case.name }}"
+
+    - name: Write the decisions
+      ansible.builtin.copy:
+        content: "{{ readers_decisions | to_json(sort_keys=true) }}\n"
+        dest: "{{ readers_output_path }}"
+        mode: "0644"

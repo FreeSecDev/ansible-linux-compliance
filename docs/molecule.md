@@ -779,7 +779,8 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
-`login_defs` (FREES-185) has four groups, all on both platforms. In `changes`,
+`login_defs` (FREES-185, FREES-198) has six groups, `readers` on Rocky Linux and the others on both platforms. In
+`changes`,
 `shared/tasks/lifecycle_login_defs_regressions.yml` applies the topic and checks the SHA-256 of the whole
 `/etc/login.defs` against the as-built text with the two lines replaced in place; it records every entry as if another
 method had written it and checks `method_changed` at apply and at cleanup with every entry kept and the file
@@ -795,17 +796,27 @@ written, the lower-case line and `UMASK 0077` restored), a stricter maximum age 
 (`PASS_MAX_DAYS 30` and `UMASK 077` written). In `values`, `shared/tasks/lifecycle_login_defs_values.yml` does the
 same for zero-padded numbers (`090` becomes `90`, `010` becomes `10`, `0365`
 becomes `245`), the forms refused as `unreadable_value` (`"30"`, `" 30"`, `""30`, `+30`, `1234567` and `0x10000` under a minimum,
-`00077`, `"077"`, `0x3f`, a file with Windows line endings, `\v30` and `\f30`, nothing written) and those that take the profile's value (`-1`, an empty value, `9x`,
+`00077`, `"077"`, `0x3f`, nothing written) and those that take the profile's value (`-1`, an empty value, `9x`,
 `1234567` under a maximum, `0`, `0x1e`, `""` and `"-1"`); then a drop-in
 `/etc/login.defs.d/50-site.defs` that sets the maximum age and a symbolic link in place of `/etc/login.defs.d` (both
 ignored: the rules apply and clean up as usual), a symbolic link in place of `/etc/login.defs` (`not_regular_file`,
-nothing written through it) and a missing `/etc/login.defs` (`notapplicable`, nothing created). In `profiles`,
+nothing written through it) and a missing `/etc/login.defs` (`notapplicable`, nothing created). In `bytes`,
+`shared/tasks/lifecycle_login_defs_bytes.yml` does the same for the bytes that the readers treat differently: a
+customised and the as-built file with Windows line endings (`30` kept, `99999` and the umask rewritten, every other
+`\r` restored byte for byte), a vertical tab and a form feed before the number (`unreadable_value`: the ledger does not
+record them) and after it (`compliant`), a vertical tab or a carriage return inside the number and a NUL after it
+(`unreadable_value`), and lines of more than 1023 bytes (`long_line` for every rule). In `profiles`,
 `shared/tasks/lifecycle_login_defs_other_profiles.yml` applies in check mode and for real, repeats and cleans up the
 rules that the CIS level 1 profiles of the lifecycle do not select, with the STIG profile of each platform (on Rocky
 Linux from `CREATE_HOME no`, so that `accounts_have_homedir_login_defs` changes something) and the RHEL 9 ANSSI
 enhanced profile, and checks every written line and the byte-for-byte restore; on Rocky Linux it also checks that
 `CREATE_HOME`, whose check reads the drop-ins, is `overridden` by a drop-in that sets it and `not_directory` next to a
-linked drop-in directory.
+linked drop-in directory. In `readers`, on Rocky Linux, `shared/tasks/lifecycle_login_defs_readers.yml` runs, each
+on a login.defs of its own through `shared/tasks/lifecycle_login_defs_rule_case.yml` with the STIG profile and the one
+rule, the forms that util-linux reads through libeconf: `FAIL_DELAY = 30` and a `FAIL_DELAY 30` glued to the line before
+(both written as `FAIL_DELAY  30`), `FAIL_DELAY=30`, a NUL and `-1` (`unreadable_value`), a section line
+(`unreadable_file`), drop-ins that set `FAIL_DELAY` and `CREATE_HOME=no` (`overridden`), and `CREATE_HOME yes` with a
+Windows line ending (`compliant`).
 
 `faillock` and `pwhistory` ([ADR 0027](adr/0027-native-faillock-pwhistory.md)) write one recorded line per setting
 into `/etc/security/faillock.conf` and `/etc/security/pwhistory.conf`. Their cycles run from the file as built and from
@@ -927,10 +938,11 @@ growth of the suite, while a hung run is still cancelled long before the merge q
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
-modes of the topic, so 40 cycle legs and 34 regression legs (`pwquality` `changes`, `ssh` `changes` and
-`vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values` and `profiles`,
-`filesystem_modules` `changes`, `faillock` `changes`, `readers`, `bytes`, `stack` and `profiles` on both platforms, `sudo`
-`files` on Ubuntu, `pwhistory` `changes`, `readers` and `stack` on Rocky Linux; `wireless_modules` runs on Rocky Linux only). A topic skips
+modes of the topic, so 40 cycle legs and 37 regression legs (`pwquality` `changes`, `ssh` `changes` and
+`vendor`, `sudo` `changes` and `profiles`, `login_defs` `changes`, `refusals`, `values`, `profiles` and `bytes`,
+`filesystem_modules` `changes`, `faillock` `changes`, `readers`, `bytes`, `stack` and `profiles` on both platforms,
+`sudo` `files` on Ubuntu, `login_defs` `readers` and `pwhistory` `changes`, `readers` and `stack` on Rocky Linux;
+`wireless_modules` runs on Rocky Linux only). A topic skips
 the platforms that its declaration lists under `unselected_platforms` (`pwhistory` on Ubuntu), which get no leg.
 `tests/unit/tools/test_molecule_matrix.py` checks that every declared group
 gets its legs and no libvirt leg, `make lint-lifecycle` checks the groups, and the harness fails a regression leg whose
