@@ -165,6 +165,9 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_comparison$') == [] or
         '__linux_compliance_remediate_ld_comparison' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_controls$') == [] or
+        '__linux_compliance_remediate_ld_controls' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_ld_current$') == [] or
         '__linux_compliance_remediate_ld_current' in (hostvars[inventory_hostname] | list)
       - >-
@@ -1076,6 +1079,7 @@
     __linux_compliance_remediate_fp_target: __linux_compliance_unset__
     __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset__
     __linux_compliance_remediate_ld_already: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_controls: __linux_compliance_unset__
     __linux_compliance_remediate_ld_current: __linux_compliance_unset__
     __linux_compliance_remediate_ld_directory: __linux_compliance_unset__
     __linux_compliance_remediate_ld_dropin_texts: __linux_compliance_unset__
@@ -1332,6 +1336,7 @@
       - __linux_compliance_remediate_fp_target == '__linux_compliance_unset__'
       - __linux_compliance_remediate_fp_valid_prior == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_already == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_ld_controls == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_current == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_directory == '__linux_compliance_unset__'
       - __linux_compliance_remediate_ld_dropin_texts == '__linux_compliance_unset__'
@@ -1960,6 +1965,7 @@
     __linux_compliance_remediate_fp_target: __linux_compliance_unset_again__
     __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_already: __linux_compliance_unset_again__
+    __linux_compliance_remediate_ld_controls: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_current: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_directory: __linux_compliance_unset_again__
     __linux_compliance_remediate_ld_dropin_texts: __linux_compliance_unset_again__
@@ -2216,6 +2222,7 @@
       - __linux_compliance_remediate_fp_target == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_fp_valid_prior == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_already == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_ld_controls == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_current == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_directory == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_ld_dropin_texts == '__linux_compliance_unset_again__'
@@ -2632,6 +2639,7 @@
     __linux_compliance_remediate_fp_target: __linux_compliance_unset__
     __linux_compliance_remediate_fp_valid_prior: __linux_compliance_unset__
     __linux_compliance_remediate_ld_already: __linux_compliance_unset__
+    __linux_compliance_remediate_ld_controls: __linux_compliance_unset__
     __linux_compliance_remediate_ld_current: __linux_compliance_unset__
     __linux_compliance_remediate_ld_directory: __linux_compliance_unset__
     __linux_compliance_remediate_ld_dropin_texts: __linux_compliance_unset__

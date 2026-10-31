@@ -36,7 +36,10 @@ verify. Verification happens twice, at two different places:
 
 1. **Controller, at fetch time.** `tools/content/fetch_content.py` verifies the archive SHA-512 before it opens the
    archive and the SHA-256 of every extracted datastream before it is renamed into place. A mismatch deletes the
-   partial file and fails.
+   partial file and fails. Amended by [ADR 0026](0026-no-content-scripts-on-hosts.md) (FREES-191): the extracted
+   member is checked against `source_sha256` and `source_size_bytes`, its Script Check Engine checks and scripts are
+   removed (`removed_sce_checks`, `removed_sce_scripts`), and the processed datastream must have `sha256` and
+   `size_bytes`, which every later step pins. Only the processed datastream is written.
 2. **Managed host, at use time.** The `benchmark_info` and `profile_info` modules (and every later consumer) take the
    expected SHA-256 as an argument, hash the file and refuse to parse it when the digest differs. The file is opened
    once, hashed, rewound and hashed again while it is parsed, so content that changes between the two reads, or a path

@@ -64,6 +64,15 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
 
 ### T-AUDIT-2: SCE check scripts run as root
 
+**Mitigated by FREES-191 ([ADR 0026](../adr/0026-no-content-scripts-on-hosts.md)):** no SCE check or script reaches a
+managed host any more. `make content` removes all 81 (Ubuntu 24.04) and 438 (RHEL 9) SCE checks and scripts on the
+controller, together with all 1257 and 3460 XCCDF `fix` elements (the content's remediation code), and pins the
+digest of the processed datastream next to the published one. The hosts refuse any script
+check at run time (`script_check_content`), in every parse of the content and in the private copy that `oscap` reads.
+That refusal also refuses references outside the datastream (`oscap` resolves `file:` references unconfined) and any
+declared encoding other than UTF-8 (libxml2 honours it, the checking parser does not).
+The former SCE-only rules are `notchecked`. The text below records the situation before FREES-191.
+
 - **Asset:** root execution on the managed host.
 - **Fact:** the pinned datastreams embed Script Check Engine (SCE) shell scripts. The Ubuntu 24.04 datastream
   (`ssg-ubuntu2404-ds.xml`, SHA-256 in `content/manifest.yml`) has 81. `oscap` 1.3.9 writes them into a new
@@ -91,12 +100,15 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
   root's library loading would add a code-loading path. Without SCE, the 16 SCE-only rules of `cis_level1_server` are
   `notchecked` (13 firewall rules and 3 file-system-wide ownership and permission rules); the other 392 rules are
   unaffected. An operator who does not want to run any SCE script can list those rules in `disabled_rules`: the
-  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`. That is not the
-  default, so the owner's requirement that ComplianceAsCode code never runs is not yet met for SCE;
-  [FREES-191](https://vidlunnia.atlassian.net/browse/FREES-191) tracks it.
-- **Residual:** the pinned content and its 81 scripts are trusted as a whole, like the OVAL definitions, which
-  `oscap` also evaluates as root. A content update is therefore a change to code that runs as root: its review covers
-  the SCE scripts that changed, not only the digest.
+  tailoring file deselects them, their scripts do not run, and they are reported as `disabled`.
+- **Residual (before FREES-191):** the pinned content and its 81 scripts were trusted as a whole, like the OVAL
+  definitions, which `oscap` also evaluates as root.
+- **Residual (since FREES-191):** only the OVAL definitions run, interpreted by `oscap` as root. They are declarative,
+  but a content update still changes what the scanner reads as root, so its review covers the OVAL that changed. The
+  removal is static: a future scanner that runs another kind of embedded code would need the refusal extended, which
+  the allow-list of check systems (OVAL and OCIL only) makes fail closed. The transform and the refusal are covered
+  by `tests/unit/tools/test_script_checks.py`, `test_catalog.py`, `test_audit_content.py` and the golden test
+  `test_content_golden_scripts.py`.
 
 ## CI-only SCC image
 
@@ -529,8 +541,8 @@ bundles with `--evidence-bundle` ([evidence bundles](../evidence.md)).
   test-evidence` plants an environment variable, a `no_log` fact, a ledger with a sensitive value, an unlisted file and
   a shadow-like ARF line and checks that none reaches a bundle or the output.
 - **Residual:** `results.xml` is copied verbatim: it carries the target facts (host names, every IP and MAC
-  address) and the standard output of the SCE check scripts (firewall rule dumps, listening ports, lists of
-  world-writable, unowned or privileged files). `make test-evidence` shows that these are carried. The exceptions file
+  address) and, for content that still had SCE checks (before FREES-191), the standard output of the SCE check scripts
+  (firewall rule dumps, listening ports, lists of world-writable, unowned or privileged files). `make test-evidence` shows that these are carried. The exceptions file
   names owners and approvers. With the ARF opt-in a bundle can hold password hashes. Bundles are `0600` in `0700`
   directories of the controller user; share them like the report.
 
