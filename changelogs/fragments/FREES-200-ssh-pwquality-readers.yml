@@ -6,7 +6,9 @@ bugfixes:
     ``sshd -T`` prints its value afterwards; otherwise the rule is rolled back and reported ``overridden`` with the
     value that sshd reads, for example behind an earlier ``DSAAuthentication no``, the alias of
     ``PubkeyAuthentication``. Settings, ``Match`` blocks and ``Include`` lines are found as sshd's lexer finds them,
-    after blanks, CRs and quotes, so a looser value in a ``Match`` block such as ``PermitRootLogin<CR>yes`` is
+    with a reproduction of sshd's ``strdelim`` checked against ``sshd -T -C`` in both Molecule images, so a looser
+    value in a ``Match`` block such as ``Permit"RootLogin" yes``, ``=PermitRootLogin yes`` or
+    ``PermitRootLogin<CR>yes`` is
     ``overridden`` and no longer reported applied, and an ``Include`` after the drop-ins of a file the family does not
     read makes every rule ``overridden``. Vendor lines are set, written back and rolled back by writing the whole
     file from the exact text read, so files with CRLF line ends or a lone CR are restored byte for byte.

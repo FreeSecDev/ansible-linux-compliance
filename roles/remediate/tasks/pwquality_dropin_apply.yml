@@ -100,7 +100,8 @@
                   'content': __linux_compliance_remediate_pwq_current.content | b64decode}]
                 if __linux_compliance_remediate_pwq_current is not skipped else []),
              __linux_compliance_remediate_pwq_main_text,
-             __linux_compliance_remediate_pwq_pam) }}
+             __linux_compliance_remediate_pwq_pam,
+             __linux_compliance_remediate_pwq_directory_kind) }}
   tags:
     - always
 
@@ -245,6 +246,9 @@
            'message': __linux_compliance_remediate_rule.parameters.path ~ ': ' ~ __linux_compliance_remediate_pwq_status
                       ~ ((' (' ~ __linux_compliance_remediate_pwq_decision.reason ~ '; nothing was changed)')
                          if __linux_compliance_remediate_pwq_status in ['overridden', 'unreadable_file'] else '')
+                      ~ ((' (' ~ __linux_compliance_remediate_pwq_decision.note ~ ')')
+                         if __linux_compliance_remediate_pwq_decision.note
+                            and __linux_compliance_remediate_pwq_status in ['applied', 'compliant'] else '')
          }] }}
   tags:
     - always

@@ -79,7 +79,21 @@
              __linux_compliance_remediate_pwq_state,
              (__linux_compliance_remediate_pwq_current.content | b64decode)
              if __linux_compliance_remediate_pwq_current is not skipped else none,
-             __linux_compliance_remediate_pwq_pam) }}
+             __linux_compliance_remediate_pwq_pam,
+             __linux_compliance_remediate_pwq_directory_kind) }}
+  tags:
+    - always
+
+- name: Password quality | Inspect the main file again with its SHA-256, right before anything is recorded or written
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwquality_main }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_pwq_again
+  when: __linux_compliance_remediate_pwq_decision.status == 'applied'
   tags:
     - always
 
@@ -90,6 +104,11 @@
       {{ 'method_changed' if __linux_compliance_remediate_pwq_entry_method not in [none, 'main_file']
          else 'notapplicable' if not __linux_compliance_remediate_pwq_stat.stat.exists
          else 'not_regular_file' if not __linux_compliance_remediate_pwq_stat.stat.isreg
+         else 'modified_since_read' if __linux_compliance_remediate_pwq_again is not skipped
+              and (__linux_compliance_remediate_pwq_again.stat.checksum | default('')
+                   != (__linux_compliance_remediate_pwq_current.content | b64decode | hash('sha256'))
+                   or __linux_compliance_remediate_pwq_again.stat.checksum | default('')
+                      != __linux_compliance_remediate_pwq_stat.stat.checksum)
          else __linux_compliance_remediate_pwq_decision.status }}
   tags:
     - always
@@ -170,12 +189,18 @@
                      else (__linux_compliance_remediate_pwquality_main ~ ' is a symbolic link or not a regular file;'
                            ~ ' nothing is written through it')
                      if __linux_compliance_remediate_pwq_status == 'not_regular_file'
+                     else (__linux_compliance_remediate_pwquality_main ~ ' changed after the collection read it,'
+                           ~ ' so nothing was written; the next run reads it again')
+                     if __linux_compliance_remediate_pwq_status == 'modified_since_read'
                      else __linux_compliance_remediate_pwq_decision.reason,
            'changed': (__linux_compliance_remediate_pwq_write is changed)
                       or (__linux_compliance_remediate_pwq_rerecord is changed),
            'message': __linux_compliance_remediate_pwquality_main ~ ' '
                       ~ __linux_compliance_remediate_rule.parameters.setting ~ ': '
                       ~ __linux_compliance_remediate_pwq_status
+                      ~ ((' (' ~ __linux_compliance_remediate_pwq_decision.note ~ ')')
+                         if __linux_compliance_remediate_pwq_decision.note
+                            and __linux_compliance_remediate_pwq_status in ['applied', 'compliant'] else '')
          }] }}
   tags:
     - always

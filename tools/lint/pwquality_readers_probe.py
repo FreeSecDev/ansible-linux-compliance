@@ -26,6 +26,7 @@ MAIN: Final[str] = "etc/security/pwquality.conf"
 DIRECTORY: Final[str] = "etc/security/pwquality.conf.d"
 TARGETS: Final[str] = "tmp/frees200-pwquality-targets"
 MISSING_TARGET: Final[str] = "/nonexistent/frees200-pwquality-link"
+LINKED_DIRECTORY: Final[str] = "linked-pwquality.conf.d"
 SETTING_IDS: Final[dict[str, int]] = {
     "difok": 1,
     "minlen": 3,
@@ -91,34 +92,52 @@ def load() -> Library:
     return cast("Library", library)
 
 
-def install(root: Path, state: dict[str, object]) -> None:
-    """Put the main file and the drop-ins of ``state`` in place below ``root``."""
+def reset(root: Path) -> tuple[Path, Path, Path]:
+    """Remove the main file, the drop-in directory and the link targets below ``root``."""
     main = root / MAIN
     directory = root / DIRECTORY
     targets = root / TARGETS
     for path in (directory, targets):
         if path.is_dir() and not path.is_symlink():
             shutil.rmtree(path)
-    if main.exists() or main.is_symlink():
-        main.unlink()
-    directory.mkdir(parents=True)
+    for path in (main, directory):
+        if path.exists() or path.is_symlink():
+            path.unlink()
+    return main, directory, targets
+
+
+def place(directory: Path, targets: Path, entry: dict[str, str]) -> None:
+    """Put one drop-in entry of a state in place: a file, a directory or a link."""
+    path = directory / entry["name"]
+    kind = entry["type"]
+    if kind == "directory":
+        path.mkdir()
+    elif kind == "link":
+        target = targets / entry["name"]
+        target.write_bytes(base64.b64decode(entry["content"]))
+        path.symlink_to(target)
+    elif kind == "dangling":
+        path.symlink_to(MISSING_TARGET)
+    else:
+        path.write_bytes(base64.b64decode(entry["content"]))
+
+
+def install(root: Path, state: dict[str, object]) -> None:
+    """Put the main file and the drop-ins of ``state`` in place below ``root``."""
+    main, directory, targets = reset(root)
     targets.mkdir(parents=True)
+    if state.get("directory") == "link":
+        linked = targets / LINKED_DIRECTORY
+        linked.mkdir()
+        directory.parent.mkdir(parents=True, exist_ok=True)
+        directory.symlink_to(linked)
+    else:
+        directory.mkdir(parents=True)
     content = state.get("main")
     if isinstance(content, str):
         main.write_bytes(base64.b64decode(content))
     for entry in cast("list[dict[str, str]]", state.get("dropins", [])):
-        path = directory / entry["name"]
-        kind = entry["type"]
-        if kind == "directory":
-            path.mkdir()
-        elif kind == "link":
-            target = targets / entry["name"]
-            target.write_bytes(base64.b64decode(entry["content"]))
-            path.symlink_to(target)
-        elif kind == "dangling":
-            path.symlink_to(MISSING_TARGET)
-        else:
-            path.write_bytes(base64.b64decode(entry["content"]))
+        place(directory, targets, entry)
 
 
 def read(library: Library, arguments: list[str]) -> list[int]:

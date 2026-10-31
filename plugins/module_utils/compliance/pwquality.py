@@ -98,6 +98,9 @@ NEWLINE: Final[str] = "\n"
 DROPIN_SUFFIX: Final[str] = ".conf"
 FILE: Final[str] = "file"
 DIRECTORY: Final[str] = "directory"
+MISSING: Final[str] = "missing"
+COMMENT_TEXT: Final[str] = "#"
+INCLUDE_TARGET: Final[int] = 2
 
 
 @dataclass(frozen=True)
@@ -428,36 +431,131 @@ def why_not_effective(reading: Reading, rule: Rule, path: str, line: int | None)
     )
 
 
+def pam_unread_includes(files: Sequence[tuple[str, str]]) -> list[str]:
+    """Return ``<file> includes <path>`` for every PAM line that includes a file by absolute path.
+
+    Linux-PAM opens such a file wherever it is, so a ``pam_pwquality`` line in it is not among the
+    files that the collection reads.
+    """
+    found: list[str] = []
+    for path, text in files:
+        for line in text.split(NEWLINE):
+            words = line.split()
+            if not words or words[0].startswith(COMMENT_TEXT):
+                continue
+            if words[0] == "@include" and len(words) > 1 and words[1].startswith("/"):
+                found.append(f"{path} includes {words[1]}")
+            elif (
+                len(words) > INCLUDE_TARGET
+                and words[1].lower() in ("include", "substack")
+                and words[2].startswith("/")
+            ):
+                found.append(f"{path} includes {words[2]}")
+    return found
+
+
+def loosening(
+    reading: Reading, pam: Sequence[tuple[str, str]], rule: Rule
+) -> tuple[str | None, str | None]:
+    """Return why ``enforcing`` turns the rule into a warning, and a note on ``local_users_only``.
+
+    With ``enforcing = 0`` libpwquality only warns and accepts every password, so no other rule
+    takes effect; with ``local_users_only`` the setting applies to local users only.
+    """
+    refusal = None
+    if rule.setting != "enforcing":
+        sources = [] if reading.value("enforcing") != 0 else ["the files"]
+        sources += [
+            entry
+            for entry in pam_overrides(pam, "enforcing", 1)
+            if entry.endswith(("=0", "=+0", "=-0"))
+        ]
+        if sources:
+            refusal = (
+                "enforcing is 0 in "
+                + "; ".join(sources)
+                + ", so libpwquality only warns and accepts every"
+                f" password, and {rule.setting} does not take effect"
+            )
+    local = reading.value("local_users_only") == 1 or any(
+        "local_users_only" in text for _path, text in pam if PAM_MODULE.decode("ascii") in text
+    )
+    note = (
+        f"local_users_only is set, so {rule.setting} applies to local users only" if local else None
+    )
+    return refusal, note
+
+
 def decide(
     rule: Rule,
     dropins: Sequence[Mapping[str, object]],
     main: str | None,
     pam: Sequence[tuple[str, str]],
+    directory: str = DIRECTORY,
 ) -> dict[str, object]:
     """Decide a rule from the files as libpwquality and ``pam_pwquality`` read them.
 
     Returns the ``status`` (``compliant``, ``applied``, ``overridden``, ``duplicate_setting``,
-    ``unreadable_file`` or ``unreadable_value``), the ``reason`` of a refusal, the ``line`` that the
-    rule writes, the setting line found in the main file (``found``) and, for the main file method,
-    the new ``text`` of the main file with every other byte unchanged. A rule is ``applied`` or
-    ``compliant`` only when the library, reading the files as they are or will be, takes the
-    required value from what the rule writes, and no ``pam_pwquality`` argument overrides it.
+    ``not_directory``, ``unreadable_file`` or ``unreadable_value``), the ``reason`` of a refusal,
+    a ``note`` on a rule that applies, the ``line`` that the rule writes, the setting line found in
+    the main file (``found``) and, for the main file method, the new ``text`` of the main file with
+    every other byte unchanged. A rule is ``applied`` or ``compliant`` only when the library,
+    reading the files as they are or will be, takes the required value from what the rule writes,
+    no ``pam_pwquality`` argument overrides it and ``enforcing`` is not 0. ``directory`` is the
+    kind of the drop-in directory: ``directory``, ``missing``, ``link`` or ``other``.
     """
-    result: dict[str, object] = {"line": rule.line, "found": None, "text": None, "reason": None}
+    result: dict[str, object] = {
+        "line": rule.line,
+        "found": None,
+        "text": None,
+        "reason": None,
+        "note": None,
+    }
+    refusal = _refusal(rule, main, pam, directory)
+    if refusal is not None:
+        return result | refusal
+    if rule.method == "dropin":
+        decided, files = _decide_dropin(rule, dropins, main, result)
+    else:
+        decided, files = _decide_main(rule, dropins, main or "", result)
+    if files is None:
+        return decided
+    loose, note = loosening(read_config(files), pam, rule)
+    if loose is not None:
+        return decided | {"status": "overridden", "reason": loose, "text": None}
+    return decided | {"note": note}
+
+
+def _refusal(
+    rule: Rule, main: str | None, pam: Sequence[tuple[str, str]], directory: str
+) -> dict[str, object] | None:
+    """Return the refusal that does not depend on reading the files, or ``None``."""
+    if directory not in (DIRECTORY, MISSING):
+        return {
+            "status": "not_directory",
+            "reason": f"{rule.dropin.rsplit('/', 1)[0]} is a symbolic link or not a"
+            " directory, which"
+            " libpwquality reads through but the collection does not",
+        }
     if main is not None and re.search(SURROGATE, main) is not None:
-        return result | {
+        return {
             "status": "unreadable_file",
             "reason": f"{rule.main} is not UTF-8 text, so it cannot be rewritten exactly",
         }
+    unread = pam_unread_includes(pam)
+    if unread:
+        return {
+            "status": "overridden",
+            "reason": "; ".join(unread) + ", which the collection does not read, so a pam_pwquality"
+            " argument there could override the file",
+        }
     overrides = pam_overrides(pam, rule.setting, rule.required)
     if overrides:
-        return result | {
+        return {
             "status": "overridden",
             "reason": "pam_pwquality arguments override the file: " + "; ".join(overrides),
         }
-    if rule.method == "dropin":
-        return _decide_dropin(rule, dropins, main, result)
-    return _decide_main(rule, dropins, main or "", result)
+    return None
 
 
 def _decide_dropin(
@@ -465,7 +563,7 @@ def _decide_dropin(
     dropins: Sequence[Mapping[str, object]],
     main: str | None,
     result: dict[str, object],
-) -> dict[str, object]:
+) -> tuple[dict[str, object], list[tuple[str, bytes | None]] | None]:
     files, unread = _files(dropins, main, rule, dropin=rule.content)
     if unread:
         return result | {
@@ -473,13 +571,13 @@ def _decide_dropin(
             "reason": "libpwquality reads "
             + ", ".join(unread)
             + ", which the collection does not read: a symbolic link or not a regular file",
-        }
+        }, None
     reason = why_not_effective(read_config(files), rule, rule.dropin, None)
     if reason is None:
         current = [entry for entry in dropins if entry.get("path") == rule.dropin]
         same = bool(current) and current[0].get("content") == rule.content
-        return result | {"status": "compliant" if same else "applied"}
-    return result | {"status": _status_of(reason), "reason": reason}
+        return result | {"status": "compliant" if same else "applied"}, files
+    return result | {"status": _status_of(reason), "reason": reason}, None
 
 
 def _status_of(reason: str) -> str:
@@ -530,12 +628,12 @@ def _decide_main(
     dropins: Sequence[Mapping[str, object]],
     main: str,
     result: dict[str, object],
-) -> dict[str, object]:
+) -> tuple[dict[str, object], list[tuple[str, bytes | None]] | None]:
     found = setting_lines(main, rule.setting)
     result = result | {"found": found[0][1] if len(found) == 1 else None}
     refusal = _main_refusal(rule, main, found)
     if refusal is not None:
-        return result | refusal
+        return result | refusal, None
     number, text = compose(main, rule.line, found)
     files, unread = _files(dropins, text, rule, dropin=None)
     reason = (
@@ -550,10 +648,10 @@ def _decide_main(
         return result | {
             "status": "unreadable_file" if unread else _status_of(reason),
             "reason": reason,
-        }
+        }, None
     if found and found[0][1] == rule.line:
-        return result | {"status": "compliant"}
-    return result | {"status": "applied", "text": text}
+        return result | {"status": "compliant"}, files
+    return result | {"status": "applied", "text": text}, files
 
 
 def restore(text: str, setting: str, written: str, prior: str | None) -> dict[str, object]:

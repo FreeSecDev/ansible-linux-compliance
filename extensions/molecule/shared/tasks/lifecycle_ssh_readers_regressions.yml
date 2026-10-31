@@ -195,7 +195,7 @@
         == ['overridden']
       - >-
         lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='reason')
-        | select('search', 'sshd -T reads pubkeyauthentication no') | list | length == 1
+        | select('search', readers_early ~ '|sshd -T reads pubkeyauthentication no') | list | length == 1
       - lifecycle_results | rejectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='status') | unique
         | list == ['compliant']
       - lifecycle_results | selectattr('changed') | list == []
@@ -242,7 +242,7 @@
         == ['overridden']
       - >-
         lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='reason')
-        | select('search', 'still reads pubkeyauthentication no') | list | length == 1
+        | select('search', readers_early ~ '|still reads pubkeyauthentication no') | list | length == 1
       - lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | selectattr('changed') | list == []
       - lifecycle_results | rejectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='status') | unique
         | list == ['applied']
@@ -262,22 +262,24 @@
   vars:
     lifecycle_check_mode: false
 
-- name: SSH reader regressions | Remove the earlier alias and add a Match block whose keyword is separated by a CR
+- name: SSH reader regressions | Remove the earlier alias before the Match block test
   ansible.builtin.file:
     path: "{{ readers_early }}"
     state: absent
 
-- name: SSH reader regressions | Add a later drop-in whose Match block sets PermitRootLogin yes after a CR
+- name: SSH reader regressions | Add a later drop-in whose Match block sets looser values in forms that sshd reads
   ansible.builtin.copy:
     content: >-
-      {{ 'Match User ' ~ readers_probe.user ~ readers_newline
-         ~ 'PermitRootLogin' ~ readers_cr ~ 'yes' ~ readers_newline }}
+      {{ '="Match" User ' ~ readers_probe.user ~ readers_newline
+         ~ 'Permit"RootLogin" yes' ~ readers_newline
+         ~ '=X11Forwarding yes' ~ readers_newline
+         ~ 'PubkeyAuthentication' ~ readers_cr ~ 'no' ~ readers_newline }}
     dest: "{{ readers_late }}"
     mode: "0600"
     owner: root
     group: root
 
-- name: SSH reader regressions | Read the value of PermitRootLogin that sshd uses for the user of the Match block
+- name: SSH reader regressions | Read the values that sshd uses for the user of the Match block
   freesecdev.linux_compliance.sshd_validate:
     effective: true
     client: "{{ readers_probe }}"
@@ -294,17 +296,17 @@
   vars:
     lifecycle_check_mode: false
 
-- name: SSH reader regressions | Check that sshd reads the looser value there and that the root rule was refused
+- name: SSH reader regressions | Check that sshd reads the looser values there and that every rule was refused
   ansible.builtin.assert:
     that:
       - readers_match_effective.effective.permitrootlogin == 'yes'
+      - readers_match_effective.effective.x11forwarding == 'yes'
+      - readers_match_effective.effective.pubkeyauthentication == 'no'
+      - lifecycle_results | map(attribute='status') | unique | list == ['overridden']
       - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', readers_root) | map(attribute='status') | list
-        == ['overridden']
-      - >-
-        lifecycle_results | selectattr('rule_id', 'equalto', readers_root) | map(attribute='reason')
-        | select('search', 'inside a Match block') | list | length == 1
-      - lifecycle_results | selectattr('rule_id', 'equalto', readers_root) | selectattr('changed') | list == []
+        lifecycle_results | map(attribute='reason') | select('search', 'inside a Match block') | list | length
+        == readers_ids | length
+      - lifecycle_results | selectattr('changed') | list == []
     fail_msg: "{{ readers_label }}, Match block: {{ readers_match_effective }}; {{ lifecycle_results }}"
     quiet: true
 

@@ -267,9 +267,9 @@ of those releases do:
 - The arguments of `pam_pwquality` in every PAM stack override the files (`minlen=8`, `MINLEN=8`,
   `enforce_for_root`), and an argument that the library refuses changes nothing.
 
-The table holds 228 cases, every file state that a decision of the family leaves (1323 states, read identically in
-both images) and the 1824 decisions of four rules (`minlen`, `minclass`, `retry`, `enforce_for_root`) with both
-methods. Measured against it, the family on main reported a rule `compliant` or `applied` while the library held a
+The table holds 273 cases, every file state that a decision of the family leaves (1795 states, read identically in
+both images) and the 2730 decisions of five rules (`minlen`, `minclass`, `retry`, `enforce_for_root`, `enforcing`)
+with both methods. Measured against it, the family on main reported a rule `compliant` or `applied` while the library held a
 looser value for: a looser second line in another case or without `=` (`MINLEN = 6`, `minlen 6`), a looser later
 drop-in written in upper case, a malformed or over-long line before the setting, a bad or over-long drop-in read
 before the main file, a dot file drop-in that stops the reading, a later drop-in that is a symbolic link, a
@@ -306,3 +306,22 @@ rewrote a CRLF file or one with a lone CR other than byte for byte.
   `minlen = 8` (rewritten in place on Ubuntu, `overridden` by the main file on Rocky Linux), cleans up byte for byte,
   and refuses both rules, with nothing written, under a PAM file that passes `minlen=8` and a drop-in read first with
   `minlen == 14`, which stops libpwquality.
+
+**Review of PR #89, round 1.**
+
+- *A linked drop-in directory is refused with both methods (F2).* libpwquality follows a symbolic link at
+  `/etc/security/pwquality.conf.d` with `scandir`; a bad drop-in there stops the reading before the main file. The
+  main file method, used on Ubuntu, now refuses with `not_directory` as the drop-in method does; the table has cases
+  with a linked directory, which the probe installs as a link to a real directory.
+- *`enforcing = 0` refuses every other rule, and `local_users_only` is reported (F7).* With `enforcing` at 0 in the
+  files or a `pam_pwquality` argument, libpwquality only warns, so a rule is `overridden` with that reason instead of
+  `applied`. With `local_users_only` set, an applied or compliant rule says in its message that it applies to local
+  users only; the shipped Rocky Linux stack sets it, so refusing would refuse every rule there.
+- *A PAM line that includes a file by absolute path refuses the rule (F8)*, because Linux-PAM opens that file
+  wherever it is and the collection reads only `/etc/pam.d` and `/usr/lib/pam.d`.
+- *Every write re-checks the file (F3), and a cleanup is `restored` only after a SHA-256 match (F5).* Right before the
+  main file is recorded and written, and right before it is written back, its SHA-256 must be that of the text read;
+  otherwise the rule is `modified_since_read` with nothing written. After it is written back, its SHA-256 must be
+  that of the text written, or the entry is kept with `write_mismatch`. The recorded `sha256` of the file before the
+  rule changed it is compared with the restored text: the message says when the file is byte for byte as recorded,
+  and that only the line is back when other lines changed since, for example by rules that are still applied.

@@ -785,9 +785,11 @@ leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 CRLF line ends and a lone CR in a comment, the three rules apply, `sshd -T` (`sshd_validate` with `effective: true`)
 prints the three values, only the `X11Forwarding` line changed, and the cleanup restores the file byte for byte. With
 an earlier drop-in `DSAAuthentication no`, the alias of `PubkeyAuthentication`, the drop-in in place is `overridden`
-by `sshd -T`, and a drop-in written behind the alias is rolled back with no file and no ledger entry left. With a later
-drop-in `Match User freesecdev-probe` and `PermitRootLogin<CR>yes`, `sshd -T -C user=freesecdev-probe,...` shows that
-sshd reads `yes` for that user, and the root rule is `overridden` with `inside a Match block`. It ends with the
+(by the lexer, which reads the alias, or by `sshd -T`), and the rule is refused again after the cleanup, with no
+drop-in and no ledger entry left. With a later
+drop-in `="Match" User freesecdev-probe` holding `Permit"RootLogin" yes`, `=X11Forwarding yes` and
+`PubkeyAuthentication<CR>no`, `sshd -T -C user=freesecdev-probe,...` shows that sshd reads the three looser values for
+that user, and the three rules are `overridden` with `inside a Match block`. It ends with the
 whole-instance comparison.
 
 `pwquality` has a second group, `readers` (FREES-200, `shared/tasks/lifecycle_pwquality_readers_regressions.yml`, both

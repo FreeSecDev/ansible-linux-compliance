@@ -320,12 +320,21 @@ lines and splits at a lone CR, so a vendor file with a CR was not written back b
   `changed: false`. Check mode cannot write, so it reports what the files predict; `sshd_validate` returns
   `check_mode`, because `ansible_check_mode` does not show the `check_mode` of an `apply`, and nothing is compared or
   reloaded after a write that check mode did not make.
-- *The lexer of the family only finds what sshd and the content's check could read as a setting, and refuses more
-  than it accepts.* A line sets a keyword when, after any run of blanks, CRs and quotes, the keyword follows in any
-  case and is not followed by a letter or digit (`__linux_compliance_remediate_sshd_line_start` and
-  `__linux_compliance_remediate_sshd_word_end`); `Match` and `Include` lines are found the same way. Earlier settings
-  stay `overridden` before anything is written, so the write and rollback above is needed only where sshd knows more
-  than the files (an alias). A conflicting later line in a `Match` block, of a vendor file or of an administrator's
+- *The lexer of the family reads each line as sshd does.* The filter `sshd_config_lines`
+  (`plugins/module_utils/compliance/sshd_config.py`) reproduces `load_server_config` and `strdelim` of OpenSSH: the
+  blanks, tabs and CRs at the start of a line are dropped, a `"` anywhere in the keyword is removed up to the next
+  `"`, one `=` after white space and an `=` at the start of the line are skipped, keywords are compared without case
+  and `DSAAuthentication` is `PubkeyAuthentication`. Settings, `Match` lines and `Include` lines are all found with
+  it (amended after the review of PR #89, finding F1, which found `Permit"RootLogin" yes`, `=PermitRootLogin yes`
+  and `Ma"tch" User x` missed by the regular expression of the first version). A file with a NUL byte, which makes
+  sshd join two lines, or with bytes that are not UTF-8 is not read as lines at all: every rule is `overridden` with
+  that reason, and nothing is rewritten. `tests/fixtures/sshd_readers/verdicts.json`, produced with
+  `tools/lint/sshd_readers.sh` by `sshd -T -C` in both images (352 cases: 37 keyword forms and 128 fuzz forms with a
+  `"`, `""`, `=`, a blank, a tab, a CR, an FF or a VT at each position of the keyword, each alone and in a `Match`
+  block, and 11 forms of the `Match` line, each with a setting and with the alias; both images agree on every case), checks that the lexer reads every case as sshd or refuses it
+  (`tests/unit/tools/test_sshd_verdicts.py`). Earlier settings
+  stay `overridden` before anything is written, the alias `DSAAuthentication` included, so the `sshd -T` comparisons
+  above are the backstop for anything that sshd reads but the files read do not show. A conflicting later line in a `Match` block, of a vendor file or of an administrator's
   drop-in, is `overridden` with `inside a Match block`, because sshd applies it to the connections that the block
   matches and the content's check reads every occurrence; the reader regressions confirm the looser value with
   `sshd -T -C user=freesecdev-probe,host=probe.example,addr=192.0.2.10`. An `Include` after the drop-ins, other than
@@ -349,3 +358,21 @@ lines and splits at a lone CR, so a vendor file with a CR was not written back b
 remaining limit is a `Match` block in a file that the family does not read, which the `Include` refusal covers, and
 the values of `Match` blocks that equal the rule's value, which are accepted as the content's check accepts them.
 Each apply runs `sshd -T` up to four times instead of `sshd -t` twice, in milliseconds.
+
+**Review of PR #89, round 1.** Besides F1 above:
+
+- *Every write re-checks the file first (F3).* Right before the vendor files are written, written back or rolled
+  back, the family reads their SHA-256 again and compares it with the text it read (or, for a rollback, with what this
+  run wrote). A file that changed in between is not written: an apply refuses the rules with `modified_since_read`, a
+  cleanup keeps the entry with the reason `modified_since_read`, and a rollback leaves the file alone and names it in
+  its failure.
+- *A cleanup is `restored` only after a SHA-256 match (F5).* After a vendor file is written back, its SHA-256 must be
+  that of the text written; otherwise the entry is kept with the reason `write_mismatch`. The vendor record holds the
+  line, not the file: restoring the line is the meaning of the cleanup, and the lifecycle checks that the whole file
+  is byte for byte the original once every rule is cleaned up.
+- *A vendor file that is not UTF-8 is refused (F4)*, as above, instead of rewritten through text that holds lone
+  surrogates.
+- *The rollback after a refused configuration is complete (F6).* A drop-in that this run rewrote for a changed value
+  gets its prior text back, and its ledger entry is recorded again with the prior values.
+- `-C` is used only by the Molecule regressions to read what sshd applies in a `Match` block; the role never passes
+  it (amendment of FREES-200 of ADR 0004).

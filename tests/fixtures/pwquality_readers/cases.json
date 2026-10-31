@@ -1399,6 +1399,302 @@
    ]
   },
   {
+   "name": "minlen_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "directory": "link"
+  },
+  {
+   "name": "minlen_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minlen_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "minlen = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minlen_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nenforcing = 0\n"
+  },
+  {
+   "name": "minlen_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "minlen_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "minlen_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "minlen_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\nlocal_users_only\n"
+  },
+  {
+   "name": "minlen_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "minlen_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "minlen_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminlen = 14\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "minclass_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "directory": "link"
+  },
+  {
+   "name": "minclass_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minclass_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "minclass = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "minclass_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nenforcing = 0\n"
+  },
+  {
+   "name": "minclass_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "minclass_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "minclass_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "minclass_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\nlocal_users_only\n"
+  },
+  {
+   "name": "minclass_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "minclass_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "minclass_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nminclass = 4\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "retry_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "directory": "link"
+  },
+  {
+   "name": "retry_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "retry_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "retry = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "retry_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nenforcing = 0\n"
+  },
+  {
+   "name": "retry_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "retry_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "retry_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "retry_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\nlocal_users_only\n"
+  },
+  {
+   "name": "retry_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "retry_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "retry_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nretry = 3\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "enforce_for_root_dir_link_empty",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "directory": "link"
+  },
+  {
+   "name": "enforce_for_root_dir_link_bad",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "dropins": [
+    {
+     "name": "10-x.conf",
+     "type": "file",
+     "content": "foo = 1\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "enforce_for_root_dir_link_looser",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforce_for_root = 0\n"
+    }
+   ],
+   "directory": "link"
+  },
+  {
+   "name": "enforce_for_root_enforcing_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\nenforcing = 0\n"
+  },
+  {
+   "name": "enforce_for_root_enforcing_off_dropin",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "dropins": [
+    {
+     "name": "90-x.conf",
+     "type": "file",
+     "content": "enforcing = 0\n"
+    }
+   ]
+  },
+  {
+   "name": "enforce_for_root_enforcing_off_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password requisite pam_pwquality.so enforcing=0\n"
+  },
+  {
+   "name": "enforce_for_root_enforcing_on_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password requisite pam_pwquality.so enforcing=1\n"
+  },
+  {
+   "name": "enforce_for_root_local_users_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\nlocal_users_only\n"
+  },
+  {
+   "name": "enforce_for_root_local_users_pam",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password requisite pam_pwquality.so local_users_only\n"
+  },
+  {
+   "name": "enforce_for_root_pam_absolute_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "password include /opt/site/pam-password\n"
+  },
+  {
+   "name": "enforce_for_root_pam_absolute_at_include",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n",
+   "pam": "@include /opt/site/common-password\n"
+  },
+  {
+   "name": "enforcing_rule_off_main",
+   "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforcing = 0\n"
+  },
+  {
    "name": "efr_set",
    "main": "# Configuration for systemwide password quality limits\n# difok = 1\nenforce_for_root\n"
   },

@@ -30,7 +30,7 @@ description:
     replaced in place or appended, and every other byte unchanged.
 author:
   - FreeSecDev (@FreeSecDev)
-positional: _input, dropins, main, pam
+positional: _input, dropins, main, pam, directory
 options:
   _input:
     description:
@@ -55,6 +55,13 @@ options:
     type: list
     elements: dict
     required: true
+  directory:
+    description:
+      - The kind of the drop-in directory, C(directory), C(missing), C(link) or C(other). A link or
+        anything else than a directory makes the rule C(not_directory) with both methods, because
+        libpwquality reads through it.
+    type: str
+    default: directory
 """
 
 EXAMPLES = r"""
@@ -77,6 +84,9 @@ _value:
       type: str
     reason:
       description: Why the rule is refused, or C(None).
+      type: str
+    note:
+      description: A remark on a rule that is applied or compliant, for example C(local_users_only).
       type: str
     line:
       description: The line that the rule writes.
@@ -101,7 +111,9 @@ def _text(value: object, what: str) -> str:
     return value
 
 
-def pwquality_decide(rule: object, dropins: object, main: object, pam: object) -> dict[str, object]:
+def pwquality_decide(
+    rule: object, dropins: object, main: object, pam: object, directory: object = "directory"
+) -> dict[str, object]:
     """Return the decision of :func:`pwquality.decide` for the rule and the files."""
     if not isinstance(rule, Mapping) or not isinstance(dropins, (list, tuple)):
         message = "the rule must be a mapping and the drop-ins a list"
@@ -131,7 +143,7 @@ def pwquality_decide(rule: object, dropins: object, main: object, pam: object) -
             raise DecisionInputError(message)
         found = cast("Mapping[str, object]", item)
         files.append((_text(found.get("path"), "path"), _text(found.get("content"), "content")))
-    return pwquality.decide(planned, entries, main, files)
+    return pwquality.decide(planned, entries, main, files, _text(directory, "directory"))
 
 
 class FilterModule:

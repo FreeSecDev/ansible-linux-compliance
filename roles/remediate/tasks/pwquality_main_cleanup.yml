@@ -106,6 +106,32 @@
   tags:
     - always
 
+- name: Password quality | Inspect the main file again with its SHA-256, right before writing it back
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwquality_main }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_pwq_again
+  when:
+    - __linux_compliance_remediate_pwq_reason is none
+    - not __linux_compliance_remediate_pwq_already
+  tags:
+    - always
+
+- name: Password quality | Refuse the cleanup when the main file changed since it was read
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_reason: modified_since_read
+  when:
+    - __linux_compliance_remediate_pwq_again is not skipped
+    - >-
+      __linux_compliance_remediate_pwq_again.stat.checksum | default('')
+      != (__linux_compliance_remediate_pwq_current.content | b64decode | hash('sha256'))
+  tags:
+    - always
+
 - name: Password quality | Write the main file with the setting as it was before, every other byte as it was read
   ansible.builtin.copy:
     content: "{{ __linux_compliance_remediate_pwq_restored_text }}"
@@ -117,6 +143,32 @@
   when:
     - __linux_compliance_remediate_pwq_reason is none
     - not __linux_compliance_remediate_pwq_already
+  tags:
+    - always
+
+- name: Password quality | Inspect the main file that was written back, with its SHA-256
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_pwquality_main }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_pwq_written_back
+  when:
+    - __linux_compliance_remediate_pwq_restored is not skipped
+    - __linux_compliance_remediate_pwq_restored.dest is defined
+  tags:
+    - always
+
+- name: Password quality | Keep the ledger entry when the main file does not hold what was written back
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_reason: write_mismatch
+  when:
+    - __linux_compliance_remediate_pwq_written_back is not skipped
+    - >-
+      __linux_compliance_remediate_pwq_written_back.stat.checksum | default('')
+      != (__linux_compliance_remediate_pwq_restored_text | hash('sha256'))
   tags:
     - always
 
@@ -150,7 +202,12 @@
                           ~ ' next run)')
                          if __linux_compliance_remediate_pwq_reason
                          else ' (the setting was already as before; only the ledger entry was removed)'
-                         if __linux_compliance_remediate_pwq_already else '')
+                         if __linux_compliance_remediate_pwq_already
+                         else ' (the file is byte for byte as recorded before the rule changed it)'
+                         if (__linux_compliance_remediate_pwq_restored_text | hash('sha256'))
+                            == __linux_compliance_remediate_pwq_prior.sha256 | default('')
+                         else ' (the line is back; other lines of the file changed since the rule was applied,'
+                              ~ ' for example by other rules that are still applied)')
          }] }}
   tags:
     - always

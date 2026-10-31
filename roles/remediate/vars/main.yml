@@ -28,8 +28,6 @@ __linux_compliance_remediate_sshd_marker: /etc/ssh/sshd_config.d/.freesecdev-cre
 __linux_compliance_remediate_sshd_vendor_files:
   - /etc/ssh/sshd_config
   - /etc/ssh/sshd_config.d/50-redhat.conf
-__linux_compliance_remediate_sshd_line_start: '(?i)^[ \t\r"'']*'
-__linux_compliance_remediate_sshd_word_end: '(?![A-Za-z0-9])'
 __linux_compliance_remediate_sshd_known_includes:
   /etc/ssh/sshd_config.d/50-redhat.conf:
     - /etc/crypto-policies/back-ends/opensshserver.config

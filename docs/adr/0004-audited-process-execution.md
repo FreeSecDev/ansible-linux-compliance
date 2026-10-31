@@ -1096,3 +1096,5 @@ sshd prints the required value. The `sshd` policy grows by one narrow form:
 - `freesecdev.linux_compliance.sshd_validate` gains `effective: true` and `client`; with them it runs `-T`
   instead of `-t` and returns only the values of the 28 keywords of the native ssh rules, parsed from lines of
   printable characters, and no values when sshd refuses the configuration, times out or prints more than 64 KiB.
+- The remediate role never passes `client`, so it never runs `-C`; only the Molecule reader regressions use it, to
+  read what sshd applies inside a `Match` block for one user.

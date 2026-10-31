@@ -38,6 +38,7 @@ RULES: Final[tuple[tuple[str, str], ...]] = (
     ("minclass", "4"),
     ("retry", "3"),
     ("enforce_for_root", ""),
+    ("enforcing", "1"),
 )
 METHODS: Final[tuple[str, ...]] = ("main_file", "dropin")
 PLATFORMS: Final[tuple[str, ...]] = ("ubuntu", "rocky")
@@ -64,6 +65,7 @@ SETTINGS: Final[tuple[str, ...]] = (
     "local_users_only",
 )
 KEY_DIGITS: Final[int] = 16
+COMPACT: Final[tuple[str, str]] = (",", ":")
 DECISION_FIELDS: Final[tuple[str, ...]] = ("case", "setting", "method", "status", "state", "after")
 
 Case = dict[str, object]
@@ -129,14 +131,18 @@ def arguments_of(case: Mapping[str, object]) -> list[str]:
 
 
 def state_of(
-    main: str | None, dropins: Sequence[Mapping[str, object]], arguments: Sequence[str]
+    main: str | None,
+    dropins: Sequence[Mapping[str, object]],
+    arguments: Sequence[str],
+    directory: str = pwquality.DIRECTORY,
 ) -> State:
-    """Return a file state as the probe installs it."""
-    return {
+    """Return a file state as the probe installs it; a linked directory is named in the state."""
+    state: State = {
         "main": None if main is None else encode(main),
         "dropins": [dict(entry) for entry in dropins],
         "arguments": list(arguments),
     }
+    return state if directory == pwquality.DIRECTORY else state | {"directory": directory}
 
 
 def state_key(state: State) -> str:
@@ -177,14 +183,16 @@ def decide_case(
 ) -> tuple[dict[str, object], State, State | None]:
     """Return the decision of a rule for a case, the state of the case and the state after it."""
     main = cast("str | None", case.get("main"))
-    decision = pwquality.decide(rule, dropins_of(case), main, pam_of(case))
+    directory = str(case.get("directory", pwquality.DIRECTORY))
+    decision = pwquality.decide(rule, dropins_of(case), main, pam_of(case), directory)
     arguments = arguments_of(case)
-    before = state_of(main, probe_dropins(case), arguments)
+    before = state_of(main, probe_dropins(case), arguments, directory)
     if decision["status"] != "applied":
         return decision, before, None
     if rule.method == "dropin":
-        return decision, before, state_of(main, after_dropins(case, rule), arguments)
-    return decision, before, state_of(cast("str", decision["text"]), probe_dropins(case), arguments)
+        return decision, before, state_of(main, after_dropins(case, rule), arguments, directory)
+    text = cast("str", decision["text"])
+    return decision, before, state_of(text, probe_dropins(case), arguments, directory)
 
 
 def prepare(cases: Path, output: Path) -> None:
@@ -239,13 +247,13 @@ def merge(directory: Path, table: Path) -> None:
         ' "verdicts": {',
         ",\n".join(
             f"  {json.dumps(key)}: "
-            + json.dumps([readings[platform][key] for platform in PLATFORMS])
+            + json.dumps([readings[platform][key] for platform in PLATFORMS], separators=COMPACT)
             for key in sorted(states)
         ),
         " },",
         ' "decisions": [',
         ",\n".join(
-            "  " + json.dumps([decision[field] for field in DECISION_FIELDS])
+            "  " + json.dumps([decision[field] for field in DECISION_FIELDS], separators=COMPACT)
             for decision in decisions
         ),
         " ]",

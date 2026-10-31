@@ -141,6 +141,11 @@
               | zip(__linux_compliance_remediate_pwq_read.results | default([]) | map(attribute='content')
                     | map('b64decode'))) }}
   ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_directory_kind: >-
+      {{ 'missing' if not (__linux_compliance_remediate_pwq_directory_stat.exists | default(false))
+         else 'directory' if __linux_compliance_remediate_pwq_directory_stat.isdir | default(false)
+         else 'link' if __linux_compliance_remediate_pwq_directory_stat.islnk | default(false)
+         else 'other' }}
     __linux_compliance_remediate_pwq_main_text: >-
       {{ (__linux_compliance_remediate_pwq_main_read.content | b64decode)
          if __linux_compliance_remediate_pwq_main_read is not skipped else none }}

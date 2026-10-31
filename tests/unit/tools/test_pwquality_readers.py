@@ -98,6 +98,21 @@ def test_install_puts_every_kind_of_entry_in_place(tmp_path: Path) -> None:
     assert list(directory.iterdir()) == []
 
 
+def test_install_links_the_drop_in_directory_and_removes_the_link_again(tmp_path: Path) -> None:
+    state: dict[str, object] = {
+        "main": None,
+        "directory": "link",
+        "dropins": [{"name": "10-x.conf", "type": "file", "content": b64("foo = 1\n")}],
+    }
+    probe.install(tmp_path, state)
+    directory = tmp_path / "etc/security/pwquality.conf.d"
+    assert directory.is_symlink()
+    assert (directory / "10-x.conf").read_text() == "foo = 1\n"
+    probe.install(tmp_path, {"main": None, "dropins": []})
+    assert directory.is_dir()
+    assert not directory.is_symlink()
+
+
 def test_read_applies_the_arguments_and_returns_every_setting(tmp_path: Path) -> None:
     library = FakeLibrary(-4)
     found = probe.read(cast("probe.Library", library), [b64("minlen=9")])
