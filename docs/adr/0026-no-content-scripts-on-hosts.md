@@ -91,7 +91,9 @@ The only reliable control is therefore the content: an SCE check or script that 
    | `ssg-rhel9-ds.xml` | 3460 | sh 1316, ansible 1294, kickstart 179, puppet 152, kubernetes 160, anaconda 134, blueprint 126, bootc 99 |
 
    Stripping the fixes needs the catalogue's values to come from the profile, not from the fixes. FREES-188 (ADR
-   0025, pull request #72) provides that, so this change is based on it.
+   0025, pull request #72) provides that, so this change is based on it. The repository guard of ADR 0025 pins the
+   element name exactly in `tools/content/script_checks.py` and `plugins/module_utils/compliance/catalog.py`, the
+   two places that remove or refuse a `fix` without reading it.
    - The document is parsed once with the bounded parser of `xmlsafe` (no DOCTYPE, no entities, bounded size and
      depth). The parser now reports the byte offset of every tag, and the elements are cut out of the original bytes.
      Nothing is serialised again, so every other byte stays as published and the result is reproducible.
