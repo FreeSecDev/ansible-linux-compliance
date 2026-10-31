@@ -1,0 +1,6343 @@
+{
+ "readers": {
+  "rocky": {
+   "libeconf": "libeconf-0.4.1-5.el9.x86_64",
+   "pam": "pam-1.5.1-28.el9.x86_64",
+   "shadow": "shadow-utils-4.9-16.el9.x86_64",
+   "util-linux": "util-linux-2.37.4-25.el9.x86_64"
+  },
+  "ubuntu": {
+   "pam": "libpam0g 1.5.3-5ubuntu5.7",
+   "shadow": "passwd 1:4.13+dfsg1-4ubuntu3.2"
+  }
+ },
+ "states": {
+  "0060f950ef1fffbb49ba98e5f581e28e4d76876e20ae6ff1f9c78ba7a164c0df": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 1,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "00a3e3c5317685dbc3fd39fe33f95a701712fa6c856b34c66aa9ef3c9892398b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "019af4a45736593f647a4665a081cb9026af5708b096d7c4e42b68bca05e0745": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 365,
+    "minimum": 0,
+    "pam": "022",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 365,
+    "minimum": 0,
+    "pam": "022\r",
+    "warning": -1
+   }
+  },
+  "0232e4c6e6372786480b71fee4231d389f282bda4dd6b7916477eb47ee79c1ea": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "03b016e62973cc7e9b8c71535a941e558912c3fd2b8c677d2958ac8c2c5e499a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "054da4869ae1545f2f1d8a190d8ba1bd6479e15944110c917c3df0398e016e24": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 400,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "0686e90fa5bbe97f1d96575c9f01d30aca35f49e36be2ea6a5618f7f51e4bde0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "0699ed4106ff11846b5c24b259771da6c6147f8abb5e605f4a063958e327e1f4": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 99999,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "06af38c4228812562c3779f0d42c126b14b6d2230c807f7228fa577c32cc88eb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "06c6fad5cf6da94f43bef763ba68419c782deefe6f430f9ad274088adf434b61": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 8,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "06d22181f0b03fe4f001d99e072dff638653b321deb4439ab7b915da1e88f9f7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "0712fbdc5d8da3c5b08bcbc0f9e55597b67665d405f363790a3a2de1031170bb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "087101e6a23a9ba8c74b4f1717568570c76930d50d53e4a8dcb21c56a5e47d61": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 245,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 245,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "093b4cb9f31999b61cebf717cf7e23c6f82485fa8acdc511f0128a003b6e360f": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "096a9d1e193a9014cc2aff72579508d1446ad09c2bb0710305afc0d441262931": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 400,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 400,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "09f91d92b8ad9278c4469e3c454c2699631dcab56bdb7caaf8f72926cead3fa1": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0077",
+    "warning": -1
+   }
+  },
+  "0a34cb4a537e915e6c546076d88fab78ea97fcb208755d61f05a6c2ee90ce65c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "0c37352b241a9f4e639b5e3e5d6d98869ef5cb5b7ed54b7fd28a1e4a5aa0eb69": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "\"077\" ",
+    "warning": -1
+   }
+  },
+  "0e063d177f5477c6d8dffd31210fb12841fa29ac75617c025521bab6ea2b867c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": "027\r",
+    "warning": -1
+   }
+  },
+  "10793f4dd8487453044249c00fc352d20fca3894fb302c2bd1eed9bdfc492b62": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "1181fa670e555142ad5723687ac29a0c83a1b9b725120f21dd71b84757992bbe": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "12e93481fedc6a07e9a517453664da90a216ef4781afa80151d10cc2310d6147": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "15ac8abebc6b60957976fce78215b7667a92bc739033a2f4b110f087838517ef": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 1,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "15d46458c2311edd9c4d37194f2fe256f3115098e497dd69e042ef32a9f7a14d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "1694a35243522bc865ce7bb3a2b4e6611285a4892cb0316500e38bf18b2665da": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "16952e5187044b45d4315a203d338d6df84c9d459efa77df969ad3e79ce1b27d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "17c02b9473c3243c21c6f3764d230f1052fb30f9061bc7cb8058345e3703b2c9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 400,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 400,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "18044063bdfa33dd9dbbf0e771497a6549f9e3933b02eb8ef5d8aac7d1087ebe": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "18ed64761a287e2d2d4d7dc1283aee3f1756996dbc22142cc4080766756eb604": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "1d96ea983b1f79f00bd2ab439c07134e8eabf1bb6ff9d0e4267a96e6af1bb907": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "1e50fe8d70cfad25eb6ba4241938e766310baeb4fba2ca2cd835977b07c9a0ce": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "1edb3d762cee4f557e6c3c445478fed249cd66c87623356b0fdb3f8c08f69dfd": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "1f25e3fdcf75b265c5e7340578a7f4be33bef2c4bf13ce3f7abb5de66b8f50a2": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "1f61499faeb0b42b2fcbd0c8983100f4e5fb9dc1b638ec98787396b6405c38a4": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "1f8f239e24bb0503239782cd77d4dce2d2e7149cd757abdf9f34aeac18ab4224": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 9,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2054c09c186aa450ebd644c3afdd313f787fdf5b9a462bd1cdadd1a91cc3a4c1": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   }
+  },
+  "21147ad466f18b70d4e0ad35003537e9d2bfbe25d28e7b2c34f6ee20618f5202": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "223f8eced71ab6d5917b4109d9c00be8189fe5cd8b3b21a51f3498ba4262d669": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "228c24b2de261068f04d651ae3b4a282a613a0491ae8595e9a2bbff84bbb55a3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "228c24ec898a4200ab5e74bfbbb4b92e76852fd4fe720a864ff613294d7eeb42": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "22951ce31f061c58b2d2b9c54c860d919d15868f651658e2e2dab2dad2223cd1": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "231fed4dd8519f254e5a6ee4f16e370ad234122d95e817ac41721eea4961b6f2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "23c2468ff1323368201ea80f0fd908ee9f9199afd804b1af2ee85f1b9693110c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "251f2476ac2a2f9d8462e456df3853e0ec7886da0390f7000e91ac6c4b171f74": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "25e1f27bd77c1b48dca0576fa6c0a12c28b8f251aabc0949511c759bda052d40": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2689088a77f89b6c7ce9b50c61257ea635a7dc9610fa1249192677d90b47a372": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 1
+   }
+  },
+  "28d3b0295069474ffb34e77b89c6a5153a6637d67799a4d4ec327560a9674f0b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "28f073b21725ec147c35ebda4d1457bf7f6ca01300ca55df57fcfbaa6fee1bfa": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2982569db77701777f690244e0b0d47f87aa2c6597f3b60bd4adf4e3a5212478": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "29e4982ffaa9c47fda8afa2ce650f3186a71ed3a78401c4eee2e0e9d43ed96aa": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2aabd46380f89ab5d9781607bb9fb72a229c502d3629a54e52e2a7f61c49b068": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2ab5179988d80cdc6003a3fbb437fe983979db3c1eb74374bbca91f1d38f09c7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2bedadd148af65ba1c368d3849779f2662c91bde95628a07764e2745d6beb420": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 0,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2ef394ab1e26ee21f8d283837313d8a47254f9ca255e10526ea06b6448cad101": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "2f1be64b486caf49e519b372aa3afa3f2ca19f41f95986f213769732cc52d284": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "305cdd86f0808971dd76ffcc9c580c77373f0ebecfb0e0061de78cf5c0a4e9b9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 365,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "314db24ad43618f3b62dd74dd5756d0c5cbf9d282fa13cf0262d1572a5d740df": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "329a94348fbf2efd67becec0bfd08deade02be2dcb8baeaf57c75bb58720a032": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   }
+  },
+  "335aba9c3a5c69e868fdc179bd2b0747c7e71886660ff43e6bbb60037e9174f3": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "33709383129f4144539ddcc905122f6cf8c1fbb361b57c77976a6fd1f2d9487d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   }
+  },
+  "33c724fc388e48d74cf7fa798133dcfb0dbbb1004ff61c5bb6f774b6722a7d02": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "33d0850658e7dd40ae010f1af66b9599e101260d434dafc5aaa93b17ff5a67bf": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 245,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 245,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3467a6b6c9e8f13ab2a7701d1938689541c34ac4456aca3b5d60878abbce10e0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 365,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 365,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "365b39d7a8ec44d51763346be18da6c6509ce5221135cf2de61393b584e71a64": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "36a1db81d823cc3bd2af31cbf6c95523196c0f5531221f719a39dc0d9e0d20a0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "389f318c1cd233b1abe1f4dbc763485cea28710b60a65c4910d7db7cf8f7e576": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "39cfd1804e8efb296bbf57daf173cfab34b9fbf3668e6d2562ee043753760e8d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3a202a4a30e068747838ceff6bdc0ccce42e8eb85bdd0d1b43611889d404cec6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "352",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "277",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "352",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "277",
+    "warning": -1
+   }
+  },
+  "3a54862fd635a5a5aeef52c443124d0e95ea3014e4bcdc024ccfc432c73c5668": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3acaa8c5eabe6e4b9fbfba31ea80b4443eb2cacc95455b888d74604d78722a9f": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3acdb7938d7f6994826e3404e82e41c173da0ed398f59362f91e45413d2f08cd": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3b3332bce9d717365de359f395056087dc1042c842d1a7f7461a0e7508c4d266": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3b8af196abf1c264e4c8ecbc14a993e024a689294ab49329d44aa9398bd30569": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 8,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 8,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3bde382146675532a1c1462a1aaa5c2c95e7e5e6ad9c3e648b6cecda49062a82": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3d41b1827cf71fd64b5828f80e22b9aaa869c580054f872963b1b0c2e3c0ebba": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "3f23ff4cf765f7a609e69466ee6e3d2d74ae566ab330b4406a51376cadf923ce": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "",
+    "warning": -1
+   }
+  },
+  "3f621b9e400c5c752545ca26e0fb9e89f9c2ccef41ed050fb898d833c450dcb4": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 99999
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 99999
+   }
+  },
+  "40702b39bd28e64a83989d570f3c58ad674d26a95286ed0740a20f10a837d33a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 99999,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "40c08c693333c7878e5e2c1595f547e6ef8b97700b8720b2b9414e9bbc6f9ced": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4417136a52dcd824fd5041b2440167d2c2cea5486561fadd771ab130cacafec6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4294967295,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "466a01d938254e45ea4fde813fcfbe5fb793f6d13b54a6fa59310f7b5e427b5c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 10,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "466d5a9a7e216a377260b14991a4a5d70f7e035a35326c9d67d15d574b2fb266": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "46d62d941bb29e757a71460edf24110c3682dd5354333c20ceb1de1d6f56aa75": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "46e594ba700056f56fa8ab624ecefbff916a8a888123fc8e59d309a3c6e8b651": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "46e798af44ec0ccf8b92da84c27690dcad34769a3671301a6cdafaa1721f7769": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4766add4592f1d4c84144c7c497559e4eee659d56eb7fa9184c9ccaf5525ed7e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "4ac6b89063369ebcb573627a3aa5bb1f14120a718cb8587cab2cd21c7ce05665": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   }
+  },
+  "4b63f4396527e60256b4eb7e7000c0f6a620950bcaab4671e41e38a29bb264ec": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4c1692b60ceab960117abc4a94ee609216a33f43f6637929781e4174e5924093": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4c2358714ce7668a8a612a2e7147e018b1ea6a1d4b89e7796144f7be52b52594": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4cce9f261e7c6cf3a23e9638ba4ee905ed71937fb19b1d42fc633b1fda1835ea": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 400,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 400,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4d1a59abc352f39bc93d54d12fafb46ece0bde14745eb4dc7f88f95bcb72c2e6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4deaea08185e9f18136faca7d877504dde782ec2220fea28646bca872d56e864": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "4e1470fa4db1ca9760b4985ad68592e46ac8d297e9b7a43dc4581fc6292b936e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "5159ce925cac2ee1c09b791f4adfcefa7cc9cf71d61b9f6b9a6c764b9a4f9b39": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "662",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "77",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "662",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "77",
+    "warning": -1
+   }
+  },
+  "52aa3e3bff695d88cffe15e704c3e1e70c003b73424a2dba6024c5d28a005644": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077\r",
+    "warning": -1
+   }
+  },
+  "542fee4d85affd5155f2ee9a37eea81738670112c1f1daccf883cb5289eee7a6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "5442b3a3084643119c048d4dc46bfa027cceccf11a0f0727477b3cd313772e85": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "54f86c0e9aa261a9e4ea433fc9724f2ed08b9c4e378b9851a56e35053f0d1767": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": " 077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "\" 077\"",
+    "warning": -1
+   }
+  },
+  "557e051e956d40e2b2f783d66a45abeb3550a77af8e5ac8e22948e2c5954baf7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 99,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "56304299f56f1a8c52f529dc4243ecd3a1025e0a8bfd659c3ce11d0518779822": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "57d5116330f081ea563819ecc5a37ee7cb7f00e38d3c578157ce109a90e38647": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "58e1617c2fd4406694458980539fc90a81faed2d167513109743a7ab529854bb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "594ea64532d90415b8015a6dc0ed7034063d8c05dee8c80beb05280f83c112e7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "5a6e8b42acee958b5e68f218a11b5293364d1b923aba4e6e1a4e6009b1b4b953": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "5b35590b0d2dabfab8127096553e342296ab0f270f0a8f3a8f5266fdc4cacc2e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 10
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 10
+   }
+  },
+  "5ba88b8eb00ed0d36abfefbf62c9d25cfcbaceadddc43283d05939982c1239c0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "5ee3abe1bf863cca3d9ddfdb7c35371c42649d0a56b0f473077eff7750e1e069": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 131072
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 131072
+   }
+  },
+  "5f27b9edc3578cf82848bcb3926a720d39a4bf44415f9b54b0769f37bc12b0ca": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "61495291c632268171d6398396b5429deb923c31f9b270ed074cdec5c9517b58": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 1234567,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 1234567,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "6307d9a40c9a49f9b4d71531019105e35d8ef41c07e6a0572e42a50304cdb6a8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "63e544f1574fbe30793b2751852b222bc6a726a0b97291bf0af1f0eaff6889df": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 9,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
+   }
+  },
+  "6497f9bbd7989508db8f914cc5ab0118f665013d361b9d3bdf9192b60bf14b7f": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 1234567,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 1234567,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "65b93597273936d753724e3d34aef02e4ef96d7d6f7aba4492a1d32b4ce4a2af": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "66c3c96d1c5edd6a1d065478742fc3b6c7ca3c2b225cc55bebaf6ac1b8e51fa9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 8,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 8,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "67ae2a9fd1d2903ec20626a40d601722b4825bd58ce9a7c7ee289d41a5d6a7ff": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 400,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "6ab7e53405ccf0453399c9df8ca28eabea0b5c07dfcdd13d4562fe98de106aeb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   }
+  },
+  "6b216c3d9be0b2a847fa0e634d5418c9daa6c6c8165ac921272ff021ab42c7de": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "6c681086979da58516f81fb0df7940c5ec2e5cf5b7ecb53c817e5a54f5d1fce6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "770",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "07",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "770",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "07",
+    "warning": -1
+   }
+  },
+  "6c72625320f8b3dcfdaa18085b5883d1fa540335cca4a97c1ac07798e9b5b133": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "6c8f22056390de7d413a045cb9598c488ecaca837c88bec76527bc3c2f483349": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 0,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "6cd00830bb12adeb68a788925b1989e935a899134a8cdcacf9ad40b3c7b50066": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077 \r",
+    "warning": -1
+   }
+  },
+  "6d6e7f6c45d7f793a9185f07d6b494aff2d12ddfa459853e68c835a618694c56": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 0
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 0
+   }
+  },
+  "6ef1511059bd4c090b329c5c23e23c7279b6318a5ac53abc843c896aa144e6e8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "6fffa7eaef0bee236d29962c3bfc5078405fb40e8238d25eee9f5146218ced1b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "7022c40480f4efe9f14970876ec2e658f9a614bbd752e3b11104ef69e7671ff9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 99999,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 99999,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "705103727fc8b90623d09daf19e5fae71da5d68d78de71ce011aeaa3495ddce9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "711b5380dc8eece12acf1507b63d95e6859e65256dd4fbe4f29cae1e5306cb3e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "\"\"077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "\"\"077",
+    "warning": -1
+   }
+  },
+  "71543d05b8c365bcd9a9c83cce4d3a37f0ab9df1e120e3548c635e195a23bf12": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 10,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "725dbc21ea37f5e85ce84af2bce2ce590405c55e6cd29943a2280baf85ece76c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "732378fab375969cdf1c27f890a5c4c7377c52c9d1c38d769033df697e4e0e00": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "738ec12753b2b65ce3b0ebc548ebaae87d5f986c8239249b670b5c9b925ce397": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 1234567,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7533b7312b75476b6b7b0ac0ad87cfa1ac6bafaa3fc02f4099baa53c6009eab9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "763f6e5a5015ba394b0174d8ace45e6b6d7bd6c894a7406ec59e8beec77210e0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7640b3bac360f27107d28b5991f8e5ece56317d8106be7210cf10602ec9725d0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "78096c16b832af7f4591431712b7884cc792be0666cd0aa618c007c3b38e6611": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 90,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "79180a1b707eea7a11ed8d6eba54edf342c69addc544955d04acae59d234f8fd": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 8
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 8
+   }
+  },
+  "7a3ed3d9bab373253cb544170754b8a877b3d302e5e27d5cf0137acad47791a6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7a7dd2cc49c6a788c8a8e9b9ece8e69538354dbd9f8659db885ecbaf534aa772": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7adfc326916d4f0aa057d146c9eb3337b2b1a7d65e1bf060a03865a7a3f07103": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "7b9bac098a488aaaed54b33aa2c7558ee320522a42a10630930e40fd46066174": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7bf2970e28f45626363ef339e2e1807d4da0cfebba0b041817a5a0b7bd4bb226": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7d0c81a33183a80bbb0fbfa1491a008a89058b57cf3fdac2cd9926294b244a8a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 400,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7d4578850d5dd811bd3e1cd5d071d859c7081a030c2e2ab6831e3c2df83c61db": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7d5bb0d7250274bfc7b2c10a2a613be731228e4f4d7170fb4aafc674c9b6ad14": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7ea3e87baae80c7d8af63ee3efc928ee679b44a208be48f0e661afe487f23cd6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7f3e0c206827cf7b6b0537ec94a8678712be6f5d1822efd80a5489ee3e765c3a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7f9e7c20f4edbd351ab8d7c983f99e9703e3784c6e87ace214fc3aa6dec234cd": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 65536,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 65536,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "7fba2cd0385547092ec376ec5514a2d3d4ede842bfb7f7b927c337b653457cf2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "80cc2c76dcb80b1c467608471db93d17c58715a226cc040c48dd1edd2d2c2286": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "81e249014a9d6941ced570b7060ac3cb5f6e55c1977aaeca0ed48b4cc44fb161": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "81f9c84024e63bceb15a2232080496ac9fcf8ac65b3377081baf8f39b40c24f6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "822ac1c077233e394a1994cd44ae2eaf3bd66bdcc7ee133d79c85a16a7639b23": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "82d49ae153b1d857e2b0b87c7ea688b3c2ef1f96f9bf8078cdea636a948f53f5": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 90,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "831e0dcf6d92b30a7a74e5afb50f188804355671bb873ca0af182064642c2bc4": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 8,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 8,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "836b5c9fd61cb4b0e798e341b7a71a9db64194d50235079eec293ebaeacdca99": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "840917b1d302f7fbf32bcef3d47378f7d653531f1df02f0b9a894c2c5cbea231": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "84ea06c7d12bb01590b04ae3e4752e2e6618b6990364b0246425ac78928a4424": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "870c0ffe759a23ba5ae3739ddb9f9b57340db88f79dbbe16a818a79614672fb2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 245
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 245
+   }
+  },
+  "88c6314fbf2f2ed0093c7d59cc297a59d8a792916675b20ad5e8ef564c8f77d5": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "88da4c598606b28204843c5f4c9b3ff037f33a67f351dd69348aa37dd3389fa3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "898b0ac3c1b0fae54128360767b28498c4ec5484f218e84aae102b98ad2593b9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   }
+  },
+  "89cf806a5cd4d09d5c81202a190698e48c7a164d27b69ff51fe9f3e9eaefb225": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8a452f647e7f9343fca4d180a6c1f9234e676eb5a41a52f04621fdb038c8fc97": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8a45d778e164bf34a8572867cbce280ce540371b4d980fd20266da66417435d5": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "002",
+    "warning": -1
+   }
+  },
+  "8aa557615f19481c403ee8ba9d3a94ea89ed16e22a69e7ddbac901974869cbb7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8aab1e753ef793a2eec81e29d4947bb569395d7c45e2014e054d009a782927b8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8bc998dfde2a4a5593d24cb0a62f09c1144566ab53ecf7fb4e9ed991d551d6ee": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8bdbd94b8fdc8b8b8a1aee694685564b2dbb21877e07becdbbc244648812bfdf": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077 ",
+    "warning": -1
+   }
+  },
+  "8bfd507b13d82cc52bb767e3b8b3385c07053c08b59aa1318a0278136b572eb3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4294967295,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8c34b177a5fb37ef4d5b7aab87877839c545e200322d87f83e5956cfcc9cbbcf": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8c5e97007b838e66b04558836692a808d318fdb499bffa5ca89c96a8af05bd44": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8ce4ece4828943c66c8b1500f3642c182dfea82ff533e1403cb6e5ed3a44069c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "error",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8ee38413542a718e2110ac71ebd02b7de9e53dfcccdd1785e41c68b336193506": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 0,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "8f3041128833cf63407781bf2f4388cb02256735cc8465c36422dd7a661b5683": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9035446e7227d3d8f540cfc15d2f9b8e99727329c0b6f12880ce5303c703fc25": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "92a5ce4390d91fecd7c73e8549381dab41a7d570d94fb32dca915ea02271f241": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "92bf84d5ae2837adff2e59f3b975aaf8228f77f1e5faf4c2708db970a5e143da": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "92c0feb884ed27c58ca464e4062e85e84d274c82a6e23ce5f71c73ffa74d5966": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "92d76a9222583e736e9d4eeba65493dcb34a484683e7c3311c5262a484191dd2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9552e4d33723471bbc834b88678d42c550a8c34e1a39ec552fb0507ba602c09e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 131072,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 131072,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "957147e6ea7dde63152d2328f7e565069986b3025e7319a800c617d54dd71e5d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 99,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "96b88c0140bb0a9afb2520308a828edeb10f05a1ecb54fa76d9c5d0406af8302": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "96da2cbc0f385c059925c2a4c716fab3c5e1de14172422b59ab0c593f3d33e79": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "97ed1af2c4cbcea70af2376de1c80239627754cee6908bb433c2f251cfd0529b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 400
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 400
+   }
+  },
+  "994dc317ddd67da22f98d67a1f4ec2a80b5131a813362642817526dd447f6552": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 9,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9a1801e07d355d334d667e1d2794c786984d971532f88768ec77e3a537f81c42": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "9a6945cf5330f3a701feea33a28c3954ca5e6ceb81a2b769db3a3881689d3689": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9ab14ba8ed7da859b1e89cb44feaad339c0a145c7ab82730bb02131ce79d270c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9ad151445ee0da4bd4424b8fcd01bb9e0967a95aeac9c5e950f9e2c5ba6e17fb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9bb91c65b617bc98e1c955b7c8da0484260c6eafeac146cd4de6b3239f2bd360": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9c38b629ac19bbd3f49fce8fd7447eb5b65dad11a103e226b9a187b3e44ef686": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 131072,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 131072,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9c5d5f39f9eb74dc2c7ae5fb02aa93210e1b74ad99829811b789a8acfb8fb0a8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077\u000b5",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077\u000b5",
+    "warning": -1
+   }
+  },
+  "9cede327529b7d8ac2307fa9f5db01d9f134f1b0249989a476a97bae4c19d848": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9eccc7be31af242352c67c3b8398ef382a3283eb2e9c4448be4f62ab22283a9e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "9f6edf272f7dfd59f50112f108c621c8c4411718a03cc4a98ed9654e8cc6e593": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 0,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 0,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "9fa79b1ac476e15deffd2750d2973ed818fdb19f5462e02a26b7f096729d3d20": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022\r",
+    "warning": -1
+   }
+  },
+  "9fe4fe7c64107941480e88ccb8cbb79a04178a4c59e7c0642d966bc39a860563": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 65536
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 65536
+   }
+  },
+  "a0fa61177f2e505e1d94cd4656994c93e58a2c0273f2e4d375cf666061c93210": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "777",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "777",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0",
+    "warning": -1
+   }
+  },
+  "a2166e28c8e39d9e875ce802382eba1bc799f18a48ec195ab4a8c431c39416cb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a25148042956ca5500ba9df81fb099f7a6263cac9bd6418b1b2d7a2090cc8a0c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a256d209af59f15474e5031e49bb6fc5ac6a2e11ad8bdf3e832e3145a2251860": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a34f308a73f986b5ac5933049460cdde52f5d9e209322791c89ed98efe15b808": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 400
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 400
+   }
+  },
+  "a4161a80ca7a86ad9f02af5623abacc4a5e4bab57ac0f7cd356409095908052c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a4c3b7218b21d0ed9e8a1e35fde3fb8f556711443bc66954caa331a3f5268d6b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a4d79afdd9855098f76527de77e0c7b9a4e93153b7361b81110360b80a2ce088": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a51d89eb7b8a7c7aff4fa4a7fe64119a1679122e6ffc7480f96657242802cd8d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a6048931950516321f5f5c649c083d0c8e47bbcbac431487dc0eec4e7b56edab": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a62b6c23e355d564fc9bf92e2e09e7e768d8c3074705a418e6950980040bdd81": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a764d551df4cfc50b5dd39f537a80bddfcb5ab2c4e29324a39d57ce615006186": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "a8cecdf939e41788fd337712b83f596188792ba1c62b95347705b366e6aebbfd": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "770",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "7",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "770",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "7",
+    "warning": -1
+   }
+  },
+  "a95e1d5e8f2eed916ff871a21cd99927fafd9bf80b02202a3058ce096e8d6544": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "aa23a652bd42412cd2e69ae320f5822be7ec9eb83207d4d3327bad418e734cce": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ab06b90f5476587040ab932ee440e0e885e566f64361a24f5a6706470f159707": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ac452f6b77606f82572641434ebbb3944188539661d4e4dd0f4a9b12ba9791a1": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 8
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 8
+   }
+  },
+  "b0123edf33540b04cbf1570ffea699a280afa515c1dab79dd1cf6d11c2923452": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 1234567
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 1234567
+   }
+  },
+  "b02a61c890514c3a40da9042ff48e1ff9092f2357cfcaae8bb4ff84fa595d69b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b11ccf644ef48ec13e464159f68f021b8deb446a5f7285eff73ec2be85d18d0c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b148caad60c07171197ec0137cf6bb09568ce415b1ed3ff5581601c2c4258b5d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 4,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b1b685e6a52a696c8a80223a1fdb3f4e33e13b612df206996f65b81b4fbfb857": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": 9,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   }
+  },
+  "b26677577c4b342d5afffae7eda39a635e3a7444d18451cdf2249079da55c60f": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b2a570ca0d5bfab4227ced92bb785f729e289104957141208fa66f95dc89f0f0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b35fb3cfd8c3e30c24e5f596d462e155590ce082ff14bc09e80e6518d3e337e7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b405760bcd69172db392199e8e913db3f6de6086073696d58b730ff936a3dac6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b5116703dca901db09c572af95d5618d4d0704c89f25bdd900bb640567e524e2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b54c2be2a422e9d2e0b2a70faffab171a70b0984f24de53ebecc12404464fcec": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b60950460ab5772f640bd9ca85626f3ccae1c134f0def7417abf9177778641dd": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b713083c0ce213a183854ba95c15faf99ba5c25937e458560b2490829fd64fb6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b767a44635b03b4fc772a77df8319f16ee6ac992059491e6d19bbefdfe656d47": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b84af1ebc522f6b6a1ef2df15b31de948d23963d199b9a964b149ec792253847": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b85edd729e2e4017b3e7332701de2af6b23d625e00a5e010e6835c7fd17ba5a5": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 10,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 10,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "b9e75807a5805f07bdaa145cec95d3bd3d48c8e0a98869a06b5fd95224350c37": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "bc1038bc994acb63c976ee3205e215034809c395633ae0dd5a93ef74dc11bb94": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "bc4a12a93b5504bb900cba12b4a945671af69416051a10ee1e021e021a6e5238": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "bc75d806dcfa38213b7737d53eea409230ac3d6601ed1a58c1b1019a06891f3b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "bdfd01944754f23542231e5bbf0a5258f28bafde3af12524f58400272a400595": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "bfee1e782f0508e33504a54137b63572d2b9cebed491c5ad07a022098b83a8a5": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 90,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 90,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c2a8ea9798e204c52e4d61fe4c8714c96c78d72b1d2cf6539fc89317d527edb9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 0,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c4374513a4f02c7e0081adb3bcfc7a9a86fb07dc5ee6e442e495952dff1c2bf9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c53cc0b81866c2950b716e056a37e5398ecc1ea7ac3f1e4dc2994cd7c489b3f8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "c5453b6a050309ae10da7413bf21b13bf686a7773e6336d941115f9e8c781cc7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 7
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 7
+   }
+  },
+  "c560b499ebb11bda703f29f50afedc09126749f73b9d74a79b3f3c79fbac1626": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c592d2d4f423865c1e567309c2e54ffcf00d9a151b97293ddc4d54096277cbaa": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c5f66395d4dfc13ec27787f9aeb89ce4cbbb24ade5440de82cb53d97dd1c5061": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "77",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0700",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "77",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0700",
+    "warning": -1
+   }
+  },
+  "c674dd7b12248b7ddcb6a6be01d1f0bf77e83b2b01290be47d099d85d8d5bb1f": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c77916e49308e715acde904e962d9cfcaf2eb764d1ec47a1db9a48d2740139b0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 65536,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 65536,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c81f241e8d62b305b3e33b436833ca9cd7f59f1963a8a1c0e21c2fddbb86e734": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "c83460ee2fe778e3ce2254610441e7dc4998c8630c056103c9202f8007ddaf20": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 0,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cae332332d64c39caf0c8f1e8ab05f9940a28a2d3099a640749b16e6c81cf213": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": 99999,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   }
+  },
+  "cb2ea1aea8890f824fbb47370d1566717c866b1010438443dbdd68e598f95856": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cd535ca7249399d843907971bb85292df838e93d0ba9bbfa2392dbd39bd35b3e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "600",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0177",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "600",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0177",
+    "warning": -1
+   }
+  },
+  "cd7b8985e204a0152d46147c55649b723ef16eb90be959dd4661cb4faa894d2e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cd80c648f8d6cddb5752a767fcc00ca2fc7a011eb7e76ba3a32819075f009705": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
+   }
+  },
+  "ce0baf940ac359374e3f1fff5417254ebc6b1e962df03f930aa8683ab045c580": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 131072,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 131072,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ce42b32b53a70c720c8732b28ce237e0f535c65f4ce3b0ae8a14f2e3521a8213": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 365,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ce839941f06299ff0f10aba254b97be63ef6cd9ac454f0eb649d9fd20b5263af": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ce9a2a1632b603745b034ddd3961938da3e439336b3a2459ecf6a99058170e9e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cee2cff5477aac535162b98ab80773f73ff939731e5e464ec6c16d08b1d81c55": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cef9c96d311bc8688463daa08a1bd52220a7b82635a932bc305dca18c256773b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cf5c6f5433da22c29bf487f15fd427c5d50a4ae6a690a9737540d400c002940c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 0,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "cf6b979d18a2d8ae9641a3e64aa4fae8b3e55afba1f7ca8bc3c0e97bbed89d5d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "775",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "002",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "775",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "002",
+    "warning": -1
+   }
+  },
+  "cf7506167732d58cc087a60fa7ab9de00c6aa2b595577b4e4e064accee7cb436": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d252a40d4c31d854ed3a0eb3d8daa7e4745558b304e4a8f3f181e7f7c67d2f8c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d29869ababe5709d32c87ad26c091048696b2d822306a2bc9acd4de2001f08bd": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d3212e834e0e1ebea3962cac5444d655968523c0c30428a4dac7e06dcc59419d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 5,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d414f9de2b99dc93854360d34e2294596dffb13d2314c6d269fe273c12fcc81a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d50ee9822eef1288232cea979e20baa7219ac48d779fea33d5fef42e7648d6bc": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d581a9f094745168aeb47fabe5f32e43e061916e03ebf5c4dcd08c2cd8634a5c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   }
+  },
+  "d62fe235835c5b06d2ad7bc43bade25473394d611253c758120e08739c84fdc4": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d66b0d85a2b3e028d44373618771bb82e9f75304965efc681db75975c216ae77": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "000",
+    "warning": -1
+   }
+  },
+  "d67e0ea3dde25c69bad7ca837176f03a7c6e48c811a3ec93336de45fab869d16": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d6d162b61ef83b1cbcb84f022b04f0356dcfc9e81f893a1d55bbff1889adc987": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 400,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 400,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d6fd84e7b71561f812f1cd888a6a9f85b9fb8f7a77d4d5f966c5f69977e5bff2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 365,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d71571da586acc3f4759dd598cdf81dac35fca213303a92836622c48ea08e9ba": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d73d019a43d9c1f10ce1972e7d6aff0689fd612efb1ce862163df6411fe710a3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 8,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 8,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d7454ad1c202f24e76eb420667f789578ffd8e9d322d41780a802656fbc1db30": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d78c9887155a1427b9990ec16144cc9c4590dac3b4d0cc644ce5c1ef711fecdb": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "022",
+    "warning": -1
+   }
+  },
+  "d872942c9d32b91e69762c7bc7809d2616444553c782e343d11a79006d72d1b3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d88b9581cad2a98a9536b7d06c97c7e2023c6127fcc4dd39201aecc3620693d8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 400,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 400,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "d8d210062948276496bb8908f0990e6a19a3c721429f232858f07759252a553a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "\"077\"",
+    "warning": -1
+   }
+  },
+  "d8eccef20dd114b2e409241d860e6cff54a1cc8263fb07cbb8cf04bb756e52a9": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 8,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 8,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "dad61405aa6025b16553f2256d5191ce8655684f2154ae722726a2a582c6242a": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 0,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 0,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "db95eeae44cc519fb5283db5276af5d683d392e249dfbb9fc452dadf152dd41b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "dbf8b0b7dfd499fcdaa6998a379295d15f28d434e0ee37deaec03481c7506c20": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "dc9622ccc6956f26075282e98438ecf630908cdec4d7ef1bd35e93adaa7c23b6": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "dd30eb3d2d362aae1dc4dd11f76b49404d204844390b2cb00a1770877395baaf": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "dd53d33b7d4ab9d5745d308e3269813470480bfb09ae68e3af74f110aa7a0094": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "ddf8e0a847b19fddde36c32960655dbecec43c993495add277171b92bff886ad": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 365
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 365
+   }
+  },
+  "ded53b1b3728824b4608d2ad63733ba3c210c5b7f0bcee2362ddbb9c38d4dbd7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e08a88f9dd810073449fa2a7856613da1cd86f53b5825c3777cd8af9a96b6f7d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": 30,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e0d2825bb23a252e4ee6315b554c09788db4c7976f6a2556f76aa000201b4a50": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e18a7f19c78c99472ba03557a9d639e8040270ba7012e7455a1f6383f1af1eba": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e1dbba5f7c9fe1a4adbfcb9bcb2a5a069c0f512751cbba37a51f3f2500d6f604": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e34e53b73bfe9f4019bec9c44bf9e5db689108b8c7076f1d8f12ca526c3d869e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 131072
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 131072
+   }
+  },
+  "e38a68d51de939b3b29e35789311198ea7b1f4fc2ef8b20b374b0de9cd3ec548": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 30
+   }
+  },
+  "e44f408890bd3ed74d9f0ae5f1ce04c2baec240fee38f4db56a897d84458d75c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e456f34e391bef8d583a4a420d3b4d769bf41ad1d3a440aeb48dbe7974e52ffd": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 90
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 90
+   }
+  },
+  "e50486cfe53d91e0c0c313ba1b944c394e53edb40f11a4ce131a4363c658b4c8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 400000,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e510778ae4fc51810924d91617db6e7cfbfe8ecfbaaa645dea7ef85d3f41327d": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e60aa6b8e1c80f178daf99bc09989afa36c8212ffb1653812a0614c350b886d8": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e8d9ee030a2d13b6b5cd75c85d30cd7f7ddc17fbe8cabf225ad8f13c2b980b47": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "e9dff4a95c7be3db5b2fbb8ed6720ba015eb063e65424db9c25e7f1237ee6466": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ec68a8e7f3865ffec7df319355a69a9ecbb210732575e488746df10a9d5ed7e3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   }
+  },
+  "ec7ff420e49f51c2f24912ba42b3349dabcd0afa8d04f177a334dc9706a18aa1": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "eca4435f6593b1cb0ec0ed21aed265d02570a103a4964a87938f763542225dba": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ee47a4b69a589e3b4865e407c019f501a00e343a4bc158c6b2db8b4f4fc2f0a2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 245,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 245,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f01557ad11d3f1c5ef278949b9f7e6490bab1c752a68f663c5d59469ff975b22": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "crash",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f03b9b7532e8f731cab1349a9596f8d0152e721632b73f55a5b6238dec4ad464": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f17293428199d979317c31a82536167ac5b7274a95f17f8109b901045d1778ca": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0x3f",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "0x3f",
+    "warning": -1
+   }
+  },
+  "f25249795f3edc45d185d3f43a422c68af21da9f09660ed0138c9a92c9ddc0b3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f2868219303d1a6a30cf88e3fc1394fe69e6cb1120dc14d8504c3a0d69747cce": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f301aaf98d8dcaba1b7fe278cbf1f7e3c25a5cdd679a7317f17c43783c367b86": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 3,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f360e38a2f5d3daf6debef477a843ab9fae80dd54752547fdd6d5efb6a0b39b7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 30,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f5ac542ecf2db7bffc464fa4b774b02c296a1a3c142c03845fb74747a2bd8792": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f6393f04c22358130be513df0e0e11872d3a73da6015e2f479301194932090f5": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 8,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f9159d30a3e06e16d03d5b5ed4b0b6e7d2a66da9dd4b102330a89c91caca1195": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f9be99c68b6c8ad467b52f82941a9ec93aaf4455f041cade9dfb9bd0fd091c85": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 0,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "f9c5ed776980be6d6b8de9bd101683dfd52f60820d98747af87332e5b1d0fe83": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "744",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "27",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "744",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "27",
+    "warning": -1
+   }
+  },
+  "fac39fa3ec29691c4bb42c76638177a7b8768fe9b19fc8e1547dc3f23d4084c2": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "fad2e059e6512c87b5dcb0c32c7ea7022706140e7029d19e3d6197ea85b70c19": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "fb2b55c1fcdfb34ba76ddb32fefa9edf3f2c261f0a86fc7560e250615b758cc0": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "077",
+    "warning": -1
+   }
+  },
+  "fb3b7ea966044a8f866fc1cf6619b9acc8acee215bf800aa881e194140f5efca": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 8
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": 8
+   }
+  },
+  "fb723493d662fd86da116ba0a75f7d869d398fd67a557821bb403ddca0f45d35": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "fc3cc3eefb2e2a19331c891a1fb922b18d4c6ebaccf5259d1d0fdcecc9572c4e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 99999,
+    "minimum": 0,
+    "pam": "022",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 99999,
+    "minimum": 0,
+    "pam": "022\r",
+    "warning": -1
+   }
+  },
+  "fcc6be299afa8991e0d7d261727daaaead399e3b15cf7910c1f925a8a4697fe3": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "700",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "00077",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "700",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "00077",
+    "warning": -1
+   }
+  },
+  "fd08c3c4b38367d33db9ced71d2910edb9a6b5e8201701d69a23839ddd7f718b": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": 30,
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "fd25eccc3908d5dcabd021672089245856c95149e080712f69fdc337aab53474": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "770",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "007",
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "770",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "007",
+    "warning": -1
+   }
+  },
+  "fd26640ca5cc276e2951e603b89f7e667f5f68d61758973b9bc7d41667d458aa": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "fd7b8d7c892ba93746dc98d06b75a3ba4e69e73e4dcf11dbbbf51af78789d19f": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "fef3bf71a5c617af49ea9dc4f8a0f304386d40caa04b5c10ca2e6ce9c4126cf3": {
+   "rocky": {
+    "home_created": true,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": true,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ff29432e335dd794b0c493d732e0db9338508a9dcd1b78920f78e4878ec54f9c": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "750",
+    "libeconf": "error",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "750",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": "027",
+    "warning": -1
+   }
+  },
+  "ff60d29a9de9d86ded440d1ae078765126e5b2c0695f58ee5b7b28b99a9da23e": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": 90,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": 90,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  },
+  "ff947a4eb2513f30d1236f9a3850778d3881b236583f0dde4ee8ca18a2c743b7": {
+   "rocky": {
+    "home_created": false,
+    "home_mode": "755",
+    "libeconf": "nokey",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   },
+   "ubuntu": {
+    "home_created": false,
+    "home_mode": "755",
+    "maximum": -1,
+    "minimum": -1,
+    "pam": null,
+    "warning": -1
+   }
+  }
+ }
+}

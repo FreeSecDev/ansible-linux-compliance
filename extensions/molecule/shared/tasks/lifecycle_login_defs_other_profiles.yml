@@ -28,7 +28,7 @@
                        'accounts_maximum_age_login_defs', 'accounts_minimum_age_login_defs',
                        'accounts_umask_etc_login_defs'],
              'home': 'CREATE_HOME no',
-             'lines': ['CREATE_HOME yes', 'FAIL_DELAY 4', 'PASS_MAX_DAYS 60', 'PASS_MIN_DAYS 1', 'UMASK 077']},
+             'lines': ['CREATE_HOME yes', 'FAIL_DELAY  5', 'PASS_MAX_DAYS 60', 'PASS_MIN_DAYS 1', 'UMASK 077']},
             {'profile': 'anssi_bp28_enhanced',
              'rules': ['accounts_password_minlen_login_defs', 'accounts_umask_etc_login_defs'],
              'lines': ['PASS_MIN_LEN 15', 'UMASK 077']}]}[lifecycle_platform] }}
