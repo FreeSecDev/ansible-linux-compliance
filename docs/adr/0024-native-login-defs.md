@@ -98,7 +98,11 @@ quote after the name and takes the characters up to the next quote, and the fami
 `#`. When that value is a number in any base, with an optional `+` (`PASS_MAX_DAYS " 30"`, `""30`, `30"x` or
 `"0x1e"`, which shadow-utils reads as 30), the rule is `unreadable_value`; when it is empty, negative or not a number
 (`PASS_MAX_DAYS ""`, `"-1"`, `" -1"`, `"9x"`, `9x # "q"`, `-1 # "x"`), the profile's value is written, as for the
-unquoted forms.
+unquoted forms. A number line that contains a carriage return, a vertical tab or a form feed is refused as
+`unreadable_value` whatever its first word: shadow-utils trims those characters at the end of a line and `strtol` skips
+them before the number, so it reads `PASS_MAX_DAYS 30` with Windows line endings (`30\r`) and `PASS_MAX_DAYS \v30` as
+30, while the family treats only a space and a tab as blanks (FREES-194). The umask rule already refuses such a first
+word (`UMASK 077\r`), and a umask that it does read is only ever widened by the union.
 `CREATE_HOME` has no exported value; its rule carries the value `yes`, which the check's pattern requires, and the
 parameter `reads_dropins`, because its check also reads `/etc/login.defs.d`.
 
@@ -178,7 +182,7 @@ duplicate lines in either case, a commented default, a lower-case name with a fo
 age and a stricter umask with a trailing comment (both kept), a drop-in and
 a symbolic link for the drop-in directory (both ignored by these rules), a symbolic link for login.defs and a missing
 login.defs; `lifecycle_login_defs_values.yml` covers zero-padded numbers (`090`, `010`, `0365`), the forms refused as
-`unreadable_value` and those that take the profile's value (`-1`, an empty value, `9x`, seven digits under a maximum,
+`unreadable_value` (including Windows line endings and a vertical tab or form feed before the number) and those that take the profile's value (`-1`, an empty value, `9x`, seven digits under a maximum,
 `0x1e`, `0`); `lifecycle_login_defs_other_profiles.yml` applies, repeats and cleans up the rules that the CIS level 1
 profiles of the lifecycle do not select, with the STIG profiles of both platforms and the RHEL 9 ANSSI enhanced
 profile, and refuses `CREATE_HOME` next to a drop-in that sets it (`overridden`) and next to a linked drop-in
