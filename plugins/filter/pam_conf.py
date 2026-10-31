@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
@@ -407,12 +407,14 @@ def _decision(
 
 def _rule(value: object) -> Rule:
     """Return the rule of the filter's second argument, or fail."""
-    given = value if isinstance(value, dict) else {}
+    shown = repr(value)[:120]
+    given = cast("dict[object, object]", value) if isinstance(value, dict) else {}
     reader, setting = given.get("reader"), given.get("setting")
     comparison, required = given.get("comparison"), given.get("required")
     checked = given.get("stack_checked")
     valid = (
-        set(given) == RULE_KEYS
+        all(isinstance(key, str) for key in given)
+        and frozenset(str(key) for key in given) == RULE_KEYS
         and isinstance(reader, str)
         and reader in READERS
         and setting in SETTINGS[reader]
@@ -428,10 +430,10 @@ def _rule(value: object) -> Rule:
         message = (
             f"pam_conf_decision needs a rule with exactly {sorted(RULE_KEYS)}: a known reader and "
             "setting, a comparison, a decimal profile value unless the setting is a flag and a "
-            f"boolean stack_checked, got {repr(value)[:120]}"
+            f"boolean stack_checked, got {shown}"
         )
         raise ValueError(message)
-    return Rule(reader, str(setting), str(comparison), required, checked)
+    return Rule(str(reader), str(setting), str(comparison), str(required), checked is True)
 
 
 def pam_conf_decision(text: object, rule: object, stack: object) -> dict[str, object]:
@@ -447,7 +449,7 @@ def pam_conf_decision(text: object, rule: object, stack: object) -> dict[str, ob
             "nothing is written"
         )
         return _decision("unsupported_value", reason, decided.line, None)
-    files = {str(key): str(value) for key, value in stack.items()}
+    files = {str(key): str(value) for key, value in cast("dict[object, object]", stack).items()}
     overriding = stack_overrides(files, decided.reader, decided.setting, checked=decided.checked)
     if overriding:
         names = ", ".join(overriding)

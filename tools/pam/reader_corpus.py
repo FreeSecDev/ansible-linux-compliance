@@ -450,7 +450,7 @@ def assemble(outputs: Path, table: Path) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run ``cases`` or ``assemble``."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
     cases = commands.add_parser("cases")
     cases.add_argument("--out", type=Path, required=True)
