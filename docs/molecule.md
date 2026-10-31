@@ -716,7 +716,7 @@ written, the lower-case line and `UMASK 0077` restored), a stricter maximum age 
 (`PASS_MAX_DAYS 30` and `UMASK 077` written). In `values`, `shared/tasks/lifecycle_login_defs_values.yml` does the
 same for zero-padded numbers (`090` becomes `90`, `010` becomes `10`, `0365`
 becomes `245`), the forms refused as `unreadable_value` (`"30"`, `" 30"`, `""30`, `+30`, `1234567` and `0x10000` under a minimum,
-`00077`, `"077"`, `0x3f`, nothing written) and those that take the profile's value (`-1`, an empty value, `9x`,
+`00077`, `"077"`, `0x3f`, a file with Windows line endings, `\v30` and `\f30`, nothing written) and those that take the profile's value (`-1`, an empty value, `9x`,
 `1234567` under a maximum, `0`, `0x1e`, `""` and `"-1"`); then a drop-in
 `/etc/login.defs.d/50-site.defs` that sets the maximum age and a symbolic link in place of `/etc/login.defs.d` (both
 ignored: the rules apply and clean up as usual), a symbolic link in place of `/etc/login.defs` (`not_regular_file`,
