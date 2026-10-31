@@ -1006,16 +1006,27 @@ def add_topic(trees: Trees, family: str, source: str, entry: dict[str, object] |
     ]
 
 
-def planned(trees: Trees, decision: affected.Decision) -> dict[str, list[dict[str, str]]]:
-    found = affected.plan(
-        decision,
-        {"include": molecule_matrix.legs(trees.head, "docker")},
-        {"include": molecule_matrix.legs(trees.head, "libvirt")},
+Matrices = tuple[list[dict[str, str]], list[dict[str, str]]]
+
+
+def repository_legs() -> Matrices:
+    docker, libvirt = full_matrices()
+    return (
+        cast("list[dict[str, str]]", docker["include"]),
+        cast("list[dict[str, str]]", libvirt["include"]),
     )
-    return {
-        driver: cast("dict[str, list[dict[str, str]]]", found[driver])["include"]
-        for driver in ("docker", "libvirt")
-    }
+
+
+def head_legs(trees: Trees) -> Matrices:
+    return molecule_matrix.legs(trees.head, "docker"), molecule_matrix.legs(trees.head, "libvirt")
+
+
+def planned(decision: affected.Decision, matrices: Matrices) -> Matrices:
+    found = affected.plan(decision, {"include": matrices[0]}, {"include": matrices[1]})
+    return (
+        cast("dict[str, list[dict[str, str]]]", found["docker"])["include"],
+        cast("dict[str, list[dict[str, str]]]", found["libvirt"])["include"],
+    )
 
 
 def test_a_new_topic_plans_only_the_legs_of_that_topic(trees: Trees) -> None:
@@ -1026,19 +1037,13 @@ def test_a_new_topic_plans_only_the_legs_of_that_topic(trees: Trees) -> None:
     decision = trees.decide(*changed)
     assert not decision.full, decision.reasons
     assert decision.topics == frozenset({family})
-    legs = planned(trees, decision)
-    head_docker = molecule_matrix.legs(trees.head, "docker")
-    assert legs["docker"] == [leg for leg in head_docker if leg["topic"] == family]
-    assert {leg["mode"] for leg in legs["docker"]} == {"topic", "rule", "regressions-changes"}
-    assert {leg["platform"] for leg in legs["docker"]} == check_lifecycle_topics.platforms(
-        trees.head
-    )
-    assert [leg for leg in head_docker if leg["topic"] != family] == molecule_matrix.legs(
-        trees.base, "docker"
-    )
-    assert legs["libvirt"] == [
-        leg for leg in molecule_matrix.legs(trees.head, "libvirt") if leg["topic"] == ""
-    ]
+    head = head_legs(trees)
+    docker, libvirt = planned(decision, head)
+    assert docker == [leg for leg in head[0] if leg["topic"] == family]
+    assert {leg["mode"] for leg in docker} == {"topic", "rule", "regressions-changes"}
+    assert {leg["platform"] for leg in docker} == check_lifecycle_topics.platforms(trees.head)
+    assert [leg for leg in head[0] if leg["topic"] != family] == repository_legs()[0]
+    assert libvirt == [leg for leg in head[1] if leg["topic"] == ""]
 
 
 def test_a_new_family_with_its_own_toggles_plans_only_its_legs(trees: Trees) -> None:
@@ -1052,12 +1057,11 @@ def test_a_new_family_with_its_own_toggles_plans_only_its_legs(trees: Trees) -> 
     reasons = {reason.split(":", 1)[0]: reason for reason in decision.reasons}
     for relative in (DEFAULTS, AUDIT_DEFAULTS, SPECS, AUDIT_SPECS):
         assert reasons[relative].endswith(f": {family}"), reasons[relative]
-    legs = planned(trees, decision)
-    assert legs["docker"]
-    assert {leg["topic"] for leg in legs["docker"]} == {family}
-    assert [
-        leg for leg in molecule_matrix.legs(trees.head, "docker") if leg["topic"] != family
-    ] == molecule_matrix.legs(trees.base, "docker")
+    head = head_legs(trees)
+    docker, _ = planned(decision, head)
+    assert docker
+    assert {leg["topic"] for leg in docker} == {family}
+    assert [leg for leg in head[0] if leg["topic"] != family] == repository_legs()[0]
 
 
 def test_a_catalogue_entry_change_of_one_topic_plans_only_its_legs(trees: Trees) -> None:
@@ -1072,11 +1076,9 @@ def test_a_catalogue_entry_change_of_one_topic_plans_only_its_legs(trees: Trees)
         topics=frozenset({"login_defs"}),
         reasons=(f"{affected.CATALOGUE}: catalogue entries: login_defs",),
     )
-    legs = planned(trees, decision)
-    assert legs["docker"] == [
-        leg for leg in molecule_matrix.legs(trees.head, "docker") if leg["topic"] == "login_defs"
-    ]
-    assert {leg["mode"] for leg in legs["docker"]} >= {"topic", "rule"}
+    docker, _ = planned(decision, repository_legs())
+    assert docker == [leg for leg in repository_legs()[0] if leg["topic"] == "login_defs"]
+    assert {leg["mode"] for leg in docker} >= {"topic", "rule"}
 
 
 @pytest.mark.parametrize(
@@ -1093,9 +1095,7 @@ def test_a_shared_file_plans_every_leg(trees: Trees, relative: str) -> None:
     trees.append(relative, "\n# changed\n")
     decision = trees.decide(relative)
     assert decision.full, decision.reasons
-    legs = planned(trees, decision)
-    assert legs["docker"] == molecule_matrix.legs(trees.head, "docker")
-    assert legs["libvirt"] == molecule_matrix.legs(trees.head, "libvirt")
+    assert planned(decision, repository_legs()) == repository_legs()
 
 
 @pytest.mark.parametrize("relative", ["unknown.txt", "extensions/molecule/shared/new/file.yml"])
@@ -1105,7 +1105,7 @@ def test_an_unknown_path_plans_every_leg(trees: Trees, relative: str) -> None:
     assert decision.full
     assert len(decision.reasons) == 1
     assert decision.reasons[0].startswith(f"{relative}: ")
-    assert planned(trees, decision)["docker"] == molecule_matrix.legs(trees.head, "docker")
+    assert planned(decision, repository_legs()) == repository_legs()
 
 
 def test_the_converge_and_verify_plays_take_the_other_topics_from_the_catalogue() -> None:
