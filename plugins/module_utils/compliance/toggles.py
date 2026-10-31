@@ -137,7 +137,7 @@ FAMILY_KEYS: Final[frozenset[str]] = frozenset({"disruptive", "name"})
 UMBRELLA_KEY: Final[str] = "umbrella"
 EMPTY: Final[tuple[str, ...]] = ()
 MAX_RULES: Final[int] = 4096
-MAX_FAMILIES: Final[int] = 64
+MAX_FAMILIES: Final[int] = 256
 MAX_ERRORS: Final[int] = 100
 
 Rule = dict[str, object]

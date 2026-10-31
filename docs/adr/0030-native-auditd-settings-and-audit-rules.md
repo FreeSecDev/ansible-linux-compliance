@@ -74,6 +74,11 @@ with the panic failure mode (`-f 2`) more events can stop the host when the back
 can halt the host or drop it to single-user mode through its disk actions. The immutable rule (`-e 2`) will be a topic of its own,
 disruptive, because it makes every later change of the loaded rules wait for a reboot (section 6).
 
+The split takes the registry past the bound of 64 families that ADR 0011 set for the parsed registry
+(`toggles.MAX_FAMILIES`): the remaining audit rule groups add a family each, and other topics are being split the
+same way. The bound rises to 256. That leaves room for those splits and still keeps a hostile catalogue from growing
+the plan without limit.
+
 ### 2. One drop-in per audit rule, with our own lines
 
 Each rule writes `/etc/audit/rules.d/50-freesecdev-<rule>.rules` (mode `0600`, root), with the collection's header and

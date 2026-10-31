@@ -468,7 +468,8 @@ reason for its disruptive flag. These refinements apply.
 - **Topics are families.** Each subsystem is a family of the registry, flat, with its own topic toggle
   `linux_compliance_<family>_enabled`, its own `disruptive` flag and, later, its own task file. Nothing about a family
   changes: the catalogue, the plan, the ledger and the dispatch still work per family. The registry grows from 21 to
-  55 families (the bound is 64); with the umbrellas there are 65 topic toggles.
+  55 families (the bound was 64, raised to 256 when the auditd topics passed it, FREES-110); with the
+  umbrellas there were 65 topic toggles.
 - **Boundaries, taken from the rule identifiers and groups of the pinned content.** `services` becomes `sssd` (12
   rules), `time_sync` (chrony, ntpd, timesyncd, 19), `mail` (8), `cron` (cron and at, 7), `nfs` (NFS and rpcbind, 6),
   `usbguard` (5), `fapolicyd` (3) and `network_services` (59: telnet, tftp, rsh, NIS, FTP, HTTP, DNS, DHCP, Samba,
