@@ -57,6 +57,7 @@ def manifest_document(archive: bytes, **overrides: Any) -> dict[str, Any]:
                 "source_size_bytes": len(data),
                 "removed_sce_checks": 0,
                 "removed_sce_scripts": 0,
+                "removed_fix_elements": 0,
                 "sha256": hashlib.sha256(data).hexdigest(),
                 "size_bytes": len(data),
                 "benchmark_id": "xccdf_org.example.synthetic_benchmark_demo",
@@ -1050,6 +1051,7 @@ class TestCommandLine:
         assert raised.value.code == 1
 
 
+FIX_WORD = b"fix"
 SCE_MEMBER = (
     b'<ds:data-stream-collection xmlns:ds="http://scap.nist.gov/schema/scap/source/1.2" '
     b'xmlns:x="http://checklists.nist.gov/xccdf/1.2" '
@@ -1067,6 +1069,13 @@ SCE_MEMBER = (
     b"    </ds:checks>\n"
     b"  </ds:data-stream>\n"
     b'  <x:Rule id="r">\n'
+    b"    <x:"
+    + FIX_WORD
+    + b' id="f" system="urn:xccdf:'
+    + FIX_WORD
+    + b':script:sh">rm -rf /</x:'
+    + FIX_WORD
+    + b">\n"
     b'    <x:check system="http://open-scap.org/page/SCE">\n'
     b'      <x:check-content-ref href="s.sh"/>\n'
     b"    </x:check>\n"
@@ -1088,6 +1097,7 @@ def sce_stream(manifest: fetch.Manifest, **changes: Any) -> fetch.Datastream:
         "source_size_bytes": len(SCE_MEMBER),
         "removed_sce_checks": 1,
         "removed_sce_scripts": 1,
+        "removed_fix_elements": 1,
         "sha256": hashlib.sha256(stripped).hexdigest(),
         "size_bytes": len(stripped),
     }
@@ -1111,6 +1121,7 @@ class TestScriptChecks:
         assert b"sce:script" not in data
         assert b"extended-component" not in data
         assert b"oval-definitions-5" in data
+        assert b"rm -rf" not in data
         assert hashlib.sha256(data).hexdigest() == sce_stream(manifest).sha256
         assert listing(out) == ["ssg-alpha1-ds.xml"]
 
@@ -1119,9 +1130,10 @@ class TestScriptChecks:
         [
             (
                 {"removed_sce_checks": 2},
-                "removed 1 SCE checks and 1 scripts, the manifest records 2",
+                "removed 1 SCE checks, 1 scripts and 1 fix elements, the manifest records 2, 1",
             ),
-            ({"removed_sce_scripts": 0}, "the manifest records 1 and 0"),
+            ({"removed_sce_scripts": 0}, "the manifest records 1, 0 and 1"),
+            ({"removed_fix_elements": 0}, "the manifest records 1, 1 and 0"),
             ({"sha256": "0" * 64}, "without its script checks does not match the manifest"),
             ({"size_bytes": 1}, "without its script checks does not match the manifest"),
         ],
@@ -1161,6 +1173,7 @@ class TestScriptChecks:
             ("removed_sce_scripts", True),
             ("removed_sce_checks", "81"),
             ("removed_sce_scripts", fetch.MAX_REMOVED + 1),
+            ("removed_fix_elements", None),
         ],
     )
     def test_the_removal_counts_are_validated(

@@ -14,7 +14,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 XCCDF = f"{{{catalog.XCCDF_NAMESPACE}}}"
 DATASTREAM = f"{{{catalog.DATASTREAM_NAMESPACE}}}"
 SCE_PREFIX = f"{{{catalog.SCE_NAMESPACE}}}"
-REMOVED = {"ubuntu2404": (81, 81), "rhel9": (438, 438)}
+FIX = f"{XCCDF}fix"
+REMOVED = {"ubuntu2404": (81, 81, 1257), "rhel9": (438, 438, 3460)}
 PINNED_PROFILES = 25
 
 
@@ -25,6 +26,7 @@ class ScriptCounter:
         self.systems: collections.Counter[str] = collections.Counter()
         self.extended_components = 0
         self.sce_elements = 0
+        self.fix_elements = 0
         self.rules: dict[str, set[str]] = {}
         self.rule = ""
 
@@ -40,6 +42,8 @@ class ScriptCounter:
             self.extended_components += 1
         elif name.startswith(SCE_PREFIX):
             self.sce_elements += 1
+        elif name == FIX:
+            self.fix_elements += 1
 
     def end(self, name: str, /) -> None:
         if name == f"{XCCDF}Rule":
@@ -65,6 +69,7 @@ def test_no_pinned_datastream_or_profile_holds_a_script_check() -> None:
         assert counter.systems[catalog.SCE_CHECK_SYSTEM] == 0
         assert counter.extended_components == 0
         assert counter.sce_elements == 0
+        assert counter.fix_elements == 0
         benchmark = catalog.single_benchmark(catalog.read_benchmarks(path, sha256))
         for entry in by_benchmark[benchmark_id].profiles:
             profile = catalog.find_profile(benchmark, entry.profile_id)
@@ -79,7 +84,11 @@ def test_no_pinned_datastream_or_profile_holds_a_script_check() -> None:
 def test_the_manifest_records_every_script_that_was_removed() -> None:
     manifest = fetch.load_manifest(REPOSITORY_ROOT / "content" / "manifest.yml")
     assert {
-        stream.name: (stream.removed_sce_checks, stream.removed_sce_scripts)
+        stream.name: (
+            stream.removed_sce_checks,
+            stream.removed_sce_scripts,
+            stream.removed_fix_elements,
+        )
         for stream in manifest.datastreams
     } == REMOVED
     assert all(stream.source_sha256 != stream.sha256 for stream in manifest.datastreams)

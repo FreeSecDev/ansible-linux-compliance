@@ -66,7 +66,8 @@ SCAP datastream with `oscap` ([audit guide](../audit.md), [ADR 0004](../adr/0004
 
 **Mitigated by FREES-191 ([ADR 0026](../adr/0026-no-content-scripts-on-hosts.md)):** no SCE check or script reaches a
 managed host any more. `make content` removes all 81 (Ubuntu 24.04) and 438 (RHEL 9) SCE checks and scripts on the
-controller and pins the digest of the processed datastream next to the published one. The hosts refuse any script
+controller, together with all 1257 and 3460 XCCDF `fix` elements (the content's remediation code), and pins the
+digest of the processed datastream next to the published one. The hosts refuse any script
 check at run time (`script_check_content`), in every parse of the content and in the private copy that `oscap` reads.
 The former SCE-only rules are `notchecked`. The text below records the situation before FREES-191.
 

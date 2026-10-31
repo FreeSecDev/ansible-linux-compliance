@@ -261,7 +261,7 @@ Jira: FREES-42 and FREES-43. Decision: [ADR 0015](adr/0015-content-acquisition-a
 `make content` (`PYTHONPATH=build/collections uv run python -m tools.content.fetch_content`) reads
 `content/manifest.yml`, downloads the pinned release zip over HTTPS (or reads `--from-file <zip>` without any network
 access), verifies the archive SHA-512, extracts only the datastreams the manifest lists (`--datastream <name>` narrows
-the choice) and verifies each against `source_sha256`. It then removes every Script Check Engine check and script
+the choice) and verifies each against `source_sha256`. It then removes every Script Check Engine check and script and every XCCDF `fix`
 ([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) and writes the result into `build/content` (or `--output-dir`)
 only when it has the pinned `sha256`. It refuses members that are symlinks, directories, special files, encrypted, duplicated or of a
 different size, never builds a path from an archive member name, and leaves no partial file on failure. The pinned

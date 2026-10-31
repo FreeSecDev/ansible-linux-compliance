@@ -113,6 +113,7 @@ def write_root(root: Path, data: bytes | None = None, *, other: bytes | None = N
                 "source_size_bytes": len(body),
                 "removed_sce_checks": 0,
                 "removed_sce_scripts": 0,
+                "removed_fix_elements": 0,
                 "sha256": hashlib.sha256(body).hexdigest(),
                 "size_bytes": len(body),
                 "benchmark_id": BENCHMARK,

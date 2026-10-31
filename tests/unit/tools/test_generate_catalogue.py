@@ -186,6 +186,7 @@ def write_root(root: Path) -> Path:
             "source_size_bytes": stream.path.stat().st_size,
             "removed_sce_checks": 0,
             "removed_sce_scripts": 0,
+            "removed_fix_elements": 0,
             "sha256": stream.sha256,
             "size_bytes": stream.path.stat().st_size,
             "benchmark_id": f"xccdf_org.ssgproject.content_benchmark_{stream.name}",

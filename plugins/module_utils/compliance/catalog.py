@@ -110,6 +110,7 @@ _SELECT: Final[str] = _qualified("select")
 _REFERENCE: Final[str] = _qualified("reference")
 _COLLECTION: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}data-stream-collection"
 _CHECK: Final[str] = _qualified("check")
+_FIX: Final[str] = _qualified("fix")
 _EXTENDED_COMPONENT: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}extended-component"
 _SCE_PREFIX: Final[str] = f"{{{SCE_NAMESPACE}}}"
 
@@ -187,8 +188,9 @@ def refuse_script_check(name: str, attributes: dict[str, str]) -> None:
     """Refuse an element that would make the scanner run a script of the content.
 
     That is an XCCDF ``check`` whose ``system`` is not OVAL or OCIL (the Script Check Engine
-    uses ``http://open-scap.org/page/SCE``), any element of the SCE namespace, and any
-    data stream ``extended-component``, which is where a datastream embeds its scripts.
+    uses ``http://open-scap.org/page/SCE``), any element of the SCE namespace, any data
+    stream ``extended-component``, which is where a datastream embeds its scripts, and any
+    XCCDF ``fix``, the remediation code of the content (ADR 0026).
 
     Raises:
         ScriptCheckError: When ``name`` and ``attributes`` are such an element.
@@ -198,6 +200,12 @@ def refuse_script_check(name: str, attributes: dict[str, str]) -> None:
         message = (
             f"the content holds a check with the system {system}, which runs a script that this "
             "collection did not write; only OVAL and OCIL checks are accepted"
+        )
+        raise ScriptCheckError(message)
+    if name == _FIX:
+        message = (
+            "the content holds an XCCDF fix element, remediation code of the content that has no "
+            "place on a managed host; fetch the content with make content, which removes them"
         )
         raise ScriptCheckError(message)
     if name == _EXTENDED_COMPONENT or name.startswith(_SCE_PREFIX):

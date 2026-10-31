@@ -1,4 +1,4 @@
-"""Remove the Script Check Engine checks and scripts from a pinned datastream (FREES-191).
+"""Remove the scripts and remediation code of ComplianceAsCode from a pinned datastream (FREES-191).
 
 ComplianceAsCode datastreams embed shell scripts for the OpenSCAP Script Check Engine (SCE):
 each script is a data stream ``extended-component`` holding one ``sce:script``, referenced by
@@ -13,16 +13,21 @@ them before the content leaves it:
   in preference to SCE already;
 * every ``extended-component``, which must hold exactly one SCE script;
 * every ``component-ref`` that points at a removed component, and every catalog ``uri`` that
-  points at a removed ``component-ref``.
+  points at a removed ``component-ref``;
+* every XCCDF ``fix`` of a rule: the Bash, Ansible, Puppet, kickstart, blueprint and other
+  remediation code of the content, which ``oscap`` would only run with ``--remediate`` (refused
+  by the process helper) but which has no place on a managed host either (ADR 0026). The
+  ``fixtext`` prose stays; a ``fixtext`` whose ``fixref`` names a removed ``fix`` fails closed.
 
 The document is parsed once with the bounded parser of :mod:`xmlsafe` (no DOCTYPE, no
 entities, bounded size and depth), which reports the byte offset of every tag, and the
 elements are cut out of the original bytes together with the indentation in front of them.
 Nothing else changes: the result is not serialised again, so every other byte, prefix and
 attribute order stays as published and the result is reproducible. Anything this module does
-not recognise fails closed: a check of another script system, an SCE check outside a rule, an
-extended component with other content, an SCE element outside a component, a reference that
-does not resolve, and an element whose children would all be removed. The result is parsed
+not recognise fails closed: a check of another script system, an SCE check or ``fix`` outside a
+rule, an extended component with other content, an SCE element outside a component, a reference
+that does not resolve or that names a removed ``fix``, and an element whose children would all be
+removed. The result is parsed
 again and must not contain any script check (:func:`catalog.refuse_script_check`).
 """
 
@@ -44,6 +49,9 @@ DATASTREAM: Final[str] = f"{{{catalog.DATASTREAM_NAMESPACE}}}"
 CHECK: Final[str] = f"{XCCDF}check"
 RULE: Final[str] = f"{XCCDF}Rule"
 CONTENT_REF: Final[str] = f"{XCCDF}check-content-ref"
+FIX: Final[str] = f"{XCCDF}fix"
+FIXTEXT: Final[str] = FIX + "text"
+FIXREF: Final[str] = "fixref"
 EXTENDED_COMPONENT: Final[str] = f"{DATASTREAM}extended-component"
 COMPONENT_REF: Final[str] = f"{DATASTREAM}component-ref"
 CATALOG_URI: Final[str] = "{urn:oasis:names:tc:entity:xmlns:xml:catalog}uri"
@@ -64,13 +72,14 @@ class ScriptCheckError(ValueError):
 
 @dataclass(frozen=True)
 class Stripped:
-    """A datastream without its SCE checks and scripts, and what was removed."""
+    """A datastream without its SCE checks, scripts and fixes, and what was removed."""
 
     data: bytes
     checks: int
     scripts: int
     component_refs: int
     catalog_uris: int
+    fixes: int = 0
 
 
 def _attributes() -> dict[str, str]:
@@ -96,6 +105,7 @@ class Frame:
     candidates: list[Frame] = field(default_factory=_frames)
     content_refs: list[str] = field(default_factory=_texts)
     child_names: list[str] = field(default_factory=_texts)
+    removable: bool = False
     end: int = -1
 
 
@@ -111,6 +121,8 @@ class Collector:
     components: list[Frame] = field(default_factory=_frames)
     references: list[Frame] = field(default_factory=_frames)
     uris: list[Frame] = field(default_factory=_frames)
+    fixes: list[Frame] = field(default_factory=_frames)
+    fixrefs: list[str] = field(default_factory=_texts)
 
     def locate(self, offset: int) -> None:
         """Remember the byte offset of the tag of the next event."""
@@ -123,6 +135,7 @@ class Collector:
         kind = self._kind(name, attributes, parent)
         if kind is not None:
             frame.attributes = dict(attributes)
+            frame.removable = True
             kind.append(frame)
             if parent is not None:
                 parent.candidates.append(frame)
@@ -132,6 +145,8 @@ class Collector:
                 parent.child_names.append(name)
             if parent.name == CHECK and name == CONTENT_REF:
                 parent.content_refs.append(attributes.get("href", ""))
+        if name == FIXTEXT and FIXREF in attributes:
+            self.fixrefs.append(attributes[FIXREF])
         self.stack.append(frame)
 
     def _kind(
@@ -146,6 +161,11 @@ class Collector:
                 message = "an SCE check is not a direct child of a rule"
                 raise ScriptCheckError(message)
             return self.checks
+        if name == FIX:
+            if parent is None or parent.name != RULE:
+                message = "a fix is not a direct child of a rule"
+                raise ScriptCheckError(message)
+            return self.fixes
         if name == EXTENDED_COMPONENT:
             return self.components
         if name == COMPONENT_REF:
@@ -162,7 +182,7 @@ class Collector:
         frame = self.stack.pop()
         if frame.candidates:
             self.parents.append(frame)
-        if frame.attributes or frame.candidates:
+        if frame.removable or frame.candidates:
             frame.end = self.element_end(frame)
         if name == EXTENDED_COMPONENT and frame.child_names != [SCE_SCRIPT]:
             identifier = frame.attributes.get("id", "")
@@ -220,7 +240,10 @@ def _line_start(data: bytes, start: int) -> int:
 
 
 def removed_elements(collector: Collector) -> tuple[list[Frame], int, int, int]:
-    """Return the elements to remove, and the numbers of scripts, references and catalog uris."""
+    """Return the elements to remove, and the numbers of scripts, references and catalog uris.
+
+    The removed elements are the SCE checks, their scripts and references, and every ``fix``.
+    """
     components = {frame.attributes.get("id", ""): frame for frame in collector.components}
     references = [
         frame for frame in collector.references if _reference(frame, XLINK_HREF) in components
@@ -237,7 +260,12 @@ def removed_elements(collector: Collector) -> tuple[list[Frame], int, int, int]:
     ):
         message = "the SCE checks, catalog entries and component references do not match"
         raise ScriptCheckError(message)
-    removed = [*collector.checks, *components.values(), *references, *uris]
+    fix_ids = {frame.attributes.get("id", "") for frame in collector.fixes} - {""}
+    dangling = sorted(fix_ids.intersection(collector.fixrefs))
+    if dangling:
+        message = f"a fixtext refers to the fix {dangling[0]!r}, which is removed"
+        raise ScriptCheckError(message)
+    removed = [*collector.checks, *components.values(), *references, *uris, *collector.fixes]
     chosen = {id(frame) for frame in removed}
     for parent in collector.parents:
         if parent.children == sum(id(child) in chosen for child in parent.candidates):
@@ -247,7 +275,7 @@ def removed_elements(collector: Collector) -> tuple[list[Frame], int, int, int]:
 
 
 def strip_script_checks(data: bytes) -> Stripped:
-    """Return ``data`` without its SCE checks, scripts and their references.
+    """Return ``data`` without its SCE checks, scripts, their references and its ``fix`` elements.
 
     Raises:
         ScriptCheckError: When the document is not safe XML, holds a script construct that is
@@ -275,4 +303,6 @@ def strip_script_checks(data: bytes) -> Stripped:
     except (xmlsafe.XmlSafetyError, catalog.ScriptCheckError) as error:
         message = f"the datastream without its scripts is not acceptable: {error}"
         raise ScriptCheckError(message) from error
-    return Stripped(result, len(collector.checks), scripts, references, uris)
+    return Stripped(
+        result, len(collector.checks), scripts, references, uris, len(collector.fixes)
+    )

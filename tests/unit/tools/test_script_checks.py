@@ -54,6 +54,23 @@ def component(name: str, content: str = "") -> str:
     )
 
 
+FIX_WORD = "fix"
+FIX_TAG = f"xccdf-1.2:{FIX_WORD}"
+FIXTEXT = "            <xccdf-1.2:fixtext>Set the mode of the file.</xccdf-1.2:fixtext>\n"
+
+
+def fixes(name: str) -> str:
+    if name == "b":
+        return f"            <{FIX_TAG}>echo b</{FIX_TAG}>\n"
+    system = f"urn:xccdf:{FIX_WORD}:script"
+    return (
+        f'            <{FIX_TAG} id="{name}" system="{system}:sh" reboot="false">\n'
+        f'chmod 0600 /etc/{name} &amp;&amp; test 1 -lt 2 <xccdf-1.2:sub idref="v"/>\n'
+        f"</{FIX_TAG}>\n"
+        f'            <{FIX_TAG} id="{name}_ansible" system="{system}:ansible"/>\n'
+    )
+
+
 def document(names: tuple[str, ...] = ("a", "b"), **parts: str) -> bytes:
     rules = parts.get("rules")
     uris = parts.get("uris")
@@ -63,7 +80,7 @@ def document(names: tuple[str, ...] = ("a", "b"), **parts: str) -> bytes:
     rule_text = (
         "".join(
             f'          <xccdf-1.2:Rule id="xccdf_x_rule_{name}" selected="false">\n'
-            f"{sce_check(name)}{OVAL_CHECK if name == 'a' else OCIL_CHECK}"
+            f"{FIXTEXT}{fixes(name)}{sce_check(name)}{OVAL_CHECK if name == 'a' else OCIL_CHECK}"
             "          </xccdf-1.2:Rule>\n"
             for name in names
         )
@@ -100,7 +117,7 @@ def document(names: tuple[str, ...] = ("a", "b"), **parts: str) -> bytes:
 def without_scripts(names: tuple[str, ...] = ("a", "b")) -> bytes:
     rules = "".join(
         f'          <xccdf-1.2:Rule id="xccdf_x_rule_{name}" selected="false">\n'
-        f"{OVAL_CHECK if name == 'a' else OCIL_CHECK}"
+        f"{FIXTEXT}{OVAL_CHECK if name == 'a' else OCIL_CHECK}"
         "          </xccdf-1.2:Rule>\n"
         for name in names
     )
@@ -112,6 +129,10 @@ def test_every_sce_check_script_and_reference_is_removed_and_nothing_else() -> N
     assert stripped.data == without_scripts()
     assert (stripped.checks, stripped.scripts) == (2, 2)
     assert (stripped.component_refs, stripped.catalog_uris) == (2, 2)
+    assert stripped.fixes == 3
+    assert FIX_WORD.encode() + b"text>" in stripped.data
+    assert b"chmod" not in stripped.data
+    assert b"urn:xccdf:" not in stripped.data
 
 
 def test_stripping_is_idempotent_and_leaves_clean_content_byte_identical() -> None:
@@ -119,6 +140,7 @@ def test_stripping_is_idempotent_and_leaves_clean_content_byte_identical() -> No
     again = sc.strip_script_checks(clean)
     assert again.data == clean
     assert (again.checks, again.scripts, again.component_refs, again.catalog_uris) == (0, 0, 0, 0)
+    assert again.fixes == 0
 
 
 def test_a_quoted_closing_bracket_in_a_removed_tag_is_honoured() -> None:
@@ -133,6 +155,16 @@ def test_a_quoted_closing_bracket_in_a_removed_tag_is_honoured() -> None:
 @pytest.mark.parametrize(
     ("data", "message"),
     [
+        (
+            document(extra_checks=f"<{FIX_TAG}>echo</{FIX_TAG}>\n"),
+            "a fix is not a direct child of a rule",
+        ),
+        (
+            document().replace(
+                b"<xccdf-1.2:fixtext>", b'<xccdf-1.2:fixtext fixref="a_ansible">', 1
+            ),
+            "a fixtext refers to the fix 'a_ansible', which is removed",
+        ),
         (
             document(extra_checks='<xccdf-1.2:check system="urn:example:shell"/>\n'),
             "the system 'urn:example:shell', which is not removed safely",
@@ -183,6 +215,8 @@ def test_a_quoted_closing_bracket_in_a_removed_tag_is_honoured() -> None:
         (b"<x>", "not well-formed"),
     ],
     ids=[
+        "fix-outside-a-rule",
+        "fixtext-names-a-removed-fix",
         "other-script-system",
         "sce-check-outside-a-rule",
         "component-without-a-script",

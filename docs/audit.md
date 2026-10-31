@@ -246,8 +246,10 @@ No script written by ComplianceAsCode runs on a managed host, not even while it 
 (SCE) shell scripts, which `oscap` would run as root: 81 in Ubuntu 24.04 and 438 in RHEL 9, one per rule with an SCE
 check. `oscap` 1.3.9 has no option to turn SCE off, so `make content` removes them on the controller. It removes
 every SCE check, every embedded script (`ds:extended-component`) and the references to them, and changes no other
-byte. It pins the digest of the processed datastream as `sha256` in `content/manifest.yml`, next to the published
-`source_sha256` and the numbers removed. Pass that processed datastream and its `sha256` to the discover role.
+byte. It also removes every XCCDF `fix`, the content's remediation code: 1257 on Ubuntu 24.04 and 3460 on RHEL 9.
+The `fixtext` prose stays. It pins the digest of the processed datastream as `sha256` in `content/manifest.yml`, next
+to the published `source_sha256` and the numbers removed. Pass that processed datastream and its `sha256` to the
+discover role.
 
 A rule that also has an OVAL check is evaluated through OVAL, as before: 63 rules on Ubuntu 24.04 and 434 on RHEL 9.
 A rule whose only automated check was SCE keeps its OCIL check, which `oscap` does not evaluate, and is reported as
@@ -255,8 +257,8 @@ A rule whose only automated check was SCE keeps its OCIL check, which `oscap` do
 408 rules of `cis_level1_server`) and 4 on RHEL 9: the iptables, ip6tables, nftables and ufw firewall rules and the
 file-system-wide checks for world-writable files and for files without a known owner or group.
 
-Any datastream that still holds a script check is refused, whoever supplied it: an XCCDF `check` whose system is not
-OVAL or OCIL, an SCE element, or a `ds:extended-component`. The discover role (`benchmark_info`, `profile_info`), the
+Any datastream that still holds a script check or remediation code is refused, whoever supplied it: an XCCDF
+`check` whose system is not OVAL or OCIL, an SCE element, a `ds:extended-component`, or an XCCDF `fix`. The discover role (`benchmark_info`, `profile_info`), the
 audit's profile check and the private copy that `oscap` reads all refuse it with `script_check_content`, and nothing
 is scanned. The threat model records the former risk as
 [T-AUDIT-2](security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root).
@@ -651,7 +653,7 @@ and the dashboard filters the rules by family and topic.
 | `nothing_to_scan` | Every rule of the profile is disabled |
 | `unknown_backend` | The backend is not registered |
 | `digest_mismatch`, `profile_not_found`, `unsupported_content`, `invalid_content` | Content errors from the catalog, or from making the private copy |
-| `script_check_content` | The datastream, or its private copy, holds a check or embedded script that would make the scanner run a script of the content; nothing is scanned ([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) |
+| `script_check_content` | The datastream, or its private copy, holds a check or embedded script that would make the scanner run a script of the content, or an XCCDF `fix` element; nothing is scanned ([ADR 0026](adr/0026-no-content-scripts-on-hosts.md)) |
 | `invalid_request` | The backend refused the request; outside check mode `evidence_dir` names the run directory, in check mode it is null because the temporary directory is gone |
 | `evidence_write_failed` | An evidence file could not be written, or the check-mode scan could not write its files |
 | `cleanup_failed` | The private copy or the temporary check-mode directory could not be removed; `evidence_dir` names what is left |

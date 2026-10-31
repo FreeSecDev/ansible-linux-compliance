@@ -785,6 +785,7 @@ class TestCloseErrors:
 
 
 SCE_SYSTEM = "http://open-scap.org/page/SCE"
+FIX_WORD = "fix"
 SCE_NAMESPACE = 'xmlns:sce="http://open-scap.org/page/SCE_xccdf_stream"'
 
 
@@ -818,8 +819,14 @@ class TestScriptChecks:
                 collection(benchmark(), f"<sce:script {SCE_NAMESPACE}>echo</sce:script>"),
                 "embeds a Script Check Engine script",
             ),
+            (
+                collection(
+                    benchmark(rule("a", inner=f"<x:{FIX_WORD}>chmod 0600 x</x:{FIX_WORD}>"))
+                ),
+                "holds an XCCDF fix element, remediation code of the content",
+            ),
         ],
-        ids=["sce-check", "other-system", "no-system", "extended-component", "sce-script"],
+        ids=["sce-check", "other-system", "no-system", "extended-component", "sce-script", "fix"],
     )
     def test_a_script_check_is_refused_wherever_the_content_is_parsed(
         self, tmp_path: Path, data: bytes, message: str

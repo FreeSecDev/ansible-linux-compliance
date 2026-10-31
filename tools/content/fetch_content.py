@@ -9,9 +9,10 @@ fixes that ComplianceAsCode ships, is never read (ADR 0003).
 No script written by ComplianceAsCode may run on a managed host, not even while it
 is audited (FREES-191, ADR 0026). A member is therefore checked against
 ``source_sha256`` and ``source_size_bytes``, the published bytes, and then
-:func:`script_checks.strip_script_checks` removes every Script Check Engine check
-and embedded script. The numbers removed must equal ``removed_sce_checks`` and
-``removed_sce_scripts``, and the result must have ``sha256`` and ``size_bytes``,
+:func:`script_checks.strip_script_checks` removes every Script Check Engine check,
+embedded script and XCCDF ``fix`` element. The numbers removed must equal
+``removed_sce_checks``, ``removed_sce_scripts`` and ``removed_fix_elements``, and the
+result must have ``sha256`` and ``size_bytes``,
 the digest and size of the processed datastream that every other consumer pins
 (the discover and audit roles, Molecule, the catalogue). Only the processed
 datastream is written.
@@ -112,6 +113,7 @@ class Datastream:
     source_size_bytes: int
     removed_sce_checks: int
     removed_sce_scripts: int
+    removed_fix_elements: int
 
     @property
     def file_name(self) -> str:
@@ -232,6 +234,7 @@ def _datastream(value: object, index: int) -> Datastream:
         source_size_bytes=_size(table, "source_size_bytes", where, MAX_MEMBER_BYTES),
         removed_sce_checks=_count(table, "removed_sce_checks", where),
         removed_sce_scripts=_count(table, "removed_sce_scripts", where),
+        removed_fix_elements=_count(table, "removed_fix_elements", where),
     )
 
 
@@ -459,11 +462,13 @@ def processed(stream: Datastream, data: bytes) -> bytes:
     except script_checks.ScriptCheckError as error:
         message = f"{stream.path}: {error}"
         raise ContentError(message) from error
-    removed = (stripped.checks, stripped.scripts)
-    if removed != (stream.removed_sce_checks, stream.removed_sce_scripts):
+    removed = (stripped.checks, stripped.scripts, stripped.fixes)
+    pinned = (stream.removed_sce_checks, stream.removed_sce_scripts, stream.removed_fix_elements)
+    if removed != pinned:
         message = (
-            f"{stream.path}: removed {stripped.checks} SCE checks and {stripped.scripts} scripts, "
-            f"the manifest records {stream.removed_sce_checks} and {stream.removed_sce_scripts}"
+            f"{stream.path}: removed {stripped.checks} SCE checks, {stripped.scripts} scripts and "
+            f"{stripped.fixes} fix elements, the manifest records {pinned[0]}, {pinned[1]} and "
+            f"{pinned[2]}"
         )
         raise ContentError(message)
     _matches(

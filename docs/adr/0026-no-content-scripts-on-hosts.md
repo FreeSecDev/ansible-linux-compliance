@@ -1,4 +1,4 @@
-# 0026. No script of the scanner content runs on a managed host, not even to audit
+# 0026. No script or remediation code of the scanner content reaches a managed host
 
 - **Status:** proposed
 - **Date:** 2026-10-30
@@ -78,7 +78,20 @@ The only reliable control is therefore the content: an SCE check or script that 
    `tools/content/fetch_content.py` (`make content`, `make molecule-content`, `make test-oscap-integration`) extracts the
    published datastream, checks it against `source_sha256` and `source_size_bytes`, and runs
    `tools/content/script_checks.py`. That removes every SCE `check` of a rule, every `ds:extended-component`, every
-   `ds:component-ref` that points at one and every catalog `uri` that points at such a reference.
+   `ds:component-ref` that points at one and every catalog `uri` that points at such a reference. It also removes
+   every XCCDF `fix` of a rule: the content's remediation code (Bash, Ansible, Puppet, kickstart, Anaconda, bootc,
+   Kubernetes and image blueprint). `oscap` would run a fix only with `--remediate`, which the process helper refuses,
+   but the owner does not want that code on a managed host at all, and FREES-188 already stopped the collection from
+   reading it. The `fixtext` prose stays, because the checklist export shows it. A `fixtext` whose `fixref` names a
+   removed `fix` fails closed, and so does a `fix` outside a rule. The pinned content has no `fixtext`.
+
+   | Datastream | `fix` elements | By system |
+   |---|---|---|
+   | `ssg-ubuntu2404-ds.xml` | 1257 | sh 589, ansible 503, puppet 88, blueprint 53, kubernetes 24 |
+   | `ssg-rhel9-ds.xml` | 3460 | sh 1316, ansible 1294, kickstart 179, puppet 152, kubernetes 160, anaconda 134, blueprint 126, bootc 99 |
+
+   Stripping the fixes needs the catalogue's values to come from the profile, not from the fixes. FREES-188 (ADR
+   0025, pull request #72) provides that, so this change is based on it.
    - The document is parsed once with the bounded parser of `xmlsafe` (no DOCTYPE, no entities, bounded size and
      depth). The parser now reports the byte offset of every tag, and the elements are cut out of the original bytes.
      Nothing is serialised again, so every other byte stays as published and the result is reproducible.
@@ -87,7 +100,8 @@ The only reliable control is therefore the content: an SCE check or script that 
      the CI job `oscap-integration` evaluates the processed Ubuntu 24.04 datastream on every run.
 2. **Both digests are pinned.** `content/manifest.yml` records, per datastream:
    - `source_sha256` and `source_size_bytes`: the published member;
-   - `removed_sce_checks` and `removed_sce_scripts`: 81 and 81 for Ubuntu 24.04, 438 and 438 for RHEL 9;
+   - `removed_sce_checks`, `removed_sce_scripts` and `removed_fix_elements`: 81, 81 and 1257 for Ubuntu 24.04, and
+     438, 438 and 3460 for RHEL 9;
    - `sha256` and `size_bytes`: the processed datastream.
 
    A difference in any of them stops the fetch, and no file is written. Every consumer of `sha256` pins the processed
@@ -95,7 +109,7 @@ The only reliable control is therefore the content: an SCE check or script that 
    STIG mapping. A published datastream with scripts no longer has a pinned digest.
 3. **The hosts refuse script checks at run time, whatever the source of the content.**
    - `catalog.refuse_script_check` refuses an XCCDF `check` whose system is not OVAL or OCIL, any element of the SCE
-     namespace, and any `ds:extended-component`.
+     namespace, any `ds:extended-component`, and any XCCDF `fix`.
    - The refusal runs on every parse of a datastream (`benchmark_info`, `profile_info` and the audit's profile check)
      and on the bytes of the private copy that `oscap` reads, which `audit.copy_content` parses while it hashes them.
    - Modules report `script_check_content`, and nothing is scanned. Operator-supplied content is held to the same rule.
@@ -106,7 +120,8 @@ The only reliable control is therefore the content: an SCE check or script that 
    - the 16 former SCE-only rules of `cis_level1_server` keep only OCIL and are `notchecked` or `notapplicable`.
 
    A container evaluation of `cis_level1_server`, before and after, changed exactly the rules that had run SCE (`pass`
-   to `notchecked`). The other 646 results were identical.
+   to `notchecked`). The other 646 results were identical. Removing the fixes as well gave the same results: they
+   play no part in an evaluation.
 
 ## Alternatives evaluated
 
@@ -121,8 +136,8 @@ The only reliable control is therefore the content: an SCE check or script that 
 
 ## Benefits
 
-- No script written by ComplianceAsCode reaches or runs on a managed host. The scanner evaluates only OVAL, which
-  `oscap` interprets.
+- No script or remediation code written by ComplianceAsCode reaches or runs on a managed host. The scanner evaluates
+  only OVAL, which `oscap` interprets. The processed datastreams are a third smaller (8.6 MB and 18.6 MB).
 - The decision holds for operator-supplied content too, and it fails closed.
 - The change is reproducible and pinned: the processed digests and the numbers removed are in the manifest and the
   golden test.
@@ -133,7 +148,7 @@ The only reliable control is therefore the content: an SCE check or script that 
   ip6tables, nftables and ufw firewall rules, and the file-system-wide checks for world-writable or unowned files.
   Native OVAL or our own checks for them are follow-up work.
 - `fetch_content` now holds a datastream in memory while it processes it (at most the 256 MiB member limit; the pinned
-  ones are 12 and 29 MB). It runs as a module (`python -m tools.content.fetch_content`, through `make content`)
+  ones are 12.6 and 28.9 MB). It runs as a module (`python -m tools.content.fetch_content`, through `make content`)
   because it uses the collection's hardened parser.
 - A content update must pin the new processed digest and the new removal numbers.
 
