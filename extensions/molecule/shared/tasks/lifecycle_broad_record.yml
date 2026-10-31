@@ -1,5 +1,5 @@
 ---
-- name: Lifecycle broad lines | Normalise the instance state, leaving out only the listed differences
+- name: Lifecycle broad record | Normalise the instance state, leaving out only the listed differences
   ansible.builtin.set_fact:
     lifecycle_broad_result: >-
       {{ lifecycle_broad_sources | freesecdev.linux_compliance.lifecycle_record({
@@ -12,9 +12,10 @@
              'volatile_sysctl': lifecycle_broad_volatile_sysctl,
              'volatile_sysctl_trees': lifecycle_broad_volatile_sysctl_trees,
              'volatile_contents': contract_snapshot_volatile_contents,
-             'volatile_times': contract_snapshot_volatile_times}}) }}
+             'volatile_times': contract_snapshot_volatile_times,
+             'declared_times': 'ctime'}}) }}
 
-- name: Lifecycle broad lines | Keep the record of the whole instance and the no-change snapshot of the same moment
+- name: Lifecycle broad record | Keep the record of the whole instance and the no-change snapshot of the same moment
   ansible.builtin.set_fact:
     lifecycle_broad_record: "{{ lifecycle_broad_result.instance }}"
     lifecycle_broad_snapshot: "{{ lifecycle_broad_result.snapshot }}"

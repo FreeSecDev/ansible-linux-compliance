@@ -11,31 +11,10 @@
     - vars/libvirt.yml
   vars:
     converge_outcomes: "{{ molecule_libvirt_reference_outcomes[molecule_target.image] }}"
-    linux_compliance_banners_enabled: false
-    linux_compliance_login_defs_enabled: false
-    linux_compliance_pwquality_enabled: false
-    linux_compliance_ssh_enabled: false
-    linux_compliance_sudo_enabled: false
-    linux_compliance_filesystem_modules_enabled: false
-    linux_compliance_protocol_modules_enabled: false
-    linux_compliance_wireless_modules_enabled: false
   tasks:
-    - name: Check that the play switches off every native topic other than the reference topic
-      ansible.builtin.assert:
-        that:
-          - >-
-            (lookup('ansible.builtin.file', molecule_repository ~ '/roles/remediate/vars/rules.yml') | from_yaml)
-            .__linux_compliance_remediate_rules | map(attribute='family') | unique
-            | reject('equalto', molecule_reference_family) | sort == molecule_other_native_topics | sort
-          - >-
-            lookup('ansible.builtin.vars', *(molecule_other_native_topics
-            | map('regex_replace', '^', 'linux_compliance_') | map('regex_replace', '$', '_enabled')),
-            wantlist=True) | unique == [false]
-        fail_msg: >-
-          converge_libvirt.yml and verify_libvirt.yml prove the reference rule alone, so their play switches off every
-          other native topic ({{ molecule_other_native_topics }} in vars/target.yml and the play vars); the lifecycle
-          scenarios prove those topics. Add a new native topic to both.
-        quiet: true
+    - name: Switch off every native topic other than the reference topic, as the catalogue lists them
+      ansible.builtin.include_tasks:
+        file: tasks/other_topics_off.yml
 
     - name: Discover the pinned datastream and the profile of this platform
       ansible.builtin.include_role:
