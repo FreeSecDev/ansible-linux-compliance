@@ -1,0 +1,9 @@
+blacklist hfs
+blacklist nouveau
+blacklist nouveau
+blacklist foo
+install hfs  /bin/false
+options pty legacy_count=0
+
+# End of configuration files. Dumping indexes now:
+

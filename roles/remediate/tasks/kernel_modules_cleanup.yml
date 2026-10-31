@@ -1,0 +1,137 @@
+---
+- name: Kernel modules | Refuse to remove a drop-in that the dispatcher did not plan to clean up
+  ansible.builtin.assert:
+    that:
+      - linux_compliance_remediate_enabled is boolean
+      - linux_compliance_remediate_enabled
+      - __linux_compliance_remediate_family is mapping
+      - __linux_compliance_remediate_family.name in __linux_compliance_remediate_modprobe_families
+      - __linux_compliance_remediate_rule is mapping
+      - __linux_compliance_remediate_rule.family == __linux_compliance_remediate_family.name
+      - __linux_compliance_remediate_rule.parameters.method == 'dropin'
+      - __linux_compliance_remediate_rule.parameters.path in __linux_compliance_remediate_km_owned
+      - >-
+        __linux_compliance_remediate_rule.parameters.module
+        is match(__linux_compliance_remediate_modprobe_module_pattern)
+      - >-
+        __linux_compliance_remediate_rule.parameters.path
+        == __linux_compliance_remediate_modprobe_directory ~ '/freesecdev-'
+           ~ __linux_compliance_remediate_rule.parameters.module ~ '.conf'
+      - __linux_compliance_remediate_rule.ledger_entry is mapping
+      - __linux_compliance_remediate_plan is defined
+      - __linux_compliance_remediate_plan is mapping
+      - __linux_compliance_remediate_plan.enabled is true
+      - >-
+        __linux_compliance_remediate_rule in
+        ((__linux_compliance_remediate_plan.families
+         | selectattr('name', 'equalto', __linux_compliance_remediate_family.name) | list | first
+         | default({}))).cleanup | default([])
+    fail_msg: >-
+      kernel_modules_cleanup.yml runs only for a rule that the remediate dispatcher planned to clean
+      up from its ledger entry, with linux_compliance_remediate_enabled true. No change was made to the host.
+    quiet: true
+  tags:
+    - always
+
+- name: Kernel modules | Inspect the drop-in before removing it, without following a symbolic link
+  ansible.builtin.stat:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: __linux_compliance_remediate_km_stat
+  when: __linux_compliance_remediate_km_directory_stat.isdir | default(false)
+  tags:
+    - always
+
+- name: Kernel modules | Read the drop-in to check that the collection wrote it
+  ansible.builtin.slurp:
+    src: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+  register: __linux_compliance_remediate_km_current
+  when:
+    - __linux_compliance_remediate_km_stat is not skipped
+    - __linux_compliance_remediate_km_stat.stat.isreg | default(false)
+  tags:
+    - always
+
+- name: Kernel modules | Read the method and the content that the ledger entry of the rule records
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_prior: >-
+      {{ __linux_compliance_remediate_rule.ledger_entry.prior_values | default([])
+         | items2dict(key_name='name', value_name='value') }}
+    __linux_compliance_remediate_km_header: >-
+      {{ '# Managed by freesecdev.linux_compliance for ' ~ __linux_compliance_remediate_rule.rule_id ~ '.' }}
+  tags:
+    - always
+
+- name: Kernel modules | Name the reason the drop-in cannot be removed, or that it is already gone
+  vars:
+    __linux_compliance_remediate_km_existing: >-
+      {{ (__linux_compliance_remediate_km_current.content | b64decode)
+         if __linux_compliance_remediate_km_current is not skipped else none }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_reason: >-
+      {{ 'method_changed' if __linux_compliance_remediate_km_prior.method | default('unknown') != 'dropin'
+         else 'not_directory' if not (__linux_compliance_remediate_km_directory_stat.isdir | default(false))
+         else 'not_regular_file' if __linux_compliance_remediate_km_stat.stat.exists
+              and not __linux_compliance_remediate_km_stat.stat.isreg
+         else none if not __linux_compliance_remediate_km_stat.stat.exists
+         else 'not_owned' if not __linux_compliance_remediate_km_existing.startswith(
+              __linux_compliance_remediate_km_header)
+         else 'invalid_record' if not (__linux_compliance_remediate_km_prior.dropin_sha256 | default(none) is string
+              and __linux_compliance_remediate_km_prior.dropin_sha256 is match('^[0-9a-f]{64}$'))
+         else 'modified_since_apply' if (__linux_compliance_remediate_km_existing | hash('sha256'))
+              != __linux_compliance_remediate_km_prior.dropin_sha256
+         else none }}
+    __linux_compliance_remediate_km_already: >-
+      {{ (__linux_compliance_remediate_km_prior.method | default('unknown')) == 'dropin'
+         and (__linux_compliance_remediate_km_directory_stat.isdir | default(false))
+         and not __linux_compliance_remediate_km_stat.stat.exists }}
+  tags:
+    - always
+
+- name: Kernel modules | Remove the drop-in that the collection wrote
+  ansible.builtin.file:
+    path: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+    state: absent
+  register: __linux_compliance_remediate_km_removal
+  when:
+    - __linux_compliance_remediate_km_reason is none
+    - not __linux_compliance_remediate_km_already
+  tags:
+    - always
+
+- name: Kernel modules | Forget the rule in the state ledger after the removal, or when the drop-in is already gone
+  freesecdev.linux_compliance.control_state:
+    action: remove
+    rule_id: "{{ __linux_compliance_remediate_rule.rule_id }}"
+  register: __linux_compliance_remediate_km_forget
+  when: __linux_compliance_remediate_km_reason is none
+  tags:
+    - always
+
+- name: Kernel modules | Add the result of the cleanup
+  vars:
+    __linux_compliance_remediate_km_cleanup_status: >-
+      {{ 'restored' if __linux_compliance_remediate_km_reason is none else 'cleanup_incomplete' }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: >-
+      {{ __linux_compliance_remediate_results + [{
+           'rule_id': __linux_compliance_remediate_rule.rule_id,
+           'family': __linux_compliance_remediate_rule.family,
+           'action': 'cleanup',
+           'status': __linux_compliance_remediate_km_cleanup_status,
+           'reason': __linux_compliance_remediate_km_reason,
+           'changed': (__linux_compliance_remediate_km_removal is changed)
+                      or (__linux_compliance_remediate_km_forget is changed),
+           'message': __linux_compliance_remediate_rule.rule_id ~ ': ' ~ __linux_compliance_remediate_km_cleanup_status
+                      ~ ((' (' ~ __linux_compliance_remediate_km_reason ~ ': '
+                          ~ __linux_compliance_remediate_rule.parameters.path
+                          ~ '; the file and the ledger entry are kept and the cleanup is retried on the next run)')
+                         if __linux_compliance_remediate_km_reason
+                         else ' (the drop-in was already gone; only the ledger entry was removed)'
+                         if __linux_compliance_remediate_km_already else '')
+         }] }}
+  tags:
+    - always

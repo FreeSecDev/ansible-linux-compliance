@@ -1281,6 +1281,279 @@ __linux_compliance_remediate_rules:
       type: "file"
       attribute: "mode"
       max_mode: "0440"
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_atm_disabled"
+    family: protocol_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_atm_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "atm"
+      path: "/etc/modprobe.d/freesecdev-atm.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_bluetooth_disabled"
+    family: wireless_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_bluetooth_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "bluetooth"
+      path: "/etc/modprobe.d/freesecdev-bluetooth.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_can_disabled"
+    family: protocol_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_can_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "can"
+      path: "/etc/modprobe.d/freesecdev-can.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_cfg80211_disabled"
+    family: wireless_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_cfg80211_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "cfg80211"
+      path: "/etc/modprobe.d/freesecdev-cfg80211.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_cramfs_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "cramfs"
+      path: "/etc/modprobe.d/freesecdev-cramfs.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_dccp_disabled"
+    family: protocol_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_dccp_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "dccp"
+      path: "/etc/modprobe.d/freesecdev-dccp.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_firewire-core_disabled"
+    family: protocol_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_firewire_core_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "firewire-core"
+      path: "/etc/modprobe.d/freesecdev-firewire-core.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_freevxfs_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_freevxfs_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "freevxfs"
+      path: "/etc/modprobe.d/freesecdev-freevxfs.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_hfs_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_hfs_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "hfs"
+      path: "/etc/modprobe.d/freesecdev-hfs.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_hfsplus_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_hfsplus_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "hfsplus"
+      path: "/etc/modprobe.d/freesecdev-hfsplus.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_iwlmvm_disabled"
+    family: wireless_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_iwlmvm_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "iwlmvm"
+      path: "/etc/modprobe.d/freesecdev-iwlmvm.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_iwlwifi_disabled"
+    family: wireless_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_iwlwifi_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "iwlwifi"
+      path: "/etc/modprobe.d/freesecdev-iwlwifi.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_jffs2_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_jffs2_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "jffs2"
+      path: "/etc/modprobe.d/freesecdev-jffs2.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_mac80211_disabled"
+    family: wireless_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_mac80211_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "mac80211"
+      path: "/etc/modprobe.d/freesecdev-mac80211.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_overlayfs_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_overlayfs_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "overlay"
+      path: "/etc/modprobe.d/freesecdev-overlay.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_rds_disabled"
+    family: protocol_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_rds_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "rds"
+      path: "/etc/modprobe.d/freesecdev-rds.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_sctp_disabled"
+    family: protocol_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_sctp_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "sctp"
+      path: "/etc/modprobe.d/freesecdev-sctp.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_squashfs_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_squashfs_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "squashfs"
+      path: "/etc/modprobe.d/freesecdev-squashfs.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_tipc_disabled"
+    family: protocol_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_tipc_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "tipc"
+      path: "/etc/modprobe.d/freesecdev-tipc.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_udf_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_udf_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "udf"
+      path: "/etc/modprobe.d/freesecdev-udf.conf"
+      install: "/bin/false"
+      blacklist: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled"
+    family: filesystem_modules
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_kernel_module_usb_storage_disabled_enabled
+    runbook: null
+    parameters:
+      method: "dropin"
+      module: "usb-storage"
+      path: "/etc/modprobe.d/freesecdev-usb-storage.conf"
+      install: "/bin/false"
+      blacklist: true
   - rule_id: "xccdf_org.ssgproject.content_rule_sshd_disable_compression"
     family: ssh
     disruptive: true
@@ -2749,30 +3022,9 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_networkmanager_dns_mode"
     - "xccdf_org.ssgproject.content_rule_only_allow_dod_certs"
     - "xccdf_org.ssgproject.content_rule_only_allow_specific_certs"
-  filesystem_modules:
-    - "xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_freevxfs_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_hfs_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_hfsplus_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_jffs2_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_overlayfs_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_squashfs_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_udf_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_usb-storage_disabled"
-  protocol_modules:
-    - "xccdf_org.ssgproject.content_rule_kernel_module_atm_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_can_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_dccp_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_firewire-core_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_rds_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_sctp_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_tipc_disabled"
-  wireless_modules:
-    - "xccdf_org.ssgproject.content_rule_kernel_module_bluetooth_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_cfg80211_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_iwlmvm_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_iwlwifi_disabled"
-    - "xccdf_org.ssgproject.content_rule_kernel_module_mac80211_disabled"
+  filesystem_modules: []
+  protocol_modules: []
+  wireless_modules: []
   firewalld:
     - "xccdf_org.ssgproject.content_rule_configure_firewalld_ports"
     - "xccdf_org.ssgproject.content_rule_configured_firewalld_default_deny"

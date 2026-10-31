@@ -350,3 +350,135 @@
           - "'No change was made to the host' in ansible_failed_result.msg"
         fail_msg: "ssh.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
         quiet: true
+
+- name: Native direct use | filesystem_modules.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run filesystem_modules.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: filesystem_modules.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because filesystem_modules.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: filesystem_modules.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that filesystem_modules.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "filesystem_modules.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | protocol_modules.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run protocol_modules.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: protocol_modules.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because protocol_modules.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: protocol_modules.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that protocol_modules.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "protocol_modules.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | wireless_modules.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run wireless_modules.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: wireless_modules.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because wireless_modules.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: wireless_modules.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that wireless_modules.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "wireless_modules.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | kernel_modules_family.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run kernel_modules_family.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: kernel_modules_family.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because kernel_modules_family.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: kernel_modules_family.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that kernel_modules_family.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "kernel_modules_family.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | kernel_modules_apply.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run kernel_modules_apply.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: kernel_modules_apply.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because kernel_modules_apply.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: kernel_modules_apply.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that kernel_modules_apply.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "kernel_modules_apply.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
+
+- name: Native direct use | kernel_modules_cleanup.yml refuses to run without the opt-in
+  block:
+    - name: Native direct use | Run kernel_modules_cleanup.yml with remediation disabled
+      ansible.builtin.include_role:
+        name: freesecdev.linux_compliance.remediate
+        tasks_from: kernel_modules_cleanup.yml
+      vars:
+        linux_compliance_remediate_enabled: false
+
+    - name: Native direct use | Fail because kernel_modules_cleanup.yml ran without the opt-in
+      ansible.builtin.fail:
+        msg: kernel_modules_cleanup.yml ran without the opt-in.
+  rescue:
+    - name: Native direct use | Check that kernel_modules_cleanup.yml refused to run before anything else
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name is search('Refuse')
+          - "'linux_compliance_remediate_enabled true' in ansible_failed_result.msg"
+          - "'No change was made to the host' in ansible_failed_result.msg"
+        fail_msg: "kernel_modules_cleanup.yml: {{ ansible_failed_task.name }}: {{ ansible_failed_result.msg }}"
+        quiet: true
