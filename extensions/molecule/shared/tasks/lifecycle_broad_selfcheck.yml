@@ -1,7 +1,7 @@
 ---
 - name: Lifecycle broad self-check | Normalise the synthetic state before the case
   ansible.builtin.include_tasks:
-    file: lifecycle_broad_lines.yml
+    file: lifecycle_broad_record.yml
   vars:
     lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
     lifecycle_broad_rewritten: "{{ lifecycle_broad_selfcheck_case.rewritten | default([]) }}"
@@ -15,7 +15,7 @@
 
 - name: Lifecycle broad self-check | Normalise the synthetic state after the case
   ansible.builtin.include_tasks:
-    file: lifecycle_broad_lines.yml
+    file: lifecycle_broad_record.yml
   vars:
     lifecycle_broad_declared: "{{ lifecycle_broad_selfcheck_declared }}"
     lifecycle_broad_rewritten: "{{ lifecycle_broad_selfcheck_case.rewritten | default([]) }}"
