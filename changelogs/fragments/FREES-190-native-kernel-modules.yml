@@ -11,7 +11,10 @@ minor_changes:
     ``install`` command of another file that ``modprobe`` reads first, by name or by a ``fnmatch`` pattern such as
     ``cram*``, is reported ``overridden`` and left alone. A vendor file masked by a link to ``/dev/null`` counts as
     empty, as for ``modprobe``, and ``/usr/local/lib/modprobe.d`` is read only where kmod reads it (Ubuntu 24.04). No
-    module is unloaded and no initramfs is rebuilt (ADR 0028). The topics stay disruptive and need their family or
+    module is unloaded and no initramfs is rebuilt (ADR 0028). What each file says is read by kmod itself, with the
+    new module ``modprobe_config`` (``modprobe -c`` through the audited process helper), and the family refuses to
+    act (``config_unreadable``, ``modprobe_missing``) when kmod and the family disagree. The topics stay disruptive
+    and need their family or
     ``kernel_modules`` in ``linux_compliance_remediate_allow_disruptive``.
 trivial:
   - >-

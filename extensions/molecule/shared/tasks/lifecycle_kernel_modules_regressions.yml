@@ -412,6 +412,109 @@
     - "{{ regression_masked_file }}"
     - "{{ regression_masked_link }}"
 
+- name: Kernel module regressions | Name the site files that kmod's own reader reads differently from the text
+  ansible.builtin.set_fact:
+    regression_lexed:
+      - path: /etc/modprobe.d/00-r3-escaped.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_freevxfs_disabled
+        content: |
+          install \*freevxfs /sbin/modprobe --ignore-install freevxfs
+      - path: /etc/modprobe.d/00-r3-directive.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_udf_disabled
+        content: |
+          ins\tall udf /sbin/modprobe --ignore-install udf
+      - path: /etc/modprobe.d/00-r3-continuation.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_jffs2_disabled
+        content: |
+          install foo /bin/true \\
+          install jffs2 /sbin/modprobe --ignore-install jffs2
+      - path: /etc/modprobe.d/00-r3-bracket.conf
+        rule: xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled
+        content: |
+          install cr[]a[a]mfs /sbin/modprobe --ignore-install cramfs
+
+- name: Kernel module regressions | Let four modules load again in lines that only kmod's reader reads right
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.path }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ regression_lexed }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Kernel module regressions | Switch every rule of the topic on for the lexed lines
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Apply the topic next to the lexed lines
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Read the drop-ins of the four modules after the apply
+  ansible.builtin.stat:
+    path: "/etc/modprobe.d/freesecdev-{{ item }}.conf"
+    follow: false
+  loop:
+    - freevxfs
+    - udf
+    - jffs2
+    - cramfs
+  register: regression_lexed_files
+
+- name: Kernel module regressions | Check that the four rules are overridden and the others applied
+  vars:
+    regression_lexed_rules: "{{ regression_lexed | map(attribute='rule') | list }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', regression_lexed_rules)
+        | map(attribute='status') | unique | list == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'in', regression_lexed_rules) | selectattr('changed')
+        | list == []
+      - >-
+        lifecycle_results | rejectattr('rule_id', 'in', regression_lexed_rules)
+        | map(attribute='status') | unique | list == ['applied']
+      - regression_lexed_files.results | map(attribute='stat') | selectattr('exists') | list == []
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', regression_lexed[3].rule)
+        | map(attribute='reason') | first is search('install ' ~ ('cr[]a[a]mfs' | regex_escape) ~ ' ')
+    fail_msg: "{{ regression_label }}, apply next to the lexed lines: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Switch every rule of the topic off after the lexed lines
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Kernel module regressions | Clean up the topic after the lexed lines
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+    lifecycle_family: filesystem_modules
+
+- name: Kernel module regressions | Check that every applied rule was restored
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+    fail_msg: "{{ regression_label }}, cleanup after the lexed lines: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Kernel module regressions | Remove the lexed site files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ regression_lexed }}"
+  loop_control:
+    label: "{{ item.path }}"
+
 - name: Kernel module regressions | Read the ledger after the regressions
   freesecdev.linux_compliance.control_state:
     action: list

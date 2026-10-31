@@ -721,7 +721,9 @@ records every entry as if another method had written it (`method_changed` at app
 adds a file read first that lets jffs2 load through the pattern `jff*` after the apply (`overridden`, nothing
 changed), changes the cramfs drop-in
 by hand and removes the freevxfs one (`modified_since_apply` kept, `restored` without a write), and finally puts the
-cramfs drop-in back and cleans it up. Every kernel module rule is limited to systems with a kernel, so the scans in
+cramfs drop-in back and cleans it up. A last step writes four site files, read before the drop-ins, that only kmod's own
+reader reads right (`install \*freevxfs`, `ins\tall udf`, a line ending in `\\` before `install jffs2`, and
+`install cr[]a[a]mfs`), and expects those four rules `overridden` and the others `applied`. Every kernel module rule is limited to systems with a kernel, so the scans in
 the containers report them `notapplicable`; the drop-ins and their checksums are the evidence.
 
 The `ssh` topic ([ADR 0023](adr/0023-native-ssh-server-configuration.md)) runs two pre-states, both with real

@@ -62,6 +62,5 @@ __linux_compliance_remediate_modprobe_module_pattern: '^[a-z0-9][a-z0-9_-]{0,63}
 __linux_compliance_remediate_modprobe_disabling_commands:
   - /bin/false
   - /bin/true
-__linux_compliance_remediate_modprobe_backslash: '\'
 __linux_compliance_remediate_modprobe_checked_install: '(?m)^\s*install\s+{module}\s+(/bin/false|/bin/true)$'
 __linux_compliance_remediate_modprobe_checked_blacklist: '(?m)^blacklist\s+{module}$'

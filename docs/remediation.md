@@ -553,8 +553,12 @@ The family reads every `*.conf` and `*.alias` file that `modprobe` reads, in its
 hides the same name in `/run/modprobe.d`, `/usr/local/lib/modprobe.d` (read by kmod 31 on Ubuntu 24.04, not by kmod
 28 on RHEL 9), `/usr/lib/modprobe.d` and `/lib/modprobe.d`, also when it is a link to `/dev/null`, a dangling link or
 another non-regular entry, which masks the lower file and holds nothing; only a directory or a link to one is skipped.
-Files are read by name, lines continued with `\` are joined and comments skipped. `modprobe` runs the first `install`
-command whose name, a `fnmatch` pattern, matches the module, so:
+Files are read by name. kmod itself reads what each file says: the module `freesecdev.linux_compliance.modprobe_config`
+runs `modprobe -c -d /dev -C <file>` for each file and `modprobe -c -d /dev` for the whole configuration through the
+audited process helper (ADR 0004), so backslashes, continued lines, comments and rejected lines are kmod's, and the
+family refuses to act when the files' directives are not exactly the whole configuration. `modprobe` runs the first
+`install` command whose name, a `fnmatch` pattern, matches the module (matched by the filter
+`freesecdev.linux_compliance.modprobe_pattern`, checked against kmod's own verdicts), so:
 
 | Status (apply) or reason (cleanup) | When |
 |---|---|
@@ -566,6 +570,8 @@ command whose name, a `fnmatch` pattern, matches the module, so:
 | `method_changed` | The ledger entry records another method, or none |
 | `modified_since_apply` (cleanup) | The drop-in's content is no longer what the collection wrote; an administrator's change is never overwritten |
 | `invalid_record` (cleanup) | The recorded SHA-256 is missing or malformed |
+| `modprobe_missing` (apply) | No `modprobe` is found in the trusted directories, so nothing reads `/etc/modprobe.d` |
+| `config_unreadable` (apply) | A run of `modprobe -c` failed, or the directives of the files the family found are not exactly those that kmod reads |
 
 A drop-in removed by hand is the recorded prior state at cleanup: the rule is `restored`, its entry removed and nothing
 written (FREES-173). The family never runs `modprobe`, never unloads a loaded module and never rebuilds the initramfs,
@@ -667,7 +673,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/unit/tools/test_content_golden_login_defs.py` | With the pinned content: every native login_defs rule reads only `/etc/login.defs` (and, for `CREATE_HOME`, `/etc/login.defs.d/*.defs`) with the pinned object pattern, its comparison is the operation of the check's state and its value the external variable of the check, on both platforms; and every selected rule whose check reads `/etc/login.defs` is native or one of the two documented `audit_only` rules | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-login-defs-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS level 2, RHEL 9 STIG and RHEL 9 ANSSI enhanced profiles every login_defs rule gets exactly one result, `changed` exactly when it is `applied`, a reason for every refusal, and `/etc/login.defs` is unchanged; a rule without a profile value fails before login.defs is read; the family file and helpers refuse to run without the opt-in; a ledger entry of another method or without one, a written line of another setting, a prior line over two lines and a malformed mode are refused and kept | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_content_golden_kernel_modules.py` | With the pinned content: the check of every native kernel module rule on both platforms is an `AND` of two `check="all"` tests that read `.conf` files of the modprobe directories, the drop-in matches both patterns, the patterns are exactly the drop-in's `install` and `blacklist` lines and equal the family's constants, every rule is limited to `system_with_kernel`, and the lifecycle profiles select exactly the drop-ins that the declarations expect | `make test-content-golden`, CI job `test` |
-| `tests/unit/plugins/filter/test_modprobe_pattern.py` | The filter `modprobe_pattern` translates the module name of an `install` line as kmod matches it: `-` and `_` alike outside brackets, wildcards, escapes, negated brackets, ranges (a reversed range matches nothing and never raises), the lines kmod rejects (`c[!]]amfs`, `[[:alpha:]]`, an unterminated `[`, a stray `]`) ignored, and the two unmodelled bracket forms matching every module. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/plugins/filter/test_modprobe_pattern.py` | The filter `modprobe_pattern` translates the module name of an `install` directive as kmod matches it (`underscores()`, then glibc's `fnmatch`), and agrees with kmod on every row of `tests/fixtures/kmod/install-names.tsv`, 5,781 verdicts of the real `modprobe` of both pinned images: it matches every name that kmod matches and otherwise differs only by matching every module for a class inside a bracket. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/plugins/modules/test_modprobe_config.py` | The module `modprobe_config` runs only `modprobe -c -d /dev` and `-C <file>`, removes the directives of the kernel command line, keeps every directive with its file and reports `consistent: false` for files in another order, a missing file, a failed, timed-out or truncated run; files outside the modprobe directories are refused before anything runs. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_content_golden_lifecycle_profiles.py` | With the pinned content: every `profiles` entry of a topic declaration selects at least the native rules of the topic that the platform's own profile selects, and the cycles of all platforms together run every native rule of the topic that some pinned profile selects | `make test-content-golden`, CI job `test` |
 | `tests/playbooks/remediate-native-check.yml`, kernel modules | Against localhost in check mode with all 21 kernel module rules and `kernel_modules` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/modprobe.d` is unchanged; the three family files and the shared helpers refuse to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 

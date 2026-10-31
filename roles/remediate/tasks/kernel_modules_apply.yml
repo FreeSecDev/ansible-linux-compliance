@@ -141,6 +141,8 @@
     __linux_compliance_remediate_km_status: >-
       {{ 'method_changed' if __linux_compliance_remediate_km_entry_method not in [none, 'dropin']
          else 'not_directory' if not (__linux_compliance_remediate_km_directory_stat.isdir | default(false))
+         else 'modprobe_missing' if not __linux_compliance_remediate_km_available
+         else 'config_unreadable' if not __linux_compliance_remediate_km_consistent
          else 'not_regular_file' if __linux_compliance_remediate_km_stat.stat.exists
               and not __linux_compliance_remediate_km_stat.stat.isreg
          else 'not_owned' if __linux_compliance_remediate_km_existing is not none
@@ -162,6 +164,11 @@
     __linux_compliance_remediate_km_reason: >-
       {{ {'method_changed': 'the ledger entry was recorded by the ' ~ __linux_compliance_remediate_km_entry_method
                             ~ ' method; clean it up first',
+          'modprobe_missing': 'modprobe is not installed, so nothing reads '
+                              ~ __linux_compliance_remediate_modprobe_directory ~ ': '
+                              ~ __linux_compliance_remediate_km_problem,
+          'config_unreadable': 'kmod does not read the modprobe configuration as the family found it: '
+                               ~ __linux_compliance_remediate_km_problem,
           'not_directory': __linux_compliance_remediate_modprobe_directory
                            ~ ' is missing, a symbolic link or not a directory; kmod creates it',
           'not_regular_file': __linux_compliance_remediate_rule.parameters.path

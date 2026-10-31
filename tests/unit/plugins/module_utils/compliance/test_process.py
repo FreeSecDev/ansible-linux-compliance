@@ -216,7 +216,7 @@ class TestPolicy:
     def test_default_allow_list_is_only_oscap_the_scc_command_line_and_sshd_test_mode(
         self,
     ) -> None:
-        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc", "sshd"}
+        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc", "sshd", "modprobe"}
         assert process.ALLOWED_EXECUTABLES["oscap"].fixed_path is None
         options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
         assert {
@@ -285,6 +285,40 @@ class TestPolicy:
     )
     def test_sshd_refuses_every_other_command_line(self, arguments: tuple[str, ...]) -> None:
         spec = process.CommandSpec("sshd", arguments, 1)
+        with pytest.raises(process.ProcessPolicyError):
+            process.check_policy(spec)
+
+    def test_modprobe_only_prints_its_configuration(self) -> None:
+        policy = process.ALLOWED_EXECUTABLES["modprobe"]
+        assert policy.fixed_path is None
+        assert policy.standalone_commands == (("-c", "-d", "/dev"),)
+        assert policy.argument_forms == (("-c", "-d", "/dev", "-C", process.PATH_ARGUMENT),)
+        for arguments in (
+            ("-c", "-d", "/dev"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/a.conf"),
+        ):
+            assert process.check_policy(process.CommandSpec("modprobe", arguments, 1)).name == (
+                "modprobe"
+            )
+
+    @pytest.mark.parametrize(
+        "arguments",
+        [
+            (),
+            ("cramfs",),
+            ("-r", "cramfs"),
+            ("-n", "-v", "cramfs"),
+            ("-i", "cramfs"),
+            ("-c",),
+            ("-c", "-d", "/"),
+            ("-c", "-d", "/dev", "-C", "a.conf"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/../x"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/a.conf", "cramfs"),
+            ("--showconfig",),
+        ],
+    )
+    def test_modprobe_refuses_every_other_command_line(self, arguments: tuple[str, ...]) -> None:
+        spec = process.CommandSpec("modprobe", arguments, 1)
         with pytest.raises(process.ProcessPolicyError):
             process.check_policy(spec)
 

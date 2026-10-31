@@ -82,18 +82,20 @@ family run), `kernel_modules_apply.yml` and `kernel_modules_cleanup.yml`, which 
 
 ### 2. Another file that already sets the module is respected, never edited
 
-The family reads every file that `modprobe` reads, as `modprobe` orders them, besides the collection's drop-ins, with
-the directories of the platform's kmod (`__linux_compliance_remediate_modprobe_read_directories`, per pinned benchmark;
-another benchmark is refused before any change). A masking entry takes its name and holds nothing, and a link to a
-directory is skipped (revised after the review of PR #76). It keeps every `install` and `blacklist` command, and
-matches the name of each `install` command as `modprobe` does, with the filter
+The family finds the files that `modprobe` reads, as `modprobe` orders them, with the directories of the platform's
+kmod (`__linux_compliance_remediate_modprobe_read_directories`, per pinned benchmark; another benchmark is refused
+before any change). A masking entry takes its name and holds nothing, and a link to a directory is skipped (revised
+after the review of PR #76). It does not parse those files itself: kmod reads each of them with its own reader
+(revised after the third review of PR #76, see the amendment below), through the module
+`freesecdev.linux_compliance.modprobe_config`, which runs `modprobe -c -d /dev -C <file>` for every file and
+`modprobe -c -d /dev` once for the whole configuration, and refuses to act when the two disagree. The family matches
+the name of each `install` directive that kmod printed as `modprobe` does, with the filter
 `freesecdev.linux_compliance.modprobe_pattern`: kmod's `underscores()` first (`-` and `_` alike outside brackets, a
-bracket ends at the first `]`), then `fnmatch` without flags (`*`, `?`, `\x` as the literal `x`, brackets with ranges
-in byte order and `!` or `^` for negation; a reversed range such as `[z-a]` matches nothing). A line that kmod rejects
-is ignored, as kmod ignores it: an unterminated `[`, a stray `]`, every `[[:class:]]` or `[[=x=]]` form, and a bracket
-closed straight after `[`, `[!` or `[^` (revised after the second review of PR #76). Only two forms, which `fnmatch`
-would read differently from where kmod ends the bracket, are taken to match every module, so they can only make the
-family refuse: a bracket whose content ends with `\`, and one that holds `[` followed by `:`, `.` or `=`:
+bracket ends at the first `]`, an unterminated `[` or a stray `]` rejected), then glibc's `fnmatch` without flags (`*`,
+`?`, `\x` as the literal `x`, brackets that read a `]` right after `[`, `[!` or `[^` as a member, ranges in byte order
+and `!` or `^` for negation; a reversed range such as `[z-a]` matches nothing). Only a bracket that holds a character
+class, an equivalence class or a collating symbol is taken to match every module, so it can only make the family
+refuse:
 
 | Status | When |
 |---|---|
@@ -103,6 +105,8 @@ family refuse: a bracket whose content ends with `\`, and one that holds `[` fol
 | `not_regular_file` | The drop-in path is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in path does not start with the collection's header |
 | `method_changed` | The ledger entry was recorded by another method |
+| `modprobe_missing` | `/etc/modprobe.d` exists but no `modprobe` is found in the trusted directories, so nothing reads it |
+| `config_unreadable` | A run of `modprobe -c` failed, timed out or printed too much, or the directives of the files the family found differ from those of the whole configuration, so the family and kmod disagree on what kmod reads |
 
 A disabling `install` line elsewhere without a `blacklist` line, a line spelled with `_` where the check wants `-`
 (`usb_storage`), or lines only in a file that `modprobe` does not read (a hidden file, `/etc/modules-load.d`) do not make
@@ -146,11 +150,11 @@ revert and a refusal whenever a site file would make the drop-in ineffective.
 
 ## Trade-offs
 
-An `install` pattern with a bracket that ends with `\`, or that holds `[` followed by `:`, `.` or `=`, is treated as
-matching every module, so such a site file makes every rule that it precedes `overridden` even where it would not
-match; no shipped or realistic configuration has one. A same-named file in `/run/modprobe.d` or
-`/usr/lib/modprobe.d` is assumed to be hidden by the collection's drop-in even before it exists. Kernel command-line
-settings (`modprobe.blacklist=`, `module_blacklist=`) are neither read nor written. The blacklisted file system modules
+An `install` pattern with a character class, an equivalence class or a collating symbol inside a bracket is treated
+as matching every module, so such a site file makes every rule that it precedes `overridden` even where it would not
+match; no shipped or realistic configuration has one. The family runs `modprobe -c` once per configuration file and
+once more, a few milliseconds each. Kernel command-line settings (`modprobe.blacklist=`, `module_blacklist=`) are
+neither read nor written. The blacklisted file system modules
 (overlay, squashfs, udf) and usb-storage can break container runtimes, snaps, optical media and USB storage, which is
 why the topics stay disruptive.
 
@@ -178,3 +182,38 @@ drop-in's path. These cases run there rather than as a pre-state of the cycles, 
 above 15 minutes. The containers cannot load kernel
 modules, so `modprobe` itself is left to the libvirt scenarios (FREES-61), and every rule is `notapplicable` in a
 container scan; the drop-ins with their checksums and the golden tests are the evidence there.
+
+## Amendment 2026-10-31: kmod reads the configuration (third review of PR #76)
+
+The third review fuzzed the family's own reading of `install` lines with 27,931 names against the real `modprobe -n -v`
+of both pinned kmods and found 114 names that kmod applies and the family did not, each giving a false `applied`:
+kmod's line reader (`freadline_wrapped()`) removes every backslash before it parses a line (`\x` is `x`, `\\` is `\`,
+and only an odd number of backslashes at the end continues the line), so `install \*cramfs`, `ins\tall cramfs` and a
+line ending in `\\` meant something else to kmod than to a reader of the text; and `cr[]a[a]mfs` is one bracket to
+`fnmatch`, where the filter had rejected it.
+
+Decision: kmod, the platform's own reader and not content of the scanner, is the source of truth for what a file says.
+
+- The new module `freesecdev.linux_compliance.modprobe_config` runs `modprobe -c` through the audited process helper
+  (ADR 0004, amendment of FREES-190): once per file with `-C <file>`, so that every directive is known with its file and
+  its place in kmod's order, and once without, for the whole configuration. `-d /dev` points kmod at a root without
+  `lib/modules`, so it dumps no module index. kmod prints the directives as it keeps them: backslashes resolved,
+  continued lines joined, comments and rejected lines dropped and `-` turned into `_` in module names. Directives from
+  the kernel command line, which kmod adds to every run, are read once with `-C /dev/null` and removed from the front
+  of each run. Checked against both pinned kmods: `install \*cramfs` prints as `install *cramfs`, `ins\tall cramfs` as
+  `install cramfs`, and the two lines after one ending in `\\` as two directives.
+- The family fails closed: when the concatenation of the files' directives is not exactly the whole configuration
+  (a file it missed, one that kmod skips, a failed or truncated run), every rule is `config_unreadable` and nothing is
+  written; without `modprobe` every rule is `modprobe_missing`.
+- `modprobe -c` keeps no file names, so the file-level part stays: which entries take a name, in which order, and
+  which of them are the collection's drop-ins. Within one file the order of kmod's output is the order of the file.
+- The matching of a name against a module stays a translation of `fnmatch`, because `modprobe -n -v` finds an
+  `install` directive by pattern only for a module that the running kernel's module tree has, which a container and
+  many hosts do not. The filter now models glibc's bracket reading exactly. `tests/fixtures/kmod/install-names.tsv`
+  holds kmod's verdicts for 5,781 rows of the fuzzing corpus (every match, every row on which the round-2 or the
+  current filter differs from kmod, and 800 others), produced from the real `modprobe -c` and `modprobe -n -v` of
+  both pinned images, which agree on every row; `tests/unit/plugins/filter/test_modprobe_pattern.py` requires the
+  filter to match every name that kmod matches, and to differ otherwise only by matching every module for a class
+  inside a bracket (1,729 rows, 0 narrower divergences).
+- The regression group adds an escaped wildcard, a backslash inside the directive, a line ending in `\\` followed by
+  a re-enabling line, and `cr[]a[a]mfs`, each before the collection's drop-ins and each expected `overridden`.

@@ -293,6 +293,8 @@
       - not_directory
       - not_regular_file
       - not_owned
+      - modprobe_missing
+      - config_unreadable
   tasks:
     - name: Refuse to run outside check mode
       ansible.builtin.assert:

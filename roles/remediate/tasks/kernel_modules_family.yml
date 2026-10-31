@@ -168,8 +168,7 @@
       {%- endif -%}
       {%- endfor -%}
       {{ kept }}
-  ansible.builtin.set_fact:
-    __linux_compliance_remediate_km_read_files: >-
+    __linux_compliance_remediate_km_chosen: >-
       {%- set chosen = {} -%}
       {%- for directory in __linux_compliance_remediate_km_read_paths -%}
       {%- for entry in __linux_compliance_remediate_km_candidates | sort(attribute='path') -%}
@@ -178,12 +177,18 @@
       {%- endif -%}
       {%- endfor -%}
       {%- endfor -%}
-      {%- for path in __linux_compliance_remediate_km_owned
-            if (path | dirname) == __linux_compliance_remediate_modprobe_directory -%}
-      {%- set _ = chosen.update({path | basename: {'path': path, 'text': false}}) -%}
-      {%- endfor -%}
-      {{ chosen | dictsort(true) | map('last') | selectattr('text')
-         | map(attribute='path') | reject('in', __linux_compliance_remediate_km_owned) | list }}
+      {{ chosen | dictsort(true) | map('last') | selectattr('text') | map(attribute='path') | list }}
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_kmod_files: "{{ __linux_compliance_remediate_km_chosen }}"
+    __linux_compliance_remediate_km_read_files: >-
+      {{ __linux_compliance_remediate_km_chosen | reject('in', __linux_compliance_remediate_km_owned) | list }}
+  tags:
+    - always
+
+- name: Kernel modules | Read every install and blacklist directive with kmod's own reader, per file and as a whole
+  freesecdev.linux_compliance.modprobe_config:
+    files: "{{ __linux_compliance_remediate_km_kmod_files }}"
+  register: __linux_compliance_remediate_km_modprobe
   tags:
     - always
 
@@ -197,34 +202,24 @@
   tags:
     - always
 
-- name: Kernel modules | Keep every install and blacklist command in the order modprobe reads them, and the checked text
+- name: Kernel modules | Keep the directives of the files besides the collection's drop-ins, and the checked text
   ansible.builtin.set_fact:
+    __linux_compliance_remediate_km_available: "{{ __linux_compliance_remediate_km_modprobe.available }}"
+    __linux_compliance_remediate_km_consistent: "{{ __linux_compliance_remediate_km_modprobe.consistent }}"
+    __linux_compliance_remediate_km_problem: "{{ __linux_compliance_remediate_km_modprobe.message }}"
     __linux_compliance_remediate_km_commands: >-
       {%- set found = [] -%}
-      {%- for result in __linux_compliance_remediate_km_read.results | default([]) -%}
-      {%- set path = result.__linux_compliance_remediate_km_source -%}
-      {%- set state = namespace(pending='', lines=[]) -%}
-      {%- for raw in (result.content | b64decode).split(__linux_compliance_remediate_newline) -%}
-      {%- set line = state.pending ~ raw -%}
-      {%- if line.endswith(__linux_compliance_remediate_modprobe_backslash) -%}
-      {%- set state.pending = line[:-1] -%}
-      {%- else -%}
-      {%- set state.pending = '' -%}
-      {%- set state.lines = state.lines + [line] -%}
-      {%- endif -%}
+      {%- for file in __linux_compliance_remediate_km_modprobe.files
+            if file.path not in __linux_compliance_remediate_km_owned -%}
+      {%- for directive in file.install -%}
+      {%- set pattern = directive.module | freesecdev.linux_compliance.modprobe_pattern -%}
+      {%- set _ = found.append({'path': file.path, 'name': file.path | basename, 'command': 'install',
+            'token': directive.module, 'module': directive.module,
+            'pattern': '.*' if pattern is none else pattern, 'argument': directive.command}) -%}
       {%- endfor -%}
-      {%- for line in state.lines + ([state.pending] if state.pending else []) -%}
-      {%- set words = line.split(none, 2) -%}
-      {%- if not line.startswith('#') and ((words | length >= 2 and words[0] == 'blacklist')
-            or (words | length == 3 and words[0] == 'install' and words[2] | trim != '')) -%}
-      {%- set pattern = words[1] | freesecdev.linux_compliance.modprobe_pattern
-            if words[0] == 'install' else (words[1] | replace('-', '_') | regex_escape) -%}
-      {%- if pattern is not none -%}
-      {%- set _ = found.append({'path': path, 'name': path | basename, 'command': words[0],
-            'token': words[1], 'module': words[1] | replace('-', '_'), 'pattern': pattern,
-            'argument': (words[2] | trim) if words | length > 2 else ''}) -%}
-      {%- endif -%}
-      {%- endif -%}
+      {%- for module in file.blacklist -%}
+      {%- set _ = found.append({'path': file.path, 'name': file.path | basename, 'command': 'blacklist',
+            'token': module, 'module': module, 'pattern': module | regex_escape, 'argument': ''}) -%}
       {%- endfor -%}
       {%- endfor -%}
       {{ found }}

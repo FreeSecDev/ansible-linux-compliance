@@ -19,6 +19,12 @@ The OpenSSH server is allow-listed only in its configuration test mode,
 (FREES-109): it reads the configuration and the host keys and exits, and never
 starts a daemon.
 
+kmod's ``modprobe`` is allow-listed only to print the configuration that it reads,
+``modprobe -c -d /dev`` for the default configuration directories and
+``modprobe -c -d /dev -C <path>`` for one file (FREES-190): it parses the files with kmod's own
+reader and prints the normalised directives, and loads, unloads or runs nothing. ``-d /dev`` points
+kmod at a root without ``lib/modules``, so it dumps no module index after the configuration.
+
 An executable that does not live in a trusted directory, such as the SCAP
 Compliance Checker at ``/opt/scc/cscc`` (ADR 0019), is permitted only through a
 policy that names its one absolute path (``fixed_path``). That path is vetted
@@ -77,6 +83,8 @@ PATH_ARGUMENT: Final[str] = "<path>"
 FIXED_ENVIRONMENT_NAMES: Final[frozenset[str]] = frozenset({"TZ", "HOME"})
 SCC_EXECUTABLE_PATH: Final[str] = "/opt/scc/cscc"
 SSHD_CONFIG_PATH: Final[str] = "/etc/ssh/sshd_config"
+MODPROBE_INDEX_ROOT: Final[str] = "/dev"
+MODPROBE_SHOW_CONFIG: Final[tuple[str, ...]] = ("-c", "-d", MODPROBE_INDEX_ROOT)
 SSHD_KEYWORDS: Final[tuple[str, ...]] = (
     "AllowTcpForwarding",
     "Banner",
@@ -215,6 +223,11 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
             "sshd",
             command_prefixes=(("-t", "-f", SSHD_CONFIG_PATH),),
             option_values=(("-o", SSHD_SETTING),),
+        ),
+        "modprobe": ExecutablePolicy(
+            "modprobe",
+            standalone_commands=(MODPROBE_SHOW_CONFIG,),
+            argument_forms=((*MODPROBE_SHOW_CONFIG, "-C", PATH_ARGUMENT),),
         ),
     }
 )
