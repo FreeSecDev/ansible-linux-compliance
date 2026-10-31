@@ -158,7 +158,10 @@
                       is match(__linux_compliance_remediate_login_defs_base0_pattern)
                   and __linux_compliance_remediate_ld_token is not match('^"?-')
                   and not (__linux_compliance_remediate_ld_comparison == 'at_most'
-                           and __linux_compliance_remediate_ld_token is match('^[1-9][0-9]{6,}$')))) }}
+                           and __linux_compliance_remediate_ld_token is match('^[1-9][0-9]{6,}$')))
+              or (__linux_compliance_remediate_ld_comparison in ['at_most', 'at_least']
+                  and __linux_compliance_remediate_ld_readings | length == 0
+                  and (__linux_compliance_remediate_ld_found | first | default('')) is search('"'))) }}
     __linux_compliance_remediate_ld_line: >-
       {{ __linux_compliance_remediate_rule.parameters.setting ~ ' '
          ~ (__linux_compliance_remediate_ld_bits.union if __linux_compliance_remediate_ld_comparison == 'umask'

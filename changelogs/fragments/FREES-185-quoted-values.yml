@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    remediate - ``login_defs`` refuses a number whose line holds a quote and that the family cannot read
+    (``unreadable_value``), such as ``PASS_MAX_DAYS " 30"`` or ``PASS_MAX_DAYS ""30``, which shadow-utils reads as 30;
+    before, the profile's looser value was written.

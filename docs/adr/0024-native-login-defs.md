@@ -92,7 +92,9 @@ the first word is empty, negative (`-1`, no limit), not a number that shadow-uti
 seven digits or more under a maximum: in each case it is stricter than what is in effect. A first word in any other
 form that shadow-utils or `pam_umask` may read (quoted, signed, longer, or a umask in another base or length, such as
 `"30"`, `+30`, `1234567` under a minimum, `0x10000`, `00077`, `"077"` or `0x3f`) is refused as `unreadable_value`
-without a write, because the family cannot tell that the profile's value is not looser.
+without a write, because the family cannot tell that the profile's value is not looser. So is a number line that
+contains a quote and has no reading, because shadow-utils skips every blank and quote before the value
+(`PASS_MAX_DAYS " 30"` and `PASS_MAX_DAYS ""30` both read as 30), while the family's first word is `"` or `""30`.
 `CREATE_HOME` has no exported value; its rule carries the value `yes`, which the check's pattern requires, and the
 parameter `reads_dropins`, because its check also reads `/etc/login.defs.d`.
 
