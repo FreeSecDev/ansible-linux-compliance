@@ -159,3 +159,6 @@ regressions:
   - name: changes
     files:
       - lifecycle_pwquality_regressions.yml
+  - name: readers
+    files:
+      - lifecycle_pwquality_readers_regressions.yml

@@ -232,12 +232,31 @@ class TestPolicy:
         policy = process.ALLOWED_EXECUTABLES["sshd"]
         assert policy.fixed_path is None
         assert policy.allowed_options == frozenset()
-        assert policy.command_prefixes == (("-t", "-f", "/etc/ssh/sshd_config"),)
+        assert policy.command_prefixes == (
+            ("-t", "-f", "/etc/ssh/sshd_config"),
+            ("-T", "-f", "/etc/ssh/sshd_config"),
+        )
         assert policy.standalone_commands == ()
-        assert policy.option_values == (("-o", process.SSHD_SETTING),)
+        assert policy.option_values == (
+            ("-o", process.SSHD_SETTING),
+            ("-C", process.SSHD_CONNECTION),
+        )
+        assert policy.option_prefixes == (("-C", ("-T", "-f", "/etc/ssh/sshd_config")),)
         assert len(process.SSHD_KEYWORDS) == len(set(process.SSHD_KEYWORDS)) == 28
         for arguments in (
             ("-t", "-f", "/etc/ssh/sshd_config"),
+            ("-T", "-f", "/etc/ssh/sshd_config"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin=no"),
+            (
+                "-T",
+                "-f",
+                "/etc/ssh/sshd_config",
+                "-C",
+                "user=freesecdev-probe,host=probe.example,addr=192.0.2.10",
+                "-o",
+                "X11Forwarding=no",
+            ),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C", "user=root,host=h,addr=255.0.0.1"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-o", "PermitRootLogin=no"),
             (
                 "-t",
@@ -259,7 +278,26 @@ class TestPolicy:
         [
             (),
             ("-t",),
-            ("-T", "-f", "/etc/ssh/sshd_config"),
+            ("-T",),
+            ("-T", "-f", "/srv/sshd_config"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C", "user=root"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C", "user=root,host=h,addr=256.0.0.1"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C", "user=root,host=h,addr=192.0.2.1,laddr=x"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C", "user=Root,host=h,addr=192.0.2.1"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C", "user=root,host=-h,addr=192.0.2.1"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-C", "user=root,host=h,addr=::1"),
+            (
+                "-T",
+                "-f",
+                "/etc/ssh/sshd_config",
+                "-C",
+                "user=a,host=h,addr=192.0.2.1",
+                "-C",
+                "user=b,host=h,addr=192.0.2.1",
+            ),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-o", "Include=/srv/x"),
+            ("-T", "-f", "/etc/ssh/sshd_config", "-d"),
             ("-D",),
             ("-t", "-f", "/srv/sshd_config"),
             ("-f", "/etc/ssh/sshd_config", "-t"),
@@ -268,6 +306,7 @@ class TestPolicy:
             ("-t", "-f", "/etc/ssh/sshd_config", "-h", "/srv/key"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-E", "/srv/log"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-C", "user=root"),
+            ("-t", "-f", "/etc/ssh/sshd_config", "-C", "user=root,host=h,addr=192.0.2.1"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-oPermitRootLogin=yes"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-o=Include=/srv/x"),
             ("-t", "-f", "/etc/ssh/sshd_config", "-o"),

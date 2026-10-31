@@ -71,7 +71,7 @@
     owner: root
     group: root
 
-- name: SSH regressions | Apply the topic over a configuration that sshd -t refuses
+- name: SSH regressions | Apply the topic over a configuration that sshd -T refuses
   ansible.builtin.include_tasks:
     file: lifecycle_remediate.yml
   vars:

@@ -1,0 +1,28 @@
+---
+bugfixes:
+  - >-
+    remediate - the ``ssh`` topic decides from sshd itself whether a drop-in takes effect (FREES-200, ADR 0023). A
+    drop-in in place is ``compliant`` only when ``sshd -T`` prints its value, and a drop-in written is kept only when
+    ``sshd -T`` prints its value afterwards; otherwise the rule is rolled back and reported ``overridden`` with the
+    value that sshd reads, for example behind an earlier ``DSAAuthentication no``, the alias of
+    ``PubkeyAuthentication``. Settings, ``Match`` blocks and ``Include`` lines are found as sshd's lexer finds them,
+    after blanks, CRs and quotes, so a looser value in a ``Match`` block such as ``PermitRootLogin<CR>yes`` is
+    ``overridden`` and no longer reported applied, and an ``Include`` after the drop-ins of a file the family does not
+    read makes every rule ``overridden``. Vendor lines are set, written back and rolled back by writing the whole
+    file from the exact text read, so files with CRLF line ends or a lone CR are restored byte for byte.
+  - >-
+    remediate - the ``pwquality`` topic decides every rule as libpwquality reads the files and as the arguments of
+    ``pam_pwquality`` in every PAM file override them (FREES-200, ADR 0021). A rule is no longer reported compliant
+    or applied when a later line sets the setting in another case or without ``=``, when a line or a drop-in that
+    libpwquality cannot read stops the configuration before the setting, when a dot file or a symbolic link in
+    ``pwquality.conf.d`` is read, or when a ``pam_pwquality`` argument sets another value; such rules are
+    ``overridden``, ``duplicate_setting``, ``unreadable_file`` or ``unreadable_value`` with a reason and nothing
+    written. The main file is written and restored whole from the exact text read, so CRs are restored byte for
+    byte. ``tests/fixtures/pwquality_readers/verdicts.json``, produced by the real library of both Molecule images
+    with ``tools/lint/pwquality_readers.sh``, checks the reader and every decision.
+minor_changes:
+  - >-
+    sshd_validate - new options ``effective`` and ``client``: with ``effective: true`` the module runs the
+    extended test mode ``sshd -T -f /etc/ssh/sshd_config``, optionally with ``-C user=,host=,addr=``, and returns the
+    values of the native keywords in ``effective``; it also returns ``check_mode``. The audited process helper allows
+    ``-T`` with the same ``-o`` pairs and at most one ``-C`` (amendment of ADR 0004).

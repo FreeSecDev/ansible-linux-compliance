@@ -364,7 +364,7 @@ benchmark that the `discover` role verified.
 
 | Rules | Method | What is applied | Record and cleanup |
 |---|---|---|---|
-| `accounts_password_pam_dcredit`, `_dictcheck`, `_difok`, `_enforcing`, `_lcredit`, `_maxclassrepeat`, `_maxrepeat`, `_maxsequence`, `_minclass`, `_minlen`, `_ocredit`, `_ucredit`, `_pwquality_retry`, `_enforce_root` | main file (Ubuntu 24.04) | One line per setting in `/etc/security/pwquality.conf` with the profile's value (`enforce_for_root` without value), written with `lineinfile`: the one active line of the setting is replaced, or the line is appended | `recorded_value` of `method` (`main_file`), `setting_line` (the prior active line, or `null` when absent), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup checks that the setting is still the line written and that the mode and ownership are unchanged, then writes the line back or removes the setting, so the file is byte for byte the original once every rule is cleaned up |
+| `accounts_password_pam_dcredit`, `_dictcheck`, `_difok`, `_enforcing`, `_lcredit`, `_maxclassrepeat`, `_maxrepeat`, `_maxsequence`, `_minclass`, `_minlen`, `_ocredit`, `_ucredit`, `_pwquality_retry`, `_enforce_root` | main file (Ubuntu 24.04) | One line per setting in `/etc/security/pwquality.conf` with the profile's value (`enforce_for_root` without value): the one line that libpwquality reads as the setting is replaced in place, or the line is appended, and the whole file is written with `copy` from the text read, every other byte unchanged | `recorded_value` of `method` (`main_file`), `setting_line` (the prior active line, or `null` when absent), `written_line` and the file's `mode`, `owner`, `group` and `sha256`; cleanup checks that the setting is still the line written and that the mode and ownership are unchanged, then writes the line back in its place or removes it with its line break, so the file is byte for byte the original, CRs included, once every rule is cleaned up |
 | the same rules | drop-ins (RHEL 9) | `/etc/security/pwquality.conf.d/50-freesecdev-<setting>.conf` with a header that names the rule; the main file is not touched | `recorded_value` of `method` (`dropin`), `dropin` (`null`: it did not exist) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
 
 Every ledger entry records its `method` and what was written (`written_line`, or `dropin_sha256` for a drop-in). The
@@ -377,13 +377,23 @@ statuses that refuse to act, with nothing changed and the entry kept:
 | `not_directory` | `pwquality.conf.d` exists but is not a directory, for example a symbolic link; nothing is written through it |
 | `not_regular_file` | The main file or a drop-in is a symbolic link or another non-regular file |
 | `not_owned` | A file at the drop-in's path does not carry the collection's header, with or without a ledger entry |
+| `overridden` (apply) | A file that libpwquality reads later sets another value, or a `pam_pwquality` argument in a PAM file sets the setting to another value (FREES-200); the reason names the file and the line or the argument |
+| `unreadable_file` (apply) | libpwquality stops reading at a line before the rule's value (an unknown setting, a value that is not an integer, a NUL, a line of 1023 bytes or more, also in a drop-in read before the main file), a drop-in that it reads is a symbolic link or not a regular file, or the main file is not UTF-8 text or holds a NUL |
+| `unreadable_value` (apply) | The setting's line holds a control character other than a tab or a CR, which the ledger cannot record |
 
 When the profile value changes while a rule stays on, apply writes the new value and replaces the entry with the same
 prior state and the new `written_line` or `dropin_sha256`.
 
-With the main file, a setting that is active on more than one line is `duplicate_setting` and not touched. With
-drop-ins, libpwquality reads them in lexical order and the main file last, so a rule is `overridden`, with nothing
-changed and the overriding file named, when the main file or a later drop-in sets the same setting; a file at the
+The family decides every rule as libpwquality reads the files (FREES-200): `pwquality_read_config` reads every entry
+of `pwquality.conf.d` whose name holds `.conf` only at its end, dot files included, in byte order, then the main file;
+`#` starts a comment anywhere, names are read in any case, `minlen 14` and `minlen=14` set the setting, the last
+occurrence wins, and the first line it cannot read stops the whole configuration. The filters `pwquality_decide` and
+`pwquality_restore` reproduce that reader, which `tests/fixtures/pwquality_readers/verdicts.json` checks against the
+real library of both Molecule images (ADR 0021, amendment of FREES-200). A rule is `applied` or `compliant` only when
+the library would take the profile's value from what the rule writes. With the main file, a setting that is set on
+more than one line, in any case or spacing, is `duplicate_setting` and not touched. With drop-ins, a rule is
+`overridden`, with nothing changed and the overriding file named, when the main file or a later drop-in sets another
+value; a file at the
 drop-in's path without the header is `not_owned` and never touched; and where the directory does not exist, the
 first drop-in creates it with mode `0755` and an empty marker `.freesecdev-created`, removed with the directory once
 nothing else is in it. Without `/etc/security/pwquality.conf` libpwquality is not installed and every rule is
@@ -407,10 +417,14 @@ this against the OVAL of both datastreams.
 | `sshd_set_idle_timeout`, `_keepalive`, `_login_grace_time`, `_max_auth_tries`, `_max_sessions`, `_maxstartups`, `sshd_use_strong_kex`, `_macs` | The same, with the profile's value (`sshd_idle_timeout_value`, `var_sshd_set_keepalive`, `var_sshd_set_login_grace_time`, `sshd_max_auth_tries_value`, `var_sshd_max_sessions`, `var_sshd_set_maxstartups`, `sshd_strong_kex`, `sshd_strong_macs`) | As above |
 
 Before anything is written, the module `freesecdev.linux_compliance.sshd_validate` runs
-`sshd -t -f /etc/ssh/sshd_config` with every setting to write as `-o <Keyword>=<value>`. sshd reads command-line
+`sshd -T -f /etc/ssh/sshd_config` with every setting to write as `-o <Keyword>=<value>`. sshd reads command-line
 options first and keeps the first value, so this tests the whole effective configuration as it will be; when sshd
-refuses it, every rule to write is `invalid_config` with sshd's message and nothing is installed. After a change, a
-second `sshd -t` checks the whole configuration; when it refuses, the run rolls back the drop-ins, vendor lines and
+refuses it, every rule to write is `invalid_config` with sshd's message and nothing is installed. sshd decides whether
+a drop-in takes effect (FREES-200, ADR 0023): a drop-in in place is `compliant` only when `sshd -T` prints its value,
+and after writing `sshd -T` runs again; a rule whose value sshd still does not print, because a setting that sshd
+reads first wins (for example the alias `DSAAuthentication` of `PubkeyAuthentication`), is rolled back and reported
+`overridden` with the value that sshd reads. After a change, a
+second `sshd -T` checks the whole configuration; when it refuses, the run rolls back the drop-ins, vendor lines and
 ledger entries that it created and fails (what a cleanup removed or wrote back stays, because that is the prior state).
 When sshd is not installed, the second check and the reload are skipped, so a cleanup on such a host succeeds.
 Otherwise sshd is reloaded once, only when `service_facts` reports
@@ -421,11 +435,14 @@ containers, nothing is reloaded, and check mode never reloads. A run that applie
 The content's check reads every occurrence of the keyword, so a later line with another value would still fail it,
 although sshd uses the drop-in's value. A later line with the same value is left alone. A conflicting later line in a
 vendor file (`/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/50-redhat.conf`; for example Ubuntu's `X11Forwarding yes`
-and RHEL's `X11Forwarding yes` and `GSSAPIAuthentication yes`) is set to the rule's value in place with `lineinfile`,
-outside any `Match` block and only where the file sets the keyword once; the original line is recorded first and
+and RHEL's `X11Forwarding yes` and `GSSAPIAuthentication yes`) is set to the rule's value in place, by writing the whole
+file from the text read with only that line replaced, so CRs anywhere stay as they were, outside any `Match` block and only where the file sets the keyword once; the original line is recorded first and
 written back on cleanup while the file still has the line written. Every other conflicting later line, in an
 administrator's drop-in or inside a `Match` block, makes the rule `overridden`: nothing is written, because the rule
-could not pass.
+could not pass, and sshd would apply the looser value to the connections that the block matches. The family finds a
+setting, a `Match` block or an `Include` as sshd's lexer does: after blanks, CRs and quotes, in any case; an `Include`
+after the drop-ins of a file the family does not read (other than the crypto policy back end in `50-redhat.conf`)
+makes every rule `overridden`.
 
 The statuses that refuse to act, with nothing changed and the ledger entry kept, each with a reason:
 
@@ -436,7 +453,7 @@ The statuses that refuse to act, with nothing changed and the ledger entry kept,
 | `prior_too_large` (apply) | The conflicting vendor line is longer than 1024 characters |
 | `not_included` (apply) | `sshd_config` does not include `/etc/ssh/sshd_config.d/*.conf` before its first `Match` block |
 | `crypto_policy` (apply) | `Ciphers`, `MACs` or `KexAlgorithms` on RHEL 9, where the crypto policy governs them |
-| `invalid_config` (apply) | `sshd -t` refuses the configuration with the settings to write |
+| `invalid_config` (apply) | `sshd -T` refuses the configuration with the settings to write, or the configuration on disk for a drop-in in place |
 | `method_changed` | The ledger entry was recorded by another method |
 | `not_directory` | `sshd_config.d` exists but is not a directory, for example a symbolic link |
 | `not_regular_file` | The drop-in path, or `sshd_config` itself, is a symbolic link or another non-regular file |
@@ -664,7 +681,8 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/playbooks/remediate-native-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS profile and `pwquality` allow-listed, every banner and password quality rule gets exactly one result, `changed` exactly when it is `applied`, and the banner and pwquality files are unchanged; a banner text with a getty escape, an operating system name, an empty text, the default text under the STIG profile and a content without catalogued values fail at the text check, and the short DoD notice passes it; a pwquality rule without a profile value fails before any change; every banner and pwquality file and helper refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_content_golden_ssh.py` | With the pinned content: the check of every native ssh rule on both platforms reads `sshd_config` and the rule's own drop-in with `check="all"`, each fixed value satisfies the check's state and each profile value is exported by the check, no pinned profile selects two native ssh rules for one keyword, the crypto rules carry the RHEL 9 refusal, every drop-in sorts before the distributions' drop-ins, and `sshd_rekey_limit` refuses every drop-in | `make test-content-golden`, CI job `test-suites` |
-| `tests/unit/plugins/modules/test_sshd_validate.py`, `test_process.py` | The `sshd_validate` module passes only the keywords of the native rules and one-word values as `-o` options of `sshd -t -f /etc/ssh/sshd_config`, reports a refusal with sshd's bounded message, a timeout and a missing executable, and changes nothing in check mode; the process policy refuses every other sshd command line. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/plugins/modules/test_sshd_validate.py`, `test_process.py` | The `sshd_validate` module passes only the keywords of the native rules and one-word values as `-o` options of `sshd -t` or `sshd -T -f /etc/ssh/sshd_config`, with at most one `-C user=,host=,addr=` for `-T`, returns the values that `sshd -T` prints for the native keywords, reports a refusal with sshd's bounded message, a timeout and a missing executable, and changes nothing in check mode; the process policy refuses every other sshd command line. 100% line and branch coverage | `make test-coverage` |
+| `tests/unit/tools/test_pwquality_verdicts.py`, `test_pwquality_readers.py`, `tests/unit/plugins/module_utils/compliance/test_pwquality.py` | The reader of the `pwquality` family reads every one of the 1323 file states of `tests/fixtures/pwquality_readers/verdicts.json` exactly as libpwquality 1.4.5 (Ubuntu 24.04) and 1.4.4 (Rocky Linux 9) did, every one of the 1824 decisions is the one in the table, and no `compliant` or `applied` decision leaves a value that the library does not hold; the generator `tools/lint/pwquality_readers.sh` and its probe. 100% line and branch coverage | `make test-coverage` |
 | `tests/playbooks/remediate-native-check.yml`, ssh plays | Against localhost in check mode with the Ubuntu 24.04 CIS rules of `ssh` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/ssh` is unchanged (as a user that cannot read a drop-in, the run must stop at the read); a rule without its profile value fails before any change; `ssh.yml` refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, that the `fix` elements of the content are never kept, digest and safety refusals, oversized values, chunking, grouping per profile, pinned `profile_value_id` values, and every error of the generator integration, including the removed `profile_value_source`. Without content: no catalogue entry sets `profile_value_source`, and the generated `timestamp_timeout` keeps 15 for CIS, 0 for the STIG and 5 for CCN and PCI DSS. 100% line and branch coverage | `make test-coverage` |
 | `tests/unit/tools/test_check_repo_rules_own_remediation.py` | The repository guard of ADR 0025 with mutation cases: Python outside `tests/unit/` that names the XCCDF `fix` element in a string or bytes constant, as a path, namespace, wildcard, suffix test, markup or regular expression (including the removed fix reader and the ElementTree and lxml forms), files that are ComplianceAsCode or OpenSCAP remediation content, invocations of the scanner's remediation (also across line continuations, and `usg fix`) and of scripts it provides in makefiles, workflows, tasks, scripts, Jinja templates, container files and Python, the exact pinned exceptions, that adding a path form to a pinned file is refused, and that only the pinned constants name the element in the repository | `make test-coverage`, `make lint-repo` |

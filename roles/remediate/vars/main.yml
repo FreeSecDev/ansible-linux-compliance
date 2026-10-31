@@ -7,6 +7,10 @@ __linux_compliance_remediate_prior_content_max_bytes: 3072
 __linux_compliance_remediate_pwquality_main: /etc/security/pwquality.conf
 __linux_compliance_remediate_pwquality_directory: /etc/security/pwquality.conf.d
 __linux_compliance_remediate_pwquality_marker: /etc/security/pwquality.conf.d/.freesecdev-created
+__linux_compliance_remediate_pwquality_pam_directories:
+  - /etc/pam.d
+  - /usr/lib/pam.d
+__linux_compliance_remediate_pwquality_line_start: '(?i)^[ \t\n\v\f\r]*'
 __linux_compliance_remediate_login_defs: /etc/login.defs
 __linux_compliance_remediate_login_defs_directory: /etc/login.defs.d
 __linux_compliance_remediate_login_defs_setting_pattern: '^[A-Z][A-Z0-9_]{1,31}$'
@@ -24,6 +28,11 @@ __linux_compliance_remediate_sshd_marker: /etc/ssh/sshd_config.d/.freesecdev-cre
 __linux_compliance_remediate_sshd_vendor_files:
   - /etc/ssh/sshd_config
   - /etc/ssh/sshd_config.d/50-redhat.conf
+__linux_compliance_remediate_sshd_line_start: '(?i)^[ \t\r"'']*'
+__linux_compliance_remediate_sshd_word_end: '(?![A-Za-z0-9])'
+__linux_compliance_remediate_sshd_known_includes:
+  /etc/ssh/sshd_config.d/50-redhat.conf:
+    - /etc/crypto-policies/back-ends/opensshserver.config
 __linux_compliance_remediate_sudo_main: /etc/sudoers
 __linux_compliance_remediate_sudo_directory: /etc/sudoers.d
 __linux_compliance_remediate_sudo_validator: /usr/sbin/visudo

@@ -14,10 +14,12 @@ consulted. Every argument that starts with ``-`` must be an option that the
 allow-list of that executable names, and remote resource fetching is always
 refused.
 
-The OpenSSH server is allow-listed only in its configuration test mode,
+The OpenSSH server is allow-listed only in its configuration test modes,
 ``sshd -t -f /etc/ssh/sshd_config`` followed by ``-o keyword=value`` options
-(FREES-109): it reads the configuration and the host keys and exits, and never
-starts a daemon.
+(FREES-109), and the extended test mode ``sshd -T -f /etc/ssh/sshd_config``
+with the same options and at most one ``-C user=<name>,host=<name>,addr=<IPv4>``
+(FREES-200), which prints the effective configuration: sshd reads the
+configuration and the host keys and exits, and never starts a daemon.
 
 kmod's ``modprobe`` is allow-listed only to print the configuration that it reads,
 ``modprobe -c -d /dev`` for the default configuration directories and
@@ -134,6 +136,13 @@ SSHD_KEYWORDS: Final[tuple[str, ...]] = (
 )
 SSHD_VALUE: Final[str] = r"[A-Za-z0-9@.,:/_+][A-Za-z0-9@.,:/_+-]{0,1023}"
 SSHD_SETTING: Final[str] = "(?:" + "|".join(SSHD_KEYWORDS) + ")=" + SSHD_VALUE
+SSHD_TEST: Final[tuple[str, ...]] = ("-t", "-f", SSHD_CONFIG_PATH)
+SSHD_EFFECTIVE: Final[tuple[str, ...]] = ("-T", "-f", SSHD_CONFIG_PATH)
+SSHD_CONNECTION: Final[str] = (
+    r"user=[a-z_][a-z0-9_-]{0,31},host=[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?,"
+    r"addr=(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}"
+    r"(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+)
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
 FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})
@@ -210,6 +219,9 @@ class ExecutablePolicy:
             its own argument, followed by one argument that matches its
             pattern in full; ``allowed_options`` and positional arguments are
             then not accepted.
+        option_prefixes: ``(option, prefix)`` pairs for options of
+            ``option_values`` that are permitted only after that one command
+            prefix and at most once.
     """
 
     name: str
@@ -220,6 +232,7 @@ class ExecutablePolicy:
     argument_forms: tuple[tuple[str, ...], ...] = ()
     environment: tuple[tuple[str, str], ...] = ()
     option_values: tuple[tuple[str, str], ...] = ()
+    option_prefixes: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
@@ -239,8 +252,9 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
         ),
         "sshd": ExecutablePolicy(
             "sshd",
-            command_prefixes=(("-t", "-f", SSHD_CONFIG_PATH),),
-            option_values=(("-o", SSHD_SETTING),),
+            command_prefixes=(SSHD_TEST, SSHD_EFFECTIVE),
+            option_values=(("-o", SSHD_SETTING), ("-C", SSHD_CONNECTION)),
+            option_prefixes=(("-C", SSHD_EFFECTIVE),),
         ),
         "modprobe": ExecutablePolicy(
             "modprobe",
@@ -756,14 +770,23 @@ class _Runner(Protocol):
     ) -> CommandResult: ...
 
 
-def _match_option_values(rest: tuple[str, ...], policy: ExecutablePolicy) -> None:
+def _match_option_values(
+    prefix: tuple[str, ...], rest: tuple[str, ...], policy: ExecutablePolicy
+) -> None:
     patterns = dict(policy.option_values)
+    restricted = dict(policy.option_prefixes)
     if len(rest) % 2:
         _deny(f"every option of {policy.name} needs exactly one value: {_safe(' '.join(rest))}")
+    seen: set[str] = set()
     for index in range(0, len(rest), 2):
         option, value = rest[index], rest[index + 1]
         if option not in patterns:
             _deny(f"option is not allow-listed for {policy.name}: {_safe(option)}")
+        if option in restricted and (restricted[option] != prefix or option in seen):
+            _deny(
+                f"option is allowed once and only in another mode of {policy.name}: {_safe(option)}"
+            )
+        seen.add(option)
         if re.fullmatch(patterns[option], value) is None:
             _deny(f"value of {_safe(option)} is not allowed for {policy.name}: {_safe(value)}")
 
@@ -776,7 +799,7 @@ def _check_arguments(
         return
     prefix = _matching_prefix(args, policy)
     if policy.option_values:
-        _match_option_values(args[len(prefix) :], policy)
+        _match_option_values(prefix, args[len(prefix) :], policy)
         return
     for argument in args[len(prefix) :]:
         if not argument.startswith("-"):
@@ -798,6 +821,7 @@ def _copy_policy(policy: ExecutablePolicy) -> ExecutablePolicy:
         tuple(tuple(form) for form in policy.argument_forms),
         tuple((pair[0], pair[1]) for pair in policy.environment),
         tuple((pair[0], pair[1]) for pair in policy.option_values),
+        tuple((pair[0], tuple(pair[1])) for pair in policy.option_prefixes),
     )
     _check_policy_environment(copied)
     return copied

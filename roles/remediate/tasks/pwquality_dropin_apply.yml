@@ -61,10 +61,9 @@
   tags:
     - always
 
-- name: Password quality | Compose the drop-in and find the files that libpwquality reads after it
+- name: Password quality | Compose the drop-in
   vars:
     __linux_compliance_remediate_pwq_setting: "{{ __linux_compliance_remediate_rule.parameters.setting }}"
-    __linux_compliance_remediate_pwq_name: "{{ __linux_compliance_remediate_rule.parameters.path | basename }}"
   ansible.builtin.set_fact:
     __linux_compliance_remediate_pwq_header: >-
       {{ '# Managed by freesecdev.linux_compliance for ' ~ __linux_compliance_remediate_rule.rule_id ~ '.' }}
@@ -77,17 +76,31 @@
             else __linux_compliance_remediate_pwq_setting ~ ' = '
                  ~ __linux_compliance_remediate_pwq_values[__linux_compliance_remediate_rule.rule_id])
          ~ __linux_compliance_remediate_newline }}
-    __linux_compliance_remediate_pwq_overriding: >-
-      {{ __linux_compliance_remediate_pwq_sources | dict2items
-         | selectattr('key', 'ne', __linux_compliance_remediate_rule.parameters.path)
-         | selectattr('value', 'search', '(?m)^[ \t]*' ~ __linux_compliance_remediate_pwq_setting ~ '[ \t]*(=|$)')
-         | map(attribute='key')
-         | select('in', [__linux_compliance_remediate_pwquality_main]
-                        + (__linux_compliance_remediate_pwq_sources.keys()
-                           | reject('equalto', __linux_compliance_remediate_pwquality_main)
-                           | select('gt', __linux_compliance_remediate_pwquality_directory ~ '/'
-                                    ~ __linux_compliance_remediate_pwq_name) | list))
-         | list }}
+  tags:
+    - always
+
+- name: Password quality | Decide the drop-in from the files as libpwquality and pam_pwquality read them
+  vars:
+    __linux_compliance_remediate_pwq_rule_input:
+      setting: "{{ __linux_compliance_remediate_rule.parameters.setting }}"
+      value: >-
+        {{ __linux_compliance_remediate_pwq_values[__linux_compliance_remediate_rule.rule_id]
+           if __linux_compliance_remediate_rule.parameters.value_id is defined else '' }}
+      method: dropin
+      main: "{{ __linux_compliance_remediate_pwquality_main }}"
+      dropin: "{{ __linux_compliance_remediate_rule.parameters.path }}"
+      content: "{{ __linux_compliance_remediate_pwq_content }}"
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_pwq_decision: >-
+      {{ __linux_compliance_remediate_pwq_rule_input
+         | freesecdev.linux_compliance.pwquality_decide(
+             __linux_compliance_remediate_pwq_state
+             | rejectattr('path', 'equalto', __linux_compliance_remediate_rule.parameters.path) | list
+             + ([{'path': __linux_compliance_remediate_rule.parameters.path, 'type': 'file',
+                  'content': __linux_compliance_remediate_pwq_current.content | b64decode}]
+                if __linux_compliance_remediate_pwq_current is not skipped else []),
+             __linux_compliance_remediate_pwq_main_text,
+             __linux_compliance_remediate_pwq_pam) }}
   tags:
     - always
 
@@ -106,11 +119,7 @@
          else 'not_owned' if __linux_compliance_remediate_pwq_current is not skipped
               and not (__linux_compliance_remediate_pwq_current.content | b64decode)
                       .startswith(__linux_compliance_remediate_pwq_header)
-         else 'overridden' if __linux_compliance_remediate_pwq_overriding | length > 0
-         else 'compliant' if __linux_compliance_remediate_pwq_current is not skipped
-              and (__linux_compliance_remediate_pwq_current.content | b64decode)
-                  == __linux_compliance_remediate_pwq_content
-         else 'applied' }}
+         else __linux_compliance_remediate_pwq_decision.status }}
   tags:
     - always
 
@@ -218,18 +227,24 @@
            'family': __linux_compliance_remediate_rule.family,
            'action': 'apply',
            'status': __linux_compliance_remediate_pwq_status,
-           'reason': (__linux_compliance_remediate_pwq_overriding | join(', '))
-                     if __linux_compliance_remediate_pwq_status == 'overridden'
-                     else ('the ledger entry was recorded by the ' ~ __linux_compliance_remediate_pwq_entry_method
-                           ~ ' method; clean it up first')
-                     if __linux_compliance_remediate_pwq_status == 'method_changed' else none,
+           'reason': ('the ledger entry was recorded by the ' ~ __linux_compliance_remediate_pwq_entry_method
+                      ~ ' method; clean it up first')
+                     if __linux_compliance_remediate_pwq_status == 'method_changed'
+                     else (__linux_compliance_remediate_pwquality_main ~ ' does not exist, so libpwquality is not'
+                           ~ ' installed') if __linux_compliance_remediate_pwq_status == 'notapplicable'
+                     else (__linux_compliance_remediate_pwquality_directory ~ ' is a symbolic link or not a'
+                           ~ ' directory') if __linux_compliance_remediate_pwq_status == 'not_directory'
+                     else (__linux_compliance_remediate_rule.parameters.path ~ ' is a symbolic link or not a'
+                           ~ ' regular file') if __linux_compliance_remediate_pwq_status == 'not_regular_file'
+                     else (__linux_compliance_remediate_rule.parameters.path ~ ' does not carry the header of the'
+                           ~ ' collection') if __linux_compliance_remediate_pwq_status == 'not_owned'
+                     else __linux_compliance_remediate_pwq_decision.reason,
            'changed': (__linux_compliance_remediate_pwq_write is changed)
                       or (__linux_compliance_remediate_pwq_directory is changed)
                       or (__linux_compliance_remediate_pwq_rerecord is changed),
            'message': __linux_compliance_remediate_rule.parameters.path ~ ': ' ~ __linux_compliance_remediate_pwq_status
-                      ~ ((' (set later by ' ~ (__linux_compliance_remediate_pwq_overriding | join(', '))
-                          ~ ', which libpwquality reads after the drop-in; nothing was changed)')
-                         if __linux_compliance_remediate_pwq_status == 'overridden' else '')
+                      ~ ((' (' ~ __linux_compliance_remediate_pwq_decision.reason ~ '; nothing was changed)')
+                         if __linux_compliance_remediate_pwq_status in ['overridden', 'unreadable_file'] else '')
          }] }}
   tags:
     - always

@@ -1,0 +1,361 @@
+---
+- name: SSH reader regressions | Name the rules, the files and the profile that also selects the rules
+  ansible.builtin.set_fact:
+    lifecycle_family: ssh
+    lifecycle_topic: "{{ lookup('ansible.builtin.file', lifecycle_topics_directory ~ '/ssh.yml') | from_yaml }}"
+    lifecycle_allow_disruptive:
+      - ssh
+    lifecycle_items: {}
+    readers_label: ssh reader regressions
+    readers_profile: "{{ linux_compliance_discovered }}"
+    readers_root: xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+    readers_pubkey: xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth
+    readers_x11: xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding
+    readers_ids:
+      - xccdf_org.ssgproject.content_rule_sshd_disable_root_login
+      - xccdf_org.ssgproject.content_rule_sshd_disable_x11_forwarding
+      - xccdf_org.ssgproject.content_rule_sshd_enable_pubkey_auth
+    readers_pubkey_dropin: /etc/ssh/sshd_config.d/00-freesecdev-sshd-enable-pubkey-auth.conf
+    readers_vendor: >-
+      {{ '/etc/ssh/sshd_config' if lifecycle_platform == 'ubuntu' else '/etc/ssh/sshd_config.d/50-redhat.conf' }}
+    readers_vendor_mode: "{{ '0644' if lifecycle_platform == 'ubuntu' else '0600' }}"
+    readers_early: /etc/ssh/sshd_config.d/00-aaa-freesecdev-readers.conf
+    readers_late: /etc/ssh/sshd_config.d/60-freesecdev-readers.conf
+    readers_cr: "\r"
+    readers_newline: "\n"
+    readers_probe:
+      user: freesecdev-probe
+      host: probe.example
+      addr: 192.0.2.10
+
+- name: SSH reader regressions | Keep the declared items of every platform and of this one
+  ansible.builtin.set_fact:
+    lifecycle_items: >-
+      {{ lifecycle_items | combine({item: (lifecycle_declared_items | rejectattr('platforms', 'defined') | list)
+      + (lifecycle_declared_items | selectattr('platforms', 'defined')
+      | selectattr('platforms', 'contains', lifecycle_platform) | list)}) }}
+  vars:
+    lifecycle_declared_items: "{{ (lifecycle_topic.state | default({}, true))[item] | default([], true) }}"
+  loop: "{{ lifecycle_state_keys.keys() | list }}"
+
+- name: SSH reader regressions | Select the rules, their toggles and the files whose content the topic rewrites
+  ansible.builtin.set_fact:
+    lifecycle_rules: >-
+      {{ lifecycle_native_rules | selectattr('rule_id', 'in', readers_ids) | sort(attribute='rule_id') }}
+    lifecycle_rule_ids: "{{ readers_ids | sort }}"
+    readers_toggles: >-
+      {{ lifecycle_native_rules | selectattr('rule_id', 'in', readers_ids) | map(attribute='toggle') | list }}
+    lifecycle_rewritten: >-
+      {{ lifecycle_items.files | selectattr('rewritten', 'defined') | selectattr('rewritten')
+      | map(attribute='path') | list }}
+
+- name: SSH reader regressions | Refuse to run unless every rule is native and the vendor file is declared rewritten
+  ansible.builtin.assert:
+    that:
+      - lifecycle_rules | length == readers_ids | length
+      - readers_vendor in lifecycle_rewritten
+    fail_msg: "{{ readers_label }} need {{ readers_ids }} native and {{ readers_vendor }} declared rewritten."
+    quiet: true
+
+- name: SSH reader regressions | Take the state of the whole instance before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad.yml
+
+- name: SSH reader regressions | Remember the state of the whole instance before the regressions
+  ansible.builtin.set_fact:
+    readers_broad_before: "{{ lifecycle_broad_record }}"
+
+- name: SSH reader regressions | Read the vendor file as built
+  ansible.builtin.slurp:
+    src: "{{ readers_vendor }}"
+  register: readers_built
+
+- name: SSH reader regressions | Compose the vendor file with CRLF line ends and a lone CR in a comment
+  ansible.builtin.set_fact:
+    readers_crlf: >-
+      {{ (readers_built.content | b64decode) | replace(readers_newline, readers_cr ~ readers_newline)
+         ~ '# a comment with a lone' ~ readers_cr ~ 'carriage return' ~ readers_cr ~ readers_newline }}
+    readers_profile_with_rules: >-
+      {{ readers_profile | combine({'rule_ids': (readers_profile.rule_ids + readers_ids) | unique | list}) }}
+
+- name: SSH reader regressions | Give the vendor file CRLF line ends and a lone CR in a comment
+  ansible.builtin.copy:
+    content: "{{ readers_crlf }}"
+    dest: "{{ readers_vendor }}"
+    mode: "{{ readers_vendor_mode }}"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Read the vendor file with CRLF line ends, which the cleanup must restore byte for byte
+  ansible.builtin.slurp:
+    src: "{{ readers_vendor }}"
+  register: readers_crlf_read
+
+- name: SSH reader regressions | Pretend a profile that also selects the rules
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ readers_profile_with_rules }}"
+
+- name: SSH reader regressions | Switch the rules on
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Apply the rules over the vendor file with CRLF line ends
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Read the vendor file after the apply
+  ansible.builtin.slurp:
+    src: "{{ readers_vendor }}"
+  register: readers_crlf_applied
+
+- name: SSH reader regressions | Read the values that sshd uses after the apply
+  freesecdev.linux_compliance.sshd_validate:
+    effective: true
+  register: readers_effective_applied
+
+- name: SSH reader regressions | Check that every rule took effect and that only the X11Forwarding line changed
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['applied']
+      - readers_effective_applied.effective.permitrootlogin == 'no'
+      - readers_effective_applied.effective.pubkeyauthentication == 'yes'
+      - readers_effective_applied.effective.x11forwarding == 'no'
+      - >-
+        (readers_crlf_applied.content | b64decode)
+        == readers_crlf | replace('X11Forwarding yes' ~ readers_cr ~ readers_newline,
+                                  'X11Forwarding no' ~ readers_newline)
+    fail_msg: "{{ readers_label }}, CRLF apply: {{ lifecycle_results }}; {{ readers_effective_applied }}"
+    quiet: true
+
+- name: SSH reader regressions | Switch the rules off
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Clean up the rules over the vendor file with CRLF line ends
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Read the vendor file after the cleanup
+  ansible.builtin.slurp:
+    src: "{{ readers_vendor }}"
+  register: readers_crlf_cleaned
+
+- name: SSH reader regressions | Check that the cleanup wrote the vendor file back byte for byte, every CR included
+  ansible.builtin.assert:
+    that:
+      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - readers_crlf_cleaned.content == readers_crlf_read.content
+    fail_msg: "{{ readers_label }}, CRLF cleanup: {{ lifecycle_results }}"
+    quiet: true
+
+- name: SSH reader regressions | Give the vendor file its content as built
+  ansible.builtin.copy:
+    content: "{{ readers_built.content | b64decode }}"
+    dest: "{{ readers_vendor }}"
+    mode: "{{ readers_vendor_mode }}"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Switch the rules on to apply them before an earlier alias of PubkeyAuthentication
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Apply the rules before the earlier alias
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Add a drop-in read before the collection's that sets PubkeyAuthentication by its alias
+  ansible.builtin.copy:
+    content: "DSAAuthentication no{{ readers_newline }}"
+    dest: "{{ readers_early }}"
+    mode: "0600"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Apply the rules again with the earlier alias in place
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Check that the drop-in in place is no longer compliant, as sshd reads the alias first
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='status') | list
+        == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='reason')
+        | select('search', 'sshd -T reads pubkeyauthentication no') | list | length == 1
+      - lifecycle_results | rejectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='status') | unique
+        | list == ['compliant']
+      - lifecycle_results | selectattr('changed') | list == []
+    fail_msg: "{{ readers_label }}, drop-in in place behind the alias: {{ lifecycle_results }}"
+    quiet: true
+
+- name: SSH reader regressions | Switch the rules off with the alias in place
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Clean up the rules with the alias in place
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Switch the rules on to write them behind the alias
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Apply the rules behind the alias
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Look for the drop-in and the ledger entry of the rule that sshd does not use
+  ansible.builtin.stat:
+    path: "{{ readers_pubkey_dropin }}"
+  register: readers_pubkey_stat
+
+- name: SSH reader regressions | Read the ledger after the apply behind the alias
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: readers_ledger_alias
+
+- name: SSH reader regressions | Check that the drop-in sshd does not use was rolled back and reported overridden
+  ansible.builtin.assert:
+    that:
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='status') | list
+        == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='reason')
+        | select('search', 'still reads pubkeyauthentication no') | list | length == 1
+      - lifecycle_results | selectattr('rule_id', 'equalto', readers_pubkey) | selectattr('changed') | list == []
+      - lifecycle_results | rejectattr('rule_id', 'equalto', readers_pubkey) | map(attribute='status') | unique
+        | list == ['applied']
+      - not readers_pubkey_stat.stat.exists
+      - readers_ledger_alias.entries | selectattr('rule_id', 'equalto', readers_pubkey) | list == []
+    fail_msg: "{{ readers_label }}, apply behind the alias: {{ lifecycle_results }}"
+    quiet: true
+
+- name: SSH reader regressions | Switch the rules off behind the alias
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Clean up the rules behind the alias
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Remove the earlier alias and add a Match block whose keyword is separated by a CR
+  ansible.builtin.file:
+    path: "{{ readers_early }}"
+    state: absent
+
+- name: SSH reader regressions | Add a later drop-in whose Match block sets PermitRootLogin yes after a CR
+  ansible.builtin.copy:
+    content: >-
+      {{ 'Match User ' ~ readers_probe.user ~ readers_newline
+         ~ 'PermitRootLogin' ~ readers_cr ~ 'yes' ~ readers_newline }}
+    dest: "{{ readers_late }}"
+    mode: "0600"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Read the value of PermitRootLogin that sshd uses for the user of the Match block
+  freesecdev.linux_compliance.sshd_validate:
+    effective: true
+    client: "{{ readers_probe }}"
+  register: readers_match_effective
+
+- name: SSH reader regressions | Switch the rules on with the Match block in place
+  ansible.builtin.set_fact:
+    "{{ item }}": true
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Apply the rules with the Match block in place
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Check that sshd reads the looser value there and that the root rule was refused
+  ansible.builtin.assert:
+    that:
+      - readers_match_effective.effective.permitrootlogin == 'yes'
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', readers_root) | map(attribute='status') | list
+        == ['overridden']
+      - >-
+        lifecycle_results | selectattr('rule_id', 'equalto', readers_root) | map(attribute='reason')
+        | select('search', 'inside a Match block') | list | length == 1
+      - lifecycle_results | selectattr('rule_id', 'equalto', readers_root) | selectattr('changed') | list == []
+    fail_msg: "{{ readers_label }}, Match block: {{ readers_match_effective }}; {{ lifecycle_results }}"
+    quiet: true
+
+- name: SSH reader regressions | Switch the rules off after the Match test
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ readers_toggles }}"
+
+- name: SSH reader regressions | Clean up the rules that the Match test applied
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: SSH reader regressions | Remove the drop-in with the Match block
+  ansible.builtin.file:
+    path: "{{ readers_late }}"
+    state: absent
+
+- name: SSH reader regressions | Give the vendor file back its content as built
+  ansible.builtin.copy:
+    content: "{{ readers_built.content | b64decode }}"
+    dest: "{{ readers_vendor }}"
+    mode: "{{ readers_vendor_mode }}"
+    owner: root
+    group: root
+
+- name: SSH reader regressions | Give the profile of this platform back
+  ansible.builtin.set_fact:
+    linux_compliance_discovered: "{{ readers_profile }}"
+
+- name: SSH reader regressions | Read the ledger after the regressions
+  freesecdev.linux_compliance.control_state:
+    action: list
+  register: readers_ledger_after
+
+- name: SSH reader regressions | Check that the ledger records none of the rules any more
+  ansible.builtin.assert:
+    that:
+      - readers_ledger_after.entries | selectattr('rule_id', 'in', readers_ids) | list == []
+    fail_msg: "{{ readers_label }}: the ledger still holds {{ readers_ledger_after.entries }}"
+    quiet: true
+
+- name: SSH reader regressions | Assert that the whole instance is back to its state before the regressions
+  ansible.builtin.include_tasks:
+    file: lifecycle_broad_compare.yml
+  vars:
+    lifecycle_label: ssh reader regressions
+    lifecycle_broad_step: the reader regressions
+    lifecycle_broad_reference: "{{ readers_broad_before }}"
+
+- name: SSH reader regressions | Record that this regression file ran to its end
+  ansible.builtin.set_fact:
+    lifecycle_regression_files_run: "{{ lifecycle_regression_files_run + ['lifecycle_ssh_readers_regressions.yml'] }}"
