@@ -38,7 +38,7 @@
 
 - name: Sudo refusals | Remember the state of the whole instance before the refusals
   ansible.builtin.set_fact:
-    regression_broad_before: "{{ lifecycle_broad_lines }}"
+    regression_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Sudo refusals | Switch every rule of the topic on
   ansible.builtin.set_fact:

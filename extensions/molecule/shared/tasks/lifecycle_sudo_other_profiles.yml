@@ -58,7 +58,7 @@
 
 - name: Sudo other profiles | Remember the state of the whole instance before these rules run
   ansible.builtin.set_fact:
-    other_broad_before: "{{ lifecycle_broad_lines }}"
+    other_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Sudo other profiles | Loosen the main sudoers file to a mode that sudo still accepts and the rule restricts
   ansible.builtin.file:

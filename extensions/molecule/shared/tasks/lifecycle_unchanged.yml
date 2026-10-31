@@ -9,5 +9,6 @@
       - snapshot_digest == lifecycle_reference.digest
     fail_msg: >-
       {{ lifecycle_label }}, {{ lifecycle_unchanged_step }} changed the watched paths:
-      {{ (lifecycle_reference.lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20] }}
+      {{ (lifecycle_reference.lines.split('\n') | symmetric_difference(snapshot_lines.split('\n')))[:20]
+         if snapshot_digest != lifecycle_reference.digest else [] }}
     quiet: true

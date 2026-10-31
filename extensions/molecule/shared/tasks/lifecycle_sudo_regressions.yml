@@ -32,7 +32,7 @@
 
 - name: Sudo regressions | Remember the state of the whole instance before the regressions
   ansible.builtin.set_fact:
-    regression_broad_before: "{{ lifecycle_broad_lines }}"
+    regression_broad_before: "{{ lifecycle_broad_record }}"
 
 - name: Sudo regressions | Switch every rule of the topic on
   ansible.builtin.set_fact:
