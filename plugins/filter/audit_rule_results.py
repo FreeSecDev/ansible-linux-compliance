@@ -103,6 +103,59 @@ def _path(rule: Mapping[str, object]) -> str:
     return str(_mapping(rule.get("parameters", {}), "the parameters of a rule").get("path", ""))
 
 
+def _cleanup_result(
+    rule: Mapping[str, object], planned: Mapping[str, object], *, changed: bool, found: str | None
+) -> dict[str, object]:
+    reason = planned.get("reason")
+    present = bool(planned.get("present"))
+    if reason is None:
+        removed = (
+            "restored (the drop-in was removed"
+            if present
+            else "restored (the drop-in no longer existed, which is the recorded prior state,"
+            " so only the ledger entry was removed"
+        )
+        text = f"{removed}{'; ' + EFFECTS[found] if found and present else ''})"
+    else:
+        text = (
+            f"cleanup_incomplete ({reason}; nothing was changed, the ledger entry is kept and"
+            " the cleanup is retried on the next run)"
+        )
+    effect_reason = None if found in (None, "loaded") else found
+    return {
+        "rule_id": str(rule["rule_id"]),
+        "family": rule.get("family"),
+        "action": "cleanup",
+        "status": "restored" if reason is None else "cleanup_incomplete",
+        "reason": reason if reason is not None else (effect_reason if present else None),
+        "changed": changed,
+        "message": f"{_path(rule)}: {text}",
+    }
+
+
+def _apply_result(
+    rule: Mapping[str, object], planned: Mapping[str, object], *, changed: bool, found: str | None
+) -> dict[str, object]:
+    status = str(planned.get("status"))
+    reason = planned.get("reason")
+    if reason:
+        text = f"{status} ({reason}; nothing was changed)"
+    elif status == "applied" and found:
+        text = f"{status} ({EFFECTS[found]})"
+    else:
+        text = status
+    effect_reason = None if found in (None, "loaded") else found
+    return {
+        "rule_id": str(rule["rule_id"]),
+        "family": rule.get("family"),
+        "action": "apply",
+        "status": status,
+        "reason": reason or (effect_reason if status == "applied" else None),
+        "changed": changed,
+        "message": f"{_path(rule)}: {text}",
+    }
+
+
 def audit_rule_results(
     family: object, plan: object, cleanup_plan: object, changed_ids: object, outcome: object
 ) -> list[dict[str, object]]:
@@ -115,59 +168,24 @@ def audit_rule_results(
         raise TypeError(message)
     changed = {str(item) for item in cast("Sequence[object]", changed_ids)}
     found = effect(_mapping(outcome, "the outcome"))
-    reason_of_effect = None if found in (None, "loaded") else found
-    results: list[dict[str, object]] = []
-    for rule in _rules(rules, "cleanup"):
-        rule_id = str(rule["rule_id"])
-        planned = _mapping(cleanups[rule_id], "a cleanup plan entry")
-        reason = planned.get("reason")
-        present = bool(planned.get("present"))
-        if reason is None:
-            removed = (
-                "restored (the drop-in was removed"
-                if present
-                else "restored (the drop-in no longer existed, which is the recorded prior state,"
-                " so only the ledger entry was removed"
-            )
-            text = f"{removed}{'; ' + EFFECTS[found] if found and present else ''})"
-        else:
-            text = (
-                f"cleanup_incomplete ({reason}; nothing was changed, the ledger entry is kept and"
-                " the cleanup is retried on the next run)"
-            )
-        results.append(
-            {
-                "rule_id": rule_id,
-                "family": rule.get("family"),
-                "action": "cleanup",
-                "status": "restored" if reason is None else "cleanup_incomplete",
-                "reason": reason if reason is not None else (reason_of_effect if present else None),
-                "changed": rule_id in changed,
-                "message": f"{_path(rule)}: {text}",
-            }
+    results = [
+        _cleanup_result(
+            rule,
+            _mapping(cleanups[str(rule["rule_id"])], "a cleanup plan entry"),
+            changed=str(rule["rule_id"]) in changed,
+            found=found,
         )
-    for rule in _rules(rules, "apply"):
-        rule_id = str(rule["rule_id"])
-        planned = _mapping(applies[rule_id], "an apply plan entry")
-        status = str(planned.get("status"))
-        reason = planned.get("reason")
-        if reason:
-            text = f"{status} ({reason}; nothing was changed)"
-        elif status == "applied" and found:
-            text = f"{status} ({EFFECTS[found]})"
-        else:
-            text = status
-        results.append(
-            {
-                "rule_id": rule_id,
-                "family": rule.get("family"),
-                "action": "apply",
-                "status": status,
-                "reason": reason or (reason_of_effect if status == "applied" else None),
-                "changed": rule_id in changed,
-                "message": f"{_path(rule)}: {text}",
-            }
+        for rule in _rules(rules, "cleanup")
+    ]
+    results.extend(
+        _apply_result(
+            rule,
+            _mapping(applies[str(rule["rule_id"])], "an apply plan entry"),
+            changed=str(rule["rule_id"]) in changed,
+            found=found,
         )
+        for rule in _rules(rules, "apply")
+    )
     return results
 
 
