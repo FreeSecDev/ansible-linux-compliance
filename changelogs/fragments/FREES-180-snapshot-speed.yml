@@ -4,13 +4,17 @@ minor_changes:
     lifecycle_record filter - new filter used only by the Molecule harness of the collection. It turns the
     ansible.builtin.find walks of a test instance into the no-change snapshot and the whole-instance record, byte for
     byte as the Jinja templates of the harness did before (FREES-180).
+  - >-
+    tree_info - new read-only module used only by the Molecule harness of the collection. It lists every entry below
+    directories with its type, mode, owner, size, inode and times, without reading content and without following
+    symbolic links, as one text, and fails on any directory or entry that it cannot read (FREES-180, ADR 0027).
 trivial:
   - >-
-    Molecule: the no-change snapshots and whole-instance records list /usr without reading its content, so size, mtime
-    and ctime stand for it, and keep the SHA-256 of every other regular file and of the files next to a declared path
-    below /usr. A no-change snapshot taken at the same moment as a whole-instance record comes from the same walk, and a
-    cycle keeps the last whole-instance record when nothing has written since it. Self-checks prove that a same-size
-    rewrite of a declared file below /etc and below /usr and a change after a kept record are caught.
+    Molecule: the no-change snapshots and whole-instance records list /usr with tree_info, without its content, so
+    size, mtime and ctime stand for it, and keep the SHA-256 of every other regular file and of the files next to a
+    declared path below /usr. A no-change snapshot taken at the same moment as a whole-instance record comes from the
+    same walk, and a cycle keeps the last whole-instance record when nothing has written since it. Self-checks prove
+    that a same-size rewrite of a declared file below /etc and below /usr and a change after a kept record are caught.
   - >-
     CI: tools/molecule/libvirt-host-packages.sh copies the verified .deb files into a private directory of root with
     install -o root and checks the copies as root before apt-get installs them, so a copy cannot be swapped after it is

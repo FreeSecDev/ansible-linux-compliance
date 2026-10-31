@@ -1,4 +1,4 @@
-# 0027. Stored find results in the lifecycle_record filter
+# 0027. Fast records for the Molecule lifecycle harness
 
 - **Status:** proposed
 - **Date:** 2026-10-31
@@ -31,9 +31,13 @@ container wraps the item and each of its 34 values again, about 30 microseconds 
 item as its `value`.
 
 An action plugin would get the variables unrendered, but it must import `ansible.plugins.action`, which the guard of
-`plugins/` does not allow (ADR 0004), and adding it would also change the standard library name sets of the guard. A
-module that walks the instance and returns compact lines would replace `ansible.builtin.find` and its checksum
-handling on every managed instance, which FREES-180 did not ask for.
+`plugins/` does not allow (ADR 0004), and adding it would also change the standard library name sets of the guard.
+
+Once the lines were built in Python, `ansible.builtin.find` itself was most of a record. `/usr` is listed without
+content (FREES-180), but `find` still returns 34 values per entry, looks up the user and group name of each and sends
+about 60 MB of JSON for 90,000 entries, which the controller decodes and tags value by value: 15 to 18 seconds per
+listing of `/usr` on a local virtual machine, nine listings per lifecycle leg. A listing of the same entries as one
+text took 1.7 seconds where `find` took 15.6 (88,680 entries in a Docker container).
 
 ## Decision
 
@@ -48,9 +52,20 @@ tagged subclass of `str`, never exactly `str`; numbers, booleans and null render
 such as the synthetic states of the self-checks, is rendered. If a later ansible-core stores items differently, no
 item matches and every item is rendered: slower, with the same lines.
 
+`plugins/modules/tree_info.py` lists the metadata-only paths of the records instead of `find`. It walks every
+directory below each path without following a symbolic link, as `find` with `recurse`, `hidden` and `file_type: any`
+lists them, reads only `lstat` of each entry and never its content, and returns path, type, mode, uid, gid, size,
+inode, mtime and ctime of every entry as one text with a NUL character after each field (a path cannot hold one). A
+directory or entry that it cannot read fails the module, where `find` would leave it out with a warning. The filter
+parses the text into the same entries; a unit test checks that a listing and the equivalent `find` entries record
+the same lines, and that a listing that is not whole entries is refused. The checksummed walks keep
+`ansible.builtin.find` and its handling of unreadable files (FREES-175).
+
 ## Consequences
 
 - A record takes about a second of Python per 100,000 entries instead of 5 to 25 seconds of templating.
+- A listing of `/usr` takes about two seconds instead of about fifteen, and adds one read-only module to the
+  collection, which only the harness uses.
 - The filter depends on the name and the `value` attribute of `_LazyValue` for its speed, never for its result. The
   pinned ansible-core is updated by review (`uv.lock`), and the Molecule legs would show the slowdown in their timings.
 - `tests/unit/plugins/filter/test_lifecycle_record.py` checks the adapter with a fake container: stored plain entries
@@ -64,5 +79,8 @@ item matches and every item is rendered: slower, with the same lines.
 - **A filter without the adapter.** Correct, and 40% faster than the templates, but still about 15 seconds per record
   on a CI runner.
 - **An action plugin.** Needs an import that the guard of `plugins/` refuses (ADR 0004).
-- **A module that returns compact walks.** The largest saving left, because `find` itself now dominates a record,
-  but a new module that reads every file of an instance needs its own review; it is left for a follow-up.
+- **A module that also takes the checksums.** It would replace the checksummed walks too, but it would read every
+  file of an instance and duplicate the handling of files that root cannot read; `/usr` is most of the entries, and
+  the module reads no content.
+- **Keeping `find` for `/usr`.** About 15 seconds per listing, more than two minutes per lifecycle leg on a local
+  virtual machine.

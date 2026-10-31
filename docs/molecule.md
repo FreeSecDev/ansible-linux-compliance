@@ -284,15 +284,17 @@ the failure of a task inside the role.
 `/var/lib/linux_compliance` and
 `/var/lib/freesecdev`, and the SHA-256 of every regular file that root can read outside `/usr`. The state ledger and
 the evidence directory are part of it. On a mismatch the assertion prints up to 20 differing entries.
-`/usr` (`contract_snapshot_metadata_paths`) is listed without reading content (FREES-180): every write of a file
+`/usr` (`contract_snapshot_metadata_paths`) is listed without reading content (FREES-180), by the module
+`freesecdev.linux_compliance.tree_info`, which lists every entry below it as `find` would and fails on any
+directory or entry that it cannot read: every write of a file
 updates its mtime and ctime, and no process can set a ctime back without setting the clock of the instance back, so
 size, mtime and ctime catch a change of content there; the files in the directory of a path that a topic declares
 below `/usr` still get their SHA-256, because the whole-instance record does not count their times (see
-[what each record guarantees](#what-each-record-guarantees)). A listing without content that stops early fails the
+[what each record guarantees](#what-each-record-guarantees)); a checksum pass there that stops early fails the
 record. The lines are built by the filter `freesecdev.linux_compliance.lifecycle_record` (`plugins/filter`), in typed
 Python, byte for byte as the Jinja templates built them before, because templating the 100,000 entries of a virtual
 machine took up to half a minute per record. It reads the `find` entries as ansible-core stores them
-([ADR 0027](adr/0027-stored-find-results-in-the-lifecycle-record-filter.md)), which takes about a second;
+([ADR 0027](adr/0027-fast-records-for-the-lifecycle-harness.md)), which takes about a second;
 `tests/unit/plugins/filter/test_lifecycle_record.py` proves the bytes
 against a recorded walk and the old templates (`tests/fixtures/lifecycle_record`). Both this snapshot and the
 whole-instance record take their entries from

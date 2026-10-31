@@ -479,3 +479,55 @@ def test_json_lines_serialise_nested_data_as_the_to_json_filter_does() -> None:
     found = lines(instance(given)["lines"])
     assert 'user|fsd|["x", "1001", null, true, 1.5, ["t"], {"k": "J\\u00f6hn"}]' in found
     assert 'package|multi|[["epoch", null], ["version", "2"]],[["Version", "1"]]' in found
+
+
+def listing(*entries: dict[str, object]) -> str:
+    """Return ``entries`` as a ``tree_info`` listing."""
+    kinds = {(True, False, False): "link", (False, True, False): "file"}
+    fields: list[str] = []
+    for item in entries:
+        flags = (item["islnk"], item["isreg"], item["isdir"])
+        kind = kinds.get(
+            cast("tuple[bool, bool, bool]", flags), "directory" if item["isdir"] else "other"
+        )
+        fields.extend(
+            str(value)
+            for value in (
+                item["path"],
+                kind,
+                item["mode"],
+                item["uid"],
+                item["gid"],
+                item["size"],
+                item["inode"],
+                item["mtime"],
+                item["ctime"],
+            )
+        )
+    return "".join(field + record.LISTING_SEPARATOR for field in fields)
+
+
+def test_a_listing_records_the_same_lines_as_find_entries() -> None:
+    static = entry("/usr/lib/fsd-static", inode=102, checksum=None)
+    declared = entry("/usr/lib/fsd-declared", inode=103, checksum=None)
+    directory = entry("/usr/lib", inode=104, checksum=None, isreg=False, isdir=True)
+    link = entry("/usr/lib/link", inode=105, checksum=None, isreg=False, islnk=True)
+    other = entry("/usr/lib/fifo", inode=106, checksum=None, isreg=False)
+    found = sources(metadata=[static, declared, directory, link, other])
+    listed = sources(metadata=listing(static, declared, directory, link, other))
+    assert instance(listed) == instance(found)
+    assert snapshot(listed) == snapshot(found)
+    assert snapshot(sources(metadata=""))["count"] == 2
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("/usr/lib/x\x00file\x00", "whole entries of 9 fields"),
+        ("/usr/lib/x" + "\x00file" * 8, "whole entries of 9 fields"),
+        ("/usr/lib/x\x00socket" + "\x000" * 7 + "\x00", "unknown type 'socket'"),
+    ],
+)
+def test_an_incomplete_listing_is_refused(text: str, message: str) -> None:
+    with pytest.raises(record.RecordError, match=message):
+        snapshot(sources(metadata=text))

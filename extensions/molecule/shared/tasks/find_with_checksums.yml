@@ -148,13 +148,8 @@
     - find_known.extra | length > 0
 
 - name: Find with checksums | List every entry below the paths whose metadata stands for their content
-  ansible.builtin.find:
+  freesecdev.linux_compliance.tree_info:
     paths: "{{ find_metadata_paths }}"
-    file_type: any
-    recurse: true
-    hidden: true
-    follow: false
-    get_checksum: false
   register: find_metadata
   when: find_metadata_paths | default([]) | length > 0
 
@@ -179,15 +174,14 @@
   register: find_metadata_summed
   when: find_metadata_watched | length > 0
 
-- name: Find with checksums | Refuse a listing without content, or its checksums, that stopped early
+- name: Find with checksums | Refuse checksums of the watched directories below those paths that stopped early
   ansible.builtin.assert:
     that:
-      - find_metadata.skipped_paths | default({}) | length == 0
       - find_metadata_summed.skipped_paths | default({}) | length == 0
     fail_msg: >-
-      The listing of {{ find_metadata_paths | default([]) }} or the checksums of {{ find_metadata_watched }} stopped
-      early in {{ find_metadata.skipped_paths | default({}) | combine(find_metadata_summed.skipped_paths
-      | default({})) }}, so a changed entry there could go unseen.
+      The checksums of {{ find_metadata_watched }} stopped early in
+      {{ find_metadata_summed.skipped_paths | default({}) }}, so a
+      changed file there could go unseen. The listing itself fails on any entry that it cannot read.
     quiet: true
 
 - name: Find with checksums | Keep the checksums of the watched files below those paths

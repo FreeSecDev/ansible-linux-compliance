@@ -162,7 +162,7 @@ contract_find_sources:
   walk: "{{ find_whole.files }}"
   walk_excluded: "{{ find_under }}"
   extra: "{{ find_listed.files if find_aborted | length > 0 else find_extra }}"
-  metadata: "{{ find_metadata.files | default([]) }}"
+  metadata: "{{ find_metadata.listing | default('') }}"
   checksums: "{{ find_sums | combine(find_metadata_sums) }}"
 contract_snapshot_options:
   paths:

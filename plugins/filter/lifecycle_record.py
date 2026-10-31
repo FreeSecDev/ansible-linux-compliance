@@ -45,9 +45,10 @@ positional: _input, options
 options:
   _input:
     description:
-      - The sources of the record. C(walk), C(extra) and C(metadata) are lists of
-        C(ansible.builtin.find) entries, C(walk_excluded) is a regular expression and
-        C(checksums) maps a path to its checksum.
+      - The sources of the record. C(walk) and C(extra) are lists of C(ansible.builtin.find)
+        entries, C(walk_excluded) is a regular expression and C(checksums) maps a path to its
+        checksum. C(metadata) is the C(listing) of M(freesecdev.linux_compliance.tree_info), or a
+        list of C(find) entries.
       - For a whole-instance record also C(sysctl), the C(find) entries below C(/proc/sys);
         C(packages), the C(packages) fact; C(users) and C(groups), the C(getent) databases;
         and C(services), the C(services) fact, or null where no service manager runs.
@@ -113,6 +114,19 @@ LINE_END: Final[str] = "\\n"
 STORED_WRAPPER: Final[str] = "_LazyValue"
 PLAIN_TYPES: Final[frozenset[type]] = frozenset({str, int, float, bool, type(None)})
 TEXT_TYPES: Final[frozenset[type]] = frozenset({str})
+LISTING_SEPARATOR: Final[str] = "\x00"
+LISTING_FIELDS: Final[tuple[str, ...]] = (
+    "path",
+    "kind",
+    "mode",
+    "uid",
+    "gid",
+    "size",
+    "inode",
+    "mtime",
+    "ctime",
+)
+KINDS: Final[frozenset[str]] = frozenset({"link", "file", "directory", "other"})
 MAPPING_TYPES: Final[frozenset[type]] = frozenset({dict})
 
 
@@ -349,10 +363,30 @@ def entries(sources: Mapping[str, object]) -> list[Entry]:
     found.extend(
         _entry(raw, checksums) for raw in stored_items(sources["extra"], "the extra entries")
     )
-    found.extend(
-        _entry(raw, checksums) for raw in stored_items(sources["metadata"], "the metadata walk")
-    )
+    found.extend(_metadata_entries(sources["metadata"], checksums))
     return found
+
+
+def _metadata_entries(raw: object, checksums: Mapping[str, object]) -> list[Entry]:
+    """Return the entries of a ``tree_info`` listing, or of a list of ``find`` entries."""
+    if not isinstance(raw, str):
+        return [_entry(item, checksums) for item in stored_items(raw, "the metadata walk")]
+    values = raw.split(LISTING_SEPARATOR)
+    width = len(LISTING_FIELDS)
+    if values[-1] or (len(values) - 1) % width:
+        _fail(f"the metadata listing must hold whole entries of {width} fields")
+    return [
+        _listed_entry(values[start : start + width], checksums)
+        for start in range(0, len(values) - 1, width)
+    ]
+
+
+def _listed_entry(fields: list[str], checksums: Mapping[str, object]) -> Entry:
+    path, kind, mode, uid, gid, size, inode, mtime, ctime = fields
+    if kind not in KINDS:
+        _fail(f"the metadata listing names the unknown type {kind!r} for {path}")
+    checksum = _text(checksums.get(path, ""))
+    return Entry(path, kind, mode, uid, gid, size, inode, mtime, ctime, checksum)
 
 
 def _ordered(found: Iterable[Entry]) -> list[Entry]:
