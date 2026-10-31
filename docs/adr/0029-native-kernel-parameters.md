@@ -226,7 +226,13 @@ The three topics run the toggle lifecycle on both drivers, by the per-pre-state 
 - The `as built, with the running kernel` pre-state requires libvirt and runs on the virtual machines with the
   running values on: the declared kernel parameters must have the rule's value after apply and their value before
   after cleanup, the whole-instance comparison covers every readable parameter below `/proc/sys`, and on Ubuntu the
-  real scan must report every rule `pass` after apply.
+  real scan must report every rule `pass` after apply. For `sysctl` and `ipv6_parameters` the virtual machine scans
+  only in the rule-toggle cycle, and a second pre-state with the same expectations, `as built, with the running
+  kernel, topic toggle`, runs the topic-toggle cycle without scans: both cycles apply exactly the same rules, so the
+  scan after apply proves the same state, and the Docker `as built` cycles of both topics scan in both modes, which
+  covers the toggle that the scan after cleanup reports in `disabled_by`. This keeps the Ubuntu legs of these two topics,
+  the longest of the family at 16 to 17 minutes on a loaded workstation, under 15 minutes. `ipv4_parameters`, whose
+  Docker cycles do not scan, keeps the scans on the virtual machine in both modes.
 - Regression groups (`ipv4_parameters`): `changes`, a Docker leg on both platforms
   (`shared/tasks/lifecycle_sysctl_regressions.yml`): an administrator's file that sorts later (`overridden`) and one
   that sorts earlier (`conflicting_setting`), a ledger entry of another method (`method_changed` on apply and cleanup),

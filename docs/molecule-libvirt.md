@@ -428,7 +428,9 @@ true`, so apply sets the running value where the check rejects it: the pre-state
 parameter of the topic after apply (`applied.sysctl`), the cleanup must give each its value before back, and the
 whole-instance comparison covers every readable parameter below `/proc/sys`, the forwarding flags and other
 per-interface values included. On Ubuntu the scans of these cycles evaluate the rules, and every rule must `pass` after
-apply. On Rocky Linux `/etc/sysctl.d` exists as built, so the pre-state expects it unchanged and no marker.
+apply. For `sysctl` and `ipv6_parameters` only the rule-toggle cycle scans: the topic-toggle cycle runs from a second
+pre-state with the same expectations, `as built, with the running kernel, topic toggle`, which declares no scans,
+because both cycles apply the same rules and the Docker cycles scan both toggles. On Rocky Linux `/etc/sysctl.d` exists as built, so the pre-state expects it unchanged and no marker.
 
 A regression group may require libvirt as well. The `runtime` group of `ipv4_parameters`
 (`shared/tasks/lifecycle_sysctl_runtime_regressions.yml`, one leg per platform) needs a running kernel that the

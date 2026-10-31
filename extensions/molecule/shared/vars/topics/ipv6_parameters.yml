@@ -144,11 +144,13 @@ pre_states:
   - name: as built
     audit: true
   - name: as built, with the running kernel
+    modes:
+      - rule
     audit:
       - ubuntu
     requires:
       - libvirt
-    applied:
+    applied: &running_kernel_applied
       files:
         - path: /etc/sysctl.d
           exists: true
@@ -264,3 +266,9 @@ pre_states:
           value: "0"
         - name: net.ipv6.conf.default.accept_source_route
           value: "0"
+  - name: as built, with the running kernel, topic toggle
+    modes:
+      - topic
+    requires:
+      - libvirt
+    applied: *running_kernel_applied

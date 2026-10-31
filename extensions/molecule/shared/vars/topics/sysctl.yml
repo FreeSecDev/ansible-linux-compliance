@@ -101,16 +101,18 @@ pre_states:
         platforms:
           - ubuntu
   - name: as built, with the running kernel
+    modes:
+      - rule
     audit:
       - ubuntu
     requires:
       - libvirt
-    unchanged:
+    unchanged: &running_kernel_unchanged
       - rule: sysctl_kernel_yama_ptrace_scope
         status: compliant
         platforms:
           - ubuntu
-    applied:
+    applied: &running_kernel_applied
       files:
         - path: /etc/sysctl.d
           exists: true
@@ -155,3 +157,10 @@ pre_states:
           value: "2"
         - name: kernel.yama.ptrace_scope
           value: "1"
+  - name: as built, with the running kernel, topic toggle
+    modes:
+      - topic
+    requires:
+      - libvirt
+    unchanged: *running_kernel_unchanged
+    applied: *running_kernel_applied

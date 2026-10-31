@@ -569,7 +569,9 @@ must equal those before the first cycle.
 A declaration names what a topic is expected to touch, so a cleanup that forgets something the declaration also
 forgot, such as a backup file, a second drop-in or a package, would pass a comparison of the declared items alone.
 `shared/tasks/lifecycle_broad.yml` therefore records the whole instance before each cycle and before the first cycle,
-and the state after the cleanup and after the last cycle must equal it:
+and the state after the cleanup and after the last cycle must equal it. The first cycle of a leg reuses the record
+before the first cycle when its pre-state declares no `files`: nothing but reads and facts runs between the two, so a
+second walk of the instance would record the same state and only cost a minute on a virtual machine (FREES-107):
 
 - every entry below `/etc`, `/usr`, `/root`, `/home`, `/opt`, `/srv`, `/var/spool`, `/var/log` and `/var/lib`
   (`find` without following links): path, type, mode, uid, gid, size, inode, mtime, ctime and the SHA-256 of every
@@ -681,7 +683,7 @@ written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the 
 only. The regressions end with the whole-instance comparison.
 
 The kernel parameter topics `sysctl`, `ipv4_parameters` and `ipv6_parameters`
-([ADR 0029](adr/0029-native-kernel-parameters.md)) run two pre-states each, by the per-pre-state driver rule of
+([ADR 0029](adr/0029-native-kernel-parameters.md)) run two kinds of pre-state, by the per-pre-state driver rule of
 FREES-61. `as built` runs in the Docker scenarios, where `/proc/sys` is read-only, so the harness passes
 `linux_compliance_remediate_sysctl_runtime: false` there (`lifecycle_sysctl_runtime` in `shared/vars/lifecycle.yml`,
 `true` on the virtual machines): the cycles prove the drop-ins with their checksums, on Ubuntu the `rp_filter` lines

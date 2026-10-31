@@ -1,4 +1,9 @@
 ---
+- name: Lifecycle cycle | Decide whether the whole instance is still in its state before any cycle
+  ansible.builtin.set_fact:
+    lifecycle_broad_reused: >-
+      {{ lifecycle_cycles_run | length == 0 and lifecycle_cycle.1.files | default([], true) | length == 0 }}
+
 - name: Lifecycle cycle | Name the cycle and the toggle that switches the topic off
   ansible.builtin.set_fact:
     lifecycle_mode: "{{ lifecycle_cycle.0 }}"
@@ -154,13 +159,15 @@
     fail_msg: "{{ lifecycle_label }}: the ledger already records {{ lifecycle_before.ledger }}."
     quiet: true
 
-- name: Lifecycle cycle | Take the state of the whole instance before the topic is applied
+- name: Lifecycle cycle | Take the state of the whole instance before the topic is applied, unless nothing ran since
   ansible.builtin.include_tasks:
     file: lifecycle_broad.yml
+  when: not lifecycle_broad_reused | bool
 
 - name: Lifecycle cycle | Remember the state of the whole instance before the topic is applied
   ansible.builtin.set_fact:
-    lifecycle_broad_before: "{{ lifecycle_broad_lines }}"
+    lifecycle_broad_before: >-
+      {{ lifecycle_broad_pristine if lifecycle_broad_reused | bool else lifecycle_broad_lines }}
 
 - name: Lifecycle cycle | Take the no-change snapshot before check mode
   ansible.builtin.include_tasks:
