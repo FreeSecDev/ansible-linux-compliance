@@ -482,7 +482,12 @@ def test_ci_runs_every_scenario_of_each_driver_and_gates_on_it() -> None:
     lifecycle = cast("dict[str, object]", jobs["molecule-lifecycle"]["strategy"])
     assert lifecycle["matrix"] == "${{ fromJSON(needs.molecule-plan.outputs.matrix) }}"
     assert libvirt["matrix"] == "${{ fromJSON(needs.molecule-plan.outputs.libvirt) }}"
-    assert jobs["molecule-libvirt"]["needs"] == "molecule-plan"
+    assert jobs["molecule-libvirt"]["needs"] == ["molecule-plan", "molecule-collections"]
+    assert jobs["molecule-lifecycle"]["needs"] == [
+        "molecule-plan",
+        "molecule-collections",
+        "molecule-images",
+    ]
     plan = cast("list[dict[str, str]]", jobs["molecule-plan"]["steps"])
     assert any(
         "make -s molecule-matrix MOLECULE_MATRIX_DRIVER=libvirt" in step.get("run", "")
@@ -502,7 +507,13 @@ def test_ci_runs_every_scenario_of_each_driver_and_gates_on_it() -> None:
             }
             assert images == {entry["platform"]}
     needs = cast("list[str]", jobs["ci-gate"]["needs"])
-    assert {"molecule-plan", "molecule-lifecycle", "molecule-libvirt"} <= set(needs)
+    assert {
+        "molecule-collections",
+        "molecule-images",
+        "molecule-plan",
+        "molecule-lifecycle",
+        "molecule-libvirt",
+    } <= set(needs)
     assert jobs["molecule-libvirt"]["permissions"] == {"contents": "read"}
     assert jobs["molecule-plan"]["permissions"] == {"contents": "read"}
 

@@ -9,7 +9,8 @@
 - **Related:** [ADR 0003](0003-native-module-remediation.md) (made stricter here),
   [ADR 0004](0004-audited-process-execution.md), [ADR 0011](0011-control-toggles-and-cleanup.md),
   [ADR 0015](0015-content-acquisition-and-pinning.md), [ADR 0021](0021-native-banners-pwquality-and-profile-values.md)
-  and [ADR 0022](0022-native-sudo-drop-ins.md) (both amended here), [native remediation guide](../native-remediation-guide.md)
+  and [ADR 0022](0022-native-sudo-drop-ins.md) (both amended here), [native remediation guide](../native-remediation-guide.md),
+  [ADR 0026](0026-no-content-scripts-on-hosts.md) (amends this ADR: no content script or `fix` reaches a host)
 
 ## Context
 
@@ -78,10 +79,16 @@ other path would come to rely on it.
    `tools/reporting/stig_content.py`, which the STIG checklist export only displays to the reader (ADR 0020); the
    forbidden words and the `generate fix` sequence in `plugins/module_utils/compliance/process.py`, which exist to
    refuse them; and the `fix` object of a Grype vulnerability in `tools/reporting/parsers/grype.py`, which is not
-   XCCDF. Any other occurrence, or a change in the number of a pinned one, fails. ADR 0026 (FREES-191) adds two
-   exceptions with the same rule: the element name in `tools/content/script_checks.py`, which removes every `fix`
-   from the content on the controller, and in `plugins/module_utils/compliance/catalog.py`, which refuses one on the
-   host. Neither reads what a `fix` holds.
+   XCCDF. Any other occurrence, or a change in the number of a pinned one, fails.
+   [ADR 0026](0026-no-content-scripts-on-hosts.md) (FREES-191) adds two exceptions under the same rule. The first is
+   the element name in `tools/content/script_checks.py`, which removes every `fix` from the content on the
+   controller. The second is in `plugins/module_utils/compliance/catalog.py`, which refuses one on the host. Neither
+   reads what a `fix` holds.
+6. **No script or remediation code of the content reaches a managed host, not even to audit** (amendment of FREES-191,
+   [ADR 0026](0026-no-content-scripts-on-hosts.md)). `make content` removes every Script Check Engine check and script
+   and every XCCDF `fix` from the pinned datastreams on the controller and pins the processed digest. The hosts refuse
+   any datastream that still holds one (`script_check_content`). A rule whose only automated check was SCE is
+   `notchecked`.
 
 ## Alternatives evaluated
 

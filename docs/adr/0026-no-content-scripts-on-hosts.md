@@ -6,14 +6,14 @@
   of ComplianceAsCode is not trusted)
 - **Jira:** FREES-191 (follows from the FREES-188 audit)
 - **Pull requests:** introduced by the pull request for FREES-191
-- **Related:** ADR 0025 "Remediation is our own Ansible only" (pull request #72, FREES-188), which this ADR amends;
+- **Related:** [ADR 0025](0025-own-ansible-remediation-only.md) (FREES-188), which this ADR amends;
   [ADR 0003](0003-native-module-remediation.md), [ADR 0004](0004-audited-process-execution.md),
   [ADR 0013](0013-normalized-findings-model.md), [ADR 0015](0015-content-acquisition-and-pinning.md) (amended here),
   [threat model T-AUDIT-2](../security/threat-model.md#t-audit-2-sce-check-scripts-run-as-root)
 
 ## Context
 
-ADR 0025 (FREES-188) makes remediation our own Ansible and keeps the scanner content for auditing. The audit itself
+[ADR 0025](0025-own-ansible-remediation-only.md) (FREES-188) makes remediation our own Ansible and keeps the scanner content for auditing. The audit itself
 still ran code written by ComplianceAsCode. The pinned datastreams embed shell scripts for the OpenSCAP Script Check
 Engine (SCE), and `oscap xccdf eval` runs them as root while it audits (threat model T-AUDIT-2). Nothing confines
 those scripts to reading the host.
@@ -90,8 +90,8 @@ The only reliable control is therefore the content: an SCE check or script that 
    | `ssg-ubuntu2404-ds.xml` | 1257 | sh 589, ansible 503, puppet 88, blueprint 53, kubernetes 24 |
    | `ssg-rhel9-ds.xml` | 3460 | sh 1316, ansible 1294, kickstart 179, puppet 152, kubernetes 160, anaconda 134, blueprint 126, bootc 99 |
 
-   Stripping the fixes needs the catalogue's values to come from the profile, not from the fixes. FREES-188 (ADR
-   0025, pull request #72) provides that, so this change is based on it. The repository guard of ADR 0025 pins the
+   Stripping the fixes needs the catalogue's values to come from the profile, not from the fixes. FREES-188
+   ([ADR 0025](0025-own-ansible-remediation-only.md), `profile_value_id`) provides that, so this change is based on it. The repository guard of ADR 0025 pins the
    element name exactly in `tools/content/script_checks.py` and `plugins/module_utils/compliance/catalog.py`, the
    two places that remove or refuse a `fix` without reading it.
    - The document is parsed once with the bounded parser of `xmlsafe` (no DOCTYPE, no entities, bounded size and
@@ -168,5 +168,4 @@ review.
 - Fetch content only with `make content` (or `make molecule-content`), and pass the processed datastream's `sha256`
   from `content/manifest.yml` to the discover role. A raw ComplianceAsCode datastream fails discovery with
   `script_check_content`.
-- Once ADR 0025 (pull request #72) has merged, its decision gains the item "no script of the content runs on a managed
-  host, not even to audit (ADR 0026)" and a link to this ADR, and this ADR links back to it.
+- [ADR 0025](0025-own-ansible-remediation-only.md) carries this decision as its item 6 and links here.

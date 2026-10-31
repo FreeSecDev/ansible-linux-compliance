@@ -115,6 +115,9 @@ __linux_compliance_remediate_families:
   - name: password_aging
     disruptive: true
     umbrella: accounts
+  - name: login_defs
+    disruptive: true
+    umbrella: accounts
   - name: root_access
     disruptive: true
     umbrella: accounts
@@ -155,6 +158,162 @@ __linux_compliance_remediate_families:
   - name: bootloader
     disruptive: true
 __linux_compliance_remediate_rules:
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_have_homedir_login_defs"
+    family: login_defs
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_have_homedir_login_defs_enabled
+    runbook: null
+    parameters:
+      setting: "CREATE_HOME"
+      comparison: "equal"
+      value: "yes"
+      reads_dropins: true
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_logon_fail_delay"
+    family: login_defs
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_logon_fail_delay_enabled
+    runbook: null
+    parameters:
+      setting: "FAIL_DELAY"
+      comparison: "at_least"
+      value_id: "var_accounts_fail_delay"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - stig
+            - stig_gui
+          value:
+            - "4"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs"
+    family: login_defs
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_maximum_age_login_defs_enabled
+    runbook: null
+    parameters:
+      setting: "PASS_MAX_DAYS"
+      comparison: "at_most"
+      value_id: "var_accounts_maximum_age_login_defs"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "365"
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - stig
+          value:
+            - "60"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "45"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "365"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ism_o
+            - stig
+            - stig_gui
+          value:
+            - "60"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - "pci-dss"
+          value:
+            - "90"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_minimum_age_login_defs"
+    family: login_defs
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_minimum_age_login_defs_enabled
+    runbook: null
+    parameters:
+      setting: "PASS_MIN_DAYS"
+      comparison: "at_least"
+      value_id: "var_accounts_minimum_age_login_defs"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level2_server
+            - cis_level2_workstation
+            - stig
+          value:
+            - "1"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "2"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - cis
+            - cis_workstation_l2
+            - ism_o
+            - stig
+            - stig_gui
+          value:
+            - "1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_minlen_login_defs"
+    family: login_defs
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_minlen_login_defs_enabled
+    runbook: null
+    parameters:
+      setting: "PASS_MIN_LEN"
+      comparison: "at_least"
+      value_id: "var_accounts_password_minlen_login_defs"
+      profile_values:
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - anssi_bp28_intermediary
+            - anssi_bp28_minimal
+          value:
+            - "15"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "12"
   - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_pam_dcredit"
     family: pwquality
     disruptive: true
@@ -640,6 +799,92 @@ __linux_compliance_remediate_rules:
             - stig_gui
           value:
             - "-1"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs"
+    family: login_defs
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_password_warn_age_login_defs_enabled
+    runbook: null
+    parameters:
+      setting: "PASS_WARN_AGE"
+      comparison: "at_least"
+      value_id: "var_accounts_password_warn_age_login_defs"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "7"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - ccn_basic
+            - ccn_intermediate
+          value:
+            - "10"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+            - ism_o
+            - "pci-dss"
+          value:
+            - "7"
+  - rule_id: "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs"
+    family: login_defs
+    disruptive: true
+    reversible: true
+    revert_strategy: recorded_value
+    toggle: linux_compliance_rule_accounts_umask_etc_login_defs_enabled
+    runbook: null
+    parameters:
+      setting: "UMASK"
+      comparison: "umask"
+      value_id: "var_accounts_user_umask"
+      profile_values:
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - cis_level1_server
+            - cis_level1_workstation
+            - cis_level2_server
+            - cis_level2_workstation
+          value:
+            - "027"
+        - datastream: "ubuntu2404"
+          content_sha256: "c4da7bea2e285326d692ade7c06c9f87750c0d6bd0e850a74c78220b893cb393"
+          profiles:
+            - stig
+          value:
+            - "077"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - anssi_bp28_enhanced
+            - anssi_bp28_high
+            - stig
+            - stig_gui
+          value:
+            - "077"
+        - datastream: "rhel9"
+          content_sha256: "db76759cd4bf91143a7c02d7e1c4ed28cf978b6e3c89571740ccf5f86cfe2069"
+          profiles:
+            - ccn_advanced
+            - cis
+            - cis_server_l1
+            - cis_workstation_l1
+            - cis_workstation_l2
+          value:
+            - "027"
   - rule_id: "xccdf_org.ssgproject.content_rule_banner_etc_issue"
     family: banners
     disruptive: false
@@ -2650,15 +2895,12 @@ __linux_compliance_remediate_audit_only:
     - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_silent"
     - "xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time"
   password_aging:
-    - "xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs"
-    - "xccdf_org.ssgproject.content_rule_accounts_minimum_age_login_defs"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_minlen_login_defs"
     - "xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_existing"
     - "xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_root"
     - "xccdf_org.ssgproject.content_rule_accounts_password_set_min_life_existing"
     - "xccdf_org.ssgproject.content_rule_accounts_password_set_warn_age_existing"
-    - "xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs"
     - "xccdf_org.ssgproject.content_rule_accounts_set_post_pw_existing"
+  login_defs: []
   root_access:
     - "xccdf_org.ssgproject.content_rule_accounts_no_uid_except_zero"
     - "xccdf_org.ssgproject.content_rule_accounts_root_gid_zero"
@@ -2682,13 +2924,10 @@ __linux_compliance_remediate_audit_only:
   umask:
     - "xccdf_org.ssgproject.content_rule_accounts_umask_etc_bashrc"
     - "xccdf_org.ssgproject.content_rule_accounts_umask_etc_csh_cshrc"
-    - "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs"
     - "xccdf_org.ssgproject.content_rule_accounts_umask_etc_profile"
     - "xccdf_org.ssgproject.content_rule_accounts_umask_interactive_users"
     - "xccdf_org.ssgproject.content_rule_accounts_umask_root"
   user_sessions:
-    - "xccdf_org.ssgproject.content_rule_accounts_have_homedir_login_defs"
-    - "xccdf_org.ssgproject.content_rule_accounts_logon_fail_delay"
     - "xccdf_org.ssgproject.content_rule_accounts_max_concurrent_login_sessions"
     - "xccdf_org.ssgproject.content_rule_accounts_polyinstantiated_tmp"
     - "xccdf_org.ssgproject.content_rule_accounts_polyinstantiated_var_tmp"
@@ -2945,6 +3184,13 @@ __linux_compliance_remediate_tags:
     - "xccdf_org.ssgproject.content_rule_ensure_journald_and_rsyslog_not_active_together"
     - "xccdf_org.ssgproject.content_rule_file_groupowner_var_log_journal"
     - "xccdf_org.ssgproject.content_rule_file_owner_var_log_journal"
+  login_defs:
+    - "xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_logindefs"
+  password_aging:
+    - "xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs"
+    - "xccdf_org.ssgproject.content_rule_accounts_minimum_age_login_defs"
+    - "xccdf_org.ssgproject.content_rule_accounts_password_minlen_login_defs"
+    - "xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs"
   pwhistory:
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_no_remember"
     - "xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_remember"
@@ -2970,4 +3216,9 @@ __linux_compliance_remediate_tags:
     - "xccdf_org.ssgproject.content_rule_file_groupowner_etc_chrony_keys"
     - "xccdf_org.ssgproject.content_rule_file_owner_etc_chrony_keys"
     - "xccdf_org.ssgproject.content_rule_file_permissions_etc_chrony_keys"
+  umask:
+    - "xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs"
+  user_sessions:
+    - "xccdf_org.ssgproject.content_rule_accounts_have_homedir_login_defs"
+    - "xccdf_org.ssgproject.content_rule_accounts_logon_fail_delay"
 __linux_compliance_remediate_family_aliases: {}
