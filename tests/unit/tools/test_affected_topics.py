@@ -204,12 +204,24 @@ def test_every_role_task_file_belongs_to_the_native_topic_of_its_name(trees: Tre
     files = role_task_files()
     assert files
     families = native()
+    registry = list(
+        generate_toggles.load_catalogue(REPOSITORY_ROOT / generate_toggles.CATALOGUE).families
+    )
     for relative in files:
         stem = Path(relative).stem
-        expected = {
-            family for family in families if stem == family or stem.startswith(family + "_")
+        named = {family for family in registry if stem == family or stem.startswith(family + "_")}
+        including = {
+            family
+            for family in families
+            if (REPOSITORY_ROOT / "roles" / "remediate" / "tasks" / f"{family}.yml").is_file()
+            and Path(relative).name
+            in (REPOSITORY_ROOT / "roles" / "remediate" / "tasks" / f"{family}.yml").read_text(
+                encoding="utf-8"
+            )
         }
-        assert len(expected) == 1, relative
+        assert len(named) == 1, relative
+        expected = named | including
+        assert len(expected) == 1 or not named & set(families), relative
         assert set(trees.context.classify(relative)[0]) == expected, relative
 
 
