@@ -17,6 +17,7 @@
     stack_deny: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny
     stack_unlock: xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time
     stack_conf: /etc/security/faillock.conf
+    stack_service: /etc/pam.d/fsd-regression-faillock
     stack_files: >-
       {{ {'ubuntu': ['/etc/pam.d/common-auth', '/etc/pam.d/common-account'],
           'rhel_compatible': ['/etc/pam.d/system-auth', '/etc/pam.d/password-auth']}[lifecycle_platform] }}
@@ -90,6 +91,17 @@
         - applied
     - name: pam_faillock in the stack with deny on its module line
       deny: " deny=3"
+      statuses:
+        - overridden
+        - applied
+    - name: pam_faillock in the stack with conf= on its module line, which redirects every setting
+      deny: " conf=/etc/security/faillock-other.conf"
+      statuses:
+        - overridden
+        - overridden
+    - name: deny on a continued module line with an upper-case type in a service file of its own
+      deny: ""
+      service: "AUTH required pam_faillock.so preauth \\\n    deny=3\n"
       statuses:
         - overridden
         - applied

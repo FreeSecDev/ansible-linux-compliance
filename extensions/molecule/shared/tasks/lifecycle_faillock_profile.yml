@@ -1,10 +1,25 @@
 ---
-- name: Faillock profile | Name the rules and the toggles of the profile
+- name: Faillock profile | Name the rules, the toggles and the file before the profile, with its prior lines
+  vars:
+    fop_newline: "\n"
   ansible.builtin.set_fact:
+    fop_base: >-
+      {{ (fop_original.content | b64decode)
+         ~ (fop_case.prior | default([]) | map('regex_replace', '$', fop_newline) | join) }}
     fop_rule_ids: "{{ fop_case.rules | map('regex_replace', '^', fop_prefix) | sort }}"
     fop_toggles: >-
       {{ fop_case.rules | map('regex_replace', '^', 'linux_compliance_rule_') | map('regex_replace', '$', '_enabled')
          | list }}
+
+- name: Faillock profile | Give faillock.conf the prior lines of the profile, as an administrator would
+  ansible.builtin.copy:
+    content: "{{ fop_base }}"
+    dest: "{{ fop_conf }}"
+    follow: false
+    mode: "{{ fop_original_stat.stat.mode }}"
+    owner: root
+    group: root
+  when: fop_case.prior is defined
 
 - name: Faillock profile | Switch the rules of the profile on
   ansible.builtin.set_fact:
@@ -37,7 +52,7 @@
       - lifecycle_results | map(attribute='rule_id') | list == fop_rule_ids
       - lifecycle_results | map(attribute='status') | unique | list == ['applied']
       - lifecycle_results | rejectattr('changed') | list == []
-      - fop_checked.content == fop_original.content
+      - fop_checked.content | b64decode == fop_base
     fail_msg: "{{ fop_label }}, {{ fop_case.profile }}, check mode: {{ lifecycle_results }}"
     quiet: true
 
@@ -59,7 +74,7 @@
     src: "{{ fop_conf }}"
   register: fop_applied
 
-- name: Faillock profile | Check that the file as built gained exactly the lines of the profile, all recorded
+- name: Faillock profile | Check that the file as built gained the lines of the profile, each prior line rewritten
   vars:
     fop_newline: "\n"
     fop_added: >-
@@ -110,11 +125,21 @@
     src: "{{ fop_conf }}"
   register: fop_after
 
-- name: Faillock profile | Check that every rule was restored and faillock.conf is byte for byte as built
+- name: Faillock profile | Check that every rule was restored and faillock.conf is byte for byte as before the profile
   ansible.builtin.assert:
     that:
       - lifecycle_results | map(attribute='rule_id') | list == fop_rule_ids
       - lifecycle_results | map(attribute='status') | unique | list == ['restored']
-      - fop_after.content == fop_original.content
+      - fop_after.content | b64decode == fop_base
     fail_msg: "{{ fop_label }}, {{ fop_case.profile }}, cleanup: {{ lifecycle_results }}"
     quiet: true
+
+- name: Faillock profile | Give faillock.conf its content as built back after the prior lines
+  ansible.builtin.copy:
+    content: "{{ fop_original.content | b64decode }}"
+    dest: "{{ fop_conf }}"
+    follow: false
+    mode: "{{ fop_original_stat.stat.mode }}"
+    owner: root
+    group: root
+  when: fop_case.prior is defined

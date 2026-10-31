@@ -83,6 +83,9 @@ regressions:
   - name: stack
     files:
       - lifecycle_faillock_stack.yml
+  - name: readers
+    files:
+      - lifecycle_faillock_readers.yml
   - name: profiles
     files:
       - lifecycle_faillock_other_profiles.yml

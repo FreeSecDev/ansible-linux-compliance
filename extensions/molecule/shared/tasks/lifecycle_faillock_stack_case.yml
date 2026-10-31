@@ -11,6 +11,16 @@
   loop_control:
     label: "{{ item.0 }}"
 
+- name: Faillock stack case | Write the service file of the case, or make sure that there is none
+  ansible.builtin.copy:
+    content: "{{ stack_case.service }}"
+    dest: "{{ stack_service }}"
+    follow: false
+    mode: "0644"
+    owner: root
+    group: root
+  when: stack_case.service is defined
+
 - name: Faillock stack case | Switch every rule of the topic on
   ansible.builtin.set_fact:
     "{{ item }}": true
@@ -30,7 +40,7 @@
       - lifecycle_results | map(attribute='status') | list == stack_case.statuses
       - >-
         lifecycle_results | selectattr('status', 'equalto', 'overridden') | map(attribute='reason')
-        | reject('search', stack_files | first) | list == []
+        | reject('search', stack_service if stack_case.service is defined else stack_files | first) | list == []
       - lifecycle_results | selectattr('status', 'equalto', 'overridden') | selectattr('changed') | list == []
     fail_msg: "{{ stack_label }}, {{ stack_case.name }}, apply: {{ lifecycle_results }}"
     quiet: true
@@ -75,7 +85,7 @@
 - name: Faillock stack case | Check that every applied rule was restored and faillock.conf is as built
   ansible.builtin.assert:
     that:
-      - lifecycle_results | map(attribute='status') | unique | list == ['restored']
+      - lifecycle_results | map(attribute='status') | unique | list in [['restored'], []]
       - >-
         lifecycle_results | map(attribute='rule_id') | list
         == ([stack_deny] if stack_case.statuses[0] == 'applied' else [])
@@ -83,3 +93,8 @@
       - stack_cleaned.content == stack_original.results[0].content
     fail_msg: "{{ stack_label }}, {{ stack_case.name }}, cleanup: {{ lifecycle_results }}"
     quiet: true
+
+- name: Faillock stack case | Remove the service file of the case
+  ansible.builtin.file:
+    path: "{{ stack_service }}"
+    state: absent

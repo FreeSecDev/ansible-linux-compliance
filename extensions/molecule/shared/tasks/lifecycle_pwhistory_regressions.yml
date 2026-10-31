@@ -16,7 +16,9 @@
     pwr_prefix: xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_
     pwr_conf: /etc/security/pwhistory.conf
     pwr_stack: /etc/pam.d/system-auth
+    pwr_service: /etc/pam.d/fsd-regression-pwhistory
     pwr_newline: "\n"
+    pwr_vt: "\v"
 
 - name: Pwhistory regressions | Name the three rules and their toggles
   ansible.builtin.set_fact:
@@ -149,9 +151,50 @@
       statuses: [none, restored, restored]
       text: "{{ pwr_text }}"
       recorded: []
+    - name: REMEMBER in upper case, which pam_pwhistory reads, refuses both remember rules and writes no remember
+      toggles: [true, true, true]
+      conf: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}"
+      statuses: [applied, hidden_setting, hidden_setting]
+      text: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}enforce_for_root{{ pwr_newline }}"
+      recorded: [enforce_for_root]
+    - name: the cleanup after the upper-case REMEMBER restores enforce_for_root alone
+      toggles: [false, false, false]
+      statuses: [restored, none, none]
+      text: "{{ pwr_text }}REMEMBER = 1{{ pwr_newline }}"
+      recorded: []
+    - name: remember after a vertical tab, which pam_pwhistory reads, refuses both remember rules
+      toggles: [false, true, true]
+      conf: "{{ pwr_text ~ pwr_vt ~ 'remember = 1' ~ pwr_newline }}"
+      statuses: [none, hidden_setting, hidden_setting]
+      text: "{{ pwr_text ~ pwr_vt ~ 'remember = 1' ~ pwr_newline }}"
+      recorded: []
+    - name: conf= on the pam_pwhistory line of system-auth overrides every rule, enforce_for_root as well
+      toggles: [true, true, true]
+      conf: "{{ pwr_text }}"
+      stack: "password    requisite     pam_pwhistory.so conf=/etc/security/pwhistory-other.conf use_authtok"
+      statuses: [overridden, overridden, overridden]
+      text: "{{ pwr_text }}"
+      recorded: []
+    - name: an upper-case type and REMEMBER= in a service file of its own override both remember rules
+      toggles: [true, true, true]
+      service: "PASSWORD requisite pam_pwhistory.so REMEMBER=1\n"
+      statuses: [applied, overridden, overridden]
+      text: "{{ pwr_text }}enforce_for_root{{ pwr_newline }}"
+      recorded: [enforce_for_root]
+    - name: the cleanup with the service file restores enforce_for_root alone
+      toggles: [false, false, false]
+      service: "PASSWORD requisite pam_pwhistory.so REMEMBER=1\n"
+      statuses: [restored, none, none]
+      text: "{{ pwr_text }}"
+      recorded: []
   loop_control:
     loop_var: pwr_step
     label: "{{ pwr_step.name }}"
+
+- name: Pwhistory regressions | Remove the service file of the regressions
+  ansible.builtin.file:
+    path: "{{ pwr_service }}"
+    state: absent
 
 - name: Pwhistory regressions | Give system-auth its content, mode and ownership as built back
   ansible.builtin.copy:

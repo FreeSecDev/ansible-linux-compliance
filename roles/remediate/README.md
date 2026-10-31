@@ -20,8 +20,10 @@ per setting below `/etc/sudoers.d`, and the mode, owner and group of `/etc/sudoe
 of `login_defs` (one recorded line per setting in `/etc/login.defs`: `PASS_MAX_DAYS`, `PASS_MIN_DAYS`,
 `PASS_WARN_AGE`, `PASS_MIN_LEN`, `UMASK`, `FAIL_DELAY`, `CREATE_HOME`), 8 rules of `faillock` and 3 rules of
 `pwhistory` (one recorded line per setting in `/etc/security/faillock.conf` or `/etc/security/pwhistory.conf`,
-through the shared helpers `pam_conf_prepare.yml`, `pam_conf_apply.yml` and `pam_conf_cleanup.yml`; the PAM
-stack is only read, and a setting that a module line of the stack sets is `overridden`), with the values of
+through the shared helpers `pam_conf_prepare.yml`, `pam_conf_apply.yml` and `pam_conf_cleanup.yml` and the filter
+`pam_conf_decision`, which reads the file and every file of `/etc/pam.d` as linux-pam does; the PAM stack is only
+read, a setting that a module line sets or redirects with `conf=` is `overridden`, and a line that pam reads but the
+collection would not edit is `hidden_setting`), with the values of
 the selected profile
 ([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md),
 [ADR 0022](../../docs/adr/0022-native-sudo-drop-ins.md),

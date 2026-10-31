@@ -35,6 +35,32 @@
     state: "{{ 'absent' if pwr_step.edit.absent | default(false) else 'present' }}"
   when: pwr_step.edit is defined
 
+- name: Pwhistory step | Write the pwhistory.conf of the step, as an administrator would
+  ansible.builtin.copy:
+    content: "{{ pwr_step.conf }}"
+    dest: "{{ pwr_conf }}"
+    follow: false
+    mode: "{{ pwr_original_stats.results[0].stat.mode }}"
+    owner: root
+    group: root
+  when: pwr_step.conf is defined
+
+- name: Pwhistory step | Write the service file of the step
+  ansible.builtin.copy:
+    content: "{{ pwr_step.service }}"
+    dest: "{{ pwr_service }}"
+    follow: false
+    mode: "0644"
+    owner: root
+    group: root
+  when: pwr_step.service is defined
+
+- name: Pwhistory step | Remove the service file when the step has none
+  ansible.builtin.file:
+    path: "{{ pwr_service }}"
+    state: absent
+  when: pwr_step.service is not defined
+
 - name: Pwhistory step | Give system-auth the module line of the step, or its content as built
   ansible.builtin.copy:
     content: >-

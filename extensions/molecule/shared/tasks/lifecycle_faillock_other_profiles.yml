@@ -23,6 +23,7 @@
              'rules': ['accounts_passwords_pam_faillock_audit', 'accounts_passwords_pam_faillock_deny',
                        'accounts_passwords_pam_faillock_interval', 'accounts_passwords_pam_faillock_silent',
                        'accounts_passwords_pam_faillock_unlock_time'],
+             'prior': ['unlock_time = 600'],
              'lines': ['audit', 'deny = 3', 'fail_interval = 900', 'silent', 'unlock_time = 0']},
             {'profile': 'cis_level2_server',
              'rules': ['accounts_passwords_pam_faillock_deny', 'accounts_passwords_pam_faillock_root_unlock_time',
@@ -33,12 +34,13 @@
              'rules': ['accounts_passwords_pam_faillock_audit', 'accounts_passwords_pam_faillock_deny',
                        'accounts_passwords_pam_faillock_deny_root', 'accounts_passwords_pam_faillock_interval',
                        'accounts_passwords_pam_faillock_unlock_time'],
+             'prior': ['unlock_time = 600'],
              'lines': ['audit', 'deny = 3', 'even_deny_root', 'fail_interval = 900', 'unlock_time = 0']},
             {'profile': 'cis_workstation_l2',
              'rules': ['accounts_passwords_pam_faillock_deny',
                        'accounts_passwords_pam_faillock_even_deny_root_or_root_unlock_time',
                        'accounts_passwords_pam_faillock_unlock_time'],
-             'lines': ['deny = 5', 'root_unlock_time = 60', 'unlock_time = 900']}]}[lifecycle_platform] }}
+             'lines': ['deny = 5', 'even_deny_root', 'unlock_time = 900']}]}[lifecycle_platform] }}
 
 - name: Faillock other profiles | Check that with the lifecycle the cases apply every rule this platform selects
   ansible.builtin.assert:
@@ -61,6 +63,12 @@
   ansible.builtin.slurp:
     src: "{{ fop_conf }}"
   register: fop_original
+
+- name: Faillock other profiles | Inspect faillock.conf as built
+  ansible.builtin.stat:
+    path: "{{ fop_conf }}"
+    follow: false
+  register: fop_original_stat
 
 - name: Faillock other profiles | Apply, repeat and clean up every profile of this platform
   ansible.builtin.include_tasks:

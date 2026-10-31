@@ -57,19 +57,51 @@ Both families write the configuration file in place, as `pwquality` does with it
 login.defs topic of FREES-185 does: `ansible.builtin.lineinfile` replaces the one line of the setting in its place, or
 appends it when the setting is absent. The written line is `<setting> = <value>`, or the bare `<setting>` for a flag.
 Every native rule is `recorded_value`; before its first write the ledger records `method: line`, `setting_line` (the
-line as it was, or `null`), `written_line` and the `mode`, `owner`, `group` and `sha256` of the file. Lines are found
-as pam reads them: the setting's name after leading blanks, with or without `=`; commented lines never count and are
-never touched. The family files `faillock.yml` and `pwhistory.yml` name their file, module and stack type and share
-three helpers, `pam_conf_prepare.yml`, `pam_conf_apply.yml` and `pam_conf_cleanup.yml`, which use only
-`ansible.builtin` modules and the ledger module; no external program runs, so ADR 0004 is unchanged.
+line as it was, or `null`), `written_line` and the `mode`, `owner`, `group` and `sha256` of the file. The family
+files `faillock.yml` and `pwhistory.yml` name their file, module and stack type and share three helpers,
+`pam_conf_prepare.yml`, `pam_conf_apply.yml` and `pam_conf_cleanup.yml`, which use only `ansible.builtin` modules, the
+ledger module and the filter `freesecdev.linux_compliance.pam_conf_decision`; no external program runs, so ADR 0004 is
+unchanged.
+
+The decision is made by that filter (`plugins/filter/pam_conf.py`), which reads the file and every file of `/etc/pam.d`
+the way linux-pam 1.5.1 (Rocky Linux 9) and 1.5.3 (Ubuntu 24.04) do, not with a pattern of our own:
+
+- `pam_faillock` (`read_config_file`, `set_conf_opt`) cuts a line at `#`, strips C white space (blank, tab, newline,
+  vertical tab, form feed, carriage return) at both ends, ends the key at white space or `=`, and the **last** line of a
+  key wins. A line of 1023 characters or more, or a NUL byte, makes the module fail with `PAM_SERVICE_ERR` instead of
+  reading any setting. `deny` is read with `%hu`, the times with `%u`; a time above 604800 seconds is ignored and the
+  default kept, and `never` is `0` for `unlock_time` and `root_unlock_time`.
+- `pam_pwhistory` (`pam_modutil_search_key`) takes the **first** line whose key matches without regard to case, after
+  any leading C white space, with the key ending at blank, tab or `=`.
+- libpam assembles a service file line by line (a trailing backslash continues the line, `#` ends it), compares the
+  type without case and drops one leading `-`; `pam_faillock` then reads `conf=` and its arguments after the file,
+  `pam_pwhistory` reads `remember=` without case, so an argument always takes precedence over the file.
+
+The collection only edits a line in the form that `lineinfile` matches (`^[ \t]*<setting>(?:[ \t=]|$)`). When pam
+reads a line of the setting that the collection would not edit (a vertical tab, form feed or carriage return before
+the key or after it, or the key in another case for `pam_pwhistory`), or when the set of lines differs in any way, the
+rule is refused as `hidden_setting`, because writing a second line would leave pam reading the first one (pwhistory)
+or would let an administrator's later line win (faillock) without the collection knowing.
 
 Values come from the profile (`profile_value` in `content/catalogue.yml`): `var_accounts_passwords_pam_faillock_deny`,
 `_unlock_time` (`0`, never, for the STIG profiles), `_fail_interval`, `_root_unlock_time` and `var_password_pam_remember`.
 A line counts as compliant only in the strict form that both pam and the check read (one decimal number without a
-leading zero or a trailing comment, or the bare flag) and when it satisfies the check's comparison; a stricter value is
-kept, also when its line had another form (`deny = 03 # site` under a maximum of 4 becomes `deny = 3`).
-`even_deny_root_or_root_unlock_time` writes `root_unlock_time` (the value it exports) and is also compliant with a
-strict `even_deny_root` line, the check's other branch.
+leading zero or a trailing comment, or the bare flag) and when the value that pam stores satisfies the check's
+comparison; a stricter value is kept, also when its line had another form (`deny = 03 # site` under a maximum of 4
+becomes `deny = 3`). The times follow pam, not only the check's regular expression:
+
+- A time above 604800 in the file is ignored by `pam_faillock`, so it is never compliant and is replaced by the
+  profile's value (`unlock_time = 1000000` becomes `unlock_time = 900`). A profile value above 604800 is never written;
+  the rule is `unsupported_value`.
+- `unlock_time = 0` means never. When the profile requires `0` (the STIG profiles), only `0` complies and any other
+  value is replaced (`unlock_time = 600` becomes `unlock_time = 0`). When the profile requires a number of seconds, an
+  existing `0` (or `never`) is stricter than the profile but the check fails it; the collection does not loosen an
+  administrator's never-unlock setting and refuses the rule as `stricter_setting`.
+
+`even_deny_root_or_root_unlock_time` writes the flag `even_deny_root`, the check's first branch: `pam_faillock` uses
+`root_unlock_time` only for root accounts that `even_deny_root` already locks, so writing `root_unlock_time` alone would
+satisfy the check without locking root at all. The rule is compliant only with a strict `even_deny_root` line and
+shares that line with `accounts_passwords_pam_faillock_deny_root` when both are selected.
 
 The two RHEL `remember` rules share one line. The first rule that writes it records the prior state; the second, in
 the same run, records the same prior state without writing again. When one of them is switched off, its cleanup
@@ -82,8 +114,12 @@ Apply reports, with a reason and without a change:
 |---|---|
 | `notapplicable` | The file does not exist (the PAM package that ships it is not installed); nothing is created |
 | `not_regular_file` | The file is a symbolic link or not a regular file; nothing is written through a link |
-| `overridden` | A `pam_faillock` (`auth`) or `pam_pwhistory` (`password`) line of `/etc/pam.d/common-auth`, `common-password`, `system-auth` or `password-auth` sets the option (or the alternative flag): pam takes the module's argument over the file and the check then fails with the file's line, so the collection writes nothing and does not edit the stack. Only for rules whose check reads the stack line (`stack_checked`) |
-| `duplicate_setting` | The file sets the setting on more than one line; pam takes the last and the Ubuntu check the first |
+| `unsupported_value` | The profile requires a time above 604800 seconds, which `pam_faillock` ignores; nothing is written |
+| `overridden` | A `pam_faillock` or `pam_pwhistory` line of any file of `/etc/pam.d`, of any type and as libpam assembles it (type in any case, continued lines), carries `conf=` (every rule: the module then reads another file) or sets the option as the module reads its arguments (`deny=`, `unlock_time=` and `root_unlock_time=`, `REMEMBER=` in any case and so on; for the rules whose check reads the stack line, `stack_checked`): pam takes the argument over the file, so the collection writes nothing and does not edit the stack |
+| `unreadable_file` | The file holds a NUL byte or a line of 1023 characters or more: `pam_faillock` fails on it instead of reading any setting, and a rewrite could turn a NUL that pam still skips into one that breaks authentication |
+| `hidden_setting` | pam reads a line of the setting that the collection would not edit (see above) |
+| `duplicate_setting` | The file sets the setting on more than one line; `pam_faillock` takes the last, `pam_pwhistory` and the Ubuntu check the first |
+| `stricter_setting` | `unlock_time` or `root_unlock_time` is `0` (never) while the profile requires a number of seconds; the line is kept |
 | `method_changed` | The ledger entry was recorded by another method; clean it up first |
 | `compliant` | Exactly one strict line satisfies the check; nothing is written or recorded |
 
@@ -119,6 +155,24 @@ and sudo check before and after) and are kept `audit_only`:
 
 No pinned rule reads `retry` in `pwhistory.conf`.
 
+### 4. The reader is the oracle
+
+The model in the filter is checked against the real readers, not against our reading of them.
+`make pam-reader-verdicts` (`tools/pam/generate-reader-verdicts.sh`) writes every case of `tools/pam/reader_corpus.py`
+(about 100 hand-written files and stacks with CR, VT, FF and NUL characters, case, duplicates, long lines, comments,
+`never`, values above 604800, signs and overflows, continued and bracketed module lines and `conf=`, 160 cases of a
+deterministic fuzz corpus, and the file after the change for every rule that the filter would apply: 1506 cases in
+all), then runs, in each Molecule image,
+`tools/pam/oracle/probe-in-image.sh`: it fetches the source package of the installed `pam` (`dnf download --source` on
+Rocky Linux, `apt-get source` on Ubuntu), compiles the module's own `args_parse` and `read_config_file`
+(`pam_faillock.c`, `faillock_config.c`) and `parse_option` and `parse_config_file` (`pam_pwhistory.c`,
+`pwhistory_config.c`, `pam_modutil_searchkey.c`) into a small probe with stubs for logging, and records what each reader
+stores. The table `tests/fixtures/pam_conf/reader_verdicts.json` names the installed and source versions of both
+platforms. `tests/unit/plugins/filter/test_pam_conf_oracle.py` requires that the filter reads every case exactly as
+both readers do, that the module lines yield the arguments that libpam passes, and that no decision is `compliant` or
+`applied` while a real reader reads the file, before or after the change, looser than the profile requires. Only the
+generator runs compilers, and only inside the Molecule images; CI reads the committed table.
+
 ## Benefits
 
 Eight faillock rules and three pwhistory rules are native with the profile's values, a toggle per rule and per topic,
@@ -126,9 +180,10 @@ an exact revert and refusals that never claim a change that would not take effec
 `tests/unit/tools/test_content_golden_pam_conf.py` pins, against the OVAL of both datastreams, that every written line
 satisfies the object and the comparison of the check that reads the file (and that the commented line does not), that
 the compared value is the catalogue's value, that `stack_checked` is true exactly when the check reads the module line,
-that the role's detector (`__linux_compliance_remediate_pam_option_pattern`) finds every module line that the check's
-pattern finds, that the role reads every stack file in which a check reads a setting, and that no other catalogued rule
-reads either file, so a content update that moves a check fails CI until the families follow.
+that the filter's stack detector finds every module line that the check's pattern finds, that every stack file of a
+check is a file of `/etc/pam.d` (which the role reads whole), and that no other catalogued rule reads either file, so a
+content update that moves a check fails CI until the families follow. The reader verdict table of section 4 pins the
+filter to what pam itself reads.
 
 ## Trade-offs
 
@@ -158,10 +213,15 @@ from `remember=5`. The cycles do not scan, because a container scan reports ever
 context); the SHA-256 of the whole file after the apply and the golden test are the evidence. A real scan of a host
 whose stack loads the modules needs the libvirt cycles of FREES-181. Regression groups, each a CI leg:
 `faillock` `changes` (a change of method, a stricter value and a removed line by hand, a duplicate line, a zero-padded
-value with a comment, a commented default, a symbolic link, a missing file), `stack` (the stack that authselect or a
-pam-auth-update profile writes, loaded for the run: both rules apply and add exactly their lines; with
-`deny=3` on the module line `deny` is `overridden` and only `unlock_time` is written; the stack files are put
+value with a comment, a commented default, a symbolic link, a missing file), `readers` (an `unlock_time` above 604800
+that is rewritten, an `unlock_time = 0` that is `stricter_setting`, `deny` after a vertical tab, a form feed or a
+carriage return and `unlock_time` with a vertical tab after the key, all `hidden_setting`), `stack` (the stack that authselect or a
+pam-auth-update profile writes, loaded for the run: both rules apply and add exactly their lines; with `deny=3` on the
+module line `deny` is `overridden` and only `unlock_time` is written; with `conf=` both are `overridden`; a service file
+of its own with an upper-case `AUTH` type and `deny=3` on a continued line overrides `deny`; the stack files are put
 back), `profiles` (the STIG and CIS level 2 rules that the lifecycle profiles do not select, in check mode, applied,
-repeated and cleaned up byte for byte), and `pwhistory` `changes` (the shared `remember` line with one rule switched off
-and on, a change of method, a change by hand, a line removed by hand and `remember=` on the `pam_pwhistory` line of
-`system-auth`).
+repeated and cleaned up byte for byte; the STIG profiles start from `unlock_time = 600`, which becomes `0` and is
+restored), and `pwhistory` `changes` (the shared `remember` line with one rule switched off and on, a change of method,
+a change by hand, a line removed by hand, `remember=` and `conf=` on the `pam_pwhistory` line of `system-auth`,
+`REMEMBER` in upper case and `remember` after a vertical tab in the file (`hidden_setting`), and a service file of its
+own with an upper-case `PASSWORD` type and `REMEMBER=1`).

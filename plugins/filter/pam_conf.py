@@ -355,7 +355,7 @@ def _editable(line: str, setting: str) -> bool:
     return re.match(rf"[ \t]*{setting}(?:[ \t=]|$)", line) is not None
 
 
-def _satisfies(setting: str, comparison: str, number: int, required: int) -> bool:
+def satisfies(setting: str, comparison: str, number: int, required: int) -> bool:
     """Return whether the value that pam reads satisfies the profile, never looser than it."""
     if comparison == "at_most":
         return 1 <= number <= required
@@ -411,17 +411,20 @@ def _rule(value: object) -> Rule:
     reader, setting = given.get("reader"), given.get("setting")
     comparison, required = given.get("comparison"), given.get("required")
     checked = given.get("stack_checked")
-    if (
-        set(given) != RULE_KEYS
-        or not isinstance(reader, str)
-        or reader not in READERS
-        or setting not in SETTINGS[reader]
-        or comparison not in COMPARISONS
-        or not isinstance(required, str)
-        or not isinstance(checked, bool)
-        or (comparison == "present") != (required == "")
-        or (comparison != "present" and re.fullmatch(NUMBER, required) is None)
-    ):
+    valid = (
+        set(given) == RULE_KEYS
+        and isinstance(reader, str)
+        and reader in READERS
+        and setting in SETTINGS[reader]
+        and comparison in COMPARISONS
+    )
+    value_valid = (
+        isinstance(required, str)
+        and isinstance(checked, bool)
+        and (comparison == "present") == (required == "")
+        and (comparison == "present" or re.fullmatch(NUMBER, required) is not None)
+    )
+    if not (valid and value_valid):
         message = (
             f"pam_conf_decision needs a rule with exactly {sorted(RULE_KEYS)}: a known reader and "
             "setting, a comparison, a decimal profile value unless the setting is a flag and a "
@@ -504,7 +507,7 @@ def _number_decision(rule: Rule, current: str) -> dict[str, object]:
             "profile and the check require; the collection does not loosen it"
         )
         return _decision("stricter_setting", reason, rule.line, current)
-    if number is not None and _satisfies(rule.setting, rule.comparison, number, required):
+    if number is not None and satisfies(rule.setting, rule.comparison, number, required):
         if _strict(current, rule.setting, flag=False):
             return _decision("compliant", None, rule.line, current)
         return _decision("applied", None, f"{rule.setting} = {number}", current)

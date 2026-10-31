@@ -49,10 +49,15 @@
     file: lifecycle_faillock_regressions.yml
   when: "'lifecycle_faillock_regressions.yml' in lifecycle_regression.files"
 
-- name: Lifecycle regressions | Run the faillock regressions with pam_faillock in the PAM stack, scanned for real
+- name: Lifecycle regressions | Run the faillock regressions with pam_faillock in the PAM stack and service files
   ansible.builtin.include_tasks:
     file: lifecycle_faillock_stack.yml
   when: "'lifecycle_faillock_stack.yml' in lifecycle_regression.files"
+
+- name: Lifecycle regressions | Run the faillock regressions for values and lines that pam_faillock reads its own way
+  ansible.builtin.include_tasks:
+    file: lifecycle_faillock_readers.yml
+  when: "'lifecycle_faillock_readers.yml' in lifecycle_regression.files"
 
 - name: Lifecycle regressions | Apply and clean up the faillock rules that only other profiles select
   ansible.builtin.include_tasks:
@@ -63,6 +68,7 @@
   ansible.builtin.include_tasks:
     file: lifecycle_pwhistory_regressions.yml
   when: "'lifecycle_pwhistory_regressions.yml' in lifecycle_regression.files"
+
 - name: Lifecycle regressions | Run the login_defs regressions for a change of method and changes by hand
   ansible.builtin.include_tasks:
     file: lifecycle_login_defs_regressions.yml
