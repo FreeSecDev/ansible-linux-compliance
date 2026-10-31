@@ -81,7 +81,7 @@ PINNED_EXCEPTIONS: Final[dict[tuple[Path, str], tuple[str, ...]]] = {
     ),
     (Path("tools/reporting/parsers/grype.py"), FIX_READER): (FIX, FIX),
     (Path("tools/content/script_checks.py"), FIX_READER): (PLACEHOLDER + FIX,),
-    (Path("plugins/module_utils/compliance/catalog.py"), FIX_READER): (FIX,),
+    (Path("plugins/module_utils/compliance/catalog.py"), FIX_READER): (FIX, FIX),
 }
 
 FIX_ELEMENT: Final[re.Pattern[str]] = re.compile(

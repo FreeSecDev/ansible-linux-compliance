@@ -444,3 +444,62 @@ def test_positions_are_not_reported_without_a_receiver() -> None:
     recorder = Recorder()
     xmlsafe.parse_chunks([POSITIONED], recorder)
     assert ("end", "a") in recorder.events
+
+
+UTF7_SCE_CHECK = (
+    b'<?xml version="1.0" encoding="UTF-7"?>'
+    b'<root xmlns:x="http://checklists.nist.gov/xccdf/1.2">'
+    b"+ADw-x:check system+AD0AIg-http://open-scap.org/page/SCE+ACI-/+AD4-</root>"
+)
+
+
+@pytest.mark.parametrize(
+    "encoding", ["UTF-7", "utf-7", "ISO-8859-1", "UTF-16", "US-ASCII", "utf8", "EBCDIC-US"]
+)
+def test_a_declared_encoding_other_than_utf8_is_refused(encoding: str) -> None:
+    data = f'<?xml version="1.0" encoding="{encoding}"?><a/>'.encode()
+    with pytest.raises(xmlsafe.XmlSafetyError, match="only UTF-8 is accepted"):
+        xmlsafe.parse_chunks([data], Recorder())
+
+
+def test_the_utf7_document_that_hides_markup_from_expat_is_refused() -> None:
+    for size in (1, 7, len(UTF7_SCE_CHECK)):
+        chunks = [
+            UTF7_SCE_CHECK[index : index + size] for index in range(0, len(UTF7_SCE_CHECK), size)
+        ]
+        with pytest.raises(xmlsafe.XmlSafetyError, match="declares the encoding 'UTF-7'"):
+            xmlsafe.parse_chunks(chunks, Recorder())
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'<?xml version="1.0" encoding="utf-8"?><a/>',
+        b'<?xml version="1.0" encoding="UTF-8"?><a/>',
+        b'<?xml version="1.0"?><a/>',
+        b'\xef\xbb\xbf<?xml version="1.0" encoding="UTF-8"?><a/>',
+        b"<a/>",
+    ],
+)
+def test_utf8_documents_are_accepted(data: bytes) -> None:
+    recorder = Recorder()
+    xmlsafe.parse_chunks([data], recorder)
+    assert ("start", "a") in recorder.events
+
+
+@pytest.mark.parametrize("mark", [b"\xff\xfe", b"\xfe\xff"])
+def test_a_utf16_byte_order_mark_split_across_chunks_is_refused(mark: bytes) -> None:
+    data = mark + "<a/>".encode("utf-16-le" if mark == b"\xff\xfe" else "utf-16-be")
+    with pytest.raises(xmlsafe.XmlSafetyError, match="UTF-16 or UTF-32"):
+        xmlsafe.parse_chunks([data[:1], data[1:]], Recorder())
+
+
+def test_comments_and_processing_instructions_reach_on_markup() -> None:
+    seen: list[str] = []
+    xmlsafe.parse_chunks(
+        [b"<a><!-- one --><?target two?><b/></a>"],
+        Recorder(),
+        on_markup=lambda: seen.append("markup"),
+    )
+    assert seen == ["markup", "markup"]
+    xmlsafe.parse_chunks([b"<a><!-- ignored --><?ignored too?></a>"], Recorder())

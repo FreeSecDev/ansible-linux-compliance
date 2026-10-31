@@ -112,7 +112,16 @@ The only reliable control is therefore the content: an SCE check or script that 
 3. **The hosts refuse script checks at run time, whatever the source of the content.**
    - `catalog.refuse_script_check` refuses an XCCDF `check` whose system is not OVAL or OCIL, any element of the SCE
      namespace, any `ds:extended-component`, and any XCCDF `fix` that holds remediation code. Such a `fix` has an
-     attribute other than `id` (a `system`, a `platform`), a child element, or text other than white space.
+     attribute other than `id` (a `system`, a `platform`), a child element, text other than XML white space, a
+     comment or a processing instruction. `check` and `fix` are refused in the XCCDF 1.1 namespace too.
+   - It refuses every `ds:component-ref` `xlink:href` and every catalog `uri` that does not start with `#`. `oscap`
+     1.3.9 loads such a reference as a separate document. A `file:` path is resolved against the datastream's
+     directory and is not confined (`src/DS/sds.c`), so `../` would bring in a document that neither the digest nor
+     this check sees. `http(s)` references stay inert, because the collection never passes `--fetch-remote-resources`.
+   - `xmlsafe` refuses an XML declaration whose encoding is not UTF-8 (case-insensitive), and a UTF-16 or UTF-32 byte
+     order mark. expat is forced to UTF-8, but `oscap` parses with libxml2 (`xmlReadFd`), which honours the declared
+     encoding. A plain ASCII document that declares `UTF-7` would otherwise be text to the check and markup to the
+     scanner. This covers every parse of content, the controller's re-parse included.
    - An empty `fix` with only an `id` is accepted. It holds no code, and DISA's STIG benchmarks use it as the target of
      a `fixtext` `fixref`. The `U_CAN_Ubuntu_24-04_LTS_V1R5_STIG` benchmark that the SCC backend scans has 165 of them
      and no other kind of `fix`.
@@ -160,12 +169,27 @@ The only reliable control is therefore the content: an SCE check or script that 
 
 ## Security implications
 
-Removes root code execution from the audit path. The remaining trust in the content is the OVAL, which `oscap`
-evaluates as root but which is declarative. The refusal runs on the bytes that `oscap` reads, after the digest
-check, so a swapped or operator-supplied datastream cannot bring scripts back. The `xmlsafe` change only adds a
-position callback to its existing bounded parse. The transform parses with the same parser and never serialises
-untrusted content again. A change to `script_checks.py`, `catalog.refuse_script_check` or `xmlsafe` needs a security
-review.
+Removes root code execution from the audit path. The refusal runs on the bytes that `oscap` reads, after the digest
+check, and it covers the two ways the review of FREES-191 found to hide content from it:
+
+- a declared encoding that `oscap` decodes differently;
+- a reference to a document outside the datastream.
+
+So a swapped or operator-supplied datastream cannot bring scripts back. The `xmlsafe` change adds a position
+callback, a comment and processing-instruction callback, and the encoding refusal to its existing bounded parse. The
+transform parses with the same parser and never serialises untrusted content again.
+
+The remaining trust in the content is the OVAL, which `oscap` evaluates as root. OVAL is declarative and runs no
+code, but it is not inert:
+
+- `textfilecontent54` and the other file tests read whatever path the OVAL names, special files included. A test can
+  therefore block on a FIFO or device, or copy a secret it matched into the results. The results are root-only
+  evidence (ADR 0018), but a content update's review must cover the paths its OVAL reads.
+- CPE platform checks are OVAL only. `oscap` evaluates an XCCDF `platform` through the CPE dictionary's OVAL
+  definitions (`_xccdf_policy_cpe_check_cb`), never by check system, so they are no path to a script.
+
+A change to `script_checks.py`, `catalog.refuse_script_check`, `catalog.ScriptCheckScanner` or `xmlsafe` needs a
+security review.
 
 ## Operational consequences
 

@@ -14,7 +14,10 @@ the Python standard library. It is made safe by layering:
    (``SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)``) and no external
    entity handler, so an external subset or entity is never loaded.
 4. Element count and nesting depth are bounded while parsing.
-5. UTF-16, UTF-32 and NUL bytes are rejected.
+5. UTF-16, UTF-32 and NUL bytes are rejected, and so is an XML declaration that names an
+   encoding other than UTF-8. expat is forced to UTF-8, but the libxml2 parser of ``oscap``
+   honours the declared encoding, so a document that declares ``UTF-7`` would be text to this
+   parser and markup to the scanner (FREES-191).
 6. Elements are never stored: callers receive start, end and text events and keep
    only the values they need.
 
@@ -53,6 +56,8 @@ _DECLARATION_MARKERS: Final[tuple[bytes, ...]] = (b"<!DOCTYPE", b"<!ENTITY")
 _MARKER_OVERLAP: Final[int] = max(len(marker) for marker in _DECLARATION_MARKERS) - 1
 _NUL: Final[bytes] = b"\x00"
 _NON_UTF8_MARKS: Final[tuple[bytes, ...]] = (b"\xff\xfe", b"\xfe\xff")
+_MARK_LENGTH: Final[int] = 2
+_UTF8: Final[str] = "utf-8"
 
 
 class XmlSafetyError(ValueError):
@@ -118,13 +123,31 @@ class _Guard:
         events: XmlEvents,
         bounds: XmlBounds,
         on_position: Callable[[int], None] | None = None,
+        on_markup: Callable[[], None] | None = None,
     ) -> None:
         self.events = events
         self.bounds = bounds
         self.count = 0
         self.depth = 0
         self.on_position = on_position
+        self.on_markup = on_markup
         self.parser: expat.XMLParserType | None = None
+
+    @staticmethod
+    def declare(_version: str, encoding: str | None, _standalone: int) -> None:
+        """Refuse an XML declaration that names an encoding other than UTF-8."""
+        if encoding is not None and encoding.lower() != _UTF8:
+            _fail(f"the document declares the encoding {encoding[:32]!r}, only UTF-8 is accepted")
+
+    def comment(self, _data: str) -> None:
+        """Report a comment to ``on_markup``, when one is set."""
+        if self.on_markup is not None:
+            self.on_markup()
+
+    def instruction(self, _target: str, _data: str) -> None:
+        """Report a processing instruction to ``on_markup``, when one is set."""
+        if self.on_markup is not None:
+            self.on_markup()
 
     def locate(self) -> None:
         """Report the byte offset of the current tag to ``on_position``, when one is set."""
@@ -169,6 +192,7 @@ def parse_chunks(
     bounds: XmlBounds | None = None,
     *,
     on_position: Callable[[int], None] | None = None,
+    on_markup: Callable[[], None] | None = None,
 ) -> None:
     """Parse a UTF-8 document delivered in chunks, forwarding events.
 
@@ -180,13 +204,16 @@ def parse_chunks(
             document: the ``<`` of a start tag or of an end tag, and for the end of an
             empty-element tag the offset just after it. A controller tool uses it to cut
             elements out of a document without serialising it again (FREES-191).
+        on_markup: Called for every comment and processing instruction, so that a receiver can
+            refuse one where it accepts no content.
 
     Raises:
-        XmlSafetyError: If the document is empty, not well-formed, not UTF-8,
-            contains a NUL byte, declares a DOCTYPE or entity, or exceeds the
-            bounds. Errors raised by ``events`` propagate unchanged.
+        XmlSafetyError: If the document is empty, not well-formed, not UTF-8 (a UTF-16 or
+            UTF-32 byte order mark, or an XML declaration that names another encoding),
+            contains a NUL byte, declares a DOCTYPE or entity, or exceeds the bounds. Errors
+            raised by ``events`` propagate unchanged.
     """
-    guard = _Guard(events, XmlBounds() if bounds is None else bounds, on_position)
+    guard = _Guard(events, XmlBounds() if bounds is None else bounds, on_position, on_markup)
     parser = expat.ParserCreate(encoding="utf-8", namespace_separator="}")
     guard.parser = parser
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
@@ -197,12 +224,18 @@ def parse_chunks(
     parser.StartDoctypeDeclHandler = guard.reject_declaration
     parser.EntityDeclHandler = guard.reject_declaration
     parser.ExternalEntityRefHandler = guard.reject_declaration
+    parser.XmlDeclHandler = guard.declare
+    parser.CommentHandler = guard.comment
+    parser.ProcessingInstructionHandler = guard.instruction
     previous = b""
+    head = b""
     received = 0
     try:
         for chunk in chunks:
-            if received == 0 and chunk.startswith(_NON_UTF8_MARKS):
-                _fail("the document is UTF-16 or UTF-32, only UTF-8 is accepted")
+            if len(head) < _MARK_LENGTH:
+                head = (head + chunk)[:_MARK_LENGTH]
+                if head.startswith(_NON_UTF8_MARKS):
+                    _fail("the document is UTF-16 or UTF-32, only UTF-8 is accepted")
             if _NUL in chunk:
                 _fail("the document contains a NUL byte, only UTF-8 text is accepted")
             received += len(chunk)

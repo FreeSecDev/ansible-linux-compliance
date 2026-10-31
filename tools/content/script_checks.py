@@ -299,7 +299,7 @@ def strip_script_checks(data: bytes) -> Stripped:
     pieces.append(data[cursor:])
     result = b"".join(pieces)
     try:
-        xmlsafe.parse_chunks(_chunks(result), catalog.ScriptCheckScanner())
+        catalog.refuse_script_content(_chunks(result))
     except (xmlsafe.XmlSafetyError, catalog.ScriptCheckError) as error:
         message = f"the datastream without its scripts is not acceptable: {error}"
         raise ScriptCheckError(message) from error

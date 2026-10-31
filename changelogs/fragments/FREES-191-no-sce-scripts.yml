@@ -13,7 +13,9 @@ security_fixes:
     benchmark_info, profile_info, compliance_scan - a datastream that holds an XCCDF check whose system is not OVAL or
     OCIL, a Script Check Engine element, a data stream extended component or an XCCDF ``fix`` with remediation code
     (an attribute other than ``id``, a child element or text) is refused with ``script_check_content``. The empty
-    ``fix`` anchors of DISA's STIG benchmarks are accepted. Such content is refused
+    ``fix`` anchors of DISA's STIG benchmarks are accepted. A ``component-ref`` or catalog ``uri`` that does not start
+    with ``#`` and an XML declaration that names an encoding other than UTF-8 are refused too, because ``oscap`` would
+    load the referenced document or decode the bytes differently. Such content is refused
     whoever supplied it. The audit also refuses it in the private copy that ``oscap`` reads, and nothing is scanned
     (ADR 0026).
 minor_changes:

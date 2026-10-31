@@ -55,6 +55,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
 
 XCCDF_NAMESPACE: Final[str] = "http://checklists.nist.gov/xccdf/1.2"
+XCCDF_11_NAMESPACE: Final[str] = "http://checklists.nist.gov/xccdf/1.1"
+XLINK_HREF: Final[str] = "http://www.w3.org/1999/xlink}href"
+CATALOG_NAMESPACE: Final[str] = "urn:oasis:names:tc:entity:xmlns:xml:catalog"
 DATASTREAM_NAMESPACE: Final[str] = "http://scap.nist.gov/schema/scap/source/1.2"
 DATASTREAM_SUFFIX: Final[str] = "-ds.xml"
 DEFAULT_MAX_BYTES: Final[int] = 256 * 1024 * 1024
@@ -100,6 +103,10 @@ def _qualified(local: str) -> str:
     return f"{{{XCCDF_NAMESPACE}}}{local}"
 
 
+def _qualified_11(local: str) -> str:
+    return f"{{{XCCDF_11_NAMESPACE}}}{local}"
+
+
 _BENCHMARK: Final[str] = _qualified("Benchmark")
 _PROFILE: Final[str] = _qualified("Profile")
 _GROUP: Final[str] = _qualified("Group")
@@ -109,10 +116,15 @@ _VERSION_TAG: Final[str] = _qualified("version")
 _SELECT: Final[str] = _qualified("select")
 _REFERENCE: Final[str] = _qualified("reference")
 _COLLECTION: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}data-stream-collection"
-_CHECK: Final[str] = _qualified("check")
 _FIX: Final[str] = _qualified("fix")
+_CHECKS: Final[frozenset[str]] = frozenset({_qualified("check"), _qualified_11("check")})
+_FIXES: Final[frozenset[str]] = frozenset({_FIX, _qualified_11("fix")})
 _FIX_ANCHOR_ATTRIBUTES: Final[frozenset[str]] = frozenset({"id"})
+_XML_WHITE_SPACE: Final[str] = " \t\r\n"
 _EXTENDED_COMPONENT: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}extended-component"
+_COMPONENT_REF: Final[str] = f"{{{DATASTREAM_NAMESPACE}}}component-ref"
+_CATALOG_URI: Final[str] = f"{{{CATALOG_NAMESPACE}}}uri"
+_INTERNAL_REFERENCE: Final[str] = "#"
 _SCE_PREFIX: Final[str] = f"{{{SCE_NAMESPACE}}}"
 
 _OUTSIDE: Final[str] = "outside"
@@ -188,26 +200,42 @@ def _fail(message: str) -> NoReturn:
 def refuse_script_check(name: str, attributes: dict[str, str]) -> None:
     """Refuse an element that would make the scanner run a script of the content.
 
-    That is an XCCDF ``check`` whose ``system`` is not OVAL or OCIL (the Script Check Engine
-    uses ``http://open-scap.org/page/SCE``), any element of the SCE namespace, any data
-    stream ``extended-component``, which is where a datastream embeds its scripts, and an
-    XCCDF ``fix`` that names a system or a platform or has any attribute other than ``id``
-    (ADR 0026). An empty ``fix`` with only an ``id`` is the target of a ``fixtext`` ``fixref``
-    in DISA's benchmarks and holds no code; :class:`ScriptCheckScanner` refuses one with any
-    content.
+    That is an XCCDF 1.2 or 1.1 ``check`` whose ``system`` is not OVAL or OCIL (the Script
+    Check Engine uses ``http://open-scap.org/page/SCE``), any element of the SCE namespace,
+    any data stream ``extended-component``, which is where a datastream embeds its scripts,
+    an XCCDF ``fix`` that names a system or a platform or has any attribute other than ``id``,
+    and a ``component-ref`` ``xlink:href`` or catalog ``uri`` that does not start with ``#``:
+    ``oscap`` loads such a reference as another document, from a ``file:`` path that it does
+    not confine, which neither the digest nor this check would see (ADR 0026). An empty
+    ``fix`` with only an ``id`` is the target of a ``fixtext`` ``fixref`` in DISA's benchmarks
+    and holds no code; :class:`ScriptCheckScanner` refuses one with any content.
 
     Raises:
         ScriptCheckError: When ``name`` and ``attributes`` are such an element.
     """
-    if name == _CHECK and attributes.get("system", "") not in ACCEPTED_CHECK_SYSTEMS:
+    if name in _CHECKS and attributes.get("system", "") not in ACCEPTED_CHECK_SYSTEMS:
         system = _echo(attributes.get("system", ""))
         message = (
             f"the content holds a check with the system {system}, which runs a script that this "
             "collection did not write; only OVAL and OCIL checks are accepted"
         )
         raise ScriptCheckError(message)
-    if name == _FIX and set(attributes) - _FIX_ANCHOR_ATTRIBUTES:
+    if name in _FIXES and set(attributes) - _FIX_ANCHOR_ATTRIBUTES:
         _refuse_fix()
+    reference = (
+        attributes.get(XLINK_HREF)
+        if name == _COMPONENT_REF
+        else attributes.get("uri")
+        if name == _CATALOG_URI
+        else None
+    )
+    if reference is not None and not reference.startswith(_INTERNAL_REFERENCE):
+        message = (
+            f"the content refers to {_echo(reference)} outside the datastream, which the scanner "
+            "would load without its digest or this check; only references that start with # "
+            "are accepted"
+        )
+        raise ScriptCheckError(message)
     if name == _EXTENDED_COMPONENT or name.startswith(_SCE_PREFIX):
         message = (
             "the content embeds a Script Check Engine script or an extended component, which the "
@@ -227,8 +255,10 @@ def _refuse_fix() -> NoReturn:
 class ScriptCheckScanner:
     """Parse events that refuse script checks and remediation code (:func:`refuse_script_check`).
 
-    It also refuses a ``fix`` that has a child element or text other than white space, so the
-    only ``fix`` it accepts is an empty anchor with an ``id``.
+    It also refuses a ``fix`` that has a child element, text other than XML white space, a
+    comment or a processing instruction (pass :meth:`markup` as ``on_markup`` to
+    :func:`xmlsafe.parse_chunks`), so the only ``fix`` it accepts is an empty anchor with an
+    ``id``.
     """
 
     def __init__(self) -> None:
@@ -240,17 +270,33 @@ class ScriptCheckScanner:
         if self.in_fix:
             _refuse_fix()
         refuse_script_check(name, attributes)
-        self.in_fix = name == _FIX
+        self.in_fix = name in _FIXES
 
     def end(self, name: str, /) -> None:
         """Leave a ``fix``."""
-        if name == _FIX:
+        if name in _FIXES:
             self.in_fix = False
 
     def text(self, data: str, /) -> None:
-        """Refuse text other than white space inside a ``fix``."""
-        if self.in_fix and data.strip():
+        """Refuse text other than XML white space inside a ``fix``."""
+        if self.in_fix and data.strip(_XML_WHITE_SPACE):
             _refuse_fix()
+
+    def markup(self) -> None:
+        """Refuse a comment or processing instruction inside a ``fix``."""
+        if self.in_fix:
+            _refuse_fix()
+
+
+def refuse_script_content(chunks: Iterable[bytes], bounds: xmlsafe.XmlBounds | None = None) -> None:
+    """Parse ``chunks`` with :class:`ScriptCheckScanner`, comments and instructions included.
+
+    Raises:
+        ScriptCheckError: When the document holds a script check or remediation code.
+        xmlsafe.XmlSafetyError: When the document is not safe XML.
+    """
+    refusal = ScriptCheckScanner()
+    xmlsafe.parse_chunks(chunks, refusal, bounds, on_markup=refusal.markup)
 
 
 def _unsafe(message: str) -> NoReturn:
@@ -673,7 +719,7 @@ def parse_benchmarks(
     """
     collector = _Collector()
     try:
-        xmlsafe.parse_chunks(chunks, collector, bounds)
+        xmlsafe.parse_chunks(chunks, collector, bounds, on_markup=collector.scripts.markup)
     except xmlsafe.XmlSafetyError as error:
         raise CatalogError(str(error)) from error
     if not collector.benchmarks:

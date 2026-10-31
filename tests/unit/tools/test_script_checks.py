@@ -274,3 +274,24 @@ def test_a_result_that_still_holds_a_script_check_is_refused(
 def test_a_root_element_that_could_be_removed_is_kept_without_scripts() -> None:
     data = b'<ds:component-ref xmlns:ds="http://scap.nist.gov/schema/scap/source/1.2" id="x"/>\n'
     assert sc.strip_script_checks(data).data == data
+
+
+UTF7_SCE_CHECK = (
+    b'<?xml version="1.0" encoding="UTF-7"?>'
+    b'<root xmlns:x="http://checklists.nist.gov/xccdf/1.2">'
+    b"+ADw-x:check system+AD0AIg-http://open-scap.org/page/SCE+ACI-/+AD4-</root>"
+)
+
+
+def test_a_document_declared_in_another_encoding_fails_closed() -> None:
+    with pytest.raises(sc.ScriptCheckError, match="declares the encoding 'UTF-7'"):
+        sc.strip_script_checks(UTF7_SCE_CHECK)
+
+
+def test_a_reference_outside_the_datastream_fails_closed() -> None:
+    data = document().replace(
+        b'<ds:component-ref id="cref_oval" xlink:href="#comp_oval"/>',
+        b'<ds:component-ref id="cref_oval" xlink:href="file:../../tmp/x.xml#comp"/>',
+    )
+    with pytest.raises(sc.ScriptCheckError, match="outside the datastream"):
+        sc.strip_script_checks(data)

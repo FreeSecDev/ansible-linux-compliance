@@ -69,6 +69,8 @@ managed host any more. `make content` removes all 81 (Ubuntu 24.04) and 438 (RHE
 controller, together with all 1257 and 3460 XCCDF `fix` elements (the content's remediation code), and pins the
 digest of the processed datastream next to the published one. The hosts refuse any script
 check at run time (`script_check_content`), in every parse of the content and in the private copy that `oscap` reads.
+That refusal also refuses references outside the datastream (`oscap` resolves `file:` references unconfined) and any
+declared encoding other than UTF-8 (libxml2 honours it, the checking parser does not).
 The former SCE-only rules are `notchecked`. The text below records the situation before FREES-191.
 
 - **Asset:** root execution on the managed host.

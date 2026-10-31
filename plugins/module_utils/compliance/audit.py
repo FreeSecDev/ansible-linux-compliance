@@ -1061,7 +1061,7 @@ def copy_content(source: str, directory: Path, pinned: str) -> ContentCopy:
         ):
             target.chmod(FILE_MODE)
             copied = _CopiedChunks(handle, copy)
-            xmlsafe.parse_chunks(copied, catalog.ScriptCheckScanner())
+            catalog.refuse_script_content(copied)
             copy.flush()
     except catalog.ScriptCheckError as error:
         _discard_copy(directory)

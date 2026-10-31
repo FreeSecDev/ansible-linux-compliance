@@ -288,3 +288,29 @@ def test_a_private_copy_that_is_not_well_formed_is_invalid_content(harness: Harn
         audit.copy_content(str(path), directory, hashlib.sha256(b"<a>").hexdigest())
     assert raised.value.error_type == "invalid_content"
     assert not directory.exists()
+
+
+def test_a_private_copy_that_refers_outside_the_datastream_is_refused(harness: Harness) -> None:
+    data = harness.datastream.read_bytes().replace(
+        b'<ds:component-ref id="synthetic_cref_demo"/>',
+        b'<ds:component-ref id="synthetic_cref_demo" '
+        b'xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="file:../../tmp/x.xml#c"/>',
+    )
+    path = harness.content_dir / "external-ds.xml"
+    path.write_bytes(data)
+    directory = harness.root / "copy-target"
+    with pytest.raises(audit.AuditError, match="outside the datastream") as raised:
+        audit.copy_content(str(path), directory, hashlib.sha256(data).hexdigest())
+    assert raised.value.error_type == "script_check_content"
+    assert not directory.exists()
+
+
+def test_a_private_copy_declared_in_another_encoding_is_invalid_content(harness: Harness) -> None:
+    data = b'<?xml version="1.0" encoding="UTF-7"?><a/>'
+    path = harness.content_dir / "utf7-ds.xml"
+    path.write_bytes(data)
+    directory = harness.root / "copy-target"
+    with pytest.raises(audit.AuditError, match="only UTF-8 is accepted") as raised:
+        audit.copy_content(str(path), directory, hashlib.sha256(data).hexdigest())
+    assert raised.value.error_type == "invalid_content"
+    assert not directory.exists()

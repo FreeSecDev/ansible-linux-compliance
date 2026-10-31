@@ -471,7 +471,10 @@ def test_the_rule_is_part_of_the_repository_guard() -> None:
     ("relative", "pinned"),
     [
         ("tools/content/script_checks.py", f'FIX = f"{{XCCDF}}{FIX}"\n'),
-        ("plugins/module_utils/compliance/catalog.py", f'_FIX = _qualified("{FIX}")\n'),
+        (
+            "plugins/module_utils/compliance/catalog.py",
+            f'_FIX = _qualified("{FIX}")\n_FIX_11 = _qualified_11("{FIX}")\n',
+        ),
     ],
 )
 def test_the_fix_removal_and_refusal_are_pinned_exactly(

@@ -892,3 +892,88 @@ class TestScriptChecks:
             xmlsafe.parse_chunks(
                 [collection(benchmark(rule("a", inner=check(SCE_SYSTEM))))], scanner
             )
+
+
+UTF7_SCE_CHECK = (
+    b'<?xml version="1.0" encoding="UTF-7"?>'
+    b'<root xmlns:x="http://checklists.nist.gov/xccdf/1.2">'
+    b"+ADw-x:check system+AD0AIg-http://open-scap.org/page/SCE+ACI-/+AD4-</root>"
+)
+DS_NAMESPACES = (
+    'xmlns:ds="http://scap.nist.gov/schema/scap/source/1.2" '
+    'xmlns:xlink="http://www.w3.org/1999/xlink" '
+    'xmlns:cat="urn:oasis:names:tc:entity:xmlns:xml:catalog"'
+)
+XCCDF_11 = 'xmlns:y="http://checklists.nist.gov/xccdf/1.1"'
+
+
+def scanned(document: str | bytes) -> None:
+    data = document.encode() if isinstance(document, str) else document
+    catalog.refuse_script_content([data])
+
+
+class TestScriptCheckBypasses:
+    """The bypasses of the FREES-191 review stay closed (B1, B2 and the non-blocking items)."""
+
+    def test_a_document_declared_in_another_encoding_is_refused(self) -> None:
+        with pytest.raises(xmlsafe.XmlSafetyError, match="declares the encoding 'UTF-7'"):
+            scanned(UTF7_SCE_CHECK)
+        with pytest.raises(catalog.CatalogError, match="declares the encoding 'UTF-7'"):
+            parse(UTF7_SCE_CHECK)
+
+    @pytest.mark.parametrize(
+        "element",
+        [
+            '<ds:component-ref id="c" xlink:href="file:../../tmp/x.xml#comp"/>',
+            '<ds:component-ref id="c" xlink:href="https://example.test/x.xml"/>',
+            '<ds:component-ref id="c" xlink:href="x.xml"/>',
+            '<ds:component-ref id="c" xlink:href=""/>',
+            '<cat:uri name="oval.xml" uri="file:/etc/x.xml"/>',
+            '<cat:uri name="oval.xml" uri="x.xml#c"/>',
+        ],
+    )
+    def test_a_reference_outside_the_datastream_is_refused(self, element: str) -> None:
+        document = (
+            f"<ds:data-stream-collection {DS_NAMESPACES}>{element}</ds:data-stream-collection>"
+        )
+        with pytest.raises(catalog.ScriptCheckError, match="outside the datastream"):
+            scanned(document)
+        with pytest.raises(catalog.ScriptCheckError, match="outside the datastream"):
+            parse(document.encode())
+
+    def test_internal_references_and_a_component_ref_without_href_are_accepted(self) -> None:
+        scanned(
+            f"<ds:data-stream-collection {DS_NAMESPACES}>"
+            '<ds:component-ref id="a" xlink:href="#comp_a"/>'
+            '<cat:uri name="oval.xml" uri="#cref_oval"/>'
+            '<ds:component-ref id="b"/>'
+            "</ds:data-stream-collection>"
+        )
+
+    @pytest.mark.parametrize(
+        "element",
+        [
+            f'<y:check system="{SCE_SYSTEM}"/>',
+            f'<y:{FIX_WORD} system="urn:xccdf:{FIX_WORD}:script:sh">rm -rf /</y:{FIX_WORD}>',
+            f"<y:{FIX_WORD}>rm -rf /</y:{FIX_WORD}>",
+        ],
+    )
+    def test_xccdf_11_script_checks_and_fixes_are_refused(self, element: str) -> None:
+        with pytest.raises(catalog.ScriptCheckError):
+            scanned(f"<r {XCCDF_11}>{element}</r>")
+
+    @pytest.mark.parametrize(
+        "inner",
+        ["<!-- code -->", "<?code x?>", "&#xA0;", "&#x61;", "<![CDATA[code]]>"],
+    )
+    def test_a_fix_with_a_comment_instruction_or_other_content_is_refused(self, inner: str) -> None:
+        anchor = f'<x:{FIX_WORD} id="a">{inner}</x:{FIX_WORD}>'
+        with pytest.raises(catalog.ScriptCheckError, match="remediation code"):
+            scanned(collection(benchmark(rule("a", inner=anchor))))
+        with pytest.raises(catalog.ScriptCheckError, match="remediation code"):
+            parse(collection(benchmark(rule("a", inner=anchor))))
+
+    def test_comments_outside_a_fix_are_accepted(self) -> None:
+        scanned(collection("<!-- note -->", benchmark(rule("a", inner="<!-- note --><?pi x?>"))))
+        anchor = f'<x:{FIX_WORD} id="a">&#x20;&#x0A;</x:{FIX_WORD}>'
+        scanned(collection(benchmark(rule("a", inner=anchor))))
