@@ -1,0 +1,86 @@
+---
+family: login_defs
+disruptive: true
+containment: >-
+  login_defs only rewrites one line per setting in /etc/login.defs with lineinfile and puts the recorded line back on
+  cleanup; it never touches /etc/shadow, /etc/passwd, PAM or an existing account. The defaults take effect when
+  shadow-utils sets a password or creates an account and, on Ubuntu, through pam_umask in a PAM login session. The
+  harness never logs in and never changes a password: it connects with docker exec through the Docker API as root,
+  without sshd, PAM, sudo or a login shell, so neither a password age nor a umask can cut it off, and the guard's
+  connection test after every remediate run proves that it still reaches the same unprivileged container. The
+  allow-list names login_defs only for the runs of this topic.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    ComplianceAsCode limits accounts_umask_etc_login_defs to the system_with_kernel platform, which excludes
+    containers, and the RHEL 9 datastream's platform checks do not recognise Rocky Linux, so those rules are
+    notapplicable whatever the file says. The lines of /etc/login.defs that the regressions compare by SHA-256 are the
+    evidence; tests/unit/tools/test_content_golden_login_defs.py checks the pattern and the comparison of every check
+    against the OVAL of both datastreams.
+state:
+  files:
+    - path: /etc/login.defs
+      rewritten: true
+    - path: /etc/login.defs.d
+  packages:
+    - name: login
+      platforms:
+        - ubuntu
+    - name: passwd
+      platforms:
+        - ubuntu
+    - name: shadow-utils
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/login.defs
+      exists: true
+      type: file
+      mode: "0644"
+      owner: root
+      group: root
+      uid: 0
+      gid: 0
+      changes:
+        - checksum
+    - path: /etc/login.defs.d
+      exists: false
+pre_states:
+  - name: as built
+    audit: true
+    unchanged:
+      - rule: accounts_password_warn_age_login_defs
+        status: compliant
+  - name: customised by an administrator
+    audit: false
+    files:
+      - path: /etc/login.defs
+        lines:
+          - regexp: '^PASS_MAX_DAYS[ \t]'
+            line: "PASS_MAX_DAYS   400"
+          - regexp: '^PASS_WARN_AGE[ \t]'
+            line: pass_warn_age 3
+          - regexp: '^UMASK[ \t]'
+            line: "UMASK           077"
+    unchanged:
+      - rule: accounts_umask_etc_login_defs
+        status: compliant
+regressions:
+  - name: changes
+    files:
+      - lifecycle_login_defs_regressions.yml
+  - name: refusals
+    files:
+      - lifecycle_login_defs_refusals.yml
+  - name: values
+    files:
+      - lifecycle_login_defs_values.yml
+  - name: profiles
+    files:
+      - lifecycle_login_defs_other_profiles.yml

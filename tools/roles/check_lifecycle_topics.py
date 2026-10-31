@@ -16,7 +16,9 @@ expectation, an expectation or a pre-state for an item that is not declared, an 
 attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
 status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
-``content`` is not a non-empty text or that also sets an owner or group, a pre-state ``applied``
+``content`` is not a non-empty text or that also sets an owner or group, pre-state ``lines``
+(``regexp`` and ``line`` on one line each) of a file that ``state.files`` does not declare
+``rewritten`` or of an entry that also sets ``content`` (FREES-185), a pre-state ``applied``
 override that the top-level ``applied`` would refuse, or ``unselected_platforms`` that name
 every platform, which would let the topic run nowhere. A topic therefore cannot gain a native rule
 without its lifecycle test, and the harness cannot silently skip a declared expectation or a
@@ -152,8 +154,9 @@ UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"
 UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
 REWRITTEN_KEY: Final[str] = "rewritten"
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset(
-    {"path", "mode", "owner", "group", "content"}
+    {"path", "mode", "owner", "group", "content", "lines"}
 )
+PRE_STATE_LINE_KEYS: Final[frozenset[str]] = frozenset({"regexp", "line"})
 MAX_CONTENT: Final[int] = 4096
 UNSELECTED_KEYS: Final[frozenset[str]] = frozenset({"platform", "reason"})
 PLATFORMS_KEY: Final[str] = "platforms"
@@ -223,6 +226,7 @@ class Declaration:
         self.items: dict[str, set[str]] = {category: set() for category in CATEGORY_KEYS}
         self.drivers: frozenset[str] = frozenset(DRIVERS)
         self.skipped_platforms: set[str] = set()
+        self.rewritten: set[str] = set()
         self.topic_drivers: frozenset[str] | None = None
         self.pre_state_drivers: list[frozenset[str] | None] = [None]
         self.pre_state_modes: list[frozenset[str]] = [TOGGLE_MODES]
@@ -303,6 +307,8 @@ class Declaration:
                 if key in self.items[category]:
                     self.error(f"{what} declares {key} twice")
                 self.items[category].add(key)
+                if category == "files" and item.get(REWRITTEN_KEY) is True:
+                    self.rewritten.add(key)
         if not any(self.items.values()):
             self.error("state declares no item")
 
@@ -421,8 +427,10 @@ class Declaration:
                 self.error(f"{where} sets {key}, which state.files does not declare")
             if "content" in item:
                 self._pre_state_content(item, where)
-            elif len(set(item) & {"mode", "owner", "group"}) == 0:
+            elif len(set(item) & {"mode", "owner", "group", "lines"}) == 0:
                 self.error(f"{where} sets no mode, owner or group")
+            if "lines" in item:
+                _pre_state_file_lines(self, item, where, key)
             mode = item.get("mode")
             if "mode" in item and (not isinstance(mode, str) or MODE.fullmatch(mode) is None):
                 self.error(f"{where} needs a four-digit octal mode string")
@@ -618,6 +626,40 @@ def check_profiles(declaration: Declaration, value: object) -> None:
             declaration.error(f"{what} names {profile}, which the datastream of {platform} lacks")
         if not _text(item.get("reason")):
             declaration.error(f"{what} needs a reason")
+
+
+def _pre_state_file_lines(
+    declaration: Declaration, item: dict[str, object], where: str, key: str | None
+) -> None:
+    """Check the lines of a pre-state file entry, which edit a declared, rewritten file."""
+    if "content" in item:
+        declaration.error(
+            f"{where} sets both content and lines: content writes a file that does not "
+            "exist, lines edit one that does"
+        )
+    _pre_state_lines(declaration, item["lines"], where)
+    if key is not None and key not in declaration.rewritten:
+        declaration.error(
+            f"{where} sets lines of {key}, which state.files must declare rewritten: "
+            "the harness puts its content back with a new inode after the cycle"
+        )
+
+
+def _pre_state_lines(declaration: Declaration, value: object, what: str) -> None:
+    """Check the lines that a pre-state sets in a declared file, as an administrator would."""
+    entries = declaration.sequence(value, f"{what}.lines")
+    if not entries:
+        declaration.error(f"{what}.lines must not be empty")
+    for index, entry in enumerate(entries):
+        where = f"{what}.lines[{index}]"
+        item = declaration.mapping(entry, where)
+        if item is None:
+            continue
+        declaration.keys(item, PRE_STATE_LINE_KEYS, where)
+        for key in sorted(PRE_STATE_LINE_KEYS):
+            text = item.get(key)
+            if not _text(text) or "\n" in str(text):
+                declaration.error(f"{where} needs a {key} on one line")
 
 
 def _regression_groups(declaration: Declaration, value: object) -> None:
