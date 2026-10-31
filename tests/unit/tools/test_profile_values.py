@@ -3,25 +3,53 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-from typing import TYPE_CHECKING, cast
+from pathlib import Path
+from typing import cast
 
 import pytest
+import yaml
 
 from ansible_collections.freesecdev.linux_compliance.plugins.module_utils.compliance import (
     catalog,
 )
 from tests.unit.tools.test_generate_catalogue import RULE, read, source_document
 from tools.roles import generate_catalogue as gen
+from tools.roles import generate_toggles
 from tools.roles import profile_values as pv
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 XCCDF = "http://checklists.nist.gov/xccdf/1.2"
 VALUE = pv.VALUE_PREFIX
 PROFILE = pv.PROFILE_PREFIX
 MINLEN = VALUE + "var_password_pam_minlen"
 BANNER = VALUE + "login_banner_text"
+TIMEOUT = VALUE + "var_sudo_timestamp_timeout"
+FIX_ELEMENT = "fix"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+PINNED_TIMEOUT_RULE = RULE + "sudo_require_reauthentication"
+PINNED_TIMEOUT_VALUE_ID = TIMEOUT
+CIS_TIMEOUT = "15"
+STIG_TIMEOUT = "0"
+DEFAULT_TIMEOUT = "5"
+PINNED_TIMEOUT_VALUES = {
+    "ubuntu2404": {
+        "cis_level1_server": CIS_TIMEOUT,
+        "cis_level1_workstation": CIS_TIMEOUT,
+        "cis_level2_server": CIS_TIMEOUT,
+        "cis_level2_workstation": CIS_TIMEOUT,
+    },
+    "rhel9": {
+        "ccn_advanced": DEFAULT_TIMEOUT,
+        "ccn_basic": DEFAULT_TIMEOUT,
+        "ccn_intermediate": DEFAULT_TIMEOUT,
+        "pci-dss": DEFAULT_TIMEOUT,
+        "cis": CIS_TIMEOUT,
+        "cis_server_l1": CIS_TIMEOUT,
+        "cis_workstation_l1": CIS_TIMEOUT,
+        "cis_workstation_l2": CIS_TIMEOUT,
+        "stig": STIG_TIMEOUT,
+        "stig_gui": STIG_TIMEOUT,
+    },
+}
 
 
 def document(extra: str = "") -> bytes:
@@ -44,8 +72,9 @@ def document(extra: str = "") -> bytes:
         f'<Rule id="{RULE}accounts_password_pam_minlen"><check system="oval">'
         f'<check-export export-name="v" value-id="{MINLEN}"/><check-content-ref name="d"/></check>'
         f'</Rule><Rule id="{RULE}banner_etc_issue"/>'
-        f'<Rule id="{RULE}sudo_require_reauthentication"><fix system="sh">t=<sub idref="{MINLEN}"/>'
-        f'</fix><check system="oval"><check-content-ref name="d"/></check><sub idref="{BANNER}"/>'
+        f'<Rule id="{RULE}sudo_require_reauthentication"><{FIX_ELEMENT} system="sh">'
+        f'<value selector="0">0</value>t=<sub idref="{TIMEOUT}"/></{FIX_ELEMENT}>'
+        f'<check system="oval"><check-content-ref name="d"/></check><sub idref="{BANNER}"/>'
         f"</Rule></Group>{extra}</Benchmark>"
         f"</data-stream-collection>"
     ).encode()
@@ -76,11 +105,18 @@ def test_the_values_refinements_and_exports_of_the_benchmark_are_read(tmp_path: 
         RULE + "banner_etc_issue": frozenset(),
         RULE + "sudo_require_reauthentication": frozenset(),
     }
-    assert found.fixes == {
-        RULE + "accounts_password_pam_minlen": frozenset(),
-        RULE + "banner_etc_issue": frozenset(),
-        RULE + "sudo_require_reauthentication": frozenset({MINLEN}),
-    }
+
+
+def test_the_fix_elements_of_the_content_are_never_kept(tmp_path: Path) -> None:
+    found = values(tmp_path)
+    assert [field.name for field in dataclasses.fields(found)] == [
+        "content_sha256",
+        "values",
+        "refinements",
+        "exports",
+    ]
+    assert TIMEOUT not in found.values
+    assert all(TIMEOUT not in exported for exported in found.exports.values())
 
 
 def test_a_profile_takes_its_refined_option_or_the_default(tmp_path: Path) -> None:
@@ -180,11 +216,11 @@ def test_resolve_refuses_a_rule_whose_checks_do_not_export_the_value(tmp_path: P
         pv.resolve(streams(tmp_path), RULE + "accounts_password_pam_minlen", "login_banner_text")
 
 
-def test_resolve_takes_a_value_that_the_fixes_substitute(tmp_path: Path) -> None:
+def test_resolve_takes_a_pinned_value_from_the_profile_refinements(tmp_path: Path) -> None:
     rule = RULE + "sudo_require_reauthentication"
     with pytest.raises(pv.ProfileValueError, match="do not export"):
         pv.resolve(streams(tmp_path), rule, "var_password_pam_minlen")
-    resolved = pv.resolve(streams(tmp_path), rule, "var_password_pam_minlen", pv.FIX_SOURCE)
+    resolved = pv.resolve(streams(tmp_path), rule, "var_password_pam_minlen", pinned=True)
     assert resolved == [
         {
             "datastream": "test",
@@ -195,27 +231,12 @@ def test_resolve_takes_a_value_that_the_fixes_substitute(tmp_path: Path) -> None
     ]
 
 
-def test_resolve_refuses_a_value_that_the_fixes_do_not_substitute(tmp_path: Path) -> None:
+def test_resolve_refuses_a_pinned_value_that_the_datastream_does_not_define(
+    tmp_path: Path,
+) -> None:
     rule = RULE + "sudo_require_reauthentication"
-    with pytest.raises(pv.ProfileValueError, match="do not substitute"):
-        pv.resolve(streams(tmp_path), rule, "login_banner_text", pv.FIX_SOURCE)
-    with pytest.raises(pv.ProfileValueError, match="do not substitute"):
-        pv.resolve(
-            streams(tmp_path),
-            RULE + "accounts_password_pam_minlen",
-            "var_password_pam_minlen",
-            "fix",
-        )
-
-
-def test_resolve_refuses_an_unknown_value_source(tmp_path: Path) -> None:
-    with pytest.raises(pv.ProfileValueError, match="the value source 'oval' is not one of"):
-        pv.resolve(
-            streams(tmp_path),
-            RULE + "accounts_password_pam_minlen",
-            "var_password_pam_minlen",
-            "oval",
-        )
+    with pytest.raises(pv.ProfileValueError, match=r"^test: the datastream does not define"):
+        pv.resolve(streams(tmp_path), rule, "var_sudo_timestamp_timeout", pinned=True)
 
 
 def test_resolve_names_the_datastream_of_a_profile_that_cannot_take_the_value(
@@ -265,31 +286,41 @@ def test_a_native_rule_with_a_profile_value_gets_the_value_of_every_selecting_pr
     assert "profile_values:" in gen.render_catalogue(built)
 
 
-def test_a_profile_value_from_the_fixes_is_resolved_from_the_fixes(tmp_path: Path) -> None:
-    data = valued_document()
+def test_a_pinned_profile_value_id_is_resolved_without_a_check_export(tmp_path: Path) -> None:
+    data = source_document()
     native = cast("list[dict[str, object]]", data["native_rules"])
-    native[0]["profile_value_source"] = "fix"
-    streams = with_values(tmp_path)
-    with pytest.raises(gen.GenerationError, match="do not substitute"):
-        gen.build(gen.parse_source(data), streams)
-    fixed = [
+    native[0]["profile_value_id"] = MINLEN
+    streams = [
         dataclasses.replace(
             stream,
-            values=dataclasses.replace(
-                cast("pv.StreamValues", stream.values),
-                exports={},
-                fixes={RULE + "file_permissions_crontab": frozenset({MINLEN})},
-            ),
+            values=dataclasses.replace(cast("pv.StreamValues", stream.values), exports={}),
         )
-        for stream in streams
+        for stream in with_values(tmp_path)
     ]
-    built = gen.build(gen.parse_source(data), fixed)
+    built = gen.build(gen.parse_source(data), streams)
     crontab = next(
         rule for rule in built.rules if rule["rule_id"] == RULE + "file_permissions_crontab"
     )
     parameters = cast("dict[str, object]", crontab["parameters"])
     assert parameters["value_id"] == "var_password_pam_minlen"
-    assert "profile_value_source" not in crontab
+    entries = cast("list[dict[str, object]]", parameters["profile_values"])
+    assert [(entry["datastream"], entry["profiles"], entry["value"]) for entry in entries] == [
+        ("first", ["server"], ["15"]),
+        ("second", ["stig"], ["15"]),
+    ]
+    assert "profile_value_id" not in crontab
+    with pytest.raises(gen.GenerationError, match="do not export"):
+        gen.build(gen.parse_source(valued_document()), streams)
+
+
+def test_a_pinned_profile_value_id_that_the_content_does_not_define_is_an_error(
+    tmp_path: Path,
+) -> None:
+    data = source_document()
+    native = cast("list[dict[str, object]]", data["native_rules"])
+    native[0]["profile_value_id"] = TIMEOUT
+    with pytest.raises(gen.GenerationError, match="the datastream does not define"):
+        gen.build(gen.parse_source(data), with_values(tmp_path))
 
 
 def test_a_profile_value_needs_the_values_of_every_datastream(tmp_path: Path) -> None:
@@ -332,15 +363,25 @@ def test_a_datastream_whose_values_cannot_be_read_is_an_error(
             {"parameters": {"profile_values": []}},
             "parameters must be a mapping without the generated keys",
         ),
-        ({"extra": 1}, "and an optional 'profile_value'"),
+        ({"extra": 1}, "and an optional 'profile_value' or 'profile_value_id'"),
+        ({"profile_value_source": "fix"}, "and an optional 'profile_value' or 'profile_value_id'"),
         (
-            {"profile_value_source": "fix"},
-            "profile_value_source must be one of \\['check', 'fix'\\] and needs 'profile_value'",
+            {"profile_value": "var_password_pam_minlen", "profile_value_source": "check"},
+            "and an optional 'profile_value' or 'profile_value_id'",
         ),
         (
-            {"profile_value": "var_password_pam_minlen", "profile_value_source": "oval"},
-            "profile_value_source must be one of",
+            {"profile_value": "var_password_pam_minlen", "profile_value_id": MINLEN},
+            "may set 'profile_value' or 'profile_value_id', not both",
         ),
+        (
+            {"profile_value_id": "var_password_pam_minlen"},
+            "profile_value_id must be the full identifier of an XCCDF value",
+        ),
+        (
+            {"profile_value_id": MINLEN + "-x"},
+            "profile_value_id must be the full identifier of an XCCDF value",
+        ),
+        ({"profile_value_id": 3}, "profile_value_id must be the full identifier"),
     ],
 )
 def test_an_invalid_profile_value_or_parameters_are_refused(
@@ -351,3 +392,37 @@ def test_an_invalid_profile_value_or_parameters_are_refused(
     native[0].update(change)
     with pytest.raises(gen.GenerationError, match=message):
         gen.parse_source(data)
+
+
+def repository_yaml(relative: Path) -> dict[str, object]:
+    return cast(
+        "dict[str, object]",
+        yaml.safe_load((REPOSITORY_ROOT / relative).read_text(encoding="utf-8")),
+    )
+
+
+def test_no_catalogue_entry_takes_a_value_from_the_content_fixes() -> None:
+    native = cast("list[dict[str, object]]", repository_yaml(gen.SOURCE)["native_rules"])
+    assert all("profile_value_source" not in entry for entry in native)
+    pinned = {
+        str(entry["rule_id"]): entry[gen.PROFILE_VALUE_ID_KEY]
+        for entry in native
+        if gen.PROFILE_VALUE_ID_KEY in entry
+    }
+    assert pinned == {PINNED_TIMEOUT_RULE: PINNED_TIMEOUT_VALUE_ID}
+
+
+def test_the_generated_sudo_timeout_keeps_the_value_of_every_pinned_profile() -> None:
+    rules = cast(
+        "list[dict[str, object]]",
+        repository_yaml(generate_toggles.CATALOGUE)[generate_toggles.RULES_KEY],
+    )
+    (rule,) = [rule for rule in rules if rule["rule_id"] == PINNED_TIMEOUT_RULE]
+    parameters = cast("dict[str, object]", rule["parameters"])
+    assert parameters["value_id"] == PINNED_TIMEOUT_VALUE_ID.removeprefix(pv.VALUE_PREFIX)
+    found: dict[str, dict[str, str]] = {}
+    for entry in cast("list[dict[str, object]]", parameters["profile_values"]):
+        value = "".join(cast("list[str]", entry["value"]))
+        for profile in cast("list[str]", entry["profiles"]):
+            found.setdefault(str(entry["datastream"]), {})[profile] = value
+    assert found == PINNED_TIMEOUT_VALUES

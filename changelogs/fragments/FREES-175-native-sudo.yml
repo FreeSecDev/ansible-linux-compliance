@@ -14,9 +14,6 @@ minor_changes:
     ``requiretty``, the ``/usr/bin/sudo`` group and mode, and the package stay
     ``audit_only`` (ADR 0022). ``sudo`` stays disruptive and needs ``sudo`` in
     ``linux_compliance_remediate_allow_disruptive``.
-  - >-
-    catalogue - a native rule may take its profile value from the content's fixes with
-    ``profile_value_source: fix`` when its check accepts a range, as for ``var_sudo_timestamp_timeout``.
 trivial:
   - >-
     Repository guard - ``validate`` stays refused except for the reviewed ``/usr/sbin/visudo -cf %s`` of the sudo

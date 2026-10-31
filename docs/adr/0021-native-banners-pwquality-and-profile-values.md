@@ -103,7 +103,8 @@ Every banner rule is `recorded_value` and records only the attribute it changes,
 refused as `prior_too_large`, so the record fits the ledger's 4096 characters), `mode`, `owner` (uid) or `group` (gid).
 Cleanup restores exactly that attribute and nothing else, so switching off only the mode rule leaves the banner text,
 and switching off the text rule of a file that did not exist removes the file. A missing file is created by the text
-rule with mode `0644`, owner and group root, as ComplianceAsCode's own fix does; the mode, owner and group rules then
+rule with mode `0644`, owner and group root, the most that the OVAL checks of its mode, owner and group rules accept
+(amended by [ADR 0025](0025-own-ansible-remediation-only.md): the content's fix is not a reference); those rules then
 find it compliant, and in check mode they predict that from the file the text rule would create. A symbolic link or
 other non-regular file is never changed (`not_regular_file`). A file that disappeared or changed type before cleanup
 keeps its ledger entry and reports `cleanup_incomplete`, as for `file_permissions` (ADR 0011, FREES-52 amendment).
