@@ -43,14 +43,12 @@
   ansible.builtin.assert:
     that:
       - lifecycle_unchanged.keys() | difference(lifecycle_rule_ids) | length == 0
-      - >-
-        lifecycle_unchanged.values() | difference(['compliant', 'notapplicable', 'overridden', 'interface_override'])
-        | length == 0
+      - lifecycle_unchanged.values() | difference(['compliant', 'notapplicable', 'overridden']) | length == 0
       - lifecycle_changed_ids | length > 0
     fail_msg: >-
       {{ lifecycle_label }}: the pre-state declares {{ lifecycle_unchanged }} unchanged, but only the rules
-      {{ lifecycle_rule_ids }} run on this platform, an unchanged rule is compliant, notapplicable, overridden or
-      interface_override, and at least one rule must change something.
+      {{ lifecycle_rule_ids }} run on this platform, an unchanged rule is compliant, notapplicable or overridden,
+      and at least one rule must change something.
     quiet: true
 
 - name: Lifecycle cycle | Refuse a rule toggle that an earlier cycle left set before a topic-toggle cycle
@@ -261,10 +259,9 @@
     that:
       - lifecycle_findings | map(attribute='rule_id') | list == lifecycle_rule_ids
       - >-
-        lifecycle_findings | rejectattr('rule_id', 'in', lifecycle_overridden_ids + lifecycle_interface_ids)
-        | map(attribute='outcome')
-        | difference(lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes | default([]))
-        | length == 0
+        lifecycle_findings | rejectattr('rule_id', 'in', lifecycle_overridden_ids) | map(attribute='outcome')
+        | difference(lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes
+        | default([])) | length == 0
       - >-
         lifecycle_findings | selectattr('rule_id', 'in', lifecycle_overridden_ids) | map(attribute='outcome')
         | difference(['fail'] + (lifecycle_topic.audit | default({})).applied_outcomes | default([]))
@@ -273,8 +270,7 @@
       {{ lifecycle_label }}: the audit after apply reported
       {{ lifecycle_findings | items2dict(key_name='rule_id', value_name='outcome') }}; expected
       {{ lifecycle_applied_outcomes + (lifecycle_topic.audit | default({})).applied_outcomes | default([]) }}, and
-      fail for the overridden rules {{ lifecycle_overridden_ids }}; the rules refused for a looser interface
-      value, {{ lifecycle_interface_ids }}, are as the instance was built.
+      fail for the overridden rules {{ lifecycle_overridden_ids }}.
     quiet: true
   vars:
     lifecycle_findings: >-
@@ -283,9 +279,6 @@
     lifecycle_overridden_ids: >-
       {{ lifecycle_unchanged | dict2items | selectattr('value', 'equalto', 'overridden') | map(attribute='key')
       | list }}
-    lifecycle_interface_ids: >-
-      {{ lifecycle_unchanged | dict2items | selectattr('value', 'equalto', 'interface_override')
-      | map(attribute='key') | list }}
   when: lifecycle_audit | bool
 
 - name: Lifecycle cycle | Take the no-change snapshot of the applied topic

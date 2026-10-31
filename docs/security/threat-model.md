@@ -418,11 +418,13 @@ running values below `/proc/sys` as root ([ADR 0029](../adr/0029-native-kernel-p
   reports `applied` or `compliant` and the scan, which reads only `all` and `default`, passes.
 - **Impact:** the host is believed hardened while redirects, source routes or reverse-path filtering are not.
 - **Mitigation:** the model of both readers (ADR 0029, section 2b) is checked against the values that the real
-  readers of the Molecule images write into a private tmpfs over `/proc/sys`, for 67 cases; a rule is `overridden`
-  unless both readers would write its value, and a configuration file name that procps would expand as a pattern
-  refuses the family as `unparsed_configuration`. With the running values on, every interface's value of a combined
-  parameter is read, and a looser interface refuses the rule as `interface_override`. With the running values off,
-  every result carries the reason `running_value_not_read`.
+  readers of the Molecule images write into a private tmpfs over `/proc/sys`, for 72 cases; a rule is `overridden`
+  unless both readers would write its value, and what the model does not follow (a file name that procps would
+  expand as a pattern, a procps key with `..`, a line at which systemd stops reading, a ufw setting other than a plain
+  one) refuses the family as `unparsed_configuration`; ufw's file counts only when ufw is enabled. With the running
+  values on, every interface's value of a combined parameter is read again after the stricter `all` value is set,
+  and a looser interface gives the rule the reason `interface_override`, naming it, instead of a plain result. With
+  the running values off, every result carries the reason `running_value_not_read`.
 - **Residual:** systemd 252 of Rocky Linux is assumed to read as systemd 255 does; the loopback interface is not
   checked; other writers (a `sysctl.extra` credential, Docker, libvirt or systemd-networkd `IPForward=`, tuned) can
   change a running value after the run.

@@ -17,13 +17,17 @@ minor_changes:
     remediate - the kernel parameter topics decide what takes effect with a model of ``systemd-sysctl`` and
     ``sysctl --system`` (the filter ``freesecdev.linux_compliance.sysctl_effective``), checked against what the real
     readers of the Molecule images set (``make sysctl-reader-verdicts``); a rule is ``overridden`` unless both
-    readers would apply its drop-in, and ``compliant`` only when both already set an accepted value; a configuration
-    file name that procps expands as a pattern refuses the family (``unparsed_configuration``).
+    readers would apply its drop-in, and ``compliant`` only when both already set an accepted value; what the model
+    does not follow (a file name that procps expands as a pattern, a procps key with ``..``, a line of 1 MiB at which
+    systemd stops reading, a ufw setting other than a plain one) refuses the family (``unparsed_configuration``);
+    ufw's ``/etc/ufw/sysctl.conf`` counts only when ufw is enabled.
   - >-
     remediate - with the running values on, a rule of ``net.ipv4.conf.all`` or ``net.ipv6.conf.all`` whose value the
-    kernel combines with each interface's is refused as ``interface_override`` when an interface keeps a looser
-    effective value; with them off, results carry the reason ``running_value_not_read``; a running value that cleanup
-    could not write back is refused as ``prior_unrestorable``.
+    kernel combines with each interface's is always applied and then, after the running values are set, reported
+    with the reason ``interface_override`` and the interfaces named when an interface still keeps a looser effective
+    value; the collection never writes per-interface values; with them off, results carry the reason
+    ``running_value_not_read``; a running value that cleanup could not write back is refused as
+    ``prior_unrestorable``.
   - >-
     remediate - new variable ``linux_compliance_remediate_sysctl_runtime`` (default ``true``); with ``false`` the
     kernel parameter topics write only the persistent drop-ins and neither read nor change the running kernel.

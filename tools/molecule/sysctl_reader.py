@@ -13,6 +13,8 @@ tool twice around the real readers in the Molecule images:
   value written to every key of the case, or ``null`` when the key still holds the preset ``9``.
 
 No reader output is parsed: what a reader opened and wrote is what the kernel would have taken.
+Every case key must match the role's own key pattern (``CASE_KEY``), because the container
+writes ``/proc/sys/<key>`` for each: no key may hold ``..``, ``/`` or anything that leaves the tree.
 ``tests/unit/plugins/module_utils/compliance/test_sysctl_config.py`` checks the role's model of the
 readers against the committed verdicts, so that a case where the model and a real reader disagree
 fails the unit tests.
@@ -31,6 +33,8 @@ from typing import Final, cast
 PRESET: Final[bytes] = b"9\n"
 INTERFACES: Final[tuple[str, ...]] = ("all", "default", "eth0", "lo")
 INTERFACE_KEY: Final[re.Pattern[str]] = re.compile(r"^(net\.ipv[46]\.conf)\.[^.]+\.([^.]+)$")
+CASE_KEY: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+){1,7}$")
+LONG_LINE: Final[str] = "@LONG_LINE@"
 READERS: Final[dict[str, tuple[str, str]]] = {
     "systemd": ("ubuntu", "systemd"),
     "procps-4": ("ubuntu", "procps"),
@@ -52,7 +56,13 @@ def load_cases(path: Path) -> dict[str, dict[str, object]]:
 
 
 def file_text(entry: dict[str, object]) -> str | None:
-    """Return the text of a file entry, or ``None`` for a link or a directory."""
+    """Return the text of a file entry, or ``None`` for a link or a directory.
+
+    A ``long_line`` entry replaces ``@LONG_LINE@`` in its text with a comment of that many bytes.
+    """
+    if "long_line" in entry:
+        comment = "#" + "x" * (int(str(entry["long_line"])) - 1)
+        return str(entry["text"]).replace(LONG_LINE, comment)
     if "text" in entry:
         return str(entry["text"])
     if "long_key" in entry:
@@ -61,8 +71,17 @@ def file_text(entry: dict[str, object]) -> str | None:
 
 
 def case_keys(case: dict[str, object]) -> list[str]:
-    """Return the keys of a case."""
-    return [str(key) for key in cast("list[object]", case["keys"])]
+    """Return the keys of a case.
+
+    Raises:
+        CaseError: If a key does not match the role's key pattern.
+    """
+    keys = [str(key) for key in cast("list[object]", case["keys"])]
+    for key in keys:
+        if not CASE_KEY.match(key):
+            message = f"{key!r} is not a kernel parameter key that the role accepts"
+            raise CaseError(message)
+    return keys
 
 
 def parameters(cases: dict[str, dict[str, object]]) -> list[str]:

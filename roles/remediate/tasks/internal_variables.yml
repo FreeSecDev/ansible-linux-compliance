@@ -678,6 +678,15 @@
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_inspected$') == [] or
         '__linux_compliance_remediate_sc_inspected' in (hostvars[inventory_hostname] | list)
       - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_interface_findings$') == [] or
+        '__linux_compliance_remediate_sc_interface_findings' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_interface_read$') == [] or
+        '__linux_compliance_remediate_sc_interface_read' in (hostvars[inventory_hostname] | list)
+      - >-
+        query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_interfaces_now$') == [] or
+        '__linux_compliance_remediate_sc_interfaces_now' in (hostvars[inventory_hostname] | list)
+      - >-
         query('ansible.builtin.varnames', '^__linux_compliance_remediate_sc_known$') == [] or
         '__linux_compliance_remediate_sc_known' in (hostvars[inventory_hostname] | list)
       - >-
@@ -1385,6 +1394,9 @@
     __linux_compliance_remediate_sc_forget: __linux_compliance_unset__
     __linux_compliance_remediate_sc_found: __linux_compliance_unset__
     __linux_compliance_remediate_sc_inspected: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_interface_findings: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_interface_read: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_interfaces_now: __linux_compliance_unset__
     __linux_compliance_remediate_sc_known: __linux_compliance_unset__
     __linux_compliance_remediate_sc_left: __linux_compliance_unset__
     __linux_compliance_remediate_sc_lines: __linux_compliance_unset__
@@ -1683,6 +1695,9 @@
       - __linux_compliance_remediate_sc_forget == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_found == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_inspected == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sc_interface_findings == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sc_interface_read == '__linux_compliance_unset__'
+      - __linux_compliance_remediate_sc_interfaces_now == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_known == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_left == '__linux_compliance_unset__'
       - __linux_compliance_remediate_sc_lines == '__linux_compliance_unset__'
@@ -2080,10 +2095,6 @@
         (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
         ansible.builtin.from_yaml)['__linux_compliance_remediate_sudo_validator']
       - >-
-        __linux_compliance_remediate_sysctl_after_boot is not defined or __linux_compliance_remediate_sysctl_after_boot
-        == (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
-        ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_after_boot']
-      - >-
         __linux_compliance_remediate_sysctl_boot_directories is not defined or
         __linux_compliance_remediate_sysctl_boot_directories == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_boot_directories']
@@ -2139,6 +2150,10 @@
         __linux_compliance_remediate_sysctl_side_effects is not defined or
         __linux_compliance_remediate_sysctl_side_effects == (lookup('ansible.builtin.file', role_path ~
         '/vars/main.yml') | ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_side_effects']
+      - >-
+        __linux_compliance_remediate_sysctl_ufw_files is not defined or __linux_compliance_remediate_sysctl_ufw_files ==
+        (lookup('ansible.builtin.file', role_path ~ '/vars/main.yml') |
+        ansible.builtin.from_yaml)['__linux_compliance_remediate_sysctl_ufw_files']
       - >-
         __linux_compliance_remediate_sysctl_value_pattern is not defined or
         __linux_compliance_remediate_sysctl_value_pattern == (lookup('ansible.builtin.file', role_path ~
@@ -2433,6 +2448,9 @@
     __linux_compliance_remediate_sc_forget: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_found: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_inspected: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sc_interface_findings: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sc_interface_read: __linux_compliance_unset_again__
+    __linux_compliance_remediate_sc_interfaces_now: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_known: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_left: __linux_compliance_unset_again__
     __linux_compliance_remediate_sc_lines: __linux_compliance_unset_again__
@@ -2731,6 +2749,9 @@
       - __linux_compliance_remediate_sc_forget == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_found == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_inspected == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sc_interface_findings == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sc_interface_read == '__linux_compliance_unset_again__'
+      - __linux_compliance_remediate_sc_interfaces_now == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_known == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_left == '__linux_compliance_unset_again__'
       - __linux_compliance_remediate_sc_lines == '__linux_compliance_unset_again__'
@@ -3225,6 +3246,9 @@
     __linux_compliance_remediate_sc_forget: __linux_compliance_unset__
     __linux_compliance_remediate_sc_found: __linux_compliance_unset__
     __linux_compliance_remediate_sc_inspected: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_interface_findings: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_interface_read: __linux_compliance_unset__
+    __linux_compliance_remediate_sc_interfaces_now: __linux_compliance_unset__
     __linux_compliance_remediate_sc_known: __linux_compliance_unset__
     __linux_compliance_remediate_sc_left: __linux_compliance_unset__
     __linux_compliance_remediate_sc_lines: __linux_compliance_unset__

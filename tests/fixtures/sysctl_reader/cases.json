@@ -1062,5 +1062,97 @@
         "text": "net.ipv4.conf.all.rp_filter = 1\n"
       }
     ]
+  },
+  "review2_dotdot_above_proc_sys": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/zz-pkg.conf",
+        "text": "/../sys/net/ipv4/conf/all/rp_filter = 0\n"
+      }
+    ]
+  },
+  "review2_dotdot_through_missing_directory": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/zz-pkg.conf",
+        "text": "net/ipv4/conf/nonexist/../all/rp_filter = 0\n"
+      }
+    ]
+  },
+  "review2_filename_backslash": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/10-loose.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/\\10-loose.conf",
+        "text": ""
+      }
+    ]
+  },
+  "review2_line_over_1_mib": {
+    "keys": [
+      "net.ipv4.conf.all.rp_filter"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.rp_filter = 1\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/zz-pkg.conf",
+        "text": "net.ipv4.conf.all.rp_filter = 0\n@LONG_LINE@\nnet.ipv4.conf.all.rp_filter = 1\n",
+        "long_line": 1100000
+      }
+    ]
+  },
+  "review2_ufw_disabled": {
+    "keys": [
+      "net.ipv4.conf.all.accept_redirects"
+    ],
+    "files": [
+      {
+        "path": "etc/sysctl.d/999-freesecdev-ipv4-parameters-net-ipv4-conf-all-accept-redirects.conf",
+        "text": "# Managed by freesecdev.linux_compliance for x.\nnet.ipv4.conf.all.accept_redirects = 0\n"
+      },
+      {
+        "path": "usr/lib/sysctl.d/zz-pkg.conf",
+        "text": "net.ipv4.conf.all.accept_redirects = 1\n"
+      },
+      {
+        "path": "etc/ufw/sysctl.conf",
+        "text": "net/ipv4/conf/all/accept_redirects=0\n"
+      },
+      {
+        "path": "etc/ufw/ufw.conf",
+        "text": "# /etc/ufw/ufw.conf\nENABLED=no\nLOGLEVEL=low\n"
+      },
+      {
+        "path": "etc/default/ufw",
+        "text": "IPV6=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf\n"
+      }
+    ]
   }
 }

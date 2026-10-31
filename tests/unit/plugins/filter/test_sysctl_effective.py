@@ -25,8 +25,13 @@ def test_each_reader_gets_its_value_and_source() -> None:
     }
 
 
-def test_the_files_read_after_boot_come_last() -> None:
-    found = sysctl_effective.sysctl_effective(ENTRIES, RP_FILTER, ["/etc/ufw/sysctl.conf"])
+def test_ufw_s_file_comes_last_when_ufw_is_enabled() -> None:
+    entries: list[dict[str, object]] = [
+        *ENTRIES,
+        {"path": "/etc/ufw/ufw.conf", "kind": "file", "text": "ENABLED=yes\n"},
+        {"path": "/etc/default/ufw", "kind": "file", "text": "IPT_SYSCTL=/etc/ufw/sysctl.conf\n"},
+    ]
+    found = sysctl_effective.sysctl_effective(entries, RP_FILTER)
     assert found["systemd"] == found["procps"] == {"value": "1", "source": "/etc/ufw/sysctl.conf"}
 
 

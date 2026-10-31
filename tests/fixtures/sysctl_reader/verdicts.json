@@ -543,6 +543,61 @@
       "net.ipv4.conf.all.rp_filter": "1"
     }
   },
+  "review2_dotdot_above_proc_sys": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    }
+  },
+  "review2_dotdot_through_missing_directory": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    }
+  },
+  "review2_filename_backslash": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    }
+  },
+  "review2_line_over_1_mib": {
+    "procps-3": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.rp_filter": "1"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.rp_filter": "0"
+    }
+  },
+  "review2_ufw_disabled": {
+    "procps-3": {
+      "net.ipv4.conf.all.accept_redirects": "1"
+    },
+    "procps-4": {
+      "net.ipv4.conf.all.accept_redirects": "1"
+    },
+    "systemd": {
+      "net.ipv4.conf.all.accept_redirects": "1"
+    }
+  },
   "review_cr_then_line": {
     "procps-3": {
       "net.ipv4.conf.all.rp_filter": "1",

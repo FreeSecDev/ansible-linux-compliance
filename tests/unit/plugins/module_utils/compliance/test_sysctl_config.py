@@ -3,8 +3,9 @@
 ``tests/fixtures/sysctl_reader/verdicts.json`` was recorded by ``make sysctl-reader-verdicts``:
 systemd 255 and procps-ng 4.0.4 in the Ubuntu 24.04 Molecule image and procps-ng 3.3.17 in the Rocky
 Linux 9 image wrote each case into a private tmpfs over ``/proc/sys``, and the values were read back
-from it. Every key of every case is compared with every reader. A case whose file names procps
-expands as patterns must be reported as unsupported instead.
+from it. Every key of every case is compared with every reader. A case that the model cannot
+decide for a reader (a file name that procps expands as a pattern, a procps key with a ``..``
+component, a line at which systemd-sysctl stops reading) must be reported as unsupported instead.
 """
 
 from __future__ import annotations
@@ -31,19 +32,28 @@ VERDICTS = cast(
     json.loads((FIXTURES / "verdicts.json").read_text(encoding="utf-8")),
 )
 RP_FILTER = "net.ipv4.conf.all.rp_filter"
-EXPANDED_NAMES = frozenset(
+PROCPS_UNSUPPORTED = frozenset(
     {
         "review_filename_glob",
         "review_filename_brace",
         "filename_question_mark",
         "filename_tilde",
         "filename_star_in_usr_lib",
+        "review2_filename_backslash",
+        "review2_dotdot_above_proc_sys",
+        "review2_dotdot_through_missing_directory",
+        "dot_dot_component",
     }
 )
+SYSTEMD_UNSUPPORTED = frozenset({"review2_line_over_1_mib"})
+UFW = "/etc/ufw/sysctl.conf"
 
 
 def case_text(file: dict[str, object]) -> str | None:
     """Return the text that the generator writes for a fixture file."""
+    if "long_line" in file:
+        comment = "#" + "x" * (int(str(file["long_line"])) - 1)
+        return str(file["text"]).replace("@LONG_LINE@", comment)
     if "text" in file:
         return str(file["text"])
     if "long_key" in file:
@@ -96,21 +106,29 @@ def test_procps_3_and_4_write_the_same_values_for_every_case() -> None:
     }
 
 
-@pytest.mark.parametrize("name", sorted(CASES))
+@pytest.mark.parametrize("name", sorted(set(CASES) - SYSTEMD_UNSUPPORTED))
 def test_systemd_writes_what_the_model_decides(name: str) -> None:
     assert model_values(name, sysctl_config.SYSTEMD) == VERDICTS[name]["systemd"]
 
 
-@pytest.mark.parametrize("name", sorted(set(CASES) - EXPANDED_NAMES))
+@pytest.mark.parametrize("name", sorted(set(CASES) - PROCPS_UNSUPPORTED))
 @pytest.mark.parametrize("reader", ["procps-4", "procps-3"])
 def test_procps_writes_what_the_model_decides(name: str, reader: str) -> None:
     assert model_values(name, sysctl_config.PROCPS) == VERDICTS[name][reader]
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
-def test_only_a_name_that_procps_expands_is_unsupported(name: str) -> None:
+def test_only_a_case_that_the_model_cannot_decide_is_unsupported(name: str) -> None:
     found = cast("list[str]", sysctl_config.effective(case_entries(name), RP_FILTER)["unsupported"])
-    assert bool(found) is (name in EXPANDED_NAMES)
+    assert bool(found) is (name in PROCPS_UNSUPPORTED | SYSTEMD_UNSUPPORTED)
+
+
+def test_a_line_just_below_the_limit_of_systemd_is_read() -> None:
+    line = "#" + "x" * (sysctl_config.SYSTEMD_LINE_LIMIT - 2)
+    entries: list[dict[str, object]] = [
+        {"path": "/etc/sysctl.d/10-a.conf", "kind": "file", "text": f"{line}\n{RP_FILTER} = 1\n"}
+    ]
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == []
 
 
 def test_the_readers_disagree_on_etc_sysctl_conf() -> None:
@@ -122,20 +140,90 @@ def test_the_readers_disagree_on_etc_sysctl_conf() -> None:
     assert found["procps"] == {"value": "0", "source": "/etc/sysctl.conf"}
 
 
-def test_a_file_read_after_boot_wins_for_both_readers() -> None:
+def ufw_entries(enabled: str, default: str | None) -> list[dict[str, object]]:
+    """Return the case ``later_name_wins`` with ufw's files, its ufw.conf and /etc/default/ufw."""
     entries: list[dict[str, object]] = [
         *case_entries("later_name_wins"),
-        {"path": "/etc/ufw/sysctl.conf", "kind": "file", "text": "net/ipv4/conf/all/rp_filter=2\n"},
+        {"path": UFW, "kind": "file", "text": "net/ipv4/conf/all/rp_filter=2\n"},
+        {"path": sysctl_config.UFW_CONF, "kind": "file", "text": f"# ufw\n{enabled}\n"},
     ]
-    found = sysctl_config.effective(entries, RP_FILTER, after=["/etc/ufw/sysctl.conf"])
-    assert {reader: found[reader] for reader in sysctl_config.READERS} == {
-        "systemd": {"value": "2", "source": "/etc/ufw/sysctl.conf"},
-        "procps": {"value": "2", "source": "/etc/ufw/sysctl.conf"},
+    if default is not None:
+        entries.append({"path": sysctl_config.UFW_DEFAULT, "kind": "file", "text": default})
+    return entries
+
+
+def readers(found: dict[str, object]) -> dict[str, object]:
+    """Return what both readers set."""
+    return {reader: found[reader] for reader in sysctl_config.READERS}
+
+
+@pytest.mark.parametrize(
+    ("enabled", "default"),
+    [
+        ("ENABLED=yes", "IPV6=yes\nIPT_SYSCTL=/etc/ufw/sysctl.conf\n"),
+        ("export ENABLED='yes'", 'IPT_SYSCTL="/etc/ufw/sysctl.conf"\n'),
+    ],
+)
+def test_ufw_s_file_wins_for_both_readers_when_ufw_is_enabled(enabled: str, default: str) -> None:
+    found = sysctl_config.effective(ufw_entries(enabled, default), RP_FILTER)
+    assert readers(found) == {
+        "systemd": {"value": "2", "source": UFW},
+        "procps": {"value": "2", "source": UFW},
     }
+    assert found["unsupported"] == []
+
+
+@pytest.mark.parametrize(
+    ("enabled", "default"),
+    [
+        ("ENABLED=no", "IPT_SYSCTL=/etc/ufw/sysctl.conf\n"),
+        ("ENABLED=yes", "IPT_SYSCTL=\n"),
+        ("ENABLED=yes", "IPV6=yes\n"),
+        ("ENABLED=yes", None),
+    ],
+)
+def test_ufw_s_file_is_ignored_unless_ufw_applies_it(enabled: str, default: str | None) -> None:
+    found = sysctl_config.effective(ufw_entries(enabled, default), RP_FILTER)
+    assert readers(found) == {
+        "systemd": {"value": "1", "source": "/usr/lib/sysctl.d/60-b.conf"},
+        "procps": {"value": "1", "source": "/usr/lib/sysctl.d/60-b.conf"},
+    }
+    assert found["unsupported"] == []
+
+
+def test_a_key_with_a_dot_dot_component_in_ufw_s_file_is_unsupported() -> None:
+    entries = ufw_entries("ENABLED=yes", "IPT_SYSCTL=/etc/ufw/sysctl.conf\n")
+    entries[-3] = {"path": UFW, "kind": "file", "text": "/../sys/net/ipv4/conf/all/rp_filter=0\n"}
+    assert sysctl_config.effective(entries, RP_FILTER)["unsupported"] == [
+        f"{UFW}: a key with a .. component, which sysctl -p resolves"
+    ]
+
+
+def test_ufw_s_file_is_ignored_without_ufw_conf() -> None:
+    entries = [entry for entry in ufw_entries("", None) if entry["path"] != sysctl_config.UFW_CONF]
     assert sysctl_config.effective(entries, RP_FILTER)["systemd"] == {
         "value": "1",
         "source": "/usr/lib/sysctl.d/60-b.conf",
     }
+
+
+@pytest.mark.parametrize(
+    ("enabled", "default", "reason"),
+    [
+        ("ENABLED=$(echo yes)", None, "ENABLED is set in a form"),
+        ("ENABLED=yes", "IPT_SYSCTL=${X}\n", "cannot follow"),
+        ("ENABLED=yes", "IPT_SYSCTL=/etc/other.conf\n", "cannot follow"),
+    ],
+)
+def test_a_ufw_setting_that_the_model_does_not_follow_is_unsupported(
+    enabled: str, default: str | None, reason: str
+) -> None:
+    found = cast(
+        "list[str]",
+        sysctl_config.effective(ufw_entries(enabled, default), RP_FILTER)["unsupported"],
+    )
+    assert len(found) == 1
+    assert reason in found[0]
 
 
 def test_no_setting_gives_nulls() -> None:

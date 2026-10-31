@@ -242,6 +242,7 @@ SHELL_SCRIPTS := build/bootstrap.rendered.sh tools/iac/install-tofu.sh tools/bro
 	tools/lint/fetch-hadolint.sh tools/scc/fetch-scc.sh tools/scc/smoke-test.sh tools/scc/check-expiry.sh \
 	tools/scc/needs-smoke.sh tools/scc/expiry-state.sh
 SHELL_SCRIPTS += tools/molecule/galaxy-collections.sh tools/molecule/instance-images.sh
+SHELL_SCRIPTS += tools/molecule/sysctl-reader-verdicts.sh tools/molecule/sysctl-reader-inside.sh
 
 INDEX_MODES := build/lint-repo-index-modes
 PYLINT_BASE_IGNORES := ^\.venv/|^\.agents/|^\.claude/|^build/|^dist/

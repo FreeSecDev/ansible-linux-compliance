@@ -436,7 +436,11 @@ because both cycles apply the same rules and the Docker cycles scan both toggles
 
 A regression group may require libvirt as well. The `runtime` group of `ipv4_parameters`
 (`shared/tasks/lifecycle_sysctl_runtime_regressions.yml`, one leg per platform) needs a running kernel that the
-collection may set: it switches forwarding on as a router would, with the loopback interface left out, and checks that
+collection may set. It first gives every interface but the loopback a looser `rp_filter` and `accept_redirects`
+than the rules, as a glob or the network configuration might, and checks that apply still writes both drop-ins and
+the stricter `all` values, leaves each interface's own value alone and reports both rules `applied` with the reason
+`interface_override`, naming every interface, and that cleanup sets the values before back. Then it switches
+forwarding on as a router would, with the loopback interface left out, and checks that
 apply records the global flag and every interface's flag and that cleanup gives each of them back exactly; that a
 running value changed by hand after apply is set again by the next apply while the first record is kept; and that a
 running value changed by hand to a third value makes cleanup `cleanup_incomplete` (`modified_since_apply`), with the

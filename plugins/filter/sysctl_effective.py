@@ -31,9 +31,12 @@ description:
 options:
   _input:
     description:
-      - The entries of the configuration directories, C(/etc/sysctl.conf) and the files of
-        O(after), each a mapping with C(path), C(kind) (C(file), C(link), C(directory) or
-        C(other)) and C(text), the content of a file or of a link's regular target, or null.
+      - The entries of the configuration directories, C(/etc/sysctl.conf) and ufw's
+        C(/etc/ufw/ufw.conf), C(/etc/default/ufw) and C(/etc/ufw/sysctl.conf), each a mapping
+        with C(path), C(kind) (C(file), C(link), C(directory) or C(other)) and C(text), the
+        content of a file or of a link's regular target, or null.
+      - ufw's C(/etc/ufw/sysctl.conf) counts, after every other file, only when C(ufw.conf) sets
+        C(ENABLED=yes) and C(/etc/default/ufw) sets C(IPT_SYSCTL) to that file.
     type: list
     elements: dict
     required: true
@@ -42,13 +45,6 @@ options:
       - The kernel parameter in the dotted form.
     type: str
     required: true
-  after:
-    description:
-      - Files that both readers read after every other, in order, such as ufw's
-        C(/etc/ufw/sysctl.conf).
-    type: list
-    elements: str
-    default: []
 """
 
 EXAMPLES = r"""
@@ -61,22 +57,20 @@ RETURN = r"""
 _value:
   description:
     - V(systemd) and V(procps), each with C(value) and C(source), null when the reader sets
-      nothing, and V(unsupported), the reasons why the model cannot decide what procps reads (a
-      configuration file name that procps expands as a pattern); the caller refuses when it is not
-      empty.
+      nothing, and V(unsupported), the reasons why the model cannot decide what a reader sets
+      (a file name that procps expands as a pattern, a key with a C(..) component, a line at
+      which systemd-sysctl stops reading, or a ufw setting the model does not follow); the
+      caller refuses when it is not empty.
   type: dict
 """
 
 
-def sysctl_effective(
-    entries: list[dict[str, object]], key: str, after: list[str] | None = None
-) -> dict[str, object]:
+def sysctl_effective(entries: list[dict[str, object]], key: str) -> dict[str, object]:
     """Return what each reader sets for ``key``.
 
     Args:
         entries: The configuration entries, with ``path``, ``kind`` and ``text``.
         key: The kernel parameter in the dotted form.
-        after: Files that both readers read last.
 
     Returns:
         The value and source file per reader, or nulls.
@@ -84,7 +78,7 @@ def sysctl_effective(
     Raises:
         ConfigError: If an entry is malformed.
     """
-    return sysctl_config.effective(entries, key, after or [])
+    return sysctl_config.effective(entries, key)
 
 
 class FilterModule:

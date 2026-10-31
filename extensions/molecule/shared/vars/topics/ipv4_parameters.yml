@@ -289,25 +289,6 @@ pre_states:
     requires:
       - libvirt
     unchanged:
-      - rule: sysctl_net_ipv4_conf_all_accept_redirects
-        status: interface_override
-        platforms:
-          - rhel_compatible
-          - ubuntu
-      - rule: sysctl_net_ipv4_conf_all_rp_filter
-        status: interface_override
-        platforms:
-          - ubuntu
-      - rule: sysctl_net_ipv4_conf_all_secure_redirects
-        status: interface_override
-        platforms:
-          - rhel_compatible
-          - ubuntu
-      - rule: sysctl_net_ipv4_conf_all_send_redirects
-        status: interface_override
-        platforms:
-          - rhel_compatible
-          - ubuntu
       - rule: sysctl_net_ipv4_conf_default_accept_source_route
         status: compliant
         platforms:
@@ -330,18 +311,6 @@ pre_states:
           exists: false
           platforms:
             - rhel_compatible
-        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf
-          exists: false
-          platforms:
-            - rhel_compatible
-        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-secure-redirects.conf
-          exists: false
-          platforms:
-            - rhel_compatible
-        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-send-redirects.conf
-          exists: false
-          platforms:
-            - rhel_compatible
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-source-route.conf
           exists: false
           platforms:
@@ -359,7 +328,16 @@ pre_states:
           platforms:
             - rhel_compatible
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf
-          exists: false
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 3e1dfc350a69892d6dcf9ce013ec1fa82b6ffd7c0ae874cf944a690f2a2be2e1
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-source-route.conf
@@ -389,15 +367,42 @@ pre_states:
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-rp-filter.conf
-          exists: false
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 923a25b88cedc5920a31c6ab27b7a54385d1cb23102cf727af15dfad9b4a49c4
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-secure-redirects.conf
-          exists: false
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 53c9818e0f523b5af82cdb92e29404615485b6a587d99fef760482214523779b
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-send-redirects.conf
-          exists: false
+          exists: true
+          type: file
+          attributes:
+            - extents
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 300981a6b4c898c2b271b5cd49375a5bf33d7b94d2dd25d49653e5f17a39e939
           platforms:
             - ubuntu
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-redirects.conf
@@ -517,19 +522,19 @@ pre_states:
             - checksum
           platforms:
             - ubuntu
-        - path: /etc/sysctl.d/10-network-security.conf
-          checksum: c52573f395da0bdd73e1e15f86fb753645237fcc9a8eb7b087001362343c3f23
-          platforms:
-            - ubuntu
       sysctl:
+        - name: net.ipv4.conf.all.accept_redirects
+          value: "0"
         - name: net.ipv4.conf.all.accept_source_route
           value: "0"
         - name: net.ipv4.conf.all.log_martians
           value: "1"
         - name: net.ipv4.conf.all.rp_filter
           value: "1"
-          platforms:
-            - rhel_compatible
+        - name: net.ipv4.conf.all.secure_redirects
+          value: "0"
+        - name: net.ipv4.conf.all.send_redirects
+          value: "0"
         - name: net.ipv4.conf.default.accept_redirects
           value: "0"
         - name: net.ipv4.conf.default.accept_source_route

@@ -115,3 +115,21 @@ def test_the_tool_runs_both_commands_as_a_script(
         runpy.run_module("tools.molecule.sysctl_reader", run_name="__main__")
     assert exit_info.value.code == 0
     assert json.loads(verdicts.read_text(encoding="utf-8"))["mixed"]["procps-3"][RP_FILTER] == "2"
+
+
+def test_a_long_line_entry_holds_a_comment_of_that_many_bytes(tmp_path: Path) -> None:
+    entry = {"path": "etc/sysctl.d/x.conf", "text": "a = 1\n@LONG_LINE@\nb = 2\n", "long_line": 5}
+    cases: dict[str, dict[str, object]] = {"long": {"keys": [RP_FILTER], "files": [entry]}}
+    sysctl_reader.materialise(cases, tmp_path)
+    text = (tmp_path / "long" / "root" / "etc" / "sysctl.d" / "x.conf").read_text(encoding="utf-8")
+    assert text == "a = 1\n#xxxx\nb = 2\n"
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["net.ipv4.conf.all.rp_filter/../../../x", "/net.ipv4", "kernel", "net..ipv4", "Net.ipv4"],
+)
+def test_a_key_that_the_role_refuses_is_refused(tmp_path: Path, key: str) -> None:
+    cases: dict[str, dict[str, object]] = {"bad": {"keys": [key], "files": []}}
+    with pytest.raises(sysctl_reader.CaseError, match="not a kernel parameter key"):
+        sysctl_reader.materialise(cases, tmp_path)

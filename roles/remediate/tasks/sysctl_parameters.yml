@@ -169,7 +169,7 @@
           + ((__linux_compliance_remediate_sc_checked | default({}, true)).package_directories | default([])))
          | unique | list }}
     __linux_compliance_remediate_sc_single_files: >-
-      {{ (__linux_compliance_remediate_sysctl_boot_last
+      {{ (__linux_compliance_remediate_sysctl_boot_last + __linux_compliance_remediate_sysctl_ufw_files
           + ((__linux_compliance_remediate_sc_checked | default({}, true)).files | default([])))
          | unique | list }}
   tags:
@@ -272,7 +272,10 @@
     src: "{{ __linux_compliance_remediate_sc_source }}"
   loop: >-
     {{ __linux_compliance_remediate_sc_entries | dict2items | selectattr('value.readable')
-       | map(attribute='key') | select('match', '^.*\.conf$') | sort | list }}
+       | map(attribute='key')
+       | select('match', '^(.*\.conf|' ~ (__linux_compliance_remediate_sysctl_ufw_files | map('regex_escape')
+                                           | join('|')) ~ ')$')
+       | sort | list }}
   loop_control:
     loop_var: __linux_compliance_remediate_sc_source
   register: __linux_compliance_remediate_sc_read
@@ -323,10 +326,6 @@
       {%- set _ = names.append(__linux_compliance_remediate_sysctl_propagating[rule.parameters.key]) -%}
       {%- endif -%}
       {%- set _ = names.extend(__linux_compliance_remediate_sysctl_side_effects[rule.parameters.key] | default([])) -%}
-      {%- if rule.parameters.key in __linux_compliance_remediate_sysctl_interface_combination -%}
-      {%- set parts = rule.parameters.key.split('.') -%}
-      {%- set _ = names.append((parts[:3] + ['*', parts[4]]) | join('.')) -%}
-      {%- endif -%}
       {%- endfor -%}
       {%- endif -%}
       {{ names | unique | list }}
@@ -606,7 +605,8 @@
       {%- set boot_entries = [] -%}
       {%- for entry_path, item in entries.items()
             if ((entry_path | dirname) in __linux_compliance_remediate_sysctl_boot_directories
-                or entry_path in __linux_compliance_remediate_sysctl_boot_last)
+                or entry_path in __linux_compliance_remediate_sysctl_boot_last
+                or entry_path in __linux_compliance_remediate_sysctl_ufw_files)
                and entry_path not in removed -%}
       {%- set _ = boot_entries.append({'path': entry_path,
             'kind': 'file' if item.isreg else 'link' if item.islnk else 'directory' if item.isdir | default(false)
@@ -630,7 +630,7 @@
       {%- set content = __linux_compliance_remediate_sc_contents[rule.rule_id] -%}
       {%- set sha = content | hash('sha256') -%}
       {%- set ns = namespace(user=[], package=[], edits=[], duplicate=[], large=[], earlier=[], later=[],
-                             now_ok=true, interfaces=[]) -%}
+                             now_ok=true) -%}
       {%- for other in user_files if other != path and other not in removed and other in texts -%}
       {%- set found = texts[other] | regex_findall(pattern, multiline=true) -%}
       {%- set bad = [] -%}
@@ -680,10 +680,8 @@
             else item) -%}
       {%- endfor -%}
       {%- set _ = planned_entries.append({'path': path, 'kind': 'file', 'text': content}) -%}
-      {%- set planned_readers = planned_entries | freesecdev.linux_compliance.sysctl_effective(key,
-            after=__linux_compliance_remediate_sysctl_after_boot) -%}
-      {%- set current_readers = boot_entries | freesecdev.linux_compliance.sysctl_effective(key,
-            after=__linux_compliance_remediate_sysctl_after_boot) -%}
+      {%- set planned_readers = planned_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
+      {%- set current_readers = boot_entries | freesecdev.linux_compliance.sysctl_effective(key) -%}
       {%- for reader in ['systemd', 'procps'] -%}
       {%- for setting, planned in [[planned_readers[reader], true], [current_readers[reader], false]] -%}
       {%- set candidate = setting.value -%}
@@ -711,29 +709,6 @@
                      if integer else (current_normal is search(wanted.pattern)) if wanted.pattern is string
                      else current_normal in (wanted.accepted | map('split') | map('join', ' ') | list))) -%}
       {%- set exact = entry is not none and entry.isreg and entry.checksum == sha -%}
-      {%- set combination = __linux_compliance_remediate_sysctl_interface_combination[key] | default(none) -%}
-      {%- if __linux_compliance_remediate_sc_runtime and combination is not none -%}
-      {%- set parts = key.split('.') -%}
-      {%- set interface_pattern = '^' ~ ((parts[:3] | join('.')) | regex_escape) ~ '\\.([^.]+)\\.'
-            ~ (parts[4] | regex_escape) ~ '$' -%}
-      {%- for name, own in __linux_compliance_remediate_sc_running_values | dictsort
-            if name is match(interface_pattern)
-               and name.split('.')[3] not in ['all', 'default', 'lo'] -%}
-      {%- set interface = name.split('.')[3] -%}
-      {%- set written = value | int if value is match('^-?[0-9]+$') else none -%}
-      {%- set device = own | trim | int if own is string and own | trim is match('^-?[0-9]+$') else none -%}
-      {%- set combined = none if written is none or device is none
-            else ([written, device] | max) if combination == 'max'
-            else ([written, device] | min) if combination == 'min'
-            else (1 if written != 0 or device != 0 else 0) if combination == 'or'
-            else (1 if written != 0 and device != 0 else 0) if combination == 'and'
-            else device -%}
-      {%- if combined is none or combined not in accepted_ints -%}
-      {%- set ns.interfaces = ns.interfaces + [interface ~ ' (' ~ name ~ ' = ' ~ (own | trim) ~ ', so the kernel uses '
-            ~ (combined if combined is not none else 'an unknown value') ~ ')'] -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {%- endif -%}
       {%- set restorable = current is not string or current is match('^[\\t -~]{0,255}$') -%}
       {%- set status =
             'method_changed' if prior is mapping and prior.method | default('unknown') != 'dropin'
@@ -746,7 +721,6 @@
             else 'unparsed_configuration' if planned_readers.unsupported | length > 0
             else 'overridden' if ns.later | length > 0
             else 'conflicting_setting' if ns.earlier | length > 0
-            else 'interface_override' if ns.interfaces | length > 0
             else 'prior_unrestorable' if not runtime_ok and not restorable
             else 'runtime_unavailable' if not runtime_ok
                  and not (__linux_compliance_remediate_sc_writable[key] | default(false))
@@ -765,9 +739,6 @@
             else (planned_readers.unsupported | join('; ')) if status == 'unparsed_configuration'
             else ((ns.later + ns.earlier) | join('; ')) if status == 'overridden'
             else (ns.earlier | join('; ')) if status == 'conflicting_setting'
-            else ('the kernel combines ' ~ key ~ ' with the value of each interface, and these interfaces keep a'
-                  ~ ' looser effective value, which the collection does not change: '
-                  ~ ns.interfaces | join(', ')) if status == 'interface_override'
             else ('the running value of ' ~ key ~ ' cannot be written back on cleanup: it is longer than 255'
                   ~ ' characters or holds a character other than printable ASCII and tab')
                  if status == 'prior_unrestorable'
@@ -954,6 +925,75 @@
   tags:
     - always
 
+- name: Kernel parameters | Name the interfaces to read for every rule whose value the kernel combines with theirs
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_interface_read: >-
+      {%- set names = [] -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if __linux_compliance_remediate_sc_runtime
+               and rule.parameters.key in __linux_compliance_remediate_sysctl_interface_combination
+               and __linux_compliance_remediate_sc_plan[rule.rule_id].status in ['applied', 'compliant'] -%}
+      {%- set parts = rule.parameters.key.split('.') -%}
+      {%- set _ = names.append((parts[:3] + ['*', parts[4]]) | join('.')) -%}
+      {%- endfor -%}
+      {{ names | unique | list }}
+  tags:
+    - always
+
+- name: Kernel parameters | Read the value of every interface after the running values of the family are set
+  freesecdev.linux_compliance.sysctl_runtime:
+    read: "{{ __linux_compliance_remediate_sc_interface_read }}"
+  register: __linux_compliance_remediate_sc_interfaces_now
+  when: __linux_compliance_remediate_sc_interface_read | length > 0
+  tags:
+    - always
+
+- name: Kernel parameters | Name the interfaces whose own value still makes the effective value looser than the rule
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_sc_interface_findings: >-
+      {%- set findings = {} -%}
+      {%- set now = __linux_compliance_remediate_sc_interfaces_now.running | default({}) -%}
+      {%- for rule in __linux_compliance_remediate_family.apply
+            if __linux_compliance_remediate_sc_runtime
+               and rule.parameters.key in __linux_compliance_remediate_sysctl_interface_combination
+               and __linux_compliance_remediate_sc_plan[rule.rule_id].status in ['applied', 'compliant'] -%}
+      {%- set key = rule.parameters.key -%}
+      {%- set planned = __linux_compliance_remediate_sc_plan[rule.rule_id] -%}
+      {%- set wanted = __linux_compliance_remediate_sc_values[rule.rule_id] -%}
+      {%- set accepted_ints = wanted.accepted | default([], true) | map('int') | list -%}
+      {%- set combination = __linux_compliance_remediate_sysctl_interface_combination[key] -%}
+      {%- set parts = key.split('.') -%}
+      {%- set all_text = wanted.value if planned.runtime | length > 0 else now[key] | default(none) -%}
+      {%- set own_all = all_text | trim | int if all_text is string and all_text | trim is match('^-?[0-9]+$')
+            else none -%}
+      {%- set interface_pattern = '^' ~ ((parts[:3] | join('.')) | regex_escape) ~ '\\.([^.]+)\\.'
+            ~ (parts[4] | regex_escape) ~ '$' -%}
+      {%- set loose = [] -%}
+      {%- for name, own in now | dictsort
+            if name is match(interface_pattern) and name.split('.')[3] not in ['all', 'default', 'lo'] -%}
+      {%- set device = own | trim | int if own is string and own | trim is match('^-?[0-9]+$') else none -%}
+      {%- set combined = none if own_all is none or device is none
+            else ([own_all, device] | max) if combination == 'max'
+            else ([own_all, device] | min) if combination == 'min'
+            else (1 if own_all != 0 or device != 0 else 0) if combination == 'or'
+            else (1 if own_all != 0 and device != 0 else 0) if combination == 'and'
+            else device -%}
+      {%- set good = combined is not none
+            and (combined in accepted_ints
+                 or (combination == 'min' and accepted_ints | length > 0 and combined < accepted_ints | min)) -%}
+      {%- if not good -%}
+      {%- set _ = loose.append(name.split('.')[3] ~ ' (' ~ name ~ ' = ' ~ (own | trim) ~ ', so the kernel uses '
+            ~ (combined if combined is not none else 'an unknown value') ~ ')') -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if loose | length > 0 -%}
+      {%- set _ = findings.update({rule.rule_id: loose}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ findings }}
+  tags:
+    - always
+
 - name: Kernel parameters | Add the result of every rule to apply and remember the drop-ins that this run writes
   vars:
     __linux_compliance_remediate_sc_set_names: >-
@@ -980,12 +1020,13 @@
       {%- set results = [] -%}
       {%- for rule in __linux_compliance_remediate_family.apply -%}
       {%- set planned = __linux_compliance_remediate_sc_plan[rule.rule_id] -%}
+      {%- set loose = __linux_compliance_remediate_sc_interface_findings[rule.rule_id] | default([]) -%}
       {%- set _ = results.append({
             'rule_id': rule.rule_id,
             'family': rule.family,
             'action': 'apply',
             'status': planned.status,
-            'reason': planned.reason,
+            'reason': 'interface_override' if loose | length > 0 else planned.reason,
             'changed': rule.rule_id in __linux_compliance_remediate_sc_changed_ids,
             'message': rule.parameters.path ~ ': ' ~ planned.status
                        ~ ((' (' ~ planned.reason ~ '; nothing was changed)')
@@ -1001,7 +1042,11 @@
                        ~ (' (only the persistent value is compliant: the running value was not read, because'
                           ~ ' linux_compliance_remediate_sysctl_runtime is false)'
                           if planned.status == 'compliant' and not __linux_compliance_remediate_sc_runtime
-                          else '')}) -%}
+                          else '')
+                       ~ ((' (interface_override: the kernel combines ' ~ rule.parameters.key ~ ' with the value of'
+                           ~ ' each interface, and these interfaces still have a looser effective value, which'
+                           ~ ' the collection does not change: ' ~ loose | join(', ') ~ ')')
+                          if loose | length > 0 else '')}) -%}
       {%- endfor -%}
       {{ __linux_compliance_remediate_results + results }}
   tags:

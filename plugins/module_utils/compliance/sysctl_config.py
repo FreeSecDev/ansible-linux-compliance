@@ -64,7 +64,12 @@ READERS: Final[tuple[str, ...]] = (SYSTEMD, PROCPS)
 SYSTEMD_SPACE: Final[str] = " \t\n\r"
 SYSTEMD_LINE_END: Final[str] = r"\r\n|[\r\n\0]"
 GLOB_CHARACTERS: Final[frozenset[str]] = frozenset("*?[")
-PROCPS_NAME_EXPANSION: Final[frozenset[str]] = frozenset("*?[]{}~")
+PROCPS_NAME_EXPANSION: Final[frozenset[str]] = frozenset("*?[]{}~\\")
+SYSTEMD_LINE_LIMIT: Final[int] = 1_000_000
+UFW_CONF: Final[str] = "/etc/ufw/ufw.conf"
+UFW_DEFAULT: Final[str] = "/etc/default/ufw"
+UFW_SYSCTL: Final[str] = "/etc/ufw/sysctl.conf"
+SHELL_ASSIGNMENT: Final[str] = r"^(?:export\s+)?{name}=([\"']?)([^\"'\s]*)\1$"
 KINDS: Final[frozenset[str]] = frozenset({"file", "link", "directory", "other"})
 READABLE_KINDS: Final[frozenset[str]] = frozenset({"file", "link"})
 
@@ -92,6 +97,7 @@ class Assignment:
     path: str | None
     value: str | None
     source: str
+    escapes: bool = False
 
 
 def load_entries(raw: Iterable[Mapping[str, object]]) -> list[Entry]:
@@ -134,10 +140,12 @@ def ordered_files(entries: Sequence[Entry], reader: str) -> list[Entry]:
 
 
 def unsupported(entries: Sequence[Entry]) -> list[str]:
-    """Return why the model cannot decide what procps reads, or an empty list.
+    """Return why the model cannot decide what a reader writes, or an empty list.
 
-    procps expands every configuration file name with glob(3), so a name with a glob, brace or
-    tilde character may read other files a second time, at its own place in the order.
+    procps expands every configuration file name with glob(3), so a name with a glob, brace,
+    tilde or backslash character may read other files a second time, at its own place in the
+    order; procps opens a key with a ``..`` component as the kernel resolves it, which may leave
+    ``/proc/sys`` and come back; systemd stops reading a file at a line of 1 MiB or more.
     """
     reasons: list[str] = []
     for entry in ordered_files(entries, PROCPS):
@@ -147,7 +155,58 @@ def unsupported(entries: Sequence[Entry]) -> list[str]:
                 f"{entry.path}: sysctl --system expands the name of this file as a pattern, which"
                 " may read other files a second time"
             )
+        if any(item.escapes for item in assignments(entry, PROCPS)):
+            reasons.append(
+                f"{entry.path}: a key with a .. component, which sysctl --system resolves"
+            )
+    reasons.extend(
+        f"{entry.path}: a line of 1 MiB or more, at which systemd-sysctl stops reading"
+        for entry in ordered_files(entries, SYSTEMD)
+        if any(
+            len(_bytes(line)) >= SYSTEMD_LINE_LIMIT for line in _lines(entry.text or "", SYSTEMD)
+        )
+    )
     return reasons
+
+
+def _shell_value(text: str | None, name: str) -> tuple[str | None, bool]:
+    """Return the last value that a sourced shell file assigns to ``name``, and whether it is plain.
+
+    Only ``NAME=value``, quoted or not and optionally exported, is plain; any other line that
+    names the variable makes the file unreadable for the model.
+    """
+    value = None
+    for raw in (text or "").split("\n"):
+        line = raw.strip()
+        if not line or line.startswith("#") or name not in line:
+            continue
+        found = re.match(SHELL_ASSIGNMENT.format(name=name), line)
+        if found is None:
+            return None, False
+        value = found.group(2)
+    return value, True
+
+
+def ufw_files(entries: Sequence[Entry]) -> tuple[list[str], list[str]]:
+    """Return the file that ufw applies with ``sysctl -p`` when it starts, and what is unclear.
+
+    ufw applies ``IPT_SYSCTL`` of ``/etc/default/ufw`` only when ``/etc/ufw/ufw.conf`` sets
+    ``ENABLED=yes``; without ``ufw.conf`` ufw is not installed.
+    """
+    by_path = {entry.path: entry for entry in entries}
+    enabled, plain = _shell_value(
+        by_path[UFW_CONF].text if UFW_CONF in by_path else None, "ENABLED"
+    )
+    if not plain:
+        return [], [f"{UFW_CONF}: ENABLED is set in a form the model does not read"]
+    target, plain = _shell_value(
+        by_path[UFW_DEFAULT].text if UFW_DEFAULT in by_path else None, "IPT_SYSCTL"
+    )
+    if enabled != "yes" or (plain and not target):
+        return [], []
+    if not plain or target != UFW_SYSCTL:
+        return [], [f"{UFW_DEFAULT}: ufw applies IPT_SYSCTL, which the collection cannot follow"]
+    return [UFW_SYSCTL], []
 
 
 def _swap(key: str) -> str:
@@ -202,7 +261,12 @@ def assignments(entry: Entry, reader: str) -> Iterator[Assignment]:
             if separator
             else None
         )
-        yield Assignment(path=normalise(name, reader), value=written, source=entry.path)
+        yield Assignment(
+            path=normalise(name, reader),
+            value=written,
+            source=entry.path,
+            escapes=".." in _swap(name).split("/"),
+        )
 
 
 def _is_glob(path: str) -> bool:
@@ -277,9 +341,7 @@ def _procps(lines: Sequence[Assignment], path: str) -> tuple[str, str] | None:
     return found
 
 
-def effective(
-    raw_entries: Iterable[Mapping[str, object]], key: str, after: Sequence[str] = ()
-) -> dict[str, object]:
+def effective(raw_entries: Iterable[Mapping[str, object]], key: str) -> dict[str, object]:
     """Return what each reader writes last for ``key``, its file, and what the model cannot follow.
 
     The result maps ``systemd`` and ``procps`` to ``{"value", "source"}`` (nulls when the reader
@@ -289,10 +351,16 @@ def effective(
     entries = load_entries(raw_entries)
     by_path = {entry.path: entry for entry in entries}
     path = normalise(key) or key
+    after, unclear = ufw_files(entries)
     late = [
         item for name in after if name in by_path for item in assignments(by_path[name], PROCPS)
     ]
     later = _procps(late, path)
+    unclear.extend(
+        f"{item.source}: a key with a .. component, which sysctl -p resolves"
+        for item in late
+        if item.escapes
+    )
     result: dict[str, object] = {}
     for reader in READERS:
         lines = [
@@ -302,5 +370,5 @@ def effective(
         result[reader] = (
             {"value": found[0], "source": found[1]} if found else {"value": None, "source": None}
         )
-    result["unsupported"] = unsupported(entries)
+    result["unsupported"] = unsupported(entries) + unclear
     return result

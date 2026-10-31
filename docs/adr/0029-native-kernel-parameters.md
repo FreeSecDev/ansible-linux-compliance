@@ -119,7 +119,7 @@ accepted value, and `compliant` without a write only when both already do. The m
   spaces after a `-`.
 - Keys: when the first separator is a dot, dots and slashes are interchanged. systemd then drops repeated slashes,
   `.` components and a leading and a trailing slash, and never writes a key with a `..` component; procps opens the
-  path as written, so the kernel resolves repeated slashes, `.`, `..` and a leading slash, and a trailing slash opens
+  path as written, so the kernel resolves repeated slashes, `.` and a leading slash, and a trailing slash opens
   nothing. `net.ipv4.conf..all.rp_filter`, `/net/ipv4/conf/all/rp_filter` and `net/ipv4/conf/./all/rp_filter` all
   name the rule's key; `net/ipv4/conf/all.rp_filter` does not.
 - Order: procps makes every setting in order, the last one wins. systemd merges every file into one ordered table
@@ -128,21 +128,39 @@ accepted value, and `compliant` without a write only when both already do. The m
   boot. For procps such a line only excludes the key from globs.
 - Globs: `*`, `?` and `[...]`, never across `/`; a key that any file assigns is never set by a glob; of the globs
   that match a key, systemd applies the last in its table order.
-- What the model does not follow is refused: procps expands every configuration file name with glob(3), braces and
-  `~` included, so a file named `[1]0-site.conf` or `{a,b}.conf` makes it read other files a second time at that
-  name's place. Any `*.conf` name with one of `*?[]{}~` in a directory the readers read makes every rule of the
-  family `unparsed_configuration`, with the file named.
-- Files read after boot: ufw applies `/etc/ufw/sysctl.conf` with `sysctl -p` when it starts, so it is read last, with
-  the rules of procps, for both readers.
+- What the model does not follow is refused, and makes every rule of the family `unparsed_configuration` with the
+  file named:
+  - procps expands every configuration file name with glob(3), braces, `~` and backslash escapes included, so a file
+    named `[1]0-site.conf`, `{a,b}.conf` or `\10-site.conf` makes it read other files a second time at that name's
+    place: any `*.conf` name with one of `*?[]{}~\` in a directory the readers read;
+  - procps opens a key with a `..` component as the kernel resolves it, and `/proc/sys/..` is `/proc`, so
+    `/../sys/net/ipv4/conf/all/rp_filter` lands on the rule's key again while `net/ipv4/conf/nonexist/../all/...`
+    names nothing: any key with a `..` component in a file that procps reads;
+  - systemd stops reading a file at a line of 1 MiB or more (`LONG_LINE_MAX`; `read_stripped_line` fails and
+    `parse_file` returns), so the lines after it never apply at boot: any line of 1,000,000 bytes or more in a file
+    that systemd reads.
+- Files read after boot: ufw applies the file named by `IPT_SYSCTL` in `/etc/default/ufw` with `sysctl -p` when it
+  starts, and only when `/etc/ufw/ufw.conf` sets `ENABLED=yes`; ufw ships disabled. Only then is
+  `/etc/ufw/sysctl.conf` read last, with the rules of procps, for both readers; with ufw disabled, without
+  `ufw.conf` or with an empty `IPT_SYSCTL` it counts for neither. An `ENABLED` or `IPT_SYSCTL` line other than a
+  plain `NAME=value` (quoted or exported), or an `IPT_SYSCTL` that names another file, is refused as
+  `unparsed_configuration`: the model does not follow what ufw would apply then.
 
 The model is not trusted on its own. `make sysctl-reader-verdicts` (`tools/molecule/sysctl-reader-verdicts.sh`) runs
-the real readers of the Molecule images on the cases of `tests/fixtures/sysctl_reader/cases.json` (67, among them
-the 13 of the first review of the pull request) and records what they write, not what they print:
+the real readers of the Molecule images on the cases of `tests/fixtures/sysctl_reader/cases.json` (72, among them
+the 13 of the first review of the pull request and the 5 of the second) and records what they write, not what they
+print:
 
-- each image runs in a throwaway container without a network, with every capability dropped but `CAP_SYS_ADMIN`;
-- inside, the script refuses to go on unless `/proc/sys` is Docker's read-only proc mount, mounts a private tmpfs
-  over it in the container's own mount namespace, and refuses again unless `/proc/sys` is that tmpfs, so no reader
-  can reach a kernel parameter of the host, `kernel.*` included;
+- each image runs in a throwaway container without a network, with every capability dropped but `CAP_SYS_ADMIN` and
+  `CAP_SETFCAP` (which lets root map itself into a new user namespace), and with `no-new-privileges`;
+- inside, `tools/molecule/sysctl-reader-inside.sh` refuses to go on unless `/proc/sys` is Docker's read-only proc
+  mount, then runs itself again in a user and mount namespace of its own (`unshare --user --map-root-user --mount`),
+  checks that it is in it, mounts a private tmpfs over `/proc/sys` there, and refuses again unless `/proc/sys` is that
+  tmpfs. In the new user namespace the read-only flags of Docker's mounts are locked, so not even a remount could
+  make the real `/proc/sys` writable, and the network namespace's parameters belong to the parent user namespace; no
+  reader can reach a kernel parameter of the host, `kernel.*` included;
+- every case key must match the role's key pattern before the generator writes `/proc/sys/<key>` for it, so no key
+  of the fixture can leave the tree;
 - the tmpfs holds every parameter of the cases, with the interfaces `all`, `default`, `eth0` and `lo`, preset to 9;
   for every case the readers run one at a time (`systemd-sysctl`, and `sysctl --system`; procps has no dry run for
   `--system`, and 3.3.17 none at all), and the files of the tree are recorded and read back.
@@ -160,7 +178,9 @@ The table replaced a hand-made boot order, and its first version an oracle that 
 diverged from the readers in ways that could report `compliant` or `applied` while a reader writes a looser value or
 none: a slash-first key with a dot, a form feed after the value, a file masked by a directory or a link to
 `/dev/null`, a `-key` line after the drop-in, a NUL or a lone carriage return before a line, a key spelled with `..`,
-`/./`, a leading slash or a trailing dot, a file name that procps expands, and a glob reassigned with the same value.
+`/./`, a leading slash or a trailing dot, a file name that procps expands, and a glob reassigned with the same value;
+the second review added a key above `/proc/sys` with `..`, a backslash in a file name, a line over 1 MiB and ufw's
+file while ufw is disabled.
 
 ### 2a. A conflicting line in a vendor file is set to the compliant value
 
@@ -201,18 +221,31 @@ the kernel combines `all` with the value of each interface: `rp_filter`, `arp_ig
 are ORed, `accept_source_route` is ANDed, and `accept_redirects` is ORed on an interface that does not forward and
 ANDed on one that does. For IPv6 only `forwarding` and `disable_ipv6` propagate from `all`; `accept_ra`, its
 `accept_ra_*` variants, `accept_redirects`, `autoconf`, `max_addresses` and `router_solicitations` act per interface,
-and `accept_source_route` takes the minimum. So an interface whose own value was set (by a glob of systemd's
-`50-default.conf`, which udev applies again per interface, by NetworkManager or systemd-networkd, or simply because it
-existed before the default changed) keeps a looser effective value while `all` is compliant and the scan passes.
-With the running values on, every rule of `net.ipv4.conf.all.*` or `net.ipv6.conf.all.*` in
-`__linux_compliance_remediate_sysctl_interface_combination` reads the value of every interface (`all`, `default` and
-the loopback interface excluded, which neither sends nor accepts redirects or router advertisements and whose
-packets are not reverse-path filtered), combines it with the value the rule writes as the kernel does (`accept_redirects`
-as if the interface did not forward, the stricter assumption; `drop_gratuitous_arp`, whose combination is not
-verified, as if only the interface value counted), and is refused as `interface_override`, nothing written, when any
-interface would keep a value that the check does not accept; the reason names each interface and its value. The
-collection does not write per-interface values: that belongs to the network configuration, and doing it here would
-change the behaviour of every interface. With the running values off, interfaces are not read either.
+and `accept_source_route` takes the minimum. `drop_gratuitous_arp` is ORed as well
+(`IN_DEV_ORCONF` in `arp_process`). For IPv4, writing `net.ipv4.conf.default.X` also copies the value to every
+interface that has not set X itself (`devinet_copy_dflt_conf`), at runtime and when `systemd-sysctl` applies the
+drop-ins at boot, so applying the `all` and the `default` rule together usually makes the interfaces compliant. An
+interface whose own value was set (by a glob of systemd's `50-default.conf`, which udev applies again per interface,
+by NetworkManager or systemd-networkd), and for IPv6 every interface, can still keep a looser effective value while
+`all` is compliant and the scan passes.
+
+Writing the stricter `all` value never loosens anything under any of these combinations, so it is never refused for
+an interface. The family always writes the drop-in and, with the running values on, the running value; then, after
+every running value of the family is set, every rule of `net.ipv4.conf.all.*` or `net.ipv6.conf.all.*` in
+`__linux_compliance_remediate_sysctl_interface_combination` that is `applied` or `compliant` reads the value of every
+interface again (`all`, `default` and the loopback interface excluded, which neither sends nor accepts redirects or
+router advertisements and whose packets are not reverse-path filtered) and combines it with the running `all` value
+as the kernel does (`accept_redirects` as if the interface did not forward, the stricter assumption;
+`accept_source_route` of IPv6, whose minimum makes `-1`, no routing header at all, stricter than `0`, counts any value
+below the accepted ones as compliant). When an interface still has a value that the check does not accept, the rule
+keeps its status `applied` or `compliant`, but with the reason `interface_override` instead of none, and its message
+names each such interface, its own value and the value the kernel then uses. So a rule is reported without a reason
+only when every interface is compliant too; `interface_override` is the operator's signal that the network
+configuration still has to change an interface. In check mode nothing is written, so the interfaces are combined
+with the value the rule would write and read as they are, without the propagation of `default`; the report can then
+name an interface that the real run makes compliant. The collection does not write per-interface values: that belongs
+to the network configuration, and doing it here would change the behaviour of every interface. With the running
+values off, interfaces are not read either, and the reason stays `running_value_not_read`.
 
 The running value is set by the new module `freesecdev.linux_compliance.sysctl_runtime` with its helper
 `plugins/module_utils/compliance/sysctl.py`. No program runs: the module writes the value to the parameter's own file
@@ -361,11 +394,14 @@ Other writers of kernel parameters are out of scope and not modelled: a systemd 
 example `systemd.set_credential=` on the kernel command line), which `systemd-sysctl` applies after every file;
 Docker, libvirt and systemd-networkd (`IPForward=`), which set `ip_forward`; and tuned's `[sysctl]` plugin. Each can
 change a running value after the collection set it; the next run then sets it again, or reports the rule's running
-value as it finds it. Per-interface values are only read, never written (section 3).
+value as it finds it. Per-interface values are only read, never written, and a looser one is reported with the
+reason `interface_override` after the stricter `all` value is set (section 3).
 
-The generator of the reader verdicts runs the real readers as root in containers with `CAP_SYS_ADMIN`, which is the
-one place the repository grants it; it mounts a private tmpfs over `/proc/sys` and refuses to run any reader unless
-that tmpfs is in place, so a reader that writes, as `sysctl --system` always does, cannot reach the host kernel.
+The generator of the reader verdicts runs the real readers as root in containers with `CAP_SYS_ADMIN` and
+`CAP_SETFCAP`, which is the one place the repository grants them; the readers run in a user and mount namespace of
+their own, where Docker's read-only mounts cannot be remounted, over a private tmpfs on `/proc/sys`, and no reader runs
+unless that tmpfs is in place, so a reader that writes, as `sysctl --system` always does, cannot reach the host
+kernel. The case keys are validated against the role's key pattern before any is written below `/proc/sys`.
 
 ## Operational consequences
 

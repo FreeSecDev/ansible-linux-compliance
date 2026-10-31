@@ -107,25 +107,80 @@
     "{{ item }}": true
   loop: "{{ regression_toggles }}"
 
-- name: Running kernel regressions | Plan the rules in check mode while the interfaces are looser
+- name: Running kernel regressions | Apply the rules while every interface is looser
   ansible.builtin.include_tasks:
     file: lifecycle_remediate.yml
   vars:
-    lifecycle_check_mode: true
+    lifecycle_check_mode: false
 
-- name: Running kernel regressions | Check that rp_filter and accept_redirects are refused for every interface
+- name: Running kernel regressions | Read the running values after the apply over the looser interfaces
+  freesecdev.linux_compliance.sysctl_runtime:
+    read: "{{ regression_parameters }}"
+  register: regression_loose
+
+- name: Running kernel regressions | Inspect the drop-in of rp_filter after the apply over the looser interfaces
+  ansible.builtin.stat:
+    path: "{{ regression_filter_dropin }}"
+    follow: false
+  register: regression_loose_dropin
+
+- name: Running kernel regressions | Check that the stricter values were written and every looser interface is named
+  vars:
+    regression_judged: >-
+      {{ lifecycle_results | selectattr('rule_id', 'in', [regression_filter, regression_redirects]) | list }}
+  ansible.builtin.assert:
+    that:
+      - regression_judged | map(attribute='status') | unique | list == ['applied']
+      - regression_judged | map(attribute='reason') | unique | list == ['interface_override']
+      - regression_judged | rejectattr('changed') | list == []
+      - >-
+        regression_devices | map('regex_replace', '$', ' (') | reject('in', regression_judged
+        | map(attribute='message') | first) | list == []
+      - >-
+        regression_devices | map('regex_replace', '$', ' (') | reject('in', regression_judged
+        | map(attribute='message') | last) | list == []
+      - regression_loose.running['net.ipv4.conf.all.rp_filter'] == '1'
+      - regression_loose.running['net.ipv4.conf.all.accept_redirects'] == '0'
+      - >-
+        regression_devices | map('regex_replace', '^', 'net.ipv4.conf.') | map('regex_replace', '$', '.rp_filter')
+        | map('extract', regression_loose.running) | unique | list == ['2']
+      - >-
+        regression_devices | map('regex_replace', '^', 'net.ipv4.conf.')
+        | map('regex_replace', '$', '.accept_redirects')
+        | map('extract', regression_loose.running) | unique | list == ['1']
+      - regression_loose_dropin.stat.exists
+    fail_msg: "{{ regression_label }}, looser interfaces {{ regression_devices }}: {{ lifecycle_results }}"
+    quiet: true
+
+- name: Running kernel regressions | Switch every rule of the topic off after the interface check
+  ansible.builtin.set_fact:
+    "{{ item }}": false
+  loop: "{{ regression_toggles }}"
+
+- name: Running kernel regressions | Clean up the rules applied over the looser interfaces
+  ansible.builtin.include_tasks:
+    file: lifecycle_remediate.yml
+  vars:
+    lifecycle_check_mode: false
+
+- name: Running kernel regressions | Read the running values after the cleanup of the interface check
+  freesecdev.linux_compliance.sysctl_runtime:
+    read: "{{ regression_parameters }}"
+  register: regression_loose_cleaned
+
+- name: Running kernel regressions | Check that the cleanup set the values before the interface check again
   ansible.builtin.assert:
     that:
       - >-
         lifecycle_results | selectattr('rule_id', 'in', [regression_filter, regression_redirects])
-        | map(attribute='status') | unique | list == ['interface_override']
+        | map(attribute='status') | unique | list == ['restored']
       - >-
-        lifecycle_results | selectattr('rule_id', 'in', [regression_filter, regression_redirects])
-        | selectattr('changed') | list == []
+        regression_loose_cleaned.running['net.ipv4.conf.all.rp_filter']
+        == regression_built.running['net.ipv4.conf.all.rp_filter']
       - >-
-        regression_devices | select('in', lifecycle_results | selectattr('rule_id', 'equalto', regression_filter)
-        | map(attribute='reason') | first) | list == regression_devices
-    fail_msg: "{{ regression_label }}, looser interfaces {{ regression_devices }}: {{ lifecycle_results }}"
+        regression_loose_cleaned.running['net.ipv4.conf.all.accept_redirects']
+        == regression_built.running['net.ipv4.conf.all.accept_redirects']
+    fail_msg: "{{ regression_label }}, cleanup of the interface check: {{ lifecycle_results }}"
     quiet: true
 
 - name: Running kernel regressions | Give every interface a compliant rp_filter and accept_redirects by hand

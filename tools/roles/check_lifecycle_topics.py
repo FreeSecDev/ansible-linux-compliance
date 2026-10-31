@@ -15,8 +15,7 @@ a disruptive topic without a containment note, a declaration without an ``applie
 expectation, an expectation or a pre-state for an item that is not declared, an unknown
 attribute or platform, a malformed mode, a ``rewritten`` flag that is not a boolean, a
 pre-state that leaves a rule ``unchanged`` that is not a native rule of the topic or with a
-status other than ``compliant``, ``notapplicable``, ``overridden`` or ``interface_override``
-(FREES-107), a pre-state file whose
+status other than ``compliant``, ``notapplicable`` or ``overridden``, a pre-state file whose
 ``content`` is not a non-empty text or that also sets an owner or group, pre-state ``lines``
 (``regexp`` and ``line`` on one line each) of a file that ``state.files`` does not declare
 ``rewritten`` or of an entry that also sets ``content`` (FREES-185), a pre-state ``applied``
@@ -48,10 +47,6 @@ driver runs it; ``make molecule-matrix`` plans one leg per group, driver and pla
 Docker scenarios unless it ``requires`` other drivers (FREES-107): a regression that needs a running
 kernel, such as a running value changed by hand, requires libvirt, and then runs only on platforms
 where a libvirt cycle of its topic runs.
-
-``regression_platforms`` returns, per topic and group, the platforms whose Docker lifecycle scenario
-runs it; ``make molecule-matrix`` plans one leg per group and platform, with the mode
-``regressions-<group>``, so that the regressions do not lengthen the cycle legs.
 
 A topic may declare ``profiles`` (FREES-190): per platform, the profile of that platform's pinned
 datastream that its cycles and regressions run with instead of the platform's own, with a reason,
@@ -159,9 +154,7 @@ PRE_STATE_KEYS: Final[frozenset[str]] = frozenset(
 )
 TOGGLE_MODES: Final[frozenset[str]] = frozenset({"topic", "rule"})
 UNCHANGED_KEYS: Final[frozenset[str]] = frozenset({"rule", "status", "platforms"})
-UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset(
-    {"compliant", "notapplicable", "overridden", "interface_override"}
-)
+UNCHANGED_STATUSES: Final[frozenset[str]] = frozenset({"compliant", "notapplicable", "overridden"})
 REWRITTEN_KEY: Final[str] = "rewritten"
 PRE_STATE_FILE_KEYS: Final[frozenset[str]] = frozenset(
     {"path", "mode", "owner", "group", "content", "lines"}
@@ -565,10 +558,7 @@ class Declaration:
             else:
                 seen.add(rule)
             if item.get("status") not in UNCHANGED_STATUSES:
-                self.error(
-                    f"{where} needs the status compliant, notapplicable, overridden or"
-                    " interface_override"
-                )
+                self.error(f"{where} needs the status compliant, notapplicable or overridden")
 
     def _pre_state_requires(self, item: dict[str, object], what: str) -> None:
         """Record the drivers of a pre-state, which must be drivers of its topic."""
