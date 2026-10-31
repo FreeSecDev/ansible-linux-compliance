@@ -1,7 +1,7 @@
 ---
 minor_changes:
   - >-
-    remediate - the kernel parameter topics are native (FREES-107, ADR 0024): 20 rules of ``sysctl`` and all 26 of
+    remediate - the kernel parameter topics are native (FREES-107, ADR 0029): 20 rules of ``sysctl`` and all 26 of
     ``ipv4_parameters`` and 19 of ``ipv6_parameters``. Each rule writes one drop-in
     ``/etc/sysctl.d/999-freesecdev-<rule>.conf`` with the value of the selected profile or of the check, which sorts
     after every file of the distributions, and, where the check rejects the running value, sets that as well and
@@ -11,7 +11,7 @@ minor_changes:
     and written back on cleanup; a
     conflicting setting in an administrator's file is reported ``overridden`` or ``conflicting_setting`` and never
     edited. ``ipv4_parameters`` and ``ipv6_parameters`` stay disruptive and need the family or ``network`` in
-    ``linux_compliance_remediate_allow_disruptive``. Eleven rules stay ``audit_only`` with their reasons in ADR 0024,
+    ``linux_compliance_remediate_allow_disruptive``. Eleven rules stay ``audit_only`` with their reasons in ADR 0029,
     among them the three whose running value cannot be set back until the next boot.
   - >-
     remediate - new variable ``linux_compliance_remediate_sysctl_runtime`` (default ``true``); with ``false`` the

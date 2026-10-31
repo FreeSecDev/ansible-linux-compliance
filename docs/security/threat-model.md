@@ -326,7 +326,7 @@ root through the audited process helper ([ADR 0023](../adr/0023-native-ssh-serve
 
 The `sysctl`, `ipv4_parameters` and `ipv6_parameters` families of the `remediate` role write drop-ins below
 `/etc/sysctl.d`, change conflicting lines of Ubuntu's procps files there, and the module `sysctl_runtime` writes
-running values below `/proc/sys` as root ([ADR 0024](../adr/0024-native-kernel-parameters.md), FREES-107).
+running values below `/proc/sys` as root ([ADR 0029](../adr/0029-native-kernel-parameters.md), FREES-107).
 
 ### Assets
 

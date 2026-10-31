@@ -14,7 +14,7 @@ description:
     entries of O(set), writes a new value there, as C(sysctl -w) does. No external program runs.
   - The persistent value of a parameter belongs to a file below C(/etc/sysctl.d); this module
     changes only the running kernel. The remediate role uses it to set the value that a native
-    sysctl rule requires and to restore the value that its ledger recorded (ADR 0024).
+    sysctl rule requires and to restore the value that its ledger recorded (ADR 0029).
   - A path is used only when it is the parameter's own regular file on the file system of
     C(/proc/sys), reached without a symbolic link. Every value is read back after it is written;
     when the kernel keeps another value, the module writes the value before back and fails.

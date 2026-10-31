@@ -1,4 +1,4 @@
-"""Read and set running kernel parameters below ``/proc/sys`` (FREES-107, ADR 0024).
+"""Read and set running kernel parameters below ``/proc/sys`` (FREES-107, ADR 0029).
 
 The remediate role writes the persistent value of a kernel parameter as a drop-in below
 ``/etc/sysctl.d`` with ``ansible.builtin.copy`` and sets the running value through the

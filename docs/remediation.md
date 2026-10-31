@@ -8,7 +8,7 @@ reviewers. Jira: FREES-52, FREES-55 (generated toggles), FREES-53 (full catalogu
 FREES-52, FREES-55 and FREES-53), [ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md) (profile values,
 banners and password quality), [ADR 0022](adr/0022-native-sudo-drop-ins.md) (sudo, FREES-175),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md) (SSH server, FREES-109),
-[ADR 0024](adr/0024-native-kernel-parameters.md) (kernel parameters, FREES-107). How to make a further topic
+[ADR 0029](adr/0029-native-kernel-parameters.md) (kernel parameters, FREES-107). How to make a further topic
 native is in the
 [native remediation guide](native-remediation-guide.md).
 
@@ -314,7 +314,7 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 Besides the reference family, seven topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0024](adr/0024-native-kernel-parameters.md)).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0029](adr/0029-native-kernel-parameters.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
@@ -488,7 +488,7 @@ run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
 
 ### Kernel parameters
 
-Three topics hold the kernel parameter rules ([ADR 0024](adr/0024-native-kernel-parameters.md)): `sysctl`, the kernel
+Three topics hold the kernel parameter rules ([ADR 0029](adr/0029-native-kernel-parameters.md)): `sysctl`, the kernel
 hardening that does not change routing (not disruptive), and `ipv4_parameters` and `ipv6_parameters`, which are
 disruptive and grouped by the umbrella `network`, so they are applied and cleaned up only with the family or `network`
 in `linux_compliance_remediate_allow_disruptive`. One helper, `sysctl_parameters.yml`, implements all three.
@@ -521,13 +521,13 @@ value is accepted, or when the check already passes without a drop-in (`kernel.y
 again after apply is set again by the next run; the first recorded value is kept. Where `/etc/sysctl.d` is missing (the
 Rocky Linux container) the first drop-in creates it with the marker `.freesecdev-created`, and cleanup removes both once
 nothing else is in it. When the current state already equals the recorded prior state at cleanup, the rule is
-`restored` without a write (FREES-173). Kept `audit_only`, with the reasons in ADR 0024: `sysctl_kernel_kexec_load_disabled`,
+`restored` without a write (FREES-173). Kept `audit_only`, with the reasons in ADR 0029: `sysctl_kernel_kexec_load_disabled`,
 `sysctl_kernel_modules_disabled` and `sysctl_kernel_unprivileged_bpf_disabled` (their running value is one-way until
 the next boot), `sysctl_kernel_pid_max`, `sysctl_user_max_user_namespaces` and its `_no_remediation` variant (they can
 stop workloads), `sysctl_kernel_exec_shield` (a boot loader check) and the four core dump rules of the `sysctl` family
 (`coredump_disable_backtraces`, `coredump_disable_storage`, `service_systemd-coredump_disabled`,
 `disable_users_coredumps`, which configure systemd-coredump and PAM limits, not kernel parameters). What each network
-rule can break, and why each can be switched off on its own, is in ADR 0024, section 5.
+rule can break, and why each can be switched off on its own, is in ADR 0029, section 5.
 
 ## Results
 

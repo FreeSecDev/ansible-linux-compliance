@@ -25,7 +25,7 @@ file in `/etc/sysctl.d` is set to the rule's value and written back on cleanup),
 values of the selected profile ([ADR 0021](../../docs/adr/0021-native-banners-pwquality-and-profile-values.md),
 [ADR 0022](../../docs/adr/0022-native-sudo-drop-ins.md),
 [ADR 0023](../../docs/adr/0023-native-ssh-server-configuration.md),
-[ADR 0024](../../docs/adr/0024-native-kernel-parameters.md)). The catalogue `vars/rules.yml` holds
+[ADR 0029](../../docs/adr/0029-native-kernel-parameters.md)). The catalogue `vars/rules.yml` holds
 every rule of the 25 pinned profiles, 1203 rules in 55 families, generated from the pinned content (FREES-53,
 [control families](../../docs/control-families.md)); every rule without a native remediation has the strategy
 `audit_only` and is reported as `not_implemented`, never as remediated. The topic toggles are generated from the

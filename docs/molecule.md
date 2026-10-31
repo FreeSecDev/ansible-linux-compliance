@@ -561,7 +561,7 @@ written through it. Rocky Linux ships `50-redhat.conf` in the directory, so the 
 only. The regressions end with the whole-instance comparison.
 
 The kernel parameter topics `sysctl`, `ipv4_parameters` and `ipv6_parameters`
-([ADR 0024](adr/0024-native-kernel-parameters.md)) run two pre-states each, by the per-pre-state driver rule of
+([ADR 0029](adr/0029-native-kernel-parameters.md)) run two pre-states each, by the per-pre-state driver rule of
 FREES-61. `as built` runs in the Docker scenarios, where `/proc/sys` is read-only, so the harness passes
 `linux_compliance_remediate_sysctl_runtime: false` there (`lifecycle_sysctl_runtime` in `shared/vars/lifecycle.yml`,
 `true` on the virtual machines): the cycles prove the drop-ins with their checksums, on Ubuntu the `rp_filter` lines

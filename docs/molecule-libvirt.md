@@ -420,7 +420,7 @@ each libvirt lifecycle scenario the two ownership cycles, one per CI leg (`file_
 about it needs one, and the real scans of `converge` already show the outcome on the machine.
 
 The kernel parameter topics `sysctl`, `ipv4_parameters` and `ipv6_parameters` (FREES-107,
-[ADR 0024](adr/0024-native-kernel-parameters.md)) each have a pre-state `as built, with the running kernel` that
+[ADR 0029](adr/0029-native-kernel-parameters.md)) each have a pre-state `as built, with the running kernel` that
 requires libvirt, next to the `as built` pre-state of the Docker scenarios, which writes only the drop-ins because the
 containers' `/proc/sys` is read-only. On the machines the harness passes `linux_compliance_remediate_sysctl_runtime:
 true`, so apply sets the running value where the check rejects it: the pre-state declares the value of every kernel

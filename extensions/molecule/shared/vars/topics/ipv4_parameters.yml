@@ -293,10 +293,6 @@ pre_states:
         status: compliant
         platforms:
           - rhel_compatible
-      - rule: sysctl_net_ipv4_conf_default_rp_filter
-        status: compliant
-        platforms:
-          - rhel_compatible
       - rule: sysctl_net_ipv4_icmp_echo_ignore_broadcasts
         status: compliant
         platforms:
@@ -317,6 +313,18 @@ pre_states:
             - rhel_compatible
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-accept-source-route.conf
           exists: false
+          platforms:
+            - rhel_compatible
+        - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-default-rp-filter.conf
+          exists: true
+          type: file
+          attributes: []
+          mode: "0644"
+          owner: root
+          group: root
+          uid: 0
+          gid: 0
+          checksum: 4c88003cfb452372961fca9dae54657d8d78f70ac35aca091b3b7b76687a5b01
           platforms:
             - rhel_compatible
         - path: /etc/sysctl.d/999-freesecdev-sysctl-net-ipv4-conf-all-accept-redirects.conf

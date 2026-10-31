@@ -1,4 +1,4 @@
-# 0024. Native kernel parameters through sysctl drop-ins and the running kernel
+# 0029. Native kernel parameters through sysctl drop-ins and the running kernel
 
 - **Status:** proposed
 - **Date:** 2026-10-30

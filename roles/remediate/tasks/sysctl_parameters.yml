@@ -111,7 +111,7 @@
       {{ linux_compliance_discovered.content_sha256 | default('') }}
       of the benchmark {{ __linux_compliance_remediate_sc_benchmark }}, which the content's check of that benchmark
       accepts; the catalogue holds {{ __linux_compliance_remediate_sc_wanted }}. The values come from the pinned
-      content (ADR 0021, ADR 0024); no kernel parameter was changed.
+      content (ADR 0021, ADR 0029); no kernel parameter was changed.
     quiet: true
   loop: "{{ __linux_compliance_remediate_sc_rules }}"
   loop_control:

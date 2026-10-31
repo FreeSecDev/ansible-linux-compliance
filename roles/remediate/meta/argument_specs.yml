@@ -112,7 +112,7 @@ argument_specs:
           - "runtime_unavailable and nothing is changed."
           - "With false, only the persistent value is written and the running kernel is neither read nor changed;"
           - "it takes the value at the next boot. Cleanup still sets back a running value that the ledger recorded."
-          - "See ADR 0024."
+          - "See ADR 0029."
       linux_compliance_file_permissions_enabled:
         type: bool
         default: true
