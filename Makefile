@@ -229,6 +229,7 @@ OSCAP_IMAGE ?= localhost/freesecdev-oscap:local
 OSCAP_CONTAINERFILE := extensions/ci/oscap/Containerfile
 OPENSCAP_SCANNER_VERSION := 1.3.9+dfsg-1.1ubuntu2
 GENERATE_STIG_MAPPING := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.content.generate_stig_mapping
+FETCH_CONTENT := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m tools.content.fetch_content
 SCC_FETCH_ENV := SCC_VERSION='$(SCC_VERSION)' SCC_BUNDLE='$(SCC_BUNDLE)' SCC_BUNDLE_URL='$(SCC_BUNDLE_URL)' \
 	SCC_BUNDLE_SIZE='$(SCC_BUNDLE_SIZE)' SCC_BUNDLE_SHA256='$(SCC_BUNDLE_SHA256)' SCC_CHECKSUMS_URL='$(SCC_CHECKSUMS_URL)' \
 	SCC_DEB_MEMBER='$(SCC_DEB_MEMBER)' SCC_DEB_SHA256='$(SCC_DEB_SHA256)' SCC_CSCC_SHA256='$(SCC_CSCC_SHA256)'
@@ -408,8 +409,8 @@ GENERATE_CATALOGUE := PYTHONPATH='$(CURDIR)/build/collections' $(RUN) python -m 
 toggles: require-uv collection-link
 	$(GENERATE_TOGGLES)
 
-content: require-uv
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content
+content: require-uv collection-link
+	$(FETCH_CONTENT) --output-dir build/content
 
 catalogue: require-uv collection-link
 	$(GENERATE_CATALOGUE)
@@ -521,12 +522,12 @@ test-coverage: require-uv collection-link
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 
 test-content-golden: require-uv collection-link content
-	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py tests/unit/tools/test_content_golden_ssh.py tests/unit/tools/test_content_golden_login_defs.py --no-cov
+	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py tests/unit/tools/test_content_golden_ssh.py tests/unit/tools/test_content_golden_login_defs.py tests/unit/tools/test_content_golden_scripts.py --no-cov
 	$(GENERATE_CATALOGUE) --check
 	$(GENERATE_STIG_MAPPING) --check
 
 test-oscap-integration: require-uv collection-link
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
+	$(FETCH_CONTENT) --output-dir build/content --datastream ubuntu2404
 	$(RUN) pytest tests/system --no-cov -v -s -p no:cacheprovider
 	$(RUN) ansible-playbook -i localhost, tests/playbooks/audit-toggles-oscap.yml
 
@@ -838,8 +839,8 @@ molecule-images-build: require-uv
 molecule-images-ids:
 	@$(MOLECULE_INSTANCE_IMAGES) ids '$(FREESECDEV_MOLECULE_IMAGES)'
 
-molecule-content: require-uv
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404 --datastream rhel9
+molecule-content: require-uv collection-link
+	$(FETCH_CONTENT) --output-dir build/content --datastream ubuntu2404 --datastream rhel9
 
 test-molecule-docker: require-uv molecule-dependencies molecule-content
 	@docker info >/dev/null 2>&1 || { printf 'error: a running Docker daemon is required\n' >&2; exit 1; }
@@ -1060,7 +1061,7 @@ oscap-image: lint-containerfile
 
 scc-integration: scc-image scc-image-ubuntu2604 oscap-image require-uv collection-link
 	uv python install
-	$(RUN) python tools/content/fetch_content.py --output-dir build/content --datastream ubuntu2404
+	$(FETCH_CONTENT) --output-dir build/content --datastream ubuntu2404
 	FREESECDEV_SCC_IMAGE='$(SCC_IMAGE)' FREESECDEV_SCC_IMAGE_UBUNTU2604='$(SCC_IMAGE_UBUNTU2604)' FREESECDEV_REQUIRE_SCC=1 \
 		FREESECDEV_OSCAP_IMAGE='$(OSCAP_IMAGE)' FREESECDEV_SCC_EXPIRY_LOG='$(SCC_EXPIRY_LOG)' \
 		$(RUN) pytest tests/system/scc --no-cov -v -s -p no:cacheprovider

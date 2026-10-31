@@ -1,0 +1,24 @@
+---
+security_fixes:
+  - >-
+    content - no script written by ComplianceAsCode runs on a managed host any more, not even during the audit.
+    ``make content`` removes every Script Check Engine (SCE) check and embedded script from the pinned datastreams
+    before they leave the controller (81 on Ubuntu 24.04, 438 on RHEL 9), and every XCCDF ``fix`` element, the
+    content's remediation code (1257 and 3460), changing no other byte; ``fixtext`` stays. The manifest
+    pins the published digest (``source_sha256``), the numbers removed and the digest of the processed datastream
+    (``sha256``), which the discover and audit roles, Molecule and the catalogue now use. The 18 Ubuntu 24.04 and 4 RHEL
+    9 rules whose only automated check was SCE report ``notchecked`` instead of a result produced by a script we did not
+    write (ADR 0026).
+  - >-
+    benchmark_info, profile_info, compliance_scan - a datastream that holds an XCCDF check whose system is not OVAL or
+    OCIL, a Script Check Engine element, a data stream extended component or an XCCDF ``fix`` with remediation code
+    (an attribute other than ``id``, a child element or text) is refused with ``script_check_content``. The empty
+    ``fix`` anchors of DISA's STIG benchmarks are accepted. A ``component-ref`` or catalog ``uri`` that does not start
+    with ``#`` and an XML declaration that names an encoding other than UTF-8 are refused too, because ``oscap`` would
+    load the referenced document or decode the bytes differently. Such content is refused
+    whoever supplied it. The audit also refuses it in the private copy that ``oscap`` reads, and nothing is scanned
+    (ADR 0026).
+minor_changes:
+  - >-
+    content - ``fetch_content`` runs as a module through ``make content`` and ``make molecule-content``, because it
+    removes the scripts with the collection's bounded XML parser, which now reports the byte offset of every tag.

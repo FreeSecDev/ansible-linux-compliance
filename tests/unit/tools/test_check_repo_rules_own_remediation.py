@@ -79,7 +79,7 @@ PYTHON_FIX_READERS = [
     [
         "tools/roles/profile_values.py",
         "tools/reporting/checklist.py",
-        "plugins/module_utils/compliance/catalog.py",
+        "plugins/module_utils/compliance/openscap.py",
         "plugins/modules/benchmark_info.py",
     ],
 )
@@ -465,3 +465,20 @@ def test_the_rule_is_part_of_the_repository_guard() -> None:
     assert "own_remediation_findings" in (
         rules.REPO_ROOT / "tools/lint/repo_rules/repository.py"
     ).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("relative", "pinned"),
+    [
+        ("tools/content/script_checks.py", f'FIX = f"{{XCCDF}}{FIX}"\n'),
+        (
+            "plugins/module_utils/compliance/catalog.py",
+            f'_FIX = _qualified("{FIX}")\n_FIX_11 = _qualified_11("{FIX}")\n',
+        ),
+    ],
+)
+def test_the_fix_removal_and_refusal_are_pinned_exactly(
+    tmp_path: Path, relative: str, pinned: str
+) -> None:
+    assert findings(tmp_path, relative, pinned) == []
+    assert_refused(findings(tmp_path, relative, pinned + f'MORE = "{FIX}text"\n'), FIX_READS)
