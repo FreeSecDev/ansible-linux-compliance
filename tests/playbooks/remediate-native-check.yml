@@ -603,6 +603,9 @@
       - prior_too_large
       - overridden
       - conflicting_setting
+      - unparsed_configuration
+      - interface_override
+      - prior_unrestorable
       - runtime_unavailable
   tasks:
     - name: Refuse to run outside check mode
