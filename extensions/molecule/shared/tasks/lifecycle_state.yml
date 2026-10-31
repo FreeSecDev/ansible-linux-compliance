@@ -8,6 +8,7 @@
       sysctl: {}
       users: {}
       groups: {}
+      audit_rules: {}
       ledger: []
 
 - name: Lifecycle state | Inspect the declared files without following a symbolic link
@@ -143,6 +144,32 @@
   loop: "{{ lifecycle_state_groups.results }}"
   loop_control:
     label: "{{ item.item.name }}"
+
+- name: Lifecycle state | Read the rules that the kernel has loaded, which only a virtual machine can show
+  freesecdev.linux_compliance.audit_control:
+    action: status
+    expect: "{{ lifecycle_items.audit_rules | map(attribute='line') | list }}"
+  register: lifecycle_state_audit
+  when: lifecycle_items.audit_rules | default([]) | length > 0
+
+- name: Lifecycle state | Refuse declared audit rules on an instance whose kernel cannot be read
+  ansible.builtin.assert:
+    that:
+      - lifecycle_state_audit.kernel
+    fail_msg: >-
+      {{ lifecycle_family }} declares loaded audit rules, but auditctl cannot read the kernel's audit status on
+      {{ molecule_target.instance }}: {{ lifecycle_state_audit.message }}. Declare them only for the libvirt driver.
+    quiet: true
+  when: lifecycle_items.audit_rules | default([]) | length > 0
+
+- name: Lifecycle state | Record whether each declared audit rule is loaded
+  ansible.builtin.set_fact:
+    lifecycle_state: >-
+      {{ lifecycle_state | combine({'audit_rules': {item.line: {
+           'loaded': item.line not in lifecycle_state_audit.missing}}}, recursive=true) }}
+  loop: "{{ lifecycle_items.audit_rules | default([]) }}"
+  loop_control:
+    label: "{{ item.line }}"
 
 - name: Lifecycle state | Read the state ledger
   freesecdev.linux_compliance.control_state:

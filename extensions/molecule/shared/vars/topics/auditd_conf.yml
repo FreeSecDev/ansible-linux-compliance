@@ -1,0 +1,135 @@
+---
+family: auditd_conf
+disruptive: true
+containment: >-
+  auditd_conf only edits lines of /etc/audit/auditd.conf and asks a running auditd to read the file again. The
+  containers run no auditd, so a disk space or disk error action (single, halt) can never fire there; the harness
+  connects with docker exec through the Docker API as root, without sshd, PAM, sudo or a login shell, and the guard's
+  connection test after every remediate run proves that it still reaches the same unprivileged container. The
+  allow-list names auditd_conf only for the runs of this topic.
+profiles:
+  - platform: ubuntu
+    profile: cis_level2_server
+    reason: >-
+      cis_level1_server selects no auditd.conf rule; the Level 2 server profile selects the CIS settings.
+  - platform: rhel_compatible
+    profile: stig
+    reason: >-
+      cis_server_l1 selects no auditd.conf rule; the STIG profile selects the most settings, the other profiles
+      run in the profiles regression.
+audit:
+  applied_outcomes:
+    - notapplicable
+  reason: >-
+    The RHEL 9 datastream's platform checks do not recognise Rocky Linux, so every rule of the profile is notapplicable
+    there; the lines of /etc/audit/auditd.conf under applied are the evidence. On Ubuntu 24.04 the rules apply to a
+    container with auditd installed, and the audit after apply must report them pass or fixed.
+state:
+  files:
+    - path: /etc/audit/auditd.conf
+      rewritten: true
+  packages:
+    - name: auditd
+      platforms:
+        - ubuntu
+    - name: audit
+      platforms:
+        - rhel_compatible
+  users:
+    - name: root
+  groups:
+    - name: root
+applied:
+  files:
+    - path: /etc/audit/auditd.conf
+      exists: true
+      type: file
+      mode: "0640"
+      owner: root
+      group: root
+      changes:
+        - checksum
+pre_states:
+  - name: as built
+    audit: true
+    reasons:
+      - step: apply
+        reason: takes_effect_at_start
+      - step: cleanup
+        reason: takes_effect_at_start
+    unchanged:
+      - rule: auditd_data_retention_action_mail_acct
+        status: compliant
+      - rule: auditd_data_retention_max_log_file
+        status: compliant
+        platforms:
+          - ubuntu
+      - rule: auditd_local_events
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_log_format
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_overflow_action
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_write_logs
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_data_retention_max_log_file_action_stig
+        status: compliant
+        platforms:
+          - rhel_compatible
+  - name: auditd running in a virtual machine, with local events off
+    audit: false
+    requires:
+      - libvirt
+    files:
+      - path: /etc/audit/auditd.conf
+        lines:
+          - regexp: '^local_events = '
+            line: local_events = no
+    reasons:
+      - step: apply
+        reason: reload_not_confirmed
+      - step: apply
+        reason: restart_required
+        rules:
+          - auditd_local_events
+      - step: cleanup
+        reason: reload_not_confirmed
+      - step: cleanup
+        reason: restart_required
+        rules:
+          - auditd_local_events
+    unchanged:
+      - rule: auditd_data_retention_action_mail_acct
+        status: compliant
+      - rule: auditd_data_retention_max_log_file
+        status: compliant
+        platforms:
+          - ubuntu
+      - rule: auditd_log_format
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_overflow_action
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_write_logs
+        status: compliant
+        platforms:
+          - rhel_compatible
+      - rule: auditd_data_retention_max_log_file_action_stig
+        status: compliant
+        platforms:
+          - rhel_compatible
+regressions:
+  - name: changes
+    files:
+      - lifecycle_auditd_conf_regressions.yml

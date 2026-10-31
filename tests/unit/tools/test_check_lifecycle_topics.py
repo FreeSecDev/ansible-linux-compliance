@@ -457,6 +457,8 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
     assert native == [
         "file_permissions",
         "banners",
+        "auditd_rules_time",
+        "auditd_conf",
         "filesystem_modules",
         "protocol_modules",
         "wireless_modules",
@@ -977,7 +979,9 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["protocol_modules"] == {}
     assert found["wireless_modules"] == {}
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 14
+    assert found["auditd_conf"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert found["auditd_rules_time"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 16
 
 
 @pytest.mark.parametrize(
@@ -1186,6 +1190,58 @@ def test_without_known_profiles_any_well_formed_profile_is_accepted(tmp_path: Pa
     assert declaration.errors == []
 
 
+AUDIT_LINE = "-a always,exit -F arch=b64 -S adjtimex -k time-change"
+
+
+def test_loaded_audit_rules_may_be_declared_for_the_libvirt_driver(tmp_path: Path) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    applied = cast("dict[str, object]", VALID["applied"])
+    declaration = changed(
+        state={**state, "audit_rules": [{"line": AUDIT_LINE, "drivers": ["libvirt"]}]},
+        applied={
+            **applied,
+            "audit_rules": [{"line": AUDIT_LINE, "loaded": True, "drivers": ["libvirt"]}],
+        },
+    )
+    assert errors_for(tmp_path, declaration) == []
+
+
+@pytest.mark.parametrize(
+    ("item", "message"),
+    [
+        ({"line": AUDIT_LINE}, "state.audit_rules[0].drivers needs a non-empty list of drivers"),
+        (
+            {"line": AUDIT_LINE, "drivers": ["docker"]},
+            "state.audit_rules[0] cannot be recorded with docker",
+        ),
+        (
+            {"line": AUDIT_LINE, "drivers": ["libvirt", "docker"]},
+            "state.audit_rules[0] cannot be recorded with docker",
+        ),
+        ({"line": "w /x", "drivers": ["libvirt"]}, "state.audit_rules[0] needs a valid line"),
+        (
+            {"line": AUDIT_LINE, "drivers": ["libvirt"], "rewritten": True},
+            "state.audit_rules[0] has the unknown key 'rewritten'",
+        ),
+    ],
+)
+def test_an_invalid_audit_rule_item_is_reported(
+    tmp_path: Path, item: dict[str, object], message: str
+) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    found = errors_for(tmp_path, changed(state={**state, "audit_rules": [item]}))
+    assert any(message in error for error in found), found
+
+
+def test_drivers_are_only_for_items_that_need_a_kernel(tmp_path: Path) -> None:
+    state = cast("dict[str, object]", VALID["state"])
+    found = errors_for(
+        tmp_path,
+        changed(state={**state, "files": [{"path": "/etc/crontab", "drivers": ["libvirt"]}]}),
+    )
+    assert any("state.files[0] has the unknown key 'drivers'" in error for error in found), found
+
+
 REWRITTEN_STATE = {
     **cast("dict[str, object]", VALID["state"]),
     "files": [{"path": "/etc/crontab", "rewritten": True}, {"path": "/etc/cron.d/x"}],
@@ -1247,3 +1303,53 @@ def test_invalid_pre_state_lines_are_reported(
     root = make_root(tmp_path, {"file_permissions": declaration})
     found = lifecycle.check(root)[1]
     assert any(message in error for error in found), found
+
+
+def test_a_pre_state_may_load_audit_rules_and_name_the_reasons_of_its_results(
+    tmp_path: Path,
+) -> None:
+    loading = {
+        **LIBVIRT_PRE_STATE,
+        "loads_audit_rules": True,
+        "reasons": [
+            {"step": "apply", "reason": "none"},
+            {"step": "apply", "reason": "restart_required", "rules": ["file_permissions_crontab"]},
+            {"step": "cleanup", "reason": "takes_effect_at_start", "platforms": ["ubuntu"]},
+        ],
+    }
+    pre_states = [*cast("list[object]", VALID["pre_states"]), loading]
+    assert errors_for(tmp_path, changed(pre_states=pre_states)) == []
+
+
+@pytest.mark.parametrize(
+    ("pre_state", "message"),
+    [
+        (
+            {"name": "x", "loads_audit_rules": True},
+            "pre_states[0] loads audit rules, so it must require drivers other than docker",
+        ),
+        ({"name": "x", "loads_audit_rules": "yes"}, "loads_audit_rules must be a boolean"),
+        (
+            {"name": "x", "reasons": [{"step": "check", "reason": "none"}]},
+            "reasons[0] needs the step apply or cleanup",
+        ),
+        (
+            {"name": "x", "reasons": [{"step": "apply", "reason": "Not Readable"}]},
+            "reasons[0] needs a machine-readable reason",
+        ),
+        (
+            {"name": "x", "reasons": [{"step": "apply", "reason": "none", "rules": ["nope"]}]},
+            "reasons[0].rules needs short identifiers of the topic's native rules",
+        ),
+        (
+            {"name": "x", "reasons": [{"step": "apply", "reason": "none", "extra": 1}]},
+            "reasons[0] has the unknown key 'extra'",
+        ),
+        ({"name": "x", "reasons": ["apply"]}, "reasons[0] must be a mapping"),
+    ],
+)
+def test_an_invalid_load_or_reason_is_reported(
+    tmp_path: Path, pre_state: dict[str, object], message: str
+) -> None:
+    errors = errors_for(tmp_path, changed(pre_states=[pre_state]))
+    assert any(message in error for error in errors), errors

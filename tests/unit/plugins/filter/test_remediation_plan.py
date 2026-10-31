@@ -467,11 +467,11 @@ def test_options_must_have_exactly_the_documented_keys(given: object) -> None:
 @pytest.mark.parametrize(
     ("families", "message"),
     [
-        ("ssh", "the family registry must be a list of 1 to 64 families"),
-        ([], "the family registry must be a list of 1 to 64 families"),
+        ("ssh", "the family registry must be a list of 1 to 256 families"),
+        ([], "the family registry must be a list of 1 to 256 families"),
         (
-            [{"name": f"f{index}", "disruptive": False} for index in range(65)],
-            "the family registry must be a list of 1 to 64 families",
+            [{"name": f"f{index}", "disruptive": False} for index in range(257)],
+            "the family registry must be a list of 1 to 256 families",
         ),
         (["ssh"], "family #0: must be a mapping"),
         (

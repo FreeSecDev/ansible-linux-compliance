@@ -339,7 +339,7 @@ def test_the_repository_tags_cover_the_reviewed_examples() -> None:
         "sssd",
         "time_sync",
     } <= names
-    assert set(source.untagged) == {"auditd"}
+    assert set(source.untagged) == {"auditd", "auditd_conf", "auditd_rules_time"}
     assert source.aliases == {}
     excluded = {short for item in source.tags for short in item.exclusions}
     assert {

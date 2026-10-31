@@ -19,6 +19,14 @@ The OpenSSH server is allow-listed only in its configuration test mode,
 (FREES-109): it reads the configuration and the host keys and exits, and never
 starts a daemon.
 
+The audit tools are allow-listed for the auditd topics (FREES-110) in exact argument forms only:
+``auditctl -s`` and ``auditctl -l`` read the kernel's audit status and loaded rules,
+``auditctl --signal reload`` asks a running auditd to read ``/etc/audit/auditd.conf`` again, and
+``augenrules --load`` builds ``/etc/audit/audit.rules`` from ``/etc/audit/rules.d`` and loads it,
+exactly as ``auditd.service`` does when it starts, and ``augenrules --check`` only compares the
+rules it would build with ``/etc/audit/audit.rules``. No rule, file or option is ever passed on
+the command line.
+
 kmod's ``modprobe`` is allow-listed only to print the configuration that it reads,
 ``modprobe -c -d /dev`` for the default configuration directories and
 ``modprobe -c -d /dev -C <path>`` for one file (FREES-190): it parses the files with kmod's own
@@ -83,6 +91,7 @@ MAX_ARGUMENT_LENGTH: Final[int] = 4096
 MAX_ECHO_LENGTH: Final[int] = 64
 READ_CHUNK_BYTES: Final[int] = 65536
 WAIT_POLL_SECONDS: Final[float] = 0.01
+AUGENRULES_TERM_GRACE_SECONDS: Final[float] = 5
 ROOT_UID: Final[int] = 0
 PATH_ARGUMENT: Final[str] = "<path>"
 FIXED_ENVIRONMENT_NAMES: Final[frozenset[str]] = frozenset({"TZ", "HOME"})
@@ -134,6 +143,8 @@ SSHD_KEYWORDS: Final[tuple[str, ...]] = (
 )
 SSHD_VALUE: Final[str] = r"[A-Za-z0-9@.,:/_+][A-Za-z0-9@.,:/_+-]{0,1023}"
 SSHD_SETTING: Final[str] = "(?:" + "|".join(SSHD_KEYWORDS) + ")=" + SSHD_VALUE
+AUDITCTL_FORMS: Final[tuple[tuple[str, ...], ...]] = (("-s",), ("-l",), ("--signal", "reload"))
+AUGENRULES_FORMS: Final[tuple[tuple[str, ...], ...]] = (("--load",), ("--check",))
 
 FORBIDDEN_OPTIONS: Final[frozenset[str]] = frozenset({"--fetch-remote-resources"})
 FORBIDDEN_WORDS: Final[frozenset[str]] = frozenset({"remediate", "--remediate"})
@@ -210,6 +221,10 @@ class ExecutablePolicy:
             its own argument, followed by one argument that matches its
             pattern in full; ``allowed_options`` and positional arguments are
             then not accepted.
+        term_grace_seconds: On a timeout, the process group first gets
+            ``SIGTERM`` and this many seconds to exit, so that a script's trap
+            can remove its temporary files, before ``SIGKILL``; 0 (the default)
+            sends ``SIGKILL`` at once.
     """
 
     name: str
@@ -220,6 +235,7 @@ class ExecutablePolicy:
     argument_forms: tuple[tuple[str, ...], ...] = ()
     environment: tuple[tuple[str, str], ...] = ()
     option_values: tuple[tuple[str, str], ...] = ()
+    term_grace_seconds: float = 0
 
 
 ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
@@ -241,6 +257,12 @@ ALLOWED_EXECUTABLES: Final[Mapping[str, ExecutablePolicy]] = MappingProxyType(
             "sshd",
             command_prefixes=(("-t", "-f", SSHD_CONFIG_PATH),),
             option_values=(("-o", SSHD_SETTING),),
+        ),
+        "auditctl": ExecutablePolicy("auditctl", argument_forms=AUDITCTL_FORMS),
+        "augenrules": ExecutablePolicy(
+            "augenrules",
+            argument_forms=AUGENRULES_FORMS,
+            term_grace_seconds=AUGENRULES_TERM_GRACE_SECONDS,
         ),
         "modprobe": ExecutablePolicy(
             "modprobe",
@@ -667,6 +689,15 @@ def _kill_group(process: subprocess.Popen[bytes]) -> None:
         os.killpg(process.pid, signal.SIGKILL)
 
 
+def _terminate_group(process: subprocess.Popen[bytes], grace: float) -> None:
+    """Send ``SIGTERM`` to the group and wait up to ``grace`` seconds for the process to exit."""
+    if grace <= 0:
+        return
+    with suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGTERM)
+        _wait_for_exit(process, time.monotonic() + grace)
+
+
 def _pump(process: subprocess.Popen[bytes], deadline: float, out: _Capture, err: _Capture) -> bool:
     timed_out = False
     with selectors.DefaultSelector() as selector:
@@ -697,7 +728,7 @@ def _wait_for_exit(process: subprocess.Popen[bytes], deadline: float) -> bool:
 
 
 def _supervise(
-    spec: CommandSpec, argv: tuple[str, ...], environment: dict[str, str]
+    spec: CommandSpec, argv: tuple[str, ...], environment: dict[str, str], grace: float = 0
 ) -> CommandResult:
     out = _Capture(spec.max_output_bytes)
     err = _Capture(spec.max_output_bytes)
@@ -720,6 +751,8 @@ def _supervise(
     with process:
         try:
             timed_out = _pump(process, started + spec.timeout_seconds, out, err)
+            if timed_out:
+                _terminate_group(process, grace)
             _kill_group(process)
             returncode = process.wait()
         except OSError as error:
@@ -908,7 +941,7 @@ def bind_policy(
         environment = build_environment(spec)
         environment.update(policy.environment)
         argv = (executable, *spec.args)
-        return _supervise(spec, argv, environment)
+        return _supervise(spec, argv, environment, policy.term_grace_seconds)
 
     return check_policy, run
 

@@ -194,7 +194,7 @@ def test_invalid_umbrellas_are_errors(registry: list[dict[str, object]], message
 def test_an_invalid_registry_has_neither_families_nor_umbrellas() -> None:
     errors = toggles.Errors()
     assert toggles.check_registry("services", errors) == toggles.Registry(families={}, umbrellas={})
-    assert errors.items == ["the family registry must be a list of 1 to 64 families"]
+    assert errors.items == ["the family registry must be a list of 1 to 256 families"]
 
 
 def test_an_umbrella_that_excludes_nothing_warns_once_naming_its_families() -> None:

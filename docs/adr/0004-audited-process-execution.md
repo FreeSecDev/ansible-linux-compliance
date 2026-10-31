@@ -1053,6 +1053,57 @@ policy:
   writable by group or others, a symbolic link out of the trusted directories) or that cannot be started fails the
   module with `fail_json`.
 
+## Amendment 2026-10-30: the audit tools (FREES-110)
+
+The auditd topics ([ADR 0030](0030-native-auditd-settings-and-audit-rules.md)) must load the audit rules that they
+write and ask auditd to read its configuration again, and must not leave a rule set that loads only in part. They follow
+the general rule of the amendment on external configuration validators (FREES-175): the tools run through the audited
+process helper, from a module of this collection, `freesecdev.linux_compliance.audit_control`, its fourth caller. The
+allow-list gains two policies, each with exact complete argument forms (`ExecutablePolicy.argument_forms` of FREES-145)
+and resolved in the trusted directories like `oscap`:
+
+- `auditctl` with exactly `-s` (the kernel's audit status), `-l` (the loaded rules) and `--signal reload` (asks the
+  running auditd to read `/etc/audit/auditd.conf` again, as `SIGHUP` does). Every option that changes the rules or the
+  kernel's audit state, `-D`, `-a`, `-d`, `-w`, `-W`, `-R`, `-e`, `-f`, `-b`, `--loginuid-immutable` and every other
+  signal, is refused before anything runs (`AUDITCTL_FORMS`).
+- `augenrules` with exactly `--load` (`AUGENRULES_FORMS`). `augenrules` is the POSIX shell script of the audit package
+  that `auditd.service` runs at every start: it joins the files of `/etc/audit/rules.d` into `/etc/audit/audit.rules`
+  and loads that file with `auditctl -R`. The helper runs it without a shell of its own, with the fixed environment and
+  a timeout; its command line takes nothing from the caller. Reimplementing how it joins the files would risk loading
+  now a set that differs from the one loaded at the next boot.
+- `augenrules` with exactly `--check` as well, the second of `AUGENRULES_FORMS`: the helper's argv is
+  `["<trusted directory>/augenrules", "--check"]`, nothing else. With `--check` the script of the audit packages pinned
+  in the Molecule images (3.1.2 and 3.1.5) joins the files of `/etc/audit/rules.d` into a temporary file that it makes
+  with `mktemp /tmp/aurules.XXXXXXXX`, compares that file with `/etc/audit/audit.rules`, prints `No change`,
+  `Rules have changed and should be updated` or `No rules`, removes the temporary file and exits 0. It never copies the
+  result to `/etc/audit/audit.rules`, never writes `audit.rules.prev` and never runs `auditctl -R`: the load runs only
+  with `--load`. When nothing changed it also runs `auditctl -s` to report locked rules, which reads only. The module
+  `audit_control` runs it in `status` to learn whether the rules of the files are the ones the last load read
+  (`current`), so that the remediate role reports a rule that another file holds as compliant only when the real
+  reader confirms it: the running auditd lists it (`auditctl -l`) and `augenrules --check` finds the files unchanged.
+  Any other output, a timeout or a non-zero status gives `current: null`, which the role treats as unconfirmed.
+
+The module never passes a rule on a command line. Before it runs `augenrules --load` it reads every file that
+`augenrules` reads (bounded: 512 files of at most 1 MiB, regular files and links to them, names that end in `.rules`
+without a leading dot) and refuses to load when two places hold the same rule or when the rules are locked
+(`enabled 2`); after the load it checks the expected rules against `auditctl -l`. The remediate role rolls back the
+drop-ins of its run when the load fails. Only an `auditctl` that is not found in the trusted directories is reported as
+`available: false`; one that the helper refuses fails the module. Unit tests in
+`tests/unit/plugins/module_utils/compliance/test_process.py` refuse every other form, and
+`tests/unit/plugins/modules/test_audit_control.py` covers the module, including every output of `--check`.
+
+To compare a `space_left` or `admin_space_left` given in percent, the auditd.conf topic needs the size of the file
+system of the audit log, which the mount facts of ansible-core did not report on the hosts tried. The file helper
+`plugins/module_utils/compliance/fileio.py` therefore gains `filesystem_megabytes`, with the one new `os` attribute
+`statvfs` in `FILE_IO_ATTRIBUTES`, which opens and writes nothing; `auditrules.py` joins `FILE_IO_IMPORTERS` to call
+it, and `audit_control` reports the size as `log_megabytes`.
+
+On a timeout the helper sends `SIGKILL` to the process group. `augenrules` keeps its merged rules in a temporary
+file, `mktemp /tmp/aurules.XXXXXXXX`, which only its trap on `HUP`, `INT`, `QUIT`, `PIPE` and `TERM` removes, so its
+policy names a grace (`ExecutablePolicy.term_grace_seconds`, five seconds): on a timeout the group first gets
+`SIGTERM`, and `SIGKILL` follows when the script has not exited by then. Every other policy keeps the grace of 0, an
+immediate `SIGKILL`.
+
 ## Amendment 2026-10-31: kmod's configuration reader (FREES-190)
 
 The kernel module topics ([ADR 0028](0028-native-kernel-module-drop-ins.md)) must know what each modprobe

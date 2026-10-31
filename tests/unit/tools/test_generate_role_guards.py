@@ -19,6 +19,8 @@ SECOND_SENTINEL = "__linux_compliance_unset_again__"
 NATIVE_FAMILIES = (
     "file_permissions",
     "banners",
+    "auditd_rules_time",
+    "auditd_conf",
     "filesystem_modules",
     "protocol_modules",
     "wireless_modules",

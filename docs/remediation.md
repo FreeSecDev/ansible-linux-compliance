@@ -322,7 +322,8 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
 [ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0024](adr/0024-native-login-defs.md),
-[ADR 0028](adr/0028-native-kernel-module-drop-ins.md)).
+[ADR 0028](adr/0028-native-kernel-module-drop-ins.md),
+[ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check exports its value names it with `profile_value` in
@@ -496,6 +497,66 @@ is written (FREES-173). Kept `audit_only`, with the reasons in ADR 0022: the rul
 `become` and so the run that would revert them), `sudo_dedicated_group` and `file_permissions_sudo` (they limit who may
 run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
 
+### Audit daemon settings and audit rules
+
+The rule groups of the `auditd` umbrella become topics of their own
+([ADR 0030](adr/0030-native-auditd-settings-and-audit-rules.md), FREES-110); `linux_compliance_auditd_enabled: false`
+switches them all off. Two are native so far, the other 177 rules of the umbrella stay `audit_only` with the reasons
+in ADR 0030 (the remaining audit rule groups follow with the same drop-in method).
+
+| Topic | Rules | What is applied | Record and cleanup |
+|---|---|---|---|
+| `auditd_rules_time` (disruptive) | `audit_rules_time_adjtimex`, `_clock_settime`, `_settimeofday`, `_stime`, `_watch_localtime` | `/etc/audit/rules.d/50-freesecdev-<rule>.rules`, mode `0600`, root, with a header that names the rule and the collection's own lines for the benchmark: `b32` and `b64` system call lines (`stime`: `b32` only), and for `/etc/localtime` `-w /etc/localtime -p wa -k time-change` on Ubuntu or the two `-F path= -F perm=wa` lines on RHEL 9 | `recorded_value` of `method` (`rules_file`), `dropin` (`null`) and `dropin_sha256`; cleanup removes the drop-in when it carries the header and still has that SHA-256 |
+| `auditd_conf` (disruptive) | 20 settings of `/etc/audit/auditd.conf`: the disk full and disk error actions (and their STIG variants), `action_mail_acct`, `admin_space_left_action`, `admin_space_left` and `space_left` in percent, `space_left`, `space_left_action`, `max_log_file`, `max_log_file_action` (and its STIG variant), `flush`, `freq`, `local_events`, `log_format`, `name_format`, `overflow_action`, `write_logs` | one line `<setting> = <value>` with the profile's value or the check's, replacing the one line that sets it or appended; an alternation is written as its first choice in the order `syslog`, `email`, `rotate`, `keep_logs`, `hostname`, `fqd`, `numeric`, `single`, `halt`; a minimum keeps a larger value | `recorded_value` of `method` (`conf_line`), `setting`, `prior_line` (`null` when absent) and `written_line`; cleanup writes the prior line back, or removes the line, while the file still holds exactly the line written |
+
+After the drop-ins of a rule topic changed, and only where `service_facts` reports `auditd.service` running, the
+module `freesecdev.linux_compliance.audit_control` loads the rule set with `augenrules --load`, as `auditd.service`
+does at boot: it first refuses a set in which two places hold the same rule, and afterwards checks every applied line
+against `auditctl -l`. A refused or failed load rolls back the drop-ins and ledger entries of the run, loads the set
+again and fails the run. `/etc/audit/audit.rules.prev`, which `augenrules` writes, is put back as it was.
+
+What `auditd.conf` sets is decided by the collection's reader of auditd's own rules
+(`plugins/module_utils/compliance/auditconf.py`), which the unit tests check against a verdict table of the real auditd
+of each Molecule image (`tests/fixtures/auditd_conf/verdicts.json`, made with `make auditd-conf-verdicts`; ADR 0030).
+Every file the role would write is read that way first, and anything that auditd refuses, or that the reader cannot
+tell, is refused. After `auditd.conf` changed, a running auditd is asked to read it again (`auditctl --signal reload`);
+auditd does not report whether it took the file.
+
+A result that changed something carries what is known about its effect as its `reason`:
+
+| Reason of an `applied` or `restored` result | Meaning |
+|---|---|
+| none (audit rules) | The rule set was loaded and every line checked with `auditctl -l` |
+| `locked_until_reboot` (audit rules) | The loaded rules are locked (`-e 2`): the files changed, the kernel's rules change at the next boot |
+| `takes_effect_at_start` | auditd does not run here (containers): the rules or the file take effect when it starts |
+| `reload_not_confirmed` (auditd.conf) | The running auditd was asked to reload and still runs, but does not report whether it took the file |
+| `restart_required` (auditd.conf) | `local_events`, which auditd reads only when it starts |
+
+The statuses that refuse to act, each with a reason, nothing changed and the ledger entry kept:
+
+| Status (apply) or reason (cleanup) | When |
+|---|---|
+| `notapplicable` (apply) | `/etc/audit/rules.d` or `/etc/audit/auditd.conf` does not exist (no audit package), or the host is not x86_64, whose system call tables the lines name |
+| `compliant` (apply) | Every line of an audit rule is already in another file of `/etc/audit/rules.d`, and the running auditd (rules not locked) lists them while `augenrules --check` finds the files unchanged since the load; nothing is written or recorded |
+| `duplicate_rule` (apply) | Some lines of the rule are in another file, they are there and the drop-in exists as well (`auditctl` would stop at the repeated rule), or they are all there but the running auditd cannot confirm them (no running auditd, locked rules, a line not loaded, files changed since the load) |
+| `conflicting_rule` (apply) | Another rule file deletes rules that match this one (`-W`, `-d`, or `-D` with a selection such as `-D -k <key>`), which `augenrules` keeps in place |
+| `watch_target_missing` (apply) | The directory of a watched path does not exist; the kernel refuses such a watch |
+| `duplicate_setting` (apply) | `auditd.conf` sets the setting more than once (the check reads the first, auditd keeps the last) |
+| `invalid_config` (apply) | auditd would refuse `auditd.conf` with the lines of the run, or as it is (a line it cannot read: a TAB, CR, VT or FF in a word, a trailing comment, an unknown keyword or value; `space_left` not larger than `admin_space_left`; incremental flushing with `freq` 0, with auditd's compiled defaults for unset settings), the reader cannot tell (an `exec` action, a NUL byte, bytes outside ASCII, percentages it cannot compare, a `log_file` other than `/var/log/audit/audit.log`; also, from auditd's start, `name_format = user` without `name`), or the file does not end with a newline; nothing is written |
+| `unsupported_value` (apply) | An alternation of the profile offers none of the values that the collection writes |
+| `prior_too_large` (apply) | The line that sets the setting is longer than 1024 characters |
+| `not_regular_file`, `not_directory` | A drop-in, `auditd.conf` or `/etc/audit/rules.d` is a symbolic link or of the wrong type |
+| `not_owned` | A file at the drop-in's path does not carry the collection's header |
+| `method_changed` | The ledger entry records another method, or none |
+| `modified_since_apply` (cleanup) | The drop-in or the line is no longer what the collection wrote |
+| `no_final_newline` (cleanup) | `auditd.conf` no longer ends with a newline, so a line could not be written back byte for byte |
+| `invalid_record`, `target_absent` (cleanup) | The record is malformed, or `auditd.conf` is gone |
+
+A drop-in that is already gone at cleanup, or a setting that is already back at its recorded prior line, is
+`restored` by removing the entry, without a write (FREES-173). The golden test
+`tests/unit/tools/test_content_golden_auditd.py` checks every line and setting against the OVAL of both pinned
+datastreams for every profile that selects the rule.
+
 ### Account defaults in login.defs
 
 `login_defs` is disruptive (umbrella `accounts`), so it is applied and cleaned up only with `login_defs` or `accounts`
@@ -664,6 +725,7 @@ already controls the host. A remediated rule is not proof that the control passe
 | `tests/playbooks/remediate-skip-always.yml` | With `--check --skip-tags always`, the role fails through its guard instead of silently doing nothing | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/playbooks/remediate-native-check.yml` | Against localhost in check mode: with the Ubuntu 24.04 CIS profile and `pwquality` allow-listed, every banner and password quality rule gets exactly one result, `changed` exactly when it is `applied`, and the banner and pwquality files are unchanged; a banner text with a getty escape, an operating system name, an empty text, the default text under the STIG profile and a content without catalogued values fail at the text check, and the short DoD notice passes it; a pwquality rule without a profile value fails before any change; every banner and pwquality file and helper refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_content_golden_ssh.py` | With the pinned content: the check of every native ssh rule on both platforms reads `sshd_config` and the rule's own drop-in with `check="all"`, each fixed value satisfies the check's state and each profile value is exported by the check, no pinned profile selects two native ssh rules for one keyword, the crypto rules carry the RHEL 9 refusal, every drop-in sorts before the distributions' drop-ins, and `sshd_rekey_limit` refuses every drop-in | `make test-content-golden`, CI job `test-suites` |
+| `tests/unit/tools/test_content_golden_auditd.py` | With the pinned content: every rules.d check of every profile that selects a native audit rule is matched by a line of the rule's drop-in, with the profile's value; every auditd.conf line passes the check's pattern and state; no pinned profile selects two native rules for one setting; every alternation offers a value that the role writes; the role's line form refuses control lines | `make test-content-golden`, CI job `test-suites` |
 | `tests/unit/plugins/modules/test_sshd_validate.py`, `test_process.py` | The `sshd_validate` module passes only the keywords of the native rules and one-word values as `-o` options of `sshd -t -f /etc/ssh/sshd_config`, reports a refusal with sshd's bounded message, a timeout and a missing executable, and changes nothing in check mode; the process policy refuses every other sshd command line. 100% line and branch coverage | `make test-coverage` |
 | `tests/playbooks/remediate-native-check.yml`, ssh plays | Against localhost in check mode with the Ubuntu 24.04 CIS rules of `ssh` allow-listed: every rule gets exactly one result, `changed` exactly when it is `applied`, every refusal has a reason and `/etc/ssh` is unchanged (as a user that cannot read a drop-in, the run must stop at the read); a rule without its profile value fails before any change; `ssh.yml` refuses to run without the opt-in | `make test-remediate-check`, CI job `test-playbooks` |
 | `tests/unit/tools/test_profile_values.py` | The profile value reader against synthetic datastreams: values, defaults, refinements and exports, that the `fix` elements of the content are never kept, digest and safety refusals, oversized values, chunking, grouping per profile, pinned `profile_value_id` values, and every error of the generator integration, including the removed `profile_value_source`. Without content: no catalogue entry sets `profile_value_source`, and the generated `timestamp_timeout` keeps 15 for CIS, 0 for the STIG and 5 for CCN and PCI DSS. 100% line and branch coverage | `make test-coverage` |
