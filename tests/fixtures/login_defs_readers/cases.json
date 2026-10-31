@@ -1,0 +1,2287 @@
+{
+ "cases": [
+  {
+   "name": "000 values PASS_MAX_DAYS '30'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "001 values PASS_MAX_DAYS '0'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 0\n"
+  },
+  {
+   "name": "002 values PASS_MAX_DAYS '0x1e'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 0x1e\n"
+  },
+  {
+   "name": "003 values PASS_MAX_DAYS '-1'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS -1\n"
+  },
+  {
+   "name": "004 values PASS_MAX_DAYS '+30'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS +30\n"
+  },
+  {
+   "name": "005 values PASS_MAX_DAYS '1234567'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 1234567\n"
+  },
+  {
+   "name": "006 values PASS_MAX_DAYS ''",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS\n"
+  },
+  {
+   "name": "007 values PASS_MAX_DAYS '090'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 090\n"
+  },
+  {
+   "name": "008 values PASS_MAX_DAYS '010'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 010\n"
+  },
+  {
+   "name": "009 values PASS_MAX_DAYS '0365'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 0365\n"
+  },
+  {
+   "name": "010 values PASS_MAX_DAYS '30 # site'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30 # site\n"
+  },
+  {
+   "name": "011 values PASS_MAX_DAYS '9x'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 9x\n"
+  },
+  {
+   "name": "012 values PASS_MAX_DAYS '\"30\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"30\"\n"
+  },
+  {
+   "name": "013 values PASS_MAX_DAYS '0x10000'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 0x10000\n"
+  },
+  {
+   "name": "014 values PASS_MAX_DAYS '\"99999\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"99999\"\n"
+  },
+  {
+   "name": "015 values PASS_MAX_DAYS '+400'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS +400\n"
+  },
+  {
+   "name": "016 values PASS_MAX_DAYS '\" 30\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \" 30\"\n"
+  },
+  {
+   "name": "017 values PASS_MAX_DAYS '30\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\"\n"
+  },
+  {
+   "name": "018 values PASS_MAX_DAYS '\"30'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"30\n"
+  },
+  {
+   "name": "019 values PASS_MAX_DAYS '\"-1\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"-1\"\n"
+  },
+  {
+   "name": "020 values PASS_MAX_DAYS '0X1E'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 0X1E\n"
+  },
+  {
+   "name": "021 values PASS_MAX_DAYS '08'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 08\n"
+  },
+  {
+   "name": "022 values PASS_MAX_DAYS '400'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 400\n"
+  },
+  {
+   "name": "023 values PASS_MAX_DAYS '1'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 1\n"
+  },
+  {
+   "name": "024 values PASS_MAX_DAYS '0400000'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 0400000\n"
+  },
+  {
+   "name": "025 values PASS_MAX_DAYS '-0x10'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS -0x10\n"
+  },
+  {
+   "name": "026 values PASS_MIN_DAYS '30'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 30\n"
+  },
+  {
+   "name": "027 values PASS_MIN_DAYS '0'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 0\n"
+  },
+  {
+   "name": "028 values PASS_MIN_DAYS '0x1e'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 0x1e\n"
+  },
+  {
+   "name": "029 values PASS_MIN_DAYS '-1'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS -1\n"
+  },
+  {
+   "name": "030 values PASS_MIN_DAYS '+30'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS +30\n"
+  },
+  {
+   "name": "031 values PASS_MIN_DAYS '1234567'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 1234567\n"
+  },
+  {
+   "name": "032 values PASS_MIN_DAYS ''",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS\n"
+  },
+  {
+   "name": "033 values PASS_MIN_DAYS '090'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 090\n"
+  },
+  {
+   "name": "034 values PASS_MIN_DAYS '010'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 010\n"
+  },
+  {
+   "name": "035 values PASS_MIN_DAYS '0365'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 0365\n"
+  },
+  {
+   "name": "036 values PASS_MIN_DAYS '30 # site'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 30 # site\n"
+  },
+  {
+   "name": "037 values PASS_MIN_DAYS '9x'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 9x\n"
+  },
+  {
+   "name": "038 values PASS_MIN_DAYS '\"30\"'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS \"30\"\n"
+  },
+  {
+   "name": "039 values PASS_MIN_DAYS '0x10000'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 0x10000\n"
+  },
+  {
+   "name": "040 values PASS_MIN_DAYS '\"99999\"'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS \"99999\"\n"
+  },
+  {
+   "name": "041 values PASS_MIN_DAYS '+400'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS +400\n"
+  },
+  {
+   "name": "042 values PASS_MIN_DAYS '\" 30\"'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS \" 30\"\n"
+  },
+  {
+   "name": "043 values PASS_MIN_DAYS '30\"'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 30\"\n"
+  },
+  {
+   "name": "044 values PASS_MIN_DAYS '\"30'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS \"30\n"
+  },
+  {
+   "name": "045 values PASS_MIN_DAYS '\"-1\"'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS \"-1\"\n"
+  },
+  {
+   "name": "046 values PASS_MIN_DAYS '0X1E'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 0X1E\n"
+  },
+  {
+   "name": "047 values PASS_MIN_DAYS '08'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 08\n"
+  },
+  {
+   "name": "048 values PASS_MIN_DAYS '400'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 400\n"
+  },
+  {
+   "name": "049 values PASS_MIN_DAYS '1'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 1\n"
+  },
+  {
+   "name": "050 values PASS_MIN_DAYS '0400000'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS 0400000\n"
+  },
+  {
+   "name": "051 values PASS_MIN_DAYS '-0x10'",
+   "setting": "PASS_MIN_DAYS",
+   "comparison": "at_least",
+   "required": "1",
+   "text": "PASS_MIN_DAYS -0x10\n"
+  },
+  {
+   "name": "052 values PASS_WARN_AGE '30'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30\n"
+  },
+  {
+   "name": "053 values PASS_WARN_AGE '0'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 0\n"
+  },
+  {
+   "name": "054 values PASS_WARN_AGE '0x1e'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 0x1e\n"
+  },
+  {
+   "name": "055 values PASS_WARN_AGE '-1'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE -1\n"
+  },
+  {
+   "name": "056 values PASS_WARN_AGE '+30'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE +30\n"
+  },
+  {
+   "name": "057 values PASS_WARN_AGE '1234567'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 1234567\n"
+  },
+  {
+   "name": "058 values PASS_WARN_AGE ''",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE\n"
+  },
+  {
+   "name": "059 values PASS_WARN_AGE '090'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 090\n"
+  },
+  {
+   "name": "060 values PASS_WARN_AGE '010'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 010\n"
+  },
+  {
+   "name": "061 values PASS_WARN_AGE '0365'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 0365\n"
+  },
+  {
+   "name": "062 values PASS_WARN_AGE '30 # site'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30 # site\n"
+  },
+  {
+   "name": "063 values PASS_WARN_AGE '9x'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 9x\n"
+  },
+  {
+   "name": "064 values PASS_WARN_AGE '\"30\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"30\"\n"
+  },
+  {
+   "name": "065 values PASS_WARN_AGE '0x10000'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 0x10000\n"
+  },
+  {
+   "name": "066 values PASS_WARN_AGE '\"99999\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"99999\"\n"
+  },
+  {
+   "name": "067 values PASS_WARN_AGE '+400'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE +400\n"
+  },
+  {
+   "name": "068 values PASS_WARN_AGE '\" 30\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \" 30\"\n"
+  },
+  {
+   "name": "069 values PASS_WARN_AGE '30\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30\"\n"
+  },
+  {
+   "name": "070 values PASS_WARN_AGE '\"30'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"30\n"
+  },
+  {
+   "name": "071 values PASS_WARN_AGE '\"-1\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"-1\"\n"
+  },
+  {
+   "name": "072 values PASS_WARN_AGE '0X1E'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 0X1E\n"
+  },
+  {
+   "name": "073 values PASS_WARN_AGE '08'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 08\n"
+  },
+  {
+   "name": "074 values PASS_WARN_AGE '400'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 400\n"
+  },
+  {
+   "name": "075 values PASS_WARN_AGE '1'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 1\n"
+  },
+  {
+   "name": "076 values PASS_WARN_AGE '0400000'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 0400000\n"
+  },
+  {
+   "name": "077 values PASS_WARN_AGE '-0x10'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE -0x10\n"
+  },
+  {
+   "name": "078 values PASS_MIN_LEN '30'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 30\n"
+  },
+  {
+   "name": "079 values PASS_MIN_LEN '0'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 0\n"
+  },
+  {
+   "name": "080 values PASS_MIN_LEN '0x1e'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 0x1e\n"
+  },
+  {
+   "name": "081 values PASS_MIN_LEN '-1'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN -1\n"
+  },
+  {
+   "name": "082 values PASS_MIN_LEN '+30'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN +30\n"
+  },
+  {
+   "name": "083 values PASS_MIN_LEN '1234567'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 1234567\n"
+  },
+  {
+   "name": "084 values PASS_MIN_LEN ''",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN\n"
+  },
+  {
+   "name": "085 values PASS_MIN_LEN '090'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 090\n"
+  },
+  {
+   "name": "086 values PASS_MIN_LEN '010'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 010\n"
+  },
+  {
+   "name": "087 values PASS_MIN_LEN '0365'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 0365\n"
+  },
+  {
+   "name": "088 values PASS_MIN_LEN '30 # site'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 30 # site\n"
+  },
+  {
+   "name": "089 values PASS_MIN_LEN '9x'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 9x\n"
+  },
+  {
+   "name": "090 values PASS_MIN_LEN '\"30\"'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN \"30\"\n"
+  },
+  {
+   "name": "091 values PASS_MIN_LEN '0x10000'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 0x10000\n"
+  },
+  {
+   "name": "092 values PASS_MIN_LEN '\"99999\"'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN \"99999\"\n"
+  },
+  {
+   "name": "093 values PASS_MIN_LEN '+400'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN +400\n"
+  },
+  {
+   "name": "094 values PASS_MIN_LEN '\" 30\"'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN \" 30\"\n"
+  },
+  {
+   "name": "095 values PASS_MIN_LEN '30\"'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 30\"\n"
+  },
+  {
+   "name": "096 values PASS_MIN_LEN '\"30'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN \"30\n"
+  },
+  {
+   "name": "097 values PASS_MIN_LEN '\"-1\"'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN \"-1\"\n"
+  },
+  {
+   "name": "098 values PASS_MIN_LEN '0X1E'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 0X1E\n"
+  },
+  {
+   "name": "099 values PASS_MIN_LEN '08'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 08\n"
+  },
+  {
+   "name": "100 values PASS_MIN_LEN '400'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 400\n"
+  },
+  {
+   "name": "101 values PASS_MIN_LEN '1'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 1\n"
+  },
+  {
+   "name": "102 values PASS_MIN_LEN '0400000'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN 0400000\n"
+  },
+  {
+   "name": "103 values PASS_MIN_LEN '-0x10'",
+   "setting": "PASS_MIN_LEN",
+   "comparison": "at_least",
+   "required": "15",
+   "text": "PASS_MIN_LEN -0x10\n"
+  },
+  {
+   "name": "104 values FAIL_DELAY '30'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "105 values FAIL_DELAY '0'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 0\n",
+   "libeconf": true
+  },
+  {
+   "name": "106 values FAIL_DELAY '0x1e'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 0x1e\n",
+   "libeconf": true
+  },
+  {
+   "name": "107 values FAIL_DELAY '-1'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY -1\n",
+   "libeconf": true
+  },
+  {
+   "name": "108 values FAIL_DELAY '+30'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY +30\n",
+   "libeconf": true
+  },
+  {
+   "name": "109 values FAIL_DELAY '1234567'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 1234567\n",
+   "libeconf": true
+  },
+  {
+   "name": "110 values FAIL_DELAY ''",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY\n",
+   "libeconf": true
+  },
+  {
+   "name": "111 values FAIL_DELAY '090'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 090\n",
+   "libeconf": true
+  },
+  {
+   "name": "112 values FAIL_DELAY '010'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 010\n",
+   "libeconf": true
+  },
+  {
+   "name": "113 values FAIL_DELAY '0365'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 0365\n",
+   "libeconf": true
+  },
+  {
+   "name": "114 values FAIL_DELAY '30 # site'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30 # site\n",
+   "libeconf": true
+  },
+  {
+   "name": "115 values FAIL_DELAY '9x'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 9x\n",
+   "libeconf": true
+  },
+  {
+   "name": "116 values FAIL_DELAY '\"30\"'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY \"30\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "117 values FAIL_DELAY '0x10000'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 0x10000\n",
+   "libeconf": true
+  },
+  {
+   "name": "118 values FAIL_DELAY '\"99999\"'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY \"99999\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "119 values FAIL_DELAY '+400'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY +400\n",
+   "libeconf": true
+  },
+  {
+   "name": "120 values FAIL_DELAY '\" 30\"'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY \" 30\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "121 values FAIL_DELAY '30\"'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "122 values FAIL_DELAY '\"30'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY \"30\n",
+   "libeconf": true
+  },
+  {
+   "name": "123 values FAIL_DELAY '\"-1\"'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY \"-1\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "124 values FAIL_DELAY '0X1E'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 0X1E\n",
+   "libeconf": true
+  },
+  {
+   "name": "125 values FAIL_DELAY '08'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 08\n",
+   "libeconf": true
+  },
+  {
+   "name": "126 values FAIL_DELAY '400'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 400\n",
+   "libeconf": true
+  },
+  {
+   "name": "127 values FAIL_DELAY '1'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 1\n",
+   "libeconf": true
+  },
+  {
+   "name": "128 values FAIL_DELAY '0400000'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 0400000\n",
+   "libeconf": true
+  },
+  {
+   "name": "129 values FAIL_DELAY '-0x10'",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY -0x10\n",
+   "libeconf": true
+  },
+  {
+   "name": "130 values UMASK '077 # site'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077 # site\n"
+  },
+  {
+   "name": "131 values UMASK '0077'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 0077\n"
+  },
+  {
+   "name": "132 values UMASK '77'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 77\n"
+  },
+  {
+   "name": "133 values UMASK '0x3f'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 0x3f\n"
+  },
+  {
+   "name": "134 values UMASK '00077'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 00077\n"
+  },
+  {
+   "name": "135 values UMASK ''",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK\n"
+  },
+  {
+   "name": "136 values UMASK '022'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 022\n"
+  },
+  {
+   "name": "137 values UMASK '27'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 27\n"
+  },
+  {
+   "name": "138 values UMASK '007'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 007\n"
+  },
+  {
+   "name": "139 values UMASK '7'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 7\n"
+  },
+  {
+   "name": "140 values UMASK '0'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 0\n"
+  },
+  {
+   "name": "141 values UMASK '07'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 07\n"
+  },
+  {
+   "name": "142 values UMASK '0177'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 0177\n"
+  },
+  {
+   "name": "143 values UMASK '277'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 277\n"
+  },
+  {
+   "name": "144 values UMASK '0700'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 0700\n"
+  },
+  {
+   "name": "145 values UMASK '\"077\"'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK \"077\"\n"
+  },
+  {
+   "name": "146 values UMASK '027'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 027\n"
+  },
+  {
+   "name": "147 values UMASK '002'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 002\n"
+  },
+  {
+   "name": "148 values CREATE_HOME 'yes'",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME yes\n",
+   "reads_dropins": true
+  },
+  {
+   "name": "149 values CREATE_HOME 'YES'",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME YES\n",
+   "reads_dropins": true
+  },
+  {
+   "name": "150 values CREATE_HOME 'no'",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME no\n",
+   "reads_dropins": true
+  },
+  {
+   "name": "151 values CREATE_HOME 'yes # x'",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME yes # x\n",
+   "reads_dropins": true
+  },
+  {
+   "name": "152 values PASS_MAX_DAYS '\" 30\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \" 30\"\n"
+  },
+  {
+   "name": "153 values PASS_MAX_DAYS '\"\"30'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"\"30\n"
+  },
+  {
+   "name": "154 values PASS_MAX_DAYS '\"  30  \"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"  30  \"\n"
+  },
+  {
+   "name": "155 values PASS_MAX_DAYS '\" \"30'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \" \"30\n"
+  },
+  {
+   "name": "156 values PASS_MAX_DAYS '\"30\" '",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"30\" \n"
+  },
+  {
+   "name": "157 values PASS_MAX_DAYS '\" 30'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \" 30\n"
+  },
+  {
+   "name": "158 values PASS_MAX_DAYS '\"0x1e\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"0x1e\"\n"
+  },
+  {
+   "name": "159 values PASS_MAX_DAYS '\"010\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"010\"\n"
+  },
+  {
+   "name": "160 values PASS_MAX_DAYS '\"\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"\"\n"
+  },
+  {
+   "name": "161 values PASS_MAX_DAYS '\"\" '",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"\" \n"
+  },
+  {
+   "name": "162 values PASS_MAX_DAYS '\"-1\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"-1\"\n"
+  },
+  {
+   "name": "163 values PASS_MAX_DAYS '\" -1\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \" -1\"\n"
+  },
+  {
+   "name": "164 values PASS_MAX_DAYS '\"+30\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"+30\"\n"
+  },
+  {
+   "name": "165 values PASS_MAX_DAYS '30\"x'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\"x\n"
+  },
+  {
+   "name": "166 values PASS_MAX_DAYS '\"9x\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"9x\"\n"
+  },
+  {
+   "name": "167 values PASS_MAX_DAYS \"'30'\"",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS '30'\n"
+  },
+  {
+   "name": "168 values PASS_MAX_DAYS '9x # \"q\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 9x # \"q\"\n"
+  },
+  {
+   "name": "169 values PASS_MAX_DAYS '30 # \"q\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30 # \"q\"\n"
+  },
+  {
+   "name": "170 values PASS_MAX_DAYS '\"30\"x'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"30\"x\n"
+  },
+  {
+   "name": "171 values PASS_MAX_DAYS '\"\"\"30\"\"\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"\"\"30\"\"\"\n"
+  },
+  {
+   "name": "172 values PASS_MAX_DAYS '-1 # \"x\"'",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS -1 # \"x\"\n"
+  },
+  {
+   "name": "173 values PASS_WARN_AGE '\" 30\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \" 30\"\n"
+  },
+  {
+   "name": "174 values PASS_WARN_AGE '\"\"30'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"\"30\n"
+  },
+  {
+   "name": "175 values PASS_WARN_AGE '\"  30  \"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"  30  \"\n"
+  },
+  {
+   "name": "176 values PASS_WARN_AGE '\" \"30'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \" \"30\n"
+  },
+  {
+   "name": "177 values PASS_WARN_AGE '\"30\" '",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"30\" \n"
+  },
+  {
+   "name": "178 values PASS_WARN_AGE '\" 30'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \" 30\n"
+  },
+  {
+   "name": "179 values PASS_WARN_AGE '\"0x1e\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"0x1e\"\n"
+  },
+  {
+   "name": "180 values PASS_WARN_AGE '\"010\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"010\"\n"
+  },
+  {
+   "name": "181 values PASS_WARN_AGE '\"\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"\"\n"
+  },
+  {
+   "name": "182 values PASS_WARN_AGE '\"\" '",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"\" \n"
+  },
+  {
+   "name": "183 values PASS_WARN_AGE '\"-1\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"-1\"\n"
+  },
+  {
+   "name": "184 values PASS_WARN_AGE '\" -1\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \" -1\"\n"
+  },
+  {
+   "name": "185 values PASS_WARN_AGE '\"+30\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"+30\"\n"
+  },
+  {
+   "name": "186 values PASS_WARN_AGE '30\"x'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30\"x\n"
+  },
+  {
+   "name": "187 values PASS_WARN_AGE '\"9x\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"9x\"\n"
+  },
+  {
+   "name": "188 values PASS_WARN_AGE \"'30'\"",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE '30'\n"
+  },
+  {
+   "name": "189 values PASS_WARN_AGE '9x # \"q\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 9x # \"q\"\n"
+  },
+  {
+   "name": "190 values PASS_WARN_AGE '30 # \"q\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30 # \"q\"\n"
+  },
+  {
+   "name": "191 values PASS_WARN_AGE '\"30\"x'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"30\"x\n"
+  },
+  {
+   "name": "192 values PASS_WARN_AGE '\"\"\"30\"\"\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \"\"\"30\"\"\"\n"
+  },
+  {
+   "name": "193 values PASS_WARN_AGE '-1 # \"x\"'",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE -1 # \"x\"\n"
+  },
+  {
+   "name": "194 values UMASK '\" 077\"'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK \" 077\"\n"
+  },
+  {
+   "name": "195 values UMASK '\"\"077'",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK \"\"077\n"
+  },
+  {
+   "name": "196 values UMASK '\"077\" '",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK \"077\" \n"
+  },
+  {
+   "name": "197 control max CRLF 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\r\n"
+  },
+  {
+   "name": "198 control warn CRLF 30",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30\r\n"
+  },
+  {
+   "name": "199 control max VT 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \u000b30\n"
+  },
+  {
+   "name": "200 control umask CRLF 077",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077\r\n"
+  },
+  {
+   "name": "201 control max FF 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \f30\n"
+  },
+  {
+   "name": "202 control warn VT 30",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE \u000b30\n"
+  },
+  {
+   "name": "203 control max CRLF blank 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30 \r\n"
+  },
+  {
+   "name": "204 control max CRLF 400",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 400\r\n"
+  },
+  {
+   "name": "205 control max CRLF comment",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30 # site\r\n"
+  },
+  {
+   "name": "206 control max trailing VT",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\u000b\n"
+  },
+  {
+   "name": "207 control max CRLF other line",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "UMASK 027\r\nPASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "208 control max LF 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "209 control max LF 400",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 400\n"
+  },
+  {
+   "name": "210 control umask CRLF blank 077",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077 \r\n"
+  },
+  {
+   "name": "211 control umask VT 077",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK \u000b077\n"
+  },
+  {
+   "name": "212 review max NUL trail",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\u0000\n"
+  },
+  {
+   "name": "213 review max NUL junk",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\u0000junk\n"
+  },
+  {
+   "name": "214 review warn NUL trail",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30\u0000\n"
+  },
+  {
+   "name": "215 review max chunk comment",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxPASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "216 review max chunk value",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                30junk\n"
+  },
+  {
+   "name": "217 review max CRLF 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\r\n"
+  },
+  {
+   "name": "218 review max VT 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \u000b30\n"
+  },
+  {
+   "name": "219 review max FF 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \f30\n"
+  },
+  {
+   "name": "220 review max CR mid 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \r30\n"
+  },
+  {
+   "name": "221 review max quoted VT",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \"\u000b30\"\n"
+  },
+  {
+   "name": "222 review warn CRLF 30",
+   "setting": "PASS_WARN_AGE",
+   "comparison": "at_least",
+   "required": "7",
+   "text": "PASS_WARN_AGE 30\r\n"
+  },
+  {
+   "name": "223 review max CRLF 400 (over-refusal?)",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 400\r\n"
+  },
+  {
+   "name": "224 review max CRLF -1 (over-refusal?)",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS -1\r\n"
+  },
+  {
+   "name": "225 review max CRLF 9x (over-refusal?)",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 9x\r\n"
+  },
+  {
+   "name": "226 review max CRLF empty value (shadow ignores)",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \r\n"
+  },
+  {
+   "name": "227 review max CRLF name only (shadow ignores)",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS\r\n"
+  },
+  {
+   "name": "228 review max CRLF lower-case (shadow ignores)",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "pass_max_days 30\r\n"
+  },
+  {
+   "name": "229 review max CRLF comment value",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS #30\r\n"
+  },
+  {
+   "name": "230 review max name VT (shadow ignores)",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS\u000b30\n"
+  },
+  {
+   "name": "231 review max U+2028",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\u2028\n"
+  },
+  {
+   "name": "232 review max LF 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "233 review max LF 400",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 400\n"
+  },
+  {
+   "name": "234 review umask CRLF blank 077",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077 \r\n"
+  },
+  {
+   "name": "235 review umask NUL",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077\u0000\n"
+  },
+  {
+   "name": "236 review fail CRLF 30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30\r\n",
+   "libeconf": true
+  },
+  {
+   "name": "237 review fail = 30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY=30\n",
+   "libeconf": true
+  },
+  {
+   "name": "238 review fail sp=sp 30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY = 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "239 review fail sp=30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY =30\n",
+   "libeconf": true
+  },
+  {
+   "name": "240 review fail name VT 30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY\u000b30\n",
+   "libeconf": true
+  },
+  {
+   "name": "241 review fail lead VT name",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "\u000bFAIL_DELAY 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "242 review fail NUL",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30\u0000\n",
+   "libeconf": true
+  },
+  {
+   "name": "243 review fail -1",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY -1\n",
+   "libeconf": true
+  },
+  {
+   "name": "244 review fail 30 comment nospace",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30#x\n",
+   "libeconf": true
+  },
+  {
+   "name": "245 review fail quoted",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY \"30\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "246 readers max NUL only",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\u0000\n"
+  },
+  {
+   "name": "247 readers home NUL",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME yes\u0000junk\n",
+   "reads_dropins": true
+  },
+  {
+   "name": "248 readers long comment 1100",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nPASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "249 readers comment 1022 bytes",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nPASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "250 readers comment 1023 bytes",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "#xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nPASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "251 readers comment 1022 bytes e-acute",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "#\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9x\nPASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "252 readers comment 1023 bytes e-acute",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "#\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\nPASS_MAX_DAYS 30\n"
+  },
+  {
+   "name": "253 readers long line umask",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077\n#yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\n"
+  },
+  {
+   "name": "254 readers max CRLF 99999",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 99999\r\n"
+  },
+  {
+   "name": "255 readers max CRLF only CR",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS\t\r\n"
+  },
+  {
+   "name": "256 readers max CRLF hash30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS #30\r\n"
+  },
+  {
+   "name": "257 readers max CRLF lower 30",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "pass_max_days 30\r\n"
+  },
+  {
+   "name": "258 readers max inner VT",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\u000b5\n"
+  },
+  {
+   "name": "259 readers max inner CR",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 3\r0\n"
+  },
+  {
+   "name": "260 readers max inner VT before comment",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS 30\u000b# x\n"
+  },
+  {
+   "name": "261 readers max lead CR",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS \r30\n"
+  },
+  {
+   "name": "262 readers max lead VT tab",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS\t\u000b\t30\n"
+  },
+  {
+   "name": "263 readers umask CRLF 077",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077\r\n"
+  },
+  {
+   "name": "264 readers umask lead VT 077",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK \u000b077\n"
+  },
+  {
+   "name": "265 readers umask inner VT",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 077\u000b5\n"
+  },
+  {
+   "name": "266 readers umask CRLF 022",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK 022\r\n"
+  },
+  {
+   "name": "267 readers home CRLF yes",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME yes\r\n",
+   "reads_dropins": true
+  },
+  {
+   "name": "268 readers home CRLF no",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME no\r\n",
+   "reads_dropins": true
+  },
+  {
+   "name": "269 readers whole CRLF file",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "# x\r\nPASS_MAX_DAYS 99999\r\nPASS_MIN_DAYS 0\r\nUMASK 022\r\n"
+  },
+  {
+   "name": "270 readers fail single space first line",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 4\n",
+   "libeconf": true
+  },
+  {
+   "name": "271 readers fail two spaces",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  4\n",
+   "libeconf": true
+  },
+  {
+   "name": "272 readers fail trailing space",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 4 \n",
+   "libeconf": true
+  },
+  {
+   "name": "273 readers fail tab tab",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY\t\t4\n",
+   "libeconf": true
+  },
+  {
+   "name": "274 readers fail sp=30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY =30\n",
+   "libeconf": true
+  },
+  {
+   "name": "275 readers fail sp=sp30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY = 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "276 readers fail = quoted 30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY = \"30\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "277 readers fail =30",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY=30\n",
+   "libeconf": true
+  },
+  {
+   "name": "278 readers fail lead VT name",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "\u000bFAIL_DELAY 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "279 readers fail name VT",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY\u000b30\n",
+   "libeconf": true
+  },
+  {
+   "name": "280 readers fail name NUL",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY\u0000 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "281 readers fail -1",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY -1\n",
+   "libeconf": true
+  },
+  {
+   "name": "282 readers fail 30junk",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30junk\n",
+   "libeconf": true
+  },
+  {
+   "name": "283 readers fail 1234567",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 1234567\n",
+   "libeconf": true
+  },
+  {
+   "name": "284 readers fail 4294967296",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 4294967296\n",
+   "libeconf": true
+  },
+  {
+   "name": "285 readers fail quoted",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY \"30\"\n",
+   "libeconf": true
+  },
+  {
+   "name": "286 readers fail 030",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 030\n",
+   "libeconf": true
+  },
+  {
+   "name": "287 readers fail 0x1e",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 0x1e\n",
+   "libeconf": true
+  },
+  {
+   "name": "288 readers fail 30 comment",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30 # site\n",
+   "libeconf": true
+  },
+  {
+   "name": "289 readers fail 30#x",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 30#x\n",
+   "libeconf": true
+  },
+  {
+   "name": "290 readers fail section before",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "[x]\nFAIL_DELAY  30\n",
+   "libeconf": true
+  },
+  {
+   "name": "291 readers fail section after",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  30\n  [x]\n",
+   "libeconf": true
+  },
+  {
+   "name": "292 readers fail dropin sets",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  30\n",
+   "libeconf": true,
+   "dropins": {
+    "50-site.defs": "FAIL_DELAY 1\n"
+   }
+  },
+  {
+   "name": "293 readers fail dropin comment",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  30\n",
+   "libeconf": true,
+   "dropins": {
+    "50-site.defs": "# FAIL_DELAY\n"
+   }
+  },
+  {
+   "name": "294 readers fail dropin section",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  30\n",
+   "libeconf": true,
+   "dropins": {
+    "50-site.defs": "[x]\nA b\n"
+   }
+  },
+  {
+   "name": "295 readers fail dropin other",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  30\n",
+   "libeconf": true,
+   "dropins": {
+    "50-site.defs": "UMASK 077\n"
+   }
+  },
+  {
+   "name": "296 readers fail dropin broken link",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  30\n",
+   "libeconf": true,
+   "links": [
+    "60-gone.defs"
+   ]
+  },
+  {
+   "name": "297 readers fail glued after setting",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "HMAC_CRYPTO_ALGO SHA512\nFAIL_DELAY 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "298 readers fail absent after setting",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "HMAC_CRYPTO_ALGO SHA512\n",
+   "libeconf": true
+  },
+  {
+   "name": "299 readers fail lower",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "fail_delay 30\n",
+   "libeconf": true
+  },
+  {
+   "name": "300 readers fail 99 single",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 99\n",
+   "libeconf": true
+  },
+  {
+   "name": "301 readers fail CRLF 4 two",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY  4\r\n",
+   "libeconf": true
+  },
+  {
+   "name": "302 readers fail CRLF 4 one",
+   "setting": "FAIL_DELAY",
+   "comparison": "at_least",
+   "required": "4",
+   "text": "FAIL_DELAY 4\r\n",
+   "libeconf": true
+  },
+  {
+   "name": "303 readers umask lead VT duplicate",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "\u000bUMASK 000\nUMASK 027\n"
+  },
+  {
+   "name": "304 readers umask lead VT only",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "\u000bUMASK 000\n"
+  },
+  {
+   "name": "305 readers umask equals duplicate",
+   "setting": "UMASK",
+   "comparison": "umask",
+   "required": "027",
+   "text": "UMASK=000\nUMASK 027\n"
+  },
+  {
+   "name": "306 readers max name VT only",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "PASS_MAX_DAYS\u000b30\n"
+  },
+  {
+   "name": "307 readers max append no newline",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "A b"
+  },
+  {
+   "name": "308 readers max append empty",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": ""
+  },
+  {
+   "name": "309 readers max replace last no newline",
+   "setting": "PASS_MAX_DAYS",
+   "comparison": "at_most",
+   "required": "365",
+   "text": "A b\nPASS_MAX_DAYS 99999"
+  },
+  {
+   "name": "310 readers home dropin equals",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME yes\n",
+   "reads_dropins": true,
+   "dropins": {
+    "50-site.defs": "CREATE_HOME=no\n"
+   }
+  },
+  {
+   "name": "311 readers home dropin VT",
+   "setting": "CREATE_HOME",
+   "comparison": "equal",
+   "required": "yes",
+   "text": "CREATE_HOME yes\n",
+   "reads_dropins": true,
+   "dropins": {
+    "50-site.defs": "\u000bCREATE_HOME no\n"
+   }
+  }
+ ]
+}

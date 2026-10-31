@@ -261,9 +261,17 @@ tab or form feed, and so never remediated a login.defs with Windows line endings
   the written line with the newline that the apply added, or puts the recorded line back in its place, so a file with
   Windows line endings or without a final newline is restored byte for byte.
 
-The decision tasks of `login_defs_apply.yml`, copied word for word into a localhost probe, were run on 312 crafted
-files (the cases of the reviews of #70, #80 and #82 and 66 new ones), and each decision was checked against byte-level
-emulations of the four readers written from their sources, which agree with `useradd` and `chage` on both images and
-with libeconf through `ctypes` on Rocky Linux 9: every written value takes effect for every reader of the setting and
-is never looser than what any of them read before, and every `compliant` holds for every reader. The same check
-found 24 looser or ineffective decisions in the logic before this amendment.
+**The reader is the oracle.** The decision tasks live in `roles/remediate/tasks/login_defs_decide.yml`, which
+`login_defs_apply.yml` includes. `tests/fixtures/login_defs_readers/verdicts.json` records what the real readers read,
+never an emulation: `useradd` and `chage` of shadow-utils (`passwd 1:4.13+dfsg1-4ubuntu3.2` on Ubuntu 24.04,
+`shadow-utils-4.9-16.el9` on Rocky Linux 9; the ages that a new account gets, the mode of a home created with `-m`,
+which follows `UMASK`, and whether a plain `useradd` creates a home), and libeconf 0.4.1 on Rocky Linux through
+`ctypes`, with the call of util-linux `login` for `FAIL_DELAY`. It covers the 312 crafted files of
+`tests/fixtures/login_defs_readers/cases.json` (the cases of the reviews of #70, #80 and #82 and 66 new ones, with
+carriage returns, vertical tabs, form feeds, NUL bytes, lines of 1023 bytes and more, names in lower case, duplicates,
+drop-ins and links to no file) and every text that the role writes for them. `tools/lint/login_defs_readers.sh UBUNTU_IMAGE
+ROCKY_IMAGE` regenerates it in throwaway `--network none` containers of the Molecule images with read-only mounts.
+`tests/unit/roles/test_login_defs_readers.py` decides every case with the role's own tasks and fails when a decision
+claims `compliant` while a reader reads a looser value, writes a value that a reader does not read, writes one looser
+than what a reader read before, or writes a text that the table lacks. `PASS_MIN_LEN` has no reader in the images
+that prints it (only `passwd` uses it), so its decisions are not checked against the table.
