@@ -21,6 +21,10 @@ Each remediation task is keyed by the full ComplianceAsCode XCCDF rule identifie
 satisfies every framework that maps to that rule. Rules without a native implementation are reported as
 `not remediated` and are never fixed by running upstream Bash or shell-based playbooks.
 
+Amended by [ADR 0025](0025-own-ansible-remediation-only.md) (FREES-188): the collection also never reads the
+content's `fix` elements, for values or anything else; values come from the profile's XCCDF values through pinned
+mappings in `content/catalogue.yml`, and a repository guard enforces the decision.
+
 ## Alternatives evaluated
 
 | Alternative | Reason rejected |
