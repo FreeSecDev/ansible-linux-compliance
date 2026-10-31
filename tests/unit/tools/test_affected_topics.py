@@ -1043,7 +1043,7 @@ def test_a_new_topic_plans_only_the_legs_of_that_topic(trees: Trees) -> None:
 
 def test_a_new_family_with_its_own_toggles_plans_only_its_legs(trees: Trees) -> None:
     family = "auditd_synthetic"
-    entry = {"name": family, "disruptive": True, "umbrella": "auditd"}
+    entry: dict[str, object] = {"name": family, "disruptive": True, "umbrella": "auditd"}
     changed = add_topic(trees, family, "auditd", entry)
     assert {DEFAULTS, AUDIT_DEFAULTS, SPECS, AUDIT_SPECS} <= set(changed)
     decision = trees.decide(*changed)
@@ -1199,7 +1199,10 @@ def test_the_toggle_of_a_tag_affects_the_families_of_its_rules(trees: Trees) -> 
 
 
 def test_a_removed_or_added_toggle_default_affects_its_family(trees: Trees) -> None:
-    trees.edit(DEFAULTS, lambda data: data.pop(toggles.toggle_name("banners")))
+    def remove(data: dict[str, object]) -> None:
+        del data[toggles.toggle_name("banners")]
+
+    trees.edit(DEFAULTS, remove)
     assert topics_of(trees.decide(DEFAULTS)) == {"banners"}
     trees.edit(affected.CATALOGUE, add_family)
     trees.edit(DEFAULTS, lambda data: data.update({toggles.toggle_name("new"): True}))
@@ -1253,7 +1256,10 @@ def options_of(data: dict[str, object], entry: str = "main") -> dict[str, object
 
 
 def test_a_toggle_option_affects_every_family_that_the_toggle_controls(trees: Trees) -> None:
-    trees.edit(SPECS, lambda data: options_of(data).pop(toggles.toggle_name("pam")))
+    def remove(data: dict[str, object]) -> None:
+        del options_of(data)[toggles.toggle_name("pam")]
+
+    trees.edit(SPECS, remove)
     assert topics_of(trees.decide(SPECS)) == controlled_by("pam")
 
     def add(data: dict[str, object]) -> None:
