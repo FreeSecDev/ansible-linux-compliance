@@ -1,0 +1,6 @@
+blacklist hfs
+blacklist nouveau
+install hfs  /bin/false
+
+# End of configuration files. Dumping indexes now:
+

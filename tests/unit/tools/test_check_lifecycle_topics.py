@@ -81,6 +81,9 @@ def make_root(
     versions = root / lifecycle.VERSIONS
     versions.parent.mkdir(parents=True)
     shutil.copyfile(REPOSITORY_ROOT / lifecycle.VERSIONS, versions)
+    manifest = root / lifecycle.MANIFEST
+    manifest.parent.mkdir(parents=True)
+    shutil.copyfile(REPOSITORY_ROOT / lifecycle.MANIFEST, manifest)
     for config in (REPOSITORY_ROOT / lifecycle.MOLECULE).glob("*/molecule.yml"):
         target = root / lifecycle.MOLECULE / config.parent.name / config.name
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -451,7 +454,17 @@ def test_the_repository_declarations_pass_against_the_repository_catalogue(tmp_p
         dirs_exist_ok=True,
     )
     native, errors = lifecycle.check(root)
-    assert native == ["file_permissions", "banners", "ssh", "pwquality", "login_defs", "sudo"]
+    assert native == [
+        "file_permissions",
+        "banners",
+        "filesystem_modules",
+        "protocol_modules",
+        "wireless_modules",
+        "ssh",
+        "pwquality",
+        "login_defs",
+        "sudo",
+    ]
     assert errors == []
 
 
@@ -962,8 +975,11 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "bytes": frozenset({"ubuntu", "rhel_compatible"}),
         "readers": frozenset({"rhel_compatible"}),
     }
+    assert found["filesystem_modules"] == {"changes": frozenset({"ubuntu", "rhel_compatible"})}
+    assert found["protocol_modules"] == {}
+    assert found["wireless_modules"] == {}
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 15
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 16
 
 
 @pytest.mark.parametrize(
@@ -1105,6 +1121,71 @@ def test_regression_platforms_fail_on_an_invalid_declaration(tmp_path: Path) -> 
     root = make_root(tmp_path, {"file_permissions": changed(regressions=NO_ITEMS)})
     with pytest.raises(lifecycle.GenerationError, match="regressions must not be empty"):
         lifecycle.regression_platforms(root)
+
+
+PROFILE = {"platform": "ubuntu", "profile": "cis_level2_server", "reason": "Level 2 selects it."}
+
+
+def test_a_topic_may_run_with_another_profile_of_a_platform(tmp_path: Path) -> None:
+    assert errors_for(tmp_path, changed(profiles=[PROFILE])) == []
+
+
+def test_the_profiles_of_the_platforms_come_from_the_manifest() -> None:
+    found = lifecycle.datastream_profiles(REPOSITORY_ROOT)
+    assert set(found) == lifecycle.platforms(REPOSITORY_ROOT)
+    assert {"cis_level1_server", "cis_level2_server", "stig"} <= found["ubuntu"]
+    assert {"cis", "cis_server_l1", "stig", "bsi"} <= found["rhel_compatible"]
+    assert "cis" not in found["ubuntu"]
+
+
+def test_the_repository_runs_the_kernel_module_topics_with_the_profiles_that_select_them() -> None:
+    for family, expected in {
+        "filesystem_modules": {"ubuntu": "cis_level2_server", "rhel_compatible": "cis"},
+        "protocol_modules": {"ubuntu": "cis_level2_server", "rhel_compatible": "stig"},
+        "wireless_modules": {"rhel_compatible": "bsi"},
+    }.items():
+        data = cast(
+            "dict[str, object]",
+            yaml.safe_load(
+                (REPOSITORY_ROOT / lifecycle.TOPICS / f"{family}.yml").read_text("utf-8")
+            ),
+        )
+        profiles = cast("list[dict[str, str]]", data["profiles"])
+        assert {item["platform"]: item["profile"] for item in profiles} == expected
+
+
+@pytest.mark.parametrize(
+    ("profiles", "message"),
+    [
+        ({"platform": "ubuntu"}, "profiles must be a list"),
+        (["ubuntu"], "profiles[0] must be a mapping"),
+        ([{**PROFILE, "x": 1}], "profiles[0] has the unknown key 'x'"),
+        ([{**PROFILE, "platform": "debian"}], "profiles[0] needs a known platform"),
+        ([PROFILE, PROFILE], "profiles[1] names ubuntu twice"),
+        (
+            [{**PROFILE, "platform": "rhel_compatible", "profile": "cis"}],
+            "profiles[0] names rhel_compatible, which unselected_platforms lists",
+        ),
+        ([{**PROFILE, "profile": "CIS"}], "profiles[0] needs the short identifier of a profile"),
+        ([{**PROFILE, "profile": 7}], "profiles[0] needs the short identifier of a profile"),
+        ([{**PROFILE, "profile": "cis"}], "profiles[0] names cis, which the datastream of ubuntu"),
+        ([{**PROFILE, "reason": " "}], "profiles[0] needs a reason"),
+    ],
+)
+def test_an_invalid_profile_is_reported(tmp_path: Path, profiles: object, message: str) -> None:
+    found = errors_for(tmp_path, changed(profiles=profiles))
+    assert any(message in error for error in found), found
+
+
+def test_without_known_profiles_any_well_formed_profile_is_accepted(tmp_path: Path) -> None:
+    root = make_root(
+        tmp_path, {"file_permissions": changed(profiles=[{**PROFILE, "profile": "x"}])}
+    )
+    declaration = lifecycle.Declaration(
+        "topic", lifecycle.platforms(root), lifecycle.Context(None, frozenset())
+    )
+    lifecycle.check_profiles(declaration, [{**PROFILE, "profile": "x"}])
+    assert declaration.errors == []
 
 
 REWRITTEN_STATE = {

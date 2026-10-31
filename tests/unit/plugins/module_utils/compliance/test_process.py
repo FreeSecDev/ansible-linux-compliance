@@ -216,7 +216,7 @@ class TestPolicy:
     def test_default_allow_list_is_only_oscap_the_scc_command_line_and_sshd_test_mode(
         self,
     ) -> None:
-        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc", "sshd"}
+        assert set(process.ALLOWED_EXECUTABLES) == {"oscap", "cscc", "sshd", "modprobe"}
         assert process.ALLOWED_EXECUTABLES["oscap"].fixed_path is None
         options = process.ALLOWED_EXECUTABLES["oscap"].allowed_options
         assert {
@@ -287,6 +287,89 @@ class TestPolicy:
         spec = process.CommandSpec("sshd", arguments, 1)
         with pytest.raises(process.ProcessPolicyError):
             process.check_policy(spec)
+
+    def test_modprobe_only_prints_its_configuration(self) -> None:
+        policy = process.ALLOWED_EXECUTABLES["modprobe"]
+        assert policy.fixed_path is None
+        assert policy.standalone_commands == (("-c", "-d", "/dev"),)
+        assert policy.argument_forms == (
+            ("-c", "-d", "/dev", "-C", process.MODPROBE_CONFIG_ARGUMENT),
+        )
+        for arguments in (
+            ("-c", "-d", "/dev"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/a.conf"),
+            ("-c", "-d", "/dev", "-C", "/run/modprobe.d/b.alias"),
+            ("-c", "-d", "/dev", "-C", "/dev/null"),
+        ):
+            assert process.check_policy(process.CommandSpec("modprobe", arguments, 1)).name == (
+                "modprobe"
+            )
+
+    @pytest.mark.parametrize(
+        "arguments",
+        [
+            (),
+            ("cramfs",),
+            ("-r", "cramfs"),
+            ("-n", "-v", "cramfs"),
+            ("-i", "cramfs"),
+            ("-c",),
+            ("-c", "-d", "/"),
+            ("-c", "-d", "/dev", "-C", "a.conf"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/../x"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/a.conf", "cramfs"),
+            ("-c", "-d", "/dev", "-C", "/etc/shadow"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/../shadow.conf"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/sub/a.conf"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/.hidden.conf"),
+            ("-c", "-d", "/dev", "-C", "/etc/modprobe.d/a.txt"),
+            ("-c", "-d", "/dev", "-C", "//etc/modprobe.d/a.conf"),
+            ("-c", "-d", "/dev", "-C", "/dev/zero"),
+            ("--showconfig",),
+        ],
+    )
+    def test_modprobe_refuses_every_other_command_line(self, arguments: tuple[str, ...]) -> None:
+        spec = process.CommandSpec("modprobe", arguments, 1)
+        with pytest.raises(process.ProcessPolicyError):
+            process.check_policy(spec)
+
+    @pytest.mark.parametrize(
+        ("target", "allowed"),
+        [
+            ("/etc/shadow", False),
+            ("/usr/lib/modprobe.d/vendor.conf", True),
+            ("/usr/lib/modprobe.d/sub/vendor.conf", False),
+            ("/dev/null", True),
+            ("/opt/site/modprobe.conf", False),
+        ],
+    )
+    def test_modprobe_reads_a_link_only_when_it_resolves_into_a_modprobe_directory(
+        self, monkeypatch: pytest.MonkeyPatch, target: str, allowed: bool
+    ) -> None:
+        link = "/etc/modprobe.d/link.conf"
+        real = os.path.realpath
+
+        def resolved(path: str) -> str:
+            return target if path == link else real(path)
+
+        monkeypatch.setattr(os.path, "realpath", resolved)
+        spec = process.CommandSpec("modprobe", ("-c", "-d", "/dev", "-C", link), 1)
+        assert process.is_modprobe_config(link) is allowed
+        if allowed:
+            assert process.check_policy(spec).name == "modprobe"
+        else:
+            with pytest.raises(process.ProcessPolicyError):
+                process.check_policy(spec)
+
+    def test_modprobe_never_reads_a_directory(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        path = "/etc/modprobe.d/a.conf"
+        is_dir = Path.is_dir
+
+        def directory(self: Path, **options: bool) -> bool:
+            return str(self) == path or is_dir(self, **options)
+
+        monkeypatch.setattr(Path, "is_dir", directory)
+        assert process.is_modprobe_config(path) is False
 
     def test_default_trusted_directories_are_fixed(self) -> None:
         assert process.TRUSTED_DIRECTORIES == ("/usr/bin", "/usr/sbin", "/bin", "/sbin")

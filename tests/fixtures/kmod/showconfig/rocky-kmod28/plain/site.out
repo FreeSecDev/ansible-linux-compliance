@@ -1,0 +1,5 @@
+blacklist cramfs
+install cram* /sbin/modprobe --ignore-install cramfs
+
+# End of configuration files. Dumping indexes now:
+
