@@ -114,7 +114,7 @@ the identifier, because rule identifiers such as `..._rule_ensure_pam_wheel_grou
 identifier that is neither, or both, fails closed. A golden file (`tests/fixtures/catalog/golden-rules.yml`) records, for
 every profile of both pinned datastreams (all 25), the rule count and the SHA-256 of the sorted rule list, and
 `make test-content-golden` fetches the pinned content through the digest-verified downloader and compares the catalog
-with it. The CI `test` job runs that target and fails, rather than skips, when the content cannot be fetched. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
+with it. The CI `test-suites` job runs that target and fails, rather than skips, when the content cannot be fetched. Supporting `extends` or deselected groups with selected rules needs a change to the catalog.
 Since FREES-126 `openscap.py` parses through `xmlsafe.py` too and no longer carries its own copy of the parser.
 
 One residual risk remains: the open helper of `xmlsafe` (`_open_regular`, private since FREES-129) checks the type with `lstat` and then opens the path. If an attacker who

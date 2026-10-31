@@ -813,7 +813,7 @@ fails fails the gate. Since FREES-189 a pull request or merge group plans only t
 On GitHub's runners at b1630d8 the twelve legs took 5.5 to 11.6 minutes (the longest is `ubuntu`, `pwquality`,
 `rule`, which includes the regressions), the standard scenarios 4.0 and 4.6 and the self-test 2.9; the run took
 12 minutes from the first job to `ci-gate`. Each job's `timeout-minutes` is about one and a half times its longest
-duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 20 for `test` (11.2 then; 15 on `main` by 2026-10-30, so FREES-189 raised it from 17) and 16 for `test-playbooks`
+duration: 18 for `molecule-lifecycle`, 18 for `molecule-docker`, 20 for `test` (11.2 then; 15 on `main` by 2026-10-30, so FREES-189 raised it from 17; 12 since FREES-174, below) and 16 for `test-playbooks`
 (10.8). One [scanner timeout](#scanner-hangs) and its retry add three minutes. `molecule-docker` was raised from 8
 on 2026-10-30: over the 15 latest CI runs its successful jobs took 3 to 7.9 minutes, but 7 of 42 were cancelled, and
 in job 124055287121 building the Rocky Linux instance image alone took 9 minutes because the package mirror was slow.
@@ -831,7 +831,11 @@ runner) and pytest-cov combines the data of the workers, so both 100% gates stil
 16-CPU workstation the suite took 555 seconds serially and 146 seconds on four workers, with the same 10,094 tests
 and the same covered lines and branches. The audit-exception, golden-content and browser tests, 3 to 4.5 minutes
 together, moved to their own job, `test-suites` (timeout 10), which runs alongside `test`; `ci-gate` needs both, and
-neither has a condition, so every event that ran the former `test` job runs both.
+neither has a condition, so every event that ran the former `test` job runs both. In the first CI run (e7718ce),
+on the slower of the two runner classes seen, `test` took 5.0 minutes (`make test-coverage` 289 seconds instead of
+829 to 853) and `test-suites` 4.4. `test` now has a timeout of 12 minutes: one and a half times its longest duration
+is 7.5, and the rest covers the runner variance (the slower runners took up to 1.9 times as long before) and the
+growth of the suite, while a hung run is still cancelled long before the merge queue's 30 minutes.
 
 With `sudo` (FREES-175) the regressions moved out of the cycle legs: `make molecule-matrix` adds one leg per regression
 group that a declaration lists and platform it runs on, with the mode `regressions-<group>`, after the two toggle
