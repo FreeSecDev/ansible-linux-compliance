@@ -1,0 +1,58 @@
+---
+- name: Login defaults entry | Give the maximum age rule the ledger entry of the case
+  ansible.builtin.set_fact:
+    login_defs_case_rule: >-
+      {{ login_defs_rule | combine({'action': 'apply', 'reason': 'enabled', 'disabled_by': none,
+         'ledger_entry': {'rule_id': login_defs_rule.rule_id, 'family': 'login_defs',
+                          'revert_strategy': 'recorded_value',
+                          'prior_values': login_defs_entry_case.prior_values}}) }}
+
+- name: Login defaults entry | Plan the rule for apply and for cleanup in the login_defs family
+  ansible.builtin.set_fact:
+    login_defs_case_family:
+      name: login_defs
+      disruptive: true
+      apply:
+        - "{{ login_defs_case_rule }}"
+      cleanup:
+        - "{{ login_defs_case_rule }}"
+
+- name: Login defaults entry | Set the facts that the family file gives its helpers
+  ansible.builtin.set_fact:
+    __linux_compliance_remediate_results: []
+    __linux_compliance_remediate_rule: "{{ login_defs_case_rule }}"
+    __linux_compliance_remediate_family: "{{ login_defs_case_family }}"
+    __linux_compliance_remediate_plan:
+      enabled: true
+      families:
+        - "{{ login_defs_case_family }}"
+    __linux_compliance_remediate_ld_values: "{{ {login_defs_case_rule.rule_id: '365'} }}"
+    __linux_compliance_remediate_ld_value_patterns:
+      at_most: '^[0-9]{1,6}$'
+      at_least: '^[0-9]{1,6}$'
+      umask: '^[0-7]{3}$'
+      equal: '^[a-z]{1,8}$'
+    __linux_compliance_remediate_ld_dropin_texts: {}
+    __linux_compliance_remediate_ld_not_directory: false
+
+- name: Login defaults entry | Run the apply helper
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: login_defs_apply.yml
+  when: login_defs_entry_case.helper == 'login_defs_apply.yml'
+
+- name: Login defaults entry | Run the cleanup helper
+  ansible.builtin.include_role:
+    name: freesecdev.linux_compliance.remediate
+    tasks_from: login_defs_cleanup.yml
+  when: login_defs_entry_case.helper == 'login_defs_cleanup.yml'
+
+- name: Login defaults entry | Check that the helper refused the entry and changed nothing
+  ansible.builtin.assert:
+    that:
+      - __linux_compliance_remediate_results | length == 1
+      - __linux_compliance_remediate_results[0].status == login_defs_entry_case.status
+      - (__linux_compliance_remediate_results[0].reason | default('', true)) is search(login_defs_entry_case.reason)
+      - __linux_compliance_remediate_results[0].changed is false
+    fail_msg: "{{ login_defs_entry_case.name }}: {{ __linux_compliance_remediate_results }}"
+    quiet: true
