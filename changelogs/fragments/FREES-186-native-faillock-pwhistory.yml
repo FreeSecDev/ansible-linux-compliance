@@ -12,7 +12,7 @@ minor_changes:
     duplicate lines, symbolic links and a missing file are refused with a reason. The settings take effect where the
     stack loads the module. The rules that enable the modules in the stack, the Ubuntu pwhistory rules (whose checks
     read only ``common-password``), ``pam_faildelay``, the tally directory and its SELinux context and the
-    ``pam_unix`` ``remember`` rules stay ``audit_only`` (ADR 0025). Both topics stay disruptive and need ``faillock``,
+    ``pam_unix`` ``remember`` rules stay ``audit_only`` (ADR 0027). Both topics stay disruptive and need ``faillock``,
     ``pwhistory`` or ``pam`` in ``linux_compliance_remediate_allow_disruptive``.
 trivial:
   - >-

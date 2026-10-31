@@ -580,7 +580,7 @@ ships `/usr/sbin` with mode `0555` and the instance drops the capability that le
 regression adds the owner's write bit for the move and puts the mode back. The whole-instance comparison at the end
 leaves out only the inode and times of the binary and the times of `/usr/sbin`.
 
-`faillock` and `pwhistory` ([ADR 0025](adr/0025-native-faillock-pwhistory.md)) write one recorded line per setting
+`faillock` and `pwhistory` ([ADR 0027](adr/0027-native-faillock-pwhistory.md)) write one recorded line per setting
 into `/etc/security/faillock.conf` and `/etc/security/pwhistory.conf`. Their cycles run from the file as built and from
 a file that an administrator customised with the pre-state key `lines` (`lineinfile` on a declared file whose
 `rewritten` is true; the harness puts the content back after the cycle): `deny=10` in place of the commented default,

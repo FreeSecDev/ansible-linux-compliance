@@ -2,7 +2,7 @@
 
 The remediate role writes one line per setting into /etc/security/faillock.conf or
 /etc/security/pwhistory.conf and refuses a setting that a module line of the PAM stack sets
-(ADR 0025). These tests read the OVAL definitions of every native rule of both families in
+(ADR 0027). These tests read the OVAL definitions of every native rule of both families in
 both datastreams and check that the written line satisfies the object and the state that
 read the file, that a commented line does not, that the value the state compares with is the
 profile value of the catalogue, that ``stack_checked`` is true exactly when the check also

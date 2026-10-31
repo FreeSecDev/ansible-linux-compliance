@@ -311,7 +311,7 @@ stricter mode such as `0400` is kept and only the excess bits are removed. Its s
 
 Besides the reference family, these topics are native
 ([ADR 0021](adr/0021-native-banners-pwquality-and-profile-values.md), [ADR 0022](adr/0022-native-sudo-drop-ins.md),
-[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0025](adr/0025-native-faillock-pwhistory.md)).
+[ADR 0023](adr/0023-native-ssh-server-configuration.md), [ADR 0027](adr/0027-native-faillock-pwhistory.md)).
 Their rules use the profile's own values, which `make catalogue` reads from the pinned datastreams into the rule
 parameters (`value_id`, `profile_values`); a rule whose content and profile the catalogue holds no value for fails the
 family before anything changes. A rule whose check accepts a range and leaves the exact value to the content's fix
@@ -487,7 +487,7 @@ run `/usr/bin/sudo`) and `package_sudo_installed` (package state).
 
 `faillock` and `pwhistory` are disruptive (umbrella `pam`), so they are applied and cleaned up only with `faillock`,
 `pwhistory` or `pam` in `linux_compliance_remediate_allow_disruptive`
-([ADR 0025](adr/0025-native-faillock-pwhistory.md)). Each rule writes one line into the file that the PAM module reads
+([ADR 0027](adr/0027-native-faillock-pwhistory.md)). Each rule writes one line into the file that the PAM module reads
 and that the content's check reads on that platform; `tests/unit/tools/test_content_golden_pam_conf.py` checks this
 against the OVAL of both datastreams. The PAM stack is only read, never edited.
 
@@ -507,7 +507,7 @@ setting that is already as before at cleanup, such as a line removed by hand or 
 other rule restored, is `restored` without a write (FREES-173). The settings take effect only where the stack loads
 `pam_faillock` or `pam_pwhistory`, and the content's checks pass only then; the Molecule regressions load such a stack
 for one run, and a container scan reports the rules `notapplicable` (their group is limited to
-`system_with_kernel`). Kept `audit_only`, with the reasons in ADR 0025: the rules
+`system_with_kernel`). Kept `audit_only`, with the reasons in ADR 0027: the rules
 that put the modules into the stack (`accounts_passwords_pam_faillock_enabled`, `account_password_pam_faillock_password_auth`,
 `account_password_pam_faillock_system_auth`; authselect and pam-auth-update are not exactly revertable and need the
 lock-out guard of FREES-181), the Ubuntu pwhistory rules (their checks read only the `common-password` line),

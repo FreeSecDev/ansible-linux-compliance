@@ -13,7 +13,7 @@ unselected_platforms:
   - platform: ubuntu
     reason: >-
       The Ubuntu 24.04 content checks the pwhistory rules only on the pam_pwhistory line of /etc/pam.d/common-password,
-      which pam-auth-update generates and which Ubuntu does not load, so none of them is native (ADR 0025) and the
+      which pam-auth-update generates and which Ubuntu does not load, so none of them is native (ADR 0027) and the
       CIS level 1 server profile selects no native pwhistory rule.
 state:
   files:

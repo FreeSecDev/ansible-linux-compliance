@@ -1,4 +1,4 @@
-# 0025. Native account lock-out and password reuse, one recorded line per setting
+# 0027. Native account lock-out and password reuse, one recorded line per setting
 
 - **Status:** proposed
 - **Date:** 2026-10-30

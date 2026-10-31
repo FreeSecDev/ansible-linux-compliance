@@ -86,7 +86,7 @@
       {{ linux_compliance_remediate_profile }} gives it in the content
       {{ linux_compliance_discovered.content_sha256 | default('') }} as a decimal number (at least 1 for a maximum),
       but the catalogue holds {{ __linux_compliance_remediate_sc_check_value }}. The values are generated from the
-      pinned content (ADR 0021, ADR 0025); no setting was changed.
+      pinned content (ADR 0021, ADR 0027); no setting was changed.
     quiet: true
   loop: "{{ __linux_compliance_remediate_family.cleanup + __linux_compliance_remediate_family.apply }}"
   loop_control:
