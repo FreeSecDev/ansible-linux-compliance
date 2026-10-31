@@ -246,7 +246,7 @@ refuses an extra variable that sets the marker, so `remediate.yml` is not affect
   without a scan, an `error` that becomes `pass` (not an improvement), waived mode with the same file and with a
   different file, waived results that do not belong to their raw run, and malformed audit results. The filter has 100%
   line and branch coverage.
-- `make test-verify` (part of `make ci` and of the CI job `test`) runs the role without `oscap` on the local inventory
+- `make test-verify` (part of `make ci` and of the CI job `test-playbooks`) runs the role without `oscap` on the local inventory
   host `web01`, with synthetic `linux_compliance_audited` facts and the audit role's `evaluate.yml` entry point for
   the waived results, and the per-checkout `ANSIBLE_HOME`. `tests/playbooks/verify.yml` checks an
   improvement without regressions, a regression that fails the host by default and is published and printed without

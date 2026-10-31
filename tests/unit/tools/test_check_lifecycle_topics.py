@@ -966,6 +966,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
     assert found["faillock"] == {
         "changes": frozenset({"ubuntu", "rhel_compatible"}),
         "stack": frozenset({"ubuntu", "rhel_compatible"}),
+        "readers": frozenset({"ubuntu", "rhel_compatible"}),
         "profiles": frozenset({"ubuntu", "rhel_compatible"}),
     }
     assert found["pwhistory"] == {"changes": frozenset({"rhel_compatible"})}
@@ -976,7 +977,7 @@ def test_the_repository_declares_regression_groups_for_pwquality_ssh_and_sudo() 
         "profiles": frozenset({"ubuntu", "rhel_compatible"}),
     }
     assert found["file_permissions"] == {}
-    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 17
+    assert len(lifecycle.dispatched_regressions(REPOSITORY_ROOT)) == 18
 
 
 @pytest.mark.parametrize(

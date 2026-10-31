@@ -262,7 +262,7 @@ Read from the pinned, digest-verified streams of `content/manifest.yml` (Complia
    holds the stream's file name, SHA-256, benchmark ID and version.
    - The file holds identifiers of BSD-licensed content only; no DISA content is read to make it.
    - A malformed STIG ID, or a release profile that maps none, is an error.
-   - `make test-content-golden` (CI job `lint`) regenerates it with `--check` and fails on drift.
+   - `make test-content-golden` (CI job `test-suites`) regenerates it with `--check` and fails on drift.
 2. **Joined to DISA content at export time on the STIG ID.** The DISA group ID (`Vuln_Num`), rule ID (`Rule_ID`)
    and all benchmark text of an entry come from the `--checklist-content` file, which the operator supplies. They are
    joined on the DISA rule `version` (`Rule_Ver`). Nothing of DISA's is committed. The entries are the DISA rules of

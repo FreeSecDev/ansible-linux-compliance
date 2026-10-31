@@ -97,7 +97,7 @@ report, including host evidence, and must be shared with the same care.
 ## Operational consequences
 
 - `make report` writes the dashboard; `make report-serve` serves it on 127.0.0.1.
-- `make test-browser` runs in the CI `test` job and in `make ci`; it needs network access to fetch the pinned browser
+- `make test-browser` runs in the CI `test-suites` job and in `make ci`; it needs network access to fetch the pinned browser
   and axe-core on first use.
 - A schema version change needs a dashboard update: the renderer refuses versions it does not know.
 
