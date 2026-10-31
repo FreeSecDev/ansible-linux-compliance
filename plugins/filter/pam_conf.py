@@ -346,7 +346,7 @@ def strtok(line: str) -> list[str]:
         if position >= len(line):
             return found
         if line[position] == "[":
-            token = []
+            token: list[str] = []
             end = position + 1
             while end < len(line) and line[end] != "]":
                 if line[end] == "\\" and end + 1 < len(line) and line[end + 1] == "]":
