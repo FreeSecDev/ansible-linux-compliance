@@ -8,6 +8,7 @@ UV := $(shell command -v uv 2>/dev/null)
 RUN := uv run --frozen
 TRACKED := git ls-files -z --cached --others --exclude-standard
 ZIZMOR_PERSONA := pedantic
+CONTENT_GOLDEN_TESTS := $(sort $(wildcard tests/unit/tools/test_content_golden*.py))
 COLLECTION_PATH := ansible_collections/freesecdev/linux_compliance
 COLLECTION_TREE := build/collection/$(COLLECTION_PATH)
 COLLECTION_LINK := build/collections/$(COLLECTION_PATH)
@@ -525,7 +526,7 @@ test-coverage: require-uv collection-link
 	$(RUN) coverage report --include='plugins/*' --fail-under=100
 
 test-content-golden: require-uv collection-link content
-	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest tests/unit/tools/test_content_golden.py tests/unit/tools/test_content_golden_native.py tests/unit/tools/test_content_golden_ssh.py tests/unit/tools/test_content_golden_login_defs.py tests/unit/tools/test_content_golden_scripts.py tests/unit/tools/test_content_golden_pam_conf.py --no-cov
+	FREESECDEV_REQUIRE_CONTENT=1 $(RUN) pytest $(CONTENT_GOLDEN_TESTS) --no-cov
 	$(GENERATE_CATALOGUE) --check
 	$(GENERATE_STIG_MAPPING) --check
 
